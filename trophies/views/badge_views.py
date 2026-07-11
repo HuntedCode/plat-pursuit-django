@@ -20,6 +20,7 @@ def _badge_xp(badge):
 # Browse badge Gallery (the per-TIER medallion wall, ?view=gallery) -- the catalog-discovery cousin of the
 # Series view. Every filter/sort below maps to a real Badge column so it stays DB-side + paginated at scale.
 _TIER_NAME_TO_INT = {'bronze': 1, 'silver': 2, 'gold': 3, 'platinum': 4}
+_GALLERY_STATES = ('earned', 'in_progress', 'maintenance', 'unearned')  # multi-select personal-state chips
 GALLERY_PAGE_SIZE = 48  # medallions per page (a multiple of common 2/3/4/6-column grids)
 GALLERY_SORTS = [  # (key, label) -- the Gallery's own sorts (distinct from the Series view's)
     ('name', 'Name (A-Z)'),
@@ -136,43 +137,45 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         )
         g = self.request.GET
 
-        tier = _TIER_NAME_TO_INT.get(g.get('tier'))
-        if tier:
-            qs = qs.filter(tier=tier)
-        badge_type = g.get('badge_type')
-        if badge_type:
-            qs = qs.filter(badge_type=badge_type)
+        # All filters are MULTI-select (chips): tier and type are `__in`; several selected = OR.
+        tiers = [_TIER_NAME_TO_INT[t] for t in g.getlist('tier') if t in _TIER_NAME_TO_INT]
+        if tiers:
+            qs = qs.filter(tier__in=tiers)
+        types = [t for t in g.getlist('badge_type') if t]
+        if types:
+            qs = qs.filter(badge_type__in=types)
         q = (g.get('q') or '').strip()
         if q:
             qs = qs.filter(
                 Q(series_slug__icontains=slugify(q)) | Q(name__icontains=q) | Q(display_title__icontains=q)
             )
 
-        # Personal state filters (auth only), via EXISTS subqueries: earned / in-progress / unearned,
-        # plus independent "hide" toggles for chase-hunting. Anonymous viewers get the pure catalog.
+        # Personal-state multi-select (auth only): pick any of earned / in-progress / maintenance / unearned;
+        # the chosen states are OR'd. Derived from EXISTS probes annotated once, then a Q per selected state
+        # (this also subsumes the old "hide" toggles -- to hide a state, just don't select it). Anonymous
+        # viewers get the pure catalog (the state chips aren't shown).
         profile = self._profile()
-        if profile:
+        states = [s for s in g.getlist('state') if s in _GALLERY_STATES] if profile else []
+        if states:
             held = UserBadge.objects.filter(profile=profile, badge=OuterRef('pk'))
-            earned = held.filter(status='earned')
-            maint = held.filter(status='maintenance')
             started = UserBadgeProgress.objects.filter(
                 profile=profile, badge=OuterRef('pk'), completed_concepts__gt=0,
             )
-            state = g.get('state')
-            if state == 'earned':
-                qs = qs.filter(Exists(held))
-            elif state == 'in_progress':
-                qs = qs.filter(Exists(started), ~Exists(held))
-            elif state == 'unearned':
-                qs = qs.filter(~Exists(held), ~Exists(started))
-            # Independent hide toggles -- each drops one state so you can carve down to what's left to chase
-            # (e.g. hide all three -> only unearned). "Owned" = fully earned; maintenance/in-progress separate.
-            if g.get('hide_owned'):
-                qs = qs.filter(~Exists(earned))
-            if g.get('hide_maintenance'):
-                qs = qs.filter(~Exists(maint))
-            if g.get('hide_in_progress'):
-                qs = qs.exclude(Exists(started), ~Exists(held))   # in-progress = started but not held
+            qs = qs.annotate(
+                _earned=Exists(held.filter(status='earned')),
+                _maint=Exists(held.filter(status='maintenance')),
+                _started=Exists(started),
+            )
+            state_q = {
+                'earned': Q(_earned=True),
+                'maintenance': Q(_maint=True),
+                'in_progress': Q(_started=True, _earned=False, _maint=False),
+                'unearned': Q(_earned=False, _maint=False, _started=False),
+            }
+            combined = Q()
+            for s in states:
+                combined |= state_q[s]
+            qs = qs.filter(combined)
 
         # Every order_by ends on 'pk' -- a unique final tiebreaker so ties (same earned_count / name / date)
         # get a DEFINED, stable order across the page-1 render and the ?page=N infinite-scroll fetches
@@ -245,16 +248,13 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             'page_obj': page_obj,
             'paginator': paginator,
             'is_paginated': page_obj.has_other_pages(),
-            'form': self.get_filter_form(),                 # supplies the badge_type <select> choices
-            'selected_badge_type': g.get('badge_type', ''),
+            'form': self.get_filter_form(),                 # supplies the badge_type choices for the chips
             'gallery_authed': profile is not None,
-            'gallery_tier': g.get('tier') or 'all',
-            'gallery_state': g.get('state') or 'all',
+            'gallery_tiers': g.getlist('tier'),             # selected chip values (multi-select)
+            'gallery_states': g.getlist('state'),
+            'gallery_types': g.getlist('badge_type'),
             'gallery_sort': g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else 'name',
             'gallery_q': g.get('q', ''),
-            'gallery_hide_owned': bool(g.get('hide_owned')),
-            'gallery_hide_maintenance': bool(g.get('hide_maintenance')),
-            'gallery_hide_in_progress': bool(g.get('hide_in_progress')),
             'gallery_sorts': GALLERY_SORTS,
             'gallery_page_size': GALLERY_PAGE_SIZE,          # keeps the JS paginateBy in sync (no magic 48)
             'breadcrumb': [

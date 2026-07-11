@@ -160,21 +160,11 @@
 
 {% block js_scripts %}
     {% if view == 'gallery' %}
-    {% comment %} Gallery: a plain GET form that full-reloads on any control change (no HTMX here), plus
-    InfiniteScroller for the endless wall. Each reload re-inits the scroller fresh from the new filters, so
-    no formSelector/scrollKey is needed (a filter change lands you back at the top, which is what you want). {% endcomment %}
+    {% comment %} Gallery: a plain GET form applied on its Search button (multi-select chips must NOT reload
+    per toggle), plus InfiniteScroller for the endless wall. Each apply full-reloads and re-inits the scroller
+    fresh from the new filters (landing you at the top), so no formSelector/scrollKey is needed. {% endcomment %}
     <script>
     document.addEventListener('DOMContentLoaded', function () {
-        var form = document.getElementById('filter-form');
-        if (form) {
-            form.querySelectorAll('select, input[type="checkbox"]').forEach(function (el) {
-                el.addEventListener('change', function () {
-                    var pageInput = form.querySelector('input[name="page"]');
-                    if (pageInput) { pageInput.value = 1; }
-                    form.submit();
-                });
-            });
-        }
         if (window.PlatPursuit && PlatPursuit.InfiniteScroller) {
             PlatPursuit.InfiniteScroller.create({
                 gridId: 'items-grid',

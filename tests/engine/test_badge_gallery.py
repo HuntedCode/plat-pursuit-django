@@ -66,14 +66,14 @@ def test_gallery_search_matches_series(client):
     assert '/badges/dark-souls/' not in html
 
 
-def test_gallery_anonymous_hides_personal_controls(client):
-    """The state filter + hide-owned toggle are auth-only (anonymous browses the pure catalog)."""
+def test_gallery_anonymous_hides_personal_state_chips(client):
+    """The State chips are auth-only (anonymous browses the pure catalog); tier + set chips still show."""
     _series('rs-anon')
 
     html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
 
-    assert 'name="state"' not in html
-    assert 'name="hide_owned"' not in html
+    assert 'name="state"' not in html                 # no personal-state filter for anon
+    assert 'name="tier"' in html                       # ... but the public tier/set chips remain
 
 
 def test_gallery_owned_marker_for_earned_badge(client):
@@ -102,56 +102,46 @@ def test_gallery_state_earned_filter_via_exists(client):
     assert 'pp-bgal__owned--earned' in html
 
 
-def test_gallery_hide_owned_excludes_held(client):
+def test_gallery_multi_tier_filter_ORs_the_selections(client):
+    """Multi-select: ?tier=silver&tier=gold returns silver AND gold (tier__in), not just one."""
+    _series('rs-mt')
+
+    html = client.get(GALLERY, {'view': 'gallery', 'tier': ['silver', 'gold']}).content.decode()
+
+    assert html.count('data-bgal-cell') == 2
+    assert 'data-tier="silver"' in html and 'data-tier="gold"' in html
+    assert 'data-tier="bronze"' not in html and 'data-tier="platinum"' not in html
+
+
+def test_gallery_multi_type_filter(client):
+    """Multi-select: ?badge_type=series&badge_type=developer returns both types (badge_type__in)."""
+    _series('rs-series')  # badge_type='series'
+    BadgeFactory(series_slug='dv-one', tier=1, badge_type='developer',
+                 is_live=True, required_stages=5, display_series='dv-one')
+    BadgeFactory(series_slug='fr-skip', tier=1, badge_type='franchise',
+                 is_live=True, required_stages=5, display_series='fr-skip')
+
+    html = client.get(GALLERY, {'view': 'gallery', 'badge_type': ['series', 'developer']}).content.decode()
+
+    assert '/badges/rs-series/' in html and '/badges/dv-one/' in html
+    assert '/badges/fr-skip/' not in html  # a non-selected type is excluded
+
+
+def test_gallery_multi_state_ORs_and_subsumes_hide(client):
+    """Multi-select state: ?state=earned&state=unearned shows earned OR unearned, dropping the in-progress
+    one (this is how the chase-carving that the old 'hide' toggles did now works -- just don't select it)."""
     profile = ProfileFactory()
-    badges = _series('rs-hide')
-    UserBadgeFactory(profile=profile, badge=badges[0])  # bronze held
-    client.force_login(profile.user)
-
-    html = client.get(GALLERY, {'view': 'gallery', 'hide_owned': '1'}).content.decode()
-
-    assert html.count('data-bgal-cell') == 3         # the 3 unheld tiers remain
-    assert 'pp-bgal__owned--earned' not in html      # the held one is gone
-
-
-def test_gallery_hide_owned_targets_earned_not_maintenance(client):
-    """'Hide owned' drops EARNED only; a maintenance (held-but-lapsed) badge has its own toggle and stays."""
-    profile = ProfileFactory()
-    badges = _series('rs-hideo')
+    badges = _series('rs-ms')
     UserBadgeFactory(profile=profile, badge=badges[0])                                # bronze earned
-    ub = UserBadgeFactory(profile=profile, badge=badges[1])
-    UserBadge.objects.filter(pk=ub.pk).update(status='maintenance')                   # silver maintenance
+    UserBadgeProgressFactory(profile=profile, badge=badges[1], completed_concepts=2)  # silver in progress
+    # gold + platinum stay unearned
     client.force_login(profile.user)
 
-    html = client.get(GALLERY, {'view': 'gallery', 'hide_owned': '1'}).content.decode()
+    html = client.get(GALLERY, {'view': 'gallery', 'state': ['earned', 'unearned']}).content.decode()
 
-    assert 'pp-bgal__owned--earned' not in html      # earned hidden
-    assert 'pp-bgal__owned--maintenance' in html     # maintenance still shown
-
-
-def test_gallery_hide_maintenance(client):
-    profile = ProfileFactory()
-    badges = _series('rs-hidem')
-    ub = UserBadgeFactory(profile=profile, badge=badges[0])
-    UserBadge.objects.filter(pk=ub.pk).update(status='maintenance')                   # bronze maintenance
-    client.force_login(profile.user)
-
-    html = client.get(GALLERY, {'view': 'gallery', 'hide_maintenance': '1'}).content.decode()
-
-    assert html.count('data-bgal-cell') == 3         # the maintenance one is dropped
-    assert 'pp-bgal__owned--maintenance' not in html
-
-
-def test_gallery_hide_in_progress(client):
-    profile = ProfileFactory()
-    badges = _series('rs-hidep')
-    UserBadgeProgressFactory(profile=profile, badge=badges[0], completed_concepts=2)  # bronze in progress
-    client.force_login(profile.user)
-
-    html = client.get(GALLERY, {'view': 'gallery', 'hide_in_progress': '1'}).content.decode()
-
-    assert html.count('data-bgal-cell') == 3         # the in-progress one is dropped
-    assert 'pp-bgal__owned--progress' not in html
+    assert 'pp-bgal__owned--earned' in html          # earned shown
+    assert 'pp-bgal__owned--progress' not in html    # in-progress dropped (not selected)
+    assert html.count('data-bgal-cell') == 3         # earned bronze + unearned gold + platinum
 
 
 def test_gallery_query_count_constant_regardless_of_catalog_size(client):
