@@ -217,6 +217,28 @@ def test_gallery_card_stat_shows_stages_not_a_meaningless_ratio(client):
     assert '2 / 5 stages' in html           # in-progress shows the real completed count
 
 
+def test_gallery_cell_shows_set_number(client):
+    """Each cell shows the badge's edition/set number (zero-padded, matching the Collection's #0042)."""
+    BadgeFactory(series_slug='rs-setno', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='rs-setno', set_number=42)
+
+    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+
+    assert '#0042' in html
+
+
+def test_gallery_sort_by_set_number(client):
+    """?sort=set_number orders by the edition number (a DB sort); unnumbered badges sort last."""
+    BadgeFactory(series_slug='rs-sn-hi', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='rs-sn-hi', set_number=9)
+    BadgeFactory(series_slug='rs-sn-lo', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='rs-sn-lo', set_number=1)
+
+    html = client.get(GALLERY, {'view': 'gallery', 'sort': 'set_number'}).content.decode()
+
+    assert html.index('/badges/rs-sn-lo/') < html.index('/badges/rs-sn-hi/')  # #0001 before #0009
+
+
 def test_gallery_full_page_carries_infinite_scroll_hooks(client):
     """The full gallery page emits the InfiniteScroller hooks: the grid + a sentinel + a loader, but NO
     page-number pager (infinite scroll owns pagination)."""

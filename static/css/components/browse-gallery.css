@@ -102,6 +102,15 @@
 }
 .pp-bgal__card:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; }
 
+/* Set number: the badge's edition number, in the top-left corner (a catalog "call number", opposite the
+   owned marker). Zero-padded to match the Collection's #0042 styling. */
+.pp-bgal__setno {
+    position: absolute; top: 8px; left: 8px; z-index: 2;
+    font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+    color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-1) 68%, transparent);
+    padding: 2px 6px; border-radius: 6px;
+}
+
 /* Ownership marker (logged-in only), pinned to the card corner -- never over the medallion. Earned/held ->
    a green check; in-progress -> a hollow accent ring. Unearned renders nothing (pure catalog look). */
 .pp-bgal__owned {

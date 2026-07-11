@@ -24,6 +24,7 @@ _GALLERY_STATES = ('earned', 'in_progress', 'maintenance', 'unearned')  # multi-
 GALLERY_PAGE_SIZE = 48  # medallions per page (a multiple of common 2/3/4/6-column grids)
 GALLERY_SORTS = [  # (key, label) -- the Gallery's own sorts (distinct from the Series view's)
     ('name', 'Name (A-Z)'),
+    ('set_number', 'Set number'),
     ('rarity', 'Rarest first'),
     ('popular', 'Most earned'),
     ('newest', 'Newest'),
@@ -182,7 +183,9 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         # (otherwise Postgres could reorder ties between pages -> a duplicated or skipped medallion).
         name_key = Lower('name')
         sort = g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else 'name'
-        if sort == 'rarity':
+        if sort == 'set_number':
+            qs = qs.order_by(F('set_number').asc(nulls_last=True), 'pk')  # edition order; unnumbered last
+        elif sort == 'rarity':
             qs = qs.order_by('earned_count', name_key, 'pk')      # fewest earners = rarest first
         elif sort == 'popular':
             qs = qs.order_by('-earned_count', name_key, 'pk')

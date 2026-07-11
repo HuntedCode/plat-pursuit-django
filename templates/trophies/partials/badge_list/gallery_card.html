@@ -5,6 +5,7 @@ login-gated collection modal is NOT used here). Expects `frame` (a showcase buil
 series_slug/badge_id). {% endcomment %}
 <a class="pp-bgal__card" data-bgal-cell data-tier="{{ frame.tier }}"
    {% if frame.series_slug %}href="{% url 'badge_detail' frame.series_slug %}"{% endif %}>
+    {% if frame.set_number %}<span class="pp-bgal__setno" title="Set number">#{{ frame.set_number|stringformat:"04d" }}</span>{% endif %}
     {% if frame.owned_state == 'earned' %}
     <span class="pp-bgal__owned pp-bgal__owned--earned" title="You've earned this">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
