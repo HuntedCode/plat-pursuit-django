@@ -38,6 +38,19 @@ def test_series_renders_pp_slist_rows(client):
     assert 'pp-vtoggle' in html                     # shared Series|Gallery toggle present
 
 
+def test_series_row_emits_tier_name_for_css_accent(client):
+    """The row's data-tier must be a tier NAME (bronze/silver/gold/platinum) so series-list.css's
+    [data-tier="..."] --tier-c accents match -- not a DaisyUI semantic color (warning/secondary/...),
+    which would silently leave every tier the same fallback cyan. Regression for the audit HIGH finding."""
+    _series('rs-tiername')
+
+    html = client.get(SERIES).content.decode()
+
+    assert 'data-tier="bronze"' in html
+    for semantic in ('data-tier="warning"', 'data-tier="secondary"', 'data-tier="error"', 'data-tier="primary"'):
+        assert semantic not in html
+
+
 def test_series_multi_badge_type_filter_ORs(client):
     """?badge_type=series&badge_type=developer returns BOTH (badge_type__in), not just one."""
     _series('rs-a', badge_type='series')

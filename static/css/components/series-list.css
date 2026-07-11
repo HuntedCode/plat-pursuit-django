@@ -27,7 +27,8 @@
  * SERIES VIEW -- the per-series ROW list. Each row is one badge SERIES with its next-tier medallion, cover,
  * reward title, the four trophy-type counts, and (auth) next-tier progress. The row is the Series view's
  * distinct job -- "what's needed to conquer this series" -- so it stays comprehensive, re-skinned to --pp-*.
- * `--pp-list-accent` (the cyan focus ring the shared .pp-bgal__ toolbar chips reference) is declared here.
+ * `--pp-list-accent` (the cyan focus ring) is declared on .pp-slist here for the Series view; the Gallery
+ * view declares its own on .pp-bgal (browse-gallery.css) since it doesn't nest inside .pp-slist.
  * ============================================================ */
 .pp-slist { --pp-list-accent: rgba(63, 205, 220, 1); display: flex; flex-direction: column; gap: 12px; }
 .pp-slist__rows { display: flex; flex-direction: column; gap: 8px; }
@@ -124,10 +125,10 @@
 .pp-slist__prog-val { font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .pp-slist__bar { height: 6px; border-radius: 999px; overflow: hidden; background: color-mix(in oklab, var(--pp-text) 12%, transparent); }
 .pp-slist__bar > span { display: block; height: 100%; border-radius: 999px; transition: width 0.3s ease; }
-.pp-slist__bar[data-band="lo"]   > span, .pp-slist__prog[data-band="lo"]   .pp-slist__prog-val { color: #e23026; }
-.pp-slist__bar[data-band="mid"]  > span, .pp-slist__prog[data-band="mid"]  .pp-slist__prog-val { color: #e7c25c; }
-.pp-slist__bar[data-band="hi"]   > span, .pp-slist__prog[data-band="hi"]   .pp-slist__prog-val { color: #3fbf7f; }
-.pp-slist__bar[data-band="full"] > span, .pp-slist__prog[data-band="full"] .pp-slist__prog-val { color: var(--pp-primary); }
+.pp-slist__prog[data-band="lo"]   .pp-slist__prog-val { color: #e23026; }
+.pp-slist__prog[data-band="mid"]  .pp-slist__prog-val { color: #e7c25c; }
+.pp-slist__prog[data-band="hi"]   .pp-slist__prog-val { color: #3fbf7f; }
+.pp-slist__prog[data-band="full"] .pp-slist__prog-val { color: var(--pp-primary); }
 .pp-slist__bar[data-band="lo"]   > span { background: #e23026; }
 .pp-slist__bar[data-band="mid"]  > span { background: #e7c25c; }
 .pp-slist__bar[data-band="hi"]   > span { background: #3fbf7f; }

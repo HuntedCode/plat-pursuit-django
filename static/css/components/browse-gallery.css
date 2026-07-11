@@ -5,7 +5,7 @@
  * small CARD-corner marker, NEVER over the medallion. Server-driven filter/sort/paginate. Reuses .pp-med
  * for the object and the .pp-gallery__ toolbar classes (globally bundled) for the controls.
  * ============================================================ */
-.pp-bgal { display: flex; flex-direction: column; gap: 16px; }
+.pp-bgal { --pp-list-accent: rgba(63, 205, 220, 1); display: flex; flex-direction: column; gap: 16px; }
 
 /* The wall: fixed responsive columns capped at 8 across (a catalog reads better in tidy rows than the
    Collection's auto-fill, which packs 10-12 on wide screens). */

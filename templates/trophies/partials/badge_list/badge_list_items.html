@@ -3,7 +3,7 @@
 {% with item.badge as badge %}
 {% with percent=item.progress_percentage %}
     <a href="{% url 'badge_detail' badge.series_slug %}"
-       class="pp-slist__row{% if item.is_earned %} is-earned{% endif %}" data-tier="{{ badge.tier|badge_color }}">
+       class="pp-slist__row{% if item.is_earned %} is-earned{% endif %}" data-tier="{{ badge.tier|badge_tier|lower }}">
 
         {# ── Next-tier medallion ── #}
         <span class="pp-slist__med{% if not item.is_earned %} pp-slist__med--dim{% endif %}">
@@ -71,7 +71,7 @@
                         <span class="pp-slist__prog-label">Progress</span>
                         <span class="pp-slist__prog-val">{{ item.completed_concepts }}/{{ item.required_stages }}</span>
                     </span>
-                    <span class="pp-slist__bar" data-band="{% if percent >= 100 %}full{% elif percent >= 66 %}hi{% elif percent >= 33 %}mid{% else %}lo{% endif %}"><span style="width: {{ percent }}%"></span></span>
+                    <span class="pp-slist__bar" data-band="{% if percent >= 100 %}full{% elif percent >= 66 %}hi{% elif percent >= 33 %}mid{% else %}lo{% endif %}" role="progressbar" aria-valuenow="{{ percent }}" aria-valuemin="0" aria-valuemax="100"><span style="width: {{ percent }}%"></span></span>
                 </span>
             {% endif %}
         </span>
@@ -103,7 +103,7 @@
                     <span class="pp-slist__prog-label">Progress</span>
                     <span class="pp-slist__prog-val">{{ item.completed_concepts }}/{{ item.required_stages }} ({{ percent }}%)</span>
                 </span>
-                <span class="pp-slist__bar" data-band="{% if percent >= 100 %}full{% elif percent >= 66 %}hi{% elif percent >= 33 %}mid{% else %}lo{% endif %}"><span style="width: {{ percent }}%"></span></span>
+                <span class="pp-slist__bar" data-band="{% if percent >= 100 %}full{% elif percent >= 66 %}hi{% elif percent >= 33 %}mid{% else %}lo{% endif %}" role="progressbar" aria-valuenow="{{ percent }}" aria-valuemin="0" aria-valuemax="100"><span style="width: {{ percent }}%"></span></span>
             </span>
         {% endif %}
     </a>
