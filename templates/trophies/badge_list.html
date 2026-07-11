@@ -72,9 +72,9 @@
 
     {% comment %} View toggle: Series (per-series rows, "what's needed") vs Gallery (per-tier medallion wall,
     catalog discovery -- filter individual tiers across every series). {% endcomment %}
-    <div class="join mb-3">
-        <a href="{% url 'badges_list' %}" class="btn btn-sm join-item {% if view != 'gallery' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">Series</a>
-        <a href="{% url 'badges_list' %}?view=gallery" class="btn btn-sm join-item {% if view == 'gallery' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">Gallery</a>
+    <div class="pp-vtoggle mb-3" role="tablist" aria-label="Badge view">
+        <a href="{% url 'badges_list' %}" class="pp-vtoggle__chip{% if view != 'gallery' %} is-active{% endif %}" role="tab" aria-selected="{% if view != 'gallery' %}true{% else %}false{% endif %}">Series</a>
+        <a href="{% url 'badges_list' %}?view=gallery" class="pp-vtoggle__chip{% if view == 'gallery' %} is-active{% endif %}" role="tab" aria-selected="{% if view == 'gallery' %}true{% else %}false{% endif %}">Gallery</a>
     </div>
 
     {% if view == 'gallery' %}

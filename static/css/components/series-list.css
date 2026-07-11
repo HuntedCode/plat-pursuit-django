@@ -1,0 +1,24 @@
+/* ============================================================
+ * BADGES BROWSE -- the /badges/ Series view + shared page chrome, rebuilt to the --pp-* house style so
+ * the page reads as one piece next to the Browse Gallery. Reuses the Gallery's .pp-bgal__ toolbar and the
+ * partials/badge.html icon; adds the per-series ROW card (.pp-slist__row) that the medallion grids lack.
+ * ============================================================ */
+
+/* View toggle (Series | Gallery): a segmented pill, mirroring the Collection's Case/Gallery toggle. */
+.pp-vtoggle {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px; border-radius: 8px;
+    border: 1px solid var(--pp-border); background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent);
+}
+.pp-vtoggle__chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 5px;
+    border: 1px solid transparent; background: transparent; color: var(--pp-text-mute);
+    font-size: 12px; font-weight: 600; letter-spacing: 0.03em; text-decoration: none;
+    transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+.pp-vtoggle__chip:hover { color: var(--pp-text); }
+.pp-vtoggle__chip.is-active {
+    background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
+    color: var(--pp-text);
+}
+.pp-vtoggle__chip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
