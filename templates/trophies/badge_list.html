@@ -195,19 +195,35 @@
         if (toggle) {
             toggle.addEventListener('click', function () { setPanel(panel.hasAttribute('hidden')); });
         }
+        var clearBtn = document.getElementById('bgal-clear');
         function activeCount() {
             return form ? form.querySelectorAll('input[type="checkbox"]:checked').length : 0;
         }
-        function updateCount() {
-            if (!countEl) { return; }
-            var n = activeCount();
-            countEl.textContent = n;
-            countEl.hidden = (n === 0);
+        function searchValue() {
+            var qi = form && form.querySelector('input[name="q"]');
+            return qi ? qi.value.trim() : '';
         }
-        if (form) { form.addEventListener('change', updateCount); }
-        updateCount();
+        function refreshControls() {
+            var n = activeCount();
+            if (countEl) { countEl.textContent = n; countEl.hidden = (n === 0); }
+            if (clearBtn) { clearBtn.hidden = (n === 0 && !searchValue()); }  // shown only when something's set
+        }
+        if (form) {
+            form.addEventListener('change', refreshControls);
+            form.addEventListener('input', refreshControls);  // live-update while typing in search
+        }
+        if (clearBtn && form) {
+            clearBtn.addEventListener('click', function () {
+                form.querySelectorAll('input[type="checkbox"]:checked').forEach(function (c) { c.checked = false; });
+                var qi = form.querySelector('input[name="q"]');
+                if (qi) { qi.value = ''; }
+                refreshControls();
+                form.requestSubmit();  // fires the form's submit -> HTMX reloads the (now unfiltered) results
+            });
+        }
+        refreshControls();
         // Start expanded if filters are already applied (so what's active is visible on load).
-        if (activeCount() > 0) { setPanel(true); }
+        if (activeCount() > 0 || searchValue()) { setPanel(true); }
     });
     </script>
     {% else %}
