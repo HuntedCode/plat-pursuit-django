@@ -95,6 +95,8 @@ Key relationships:
 - `most_recent_concept` FK to `Concept`
 - `funded_by` FK to `Profile` (donor who funded artwork)
 
+**Public surfaces** (`BadgeListView`, `/badges/`, rebuilt to `--pp-*`): two views on one page. The **Series** view (default) is one row per `series_slug` showing the next-tier medallion + trophy-type spread + progress ("what's needed"); the **Gallery** view (`?view=gallery`) is a per-*tier* medallion wall for catalog discovery (DB-side tier/type/state/set filters, `build_badge_frame(..., showcase=True)`). Both server-paginate with infinite scroll and share the `.pp-bgal__` toolbar. The personal **Collection** (`/collection/`) is the engaged-scoped album of what a user actually holds.
+
 ### Stage
 Defines one "step" in a badge series. Contains the Concepts a player must platinum (or 100%) to complete the stage. `stage_number` 0 marks optional/tangential entries. `required_tiers` limits which badge tiers require this stage.
 

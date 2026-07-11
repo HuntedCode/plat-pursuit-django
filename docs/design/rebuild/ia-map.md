@@ -23,7 +23,7 @@ The expensive-to-change structure is decided and stable. Do not re-litigate it p
 ## Sections
 
 ### Pursuit (`/`) — the spine
-Home of the Pursuer, the two rails (**Badges** = collection, **Contracts/Elements** = leveling), and identity. **The Pursuit home IS the "where you're at" overview** (Pursuer hero + Lab snapshot + active Projects + recent badges, with quick links into each destination). There is **no separate Logbook page** — that role folds into `/` (see resolution below).
+Home of the Pursuer, the two rails (**Badges** and **Contracts/Elements** = leveling), and identity. Badges now split into two surfaces: the **public catalog** (Browse `/badges/` — the per-series Series view + the per-tier medallion Gallery) and the **personal album** (the engaged-scoped Collection under Pursuit). The catalog is discovery; the album is "what you hold." **The Pursuit home IS the "where you're at" overview** (Pursuer hero + Lab snapshot + active Projects + recent badges, with quick links into each destination). There is **no separate Logbook page** — that role folds into `/` (see resolution below).
 
 | Page | URL | Status | Links OUT to | Linked IN from |
 |------|-----|--------|--------------|----------------|
