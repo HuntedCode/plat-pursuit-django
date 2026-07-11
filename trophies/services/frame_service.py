@@ -159,9 +159,11 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
     # showcase frame (the medallion is "the badge as it exists", not the viewer's copy).
     owned_state = None
     owned_progress_pct = None
+    owned_stages_done = None
     if showcase and profile is not None:
         owned_state = state
         owned_progress_pct = progress_pct
+        owned_stages_done = stages_done   # the viewer's REAL completed count, before the showcase full bar
         state = "earned"
         stages_done = stages_total
         progress_pct = None
@@ -185,9 +187,11 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
         frame["earned_date"] = earned_date
     if progress_pct is not None:
         frame["progress_pct"] = progress_pct
-    # Showcase card marker: the viewer's real ownership of a badge shown in full-colour 'earned' glory.
+    # Showcase card marker: the viewer's real ownership of a badge shown in full-colour 'earned' glory,
+    # plus their real completed-stage count (so the catalog card can show "X / N stages" for in-progress).
     if owned_state is not None:
         frame["owned_state"] = owned_state
+        frame["owned_stages_done"] = owned_stages_done
         if owned_progress_pct is not None:
             frame["owned_progress_pct"] = owned_progress_pct
     # Segmented progress meter cells (the medallion's in-progress/maintenance states render these as a

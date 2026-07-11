@@ -155,20 +155,36 @@ def test_gallery_badge_type_filter(client):
     assert '/badges/rs-type/' not in html
 
 
-def test_gallery_card_markers_for_maintenance_and_in_progress(client):
-    """The card-corner marker reads owned_state: a held (incl. lapsed/maintenance) badge shows the green
-    check, an in-progress one shows the hollow ring. The medallions all stay showcase colour."""
+def test_gallery_card_markers_are_distinct_per_owned_state(client):
+    """The card-corner marker reads owned_state, with THREE distinct treatments: earned = green check,
+    maintenance = red ring (lapsed), in-progress = cyan ring. The medallions all stay showcase colour."""
     profile = ProfileFactory()
     badges = _series('rs-mark')
-    ub = UserBadgeFactory(profile=profile, badge=badges[0])
-    UserBadge.objects.filter(pk=ub.pk).update(status='maintenance')                   # bronze -> held/lapsed
-    UserBadgeProgressFactory(profile=profile, badge=badges[1], completed_concepts=2)  # silver -> in progress
+    UserBadgeFactory(profile=profile, badge=badges[0])                                # bronze -> earned
+    ub = UserBadgeFactory(profile=profile, badge=badges[1])
+    UserBadge.objects.filter(pk=ub.pk).update(status='maintenance')                   # silver -> held/lapsed
+    UserBadgeProgressFactory(profile=profile, badge=badges[2], completed_concepts=2)  # gold -> in progress
     client.force_login(profile.user)
 
     html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
 
-    assert 'pp-bgal__owned--earned' in html      # maintenance is still held -> the owned check
-    assert 'pp-bgal__owned--progress' in html    # in-progress -> the hollow ring
+    assert 'pp-bgal__owned--earned' in html        # earned -> green check
+    assert 'pp-bgal__owned--maintenance' in html   # maintenance -> red ring (distinct from both)
+    assert 'pp-bgal__owned--progress' in html      # in-progress -> cyan ring
+
+
+def test_gallery_card_stat_shows_stages_not_a_meaningless_ratio(client):
+    """The card stat reads as stage info: how big the badge is ("N stages"), and once you're working on it,
+    how far you've gotten ("X / N stages") -- not the medallion's showcase "N / N"."""
+    profile = ProfileFactory()
+    badges = _series('rs-stat', tiers=(1,))                                           # one badge, required_stages=5
+    UserBadgeProgressFactory(profile=profile, badge=badges[0], completed_concepts=2)  # 2 of 5 in progress
+    client.force_login(profile.user)
+
+    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+
+    assert 'stages' in html                 # the stat is labelled in stages, not a bare ratio
+    assert '2 / 5 stages' in html           # in-progress shows the real completed count
 
 
 def test_gallery_full_page_carries_infinite_scroll_hooks(client):

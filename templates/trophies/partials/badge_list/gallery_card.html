@@ -5,17 +5,21 @@ login-gated collection modal is NOT used here). Expects `frame` (a showcase buil
 series_slug/badge_id). {% endcomment %}
 <a class="pp-bgal__card" data-bgal-cell data-tier="{{ frame.tier }}"
    {% if frame.series_slug %}href="{% url 'badge_detail' frame.series_slug %}"{% endif %}>
-    {% if frame.owned_state == 'earned' or frame.owned_state == 'maintenance' %}
+    {% if frame.owned_state == 'earned' %}
     <span class="pp-bgal__owned pp-bgal__owned--earned" title="You've earned this">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
         <span class="sr-only">You've earned this</span>
     </span>
+    {% elif frame.owned_state == 'maintenance' %}
+    <span class="pp-bgal__owned pp-bgal__owned--maintenance" title="Earned, now lapsed"><span class="sr-only">Earned, now lapsed</span></span>
     {% elif frame.owned_state == 'in_progress' %}
     <span class="pp-bgal__owned pp-bgal__owned--progress" title="In progress"><span class="sr-only">In progress</span></span>
     {% endif %}
     {% include 'components/badge_medallion.html' with frame=frame no_id=True %}
     <span class="pp-bgal__caption">
         <span class="pp-bgal__name">{{ frame.series_name }}</span>
-        <span class="pp-bgal__stat">{{ frame.tier }}</span>
+        {% comment %} The catalog stat: how big the badge is ("N stages"), or -- once you're working on it --
+        how far along you are ("X / N stages"). Replaces the medallion's meaningless showcase "N / N". {% endcomment %}
+        <span class="pp-bgal__stat">{% if frame.owned_state == 'in_progress' or frame.owned_state == 'maintenance' %}{{ frame.owned_stages_done|default:0 }} / {{ frame.stages_total }} stages{% else %}{{ frame.stages_total }} stage{{ frame.stages_total|pluralize }}{% endif %}</span>
     </span>
 </a>

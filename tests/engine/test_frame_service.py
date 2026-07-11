@@ -150,6 +150,7 @@ def test_showcase_in_progress_stashes_owned_progress_but_shows_full():
     assert "progress_pct" not in frame                # the showcase medallion carries no progress bar
     assert frame["owned_state"] == "in_progress"      # ... the card shows you're chasing it
     assert frame["owned_progress_pct"] == 30
+    assert frame["owned_stages_done"] == 3            # the REAL completed count (for the "3 / 10 stages" card stat)
 
 
 def test_showcase_maintenance_owned_state():
