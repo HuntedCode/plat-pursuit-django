@@ -550,12 +550,17 @@
     }
 
     function elMatches(el, filters, term) {
-        return (filters.tier === 'all' || el.getAttribute('data-tier') === filters.tier)
-            && stateMatches(el.getAttribute('data-state'), filters.state)
-            && (filters.theme === 'all' || el.getAttribute('data-theme') === filters.theme)
-            && (term === ''
-                || el.getAttribute('data-series').indexOf(term) !== -1
-                || el.getAttribute('data-badge').indexOf(term) !== -1);
+        if (filters.tier !== 'all' && el.getAttribute('data-tier') !== filters.tier) return false;
+        if (!stateMatches(el.getAttribute('data-state'), filters.state)) return false;
+        if (filters.theme !== 'all' && el.getAttribute('data-theme') !== filters.theme) return false;
+        if (term === '') return true;
+        if (el.getAttribute('data-series').indexOf(term) !== -1) return true;
+        if (el.getAttribute('data-badge').indexOf(term) !== -1) return true;
+        // A numeric query (optionally "#0042") also matches the badge's set number.
+        var numeric = term.replace(/^#/, '');
+        if (/^\d+$/.test(numeric)
+            && parseInt(numeric, 10) === (parseInt(el.getAttribute('data-set-number'), 10) || 0)) return true;
+        return false;
     }
 
     function sortValue(el, key) {
