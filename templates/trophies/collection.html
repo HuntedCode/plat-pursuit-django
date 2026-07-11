@@ -21,6 +21,8 @@
                         Your badge collection. Earned badges gleam on display; the rest are waiting mounts to fill.
                     </p>
                 </div>
+                {# Tally hidden on an empty album -- "0 / 0 . 0%" over the empty-state CTA is redundant. #}
+                {% if summary.total %}
                 <div class="shrink-0 text-right">
                     <div class="leading-none">
                         <span class="pp-tally text-2xl md:text-3xl text-primary" data-countup="{{ summary.earned }}">{{ summary.earned|intcomma }}</span>
@@ -34,6 +36,7 @@
                     </div>
                     {% endif %}
                 </div>
+                {% endif %}
             </div>
 
             {# Completion Horizon + tier composition -- substance in the header, not a separate section.

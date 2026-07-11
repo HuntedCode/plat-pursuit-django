@@ -142,6 +142,24 @@ def test_held_standalone_badge_with_no_series_slug_still_appears():
     assert standalone.id in ids
 
 
+def test_held_empty_slug_badge_kept_by_id_not_matched_as_a_slug():
+    """A held badge with an EMPTY-STRING series_slug (a valid blank value, distinct from NULL) is kept by
+    id like a null-slug one -- crucially it must NOT inject '' into the engaged-slug set, which would match
+    every empty-slug badge catalog-wide. Locks the `if not slug` split against a future `is None` tightening."""
+    profile = ProfileFactory()
+    held = BadgeFactory(series_slug='', tier=1, badge_type='event', is_live=True,
+                        required_stages=1, display_series='Blank-slug')
+    other = BadgeFactory(series_slug='', tier=2, badge_type='event', is_live=True,
+                         required_stages=1, display_series='Other blank-slug')  # a DIFFERENT blank-slug badge, NOT held
+    UserBadgeFactory(profile=profile, badge=held)
+
+    ctx = build_collection_context(profile)
+
+    ids = {f['badge_id'] for s in ctx['binder_sets'] for g in s['groups'] for f in g['tiers']}
+    assert held.id in ids       # the held blank-slug badge appears (via extra_ids)
+    assert other.id not in ids  # '' is NOT treated as a slug, so unrelated blank-slug badges aren't dragged in
+
+
 def test_each_badge_type_is_its_own_set():
     """Each badge type is a distinct binder view (set), even small ones -- one page each."""
     profile = ProfileFactory()
