@@ -42,7 +42,7 @@ def _resolve_layer_url(path):
 
 def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
                       earned=_UNSET, progress=_UNSET, include_live_stats=True,
-                      current_rank=_UNSET, series_xp=_UNSET):
+                      current_rank=_UNSET, series_xp=_UNSET, showcase=False):
     """Build the Frame data dict for a single-tier Badge.
 
     state is derived from the viewer's progress:
@@ -51,6 +51,12 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
       - unearned    : no progress
     Anonymous viewers (profile=None) get the showcase 'earned' look so public
     badge pages present the artwork in full rather than locked.
+
+    SHOWCASE MODE (`showcase=True`, the Browse catalog Gallery): present the badge in its full
+    "as-designed" (earned) look for EVERY viewer -- the emitted `state` is forced to 'earned' (no
+    tarnish) -- while the viewer's real state is stashed on the frame as `owned_state`
+    (earned/maintenance/in_progress/unearned) + `owned_progress_pct`, so the CARD can show a small
+    ownership marker WITHOUT changing the medallion. Anonymous viewers get no owned_state (pure catalog).
 
     PERFORMANCE: with a profile this issues, per call: the UserBadge query, an
     earners-leaderboard Redis lookup + a series-XP DB query (both for earned
@@ -147,6 +153,21 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
                 state = "unearned"
                 stages_done = 0
 
+    # Showcase (catalog Gallery): keep the personal state as `owned_state` for the card marker, then
+    # force the medallion itself back to the full-colour 'earned' look. Anonymous (profile is None) keeps
+    # owned_state None -> pure catalog, no marker. earned_date/earn_rank are per-viewer, so drop them off a
+    # showcase frame (the medallion is "the badge as it exists", not the viewer's copy).
+    owned_state = None
+    owned_progress_pct = None
+    if showcase and profile is not None:
+        owned_state = state
+        owned_progress_pct = progress_pct
+        state = "earned"
+        stages_done = stages_total
+        progress_pct = None
+        earned_date = None
+        earn_rank = None
+
     frame = {
         "tier": _TIER_NAME.get(badge.tier, "gold"),
         "state": state,
@@ -164,6 +185,11 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
         frame["earned_date"] = earned_date
     if progress_pct is not None:
         frame["progress_pct"] = progress_pct
+    # Showcase card marker: the viewer's real ownership of a badge shown in full-colour 'earned' glory.
+    if owned_state is not None:
+        frame["owned_state"] = owned_state
+        if owned_progress_pct is not None:
+            frame["owned_progress_pct"] = owned_progress_pct
     # Segmented progress meter cells (the medallion's in-progress/maintenance states render these as a
     # multi-bar). One cell per platinum/100%, filled up to stages_done; only when countable (<= cap).
     # Above the cap the medallion falls back to a smooth bar off progress_pct instead.

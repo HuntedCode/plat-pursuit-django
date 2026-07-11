@@ -8,6 +8,7 @@ base.
 
 import pytest
 
+from trophies.models import UserBadge
 from trophies.services.frame_service import build_badge_frame
 from tests.factories import (
     BadgeFactory,
@@ -107,6 +108,70 @@ def test_unearned_viewer_with_no_progress():
 
     assert frame["state"] == "unearned"
     assert frame["stages_done"] == 0
+
+
+# --- showcase mode (the Browse catalog Gallery): full-colour look + a per-viewer owned_state marker ---
+
+
+def test_showcase_forces_earned_look_on_an_unearned_badge():
+    """Showcase presents an unearned badge in full-colour 'earned' glory (no tarnish), but the viewer's
+    real state rides along as owned_state so the CARD can mark it -- the medallion itself is unchanged."""
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=10)
+
+    frame = build_badge_frame(badge, profile, showcase=True)
+
+    assert frame["state"] == "earned"            # the medallion shows the badge in full
+    assert frame["stages_done"] == 10            # earned look = full meter
+    assert frame["owned_state"] == "unearned"    # ... but the card knows you don't have it
+    assert "earned_date" not in frame            # no per-viewer earn date on a showcase frame
+
+
+def test_showcase_earned_viewer_owned_state_is_earned():
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=2, required_stages=8)
+    UserBadgeFactory(profile=profile, badge=badge)
+
+    frame = build_badge_frame(badge, profile, showcase=True)
+
+    assert frame["state"] == "earned"
+    assert frame["owned_state"] == "earned"
+
+
+def test_showcase_in_progress_stashes_owned_progress_but_shows_full():
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=10)
+    UserBadgeProgressFactory(profile=profile, badge=badge, completed_concepts=3)
+
+    frame = build_badge_frame(badge, profile, showcase=True)
+
+    assert frame["state"] == "earned"                 # medallion in full colour
+    assert frame["segments"] == [True] * 10           # earned look, not a 3/10 meter
+    assert "progress_pct" not in frame                # the showcase medallion carries no progress bar
+    assert frame["owned_state"] == "in_progress"      # ... the card shows you're chasing it
+    assert frame["owned_progress_pct"] == 30
+
+
+def test_showcase_maintenance_owned_state():
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=5)
+    ub = UserBadgeFactory(profile=profile, badge=badge)
+    UserBadge.objects.filter(pk=ub.pk).update(status='maintenance')
+
+    frame = build_badge_frame(badge, profile, showcase=True)
+
+    assert frame["state"] == "earned"
+    assert frame["owned_state"] == "maintenance"
+
+
+def test_showcase_anonymous_has_no_owned_state():
+    """Anonymous viewers get the pure catalog look -- earned presentation, no ownership marker at all."""
+    badge = BadgeFactory(tier=4, required_stages=10)
+
+    frame = build_badge_frame(badge, showcase=True)  # no profile
+
+    assert frame["state"] == "earned"
+    assert "owned_state" not in frame
 
 
 def test_rarity_set_number_and_type_in_frame():
