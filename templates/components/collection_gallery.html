@@ -17,12 +17,15 @@ collection-gallery.css, wired by collection.js (initGallery).
             <button type="button" class="pp-gallery__chip" data-filter-tier="gold">Gold</button>
             <button type="button" class="pp-gallery__chip" data-filter-tier="platinum">Platinum</button>
         </div>
+        {% comment %} No "Unearned" chip: the Collection is scoped to ENGAGED series, and every tier of an
+        engaged series carries progress (the badge engine writes a UserBadgeProgress row per tier, and shared
+        stages give the higher rungs non-zero progress), so nothing here is unearned -- only Earned / In Progress.
+        The JS still handles a stray unearned data-state under "All". {% endcomment %}
         <div class="pp-gallery__fgroup">
             <span>State</span>
             <button type="button" class="pp-gallery__chip is-active" data-filter-state="all">All</button>
             <button type="button" class="pp-gallery__chip" data-filter-state="earned">Earned</button>
             <button type="button" class="pp-gallery__chip" data-filter-state="in_progress">In Progress</button>
-            <button type="button" class="pp-gallery__chip" data-filter-state="unearned">Unearned</button>
         </div>
         {% if themes|length > 1 %}
         {% comment %} Set filter is a dropdown (not chips): the set types keep growing -- series, franchise,
