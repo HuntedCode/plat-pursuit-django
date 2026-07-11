@@ -87,97 +87,30 @@
     {# ── Education Header ── #}
     {% include 'trophies/partials/badge_list/badge_list_header.html' %}
 
-    {# ── Search + Sort Toolbar Card ── #}
-    <form id="filter-form" method="get" data-browse-form
-          hx-get="{% url 'badges_list' %}" hx-target="#browse-results" hx-push-url="true" hx-swap="innerHTML" hx-trigger="submit">
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-            <div class="card-body p-3 md:p-4">
-                <div class="flex flex-col md:flex-row gap-2 md:gap-3">
-                    <div class="relative flex-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <input type="text" name="series_slug" id="id_query" value="{{ request.GET.series_slug }}"
-                               class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
-                               placeholder="Search for a badge series..." />
-                    </div>
-
-                    <select name="sort" id="id_sort"
-                            class="select select-bordered select-sm md:select-md w-full md:w-44 lg:w-52">
-                        {% for value, display in form.sort.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
-                        {% endfor %}
-                    </select>
-
-                    <select name="badge_type" id="id_badge_type"
-                            class="select select-bordered select-sm md:select-md w-full md:w-44 lg:w-52">
-                        {% for value, display in form.badge_type.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.badge_type == value %}selected{% endif %}>{{ display }}</option>
-                        {% endfor %}
-                    </select>
-
-                    {% if user.is_authenticated %}
-                    <select name="completion_status" id="id_completion_status"
-                            class="select select-bordered select-sm md:select-md w-full md:w-36 lg:w-44">
-                        {% for value, display in form.completion_status.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.completion_status == value %}selected{% endif %}>{{ display }}</option>
-                        {% endfor %}
-                    </select>
-                    {% endif %}
-
-                    <button type="button" data-submit-btn
-                            class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <span class="hidden md:inline">Search</span>
-                    </button>
-                    <input type="hidden" name="page" value="1" />
-                </div>
-            </div>
-        </div>
-    </form>
-
-    {# ── Active Filter Summary ── #}
-    <div class="flex flex-wrap items-center gap-1.5 mb-3 text-xs text-base-content/50">
-        <span class="font-semibold">Showing:</span>
-        {% if selected_badge_type %}
-            <span class="badge badge-xs badge-ghost">{{ selected_badge_type|capfirst }}</span>
-        {% else %}
-            <span class="badge badge-xs badge-ghost">All Types</span>
-        {% endif %}
-        {% if request.GET.series_slug %}
-            <span class="text-base-content/30">&middot;</span>
-            <span class="badge badge-xs badge-ghost">"{{ request.GET.series_slug }}"</span>
-        {% endif %}
-        <a href="{% url 'badges_list' %}" class="link link-primary text-xs ml-1">Reset</a>
-    </div>
-
     {% include 'partials/ad_unit.html' with ad_slot="8195453976" %}
 
-    <div id="browse-results">
-        {% include 'trophies/partials/badge_list/browse_results.html' %}
-    </div>
+    {% include 'trophies/partials/badge_list/series_view.html' %}
     {% endif %}
 
 {% endblock %}
 
 {% block js_scripts %}
-    {% if view == 'gallery' %}
-    {% comment %} Gallery: filters apply INSTANTLY via HTMX (the form hx-swaps #browse-results on change), so
-    there's no Apply button and multi-select is fine. We (re)create InfiniteScroller after each swap (the grid
-    is replaced), and wire the collapsible Filters panel + its active-count badge. {% endcomment %}
+    {% comment %} Both views (Series rows + Gallery medallion wall) share this controller: filters apply
+    INSTANTLY via HTMX (the form hx-swaps #browse-results on change), so there's no Apply button and multi-
+    select is fine. We (re)create InfiniteScroller after each swap (the grid is replaced), and wire the
+    collapsible Filters panel + its active-count badge. The only per-view differences are the card selector
+    and page size, injected below. {% endcomment %}
     <script>
     document.addEventListener('DOMContentLoaded', function () {
+        var CARD = '{% if view == "gallery" %}.pp-bgal__card{% else %}.pp-slist__row{% endif %}';
+        var PAGE = {% if view == "gallery" %}{{ gallery_page_size|default:48 }}{% else %}{{ series_page_size|default:30 }}{% endif %};
         var scroller = null;
         function initScroller() {
             if (scroller && scroller.destroy) { scroller.destroy(); }
             if (window.PlatPursuit && PlatPursuit.InfiniteScroller) {
                 scroller = PlatPursuit.InfiniteScroller.create({
                     gridId: 'items-grid', sentinelId: 'bgal-sentinel', loadingId: 'bgal-loading',
-                    paginateBy: {{ gallery_page_size|default:48 }}, cardSelector: '.pp-bgal__card',
+                    paginateBy: PAGE, cardSelector: CARD,
                 });
             }
         }
@@ -205,8 +138,12 @@
         function activeCount() {
             return form ? form.querySelectorAll('input[type="checkbox"]:checked').length : 0;
         }
+        function searchInput() {
+            // Both toolbars share the .pp-bgal__search wrapper (Gallery = name="q", Series = name="series_slug").
+            return form ? form.querySelector('.pp-bgal__search input') : null;
+        }
         function searchValue() {
-            var qi = form && form.querySelector('input[name="q"]');
+            var qi = searchInput();
             return qi ? qi.value.trim() : '';
         }
         function refreshControls() {
@@ -221,7 +158,7 @@
         if (clearBtn && form) {
             clearBtn.addEventListener('click', function () {
                 form.querySelectorAll('input[type="checkbox"]:checked').forEach(function (c) { c.checked = false; });
-                var qi = form.querySelector('input[name="q"]');
+                var qi = searchInput();
                 if (qi) { qi.value = ''; }
                 refreshControls();
                 form.requestSubmit();  // fires the form's submit -> HTMX reloads the (now unfiltered) results
@@ -233,7 +170,4 @@
         setPanel(activeCount() > 0 || searchValue());
     });
     </script>
-    {% else %}
-    <script src="{% static 'js/browse-filters.js' %}"></script>
-    {% endif %}
 {% endblock %}

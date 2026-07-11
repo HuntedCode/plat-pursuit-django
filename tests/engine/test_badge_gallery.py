@@ -183,7 +183,10 @@ def test_gallery_view_defaults_to_series(client):
 
     html = client.get(GALLERY).content.decode()
 
-    assert 'pp-bgal' not in html  # series view, not the gallery island
+    # Series view, not the medallion wall. (Both views now share the .pp-bgal__ TOOLBAR classes, so key on
+    # the gallery-only grid/cells vs. the Series row.)
+    assert 'data-bgal-cell' not in html and 'pp-bgal__grid' not in html
+    assert 'pp-slist__row' in html
 
 
 def test_gallery_badge_type_filter(client):

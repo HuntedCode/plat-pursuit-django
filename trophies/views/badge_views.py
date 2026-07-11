@@ -25,6 +25,7 @@ _GALLERY_STATES = ('earned', 'in_progress', 'maintenance', 'unearned')  # multi-
 # since set numbers restart per type (Series #1 and Franchise #1 both exist).
 _TYPE_ORDER = ('series', 'franchise', 'collection', 'megamix', 'developer', 'user', 'event')
 GALLERY_PAGE_SIZE = 48  # medallions per page (a multiple of common 2/3/4/6-column grids)
+SERIES_PAGE_SIZE = 30   # series rows per page (Series view infinite scroll)
 # (key, label). Order mirrors the Collection Gallery's sort dropdown (name, rarest, tier, ..., set last).
 GALLERY_SORTS = [
     ('name', 'Name (A-Z)'),
@@ -95,13 +96,16 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     def get_template_names(self):
         gallery = self._view_mode() == 'gallery'
         htmx_results = getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results'
+        xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         if gallery:
             # InfiniteScroller page fetch (XHR) or a filter/toggle HTMX swap -> just the gallery grid;
             # otherwise the full page (badge_list.html branches to the gallery island on view=gallery).
-            if htmx_results or self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if htmx_results or xhr:
                 return ['trophies/partials/badge_list/gallery_results.html']
             return ['trophies/badge_list.html']
-        if htmx_results:
+        # Series: same model -- a filter/toggle HTMX swap OR an InfiniteScroller page fetch returns just
+        # the rows partial (browse_results.html); the full page otherwise.
+        if htmx_results or xhr:
             return ['trophies/partials/badge_list/browse_results.html']
         return super().get_template_names()
 
@@ -125,9 +129,10 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             series_slug = slugify(form.cleaned_data.get('series_slug'))
             if series_slug:
                 qs = qs.filter(series_slug__icontains=series_slug)
-            badge_type = form.cleaned_data.get('badge_type')
-            if badge_type:
-                qs = qs.filter(badge_type=badge_type)
+        # badge_type is now MULTI-select (chips) -> __in; read the raw list (the form field is single).
+        types = [t for t in self.request.GET.getlist('badge_type') if t]
+        if types:
+            qs = qs.filter(badge_type__in=types)
         return qs
 
     def _gallery_queryset(self):
@@ -471,9 +476,11 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 for d in display_data:
                     d['last_progress_date'] = progress_dates.get(d['badge'].series_slug)
 
-        # Filter by completion status (auth-only)
-        completion_status = self.request.GET.get('completion_status', '')
-        if completion_status and profile:
+        # Filter by completion status (auth-only) -- now MULTI-select chips, OR'd. Keep the exact original
+        # per-status predicates (they intentionally overlap: a not-started-but-started series matches both
+        # not_started and in_progress).
+        completion_statuses = [s for s in self.request.GET.getlist('completion_status') if s]
+        if completion_statuses and profile:
             max_tier_lookup = {}
             for d in display_data:
                 slug = d['badge'].series_slug
@@ -483,20 +490,20 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 )
                 max_tier_lookup[slug] = max_possible
 
-            if completion_status == 'not_started':
-                display_data = [d for d in display_data if d['user_highest_tier'] == 0]
-            elif completion_status == 'in_progress':
-                display_data = [
-                    d for d in display_data
-                    if 0 < d['user_highest_tier'] < max_tier_lookup.get(d['badge'].series_slug, 0)
-                    or (d['user_highest_tier'] == 0 and d['progress_percentage'] > 0)
-                ]
-            elif completion_status == 'completed':
-                display_data = [
-                    d for d in display_data
-                    if d['user_highest_tier'] > 0
-                    and d['user_highest_tier'] >= max_tier_lookup.get(d['badge'].series_slug, 0)
-                ]
+            def _status_match(d):
+                mt = d['user_highest_tier']
+                cap = max_tier_lookup.get(d['badge'].series_slug, 0)
+                prog = d['progress_percentage']
+                for s in completion_statuses:
+                    if s == 'not_started' and mt == 0:
+                        return True
+                    if s == 'in_progress' and (0 < mt < cap or (mt == 0 and prog > 0)):
+                        return True
+                    if s == 'completed' and (mt > 0 and mt >= cap):
+                        return True
+                return False
+
+            display_data = [d for d in display_data if _status_match(d)]
 
         # Sort data
         sort_val = self.request.GET.get('sort', 'name')
@@ -536,16 +543,24 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         else:
             display_data.sort(key=lambda d: _title(d))
 
-        # Paginate
-        paginate_by = 30
-        paginator = Paginator(display_data, paginate_by)
+        # Paginate. InfiniteScroller walks pages 2,3,... via XHR; get_page clamps an out-of-range page to the
+        # last (which would loop it forever), so an XHR fetch past the end emits NO rows and the scroller stops.
+        paginator = Paginator(display_data, SERIES_PAGE_SIZE)
         page_number = self.request.GET.get('page')
         page_obj = paginator.get_page(page_number)
-
-        context['display_data'] = page_obj
+        try:
+            requested_page = int(page_number or 1)
+        except (TypeError, ValueError):
+            requested_page = 1
+        is_xhr = (
+            self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or (getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results')
+        )
+        context['display_data'] = [] if (is_xhr and requested_page > paginator.num_pages) else page_obj
         context['page_obj'] = page_obj
         context['paginator'] = paginator
         context['is_paginated'] = page_obj.has_other_pages()
+        context['series_page_size'] = SERIES_PAGE_SIZE
 
         # User badge stats for authenticated users
         if profile:
@@ -599,14 +614,20 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             {'text': 'Badges'},
         ]
         context['form'] = self.get_filter_form()
-        context['selected_badge_type'] = self.request.GET.get('badge_type', '')
+        # Multi-select chip state for the rebuilt toolbar.
+        context['selected_badge_types'] = self.request.GET.getlist('badge_type')
+        context['selected_completion_statuses'] = self.request.GET.getlist('completion_status')
+        context['series_sort'] = self.request.GET.get('sort', 'name')
+        context['series_q'] = self.request.GET.get('series_slug', '')
 
         context['seo_description'] = (
             "Explore all badge series on Platinum Pursuit. "
             "Track your progress across game collections and earn every tier."
         )
 
-        track_page_view('badges_list', 'list', self.request)
+        # Only count a real page view, not each infinite-scroll ?page=N XHR fetch.
+        if not is_xhr:
+            track_page_view('badges_list', 'list', self.request)
         return context
 
 
