@@ -1,0 +1,19 @@
+{% load humanize %}
+{% comment %} Swappable results for the Browse Gallery: the medallion grid + pagination. Rendered inside
+#browse-results on a full page load, and returned ALONE on an HTMX filter/page swap (see BadgeListView
+.get_template_names). {% endcomment %}
+{% if gallery_frames %}
+<div class="pp-bgal__meta text-xs mb-2">{{ paginator.count|intcomma }} badge{{ paginator.count|pluralize }}</div>
+<div class="pp-bgal__grid" id="items-grid" data-bgal-grid>
+    {% for frame in gallery_frames %}
+    {% include 'trophies/partials/badge_list/gallery_card.html' with frame=frame %}
+    {% endfor %}
+</div>
+{% include 'partials/pagination.html' %}
+{% else %}
+<div class="pp-bgal__empty">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>
+    <p class="pp-bgal__empty-title">No badges match these filters</p>
+    <p class="text-sm mt-1">Try widening your tier or type filters.</p>
+</div>
+{% endif %}

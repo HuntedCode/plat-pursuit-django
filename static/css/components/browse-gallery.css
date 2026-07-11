@@ -1,0 +1,73 @@
+/* ============================================================
+ * BROWSE BADGE GALLERY -- the public catalog's per-tier medallion wall (?view=gallery on /badges/).
+ * The catalog-discovery cousin of the Collection Gallery: SHOWCASE-first (every medallion renders in full
+ * earned colour -- the badge as it exists, for everyone), with a logged-in viewer's ownership shown as a
+ * small CARD-corner marker, NEVER over the medallion. Server-driven filter/sort/paginate. Reuses .pp-med
+ * for the object and the .pp-gallery__ toolbar classes (globally bundled) for the controls.
+ * ============================================================ */
+.pp-bgal { display: flex; flex-direction: column; gap: 16px; }
+
+/* The wall: same rhythm as the Collection Gallery grid. */
+.pp-bgal__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 14px;
+}
+.pp-bgal__meta { color: var(--pp-text-mute); }
+
+/* Each card frames the showcase medallion. Neutral resting edge (no per-state frame -- state lives in the
+   corner marker, not the card), tier-accent warm on hover. */
+.pp-bgal__card {
+    --tier-c: var(--pp-primary);
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 16px 12px 12px; border-radius: 14px;
+    background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent);
+    border: 1px solid var(--pp-border);
+    text-decoration: none; color: inherit; scroll-margin-top: 96px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.pp-bgal__card[data-tier="bronze"]   { --tier-c: #cf9160; }
+.pp-bgal__card[data-tier="silver"]   { --tier-c: #b9c6d6; }
+.pp-bgal__card[data-tier="gold"]     { --tier-c: #e7c25c; }
+.pp-bgal__card[data-tier="platinum"] { --tier-c: #8fd2ea; }
+.pp-bgal__card .pp-med { --sz: 108px; }
+@media (hover: hover) {
+    .pp-bgal__card:hover {
+        border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border));
+        background: color-mix(in oklab, var(--pp-bg-2) 72%, transparent);
+        box-shadow: 0 10px 24px -12px color-mix(in oklab, var(--tier-c) 45%, #000);
+    }
+}
+.pp-bgal__card:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; }
+
+/* Ownership marker (logged-in only), pinned to the card corner -- never over the medallion. Earned/held ->
+   a green check; in-progress -> a hollow accent ring. Unearned renders nothing (pure catalog look). */
+.pp-bgal__owned {
+    position: absolute; top: 8px; right: 8px; z-index: 3;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 17px; height: 17px; border-radius: 50%;
+}
+.pp-bgal__owned--earned {
+    background: #3fbf7f; color: #06140d;
+    box-shadow: 0 0 8px -1px color-mix(in oklab, #3fbf7f 70%, transparent);
+}
+.pp-bgal__owned--earned svg { width: 11px; height: 11px; }
+.pp-bgal__owned--progress {
+    width: 14px; height: 14px; background: transparent;
+    border: 2px solid var(--pp-primary);
+    box-shadow: 0 0 8px -2px color-mix(in oklab, var(--pp-primary) 70%, transparent);
+}
+
+/* Caption: series name + the tier label. */
+.pp-bgal__caption { display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 100%; margin-top: auto; padding-top: 4px; }
+.pp-bgal__name {
+    font-size: 12px; font-weight: 600; color: var(--pp-text); text-align: center;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pp-bgal__stat { font-size: 10.5px; color: var(--pp-text-mute); text-transform: capitalize; }
+
+/* Empty state. */
+.pp-bgal__empty { text-align: center; color: var(--pp-text-mute); padding: 48px 16px; }
+.pp-bgal__empty svg { width: 34px; height: 34px; margin: 0 auto 4px; opacity: 0.6; }
+.pp-bgal__empty-title { font-size: 15px; font-weight: 700; color: var(--pp-text); }

@@ -1,0 +1,78 @@
+{% comment %} Browse badge Gallery island (?view=gallery): the public catalog's per-tier medallion wall,
+the cohesive rebuilt cousin of the Collection Gallery. Showcase-first medallions + a card-corner ownership
+marker for logged-in viewers. Server-driven: the toolbar is a plain GET form -- browse-filters.js
+auto-submits the selects/checkbox and HTMX-swaps #browse-results (get_template_names returns
+gallery_results.html for the swap). Reuses the .pp-gallery__ toolbar classes for a consistent look. {% endcomment %}
+<div class="pp-bgal">
+    <form id="filter-form" method="get" data-browse-form
+          hx-get="{% url 'badges_list' %}" hx-target="#browse-results" hx-push-url="true" hx-swap="innerHTML" hx-trigger="submit">
+        <input type="hidden" name="view" value="gallery" />
+        <input type="hidden" name="page" value="1" />
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body p-3 md:p-4">
+                <div class="pp-gallery__toolbar">
+                    <label class="pp-gallery__fgroup">
+                        <span>Tier</span>
+                        <select class="pp-gallery__select" name="tier" aria-label="Filter by tier">
+                            <option value="all"{% if gallery_tier == 'all' %} selected{% endif %}>All tiers</option>
+                            <option value="bronze"{% if gallery_tier == 'bronze' %} selected{% endif %}>Bronze</option>
+                            <option value="silver"{% if gallery_tier == 'silver' %} selected{% endif %}>Silver</option>
+                            <option value="gold"{% if gallery_tier == 'gold' %} selected{% endif %}>Gold</option>
+                            <option value="platinum"{% if gallery_tier == 'platinum' %} selected{% endif %}>Platinum</option>
+                        </select>
+                    </label>
+
+                    {% if gallery_authed %}
+                    <label class="pp-gallery__fgroup">
+                        <span>State</span>
+                        <select class="pp-gallery__select" name="state" aria-label="Filter by your state">
+                            <option value="all"{% if gallery_state == 'all' %} selected{% endif %}>Any</option>
+                            <option value="earned"{% if gallery_state == 'earned' %} selected{% endif %}>Earned</option>
+                            <option value="in_progress"{% if gallery_state == 'in_progress' %} selected{% endif %}>In Progress</option>
+                            <option value="unearned"{% if gallery_state == 'unearned' %} selected{% endif %}>Unearned</option>
+                        </select>
+                    </label>
+                    {% endif %}
+
+                    <label class="pp-gallery__fgroup">
+                        <span>Set</span>
+                        <select class="pp-gallery__select" name="badge_type" aria-label="Filter by badge type">
+                            {% for value, display in form.badge_type.field.choices %}
+                            <option value="{{ value }}"{% if selected_badge_type == value %} selected{% endif %}>{{ display }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+
+                    <span class="pp-gallery__search-wrap">
+                        <input type="text" class="pp-gallery__search" name="q" value="{{ gallery_q }}" placeholder="Search badges&hellip;" aria-label="Search badges" />
+                    </span>
+
+                    <label class="pp-gallery__sort-label">
+                        <span class="sr-only">Sort badges</span>
+                        <select class="pp-gallery__select" name="sort" aria-label="Sort badges">
+                            {% for key, label in gallery_sorts %}
+                            <option value="{{ key }}"{% if gallery_sort == key %} selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+
+                    {% if gallery_authed %}
+                    <label class="pp-gallery__fgroup" style="gap: 6px;">
+                        <input type="checkbox" name="hide_owned" value="1"{% if gallery_hide_owned %} checked{% endif %} aria-label="Hide badges you own" />
+                        <span>Hide owned</span>
+                    </label>
+                    {% endif %}
+
+                    <button type="button" data-submit-btn class="btn btn-sm btn-primary gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <span class="hidden md:inline">Search</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <div id="browse-results">
+        {% include 'trophies/partials/badge_list/gallery_results.html' %}
+    </div>
+</div>

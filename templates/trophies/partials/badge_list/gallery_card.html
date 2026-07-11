@@ -1,0 +1,21 @@
+{% comment %} One Browse Gallery cell: the SHOWCASE medallion (full earned colour for everyone) + a
+card-corner ownership marker derived from owned_state (logged-in only -- earned/held gets a green check,
+in-progress a hollow ring, unearned nothing). Taps through to the full badge_detail series page (the
+login-gated collection modal is NOT used here). Expects `frame` (a showcase build_badge_frame dict +
+series_slug/badge_id). {% endcomment %}
+<a class="pp-bgal__card" data-bgal-cell data-tier="{{ frame.tier }}"
+   {% if frame.series_slug %}href="{% url 'badge_detail' frame.series_slug %}"{% endif %}>
+    {% if frame.owned_state == 'earned' or frame.owned_state == 'maintenance' %}
+    <span class="pp-bgal__owned pp-bgal__owned--earned" title="You've earned this">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        <span class="sr-only">You've earned this</span>
+    </span>
+    {% elif frame.owned_state == 'in_progress' %}
+    <span class="pp-bgal__owned pp-bgal__owned--progress" title="In progress"><span class="sr-only">In progress</span></span>
+    {% endif %}
+    {% include 'components/badge_medallion.html' with frame=frame no_id=True %}
+    <span class="pp-bgal__caption">
+        <span class="pp-bgal__name">{{ frame.series_name }}</span>
+        <span class="pp-bgal__stat">{{ frame.tier }}</span>
+    </span>
+</a>

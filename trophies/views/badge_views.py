@@ -16,9 +16,23 @@ def _badge_xp(badge):
     """Compute total XP value for a badge tier."""
     return badge.required_stages * get_tier_xp(badge.tier) + BADGE_TIER_XP
 
+
+# Browse badge Gallery (the per-TIER medallion wall, ?view=gallery) -- the catalog-discovery cousin of the
+# Series view. Every filter/sort below maps to a real Badge column so it stays DB-side + paginated at scale.
+_TIER_NAME_TO_INT = {'bronze': 1, 'silver': 2, 'gold': 3, 'platinum': 4}
+GALLERY_PAGE_SIZE = 48  # medallions per page (a multiple of common 2/3/4/6-column grids)
+GALLERY_SORTS = [  # (key, label) -- the Gallery's own sorts (distinct from the Series view's)
+    ('name', 'Name (A-Z)'),
+    ('rarity', 'Rarest first'),
+    ('popular', 'Most earned'),
+    ('newest', 'Newest'),
+    ('tier', 'Tier (Bronze first)'),
+]
+GALLERY_SORT_KEYS = {k for k, _ in GALLERY_SORTS}
+
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db.models import Q, F, Prefetch, Max
+from django.db.models import Q, F, Prefetch, Max, Exists, OuterRef
 from django.db.models.functions import Lower
 from django.http import Http404, HttpResponseRedirect
 from urllib.parse import urlencode
@@ -34,6 +48,7 @@ from ..models import (
     UserTitle, ProfileGamification,
 )
 from ..forms import BadgeSearchForm
+from trophies.services.frame_service import build_badge_frame
 from trophies.services.redis_leaderboard_service import (
     RedisPaginator, RedisPage,
     get_xp_page, get_xp_rank, get_xp_count,
@@ -63,8 +78,24 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     context_object_name = 'display_data'
     paginate_by = None
 
+    def _view_mode(self):
+        """'gallery' (the per-tier medallion wall) or 'series' (the default per-series rows)."""
+        return 'gallery' if self.request.GET.get('view') == 'gallery' else 'series'
+
+    def _profile(self):
+        user = self.request.user
+        return user.profile if user.is_authenticated and hasattr(user, 'profile') else None
+
     def get_template_names(self):
-        if getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results':
+        gallery = self._view_mode() == 'gallery'
+        htmx_results = getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results'
+        if gallery:
+            # InfiniteScroller page fetch (XHR) or a filter/toggle HTMX swap -> just the gallery grid;
+            # otherwise the full page (badge_list.html branches to the gallery island on view=gallery).
+            if htmx_results or self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return ['trophies/partials/badge_list/gallery_results.html']
+            return ['trophies/badge_list.html']
+        if htmx_results:
             return ['trophies/partials/badge_list/browse_results.html']
         return super().get_template_names()
 
@@ -74,6 +105,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         return self._filter_form
 
     def get_queryset(self):
+        if self._view_mode() == 'gallery':
+            return self._gallery_queryset()
         qs = super().get_queryset().live().select_related(
             'base_badge', 'most_recent_concept', 'most_recent_concept__igdb_match', 'title',
             'base_badge__most_recent_concept', 'base_badge__most_recent_concept__igdb_match',
@@ -90,6 +123,126 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             if badge_type:
                 qs = qs.filter(badge_type=badge_type)
         return qs
+
+    def _gallery_queryset(self):
+        """The Browse Gallery's per-TIER queryset: one row per individual badge tier (not per series),
+        every filter + sort DB-side so it paginates at catalog scale. Mirrors the game-browse pattern
+        (Exists subqueries for personal state, real-column order_by). select_related covers every FK
+        build_badge_frame reads so the batched frame build issues no per-badge FK queries."""
+        qs = Badge.objects.live().select_related(
+            'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
+            'base_badge__franchise', 'base_badge__collection',
+            'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
+        )
+        g = self.request.GET
+
+        tier = _TIER_NAME_TO_INT.get(g.get('tier'))
+        if tier:
+            qs = qs.filter(tier=tier)
+        badge_type = g.get('badge_type')
+        if badge_type:
+            qs = qs.filter(badge_type=badge_type)
+        q = (g.get('q') or '').strip()
+        if q:
+            qs = qs.filter(
+                Q(series_slug__icontains=slugify(q)) | Q(name__icontains=q) | Q(display_title__icontains=q)
+            )
+
+        # Personal state filters (auth only), via EXISTS subqueries: earned / in-progress / unearned,
+        # plus a "hide owned" toggle for chase-hunting. Anonymous viewers get the pure catalog (no state).
+        profile = self._profile()
+        if profile:
+            held = UserBadge.objects.filter(profile=profile, badge=OuterRef('pk'))
+            started = UserBadgeProgress.objects.filter(
+                profile=profile, badge=OuterRef('pk'), completed_concepts__gt=0,
+            )
+            state = g.get('state')
+            if state == 'earned':
+                qs = qs.filter(Exists(held))
+            elif state == 'in_progress':
+                qs = qs.filter(Exists(started), ~Exists(held))
+            elif state == 'unearned':
+                qs = qs.filter(~Exists(held), ~Exists(started))
+            if g.get('hide_owned'):
+                qs = qs.filter(~Exists(held))
+
+        name_key = Lower('name')
+        sort = g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else 'name'
+        if sort == 'rarity':
+            qs = qs.order_by('earned_count', name_key)      # fewest earners = rarest first
+        elif sort == 'popular':
+            qs = qs.order_by('-earned_count', name_key)
+        elif sort == 'newest':
+            qs = qs.order_by('-created_at', name_key)
+        elif sort == 'tier':
+            qs = qs.order_by('tier', name_key)
+        else:
+            qs = qs.order_by(name_key, 'tier')
+        return qs
+
+    def _gallery_context_data(self, **kwargs):
+        """Build the Browse Gallery context: paginate the per-tier queryset (self.object_list), then
+        batch-build SHOWCASE frames for the page. Whale-safe -- three bulk maps + include_live_stats=False
+        means zero per-badge queries/Redis (the frame_service prescribed batch path). super() preserves
+        the hotbar + base context from ProfileHotbarMixin."""
+        context = super().get_context_data(**kwargs)
+        paginator = Paginator(self.object_list, GALLERY_PAGE_SIZE)
+        page_obj = paginator.get_page(self.request.GET.get('page'))
+        profile = self._profile()
+
+        page_badges = list(page_obj)
+        badge_ids = [b.id for b in page_badges]
+        earned_map, progress_map = {}, {}
+        if profile:
+            earned_map = {
+                ub.badge_id: ub
+                for ub in UserBadge.objects.filter(profile=profile, badge_id__in=badge_ids)
+            }
+            progress_map = {
+                pr.badge_id: pr
+                for pr in UserBadgeProgress.objects.filter(profile=profile, badge_id__in=badge_ids)
+            }
+
+        frames = []
+        for b in page_badges:
+            if profile:
+                frame = build_badge_frame(
+                    b, profile, earned=earned_map.get(b.id), progress=progress_map.get(b.id),
+                    include_live_stats=False, showcase=True,
+                )
+            else:
+                frame = build_badge_frame(b, None, include_live_stats=False, showcase=True)
+            frame['series_slug'] = b.series_slug
+            frame['badge_id'] = b.id
+            frames.append(frame)
+
+        g = self.request.GET
+        context.update({
+            'view': 'gallery',
+            'gallery_frames': frames,
+            'page_obj': page_obj,
+            'paginator': paginator,
+            'is_paginated': page_obj.has_other_pages(),
+            'form': self.get_filter_form(),                 # supplies the badge_type <select> choices
+            'selected_badge_type': g.get('badge_type', ''),
+            'gallery_authed': profile is not None,
+            'gallery_tier': g.get('tier') or 'all',
+            'gallery_state': g.get('state') or 'all',
+            'gallery_sort': g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else 'name',
+            'gallery_q': g.get('q', ''),
+            'gallery_hide_owned': bool(g.get('hide_owned')),
+            'gallery_sorts': GALLERY_SORTS,
+            'breadcrumb': [
+                {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'Badges'},
+            ],
+            'seo_description': (
+                "Browse every badge on Platinum Pursuit -- filter by tier, rarity, and type to find "
+                "your next platinum to chase."
+            ),
+        })
+        track_page_view('badges_list', 'gallery', self.request)
+        return context
 
     def _calculate_all_series_stats(self, series_slugs):
         """
@@ -229,6 +382,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         Returns:
             dict: Context with paginated badge display data
         """
+        if self._view_mode() == 'gallery':
+            return self._gallery_context_data(**kwargs)
         context = super().get_context_data(**kwargs)
         badges = context['object_list']
 

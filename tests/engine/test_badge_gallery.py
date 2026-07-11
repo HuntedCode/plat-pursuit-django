@@ -1,0 +1,142 @@
+"""Tests for the Browse badge Gallery -- the per-tier medallion wall at /badges/?view=gallery.
+
+The catalog-discovery cousin of the Collection album: public, server-paginated, SHOWCASE-first
+(every medallion in full earned colour), with a logged-in viewer's ownership shown as a card-corner
+marker. These pin the view contract: DB-side tier/state/hide-owned filters, showcase rendering, the
+public (non-modal) detail link, and whale-safe constant per-page query count.
+"""
+import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
+
+from trophies.models import UserBadge
+from tests.factories import (
+    BadgeFactory, ProfileFactory, UserBadgeFactory, UserBadgeProgressFactory,
+)
+
+pytestmark = pytest.mark.django_db
+
+GALLERY = reverse('badges_list')
+
+
+def _series(slug, tiers=(1, 2, 3, 4)):
+    return [
+        BadgeFactory(series_slug=slug, tier=t, badge_type='series',
+                     is_live=True, required_stages=5, display_series=slug)
+        for t in tiers
+    ]
+
+
+def test_gallery_renders_showcase_wall_linking_to_detail(client):
+    """Anonymous: the Gallery renders the medallion wall, every medallion in full 'earned' showcase colour,
+    each card linking to the public badge_detail page (never the login-gated collection modal)."""
+    _series('rs-gal')
+
+    resp = client.get(GALLERY, {'view': 'gallery'})
+    html = resp.content.decode()
+
+    assert resp.status_code == 200
+    assert 'pp-bgal' in html and 'pp-med' in html                 # the gallery island + medallions
+    assert html.count('data-bgal-cell') == 4                      # one cell per tier
+    assert 'data-state="earned"' in html                          # showcase-first: full colour for everyone
+    assert '/badges/rs-gal/' in html                              # cards tap through to the series detail page
+    assert 'collection_badge_modal' not in html and '/collection/badge/' not in html  # not the gated modal
+    assert 'pp-bgal__owned' not in html                           # anonymous -> no ownership markers
+
+
+def test_gallery_tier_filter_is_db_side(client):
+    """?tier=bronze returns only that tier's badges (a real DB filter, not client-side)."""
+    _series('rs-tier')
+
+    html = client.get(GALLERY, {'view': 'gallery', 'tier': 'bronze'}).content.decode()
+
+    assert html.count('data-bgal-cell') == 1
+    assert 'data-tier="bronze"' in html
+    assert 'data-tier="silver"' not in html
+
+
+def test_gallery_search_matches_series(client):
+    _series('elden-ring')
+    _series('dark-souls')
+
+    html = client.get(GALLERY, {'view': 'gallery', 'q': 'elden'}).content.decode()
+
+    assert '/badges/elden-ring/' in html
+    assert '/badges/dark-souls/' not in html
+
+
+def test_gallery_anonymous_hides_personal_controls(client):
+    """The state filter + hide-owned toggle are auth-only (anonymous browses the pure catalog)."""
+    _series('rs-anon')
+
+    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+
+    assert 'name="state"' not in html
+    assert 'name="hide_owned"' not in html
+
+
+def test_gallery_owned_marker_for_earned_badge(client):
+    """A logged-in viewer's earned badge gets a card-corner ownership marker; the medallion stays showcase."""
+    profile = ProfileFactory()
+    badges = _series('rs-own')
+    UserBadgeFactory(profile=profile, badge=badges[0])  # earn bronze
+    client.force_login(profile.user)
+
+    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+
+    assert 'pp-bgal__owned--earned' in html          # the earned cell shows the owned check
+    assert html.count('data-state="earned"') >= 4    # ... but ALL medallions still render in showcase colour
+
+
+def test_gallery_state_earned_filter_via_exists(client):
+    """?state=earned returns only badges the viewer holds (DB EXISTS subquery)."""
+    profile = ProfileFactory()
+    badges = _series('rs-state')
+    UserBadgeFactory(profile=profile, badge=badges[0])  # only bronze earned
+    client.force_login(profile.user)
+
+    html = client.get(GALLERY, {'view': 'gallery', 'state': 'earned'}).content.decode()
+
+    assert html.count('data-bgal-cell') == 1
+    assert 'pp-bgal__owned--earned' in html
+
+
+def test_gallery_hide_owned_excludes_held(client):
+    profile = ProfileFactory()
+    badges = _series('rs-hide')
+    UserBadgeFactory(profile=profile, badge=badges[0])  # bronze held
+    client.force_login(profile.user)
+
+    html = client.get(GALLERY, {'view': 'gallery', 'hide_owned': '1'}).content.decode()
+
+    assert html.count('data-bgal-cell') == 3         # the 3 unheld tiers remain
+    assert 'pp-bgal__owned--earned' not in html      # the held one is gone
+
+
+def test_gallery_query_count_constant_regardless_of_catalog_size(client):
+    """Whale-safety: rendering a page of the Gallery over a MUCH larger catalog issues the same number of
+    queries (no per-badge N+1 -- the frames are batch-built with include_live_stats=False)."""
+    _series('rs-base-a')
+    _series('rs-base-b')
+    client.get(GALLERY, {'view': 'gallery'})  # warm caches
+
+    with CaptureQueriesContext(connection) as small:
+        client.get(GALLERY, {'view': 'gallery'})
+
+    for i in range(20):  # 20 more series x 4 tiers -> a page still shows GALLERY_PAGE_SIZE at most
+        _series(f'rs-more-{i}')
+
+    with CaptureQueriesContext(connection) as large:
+        client.get(GALLERY, {'view': 'gallery'})
+
+    assert len(large) == len(small)
+
+
+def test_gallery_view_defaults_to_series(client):
+    """No ?view (or view != gallery) keeps the existing per-series Series view, not the medallion wall."""
+    _series('rs-default')
+
+    html = client.get(GALLERY).content.decode()
+
+    assert 'pp-bgal' not in html  # series view, not the gallery island

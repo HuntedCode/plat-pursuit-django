@@ -64,6 +64,17 @@
         </div>
     </div>
 
+    {# View toggle: Series (per-series rows, "what's needed") vs Gallery (per-tier medallion wall, catalog
+       discovery -- filter individual tiers across every series). #}
+    <div class="join mb-3">
+        <a href="{% url 'badges_list' %}" class="btn btn-sm join-item {% if view != 'gallery' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">Series</a>
+        <a href="{% url 'badges_list' %}?view=gallery" class="btn btn-sm join-item {% if view == 'gallery' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">Gallery</a>
+    </div>
+
+    {% if view == 'gallery' %}
+    {% include 'trophies/partials/badge_list/gallery.html' %}
+    {% else %}
+
     {# ── User Badge Stats ── #}
     {% include 'trophies/partials/badge_list/badge_user_stats.html' %}
 
@@ -143,6 +154,7 @@
     <div id="browse-results">
         {% include 'trophies/partials/badge_list/browse_results.html' %}
     </div>
+    {% endif %}
 
 {% endblock %}
 
