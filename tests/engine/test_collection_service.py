@@ -23,12 +23,18 @@ from tests.factories import (
 pytestmark = pytest.mark.django_db
 
 
-def _series(slug, badge_type='series', tiers=(1, 2, 3, 4), live=True):
-    return [
+def _series(slug, badge_type='series', tiers=(1, 2, 3, 4), live=True, profile=None):
+    badges = [
         BadgeFactory(series_slug=slug, tier=t, badge_type=badge_type,
                      is_live=live, required_stages=5, display_series=slug)
         for t in tiers
     ]
+    # The Collection is scoped to ENGAGED series. Pass `profile` to engage this one -- a light
+    # progress row (completed_concepts=1) on the first tier, so it shows up in the album without
+    # touching earned-count assertions (progress != earned). All 4 tiers then follow the slug.
+    if profile is not None and badges:
+        UserBadgeProgressFactory(profile=profile, badge=badges[0], completed_concepts=1)
+    return badges
 
 
 def _all_frames(ctx):
@@ -59,19 +65,73 @@ def test_full_set_shown_with_earned_and_unearned():
 
 def test_non_live_badges_excluded():
     profile = ProfileFactory()
-    _series('rs-live')
-    _series('rs-hidden', live=False)
+    _series('rs-live', profile=profile)      # engaged -> shows
+    _series('rs-hidden', live=False)          # not live -> excluded regardless
 
     ctx = build_collection_context(profile)
 
     assert ctx['summary']['total'] == 4  # only the live series
 
 
+def test_collection_scoped_to_engaged_series():
+    """The album shows ONLY series the viewer has engaged with (holds or is in-progress on a tier),
+    never the full catalog. An untouched live series does not appear -- discovery lives on Browse."""
+    profile = ProfileFactory()
+    engaged = _series('rs-engaged')
+    UserBadgeFactory(profile=profile, badge=engaged[0])   # hold bronze -> series engaged
+    _series('rs-untouched')                                # live, but never engaged
+
+    frames = _all_frames(build_collection_context(profile))
+
+    assert {f['series_slug'] for f in frames} == {'rs-engaged'}   # untouched series excluded
+    assert len(frames) == 4                                       # all 4 tiers of the engaged series follow
+
+
+def test_series_engaged_via_progress_only_is_included():
+    """Engagement counts in-progress, not just held: a series you've started (progress > 0) but never
+    earned still appears with all its tiers, so the rungs you're chasing are in the album."""
+    profile = ProfileFactory()
+    badges = _series('rs-wip')
+    UserBadgeProgressFactory(profile=profile, badge=badges[0], completed_concepts=1)  # started bronze
+
+    frames = _all_frames(build_collection_context(profile))
+
+    assert {f['series_slug'] for f in frames} == {'rs-wip'}
+    assert len(frames) == 4
+    assert {f['state'] for f in frames} == {'in_progress', 'unearned'}  # the started tier + the rest to chase
+
+
+def test_zero_progress_series_is_excluded():
+    """A bare progress row with completed_concepts=0 is functionally unearned, so it does NOT engage the
+    series -- a series you've only glanced at stays out of the album."""
+    profile = ProfileFactory()
+    badges = _series('rs-zero')
+    UserBadgeProgressFactory(profile=profile, badge=badges[0], completed_concepts=0)
+
+    ctx = build_collection_context(profile)
+
+    assert ctx['binder_sets'] == []
+    assert ctx['list_badges'] == []
+
+
+def test_empty_album_when_badges_exist_but_none_engaged():
+    """A user who has engaged nothing gets an empty album (the empty-state CTA territory), even though the
+    live catalog is full."""
+    profile = ProfileFactory()
+    _series('rs-a')
+    _series('rs-b')
+
+    ctx = build_collection_context(profile)
+
+    assert ctx['binder_sets'] == []
+    assert ctx['summary']['total'] == 0
+
+
 def test_each_badge_type_is_its_own_set():
     """Each badge type is a distinct binder view (set), even small ones -- one page each."""
     profile = ProfileFactory()
-    _series('rs-series', 'series')
-    _series('fr-one', 'franchise')
+    _series('rs-series', 'series', profile=profile)
+    _series('fr-one', 'franchise', profile=profile)
 
     sets = build_collection_context(profile)['binder_sets']
 
@@ -83,7 +143,7 @@ def test_each_badge_type_is_its_own_set():
 def test_page_size_splits_a_large_set():
     profile = ProfileFactory()
     for i in range(5):  # 5 series x 4 tiers = 20 badges in ONE type
-        _series(f'rs-{i}', 'series')
+        _series(f'rs-{i}', 'series', profile=profile)
 
     series_set = build_collection_context(profile)['binder_sets'][0]
 
@@ -107,7 +167,7 @@ def test_set_carries_earned_and_total_counts():
 def test_pages_pair_into_facing_page_spreads():
     profile = ProfileFactory()
     for i in range(5):  # 5 series x 4 = 20 badges -> 2 pages (16 + 4)
-        _series(f'rs-{i}', 'series')
+        _series(f'rs-{i}', 'series', profile=profile)
 
     s = build_collection_context(profile)['binder_sets'][0]
 
@@ -120,7 +180,7 @@ def test_pages_pair_into_facing_page_spreads():
 def test_odd_final_page_leaves_an_empty_right():
     profile = ProfileFactory()
     for i in range(9):  # 9 series x 4 = 36 badges -> 3 pages (16 + 16 + 4)
-        _series(f'rs-{i}', 'series')
+        _series(f'rs-{i}', 'series', profile=profile)
 
     s = build_collection_context(profile)['binder_sets'][0]
 
@@ -132,9 +192,9 @@ def test_odd_final_page_leaves_an_empty_right():
 
 def test_sets_follow_canonical_order():
     profile = ProfileFactory()
-    _series('ev-x', 'event')
-    _series('rs-x', 'series')
-    _series('co-x', 'collection')
+    _series('ev-x', 'event', profile=profile)
+    _series('rs-x', 'series', profile=profile)
+    _series('co-x', 'collection', profile=profile)
 
     sets = build_collection_context(profile)['binder_sets']
 
@@ -152,8 +212,8 @@ def _number(series, start):
 
 def test_default_sort_is_set_number_edition_order():
     profile = ProfileFactory()
-    _number(_series('alpha', 'series'), 5)   # alphabetically first, numbered LAST
-    _number(_series('zeta', 'series'), 1)     # alphabetically last, numbered FIRST
+    _number(_series('alpha', 'series', profile=profile), 5)   # alphabetically first, numbered LAST
+    _number(_series('zeta', 'series', profile=profile), 1)     # alphabetically last, numbered FIRST
 
     frames = _all_frames(build_collection_context(profile))  # default sort
 
@@ -163,8 +223,8 @@ def test_default_sort_is_set_number_edition_order():
 
 def test_series_sort_orders_alphabetically():
     profile = ProfileFactory()
-    _number(_series('zeta', 'series'), 1)
-    _number(_series('alpha', 'series'), 5)
+    _number(_series('zeta', 'series', profile=profile), 1)
+    _number(_series('alpha', 'series', profile=profile), 5)
 
     frames = _all_frames(build_collection_context(profile, sort='series'))
 
@@ -174,8 +234,8 @@ def test_series_sort_orders_alphabetically():
 
 def test_unnumbered_badges_sort_after_numbered():
     profile = ProfileFactory()
-    _number(_series('zeta', 'series'), 1)
-    _series('alpha', 'series')  # left unnumbered (set_number stays None)
+    _number(_series('zeta', 'series', profile=profile), 1)
+    _series('alpha', 'series', profile=profile)  # left unnumbered (set_number stays None)
 
     frames = _all_frames(build_collection_context(profile))
 
@@ -208,7 +268,7 @@ def test_summary_counts_earned_by_tier():
 
 def test_frames_use_id_based_dom_anchor_and_allow_flip():
     profile = ProfileFactory()
-    badges = _series('rs-dom')
+    badges = _series('rs-dom', profile=profile)
 
     ctx = build_collection_context(profile)
 
@@ -222,7 +282,7 @@ def test_frames_carry_series_slug_for_detail_link():
     """Each frame carries series_slug -- it powers the per-series detail link in the binder
     header and the series-name link in the list view."""
     profile = ProfileFactory()
-    _series('rs-link')
+    _series('rs-link', profile=profile)
 
     frame = _all_frames(build_collection_context(profile))[0]
 
@@ -279,7 +339,7 @@ def test_query_count_is_constant_regardless_of_badge_count(monkeypatch):
     call short-circuits on an empty earned set."""
     monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
     profile = ProfileFactory()
-    _series('rs-base')  # 4 badges, one type
+    _series('rs-base', profile=profile)  # 4 badges, one type -- engaged so it shows
     build_collection_context(profile)  # warm-up: absorb any one-time/first-call queries
 
     with CaptureQueriesContext(connection) as small:
@@ -288,13 +348,13 @@ def test_query_count_is_constant_regardless_of_badge_count(monkeypatch):
     # Grow BOTH badge count AND the number of badge types (sections): a regression that
     # batched the rank/XP maps per-section instead of once would scale with type count.
     for i in range(5):
-        _series(f'rs-more-{i}', 'series')
+        _series(f'rs-more-{i}', 'series', profile=profile)
     for i in range(3):
-        _series(f'fr-{i}', 'franchise')
+        _series(f'fr-{i}', 'franchise', profile=profile)
     for i in range(3):
-        _series(f'co-{i}', 'collection')
+        _series(f'co-{i}', 'collection', profile=profile)
     for i in range(2):
-        _series(f'ev-{i}', 'event')
+        _series(f'ev-{i}', 'event', profile=profile)
 
     with CaptureQueriesContext(connection) as large:
         build_collection_context(profile)
@@ -321,8 +381,8 @@ def test_set_groups_bind_a_series_four_tiers_together():
     """Each set carries `groups` -- one per series, holding that series' four tiers in
     bronze->platinum order. This is what lets the Case render a series as one bound unit."""
     profile = ProfileFactory()
-    _series('rs-a', 'series')
-    _series('rs-b', 'series')
+    _series('rs-a', 'series', profile=profile)
+    _series('rs-b', 'series', profile=profile)
 
     s = build_collection_context(profile)['binder_sets'][0]
 
@@ -335,8 +395,8 @@ def test_set_groups_bind_a_series_four_tiers_together():
 def test_groups_respect_the_active_sort():
     """Grouping walks the already-sorted frames, so the series-name sort reorders groups too."""
     profile = ProfileFactory()
-    _number(_series('zeta', 'series'), 1)   # numbered first, alpha last
-    _number(_series('alpha', 'series'), 5)
+    _number(_series('zeta', 'series', profile=profile), 1)   # numbered first, alpha last
+    _number(_series('alpha', 'series', profile=profile), 5)
 
     s = build_collection_context(profile, sort='series')['binder_sets'][0]
 
@@ -359,7 +419,7 @@ def test_frames_carry_earned_ts_for_the_gallery_sort(monkeypatch):
     monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
     profile = ProfileFactory()
     _earn(profile, 'held', 1)
-    _series('unheld', 'series')   # all unearned
+    _series('unheld', 'series', profile=profile)   # engaged (tier-1 progress); its higher tiers stay unearned
 
     by_slug = {
         f['series_slug']: f
@@ -412,7 +472,7 @@ def test_case_template_renders_medallions_and_tablist(monkeypatch):
 
     monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
     profile = ProfileFactory()
-    _series('rs-case')
+    _series('rs-case', profile=profile)
 
     html = render_to_string('components/collection_case.html', build_collection_context(profile))
 
@@ -587,8 +647,8 @@ def test_gallery_maintenance_cell_shows_the_red_m_not_the_check(monkeypatch):
 
 def test_list_badges_flatten_every_frame_with_theme_and_palette():
     profile = ProfileFactory()
-    _series('rs-x', 'series')
-    _series('fr-x', 'franchise')
+    _series('rs-x', 'series', profile=profile)
+    _series('fr-x', 'franchise', profile=profile)
 
     ctx = build_collection_context(profile)
 
@@ -601,8 +661,8 @@ def test_list_badges_flatten_every_frame_with_theme_and_palette():
 
 def test_themes_are_distinct_sections_in_canonical_order():
     profile = ProfileFactory()
-    _series('ev-x', 'event')
-    _series('rs-x', 'series')
+    _series('ev-x', 'event', profile=profile)
+    _series('rs-x', 'series', profile=profile)
 
     themes = build_collection_context(profile)['themes']
 

@@ -1,9 +1,11 @@
 """Collection album page context builder.
 
 The Collection (`/my-pursuit/collection/`) is the Pursuer's badge album -- the product
-mount of the **Binder Surface** (see docs/design/binder-surface.md). It shows the FULL set
-of live badges as framed trading cards: earned ones framed, unearned shown as named slots
-(the collector's pull). Grouped into binder pages by badge type.
+mount of the **Binder Surface** (see docs/design/binder-surface.md). It shows the badges from
+every series the viewer has ENGAGED with (holds or is in-progress on any tier): earned ones
+framed, the remaining tiers of those series shown as named slots (the rungs left to climb).
+Grouped into binder pages by badge type. This is the personal album, scoped to what you've
+started -- full-catalog discovery lives on the Browse badge Gallery, not here.
 
 Whale-safe: the per-viewer UserBadge / UserBadgeProgress reads are bulk-fetched ONCE and
 passed into `build_badge_frame(..., earned=, progress=, include_live_stats=False)`, so
@@ -55,24 +57,48 @@ def _sort_key(sort):
     )
 
 
-def _live_badges():
-    """All live badges with every FK build_badge_frame touches select_related, so the
-    batched frame build issues zero per-badge FK queries."""
-    return list(
-        Badge.objects.filter(is_live=True).select_related(
-            'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
-            'base_badge__franchise', 'base_badge__collection',
-            'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
-        )
+def _engaged_series_slugs(profile):
+    """The set of series_slugs the profile has ENGAGED with: holds any tier (a UserBadge row)
+    or has real progress on any tier (a UserBadgeProgress with completed_concepts > 0). The
+    Collection is scoped to these, and since every tier of a series shares the slug, all 4 tiers
+    come along -- earned rungs plus the ones left to chase. Two cheap distinct FK reads, unioned;
+    zero-progress rows are skipped (functionally unearned, matching frame_service's state logic)."""
+    held = (
+        UserBadge.objects
+        .filter(profile=profile, badge__series_slug__isnull=False)
+        .values_list('badge__series_slug', flat=True).distinct()
     )
+    started = (
+        UserBadgeProgress.objects
+        .filter(profile=profile, completed_concepts__gt=0, badge__series_slug__isnull=False)
+        .values_list('badge__series_slug', flat=True).distinct()
+    )
+    return set(held) | set(started)
+
+
+def _live_badges(series_slugs=None):
+    """Live badges with every FK build_badge_frame touches select_related, so the batched frame
+    build issues zero per-badge FK queries. When `series_slugs` is given (the Collection's engaged
+    scope), only those series' badges are returned (an empty set -> no badges, i.e. an empty album)."""
+    qs = Badge.objects.filter(is_live=True).select_related(
+        'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
+        'base_badge__franchise', 'base_badge__collection',
+        'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
+    )
+    if series_slugs is not None:
+        qs = qs.filter(series_slug__in=series_slugs)
+    return list(qs)
 
 
 def _build_sets(profile, sort=DEFAULT_SORT):
     """Group live badges into binder SETS (one per badge type). Each set is its own
     sub-binder: its pages are numbered within the set, and the page (Series / Developers /
     ...) is selected as a distinct binder view on the page. Returns (binder_sets, summary).
+
+    Scoped to the viewer's ENGAGED series (see _engaged_series_slugs) -- the album shows only
+    series you've started, never the full catalog.
     """
-    badges = _live_badges()
+    badges = _live_badges(_engaged_series_slugs(profile))
     if not badges:
         return [], {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}, 'recent': 0, 'tiers': []}
 
