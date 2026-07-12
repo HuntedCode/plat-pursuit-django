@@ -185,9 +185,10 @@ def test_series_query_count_is_flat(client):
     assert len(small.captured_queries) < 25
 
 
-def test_quick_peek_is_public_showcase_for_anon(client):
-    """The quick-peek endpoint is PUBLIC (unlike the login-gated collection modal): anon gets the badge
-    partial with the full-colour showcase medallion + public stats."""
+def test_quick_peek_is_public_and_generic(client):
+    """The quick-peek endpoint is PUBLIC (unlike the login-gated collection modal) and GENERIC -- a display
+    piece: the full-colour showcase medallion + catalog facts about the tier (requirement, XP), not the
+    viewer's copy."""
     b = _series('rs-peek')[0]
 
     resp = client.get(reverse('badge_quick_peek', args=[b.id]))
@@ -195,7 +196,8 @@ def test_quick_peek_is_public_showcase_for_anon(client):
 
     assert resp.status_code == 200
     assert 'pp-bdetail' in html and 'pp-med' in html    # modal content + the big medallion
-    assert 'data-state="earned"' in html                # anon -> showcase (full-colour) look
+    assert 'data-state="earned"' in html                # showcase (full-colour) look
+    assert 'Requires' in html and 'Badge XP' in html    # generic tier facts
 
 
 def test_quick_peek_404_for_missing_or_unlive(client):
@@ -205,16 +207,18 @@ def test_quick_peek_404_for_missing_or_unlive(client):
     assert client.get(reverse('badge_quick_peek', args=[dead.id])).status_code == 404
 
 
-def test_quick_peek_linked_viewer_sees_personal_state(client):
-    """A LINKED viewer gets their real state, not the anon showcase: a badge they don't own reads 'unearned'
-    (proving the endpoint isn't just forcing the catalog look)."""
+def test_quick_peek_stays_generic_for_a_linked_owner(client):
+    """Even a linked viewer who has EARNED the badge gets the generic display piece -- no personal earn
+    stats (earn rank / leaderboard) and still the full-colour showcase, not their own tarnished/earned copy."""
     profile = ProfileFactory(is_linked=True)
     b = _series('rs-peek-me')[0]
+    UserBadgeFactory(profile=profile, badge=b)   # they own it
     client.force_login(profile.user)
 
     html = client.get(reverse('badge_quick_peek', args=[b.id])).content.decode()
 
-    assert 'data-state="unearned"' in html
+    assert 'data-state="earned"' in html                        # showcase, viewer-independent
+    assert 'Earn rank' not in html and 'Leaderboard' not in html  # no personal stats leaked in
 
 
 def test_series_tile_wires_badge_peek(client):

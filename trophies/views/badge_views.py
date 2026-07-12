@@ -739,12 +739,12 @@ class BadgeListView(ProfileHotbarMixin, ListView):
 
 
 class BadgeQuickPeekView(View):
-    """PUBLIC quick-peek modal for one badge (the Series/Gallery 'pick it up'): the medallion big + its
-    stats, fetched on tap so the grids stay light. The public sibling of the collection's
-    CollectionBadgeModalView -- NOT login-gated: anonymous / unlinked viewers get the badge's showcase
-    catalog look (full colour) + its public stats; a linked viewer additionally gets their own state +
-    earn stats. Renders the SAME components/collection_badge_modal.html partial (its stat rows are all
-    conditional, so they simply fall away when a viewer has no personal data)."""
+    """PUBLIC quick-peek modal for one badge (the Series/Gallery 'pick it up'): the medallion big + facts
+    ABOUT this badge tier, fetched on tap so the grids stay light. Deliberately GENERIC / viewer-independent
+    -- a display piece, like the sample on a showroom floor, not the viewer's own copy. So it's always the
+    showcase (full-colour) medallion + catalog stats (tier, requirement, XP on offer, rarity, earned-by, set
+    number); no personal progress / earn stats / owner engraving. (Those live on the badge detail page, and
+    on the collection's own CollectionBadgeModalView for a Pursuer's held badges.)"""
 
     def get(self, request, badge_id):
         badge = (
@@ -757,17 +757,10 @@ class BadgeQuickPeekView(View):
         )
         if badge is None:
             return HttpResponseNotFound()   # explicit 404 (the project's handler404 renders at 200)
-        # Only a LINKED profile gets personal state/stats; anon + unlinked see the pure catalog look.
-        profile = getattr(request.user, 'profile', None)
-        if profile is not None and not profile.is_linked:
-            profile = None
-        frame = build_badge_frame(badge, profile)   # profile=None -> anonymous showcase ('earned') look
-        frame['dom_id'] = f'peek-{badge.id}'
+        frame = build_badge_frame(badge, None)   # profile=None -> the generic showcase ('earned') look
         frame['series_slug'] = badge.series_slug
-        frame['badge_id'] = badge.id
-        if profile is not None:
-            frame['owner_name'] = profile.display_psn_username or profile.psn_username
-        return render(request, 'components/collection_badge_modal.html', {'frame': frame})
+        frame['tier_xp'] = _badge_xp(badge)      # XP on offer for earning this tier (a catalog fact)
+        return render(request, 'components/badge_peek_modal.html', {'frame': frame})
 
 
 class BadgeDetailView(ProfileHotbarMixin, DetailView):

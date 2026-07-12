@@ -1,0 +1,25 @@
+{% load humanize %}
+{% comment %} Public badge quick-peek -- a GENERIC display piece: the showcase medallion + facts ABOUT this
+badge tier (no personal / owner stats). Rendered by BadgeQuickPeekView, fetched into #badge-peek on tap.
+Reuses the collection modal's .pp-bdetail layout; the medallion is `with_back` so it flips to its engraved
+base (once the shared medallion JS is wired). Expects a showcase `frame` (+ tier_xp, series_slug). {% endcomment %}
+<div class="pp-bdetail" data-tier="{{ frame.tier }}" data-state="earned">
+    <div class="pp-bdetail__stage">
+        {% include 'components/badge_medallion.html' with frame=frame no_id=True with_back=True %}
+    </div>
+    <div class="pp-bdetail__info">
+        <div class="pp-bdetail__eyebrow">{{ frame.series_name }}</div>
+        <h2 class="pp-bdetail__title">{{ frame.badge_name }}</h2>
+        <div class="pp-bdetail__state">{{ frame.tier|title }} &middot; {{ frame.badge_type }}</div>
+        {% if frame.description %}<p class="pp-bdetail__desc">{{ frame.description }}</p>{% endif %}
+        <div class="pp-bdetail__stats">
+            {% if frame.set_number %}<div class="pp-bdetail__stat"><div class="k">Set number</div><div class="v">#{{ frame.set_number|stringformat:"04d" }}</div></div>{% endif %}
+            {% if frame.stages_total %}<div class="pp-bdetail__stat"><div class="k">Requires</div><div class="v">{{ frame.stages_total }} {% if frame.tier == 'silver' or frame.tier == 'platinum' %}100%{{ frame.stages_total|pluralize }}{% else %}platinum{{ frame.stages_total|pluralize }}{% endif %}</div></div>{% endif %}
+            {% if frame.tier_xp %}<div class="pp-bdetail__stat"><div class="k">Badge XP</div><div class="v">{{ frame.tier_xp|intcomma }}</div></div>{% endif %}
+            {% if frame.rarity_pct is not None %}<div class="pp-bdetail__stat"><div class="k">Rarity</div><div class="v">Top {{ frame.rarity_pct }}%{% if frame.rarity_rank %} &middot; #{{ frame.rarity_rank|intcomma }}{% endif %}</div></div>{% endif %}
+            {% if frame.earned_count %}<div class="pp-bdetail__stat"><div class="k">Earned by</div><div class="v">{{ frame.earned_count|intcomma }}</div></div>{% endif %}
+        </div>
+        {% if frame.funded_by %}<div class="pp-bdetail__funder">Artwork funded by <span>{{ frame.funded_by }}</span></div>{% endif %}
+        {% if frame.series_slug %}<a class="pp-bdetail__link" href="{% url 'badge_detail' frame.series_slug %}">View full series &rarr;</a>{% endif %}
+    </div>
+</div>
