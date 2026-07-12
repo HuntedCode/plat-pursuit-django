@@ -1,9 +1,10 @@
-"""Tests for the /badges/ Series view -- the per-series ROW list (the default, non-gallery mode).
+"""Tests for the /badges/ Series view -- the per-series TILE grid (the default, non-gallery mode).
 
-The discovery cousin of the Browse Gallery: one row per badge SERIES showing the next-tier medallion,
-trophy-type counts, and (auth) next-tier progress. These pin the rebuilt contract: the --pp-* row markup,
-multi-select badge_type/completion_status filters (OR'd), the infinite-scroll rows partial for XHR page
-fetches (+ a past-end fetch returning no rows so the scroller stops), and slug search.
+Each tile (.pp-scard) is one badge SERIES rendered as its whole tier LADDER: four nodes (earned / active /
+locked) that double as a face selector, the selected tier's medallion + stat pane, and community meta.
+These pin the rebuilt contract: the tile markup + ladder, the server-chosen default face (the tier you're
+working on -> Bronze if unstarted -> top tier if finished), the multi-select badge_type/completion_status
+filters (OR'd), the infinite-scroll partial for XHR page fetches (+ a past-end fetch returning nothing).
 """
 import pytest
 from django.urls import reverse
@@ -23,25 +24,26 @@ def _series(slug, badge_type='series', tiers=(1, 2, 3, 4)):
     ]
 
 
-def test_series_renders_pp_slist_rows(client):
-    """The default view renders the rebuilt --pp-* row list, comprehensive (trophy-type grid), each row
-    linking to the public badge_detail page."""
+def test_series_renders_tile_with_tier_ladder(client):
+    """The default view renders the tile grid: each tile is a .pp-scard with a four-node tier ladder and a
+    detail link."""
     _series('rs-series')
 
     resp = client.get(SERIES)
     html = resp.content.decode()
 
     assert resp.status_code == 200
-    assert 'pp-srow' in html                        # the from-scratch Career-grade card (not DaisyUI/pp-slist row)
-    assert 'pp-srow__spread' in html                # comprehensive: the 4-col trophy-type spread
+    assert 'pp-scard' in html                       # the tile (not the old row / DaisyUI card)
+    assert 'pp-scard__ladder' in html               # the tier ladder centrepiece
+    assert html.count('pp-scard__dot') == 4         # one node per tier (4-tier series); dot isn't referenced in JS
     assert '/badges/rs-series/' in html
     assert 'pp-vtoggle' in html                     # shared Series|Gallery toggle present
 
 
-def test_series_row_emits_tier_name_for_css_accent(client):
-    """The row's data-tier must be a tier NAME (bronze/silver/gold/platinum) so series-list.css's
-    [data-tier="..."] --tier-c accents match -- not a DaisyUI semantic color (warning/secondary/...),
-    which would silently leave every tier the same fallback cyan. Regression for the audit HIGH finding."""
+def test_series_tile_emits_tier_name_for_css_accent(client):
+    """The tile's data-tier must be a tier NAME (bronze/silver/gold/platinum) so series-list.css's
+    [data-tier="..."] --tier-c accents match -- not a DaisyUI semantic (warning/secondary/...). An
+    unstarted 4-tier series defaults to the Bronze face."""
     _series('rs-tiername')
 
     html = client.get(SERIES).content.decode()
@@ -49,6 +51,33 @@ def test_series_row_emits_tier_name_for_css_accent(client):
     assert 'data-tier="bronze"' in html
     for semantic in ('data-tier="warning"', 'data-tier="secondary"', 'data-tier="error"', 'data-tier="primary"'):
         assert semantic not in html
+
+
+def test_series_default_face_is_the_working_tier(client):
+    """Resting face = the tier you're working on (the lowest unearned). Earn Bronze -> the tile defaults to
+    the Silver face (data-tier='silver')."""
+    profile = ProfileFactory()
+    badges = _series('rs-working')
+    UserBadgeFactory(profile=profile, badge=badges[0])   # Bronze earned -> working on Silver
+    client.force_login(profile.user)
+
+    html = client.get(SERIES).content.decode()
+
+    assert 'data-tier="silver"' in html
+    assert 'pp-scard__node is-earned' in html            # the Bronze node reads earned
+    assert 'pp-scard__seal' in html                      # ... and the earned face carries the seal
+
+
+def test_series_default_face_finished_is_top_tier(client):
+    """A finished series (all tiers earned) defaults to the top tier's face (data-tier='platinum')."""
+    profile = ProfileFactory()
+    for b in _series('rs-fin'):
+        UserBadgeFactory(profile=profile, badge=b)
+    client.force_login(profile.user)
+
+    html = client.get(SERIES).content.decode()
+
+    assert 'data-tier="platinum"' in html
 
 
 def test_series_multi_badge_type_filter_ORs(client):
@@ -79,41 +108,27 @@ def test_series_completion_status_multi_filter(client):
     assert '/badges/rs-fresh/' not in html
 
 
-def test_series_earned_row_is_marked(client):
-    """A series the viewer has any tier of gets the green is-earned rail."""
-    profile = ProfileFactory()
-    badges = _series('rs-earn')
-    UserBadgeFactory(profile=profile, badge=badges[0])   # bronze earned
-    client.force_login(profile.user)
-
-    html = client.get(SERIES).content.decode()
-
-    assert 'pp-srow is-earned' in html
-
-
-def test_series_xhr_returns_bare_rows_partial(client):
-    """An InfiniteScroller page fetch (XHR) returns just the rows partial -- no page chrome/toolbar."""
+def test_series_xhr_returns_bare_tiles_partial(client):
+    """An InfiniteScroller page fetch (XHR) returns just the tiles partial -- no page chrome/toolbar."""
     _series('rs-xhr')
 
     resp = client.get(SERIES, {'page': '1'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
     html = resp.content.decode()
 
-    assert 'pp-slist__row' in html
+    assert 'pp-scard' in html
     assert 'pp-vtoggle' not in html                 # bare partial, no shared chrome
     assert 'id="filter-form"' not in html           # ... and no toolbar form
 
 
-def test_series_xhr_past_end_returns_no_rows(client):
-    """A page fetch past the last page emits NO rows so the scroller sees zero and stops (get_page would
+def test_series_xhr_past_end_returns_no_tiles(client):
+    """A page fetch past the last page emits NO tiles so the scroller sees zero and stops (get_page would
     otherwise clamp to the last page and loop it forever)."""
     _series('rs-end')   # one series, far under a full page
 
     resp = client.get(SERIES, {'page': '9'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
     html = resp.content.decode()
 
-    # No row anchors -> the scroller extracts zero cards and stops. (Assert on the detail link, not the
-    # 'pp-slist__row' class -- the empty grid's wrapper is 'pp-slist__rows', which substring-matches.)
-    assert '/badges/rs-end/' not in html
+    assert '/badges/rs-end/' not in html            # no tile for this series on the past-end page
 
 
 def test_series_search_filters_by_slug(client):

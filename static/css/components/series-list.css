@@ -30,131 +30,125 @@
  * (browse-gallery.css) since it doesn't nest inside .pp-slist.
  * ============================================================ */
 .pp-slist { --pp-list-accent: rgba(63, 205, 220, 1); display: flex; flex-direction: column; gap: 12px; }
-.pp-slist__rows { display: flex; flex-direction: column; gap: 10px; }
+/* The tile grid: compact cards, denser as the viewport grows. */
+.pp-slist__rows { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 768px)  { .pp-slist__rows { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
+@media (min-width: 1024px) { .pp-slist__rows { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1440px) { .pp-slist__rows { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 
-/* ── The Series card (.pp-srow) -- a from-scratch, Career-grade premium row. ─────────────────────────────
- * Built to the visual-identity constitution, not the old dashboard row:
- *  - The MEDALLION is the hero (the badge art is the moat; chrome frames it, never competes).
- *  - The TIER threads through the whole card as its family colour (--tier-c) -- a workbench material
- *    gradient + a grade-tinted accent edge + a "grade" chip -- the way Career's dossier bands thread --disc.
- *    A Gold series reads gold before you read a word.
- *  - Numbers render in the shared TALLY primitive; next-tier progress in the shared HORIZON (band tone:
- *    cool far -> warm close, the "how close am I" semantic).
- *  - Calm matte resting (top light-catch + faint tint + soft lift); tier-tinted GLOW on hover, never scale.
- *  - The trading-card read: the tier is the grading, the set number the serial, an earned seal the stamp. */
-.pp-srow {
+/* ── The Series card (.pp-scard): a compact tile whose centrepiece is the TIER LADDER. ───────────────────
+ * A badge series is one stage pool with four tier thresholds, so the card shows the whole ladder, not one
+ * rung. Four nodes (earned / active / locked) sit under the medallion and double as a FACE SELECTOR --
+ * clicking a node swaps the medallion + the stat pane to that tier and re-tints the tile to its family
+ * colour (--tier-c). The resting face is the tier you're working on (server-chosen `default_tier`; Bronze
+ * if unstarted, top tier if finished, Bronze for anon). Numbers use the shared Tally primitive, the
+ * selected tier's progress the shared Horizon (band tone). No refetch on swap: every tier's medallion +
+ * pane renders once, hidden, toggled client-side. Badge art stays full-colour (greyscale-unearned is an
+ * anti-pattern -- "reads disabled"); state lives in the ladder + the earned seal, not the art. */
+.pp-scard {
     --tier-c: var(--pp-primary);
-    position: relative; display: flex; align-items: center; gap: 12px;
-    padding: 12px 14px; border-radius: var(--pp-radius-lg);
-    background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 7%, var(--pp-bg-1)), var(--pp-bg-1));
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px;
+    padding: 14px 12px 12px; border-radius: var(--pp-radius-lg); scroll-margin-top: 96px;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 8%, var(--pp-bg-1)), var(--pp-bg-1));
     border: 1px solid color-mix(in oklab, var(--tier-c) 22%, var(--pp-border));
-    border-left: 3px solid color-mix(in oklab, var(--tier-c) 55%, var(--pp-border));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.18);
-    text-decoration: none; color: inherit; scroll-margin-top: 96px;
     transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease),
                 background var(--pp-dur) var(--pp-ease);
 }
-@media (min-width: 768px) { .pp-srow { gap: 16px; padding: 14px 18px; } }
-.pp-srow[data-tier="bronze"]   { --tier-c: #cf9160; }
-.pp-srow[data-tier="silver"]   { --tier-c: #b9c6d6; }
-.pp-srow[data-tier="gold"]     { --tier-c: #e7c25c; }
-.pp-srow[data-tier="platinum"] { --tier-c: #8fd2ea; }
-/* Earned = "graded / authenticated": a brighter tier edge (the seal lives on the art). */
-.pp-srow.is-earned { border-left-color: color-mix(in oklab, var(--tier-c) 85%, white); }
+.pp-scard[data-tier="bronze"]   { --tier-c: #cf9160; }
+.pp-scard[data-tier="silver"]   { --tier-c: #b9c6d6; }
+.pp-scard[data-tier="gold"]     { --tier-c: #e7c25c; }
+.pp-scard[data-tier="platinum"] { --tier-c: #8fd2ea; }
 @media (hover: hover) {
-    .pp-srow:hover {
-        border-color: color-mix(in oklab, var(--tier-c) 50%, var(--pp-border));
+    .pp-scard:hover {
+        border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border));
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
-                    0 0 0 1px color-mix(in oklab, var(--tier-c) 30%, transparent),
-                    0 12px 30px -12px color-mix(in oklab, var(--tier-c) 45%, #000);
-        z-index: 1;
+                    0 0 0 1px color-mix(in oklab, var(--tier-c) 28%, transparent),
+                    0 12px 30px -14px color-mix(in oklab, var(--tier-c) 45%, #000);
     }
 }
-.pp-srow:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; }
 
-/* Art: the medallion hero + (earned) the graded seal. */
-.pp-srow__art { position: relative; flex: 0 0 auto; }
-.pp-srow__med { display: block; width: 54px; height: 54px; }
-@media (min-width: 768px) { .pp-srow__med { width: 66px; height: 66px; } }
-/* Unearned reads dormant (dimmed + desaturated), waking to full colour on hover. */
-.pp-srow__med--dim { filter: grayscale(0.85) opacity(0.72); transition: filter 0.25s var(--pp-ease); }
-.pp-srow:hover .pp-srow__med--dim { filter: grayscale(0) opacity(1); }
-.pp-srow__seal {
-    position: absolute; right: -3px; bottom: -3px; width: 20px; height: 20px; border-radius: 50%;
+/* Open link (medallion + name) -> the detail page. The ladder nodes below are separate buttons. */
+.pp-scard__open { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%; text-decoration: none; color: inherit; }
+.pp-scard__open:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; border-radius: 6px; }
+
+/* Art: the tier faces stacked; only the selected one shows. Art stays full colour on every tier. */
+.pp-scard__art { position: relative; width: 56px; height: 56px; }
+@media (min-width: 768px) { .pp-scard__art { width: 64px; height: 64px; } }
+.pp-scard__med { position: absolute; inset: 0; }
+.pp-scard__med[hidden] { display: none; }
+.pp-scard__seal {
+    position: absolute; right: -2px; bottom: -2px; width: 18px; height: 18px; border-radius: 50%;
     display: grid; place-items: center; background: var(--pp-success); color: #06140d;
     border: 2px solid var(--pp-bg-1); box-shadow: 0 0 8px -1px color-mix(in oklab, var(--pp-success) 70%, transparent);
 }
-.pp-srow__seal svg { width: 11px; height: 11px; }
+.pp-scard__seal svg { width: 10px; height: 10px; }
 
-/* Cover: a small, de-emphasised game-context thumb (lg:+). Secondary to the medallion, never competing. */
-.pp-srow__cover {
-    flex: 0 0 auto; width: 40px; aspect-ratio: 3 / 4; border-radius: 6px; overflow: hidden;
-    border: 1px solid var(--pp-border); opacity: 0.9;
-}
-.pp-srow__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
-
-/* Body: name + grade/type/serial, reward, description, submitter, stat row. */
-.pp-srow__body { flex: 1 1 auto; min-width: 0; }
-.pp-srow__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pp-srow__name {
-    font-family: var(--pp-font-display); font-weight: 800; font-size: 16px; line-height: 1.15; letter-spacing: 0.01em;
-    color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; padding-right: 4px;
+.pp-scard__name {
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 13px; line-height: 1.15; text-align: center;
+    color: var(--pp-text); max-width: 100%; padding: 0 2px;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     transition: color var(--pp-dur) var(--pp-ease);
 }
-.pp-srow:hover .pp-srow__name { color: color-mix(in oklab, var(--tier-c) 60%, var(--pp-text)); }
-/* Grade chip = the tier as a collectible-card grade. */
-.pp-srow__grade {
-    display: inline-flex; align-items: center; padding: 1px 9px; border-radius: 999px;
-    font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tier-c);
+.pp-scard:hover .pp-scard__name { color: color-mix(in oklab, var(--tier-c) 55%, var(--pp-text)); }
+.pp-scard__type { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); }
+
+/* The tier ladder = 4 state nodes that double as the face selector. */
+.pp-scard__ladder { display: flex; align-items: center; justify-content: center; gap: 5px; margin-top: 1px; }
+.pp-scard__node {
+    --nc: var(--pp-text-mute);
+    display: grid; place-items: center; width: 22px; height: 22px; padding: 0;
+    border: 0; background: none; cursor: pointer; border-radius: 50%;
+}
+.pp-scard__node[data-tier-key="bronze"]   { --nc: #cf9160; }
+.pp-scard__node[data-tier-key="silver"]   { --nc: #b9c6d6; }
+.pp-scard__node[data-tier-key="gold"]     { --nc: #e7c25c; }
+.pp-scard__node[data-tier-key="platinum"] { --nc: #8fd2ea; }
+.pp-scard__node:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 1px; }
+.pp-scard__dot {
+    width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--nc);
+    transition: transform 0.15s var(--pp-ease), background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+.pp-scard__node.is-earned .pp-scard__dot { background: var(--nc); box-shadow: 0 0 6px color-mix(in oklab, var(--nc) 55%, transparent); }
+.pp-scard__node.is-active .pp-scard__dot { background: transparent; box-shadow: 0 0 7px color-mix(in oklab, var(--nc) 55%, transparent); }
+.pp-scard__node.is-locked .pp-scard__dot { border-color: color-mix(in oklab, var(--nc) 45%, var(--pp-border)); opacity: 0.55; }
+/* Selected node (the shown face): a ring around the dot, whatever its state. */
+.pp-scard__node.is-selected .pp-scard__dot { transform: scale(1.25); box-shadow: 0 0 0 2px color-mix(in oklab, var(--nc) 60%, transparent), 0 0 8px color-mix(in oklab, var(--nc) 45%, transparent); }
+@media (hover: hover) { .pp-scard__node:hover .pp-scard__dot { transform: scale(1.2); } }
+
+/* Face panes: the selected tier's grade + progress. Only the selected one shows. */
+.pp-scard__faces { width: 100%; }
+.pp-scard__face { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.pp-scard__face[hidden] { display: none; }
+.pp-scard__face-top { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 5px; }
+.pp-scard__grade {
+    display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px;
+    font-size: 9.5px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: var(--tier-c);
     background: color-mix(in oklab, var(--tier-c) 14%, transparent);
     border: 1px solid color-mix(in oklab, var(--tier-c) 45%, transparent);
 }
-.pp-srow__type { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-mute); }
-/* Serial = the set number, the limited-edition serial of the card metaphor. Pushed to the row's end. */
-.pp-srow__serial { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-.pp-srow__reward {
-    display: block; margin-top: 3px; font-size: 12.5px; font-style: italic;
-    color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-text));
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; padding-right: 4px;
-}
-.pp-srow__desc {
-    font-size: 12px; color: var(--pp-text-dim); margin-top: 2px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; padding-right: 4px;
-}
-.pp-srow__by { font-size: 11px; font-style: italic; color: color-mix(in oklab, var(--pp-accent) 55%, var(--pp-text-mute)); }
-.pp-srow__stats { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; }
-.pp-srow__stat { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-.pp-srow__stat svg { width: 12px; height: 12px; opacity: 0.7; }
-.pp-srow__stat .pp-tally { font-size: 12px; color: var(--pp-text-dim); }
-/* XP: a rewarding number -> Tally face in a tinted pill. */
-.pp-srow__xp {
-    display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px; border-radius: 999px;
+.pp-scard__state { font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--pp-text-mute); }
+.pp-scard__frac { font-size: 11px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.pp-scard__frac .pp-tally { font-size: 12px; color: var(--pp-text); }
+.pp-scard__prog-row { display: flex; align-items: center; gap: 7px; width: 100%; }
+.pp-scard__prog-row .pp-horizon { flex: 1 1 auto; }
+.pp-scard__rem { flex: 0 0 auto; font-size: 9.5px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.pp-scard__xp {
+    display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 999px;
     color: color-mix(in oklab, var(--pp-primary) 82%, white);
     background: color-mix(in oklab, var(--pp-primary) 13%, transparent);
     border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, transparent);
 }
-.pp-srow__xp svg { width: 11px; height: 11px; }
-.pp-srow__xp .pp-tally { font-size: 11.5px; }
+.pp-scard__xp svg { width: 10px; height: 10px; }
+.pp-scard__xp .pp-tally { font-size: 10.5px; }
 
-/* Trophy-type spread (lg:+) -- the four PSN types this series' next tier spans. */
-.pp-srow__spread { display: none; flex: 0 0 auto; }
-@media (min-width: 1024px) { .pp-srow__spread { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; } }
-.pp-srow__t { padding: 2px 9px; }
-.pp-srow__t-n { font-size: 15px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
-.pp-srow__t-l { font-size: 8px; font-weight: 700; letter-spacing: 0.06em; color: var(--pp-text-mute); line-height: 1; margin-top: 3px; }
+/* Series-level meta footer (community context). */
+.pp-scard__meta { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 9.5px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.pp-scard__meta .pp-tally { font-size: 10px; color: var(--pp-text-dim); }
 
-/* Next-tier progress (auth), composed on the shared Horizon primitive (band tone). Mobile: full-width under
-   the body. lg:+: a fixed rail at the row's trailing edge. */
-.pp-srow__prog { display: block; margin-top: 8px; }
-@media (min-width: 1024px) { .pp-srow__prog { flex: 0 0 auto; width: 156px; margin-top: 0; } }
-.pp-srow__prog-top { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-bottom: 5px; }
-.pp-srow__prog-label { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); }
-.pp-srow__prog-frac { color: var(--pp-text); }
-.pp-srow__prog-frac .pp-tally { font-size: 13px; }
-.pp-srow__prog-pct { font-size: 10px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; margin-left: 4px; }
-
-/* Empty state (no series match the filters). */
+/* Empty state (no series match the filters). Spans the whole tile grid. */
 .pp-slist__empty {
+    grid-column: 1 / -1;
     text-align: center; color: var(--pp-text-mute); padding: 48px 16px;
     border: 1px solid var(--pp-border); border-radius: 14px;
     background: color-mix(in oklab, var(--pp-bg-2) 40%, transparent);

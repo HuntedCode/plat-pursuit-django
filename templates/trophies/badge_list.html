@@ -102,7 +102,7 @@
     and page size, injected below. {% endcomment %}
     <script>
     document.addEventListener('DOMContentLoaded', function () {
-        var CARD = '{% if view == "gallery" %}.pp-bgal__card{% else %}.pp-srow{% endif %}';
+        var CARD = '{% if view == "gallery" %}.pp-bgal__card{% else %}.pp-scard{% endif %}';
         var PAGE = {% if view == "gallery" %}{{ gallery_page_size|default:48 }}{% else %}{{ series_page_size|default:30 }}{% endif %};
         var scroller = null;
         function initScroller() {
@@ -119,6 +119,28 @@
             if (e.target && e.target.id === 'browse-results') { initScroller(); }
         });
         initScroller();
+
+        // Tier-face swap (Series tiles): the ladder nodes select which tier's medallion + stat pane a tile
+        // shows, and re-tint the tile to that tier. Delegated on document so infinite-scroll-appended tiles
+        // work without re-wiring (a no-op on the Gallery, which has no nodes).
+        document.addEventListener('click', function (e) {
+            var node = e.target.closest ? e.target.closest('.pp-scard__node') : null;
+            if (!node) { return; }
+            var card = node.closest('.pp-scard');
+            if (!card) { return; }
+            var face = node.getAttribute('data-face-node');
+            card.querySelectorAll('.pp-scard__med, .pp-scard__face').forEach(function (el) {
+                if (el.getAttribute('data-face') === face) { el.removeAttribute('hidden'); }
+                else { el.setAttribute('hidden', ''); }
+            });
+            card.querySelectorAll('.pp-scard__node').forEach(function (n) {
+                var on = (n === node);
+                n.classList.toggle('is-selected', on);
+                n.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            var key = node.getAttribute('data-tier-key');
+            if (key) { card.setAttribute('data-tier', key); }
+        });
 
         var form = document.getElementById('filter-form');
         var toggle = document.getElementById('bgal-filters-toggle');

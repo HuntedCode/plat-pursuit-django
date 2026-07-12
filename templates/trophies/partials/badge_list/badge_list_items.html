@@ -1,123 +1,79 @@
 {% load custom_filters humanize %}
 {% for item in display_data %}
-{% with item.badge as badge %}
-{% with percent=item.progress_percentage %}
-    {% comment %} Series card (.pp-srow): from-scratch Career-grade premium row. Medallion hero + tier-as-
-    family-colour + Tally numbers + Horizon next-tier bar. See series-list.css for the design rationale. {% endcomment %}
-    <a href="{% url 'badge_detail' badge.series_slug %}"
-       class="pp-srow{% if item.is_earned %} is-earned{% endif %}" data-tier="{{ badge.tier|badge_tier|lower }}">
+{% with badge=item.badge %}
+    {% comment %} Series tile (.pp-scard): the whole tier LADDER, not one rung. Four nodes double as a face
+    selector; each tier's medallion + stat pane render once (hidden) and toggle client-side. The resting face
+    is item.default_tier (server-chosen). See series-list.css + the swap JS in badge_list.html. {% endcomment %}
+    <div class="pp-scard" data-tier="{{ item.default_tier|badge_tier|lower }}">
 
-        {# ── Medallion hero + earned seal ── #}
-        <span class="pp-srow__art">
-            <span class="pp-srow__med{% if not item.is_earned %} pp-srow__med--dim{% endif %}">
-                {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
-            </span>
-            {% if item.is_earned %}
-                <span class="pp-srow__seal" title="Earned">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                </span>
-            {% endif %}
-        </span>
-
-        {# ── Game-context cover (lg:+, secondary) ── #}
-        {% if badge.most_recent_concept.cover_url %}
-            <span class="pp-srow__cover hidden lg:block">
-                <img src="{{ badge.most_recent_concept.cover_url }}" alt="{{ badge.effective_display_title }}" loading="lazy" />
-            </span>
-        {% elif badge.base_badge.most_recent_concept.cover_url %}
-            <span class="pp-srow__cover hidden lg:block">
-                <img src="{{ badge.base_badge.most_recent_concept.cover_url }}" alt="{{ badge.effective_display_title }}" loading="lazy" />
-            </span>
-        {% endif %}
-
-        {# ── Body ── #}
-        <span class="pp-srow__body">
-            <span class="pp-srow__head">
-                <span class="pp-srow__name">{{ badge.effective_display_title }}</span>
-                {% if item.is_earned %}
-                    <span class="pp-srow__grade">{{ badge.tier|badge_tier }}</span>
-                {% else %}
-                    <span class="pp-srow__type">Unearned</span>
-                {% endif %}
-                <span class="pp-srow__type">{{ badge.badge_type|capfirst }}</span>
-                {% if badge.set_number %}<span class="pp-srow__serial">#{{ badge.set_number|stringformat:"04d" }}</span>{% endif %}
-            </span>
-
-            {% if badge.effective_user_title %}
-                <span class="pp-srow__reward">{{ badge.effective_user_title }}</span>
-            {% endif %}
-
-            <p class="pp-srow__desc hidden md:block">{{ badge.effective_description }}</p>
-
-            {% if badge.effective_submitted_by %}
-                <span class="pp-srow__by">by {{ badge.effective_submitted_by.psn_username }}</span>
-            {% endif %}
-
-            <span class="pp-srow__stats">
-                <span class="pp-srow__stat">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.5 6.027a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2.5-.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m-6.5-3h1v1h1v1h-1v1h-1v-1h-1v-1h1z"/><path d="M3.051 3.26a.5.5 0 0 1 .354-.613l1.932-.518a.5.5 0 0 1 .62.39c.655-.079 1.35-.117 2.043-.117.72 0 1.443.041 2.12.126a.5.5 0 0 1 .622-.399l1.932.518a.5.5 0 0 1 .306.729q.211.136.373.297c.408.408.78 1.05 1.095 1.772.32.733.599 1.591.805 2.466s.34 1.78.364 2.606c.024.816-.059 1.602-.328 2.21a1.42 1.42 0 0 1-1.445.83c-.636-.067-1.115-.394-1.513-.773a11.3 11.3 0 0 1-.739-.809c-.126-.147-.25-.291-.368-.422-.728-.804-1.597-1.527-3.224-1.527s-2.496.723-3.224 1.527c-.119.131-.242.275-.368.422-.243.283-.494.576-.739.81-.398.378-.877.705-1.513.772a1.42 1.42 0 0 1-1.445-.83c-.27-.608-.352-1.395-.329-2.21.024-.826.16-1.73.365-2.606.206-.875.484-1.733.805-2.466.315-.722.687-1.364 1.094-1.772a2.3 2.3 0 0 1 .433-.335.5.5 0 0 1-.048-.745z"/></svg>
-                    {{ item.total_games }} game{{ item.total_games|pluralize }}
-                </span>
-                <span class="pp-srow__stat">
-                    {% include 'partials/icons/user.html' with size='w-3 h-3' %}
-                    <span class="pp-tally">{{ item.tier1_earned_count|intcomma }}</span> earned
-                </span>
-                {% if user.is_authenticated and series_badge_xp %}
-                    {% with badge.series_slug as slug %}
-                        {% if series_badge_xp|dict_get:slug %}
-                            <span class="pp-srow__xp">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                                <span class="pp-tally">{{ series_badge_xp|dict_get:slug|intcomma }}</span> XP
-                            </span>
-                        {% endif %}
-                    {% endwith %}
-                {% endif %}
-            </span>
-
-            {# Mobile: next-tier progress under the body (auth only) #}
-            {% if user.is_authenticated and user.profile %}
-                <span class="pp-srow__prog lg:hidden">
-                    <span class="pp-srow__prog-top">
-                        <span class="pp-srow__prog-label">Progress</span>
-                        <span class="pp-srow__prog-frac"><span class="pp-tally">{{ item.completed_concepts }}/{{ item.required_stages }}</span></span>
+        {# Medallion (selected face) + name -> detail page #}
+        <a class="pp-scard__open" href="{% url 'badge_detail' badge.series_slug %}" aria-label="{{ badge.effective_display_title }} detail">
+            <span class="pp-scard__art">
+                {% for t in item.tiers %}
+                <span class="pp-scard__med" data-face="{{ t.tier }}"{% if t.tier != item.default_tier %} hidden{% endif %}>
+                    {% include 'partials/badge.html' with layers=t.badge.get_badge_layers %}
+                    {% if t.state == 'earned' %}
+                    <span class="pp-scard__seal" title="Earned">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
                     </span>
-                    {% include 'components/horizon.html' with progress=percent tone='band' height='6px' %}
+                    {% endif %}
                 </span>
-            {% endif %}
-        </span>
+                {% endfor %}
+            </span>
+            <span class="pp-scard__name">{{ badge.effective_display_title }}</span>
+            <span class="pp-scard__type">{{ badge.badge_type|capfirst }}</span>
+        </a>
 
-        {# ── Trophy-type spread (lg:+) ── #}
-        <span class="pp-srow__spread">
-            <span class="pp-srow__t">
-                <span class="pp-srow__t-n" style="color: var(--color-trophy-bronze)">{{ item.trophy_types.bronze }}</span>
-                <span class="pp-srow__t-l">BRZ</span>
-            </span>
-            <span class="pp-srow__t">
-                <span class="pp-srow__t-n" style="color: var(--color-trophy-silver)">{{ item.trophy_types.silver }}</span>
-                <span class="pp-srow__t-l">SLV</span>
-            </span>
-            <span class="pp-srow__t">
-                <span class="pp-srow__t-n" style="color: var(--color-trophy-gold)">{{ item.trophy_types.gold }}</span>
-                <span class="pp-srow__t-l">GLD</span>
-            </span>
-            <span class="pp-srow__t">
-                <span class="pp-srow__t-n" style="color: var(--color-trophy-platinum)">{{ item.trophy_types.platinum }}</span>
-                <span class="pp-srow__t-l">PLT</span>
-            </span>
-        </span>
+        {# Tier ladder = the face selector (each node shows its state) #}
+        <div class="pp-scard__ladder" role="tablist" aria-label="Tier ladder">
+            {% for t in item.tiers %}
+            <button type="button" class="pp-scard__node is-{{ t.state }}{% if t.tier == item.default_tier %} is-selected{% endif %}"
+                    data-face-node="{{ t.tier }}" data-tier-key="{{ t.tier|badge_tier|lower }}"
+                    role="tab" aria-selected="{% if t.tier == item.default_tier %}true{% else %}false{% endif %}"
+                    title="{{ t.tier|badge_tier }}{% if user.is_authenticated %}{% if t.state == 'earned' %} - earned{% elif t.state == 'active' %} - in progress{% else %} - locked{% endif %}{% endif %}">
+                <span class="pp-scard__dot"></span>
+            </button>
+            {% endfor %}
+        </div>
 
-        {# ── Next-tier progress rail (lg:+, auth only) ── #}
-        {% if user.is_authenticated and user.profile %}
-            <span class="pp-srow__prog hidden lg:block">
-                <span class="pp-srow__prog-top">
-                    <span class="pp-srow__prog-label">Progress</span>
-                    <span class="pp-srow__prog-frac"><span class="pp-tally">{{ item.completed_concepts }}/{{ item.required_stages }}</span><span class="pp-srow__prog-pct">{{ percent }}%</span></span>
-                </span>
-                {% include 'components/horizon.html' with progress=percent tone='band' height='6px' %}
-            </span>
-        {% endif %}
-    </a>
-{% endwith %}
+        {# Per-tier face panes -- only the selected tier shows #}
+        <div class="pp-scard__faces">
+            {% for t in item.tiers %}
+            <div class="pp-scard__face" data-face="{{ t.tier }}"{% if t.tier != item.default_tier %} hidden{% endif %}>
+                <div class="pp-scard__face-top">
+                    <span class="pp-scard__grade">{{ t.tier|badge_tier }}</span>
+                    {% if user.is_authenticated %}
+                        <span class="pp-scard__state">{% if t.state == 'earned' %}Earned{% elif t.state == 'active' %}Working{% else %}Locked{% endif %}</span>
+                    {% endif %}
+                </div>
+                <div class="pp-scard__face-top">
+                    {% if user.is_authenticated %}
+                        <span class="pp-scard__frac"><span class="pp-tally">{{ t.completed }}/{{ t.required }}</span> stages</span>
+                    {% else %}
+                        <span class="pp-scard__frac"><span class="pp-tally">{{ t.required }}</span> stage{{ t.required|pluralize }}</span>
+                    {% endif %}
+                    <span class="pp-scard__xp">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                        <span class="pp-tally">{{ t.xp|intcomma }}</span>
+                    </span>
+                </div>
+                {% if user.is_authenticated and user.profile %}
+                <div class="pp-scard__prog-row">
+                    {% include 'components/horizon.html' with progress=t.progress_pct tone='band' height='6px' %}
+                    {% if t.state == 'earned' %}<span class="pp-scard__rem">Done</span>{% elif t.remaining %}<span class="pp-scard__rem">{{ t.remaining }} to go</span>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        {# Series-level meta (community context) #}
+        <div class="pp-scard__meta">
+            <span>{{ item.total_games }} game{{ item.total_games|pluralize }}</span>
+            <span>&middot;</span>
+            <span><span class="pp-tally">{{ item.tier1_earned_count|intcomma }}</span> earned</span>
+        </div>
+    </div>
 {% endwith %}
 {% empty %}
     <div class="pp-slist__empty">

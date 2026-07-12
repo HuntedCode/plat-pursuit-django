@@ -381,8 +381,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             tier1_earned_count = tier1_badge.earned_count
 
             # Determine display badge and progress
+            highest_tier = earned_dict.get(slug, 0)   # 0 for anon / not started
             if profile:
-                highest_tier = earned_dict.get(slug, 0)
                 display_badge = next((b for b in sorted_group if b.tier == highest_tier), None) if highest_tier > 0 else tier1_badge
                 if not display_badge:
                     continue
@@ -408,6 +408,37 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 required_stages = tier1_badge.required_stages
                 progress_percentage = 0
 
+            # Per-tier ladder faces (the swappable faces on the card): each tier's state + progress, built
+            # ONLY from data already fetched (grouped_badges + earned_dict + progress_dict) -- no new queries,
+            # whale-safe. The resting face (`default_tier`) is the tier you're working on (the lowest unearned
+            # tier); Bronze if nothing is started, the top tier if the series is finished; anon sees Bronze.
+            present_tiers = [b.tier for b in sorted_group]
+            working_rung = next((t for t in present_tiers if t > highest_tier), None)
+            default_tier = working_rung or present_tiers[-1]
+            tier_faces = []
+            for b in sorted_group:
+                req_t = b.required_stages
+                if b.tier <= highest_tier:
+                    t_state, t_done, t_pct = 'earned', req_t, 100
+                else:
+                    pr = progress_dict.get(b.id)
+                    if pr and b.badge_type in EVALUATABLE_BADGE_TYPES:
+                        t_done = pr.completed_concepts
+                        t_pct = round((t_done / req_t) * 100, 1) if req_t else 0
+                    else:
+                        t_done, t_pct = 0, 0
+                    t_state = 'active' if b.tier == working_rung else 'locked'
+                tier_faces.append({
+                    'tier': b.tier,
+                    'badge': b,
+                    'state': t_state,
+                    'completed': t_done,
+                    'required': req_t,
+                    'progress_pct': t_pct,
+                    'remaining': max(req_t - t_done, 0),
+                    'xp': _badge_xp(b),
+                })
+
             display_data.append({
                 'badge': display_badge,
                 'tier1_earned_count': tier1_earned_count,
@@ -417,7 +448,9 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 'trophy_types': trophy_types,
                 'total_games': total_games,
                 'is_earned': is_earned,
-                'user_highest_tier': earned_dict.get(slug, 0),
+                'user_highest_tier': highest_tier,
+                'tiers': tier_faces,
+                'default_tier': default_tier,
             })
 
         return display_data
