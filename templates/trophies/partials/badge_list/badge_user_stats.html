@@ -1,34 +1,15 @@
 {% load humanize %}
 {% if user.is_authenticated and user_badge_stats %}
-    {% comment %} Viewer progress, on the shared rebuild stat card (.scard, as on Career/Home) -- label over a
-    neutral .pp-tally value, one primary hero (Total XP). Capped at 3-up (2 rows) so a whale's 7-figure Total
-    XP never crowds a narrow cell -- wider cells read better than a single cramped 6-across row anyway. {% endcomment %}
+    {% comment %} Viewer progress as one compact stat row (the Home snapshot pattern): a value over a small
+    label, no per-stat card. 3-up on mobile, a single line at lg. One primary hero (Total XP). {% endcomment %}
     <div class="pp-bhead__stats">
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
-            <div class="scard text-center">
-                <div class="scard__label">Total XP</div>
-                <div class="scard__value pp-tally text-primary">{{ user_badge_stats.total_xp|intcomma }}</div>
-            </div>
-            <div class="scard text-center">
-                <div class="scard__label">Tiers Earned</div>
-                <div class="scard__value pp-tally">{{ user_badge_stats.total_badges_earned }}</div>
-            </div>
-            <div class="scard text-center">
-                <div class="scard__label">Stages Plat</div>
-                <div class="scard__value pp-tally">{{ user_badge_stats.stages_platted }}/{{ user_badge_stats.plat_eligible_stages }}</div>
-            </div>
-            <div class="scard text-center">
-                <div class="scard__label">Stages 100%</div>
-                <div class="scard__value pp-tally">{{ user_badge_stats.stages_completed }}/{{ user_badge_stats.total_stages }}</div>
-            </div>
-            <div class="scard text-center">
-                <div class="scard__label">Unique</div>
-                <div class="scard__value pp-tally">{{ user_badge_stats.series_completed }}/{{ user_badge_stats.total_series }}</div>
-            </div>
-            <div class="scard text-center">
-                <div class="scard__label">Complete</div>
-                <div class="scard__value pp-tally">{{ user_badge_stats.completion_pct }}%</div>
-            </div>
+        <div class="grid grid-cols-3 lg:grid-cols-6 gap-x-3 gap-y-3 text-center">
+            <div><div class="text-sm md:text-base font-bold pp-tally text-primary">{{ user_badge_stats.total_xp|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Total XP</div></div>
+            <div><div class="text-sm md:text-base font-bold pp-tally">{{ user_badge_stats.total_badges_earned }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Tiers Earned</div></div>
+            <div><div class="text-sm md:text-base font-bold pp-tally">{{ user_badge_stats.stages_platted }}/{{ user_badge_stats.plat_eligible_stages }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Stages Plat</div></div>
+            <div><div class="text-sm md:text-base font-bold pp-tally">{{ user_badge_stats.stages_completed }}/{{ user_badge_stats.total_stages }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Stages 100%</div></div>
+            <div><div class="text-sm md:text-base font-bold pp-tally">{{ user_badge_stats.series_completed }}/{{ user_badge_stats.total_series }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Unique</div></div>
+            <div><div class="text-sm md:text-base font-bold pp-tally">{{ user_badge_stats.completion_pct }}%</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Complete</div></div>
         </div>
     </div>
 {% endif %}
