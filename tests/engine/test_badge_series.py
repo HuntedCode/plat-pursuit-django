@@ -7,6 +7,8 @@ working on -> Bronze if unstarted -> top tier if finished), the multi-select bad
 filters (OR'd), the infinite-scroll partial for XHR page fetches (+ a past-end fetch returning nothing).
 """
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from tests.factories import BadgeFactory, ProfileFactory, UserBadgeFactory
@@ -36,6 +38,10 @@ def test_series_renders_tile_with_tier_ladder(client):
     assert 'pp-scard' in html                       # the tile (not the old row / DaisyUI card)
     assert 'pp-scard__ladder' in html               # the tier ladder centrepiece
     assert html.count('pp-scard__dot') == 4         # one node per tier (4-tier series); dot isn't referenced in JS
+    assert 'pp-scard__arrow' in html                # prev/next face-swap arrows
+    assert 'pp-scard__trophies' in html             # per-tier trophy spread in the face
+    assert 'pp-med' in html                         # uses the shared medallion object (not the flat badge)
+    assert 'earned' in html                         # type . N earned line
     assert '/badges/rs-series/' in html
     assert 'pp-vtoggle' in html                     # shared Series|Gallery toggle present
 
@@ -141,6 +147,25 @@ def test_series_xhr_past_end_returns_no_tiles(client):
     html = resp.content.decode()
 
     assert '/badges/rs-end/' not in html            # no tile for this series on the past-end page
+
+
+def test_series_query_count_is_flat(client):
+    """Whale-safety: the tile grid builds 4 medallion frames per tile, so it MUST NOT N+1 per series/tier.
+    Query count stays flat as the catalog grows (frames read only select_related FKs; per-tier trophies +
+    stats are single bulk queries)."""
+    for i in range(3):
+        _series('rs-qs-%d' % i)
+    with CaptureQueriesContext(connection) as small:
+        client.get(SERIES)
+
+    for i in range(12):
+        _series('rs-qb-%d' % i)
+    with CaptureQueriesContext(connection) as big:
+        client.get(SERIES)
+
+    # 4x more series (and 4x more per-tier frame builds) must not grow the query count meaningfully.
+    assert len(big.captured_queries) <= len(small.captured_queries) + 2
+    assert len(small.captured_queries) < 25
 
 
 def test_series_search_filters_by_slug(client):

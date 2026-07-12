@@ -120,26 +120,52 @@
         });
         initScroller();
 
-        // Tier-face swap (Series tiles): the ladder nodes select which tier's medallion + stat pane a tile
-        // shows, and re-tint the tile to that tier. Delegated on document so infinite-scroll-appended tiles
-        // work without re-wiring (a no-op on the Gallery, which has no nodes).
-        document.addEventListener('click', function (e) {
-            var node = e.target.closest ? e.target.closest('.pp-scard__node') : null;
-            if (!node) { return; }
-            var card = node.closest('.pp-scard');
-            if (!card) { return; }
+        // Series tile interactions: the ladder nodes / flanking arrows swap which tier face a tile shows;
+        // clicking anywhere else on the tile opens its detail page. All delegated on document so infinite-
+        // scroll-appended tiles work with no re-wiring (a no-op on the Gallery, which has no tiles).
+        function scardSelect(card, node) {
+            if (!card || !node) { return; }
             var face = node.getAttribute('data-face-node');
             card.querySelectorAll('.pp-scard__med, .pp-scard__face').forEach(function (el) {
                 if (el.getAttribute('data-face') === face) { el.removeAttribute('hidden'); }
                 else { el.setAttribute('hidden', ''); }
             });
-            card.querySelectorAll('.pp-scard__node').forEach(function (n) {
+            var nodes = card.querySelectorAll('.pp-scard__node');
+            var idx = 0;
+            nodes.forEach(function (n, i) {
                 var on = (n === node);
                 n.classList.toggle('is-selected', on);
                 n.setAttribute('aria-pressed', on ? 'true' : 'false');
+                if (on) { idx = i; }
             });
             var key = node.getAttribute('data-tier-key');
             if (key) { card.setAttribute('data-tier', key); }
+            var prev = card.querySelector('.pp-scard__arrow[data-face-step="-1"]');
+            var next = card.querySelector('.pp-scard__arrow[data-face-step="1"]');
+            if (prev) { prev.disabled = (idx === 0); }
+            if (next) { next.disabled = (idx === nodes.length - 1); }
+        }
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            var node = e.target.closest('.pp-scard__node');
+            if (node) { scardSelect(node.closest('.pp-scard'), node); return; }
+            var arrow = e.target.closest('.pp-scard__arrow');
+            if (arrow) {
+                if (arrow.disabled) { return; }
+                var acard = arrow.closest('.pp-scard');
+                var anodes = acard ? acard.querySelectorAll('.pp-scard__node') : [];
+                var cur = 0;
+                for (var i = 0; i < anodes.length; i++) { if (anodes[i].classList.contains('is-selected')) { cur = i; } }
+                var step = parseInt(arrow.getAttribute('data-face-step'), 10) || 0;
+                scardSelect(acard, anodes[Math.min(anodes.length - 1, Math.max(0, cur + step))]);
+                return;
+            }
+            if (e.target.closest('a')) { return; }   // the medallion/name link navigates natively
+            var tile = e.target.closest('.pp-scard');
+            if (tile) {
+                var link = tile.querySelector('.pp-scard__open');
+                if (link && link.href) { window.location.href = link.href; }
+            }
         });
 
         var form = document.getElementById('filter-form');

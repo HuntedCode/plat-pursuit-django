@@ -26,6 +26,7 @@ _GALLERY_STATES = ('earned', 'in_progress', 'maintenance', 'unearned')  # multi-
 _TYPE_ORDER = ('series', 'franchise', 'collection', 'megamix', 'developer', 'user', 'event')
 GALLERY_PAGE_SIZE = 48  # medallions per page (a multiple of common 2/3/4/6-column grids)
 SERIES_PAGE_SIZE = 30   # series rows per page (Series view infinite scroll)
+TILE_SEGMENT_CAP = 12   # a tier face renders a per-stage segmented meter up to this many stages, else a bar
 # (key, label). Order mirrors the Collection Gallery's sort dropdown (name, rarest, tier, ..., set last).
 GALLERY_SORTS = [
     ('name', 'Name (A-Z)'),
@@ -122,6 +123,10 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             'base_badge__most_recent_concept', 'base_badge__most_recent_concept__igdb_match',
             'base_badge__title',
             'submitted_by', 'base_badge__submitted_by',
+            # For per-tier build_badge_frame (effective_franchise/collection/developer/funded_by read badge
+            # AND base_badge FKs) + the card affiliation name -- keeps the 4-frames-per-tile build query-free.
+            'franchise', 'collection', 'developer', 'funded_by',
+            'base_badge__franchise', 'base_badge__collection', 'base_badge__developer', 'base_badge__funded_by',
         )
         form = self.get_filter_form()
 
@@ -296,42 +301,52 @@ class BadgeListView(ProfileHotbarMixin, ListView):
 
     def _calculate_all_series_stats(self, series_slugs):
         """
-        Calculate total games and trophy counts for multiple badge series in bulk.
+        Calculate total games and trophy counts (series-level AND per-tier) for multiple series in bulk.
 
-        Single query fetches all games across all requested series, then groups
-        in memory. Eliminates N*2 queries (count + iteration per series).
+        One query fetches every game across the requested series with the tier-set of the stage that links
+        it, then groups in memory (eliminates N*2 per-series queries). Per-tier trophy totals let each tile
+        face show that tier's own trophy spread; since higher tiers require more stages, their totals are
+        supersets of the lower tiers'.
 
         Args:
             series_slugs: Iterable of series slug strings
 
         Returns:
-            dict: {series_slug: (total_games, trophy_types_dict)}
+            dict: {series_slug: (total_games, trophy_types, per_tier_trophies)} where per_tier_trophies is
+                  {tier_int: {'bronze','silver','gold','platinum'}} for tiers 1-4.
         """
-        games_with_series = Game.objects.filter(
+        ALL_TIERS = (1, 2, 3, 4)
+        rows = Game.objects.filter(
             concept__stages__series_slug__in=series_slugs
         ).values_list(
             'id', 'concept__stages__series_slug',
-            'defined_trophies',
+            'concept__stages__required_tiers', 'defined_trophies',
         ).distinct()
 
-        # Group games by series slug
-        series_games = defaultdict(dict)
-        for game_id, slug, trophies in games_with_series:
-            if game_id not in series_games[slug]:
-                series_games[slug][game_id] = trophies
+        # Per (slug, game): its trophies + the UNION of tiers it counts toward. A stage with empty
+        # required_tiers applies to every tier; otherwise to the listed tiers. A game linked through several
+        # stages unions their tier-sets (one row per stage; we merge them).
+        series_games = defaultdict(dict)  # slug -> {game_id: {'trophies': ..., 'tiers': set()}}
+        for game_id, slug, req_tiers, trophies in rows:
+            entry = series_games[slug].setdefault(game_id, {'trophies': trophies, 'tiers': set()})
+            entry['tiers'].update(req_tiers if req_tiers else ALL_TIERS)
 
         result = {}
         for slug in series_slugs:
             games_map = series_games.get(slug, {})
             total_games = len(games_map)
             trophy_types = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
-            for trophies in games_map.values():
-                if trophies:
-                    trophy_types['bronze'] += trophies.get('bronze', 0)
-                    trophy_types['silver'] += trophies.get('silver', 0)
-                    trophy_types['gold'] += trophies.get('gold', 0)
-                    trophy_types['platinum'] += trophies.get('platinum', 0)
-            result[slug] = (total_games, trophy_types)
+            per_tier = {t: {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0} for t in ALL_TIERS}
+            for entry in games_map.values():
+                trophies = entry['trophies']
+                if not trophies:
+                    continue
+                for kind in ('bronze', 'silver', 'gold', 'platinum'):
+                    n = trophies.get(kind, 0)
+                    trophy_types[kind] += n
+                    for t in entry['tiers']:
+                        per_tier[t][kind] += n
+            result[slug] = (total_games, trophy_types, per_tier)
 
         return result
 
@@ -376,8 +391,9 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             if not tier1_badge:
                 continue
 
-            # Look up pre-computed series stats
-            total_games, trophy_types = all_series_stats.get(slug, (0, {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}))
+            # Look up pre-computed series stats (series-level + per-tier trophy spreads)
+            _zero = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
+            total_games, trophy_types, per_tier_trophies = all_series_stats.get(slug, (0, dict(_zero), {}))
             tier1_earned_count = tier1_badge.earned_count
 
             # Determine display badge and progress
@@ -432,19 +448,57 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                     # Locked (beyond the tier you're working on): no progress shown, even if a stale
                     # UserBadgeProgress row happens to exist for that tier.
                     t_state, t_done, t_pct = 'locked', 0, 0
+
+                # XP earned-so-far / total on offer for this tier: stage XP accrues per completed stage; the
+                # flat tier bonus lands only once the tier is earned.
+                stage_xp = get_tier_xp(b.tier)
+                xp_total = req_t * stage_xp + BADGE_TIER_XP
+                xp_earned = xp_total if t_state == 'earned' else t_done * stage_xp
+
+                # Per-stage segmented meter when countable (<= cap); above it the face uses a smooth bar.
+                # 'done' = completed, 'active' = the current stage, '' = still to do.
+                segments = None
+                if 0 < req_t <= TILE_SEGMENT_CAP:
+                    segments = ['done'] * min(t_done, req_t)
+                    if t_state == 'active' and t_done < req_t:
+                        segments.append('active')
+                    segments += [''] * (req_t - len(segments))
+
+                # Full-colour showcase medallion per tier (anon look -> no per-badge queries; the badge FKs
+                # are select_related in get_queryset). State lives in the ladder + seal, not the art.
+                frame = build_badge_frame(b, None, include_live_stats=False)
+
                 tier_faces.append({
                     'tier': b.tier,
-                    'badge': b,
+                    'frame': frame,
                     'state': t_state,
                     'completed': t_done,
                     'required': req_t,
                     'progress_pct': t_pct,
                     'remaining': max(req_t - t_done, 0),
-                    'xp': _badge_xp(b),
+                    'xp_earned': xp_earned,
+                    'xp_total': xp_total,
+                    'trophies': per_tier_trophies.get(b.tier, dict(_zero)),
+                    'segments': segments,
                 })
+
+            # Card name: the badge's affiliation takes precedence -- Franchise > Series (IGDB collection) >
+            # Developer -- else the series' Display Series (then the display title). Mirrors the medallion's
+            # engraved affiliation label so the card and the object agree.
+            _fr = display_badge.effective_franchise
+            _co = display_badge.effective_collection
+            _dv = display_badge.effective_developer
+            card_name = (
+                (_fr.name if _fr else '')
+                or (_co.name if _co else '')
+                or (_dv.name if _dv else '')
+                or display_badge.effective_display_series
+                or display_badge.effective_display_title
+            )
 
             display_data.append({
                 'badge': display_badge,
+                'card_name': card_name,
                 'tier1_earned_count': tier1_earned_count,
                 'completed_concepts': completed_concepts,
                 'required_stages': required_stages,

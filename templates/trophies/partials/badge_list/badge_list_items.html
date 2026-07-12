@@ -1,17 +1,19 @@
 {% load custom_filters humanize %}
 {% for item in display_data %}
 {% with badge=item.badge %}
-    {% comment %} Series tile (.pp-scard): the whole tier LADDER, not one rung. Four nodes double as a face
-    selector; each tier's medallion + stat pane render once (hidden) and toggle client-side. The resting face
-    is item.default_tier (server-chosen). See series-list.css + the swap JS in badge_list.html. {% endcomment %}
+{% with last_tier=item.tiers|last %}
+    {% comment %} Series tile (.pp-scard): the whole tier LADDER, not one rung. Each tier renders once (a
+    showcase medallion + a stat face), hidden, and the ladder nodes / flanking arrows toggle them client-side
+    (delegated handler in badge_list.html). The resting face is item.default_tier (the tier you're working
+    on). See series-list.css for the design rationale. {% endcomment %}
     <div class="pp-scard" data-tier="{{ item.default_tier|badge_tier|lower }}">
 
-        {# Medallion (selected face) + name -> detail page #}
-        <a class="pp-scard__open" href="{% url 'badge_detail' badge.series_slug %}" aria-label="{{ badge.effective_display_title }} detail">
+        {# Medallion (selected face) + name + type - earned. The whole tile navigates to detail (JS). #}
+        <a class="pp-scard__open" href="{% url 'badge_detail' badge.series_slug %}" aria-label="{{ item.card_name }} detail">
             <span class="pp-scard__art">
                 {% for t in item.tiers %}
                 <span class="pp-scard__med" data-face="{{ t.tier }}"{% if t.tier != item.default_tier %} hidden{% endif %}>
-                    {% include 'partials/badge.html' with layers=t.badge.get_badge_layers %}
+                    {% include 'components/badge_medallion.html' with frame=t.frame no_id=True %}
                     {% if t.state == 'earned' %}
                     <span class="pp-scard__seal" title="Earned">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -20,21 +22,29 @@
                 </span>
                 {% endfor %}
             </span>
-            <span class="pp-scard__name">{{ badge.effective_display_title }}</span>
-            <span class="pp-scard__type">{{ badge.badge_type|capfirst }}</span>
+            <span class="pp-scard__name">{{ item.card_name }}</span>
+            <span class="pp-scard__type">{{ badge.badge_type|capfirst }} &middot; <span class="pp-tally">{{ item.tier1_earned_count|intcomma }}</span> earned</span>
         </a>
 
-        {# Tier ladder = the face selector (each node shows its state) #}
-        <div class="pp-scard__ladder" role="group" aria-label="Tier ladder — select a tier to view">
-            {% for t in item.tiers %}
-            <button type="button" class="pp-scard__node {% if user.is_authenticated and user.profile %}is-{{ t.state }}{% else %}is-catalog{% endif %}{% if t.tier == item.default_tier %} is-selected{% endif %}"
-                    data-face-node="{{ t.tier }}" data-tier-key="{{ t.tier|badge_tier|lower }}"
-                    aria-pressed="{% if t.tier == item.default_tier %}true{% else %}false{% endif %}"
-                    aria-label="{{ t.tier|badge_tier }} tier{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %}, earned{% elif t.state == 'active' %}, in progress{% else %}, locked{% endif %}{% endif %}"
-                    title="{{ t.tier|badge_tier }}{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %} - earned{% elif t.state == 'active' %} - in progress{% else %} - locked{% endif %}{% endif %}">
-                <span class="pp-scard__dot"></span>
+        {# Tier ladder (with prev/next arrows) = the face selector; each node shows its state #}
+        <div class="pp-scard__ladder-row">
+            <button type="button" class="pp-scard__arrow" data-face-step="-1" aria-label="Previous tier"{% if item.default_tier == item.tiers.0.tier %} disabled{% endif %}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
             </button>
-            {% endfor %}
+            <div class="pp-scard__ladder" role="group" aria-label="Tier ladder — select a tier to view">
+                {% for t in item.tiers %}
+                <button type="button" class="pp-scard__node {% if user.is_authenticated and user.profile %}is-{{ t.state }}{% else %}is-catalog{% endif %}{% if t.tier == item.default_tier %} is-selected{% endif %}"
+                        data-face-node="{{ t.tier }}" data-tier-key="{{ t.tier|badge_tier|lower }}"
+                        aria-pressed="{% if t.tier == item.default_tier %}true{% else %}false{% endif %}"
+                        aria-label="{{ t.tier|badge_tier }} tier{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %}, earned{% elif t.state == 'active' %}, in progress{% else %}, locked{% endif %}{% endif %}"
+                        title="{{ t.tier|badge_tier }}{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %} - earned{% elif t.state == 'active' %} - in progress{% else %} - locked{% endif %}{% endif %}">
+                    <span class="pp-scard__dot"></span>
+                </button>
+                {% endfor %}
+            </div>
+            <button type="button" class="pp-scard__arrow" data-face-step="1" aria-label="Next tier"{% if item.default_tier == last_tier.tier %} disabled{% endif %}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
         </div>
 
         {# Per-tier face panes -- only the selected tier shows #}
@@ -47,34 +57,36 @@
                         <span class="pp-scard__state">{% if t.state == 'earned' %}Earned{% elif t.state == 'active' %}Working{% else %}Locked{% endif %}</span>
                     {% endif %}
                 </div>
-                <div class="pp-scard__face-top">
-                    {% if user.is_authenticated and user.profile %}
-                        <span class="pp-scard__frac"><span class="pp-tally">{{ t.completed }}/{{ t.required }}</span> stages</span>
-                    {% else %}
-                        <span class="pp-scard__frac"><span class="pp-tally">{{ t.required }}</span> stage{{ t.required|pluralize }}</span>
-                    {% endif %}
-                    <span class="pp-scard__xp">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                        <span class="pp-tally">{{ t.xp|intcomma }}</span>
-                    </span>
-                </div>
+
                 {% if user.is_authenticated and user.profile %}
                 <div class="pp-scard__prog-row">
-                    {% include 'components/horizon.html' with progress=t.progress_pct tone='band' height='6px' %}
-                    {% if t.state == 'earned' %}<span class="pp-scard__rem">Done</span>{% elif t.remaining %}<span class="pp-scard__rem">{{ t.remaining }} to go</span>{% endif %}
+                    {% if t.segments %}
+                    <span class="pp-horizon pp-horizon--segmented" role="progressbar" aria-valuenow="{{ t.progress_pct }}" aria-valuemin="0" aria-valuemax="100" style="--horizon-accent: var(--tier-c); --horizon-h: 6px;">
+                        {% for s in t.segments %}<span class="pp-horizon__seg"{% if s %} data-state="{{ s }}"{% endif %}></span>{% endfor %}
+                    </span>
+                    {% else %}
+                    {% include 'components/horizon.html' with progress=t.progress_pct accent='var(--tier-c)' height='6px' %}
+                    {% endif %}
+                    {% if t.state == 'earned' %}<span class="pp-scard__rem">Done</span>{% elif t.remaining %}<span class="pp-scard__rem">{{ t.remaining }} left</span>{% endif %}
                 </div>
                 {% endif %}
+
+                <div class="pp-scard__xp" title="XP earned so far / total XP on offer for this tier">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                    {% if user.is_authenticated and user.profile %}<span class="pp-tally">{{ t.xp_earned|intcomma }}</span> / {% endif %}<span class="pp-tally">{{ t.xp_total|intcomma }}</span> XP
+                </div>
+
+                <div class="pp-scard__trophies" aria-label="Trophies this tier spans">
+                    <span class="pp-scard__t" style="--tc: var(--color-trophy-bronze)">{{ t.trophies.bronze }}</span>
+                    <span class="pp-scard__t" style="--tc: var(--color-trophy-silver)">{{ t.trophies.silver }}</span>
+                    <span class="pp-scard__t" style="--tc: var(--color-trophy-gold)">{{ t.trophies.gold }}</span>
+                    <span class="pp-scard__t" style="--tc: var(--color-trophy-platinum)">{{ t.trophies.platinum }}</span>
+                </div>
             </div>
             {% endfor %}
         </div>
-
-        {# Series-level meta (community context) #}
-        <div class="pp-scard__meta">
-            <span>{{ item.total_games }} game{{ item.total_games|pluralize }}</span>
-            <span>&middot;</span>
-            <span><span class="pp-tally">{{ item.tier1_earned_count|intcomma }}</span> earned</span>
-        </div>
     </div>
+{% endwith %}
 {% endwith %}
 {% empty %}
     <div class="pp-slist__empty">

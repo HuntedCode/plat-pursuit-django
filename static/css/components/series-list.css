@@ -48,7 +48,7 @@
 .pp-scard {
     --tier-c: var(--pp-primary);
     position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px;
-    padding: 14px 12px 12px; border-radius: var(--pp-radius-lg); scroll-margin-top: 96px;
+    padding: 14px 12px 12px; border-radius: var(--pp-radius-lg); scroll-margin-top: 96px; cursor: pointer;
     background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 8%, var(--pp-bg-1)), var(--pp-bg-1));
     border: 1px solid color-mix(in oklab, var(--tier-c) 22%, var(--pp-border));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.18);
@@ -72,13 +72,21 @@
 .pp-scard__open { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%; text-decoration: none; color: inherit; }
 .pp-scard__open:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; border-radius: 6px; }
 
-/* Art: the tier faces stacked; only the selected one shows. Art stays full colour on every tier. */
-.pp-scard__art { position: relative; width: 56px; height: 56px; }
-@media (min-width: 768px) { .pp-scard__art { width: 64px; height: 64px; } }
-.pp-scard__med { position: absolute; inset: 0; }
+/* Art: the tier medallions -- only the selected one shows. Uses the shared .pp-med OBJECT (matching the
+   Collection Case + Browse Gallery), sized down for the tile; its showcase 'earned' look means full colour
+   on every tier (state lives in the ladder + seal, not the art). */
+.pp-scard__art { display: grid; place-items: center; min-height: 60px; }
+@media (min-width: 768px) { .pp-scard__art { min-height: 68px; } }
+.pp-scard__med { position: relative; }
 .pp-scard__med[hidden] { display: none; }
+.pp-scard__med .pp-med { --sz: 54px; }
+@media (min-width: 768px) { .pp-scard__med .pp-med { --sz: 62px; } }
+/* The medallion's own count + earned-aura blur are noise here (the face carries the numbers; the aura is
+   the Browse Gallery's scroll-lag culprit) -- suppress both, matching browse-gallery.css. */
+.pp-scard__med .pp-med__count { display: none; }
+.pp-scard__med .pp-med__stage::before { display: none; }
 .pp-scard__seal {
-    position: absolute; right: -2px; bottom: -2px; width: 18px; height: 18px; border-radius: 50%;
+    position: absolute; right: -2px; bottom: 2px; z-index: 3; width: 18px; height: 18px; border-radius: 50%;
     display: grid; place-items: center; background: var(--pp-success); color: #06140d;
     border: 2px solid var(--pp-bg-1); box-shadow: 0 0 8px -1px color-mix(in oklab, var(--pp-success) 70%, transparent);
 }
@@ -91,10 +99,24 @@
     transition: color var(--pp-dur) var(--pp-ease);
 }
 .pp-scard:hover .pp-scard__name { color: color-mix(in oklab, var(--tier-c) 55%, var(--pp-text)); }
-.pp-scard__type { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); }
+/* Type + community earned count, on one line ("Series . 3,412 earned"). */
+.pp-scard__type { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-mute); }
+.pp-scard__type .pp-tally { font-size: 10.5px; color: var(--pp-text-dim); letter-spacing: 0; }
+
+/* Ladder row: prev/next arrows flanking the tier nodes, to step faces sequentially. */
+.pp-scard__ladder-row { display: flex; align-items: center; justify-content: center; gap: 3px; margin-top: 1px; }
+.pp-scard__arrow {
+    display: grid; place-items: center; width: 20px; height: 20px; flex: 0 0 auto; padding: 0;
+    border: 0; background: none; border-radius: 5px; cursor: pointer; color: var(--pp-text-mute);
+    transition: color 0.15s ease, background 0.15s ease;
+}
+@media (hover: hover) { .pp-scard__arrow:hover:not(:disabled) { color: var(--pp-text); background: color-mix(in oklab, var(--pp-text) 9%, transparent); } }
+.pp-scard__arrow:disabled { opacity: 0.3; cursor: default; }
+.pp-scard__arrow:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 1px; }
+.pp-scard__arrow svg { width: 13px; height: 13px; }
 
 /* The tier ladder = 4 state nodes that double as the face selector. */
-.pp-scard__ladder { display: flex; align-items: center; justify-content: center; gap: 5px; margin-top: 1px; }
+.pp-scard__ladder { display: flex; align-items: center; justify-content: center; gap: 5px; }
 .pp-scard__node {
     --nc: var(--pp-text-mute);
     display: grid; place-items: center; width: 22px; height: 22px; padding: 0;
@@ -131,23 +153,17 @@
     border: 1px solid color-mix(in oklab, var(--tier-c) 45%, transparent);
 }
 .pp-scard__state { font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--pp-text-mute); }
-.pp-scard__frac { font-size: 11px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
-.pp-scard__frac .pp-tally { font-size: 12px; color: var(--pp-text); }
 .pp-scard__prog-row { display: flex; align-items: center; gap: 7px; width: 100%; }
 .pp-scard__prog-row .pp-horizon { flex: 1 1 auto; }
 .pp-scard__rem { flex: 0 0 auto; font-size: 9.5px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-.pp-scard__xp {
-    display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 999px;
-    color: color-mix(in oklab, var(--pp-primary) 82%, white);
-    background: color-mix(in oklab, var(--pp-primary) 13%, transparent);
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, transparent);
-}
-.pp-scard__xp svg { width: 10px; height: 10px; }
-.pp-scard__xp .pp-tally { font-size: 10.5px; }
-
-/* Series-level meta footer (community context). */
-.pp-scard__meta { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 9.5px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-.pp-scard__meta .pp-tally { font-size: 10px; color: var(--pp-text-dim); }
+/* XP broken out (not a pill): earned-so-far / total on offer for this tier. */
+.pp-scard__xp { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.pp-scard__xp svg { width: 11px; height: 11px; color: color-mix(in oklab, var(--pp-primary) 70%, var(--pp-text-mute)); }
+.pp-scard__xp .pp-tally { font-size: 11px; color: var(--pp-text-dim); }
+/* Per-tier trophy spread: a tier-trophy-coloured dot + count for each of the four PSN types. */
+.pp-scard__trophies { display: flex; align-items: center; justify-content: center; gap: 9px; }
+.pp-scard__t { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.pp-scard__t::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--tc); flex: 0 0 auto; }
 
 /* Empty state (no series match the filters). Spans the whole tile grid. */
 .pp-slist__empty {
