@@ -32,8 +32,12 @@
 /* A chip group (Type / Status) with its inline label; wraps its own chips before spilling to a new row. */
 .pp-sbar__group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pp-sbar__group .pp-bgal__clabel { min-width: 0; }   /* the shared label's 42px min isn't needed inline */
-/* Clear sits inline at the end (the shared rule floats it under the collapsed panel). */
-.pp-sbar__clear { margin-top: 0; align-self: center; }
+/* Clear sits inline at the end (the shared rule floats it under the collapsed panel). Reserve its slot even
+ * when inactive -- toggling visibility, not display -- so it fades in place instead of shifting the bar over
+ * when a filter is applied (the JS still sets the `hidden` attribute; we just redefine what hidden looks
+ * like here). */
+.pp-sbar__clear { margin-top: 0; align-self: center; transition: opacity 0.15s ease; }
+.pp-sbar__clear[hidden] { display: inline-flex; visibility: hidden; opacity: 0; }
 
 /* ============================================================
  * SERIES VIEW -- the per-series ROW list. Each row is one badge SERIES: next-tier medallion, cover, reward
