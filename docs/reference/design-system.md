@@ -96,6 +96,8 @@ Every content module uses this card structure:
 
 ### Card Variants
 
+**Page structure = STACKED surfaces (site-wide rule, 2026-07).** A page is a vertical stack of distinct card surfaces: a page-header card, then separate content/module cards with an `mb-3`/`mb-4` gap. Do NOT wrap the header + every section in one bordered container. Stacked is the standard because it's the only model that scales to long / paginated (infinite-scroll grid) pages, where a single wrapping border would trap an ever-growing box; a one-container layout only ever suited bounded, single-concept surfaces. (A tabbed widget -- tabs + its panels -- may still live in one content card; that's a single control, not the page.)
+
 **Content module cards** (dashboard modules, detail page sections): Full card tokens with `p-3 md:p-5 lg:p-7` padding.
 
 **Compact utility cards** (toolbars, filter bars, page headers): Tighter padding `p-3 md:p-4`. These are control surfaces, not content display, so they should not feel bloated.
