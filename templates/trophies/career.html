@@ -111,9 +111,8 @@
     {% endif %}
 
     {% if career %}
-    {# ── Career summary: your jobs at a glance (heading + the aggregate stat cards). Stacked surface,
-       per the site-wide page-structure rule -- the hero above is the accented header; this + the tabs
-       card below are plain content cards. ── #}
+    {% comment %} Career summary card (heading + aggregate stats). Stacked chrome per the site-wide rule --
+    the hero above is the accented header; the tabs + panels below flow FREE (not carded). {% endcomment %}
     <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
         <div class="card-body p-3 md:p-5 lg:p-7">
             <div class="flex items-center gap-2 flex-wrap">
@@ -152,190 +151,185 @@
         </div>
     </section>
 
-    {# ── Career content: the Jobs / Radar / Contracts tabs + their panels. A single tabbed widget legitimately
-       lives in ONE content card (the tabs are one control, not the page). ── #}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-5 lg:p-7">
-            {# View toggle: Jobs / Radar / Contracts (the merged Contracts board) #}
-            <div class="lab-views" role="tablist" aria-label="Career view">
-                <button type="button" id="career-tab-jobs" aria-controls="career-panel-jobs" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}">Jobs</button>
-                <button type="button" id="career-tab-radar" aria-controls="career-panel-radar" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}">Radar</button>
-                <button type="button" id="career-tab-contracts" aria-controls="career-panel-contracts" class="lab-view-tab {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}">Contracts{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
-            </div>
+    {% comment %} Career content: the Jobs / Radar / Contracts tabs + panels flow FREE (NOT boxed in a card),
+    per the site-wide page-structure rule -- mirroring the Collection's free toggle + views. {% endcomment %}
+    {# View toggle: Jobs / Radar / Contracts (the merged Contracts board) #}
+    <div class="lab-views" role="tablist" aria-label="Career view">
+        <button type="button" id="career-tab-jobs" aria-controls="career-panel-jobs" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}">Jobs</button>
+        <button type="button" id="career-tab-radar" aria-controls="career-panel-radar" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}">Radar</button>
+        <button type="button" id="career-tab-contracts" aria-controls="career-panel-contracts" class="lab-view-tab {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}">Contracts{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
+    </div>
 
-            {# Jobs: two layouts -- Dossier (rich discipline chapters) + Character sheet (compact, shareable) #}
-            <div class="lab-view" id="career-panel-jobs" role="tabpanel" aria-labelledby="career-tab-jobs" data-view="jobs" {% if active_view != 'jobs' %}hidden{% endif %}>
-                <div class="jlayout" role="tablist" aria-label="Jobs layout">
-                    <button type="button" class="jlayout__btn is-active" data-layout="dossier" role="tab" aria-selected="true">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
-                        Dossier
-                    </button>
-                    <button type="button" class="jlayout__btn" data-layout="sheet" role="tab" aria-selected="false">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
-                        Sheet
-                    </button>
-                </div>
-
-                {# Dossier: each discipline a banded chapter (icon + name + active/XP stats + avg), jobs beneath #}
-                <div class="jobs-layout jdoss" data-layout="dossier">
-                    {% for d in career.disciplines %}
-                    <div class="jdoss__band{% if d.slug == hero.dominant_disc %} jdoss__band--top{% endif %}" style="--disc: var(--disc-{{ d.slug }});">
-                        <div class="jdoss__head">
-                            <span class="jdoss__ic">{% job_icon d.icon '' %}</span>
-                            <div class="jdoss__titles">
-                                <div class="jdoss__name">{{ d.label }}{% if d.slug == hero.dominant_disc %}<span class="jdoss__top" title="Your strongest discipline">Top</span>{% endif %}</div>
-                                <div class="jdoss__stats">{{ d.played }}/5 active &middot; <span class="pp-tally">{{ d.xp_total|intcomma }}</span> XP</div>
-                            </div>
-                            <span class="jdoss__avg">avg Lv <b class="pp-tally">{{ d.avg }}</b></span>
-                        </div>
-                        <div class="jdoss__grid">
-                            {% for job in d.jobs %}<div class="ptile" data-slug="{{ job.slug }}" role="button" tabindex="0" aria-label="{{ job.name }} detail">{% include 'partials/jobs/_job_tile.html' with card=job %}</div>{% endfor %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-
-                {# Character sheet: compact skill rows, two discipline columns on desktop (screenshot-friendly) #}
-                <div class="jobs-layout jsheet" data-layout="sheet" hidden>
-                    {% for d in career.disciplines %}
-                    <div class="jsheet__disc{% if d.slug == hero.dominant_disc %} jsheet__disc--top{% endif %}" style="--disc: var(--disc-{{ d.slug }});">
-                        <div class="jsheet__head">
-                            <span class="jsheet__head-ic">{% job_icon d.icon '' %}</span>
-                            <span class="jsheet__head-name">{{ d.label }}{% if d.slug == hero.dominant_disc %}<span class="jsheet__head-top" title="Your strongest discipline">Top</span>{% endif %}</span>
-                            <span class="jsheet__head-avg">avg Lv {{ d.avg }}</span>
-                        </div>
-                        {% for job in d.jobs %}{% include 'partials/jobs/_job_sheet_row.html' with card=job %}{% endfor %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-
-            {# Radar #}
-            <div class="lab-view" id="career-panel-radar" role="tabpanel" aria-labelledby="career-tab-radar" data-view="radar" {% if active_view != 'radar' %}hidden{% endif %}>
-                <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">Your play, mapped across the five disciplines.</p>
-                <div class="radar-card">
-                    <div class="radar-tabs">
-                        <span class="radar-tabs__slider" aria-hidden="true"></span>
-                        <button type="button" class="radar-tab is-active" data-mode="overview">Overview</button>
-                        {% for d in career.disciplines %}<button type="button" class="radar-tab" data-mode="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>{% endfor %}
-                    </div>
-                    <div class="radar-body">
-                        <div class="radar-stage"><canvas id="disc-radar" width="440" height="440"></canvas></div>
-                        <div class="radar-detail" id="radar-detail"></div>
-                    </div>
-                </div>
-            </div>
-
-            {# Contracts: the merged board -- games you can pursue + accept to level jobs #}
-            <div class="lab-view" id="career-panel-contracts" role="tabpanel" aria-labelledby="career-tab-contracts" data-view="contracts" {% if active_view != 'contracts' %}hidden{% endif %}>
-                <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
-                    <p class="text-xs md:text-sm text-base-content/50 italic pr-1 min-w-0">
-                        Contracts on the board: complete a game to level its jobs. Each Contract's XP is split evenly among the jobs it feeds.
-                    </p>
-                    {% if claimable_count %}
-                    <button type="button" id="rp-accept-all" class="btn btn-sm btn-primary shrink-0">Claim all ({{ claimable_count }})</button>
-                    {% endif %}
-                </div>
-                {% comment %} Icon sprite: define all job glyphs once, BEFORE the toolbar's discipline
-                popovers and the cards both reference them via <use>. {% endcomment %}
-                {% job_icon_sprite %}
-                <div class="rp-toolbar mb-3">
-                    {% comment %} Primary bar: search + sort + the advanced-filters toggle. {% endcomment %}
-                    <div class="rp-bar">
-                        <div class="rp-search">
-                            <svg class="rp-search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                            <input type="search" id="rp-search" class="rp-search__input" placeholder="Search games or contracts..." aria-label="Search contracts">
-                        </div>
-                        <div class="rp-bar__end">
-                            <div class="rp-sort">
-                                <label class="rp-sort__label hidden md:inline" for="rp-sort-select">Sort</label>
-                                <div class="rp-sort__field">
-                                    <select id="rp-sort-select" class="rp-sort__select" aria-label="Sort contracts">
-                                        <option value="relevance">Relevant to you</option>
-                                        <option value="pushing">Keep pushing</option>
-                                        <option value="jobs">Most jobs</option>
-                                        <option value="fewest">Fewest jobs</option>
-                                        <option value="progress">Closest to done</option>
-                                        <option value="newest">Newest</option>
-                                        <option value="name">A to Z</option>
-                                    </select>
-                                    <svg class="rp-sort__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-                                </div>
-                            </div>
-                            <button type="button" id="rp-adv-toggle" class="rp-advbtn" aria-label="Filters" aria-expanded="false" aria-controls="rp-advanced">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
-                                <span class="hidden md:inline">Filters</span>
-                                <span id="rp-adv-count" class="rp-advbtn__badge" hidden>0</span>
-                            </button>
-                        </div>
-                    </div>
-                    {% comment %} Status quick-filter (always visible) + the live result count. {% endcomment %}
-                    <div class="rp-statusrow">
-                        <div class="rp-filters" role="group" aria-label="Filter by status">
-                            <button type="button" class="rp-chip is-active" data-filter="all">All<span class="rp-chip__n" hidden></span></button>
-                            <button type="button" class="rp-chip" data-filter="available">Not Started<span class="rp-chip__n" hidden></span></button>
-                            <button type="button" class="rp-chip" data-filter="pursuing">In Progress<span class="rp-chip__n" hidden></span></button>
-                            <button type="button" class="rp-chip" data-filter="claimable">Ready to Claim<span class="rp-chip__n" hidden></span></button>
-                            <button type="button" class="rp-chip" data-filter="accepted">Claimed<span class="rp-chip__n" hidden></span></button>
-                        </div>
-                        <span id="rp-count" class="rp-count" aria-live="polite">{{ contracts_total }} contract{{ contracts_total|pluralize }}</span>
-                    </div>
-                    {% comment %} Advanced panel: discipline -> job drill-down + platform selector. {% endcomment %}
-                    <div id="rp-advanced" class="rp-advanced" hidden>
-                        <div class="rp-adv__group">
-                            <span class="rp-adv__label">Discipline</span>
-                            <div class="rp-discs" role="group" aria-label="Filter by discipline or job">
-                                <button type="button" class="rp-chip is-active" data-disc="all">All</button>
-                                {% for d in contract_disciplines %}
-                                <div class="rp-disc" style="--disc: var(--disc-{{ d.slug }});">
-                                    <button type="button" class="rp-chip rp-chip--disc rp-disc__trigger" data-disc="{{ d.slug }}" data-label="{{ d.label }}" aria-haspopup="true" aria-expanded="false"><span class="rp-disc__name">{{ d.label }}</span><span class="rp-disc__count" hidden></span><svg class="rp-disc__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
-                                    <div class="rp-pop" role="group" aria-label="{{ d.label }} jobs" hidden>
-                                        <button type="button" class="rp-pop__item rp-pop__item--head" data-disc="{{ d.slug }}" data-name="All {{ d.label }} jobs" aria-pressed="false"><span>All {{ d.label }} jobs</span><span class="rp-pop__n"></span></button>
-                                        {% for j in d.jobs %}<button type="button" class="rp-pop__item" data-job="{{ j.slug }}" data-disc="{{ d.slug }}" data-name="{{ j.name }}" aria-pressed="false">{% job_icon_use j.icon 'rp-pop__ico' %}<span>{{ j.name }}</span><span class="rp-pop__n"></span></button>{% endfor %}
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        {% comment %} Selected jobs/disciplines as removable tokens (populated by JS; ANDed together). {% endcomment %}
-                        <div class="rp-adv__group rp-adv__group--tokens" id="rp-tokens-row" hidden>
-                            <span class="rp-adv__label">Selected</span>
-                            <div class="rp-tokens" id="rp-tokens" aria-live="polite"></div>
-                            <button type="button" id="rp-tokens-clear" class="rp-tokens__clear">Clear</button>
-                        </div>
-                        <div class="rp-adv__group">
-                            <span class="rp-adv__label">Platform</span>
-                            <div class="rp-plats" role="group" aria-label="Filter by platform">
-                                <div class="rp-platgrp"><span class="rp-platgrp__tag">Current</span><button type="button" class="rp-chip rp-plat is-active" data-plat="PS5">PS5<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat is-active" data-plat="PS4">PS4<span class="rp-chip__n" hidden></span></button></div>
-                                <div class="rp-platgrp"><span class="rp-platgrp__tag">Legacy</span><button type="button" class="rp-chip rp-plat" data-plat="PS3">PS3<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat" data-plat="PSVITA">PS Vita<span class="rp-chip__n" hidden></span></button></div>
-                                <div class="rp-platgrp"><span class="rp-platgrp__tag">VR</span><button type="button" class="rp-chip rp-plat" data-plat="PSVR">PSVR<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat" data-plat="PSVR2">PSVR2<span class="rp-chip__n" hidden></span></button></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% comment %} Facet chip counts + smart-empty suggestion for the SSR page 1 (the results
-                endpoint re-emits this island on each filter swap; the JS reads it out of the fragment). {% endcomment %}
-                {{ contracts_facets|json_script:"rp-facets" }}
-                <div id="rp-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-stretch"
-                     data-results-url="{% url 'contracts_results' %}" data-has-next="{{ contracts_has_next|yesno:'1,0' }}">
-                    {% for p in contracts %}
-                    {% include 'trophies/partials/contracts/_contract_card.html' with p=p disciplines=contract_disciplines %}
-                    {% endfor %}
-                </div>
-                {# Empty / no-match states + infinite-scroll sentinel & spinner (page 1 rendered above). #}
-                <p id="rp-empty" class="text-center text-sm text-base-content/50 py-10" {% if contracts %}hidden{% endif %}>No Contracts on the board yet. Contracts are curated games that level your jobs, check back soon.</p>
-                <div id="rp-no-match" class="text-center text-sm text-base-content/50 py-10" hidden>
-                    <p id="rp-no-match__msg">No Contracts match your search or filters.</p>
-                    {# Smart empty state: JS fills this with "Drop <label> to see N" when a filter combo is too tight. #}
-                    <button type="button" id="rp-relax" class="rp-relax" hidden></button>
-                    <button type="button" id="rp-clear-filters" class="link link-primary">Clear all filters</button>
-                </div>
-                <div id="rp-loading" class="flex justify-center py-6" hidden><span class="loading loading-spinner loading-md text-primary"></span></div>
-                <div id="rp-sentinel" aria-hidden="true"></div>
-            </div>
-
+    {# Jobs: two layouts -- Dossier (rich discipline chapters) + Character sheet (compact, shareable) #}
+    <div class="lab-view" id="career-panel-jobs" role="tabpanel" aria-labelledby="career-tab-jobs" data-view="jobs" {% if active_view != 'jobs' %}hidden{% endif %}>
+        <div class="jlayout" role="tablist" aria-label="Jobs layout">
+            <button type="button" class="jlayout__btn is-active" data-layout="dossier" role="tab" aria-selected="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                Dossier
+            </button>
+            <button type="button" class="jlayout__btn" data-layout="sheet" role="tab" aria-selected="false">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+                Sheet
+            </button>
         </div>
-    </section>
+
+        {# Dossier: each discipline a banded chapter (icon + name + active/XP stats + avg), jobs beneath #}
+        <div class="jobs-layout jdoss" data-layout="dossier">
+            {% for d in career.disciplines %}
+            <div class="jdoss__band{% if d.slug == hero.dominant_disc %} jdoss__band--top{% endif %}" style="--disc: var(--disc-{{ d.slug }});">
+                <div class="jdoss__head">
+                    <span class="jdoss__ic">{% job_icon d.icon '' %}</span>
+                    <div class="jdoss__titles">
+                        <div class="jdoss__name">{{ d.label }}{% if d.slug == hero.dominant_disc %}<span class="jdoss__top" title="Your strongest discipline">Top</span>{% endif %}</div>
+                        <div class="jdoss__stats">{{ d.played }}/5 active &middot; <span class="pp-tally">{{ d.xp_total|intcomma }}</span> XP</div>
+                    </div>
+                    <span class="jdoss__avg">avg Lv <b class="pp-tally">{{ d.avg }}</b></span>
+                </div>
+                <div class="jdoss__grid">
+                    {% for job in d.jobs %}<div class="ptile" data-slug="{{ job.slug }}" role="button" tabindex="0" aria-label="{{ job.name }} detail">{% include 'partials/jobs/_job_tile.html' with card=job %}</div>{% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {# Character sheet: compact skill rows, two discipline columns on desktop (screenshot-friendly) #}
+        <div class="jobs-layout jsheet" data-layout="sheet" hidden>
+            {% for d in career.disciplines %}
+            <div class="jsheet__disc{% if d.slug == hero.dominant_disc %} jsheet__disc--top{% endif %}" style="--disc: var(--disc-{{ d.slug }});">
+                <div class="jsheet__head">
+                    <span class="jsheet__head-ic">{% job_icon d.icon '' %}</span>
+                    <span class="jsheet__head-name">{{ d.label }}{% if d.slug == hero.dominant_disc %}<span class="jsheet__head-top" title="Your strongest discipline">Top</span>{% endif %}</span>
+                    <span class="jsheet__head-avg">avg Lv {{ d.avg }}</span>
+                </div>
+                {% for job in d.jobs %}{% include 'partials/jobs/_job_sheet_row.html' with card=job %}{% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# Radar #}
+    <div class="lab-view" id="career-panel-radar" role="tabpanel" aria-labelledby="career-tab-radar" data-view="radar" {% if active_view != 'radar' %}hidden{% endif %}>
+        <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">Your play, mapped across the five disciplines.</p>
+        <div class="radar-card">
+            <div class="radar-tabs">
+                <span class="radar-tabs__slider" aria-hidden="true"></span>
+                <button type="button" class="radar-tab is-active" data-mode="overview">Overview</button>
+                {% for d in career.disciplines %}<button type="button" class="radar-tab" data-mode="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>{% endfor %}
+            </div>
+            <div class="radar-body">
+                <div class="radar-stage"><canvas id="disc-radar" width="440" height="440"></canvas></div>
+                <div class="radar-detail" id="radar-detail"></div>
+            </div>
+        </div>
+    </div>
+
+    {# Contracts: the merged board -- games you can pursue + accept to level jobs #}
+    <div class="lab-view" id="career-panel-contracts" role="tabpanel" aria-labelledby="career-tab-contracts" data-view="contracts" {% if active_view != 'contracts' %}hidden{% endif %}>
+        <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+            <p class="text-xs md:text-sm text-base-content/50 italic pr-1 min-w-0">
+                Contracts on the board: complete a game to level its jobs. Each Contract's XP is split evenly among the jobs it feeds.
+            </p>
+            {% if claimable_count %}
+            <button type="button" id="rp-accept-all" class="btn btn-sm btn-primary shrink-0">Claim all ({{ claimable_count }})</button>
+            {% endif %}
+        </div>
+        {% comment %} Icon sprite: define all job glyphs once, BEFORE the toolbar's discipline
+        popovers and the cards both reference them via <use>. {% endcomment %}
+        {% job_icon_sprite %}
+        <div class="rp-toolbar mb-3">
+            {% comment %} Primary bar: search + sort + the advanced-filters toggle. {% endcomment %}
+            <div class="rp-bar">
+                <div class="rp-search">
+                    <svg class="rp-search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input type="search" id="rp-search" class="rp-search__input" placeholder="Search games or contracts..." aria-label="Search contracts">
+                </div>
+                <div class="rp-bar__end">
+                    <div class="rp-sort">
+                        <label class="rp-sort__label hidden md:inline" for="rp-sort-select">Sort</label>
+                        <div class="rp-sort__field">
+                            <select id="rp-sort-select" class="rp-sort__select" aria-label="Sort contracts">
+                                <option value="relevance">Relevant to you</option>
+                                <option value="pushing">Keep pushing</option>
+                                <option value="jobs">Most jobs</option>
+                                <option value="fewest">Fewest jobs</option>
+                                <option value="progress">Closest to done</option>
+                                <option value="newest">Newest</option>
+                                <option value="name">A to Z</option>
+                            </select>
+                            <svg class="rp-sort__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                        </div>
+                    </div>
+                    <button type="button" id="rp-adv-toggle" class="rp-advbtn" aria-label="Filters" aria-expanded="false" aria-controls="rp-advanced">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+                        <span class="hidden md:inline">Filters</span>
+                        <span id="rp-adv-count" class="rp-advbtn__badge" hidden>0</span>
+                    </button>
+                </div>
+            </div>
+            {% comment %} Status quick-filter (always visible) + the live result count. {% endcomment %}
+            <div class="rp-statusrow">
+                <div class="rp-filters" role="group" aria-label="Filter by status">
+                    <button type="button" class="rp-chip is-active" data-filter="all">All<span class="rp-chip__n" hidden></span></button>
+                    <button type="button" class="rp-chip" data-filter="available">Not Started<span class="rp-chip__n" hidden></span></button>
+                    <button type="button" class="rp-chip" data-filter="pursuing">In Progress<span class="rp-chip__n" hidden></span></button>
+                    <button type="button" class="rp-chip" data-filter="claimable">Ready to Claim<span class="rp-chip__n" hidden></span></button>
+                    <button type="button" class="rp-chip" data-filter="accepted">Claimed<span class="rp-chip__n" hidden></span></button>
+                </div>
+                <span id="rp-count" class="rp-count" aria-live="polite">{{ contracts_total }} contract{{ contracts_total|pluralize }}</span>
+            </div>
+            {% comment %} Advanced panel: discipline -> job drill-down + platform selector. {% endcomment %}
+            <div id="rp-advanced" class="rp-advanced" hidden>
+                <div class="rp-adv__group">
+                    <span class="rp-adv__label">Discipline</span>
+                    <div class="rp-discs" role="group" aria-label="Filter by discipline or job">
+                        <button type="button" class="rp-chip is-active" data-disc="all">All</button>
+                        {% for d in contract_disciplines %}
+                        <div class="rp-disc" style="--disc: var(--disc-{{ d.slug }});">
+                            <button type="button" class="rp-chip rp-chip--disc rp-disc__trigger" data-disc="{{ d.slug }}" data-label="{{ d.label }}" aria-haspopup="true" aria-expanded="false"><span class="rp-disc__name">{{ d.label }}</span><span class="rp-disc__count" hidden></span><svg class="rp-disc__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+                            <div class="rp-pop" role="group" aria-label="{{ d.label }} jobs" hidden>
+                                <button type="button" class="rp-pop__item rp-pop__item--head" data-disc="{{ d.slug }}" data-name="All {{ d.label }} jobs" aria-pressed="false"><span>All {{ d.label }} jobs</span><span class="rp-pop__n"></span></button>
+                                {% for j in d.jobs %}<button type="button" class="rp-pop__item" data-job="{{ j.slug }}" data-disc="{{ d.slug }}" data-name="{{ j.name }}" aria-pressed="false">{% job_icon_use j.icon 'rp-pop__ico' %}<span>{{ j.name }}</span><span class="rp-pop__n"></span></button>{% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% comment %} Selected jobs/disciplines as removable tokens (populated by JS; ANDed together). {% endcomment %}
+                <div class="rp-adv__group rp-adv__group--tokens" id="rp-tokens-row" hidden>
+                    <span class="rp-adv__label">Selected</span>
+                    <div class="rp-tokens" id="rp-tokens" aria-live="polite"></div>
+                    <button type="button" id="rp-tokens-clear" class="rp-tokens__clear">Clear</button>
+                </div>
+                <div class="rp-adv__group">
+                    <span class="rp-adv__label">Platform</span>
+                    <div class="rp-plats" role="group" aria-label="Filter by platform">
+                        <div class="rp-platgrp"><span class="rp-platgrp__tag">Current</span><button type="button" class="rp-chip rp-plat is-active" data-plat="PS5">PS5<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat is-active" data-plat="PS4">PS4<span class="rp-chip__n" hidden></span></button></div>
+                        <div class="rp-platgrp"><span class="rp-platgrp__tag">Legacy</span><button type="button" class="rp-chip rp-plat" data-plat="PS3">PS3<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat" data-plat="PSVITA">PS Vita<span class="rp-chip__n" hidden></span></button></div>
+                        <div class="rp-platgrp"><span class="rp-platgrp__tag">VR</span><button type="button" class="rp-chip rp-plat" data-plat="PSVR">PSVR<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat" data-plat="PSVR2">PSVR2<span class="rp-chip__n" hidden></span></button></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% comment %} Facet chip counts + smart-empty suggestion for the SSR page 1 (the results
+        endpoint re-emits this island on each filter swap; the JS reads it out of the fragment). {% endcomment %}
+        {{ contracts_facets|json_script:"rp-facets" }}
+        <div id="rp-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-stretch"
+             data-results-url="{% url 'contracts_results' %}" data-has-next="{{ contracts_has_next|yesno:'1,0' }}">
+            {% for p in contracts %}
+            {% include 'trophies/partials/contracts/_contract_card.html' with p=p disciplines=contract_disciplines %}
+            {% endfor %}
+        </div>
+        {# Empty / no-match states + infinite-scroll sentinel & spinner (page 1 rendered above). #}
+        <p id="rp-empty" class="text-center text-sm text-base-content/50 py-10" {% if contracts %}hidden{% endif %}>No Contracts on the board yet. Contracts are curated games that level your jobs, check back soon.</p>
+        <div id="rp-no-match" class="text-center text-sm text-base-content/50 py-10" hidden>
+            <p id="rp-no-match__msg">No Contracts match your search or filters.</p>
+            {# Smart empty state: JS fills this with "Drop <label> to see N" when a filter combo is too tight. #}
+            <button type="button" id="rp-relax" class="rp-relax" hidden></button>
+            <button type="button" id="rp-clear-filters" class="link link-primary">Clear all filters</button>
+        </div>
+        <div id="rp-loading" class="flex justify-center py-6" hidden><span class="loading loading-spinner loading-md text-primary"></span></div>
+        <div id="rp-sentinel" aria-hidden="true"></div>
+    </div>
 
     {# Hidden per-job detail panels + the modal shell (populated on tile tap). #}
     <div id="element-details" hidden>
@@ -1596,8 +1590,8 @@ function ppCountUp(el, dur) {
 })();
 </script>
 {% if ceremony_debug %}
-{# ── DEV-ONLY: claim-ceremony replay harness. Canned payloads (no DB, no accept) so the animation
-   can be iterated on endlessly. Gated on settings.DEBUG -- never ships to prod. ── #}
+{% comment %} DEV-ONLY: claim-ceremony replay harness. Canned payloads (no DB, no accept) so the animation
+can be iterated on endlessly. Gated on settings.DEBUG -- never ships to prod. {% endcomment %}
 <div class="ccx-dev" aria-hidden="true">
     <div class="ccx-dev__title">Ceremony replay</div>
     <div class="ccx-dev__row">

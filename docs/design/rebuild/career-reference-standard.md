@@ -33,14 +33,16 @@ almost always a specific detail that question surfaces:
   one-offs; uses `--pp-*` / `--disc-*` / `--rank-*` tokens, never hex one-offs.
 - **Chrome is a frame, not a module.** Nav / sub-nav / hotbar / footer are the fixed frame; only the
   page content is "the page." (This is why the modal recede scales `#page-recede`, not the chrome.)
-- **Pages are STACKED surfaces, not one wrapping container** (site-wide rule, 2026-07). A distinct
-  page-header card, then separate content/module cards with an `mb-3`/`mb-4` gap -- never a single bordered
-  box that swallows the header + every section. This is the standard because it's the only model that
-  scales to the many long / paginated (infinite-scroll grid) pages, where a wrapping border would trap an
-  ever-growing box; the one-container look only ever fit bounded, single-concept surfaces. A tabbed widget
-  (tabs + its panels) may still live in ONE content card -- that's a single control, not the page. NB:
-  Career's own original layout was the site's lone one-container exception and is being reconciled to this
-  rule, so don't copy its old outer shell.
+- **Pages are STACKED surfaces, and the CONTENT flows FREE** (site-wide rule, 2026-07). The chrome is
+  carded -- an accented page-header card, then optional stat/education/toolbar cards, each `mb-3`/`mb-4`
+  apart. The main content (grids, lists, tab panels -- even a tabbed widget's panels) is **NOT wrapped in
+  an outer card**; it flows free below the chrome, exactly like the Collection (header card -> free toggle
+  -> free Case/Gallery panels). NEVER a single bordered box that swallows the header + every section, and
+  never an outer card around the content grid -- both trap the many long / paginated (infinite-scroll)
+  pages in an ever-growing border. (Item-level cards inside the content -- game cards, job tiles, the empty
+  state -- are fine; it's the *outer content wrapper* that must not be a card.) NB: Career's original
+  one-container layout was the lone exception and has been reconciled to this rule (`career.html`: hero card
+  -> summary card -> free tabs + panels), so don't copy its old outer shell.
 - Every surface reads like it belongs to the same app as the rest of the rebuild.
 
 ### 2. Responsive: three layouts, mobile-first, actually verified

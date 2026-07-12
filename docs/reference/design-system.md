@@ -96,7 +96,7 @@ Every content module uses this card structure:
 
 ### Card Variants
 
-**Page structure = STACKED surfaces (site-wide rule, 2026-07).** A page is a vertical stack of distinct card surfaces: a page-header card, then separate content/module cards with an `mb-3`/`mb-4` gap. Do NOT wrap the header + every section in one bordered container. Stacked is the standard because it's the only model that scales to long / paginated (infinite-scroll grid) pages, where a single wrapping border would trap an ever-growing box; a one-container layout only ever suited bounded, single-concept surfaces. (A tabbed widget -- tabs + its panels -- may still live in one content card; that's a single control, not the page.)
+**Page structure = STACKED chrome + FREE content (site-wide rule, 2026-07).** The chrome is carded -- an accented page-header card, then optional stat/education/toolbar cards, each `mb-3`/`mb-4` apart. The main content (grids, lists, tab panels) is NOT wrapped in an outer card; it flows free below the chrome, like the Collection (header card -> free toggle -> free Case/Gallery). Never one bordered box swallowing the header + sections, and never an outer card around the content grid -- both trap long / paginated (infinite-scroll) pages in an ever-growing border. Item-level cards *inside* the content (game/badge cards, tiles, the empty state) are fine; it's the outer content wrapper that must not be a card.
 
 **Content module cards** (dashboard modules, detail page sections): Full card tokens with `p-3 md:p-5 lg:p-7` padding.
 
