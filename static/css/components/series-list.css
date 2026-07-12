@@ -112,6 +112,9 @@
 .pp-scard__node.is-earned .pp-scard__dot { background: var(--nc); box-shadow: 0 0 6px color-mix(in oklab, var(--nc) 55%, transparent); }
 .pp-scard__node.is-active .pp-scard__dot { background: transparent; box-shadow: 0 0 7px color-mix(in oklab, var(--nc) 55%, transparent); }
 .pp-scard__node.is-locked .pp-scard__dot { border-color: color-mix(in oklab, var(--nc) 45%, var(--pp-border)); opacity: 0.55; }
+/* Catalog (anon / no-profile): neutral tier dots -- no earned/active/locked emphasis, since there's no
+   personal progress to imply. Just the four tier colours, so the ladder reads as a clean catalog. */
+.pp-scard__node.is-catalog .pp-scard__dot { background: transparent; opacity: 1; }
 /* Selected node (the shown face): a ring around the dot, whatever its state. */
 .pp-scard__node.is-selected .pp-scard__dot { transform: scale(1.25); box-shadow: 0 0 0 2px color-mix(in oklab, var(--nc) 60%, transparent), 0 0 8px color-mix(in oklab, var(--nc) 45%, transparent); }
 @media (hover: hover) { .pp-scard__node:hover .pp-scard__dot { transform: scale(1.2); } }

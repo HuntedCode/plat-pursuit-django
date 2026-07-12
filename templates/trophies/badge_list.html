@@ -136,7 +136,7 @@
             card.querySelectorAll('.pp-scard__node').forEach(function (n) {
                 var on = (n === node);
                 n.classList.toggle('is-selected', on);
-                n.setAttribute('aria-selected', on ? 'true' : 'false');
+                n.setAttribute('aria-pressed', on ? 'true' : 'false');
             });
             var key = node.getAttribute('data-tier-key');
             if (key) { card.setAttribute('data-tier', key); }

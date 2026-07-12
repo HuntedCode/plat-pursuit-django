@@ -420,14 +420,18 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 req_t = b.required_stages
                 if b.tier <= highest_tier:
                     t_state, t_done, t_pct = 'earned', req_t, 100
-                else:
+                elif b.tier == working_rung:
+                    t_state = 'active'
                     pr = progress_dict.get(b.id)
                     if pr and b.badge_type in EVALUATABLE_BADGE_TYPES:
                         t_done = pr.completed_concepts
                         t_pct = round((t_done / req_t) * 100, 1) if req_t else 0
                     else:
                         t_done, t_pct = 0, 0
-                    t_state = 'active' if b.tier == working_rung else 'locked'
+                else:
+                    # Locked (beyond the tier you're working on): no progress shown, even if a stale
+                    # UserBadgeProgress row happens to exist for that tier.
+                    t_state, t_done, t_pct = 'locked', 0, 0
                 tier_faces.append({
                     'tier': b.tier,
                     'badge': b,

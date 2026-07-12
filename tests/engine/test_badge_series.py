@@ -80,6 +80,18 @@ def test_series_default_face_finished_is_top_tier(client):
     assert 'data-tier="platinum"' in html
 
 
+def test_series_anon_sees_neutral_catalog_ladder(client):
+    """Anonymous (and logged-in-without-profile) users get NEUTRAL catalog nodes -- no earned/active/locked
+    emphasis and no 'Working'/'Locked' progress text, since there's no personal progress to imply."""
+    _series('rs-anon')
+
+    html = client.get(SERIES).content.decode()
+
+    assert 'is-catalog' in html
+    assert 'pp-scard__node is-active' not in html and 'pp-scard__node is-locked' not in html
+    assert 'Working' not in html            # no personal-progress state chips for anon
+
+
 def test_series_multi_badge_type_filter_ORs(client):
     """?badge_type=series&badge_type=developer returns BOTH (badge_type__in), not just one."""
     _series('rs-a', badge_type='series')

@@ -25,12 +25,13 @@
         </a>
 
         {# Tier ladder = the face selector (each node shows its state) #}
-        <div class="pp-scard__ladder" role="tablist" aria-label="Tier ladder">
+        <div class="pp-scard__ladder" role="group" aria-label="Tier ladder — select a tier to view">
             {% for t in item.tiers %}
-            <button type="button" class="pp-scard__node is-{{ t.state }}{% if t.tier == item.default_tier %} is-selected{% endif %}"
+            <button type="button" class="pp-scard__node {% if user.is_authenticated and user.profile %}is-{{ t.state }}{% else %}is-catalog{% endif %}{% if t.tier == item.default_tier %} is-selected{% endif %}"
                     data-face-node="{{ t.tier }}" data-tier-key="{{ t.tier|badge_tier|lower }}"
-                    role="tab" aria-selected="{% if t.tier == item.default_tier %}true{% else %}false{% endif %}"
-                    title="{{ t.tier|badge_tier }}{% if user.is_authenticated %}{% if t.state == 'earned' %} - earned{% elif t.state == 'active' %} - in progress{% else %} - locked{% endif %}{% endif %}">
+                    aria-pressed="{% if t.tier == item.default_tier %}true{% else %}false{% endif %}"
+                    aria-label="{{ t.tier|badge_tier }} tier{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %}, earned{% elif t.state == 'active' %}, in progress{% else %}, locked{% endif %}{% endif %}"
+                    title="{{ t.tier|badge_tier }}{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %} - earned{% elif t.state == 'active' %} - in progress{% else %} - locked{% endif %}{% endif %}">
                 <span class="pp-scard__dot"></span>
             </button>
             {% endfor %}
@@ -42,12 +43,12 @@
             <div class="pp-scard__face" data-face="{{ t.tier }}"{% if t.tier != item.default_tier %} hidden{% endif %}>
                 <div class="pp-scard__face-top">
                     <span class="pp-scard__grade">{{ t.tier|badge_tier }}</span>
-                    {% if user.is_authenticated %}
+                    {% if user.is_authenticated and user.profile %}
                         <span class="pp-scard__state">{% if t.state == 'earned' %}Earned{% elif t.state == 'active' %}Working{% else %}Locked{% endif %}</span>
                     {% endif %}
                 </div>
                 <div class="pp-scard__face-top">
-                    {% if user.is_authenticated %}
+                    {% if user.is_authenticated and user.profile %}
                         <span class="pp-scard__frac"><span class="pp-tally">{{ t.completed }}/{{ t.required }}</span> stages</span>
                     {% else %}
                         <span class="pp-scard__frac"><span class="pp-tally">{{ t.required }}</span> stage{{ t.required|pluralize }}</span>
