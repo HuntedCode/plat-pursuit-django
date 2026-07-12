@@ -1,7 +1,7 @@
 /* ============================================================
  * BADGES BROWSE -- the /badges/ Series view + shared page chrome, rebuilt to the --pp-* house style so
- * the page reads as one piece next to the Browse Gallery. Reuses the Gallery's .pp-bgal__ toolbar and the
- * partials/badge.html icon; adds the per-series ROW card (.pp-slist__row) that the medallion grids lack.
+ * the page reads as one piece next to the Browse Gallery. Reuses the Gallery's .pp-bgal__ search/chip
+ * classes; adds the inline toolbar (.pp-sbar) and the per-series tier-ladder TILE (.pp-scard).
  * ============================================================ */
 
 /* View toggle (Series | Gallery): a segmented pill, mirroring the Collection's Case/Gallery toggle. */
@@ -22,6 +22,18 @@
     color: var(--pp-text);
 }
 .pp-vtoggle__chip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* ── Series toolbar: all controls on one bar (search + sort + the Type/Status chips), no collapse. There
+ * are few enough controls to show inline; the row wraps gracefully on narrow screens. Reuses the Gallery's
+ * .pp-bgal__search / .pp-bgal__chip / .pp-bgal__clabel so the two toolbars stay of a piece. ── */
+.pp-sbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.pp-sbar .pp-bgal__search { flex: 1 1 180px; min-width: 150px; }
+.pp-sbar .pp-gallery__select { flex: 0 0 auto; }
+/* A chip group (Type / Status) with its inline label; wraps its own chips before spilling to a new row. */
+.pp-sbar__group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pp-sbar__group .pp-bgal__clabel { min-width: 0; }   /* the shared label's 42px min isn't needed inline */
+/* Clear sits inline at the end (the shared rule floats it under the collapsed panel). */
+.pp-sbar__clear { margin-top: 0; align-self: center; }
 
 /* ============================================================
  * SERIES VIEW -- the per-series ROW list. Each row is one badge SERIES: next-tier medallion, cover, reward
