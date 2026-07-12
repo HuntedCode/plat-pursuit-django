@@ -8,37 +8,35 @@ Gallery's .pp-bgal__ search/chip classes so the two views' toolbars stay of a pi
           hx-push-url="true" hx-trigger="change delay:250ms, submit">
         <input type="hidden" name="page" value="1" />
         <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Search</button>
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
-            <div class="card-body p-3 md:p-4">
-                <div class="pp-sbar">
-                    <span class="pp-bgal__search">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                        <input type="search" name="series_slug" value="{{ series_q }}" placeholder="Search a series&hellip;" aria-label="Search series" />
-                    </span>
-                    <select class="pp-gallery__select" name="sort" aria-label="Sort series">
-                        {% for value, display in form.sort.field.choices %}
-                        <option value="{{ value }}"{% if series_sort == value %} selected{% endif %}>{{ display }}</option>
-                        {% endfor %}
-                    </select>
+        <div class="pp-bgal__toolbar">
+            <div class="pp-sbar">
+                <span class="pp-bgal__search">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input type="search" name="series_slug" value="{{ series_q }}" placeholder="Search a series&hellip;" aria-label="Search series" />
+                </span>
+                <select class="pp-gallery__select" name="sort" aria-label="Sort series">
+                    {% for value, display in form.sort.field.choices %}
+                    <option value="{{ value }}"{% if series_sort == value %} selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
 
-                    <span class="pp-sbar__group">
-                        <span class="pp-bgal__clabel">Type</span>
-                        {% for value, display in form.badge_type.field.choices %}{% if value %}
-                        <label class="pp-bgal__chip"><input type="checkbox" name="badge_type" value="{{ value }}"{% if value in selected_badge_types %} checked{% endif %}>{{ display }}</label>
-                        {% endif %}{% endfor %}
-                    </span>
+                <span class="pp-sbar__group">
+                    <span class="pp-bgal__clabel">Type</span>
+                    {% for value, display in form.badge_type.field.choices %}{% if value %}
+                    <label class="pp-bgal__chip"><input type="checkbox" name="badge_type" value="{{ value }}"{% if value in selected_badge_types %} checked{% endif %}>{{ display }}</label>
+                    {% endif %}{% endfor %}
+                </span>
 
-                    {% if user.is_authenticated %}
-                    <span class="pp-sbar__group">
-                        <span class="pp-bgal__clabel">Status</span>
-                        {% for value, display in form.completion_status.field.choices %}{% if value %}
-                        <label class="pp-bgal__chip"><input type="checkbox" name="completion_status" value="{{ value }}"{% if value in selected_completion_statuses %} checked{% endif %}>{{ display }}</label>
-                        {% endif %}{% endfor %}
-                    </span>
-                    {% endif %}
+                {% if user.is_authenticated %}
+                <span class="pp-sbar__group">
+                    <span class="pp-bgal__clabel">Status</span>
+                    {% for value, display in form.completion_status.field.choices %}{% if value %}
+                    <label class="pp-bgal__chip"><input type="checkbox" name="completion_status" value="{{ value }}"{% if value in selected_completion_statuses %} checked{% endif %}>{{ display }}</label>
+                    {% endif %}{% endfor %}
+                </span>
+                {% endif %}
 
-                    <button type="button" class="pp-bgal__clear pp-sbar__clear" id="bgal-clear" hidden>Clear</button>
-                </div>
+                <button type="button" class="pp-bgal__clear pp-sbar__clear" id="bgal-clear" hidden>Clear</button>
             </div>
         </div>
     </form>
