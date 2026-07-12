@@ -15,7 +15,7 @@ A **badge series** is identified by a `series_slug` (e.g., `god-of-war`, `reside
 | 3    | Gold     | 250 XP              | Platinum the game    |
 | 4    | Platinum | 75 XP               | 100% completion      |
 
-Tiers are sequential prerequisites: you cannot earn Gold without first earning Silver, which requires Bronze. This is enforced by `_check_prerequisite_tier()`.
+Tiers are **independent**: each tier is earned on its own merits, so a user can earn Gold without holding Silver. (The old previous-tier prerequisite chain was removed; `handle_badge` now hard-codes `prev_badge_earned = True`, and `_check_prerequisite_tier()` no longer exists.)
 
 Odd tiers (1, 3) check for `has_plat=True` on ProfileGame. Even tiers (2, 4) check for `progress=100`. This alternating pattern applies to `series`, `collection`, `developer`, `user`, and `genre` badge types. Megamix badges always use platinum checks regardless of tier.
 
@@ -77,7 +77,7 @@ XP is denormalized into `ProfileGamification` (one row per profile) with both a 
 The central model. Each row represents one tier of one badge series.
 
 - `series_slug`: Groups tiers together. All tiers of "God of War" share the same slug.
-- `tier`: 1-4 (Bronze through Platinum). Sequential prerequisite chain.
+- `tier`: 1-4 (Bronze through Platinum). Tiers are independent, not a prerequisite chain.
 - `badge_type`: Determines evaluation logic (series/collection/developer/user/genre/megamix/misc).
 - `base_badge`: FK to Tier 1 badge. Higher tiers can inherit display properties (image, title, description) from their base badge via `effective_*` properties.
 - `requires_all` / `min_required`: Megamix flexibility. When `requires_all=False`, only `min_required` stages need completion.
@@ -198,11 +198,11 @@ The primary evaluation path runs during PSN sync completion:
 
 2. **Scope reduction**: The service resolves which badge series could be affected:
    - ProfileGame IDs -> Game concept_ids -> Stages containing those concepts -> series_slugs -> Badges with those slugs.
-   - Only `is_live=True` badges are evaluated. Results are ordered by tier (ascending) so prerequisites are checked first.
+   - Only `is_live=True` badges are evaluated, ordered by tier (ascending).
 
 3. **Context pre-fetch** (`_build_badge_context`): A single batch query gathers:
    - All earned badge IDs for this profile (avoids per-badge existence checks).
-   - A `badges_by_key` dict keyed by `(series_slug, tier)` for prerequisite lookups.
+   - A `badges_by_key` dict keyed by `(series_slug, tier)` for fast per-tier lookups.
    - All stage data: `series_slug -> [(stage_number, required_tiers, game_ids, bundles)]` where `bundles` is a list of `(bundle_id, frozenset[member_concept_id])` tuples.
    - Sets of `plat_game_ids` and `complete_game_ids` for the profile (for standalone qualifier checks).
    - `fully_earned_concept_ids`: set of bundle-member concept IDs where any of the concept's games is at `progress=100` for this profile (synthesized-plat path).
@@ -213,14 +213,14 @@ The primary evaluation path runs during PSN sync completion:
 4. **Bulk gamification wrapper**: All badge evaluations run inside `bulk_gamification_update()`, which defers ProfileGamification recalculation until the entire batch is done (one recalc instead of N).
 
 5. **Per-badge evaluation** (`handle_badge`):
-   - **Prerequisite check**: Tier > 1 must have the previous tier earned. Uses context for fast lookups.
+   - **Independent tiers**: each tier is evaluated on its own; there is no previous-tier requirement (`prev_badge_earned` is always `True`).
    - **Stage completion**: Uses `_get_stage_completion_from_cache()` to check each stage against pre-fetched plat/complete game ID sets. Stage 0 is always skipped.
    - **Completion logic**:
      - Series/collection/developer/user: ALL non-zero stages must be complete.
      - Megamix with `requires_all=True`: ALL non-zero stages must be complete.
      - Megamix with `requires_all=False`: At least `min_required` stages must be complete.
    - **Progress update**: `_update_badge_progress()` writes `completed_concepts` count to UserBadgeProgress.
-   - **Award/revoke**: `_process_badge_award_revoke()` creates or deletes UserBadge, updates context in-place so subsequent tier checks see the new state. `handle_badge` is pure award logic and sends NO notifications.
+   - **Award/lapse**: `_process_badge_award_revoke()` creates a UserBadge when newly earned, or on lapse moves an existing one to `status='maintenance'` via `_lapse_badge` (no-delete policy). It updates the context in-place so later lookups in the batch see the new state. `handle_badge` is pure award logic and sends NO notifications.
 
 6. **Post-evaluation**: each caller collects the badges `handle_badge` reports as newly-created and sends ONE consolidated Discord embed via `send_badge_earned_notification` (no per-badge pings, no roles, Discord-linked profiles only). On-site + email go through the `DeferredNotificationService` (consolidated, highest tier only per series). `refresh_badge_series` accepts `--no-notifications` to silence all three channels for bulk re-evaluations.
 
@@ -251,7 +251,7 @@ The asymmetry (250/75/250/75) is intentional. Bronze and Gold check for platinum
 **Update triggers**: ProfileGamification is recalculated via Django signals:
 - `UserBadgeProgress` saved: progress XP changed.
 - `UserBadge` created: badge completion bonus added.
-- `UserBadge` deleted: badge completion bonus removed.
+- `UserBadge` lapsed to `maintenance` (or deleted): completion bonus removed. Recalculation counts only `status='earned'` badges, so a maintenance badge grants no bonus (its progress XP is unaffected).
 
 During sync (bulk operations), the `bulk_gamification_update()` context manager collects affected profiles in a thread-local set and runs one `update_profile_gamification()` call per profile after the context exits.
 
@@ -303,7 +303,7 @@ Leaderboards are maintained in Redis sorted sets with incremental signal-driven 
 - Tiered milestones only notify for the highest newly earned tier in a batch.
 
 ### Title System
-Both badges and milestones can award Titles. When a badge/milestone is earned, `UserTitle` is created with `source_type='badge'|'milestone'` and `source_id=badge.id|milestone.id`. Titles are revoked when badges are revoked.
+Both badges and milestones can award Titles. When a badge/milestone is earned, `UserTitle` is created with `source_type='badge'|'milestone'` and `source_id=badge.id|milestone.id`. A title represents active possession, so it is removed when its badge lapses to `maintenance` and restored when the profile re-qualifies.
 
 ### Fundraiser System
 The `funded_by` field on Badge tracks which donor funded the badge artwork. Higher tiers inherit this via the `effective_funded_by` property through `base_badge`.
@@ -319,11 +319,14 @@ Challenge-related milestones (`az_progress`, `genre_progress`, `subgenre_progres
 ### Stage 0 is silently skipped
 Stage 0 is never counted toward badge completion but still contributes XP through progress tracking. If you add a concept to a Stage 0 expecting it to be required for the badge, it will not be. This is by design for "bonus" stages.
 
-### Prerequisite chain is strict
-If a user somehow loses their Bronze badge (e.g., a game's concept is reassigned and the stage no longer qualifies), all higher tiers in the chain will also be revoked on the next evaluation pass. The context is updated in-place during iteration so downstream tier checks immediately see the revocation.
+### Tiers are independent (no prerequisite chain)
+Each tier is earned on its own merits, so a user can hold Gold without Silver, and losing a lower tier does not cascade to higher tiers. (`handle_badge` hard-codes `prev_badge_earned = True`; the old `_check_prerequisite_tier()` was removed.) Some prose in the `badge_service.py` docstrings still says "prerequisite" -- treat those as stale.
+
+### Revocation lapses; it never deletes
+When a profile stops meeting a badge's requirements, `_lapse_badge` flips the `UserBadge` to `status='maintenance'` rather than deleting it, so the row and its permanent `earn_rank` survive. Its Title (and Discord role) are removed while lapsed and restored by `_award_badge` when the profile re-qualifies (which also flips `maintenance -> earned`, keeping `earn_rank`). Rarity/earner counts include maintenance rows; the completion XP bonus does not (recalc counts only `status='earned'`).
 
 ### Context mutation during batch processing
-`_process_badge_award_revoke()` mutates the `_context['earned_badge_ids']` set in-place when badges are awarded or revoked. This is intentional: it allows subsequent tiers in the same batch to see the correct state without a DB round-trip. However, this means the context is only valid within its evaluation loop and should not be reused across separate calls.
+`_process_badge_award_revoke()` mutates the `_context['earned_badge_ids']` set in-place when badges are awarded or lapsed. This is intentional: it keeps the in-batch earned set current so later lookups in the same batch (rarity, XP, notification selection) don't need a DB round-trip. However, this means the context is only valid within its evaluation loop and should not be reused across separate calls.
 
 ### Gamification signal handlers must check bulk state
 The `post_save` and `post_delete` signals on UserBadge and UserBadgeProgress always fire. When a bulk update context is active (`is_bulk_update_active()`), handlers must defer the profile to `defer_profile_update()` instead of immediately recalculating. Forgetting this check would cause N redundant ProfileGamification recalculations during sync.
