@@ -54,12 +54,13 @@
 /* ── The Series card (.pp-scard): a compact tile whose centrepiece is the TIER LADDER. ───────────────────
  * A badge series is one stage pool with four tier thresholds, so the card shows the whole ladder, not one
  * rung. Four nodes (earned / active / locked) sit under the medallion and double as a FACE SELECTOR --
- * clicking a node swaps the medallion + the stat pane to that tier and re-tints the tile to its family
- * colour (--tier-c). The resting face is the tier you're working on (server-chosen `default_tier`; Bronze
- * if unstarted, top tier if finished, Bronze for anon). Numbers use the shared Tally primitive, the
- * selected tier's progress the shared Horizon (band tone). No refetch on swap: every tier's medallion +
- * pane renders once, hidden, toggled client-side. Badge art stays full-colour (greyscale-unearned is an
- * anti-pattern -- "reads disabled"); state lives in the ladder + the earned seal, not the art. */
+ * clicking a node re-tints the single medallion (the tiers share art; only the tier tint + cached backdrop/
+ * foreground swap) + swaps the stat pane to that tier + re-tints the tile to its family colour (--tier-c).
+ * The resting face is the tier you're working on (server-chosen `default_tier`; Bronze if unstarted, top
+ * tier if finished, Bronze for anon). Numbers use the shared Tally primitive, the selected tier's progress
+ * the shared Horizon. No refetch on swap: one medallion renders + retints client-side, and each tier's stat
+ * pane renders once, hidden, and toggles. Badge art stays full-colour (greyscale-unearned is an anti-pattern
+ * -- "reads disabled"); state lives in the ladder + the earned seal, not the art. */
 .pp-scard {
     --tier-c: var(--pp-primary);
     position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px;
@@ -87,13 +88,12 @@
 .pp-scard__open { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%; text-decoration: none; color: inherit; }
 .pp-scard__open:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; border-radius: 6px; }
 
-/* Art: the tier medallions -- only the selected one shows. Uses the shared .pp-med OBJECT (matching the
-   Collection Case + Browse Gallery), sized down for the tile; its showcase 'earned' look means full colour
-   on every tier (state lives in the ladder + seal, not the art). */
+/* Art: ONE medallion (the shared .pp-med OBJECT, matching the Collection Case + Browse Gallery), sized down
+   for the tile and retinted in place on a face swap. Showcase 'earned' look = full colour on every tier
+   (state lives in the ladder + seal, not the art). */
 .pp-scard__art { display: grid; place-items: center; min-height: 60px; }
 @media (min-width: 768px) { .pp-scard__art { min-height: 68px; } }
 .pp-scard__med { position: relative; }
-.pp-scard__med[hidden] { display: none; }
 .pp-scard__med .pp-med { --sz: 54px; }
 @media (min-width: 768px) { .pp-scard__med .pp-med { --sz: 62px; } }
 /* The medallion's own count + earned-aura blur are noise here (the face carries the numbers; the aura is

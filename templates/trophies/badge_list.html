@@ -157,9 +157,12 @@
                 // once if it wasn't rendered (default tier wasn't platinum).
                 var isPlat = (face === '4');
                 med.classList.toggle('pp-med--holographic', isPlat);
-                if (isPlat && !med.querySelector('.pp-med__foil')) {
+                var foil = med.querySelector('.pp-med__foil');
+                if (isPlat && !foil) {
                     var art = med.querySelector('.pp-med__art');
-                    if (art) { var foil = document.createElement('span'); foil.className = 'pp-med__foil'; foil.setAttribute('aria-hidden', 'true'); art.appendChild(foil); }
+                    if (art) { foil = document.createElement('span'); foil.className = 'pp-med__foil'; foil.setAttribute('aria-hidden', 'true'); art.appendChild(foil); }
+                } else if (!isPlat && foil) {
+                    foil.remove();   // .pp-med__foil is visible (opacity .3) on its own -- must be removed, not just declassed
                 }
             }
             var seal = card.querySelector('.pp-scard__seal');

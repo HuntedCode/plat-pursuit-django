@@ -2,10 +2,10 @@
 {% for item in display_data %}
 {% with badge=item.badge %}
 {% with last_tier=item.tiers|last %}
-    {% comment %} Series tile (.pp-scard): the whole tier LADDER, not one rung. Each tier renders once (a
-    showcase medallion + a stat face), hidden, and the ladder nodes / flanking arrows toggle them client-side
-    (delegated handler in badge_list.html). The resting face is item.default_tier (the tier you're working
-    on). See series-list.css for the design rationale. {% endcomment %}
+    {% comment %} Series tile (.pp-scard): the whole tier LADDER, not one rung. One medallion (the default
+    tier) is retinted in place on a swap (tiers share art); each tier's stat face renders once, hidden, and
+    the ladder nodes / flanking arrows toggle them client-side (delegated handler in badge_list.html). The
+    resting face is item.default_tier (the tier you're working on). See series-list.css for the rationale. {% endcomment %}
     <div class="pp-scard" data-tier="{{ item.default_tier|badge_tier|lower }}">
 
         {# Medallion (selected face) + name + type - earned. The whole tile navigates to detail (JS). #}
