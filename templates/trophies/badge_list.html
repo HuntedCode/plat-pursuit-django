@@ -197,7 +197,17 @@
         // #badge-peek dialog (reusing the collection's .pp-detail-modal chrome). data-peek-url is the
         // reverse with a 0 placeholder we swap for the badge id.
         var peekEl = document.getElementById('badge-peek');
-        var peekBusy = false;
+        var peekBusy = false, peekLastFocus = null;
+        // Tear the medallion down: its gyro driver adds a WINDOW listener that outlives a wiped body, and a
+        // flip timer could fire on a detached node. Called before replacing the body AND on close.
+        function teardownPeekMedallion() {
+            var body = peekEl && peekEl.querySelector('[data-peek-body]');
+            var card = body && body.querySelector('.pp-bdetail__stage .pp-med__art');
+            if (card) {
+                if (card._gyroCleanup) { card._gyroCleanup(); card._gyroCleanup = null; }
+                if (card._flipTimer) { clearTimeout(card._flipTimer); card._flipTimer = null; }
+            }
+        }
         function openPeek(badgeId) {
             if (!peekEl || peekBusy || !badgeId) { return; }
             var body = peekEl.querySelector('[data-peek-body]');
@@ -205,10 +215,12 @@
             var tmpl = peekEl.getAttribute('data-peek-url') || '';
             var url = tmpl.replace(/0\/$/, badgeId + '/');
             if (!url || url === tmpl) { return; }
+            peekLastFocus = document.activeElement;   // so close returns focus to the tapped tile
             peekBusy = true;
             fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
                 .then(function (r) { if (!r.ok) { throw new Error('peek ' + r.status); } return r.text(); })
                 .then(function (html) {
+                    teardownPeekMedallion();   // defensively clear any prior medallion before replacing
                     if (body) { body.innerHTML = html; }
                     if (window.PlatPursuit && PlatPursuit.Medallion) { PlatPursuit.Medallion.wire(body); }   // shared flip/tilt
                     peekEl.hidden = false;
@@ -222,11 +234,11 @@
             if (!peekEl || peekEl.hidden) { return; }
             peekEl.hidden = true;
             document.body.style.overflow = '';
+            teardownPeekMedallion();
             var body = peekEl.querySelector('[data-peek-body]');
-            // The medallion's gyro driver adds a WINDOW listener that outlives the wiped body -- tear it down.
-            var card = body && body.querySelector('.pp-bdetail__stage .pp-med__art');
-            if (card && card._gyroCleanup) { card._gyroCleanup(); }
             if (body) { body.innerHTML = ''; }
+            if (peekLastFocus && peekLastFocus.focus) { peekLastFocus.focus(); }   // return focus to the grid
+            peekLastFocus = null;
         }
         if (peekEl) {
             peekEl.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('[data-peek-close]')) { closePeek(); } });
@@ -235,6 +247,9 @@
 
         document.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
+            // Let modified clicks (open-in-new-tab/window) fall through to native anchor navigation instead
+            // of being hijacked into the modal / card-nav -- the medallion + Gallery cell keep their hrefs.
+            if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }
             // Medallion -> quick-peek modal. Series: the SELECTED tier's badge; Gallery: the whole cell.
             var medEl = e.target.closest('.pp-scard__med');
             if (medEl) {
