@@ -210,6 +210,7 @@
                 .then(function (r) { if (!r.ok) { throw new Error('peek ' + r.status); } return r.text(); })
                 .then(function (html) {
                     if (body) { body.innerHTML = html; }
+                    if (window.PlatPursuit && PlatPursuit.Medallion) { PlatPursuit.Medallion.wire(body); }   // shared flip/tilt
                     peekEl.hidden = false;
                     document.body.style.overflow = 'hidden';   // lock the page scroll behind the modal
                     if (dialog) { dialog.focus(); }
@@ -222,6 +223,9 @@
             peekEl.hidden = true;
             document.body.style.overflow = '';
             var body = peekEl.querySelector('[data-peek-body]');
+            // The medallion's gyro driver adds a WINDOW listener that outlives the wiped body -- tear it down.
+            var card = body && body.querySelector('.pp-bdetail__stage .pp-med__art');
+            if (card && card._gyroCleanup) { card._gyroCleanup(); }
             if (body) { body.innerHTML = ''; }
         }
         if (peekEl) {
