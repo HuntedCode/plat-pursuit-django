@@ -36,8 +36,10 @@
  * when inactive -- toggling visibility, not display -- so it fades in place instead of shifting the bar over
  * when a filter is applied (the JS still sets the `hidden` attribute; we just redefine what hidden looks
  * like here). */
-.pp-sbar__clear { margin-top: 0; align-self: center; transition: opacity 0.15s ease; }
-.pp-sbar__clear[hidden] { display: inline-flex; visibility: hidden; opacity: 0; }
+.pp-sbar__clear { display: inline-flex; align-items: center; white-space: nowrap; margin-top: 0; align-self: center; transition: opacity 0.15s ease; }
+/* Same display in BOTH states (author display beats the UA [hidden] display:none), so only visibility +
+ * opacity change -- the box width is identical whether shown or hidden, so no reflow when it toggles. */
+.pp-sbar__clear[hidden] { visibility: hidden; opacity: 0; }
 
 /* ============================================================
  * SERIES VIEW -- the per-series ROW list. Each row is one badge SERIES: next-tier medallion, cover, reward
