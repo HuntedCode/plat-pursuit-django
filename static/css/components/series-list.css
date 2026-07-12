@@ -26,10 +26,17 @@
 /* ── "How badges work": shown by default in the page header (new-user teaching). A short intro over a
  * four-rung tier ladder; each rung carries its requirement (platinum vs 100%) and platform scope. ── */
 .pp-btiers { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pp-border); }
-.pp-btiers__intro { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 14px; }
-.pp-btiers__icon { width: 17px; height: 17px; flex: 0 0 auto; color: var(--pp-primary); margin-top: 2px; }
+.pp-btiers__summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+.pp-btiers__summary::-webkit-details-marker { display: none; }
+.pp-btiers__summary:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 4px; }
+.pp-btiers__icon { width: 17px; height: 17px; flex: 0 0 auto; color: var(--pp-primary); }
 .pp-btiers__title { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text); }
-.pp-btiers__lede { font-size: 12.5px; line-height: 1.5; color: var(--pp-text-mute); margin-top: 3px; max-width: 70ch; }
+.pp-btiers__chev { margin-left: auto; width: 15px; height: 15px; flex: 0 0 auto; color: var(--pp-text-mute); transition: transform 0.2s ease; }
+.pp-btiers[open] .pp-btiers__chev { transform: rotate(180deg); }
+.pp-btiers__summary:hover .pp-btiers__chev { color: var(--pp-text); }
+@media (prefers-reduced-motion: reduce) { .pp-btiers__chev { transition: none; } }
+.pp-btiers__body { padding-top: 14px; }
+.pp-btiers__lede { font-size: 13.5px; line-height: 1.55; color: var(--pp-text-dim); max-width: 72ch; margin-bottom: 14px; }
 .pp-btiers__ladder { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 @media (min-width: 768px) { .pp-btiers__ladder { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .pp-btiers__rung {
@@ -50,7 +57,7 @@
 .pp-btiers__req { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--pp-text); }
 .pp-btiers__req img { width: 14px; height: 14px; }
 .pp-btiers__scope { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
-.pp-btiers__foot { font-size: 11px; line-height: 1.5; color: var(--pp-text-mute); margin-top: 12px; }
+.pp-btiers__foot { font-size: 12px; line-height: 1.55; color: var(--pp-text-dim); margin-top: 12px; }
 
 /* ── Series toolbar: all controls on one bar (search + sort + the Type/Status chips), no collapse. There
  * are few enough controls to show inline; the row wraps gracefully on narrow screens. Reuses the Gallery's

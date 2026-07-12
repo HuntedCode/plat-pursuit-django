@@ -1,45 +1,59 @@
 {% load static %}
-{% comment %} "How badges work" -- shown by default (the new-user teaching moment). Concept + how to earn:
-every series has four collectible tiers, earned by platinum (Bronze/Gold) or 100% (Silver/Platinum), with
-the top two tiers counting games on every platform, not just PS4/PS5. Ground truth: the tier is set by a
-Stage's required_tiers convention (modern = PS4/PS5 non-VR; all = adds VR + classic PS3/Vita). {% endcomment %}
-<div class="pp-btiers">
-    <div class="pp-btiers__intro">
+{% comment %} "How badges work" -- the new-user teaching moment. Default open; the summary is a toggle and the
+inline script below persists the collapsed choice in localStorage (restored before paint, so no flash for a
+returning user who closed it). Concept + how to earn: four collectible tiers per series, earned by platinum
+(Bronze/Gold) or 100% (Silver/Platinum); Bronze/Silver count modern PS4/PS5 games, Gold/Platinum count every
+platform (adds VR + classic PS3/Vita). Ground truth is a Stage's required_tiers convention. {% endcomment %}
+<details class="pp-btiers" id="btiers-explainer" open>
+    <summary class="pp-btiers__summary">
         <svg class="pp-btiers__icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="8" r="6"></circle><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path>
         </svg>
-        <div>
-            <h3 class="pp-btiers__title">How badges work</h3>
-            <p class="pp-btiers__lede">Every badge is a themed set of PlayStation games (a franchise, a studio, a collection). Each has four tiers to collect, and here is how you earn them:</p>
-        </div>
+        <span class="pp-btiers__title">How badges work</span>
+        <svg class="pp-btiers__chev" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    </summary>
+
+    <div class="pp-btiers__body">
+        <p class="pp-btiers__lede">Every badge is a themed set of PlayStation games (a franchise, a studio, a collection). Each has four tiers to collect, and here is how you earn them:</p>
+
+        <ol class="pp-btiers__ladder">
+            <li class="pp-btiers__rung" data-btier="bronze">
+                <span class="pp-btiers__art"><img src="{% static 'images/badges/backdrops/1_backdrop.png' %}" alt="" loading="lazy" decoding="async" /></span>
+                <span class="pp-btiers__name">Bronze</span>
+                <span class="pp-btiers__req"><img src="{% static 'images/plat.png' %}" alt="" /> Platinum</span>
+                <span class="pp-btiers__scope">PS4 &amp; PS5</span>
+            </li>
+            <li class="pp-btiers__rung" data-btier="silver">
+                <span class="pp-btiers__art"><img src="{% static 'images/badges/backdrops/2_backdrop.png' %}" alt="" loading="lazy" decoding="async" /></span>
+                <span class="pp-btiers__name">Silver</span>
+                <span class="pp-btiers__req"><b>100%</b></span>
+                <span class="pp-btiers__scope">PS4 &amp; PS5</span>
+            </li>
+            <li class="pp-btiers__rung" data-btier="gold">
+                <span class="pp-btiers__art"><img src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" loading="lazy" decoding="async" /></span>
+                <span class="pp-btiers__name">Gold</span>
+                <span class="pp-btiers__req"><img src="{% static 'images/plat.png' %}" alt="" /> Platinum</span>
+                <span class="pp-btiers__scope">All platforms</span>
+            </li>
+            <li class="pp-btiers__rung" data-btier="platinum">
+                <span class="pp-btiers__art"><img src="{% static 'images/badges/backdrops/4_backdrop.png' %}" alt="" loading="lazy" decoding="async" /></span>
+                <span class="pp-btiers__name">Platinum</span>
+                <span class="pp-btiers__req"><b>100%</b></span>
+                <span class="pp-btiers__scope">All platforms</span>
+            </li>
+        </ol>
+
+        <p class="pp-btiers__foot">Tiers are independent, so grab any without the others. "All platforms" adds VR and classic PS3 and Vita games on top of PS4/PS5.</p>
     </div>
-
-    <ol class="pp-btiers__ladder">
-        <li class="pp-btiers__rung" data-btier="bronze">
-            <span class="pp-btiers__art"><img src="{% static 'images/badges/backdrops/1_backdrop.png' %}" alt="" loading="lazy" decoding="async" /></span>
-            <span class="pp-btiers__name">Bronze</span>
-            <span class="pp-btiers__req"><img src="{% static 'images/plat.png' %}" alt="" /> Platinum</span>
-            <span class="pp-btiers__scope">PS4 &amp; PS5</span>
-        </li>
-        <li class="pp-btiers__rung" data-btier="silver">
-            <span class="pp-btiers__art"><img src="{% static 'images/badges/backdrops/2_backdrop.png' %}" alt="" loading="lazy" decoding="async" /></span>
-            <span class="pp-btiers__name">Silver</span>
-            <span class="pp-btiers__req"><b>100%</b></span>
-            <span class="pp-btiers__scope">PS4 &amp; PS5</span>
-        </li>
-        <li class="pp-btiers__rung" data-btier="gold">
-            <span class="pp-btiers__art"><img src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" loading="lazy" decoding="async" /></span>
-            <span class="pp-btiers__name">Gold</span>
-            <span class="pp-btiers__req"><img src="{% static 'images/plat.png' %}" alt="" /> Platinum</span>
-            <span class="pp-btiers__scope">All platforms</span>
-        </li>
-        <li class="pp-btiers__rung" data-btier="platinum">
-            <span class="pp-btiers__art"><img src="{% static 'images/badges/backdrops/4_backdrop.png' %}" alt="" loading="lazy" decoding="async" /></span>
-            <span class="pp-btiers__name">Platinum</span>
-            <span class="pp-btiers__req"><b>100%</b></span>
-            <span class="pp-btiers__scope">All platforms</span>
-        </li>
-    </ol>
-
-    <p class="pp-btiers__foot">Tiers are independent, so grab any without the others. "All platforms" adds VR and classic PS3 and Vita games on top of PS4/PS5.</p>
-</div>
+</details>
+{% comment %} Restore the collapsed choice before paint (no flash) and persist future toggles. {% endcomment %}
+<script>
+    (function () {
+        var d = document.getElementById('btiers-explainer');
+        if (!d) { return; }
+        try { if (localStorage.getItem('pp-btiers-collapsed') === '1') { d.removeAttribute('open'); } } catch (e) {}
+        d.addEventListener('toggle', function () {
+            try { localStorage.setItem('pp-btiers-collapsed', d.open ? '0' : '1'); } catch (e) {}
+        });
+    })();
+</script>
