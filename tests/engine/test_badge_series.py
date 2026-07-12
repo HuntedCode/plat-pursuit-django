@@ -150,6 +150,22 @@ def test_series_xhr_past_end_returns_no_tiles(client):
     assert '/badges/rs-end/' not in html            # no tile for this series on the past-end page
 
 
+def test_series_big_tier_falls_back_to_smooth_bar(client):
+    """Coherence guard: a tier needing more stages than the segment cap renders the smooth Horizon bar, not
+    a row of indistinct slivers; a small tier still segments (one cell per stage)."""
+    profile = ProfileFactory()
+    BadgeFactory(series_slug='rs-big', tier=1, badge_type='series', is_live=True,
+                 required_stages=20, display_series='rs-big')     # > cap -> smooth bar
+    BadgeFactory(series_slug='rs-small', tier=1, badge_type='series', is_live=True,
+                 required_stages=4, display_series='rs-small')    # <= cap -> 4 segments
+    client.force_login(profile.user)
+
+    html = client.get(SERIES).content.decode()
+
+    assert 'pp-horizon__track' in html               # the big tier's smooth fallback bar
+    assert html.count('pp-horizon__seg') == 4        # only the small tier segments; the big one does NOT sliver
+
+
 def test_series_query_count_is_flat(client):
     """Whale-safety: the tile grid builds 4 medallion frames per tile, so it MUST NOT N+1 per series/tier.
     Query count stays flat as the catalog grows (frames read only select_related FKs; per-tier trophies +

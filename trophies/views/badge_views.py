@@ -26,7 +26,11 @@ _GALLERY_STATES = ('earned', 'in_progress', 'maintenance', 'unearned')  # multi-
 _TYPE_ORDER = ('series', 'franchise', 'collection', 'megamix', 'developer', 'user', 'event')
 GALLERY_PAGE_SIZE = 48  # medallions per page (a multiple of common 2/3/4/6-column grids)
 SERIES_PAGE_SIZE = 30   # series rows per page (Series view infinite scroll)
-TILE_SEGMENT_CAP = 12   # a tier face renders a per-stage segmented meter up to this many stages, else a bar
+# A tier face renders a per-stage SEGMENTED meter only up to this many stages; above it, the smooth Horizon
+# bar (coherent at any count). Kept low because the tile's narrowest column (2-col mobile, ~100px of bar)
+# turns more segments than this into indistinct slivers -- big-series tiers (many games -> many stages) get
+# the smooth bar instead.
+TILE_SEGMENT_CAP = 8
 # (key, label). Order mirrors the Collection Gallery's sort dropdown (name, rarest, tier, ..., set last).
 GALLERY_SORTS = [
     ('name', 'Name (A-Z)'),
