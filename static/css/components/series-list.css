@@ -29,7 +29,7 @@
    over the collapsible summary, no bordered panel of its own. */
 .pp-howto { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pp-border); }
 .pp-howto__summary {
-    display: flex; align-items: center; gap: 8px; padding: 2px 0; cursor: pointer; list-style: none;
+    display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; list-style: none;
     font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute);
     transition: color 0.15s ease;
 }
@@ -39,6 +39,7 @@
 .pp-howto__summary:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 4px; }
 .pp-howto__chev { margin-left: auto; width: 14px; height: 14px; flex: 0 0 auto; transition: transform 0.2s ease; }
 .pp-howto[open] .pp-howto__chev { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .pp-howto__chev { transition: none; } }
 .pp-howto__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px 0 0; }
 @media (min-width: 1024px) { .pp-howto__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .pp-howto__tier {
@@ -232,20 +233,17 @@
 .pp-slist__empty-title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
 
 /* ── User badge stats: six tiles above the list (auth only). ── */
-/* Flush inside the page header (merged, like .pp-howto above): a divider rule, then the label + tile grid. */
+/* Flush inside the page header (merged, like .pp-howto above): a divider rule, then the tile grid -- no
+   section label, matching how Career/Collection keep their in-header stats unlabelled. */
 .pp-bhead__stats { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pp-border); }
-.pp-slist__statcard__h {
-    display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
-    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute);
-}
-.pp-slist__statcard__h svg { width: 14px; height: 14px; color: var(--pp-primary); }
 .pp-slist__statgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 @media (min-width: 768px) { .pp-slist__statgrid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 .pp-slist__tile {
     text-align: center; padding: 10px 6px; border-radius: 12px;
     border: 1px solid var(--pp-border); background: color-mix(in oklab, var(--pp-bg-1) 50%, transparent);
 }
-.pp-slist__tile__n { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.pp-slist__tile__n { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+@media (min-width: 768px) { .pp-slist__tile__n { font-size: 17px; } }
 .pp-slist__tile__l { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); margin-top: 3px; }
 .pp-slist__tile[data-accent="xp"]       .pp-slist__tile__n { color: #b98cff; }
 .pp-slist__tile[data-accent="earned"]   .pp-slist__tile__n { color: #3fbf7f; }
