@@ -1,10 +1,10 @@
 {% load humanize %}
 {% if user.is_authenticated and user_badge_stats %}
     {% comment %} Viewer progress, on the shared rebuild stat card (.scard, as on Career/Home) -- label over a
-    neutral .pp-tally value, one primary hero (Total XP). 3-up on desktop, one row at xl so whale XP never
-    crowds a narrow cell. {% endcomment %}
+    neutral .pp-tally value, one primary hero (Total XP). Capped at 3-up (2 rows) so a whale's 7-figure Total
+    XP never crowds a narrow cell -- wider cells read better than a single cramped 6-across row anyway. {% endcomment %}
     <div class="pp-bhead__stats">
-        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 md:gap-3">
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
             <div class="scard text-center">
                 <div class="scard__label">Total XP</div>
                 <div class="scard__value pp-tally text-primary">{{ user_badge_stats.total_xp|intcomma }}</div>
