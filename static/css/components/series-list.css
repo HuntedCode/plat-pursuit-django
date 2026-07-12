@@ -103,10 +103,11 @@
 .pp-scard__type { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-mute); }
 .pp-scard__type .pp-tally { font-size: 10.5px; color: var(--pp-text-dim); letter-spacing: 0; }
 
-/* Ladder row: prev/next arrows flanking the tier nodes, to step faces sequentially. */
-.pp-scard__ladder-row { display: flex; align-items: center; justify-content: center; gap: 3px; margin-top: 1px; }
+/* Ladder row: prev/next arrows flanking the tier nodes, to step faces sequentially. Sized to fit a 2-col
+   375px card (2 arrows + 4 nodes + gaps must clear ~140px of inner width). */
+.pp-scard__ladder-row { display: flex; align-items: center; justify-content: center; gap: 2px; margin-top: 1px; max-width: 100%; }
 .pp-scard__arrow {
-    display: grid; place-items: center; width: 20px; height: 20px; flex: 0 0 auto; padding: 0;
+    display: grid; place-items: center; width: 18px; height: 18px; flex: 0 0 auto; padding: 0;
     border: 0; background: none; border-radius: 5px; cursor: pointer; color: var(--pp-text-mute);
     transition: color 0.15s ease, background 0.15s ease;
 }
@@ -116,10 +117,10 @@
 .pp-scard__arrow svg { width: 13px; height: 13px; }
 
 /* The tier ladder = 4 state nodes that double as the face selector. */
-.pp-scard__ladder { display: flex; align-items: center; justify-content: center; gap: 5px; }
+.pp-scard__ladder { display: flex; align-items: center; justify-content: center; gap: 4px; }
 .pp-scard__node {
     --nc: var(--pp-text-mute);
-    display: grid; place-items: center; width: 22px; height: 22px; padding: 0;
+    display: grid; place-items: center; width: 20px; height: 20px; padding: 0;
     border: 0; background: none; cursor: pointer; border-radius: 50%;
 }
 .pp-scard__node[data-tier-key="bronze"]   { --nc: #cf9160; }
@@ -160,8 +161,9 @@
 .pp-scard__xp { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
 .pp-scard__xp svg { width: 11px; height: 11px; color: color-mix(in oklab, var(--pp-primary) 70%, var(--pp-text-mute)); }
 .pp-scard__xp .pp-tally { font-size: 11px; color: var(--pp-text-dim); }
-/* Per-tier trophy spread: a tier-trophy-coloured dot + count for each of the four PSN types. */
-.pp-scard__trophies { display: flex; align-items: center; justify-content: center; gap: 9px; }
+/* Per-tier trophy spread: a tier-trophy-coloured dot + count for each of the four PSN types. Wraps rather
+   than overflowing when a big franchise pushes the counts into the thousands on a narrow tile. */
+.pp-scard__trophies { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 9px; }
 .pp-scard__t { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
 .pp-scard__t::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--tc); flex: 0 0 auto; }
 

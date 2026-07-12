@@ -23,6 +23,8 @@
                 {% endfor %}
             </span>
             <span class="pp-scard__name">{{ item.card_name }}</span>
+            {% comment %} Series-level popularity (tier-1 earners) -- static across faces by design, unlike the
+            per-tier stats below. {% endcomment %}
             <span class="pp-scard__type">{{ badge.badge_type|capfirst }} &middot; <span class="pp-tally">{{ item.tier1_earned_count|intcomma }}</span> earned</span>
         </a>
 
@@ -77,10 +79,10 @@
                 </div>
 
                 <div class="pp-scard__trophies" aria-label="Trophies this tier spans">
-                    <span class="pp-scard__t" style="--tc: var(--color-trophy-bronze)">{{ t.trophies.bronze }}</span>
-                    <span class="pp-scard__t" style="--tc: var(--color-trophy-silver)">{{ t.trophies.silver }}</span>
-                    <span class="pp-scard__t" style="--tc: var(--color-trophy-gold)">{{ t.trophies.gold }}</span>
-                    <span class="pp-scard__t" style="--tc: var(--color-trophy-platinum)">{{ t.trophies.platinum }}</span>
+                    <span class="pp-scard__t" style="--tc: var(--color-trophy-bronze)">{{ t.trophies.bronze|intcomma }}</span>
+                    <span class="pp-scard__t" style="--tc: var(--color-trophy-silver)">{{ t.trophies.silver|intcomma }}</span>
+                    <span class="pp-scard__t" style="--tc: var(--color-trophy-gold)">{{ t.trophies.gold|intcomma }}</span>
+                    <span class="pp-scard__t" style="--tc: var(--color-trophy-platinum)">{{ t.trophies.platinum|intcomma }}</span>
                 </div>
             </div>
             {% endfor %}

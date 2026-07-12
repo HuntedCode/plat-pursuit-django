@@ -118,13 +118,12 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     def get_queryset(self):
         if self._view_mode() == 'gallery':
             return self._gallery_queryset()
+        # The tile renders per-tier medallions (build_badge_frame) + the affiliation name; it no longer shows
+        # cover art or the Title, so only the FKs those frames read are joined. (Dropping the concept/
+        # igdb_match joins also stops pulling the ~30KB raw_response blob per badge.) submitted_by stays --
+        # get_badge_layers uses it for user-type badge art.
         qs = super().get_queryset().live().select_related(
-            'base_badge', 'most_recent_concept', 'most_recent_concept__igdb_match', 'title',
-            'base_badge__most_recent_concept', 'base_badge__most_recent_concept__igdb_match',
-            'base_badge__title',
-            'submitted_by', 'base_badge__submitted_by',
-            # For per-tier build_badge_frame (effective_franchise/collection/developer/funded_by read badge
-            # AND base_badge FKs) + the card affiliation name -- keeps the 4-frames-per-tile build query-free.
+            'base_badge', 'submitted_by', 'base_badge__submitted_by',
             'franchise', 'collection', 'developer', 'funded_by',
             'base_badge__franchise', 'base_badge__collection', 'base_badge__developer', 'base_badge__funded_by',
         )
@@ -329,7 +328,9 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         series_games = defaultdict(dict)  # slug -> {game_id: {'trophies': ..., 'tiers': set()}}
         for game_id, slug, req_tiers, trophies in rows:
             entry = series_games[slug].setdefault(game_id, {'trophies': trophies, 'tiers': set()})
-            entry['tiers'].update(req_tiers if req_tiers else ALL_TIERS)
+            # Empty required_tiers = applies to every tier. Clamp to 1-4 so a stray out-of-range value in the
+            # ArrayField can never KeyError per_tier below and take down the whole page render.
+            entry['tiers'].update(t for t in (req_tiers or ALL_TIERS) if t in ALL_TIERS)
 
         result = {}
         for slug in series_slugs:
@@ -450,7 +451,9 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                     t_state, t_done, t_pct = 'locked', 0, 0
 
                 # XP earned-so-far / total on offer for this tier: stage XP accrues per completed stage; the
-                # flat tier bonus lands only once the tier is earned.
+                # flat tier bonus lands only once the tier is earned. (Megamix uses required_stages =
+                # min_required, so its "/ total" here is the min-completion XP, not the full-set XP -- the
+                # detail page computes the exact figure; the browse tile stays cheap.)
                 stage_xp = get_tier_xp(b.tier)
                 xp_total = req_t * stage_xp + BADGE_TIER_XP
                 xp_earned = xp_total if t_state == 'earned' else t_done * stage_xp
@@ -494,6 +497,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 or (_dv.name if _dv else '')
                 or display_badge.effective_display_series
                 or display_badge.effective_display_title
+                or display_badge.name   # final fallback (matches the medallion's series_name) -- never None
             )
 
             display_data.append({
