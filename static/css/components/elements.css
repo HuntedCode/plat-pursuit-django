@@ -288,10 +288,10 @@
 @media (max-width: 560px) { .jdoss__grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* ---- Character sheet: compact skill rows, two discipline columns on desktop (screenshot-friendly) ---- */
-.jsheet { display: grid; grid-template-columns: 1fr; gap: 18px; }
-@media (min-width: 768px) { .jsheet { grid-template-columns: repeat(2, 1fr); gap: 16px 26px; } }
+.jsheet { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 768px) { .jsheet { grid-template-columns: repeat(2, 1fr); gap: 12px 24px; } }
 /* Each discipline is a card (matching the Dossier bands), so the Sheet reads as panels, not bare text. */
-.jsheet__disc { border-radius: var(--pp-radius-lg); padding: 14px; border: 1px solid color-mix(in oklab, var(--disc) 30%, transparent); border-left: 3px solid var(--disc); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 9%, var(--pp-bg-1)), var(--pp-bg-1)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.18); }
+.jsheet__disc { border-radius: var(--pp-radius-lg); padding: 11px 13px; border: 1px solid color-mix(in oklab, var(--disc) 30%, transparent); border-left: 3px solid var(--disc); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 9%, var(--pp-bg-1)), var(--pp-bg-1)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.18); }
 .jsheet__head { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; margin-bottom: 5px; border-bottom: 2px solid color-mix(in oklab, var(--disc) 45%, transparent); }
 .jsheet__head-ic { width: 20px; height: 20px; flex: none; color: var(--disc); }
 .jsheet__head-ic svg { width: 20px; height: 20px; }
