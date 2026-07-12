@@ -1,30 +1,33 @@
 {% load humanize %}
 {% if user.is_authenticated and user_badge_stats %}
+    {% comment %} Viewer progress, on the shared rebuild stat card (.scard, as on Career/Home) -- label over a
+    neutral .pp-tally value, one primary hero (Total XP). 3-up on desktop, one row at xl so whale XP never
+    crowds a narrow cell. {% endcomment %}
     <div class="pp-bhead__stats">
-        <div class="pp-slist__statgrid">
-            <div class="pp-slist__tile" data-accent="xp">
-                <div class="pp-slist__tile__n pp-tally">{{ user_badge_stats.total_xp|intcomma }}</div>
-                <div class="pp-slist__tile__l">Total XP</div>
+        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 md:gap-3">
+            <div class="scard text-center">
+                <div class="scard__label">Total XP</div>
+                <div class="scard__value pp-tally text-primary">{{ user_badge_stats.total_xp|intcomma }}</div>
             </div>
-            <div class="pp-slist__tile" data-accent="earned">
-                <div class="pp-slist__tile__n pp-tally">{{ user_badge_stats.total_badges_earned }}</div>
-                <div class="pp-slist__tile__l">Tiers Earned</div>
+            <div class="scard text-center">
+                <div class="scard__label">Tiers Earned</div>
+                <div class="scard__value pp-tally">{{ user_badge_stats.total_badges_earned }}</div>
             </div>
-            <div class="pp-slist__tile" data-accent="plat">
-                <div class="pp-slist__tile__n pp-tally">{{ user_badge_stats.stages_platted }}/{{ user_badge_stats.plat_eligible_stages }}</div>
-                <div class="pp-slist__tile__l">Stages Plat</div>
+            <div class="scard text-center">
+                <div class="scard__label">Stages Plat</div>
+                <div class="scard__value pp-tally">{{ user_badge_stats.stages_platted }}/{{ user_badge_stats.plat_eligible_stages }}</div>
             </div>
-            <div class="pp-slist__tile" data-accent="hundo">
-                <div class="pp-slist__tile__n pp-tally">{{ user_badge_stats.stages_completed }}/{{ user_badge_stats.total_stages }}</div>
-                <div class="pp-slist__tile__l">Stages 100%</div>
+            <div class="scard text-center">
+                <div class="scard__label">Stages 100%</div>
+                <div class="scard__value pp-tally">{{ user_badge_stats.stages_completed }}/{{ user_badge_stats.total_stages }}</div>
             </div>
-            <div class="pp-slist__tile" data-accent="unique">
-                <div class="pp-slist__tile__n pp-tally">{{ user_badge_stats.series_completed }}/{{ user_badge_stats.total_series }}</div>
-                <div class="pp-slist__tile__l">Unique</div>
+            <div class="scard text-center">
+                <div class="scard__label">Unique</div>
+                <div class="scard__value pp-tally">{{ user_badge_stats.series_completed }}/{{ user_badge_stats.total_series }}</div>
             </div>
-            <div class="pp-slist__tile" data-accent="complete">
-                <div class="pp-slist__tile__n pp-tally">{{ user_badge_stats.completion_pct }}%</div>
-                <div class="pp-slist__tile__l">Complete</div>
+            <div class="scard text-center">
+                <div class="scard__label">Complete</div>
+                <div class="scard__value pp-tally">{{ user_badge_stats.completion_pct }}%</div>
             </div>
         </div>
     </div>

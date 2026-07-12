@@ -232,22 +232,7 @@
 .pp-slist__empty svg { width: 40px; height: 40px; margin: 0 auto 8px; opacity: 0.5; }
 .pp-slist__empty-title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
 
-/* ── User badge stats: six tiles above the list (auth only). ── */
-/* Flush inside the page header (merged, like .pp-howto above): a divider rule, then the tile grid -- no
-   section label, matching how Career/Collection keep their in-header stats unlabelled. */
+/* ── User badge stats: the shared .scard grid, flush inside the page header (auth only). ── */
+/* A divider rule over the stat cards (mirrors .pp-howto's flush treatment); the cards themselves are the
+   site-wide .scard component (elements.css), so no bespoke tile styling lives here. */
 .pp-bhead__stats { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pp-border); }
-.pp-slist__statgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-@media (min-width: 768px) { .pp-slist__statgrid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
-.pp-slist__tile {
-    text-align: center; padding: 10px 6px; border-radius: 12px;
-    border: 1px solid var(--pp-border); background: color-mix(in oklab, var(--pp-bg-1) 50%, transparent);
-}
-.pp-slist__tile__n { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
-@media (min-width: 768px) { .pp-slist__tile__n { font-size: 17px; } }
-.pp-slist__tile__l { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); margin-top: 3px; }
-.pp-slist__tile[data-accent="xp"]       .pp-slist__tile__n { color: #b98cff; }
-.pp-slist__tile[data-accent="earned"]   .pp-slist__tile__n { color: #3fbf7f; }
-.pp-slist__tile[data-accent="plat"]     .pp-slist__tile__n { color: #e7c25c; }
-.pp-slist__tile[data-accent="hundo"]    .pp-slist__tile__n { color: #8fd2ea; }
-.pp-slist__tile[data-accent="unique"]   .pp-slist__tile__n { color: #f0883e; }
-.pp-slist__tile[data-accent="complete"] .pp-slist__tile__n { color: var(--pp-primary); }
