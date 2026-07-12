@@ -26,22 +26,17 @@
 /* ── Series toolbar: all controls on one bar (search + sort + the Type/Status chips), no collapse. There
  * are few enough controls to show inline; the row wraps gracefully on narrow screens. Reuses the Gallery's
  * .pp-bgal__search / .pp-bgal__chip / .pp-bgal__clabel so the two toolbars stay of a piece. ── */
-.pp-sbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.pp-sbar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-right: 60px; }
 .pp-sbar .pp-bgal__search { flex: 1 1 180px; min-width: 150px; }
 .pp-sbar .pp-gallery__select { flex: 0 0 auto; }
 /* A chip group (Type / Status) with its inline label; wraps its own chips before spilling to a new row. */
 .pp-sbar__group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pp-sbar__group .pp-bgal__clabel { min-width: 0; }   /* the shared label's 42px min isn't needed inline */
-/* Clear sits inline at the end (the shared rule floats it under the collapsed panel). Reserve its slot even
- * when inactive -- toggling visibility, not display -- so it fades in place instead of shifting the bar over
- * when a filter is applied (the JS still sets the `hidden` attribute; we just redefine what hidden looks
- * like here). */
-.pp-sbar__clear { display: inline-flex; align-items: center; white-space: nowrap; margin-top: 0; align-self: center; transition: opacity 0.15s ease; }
-/* Keep the box in flow when inactive so only visibility + opacity change -- no reflow when it toggles.
- * The !important is deliberate: Tailwind v4 preflight sets `[hidden]{display:none!important}`, which a plain
- * `display` can't override, so the button was collapsing to display:none and the flex-grow search reflowed
- * around it. Higher specificity + !important beats preflight's zero-specificity :where() rule. */
-.pp-sbar__clear[hidden] { display: inline-flex !important; visibility: hidden; opacity: 0; }
+/* Clear is pinned to the toolbar's top-right corner, OUT of the flex flow -- so toggling it (the JS sets the
+ * `hidden` attribute -> display:none) can't reflow the search/sort/chips at all. .pp-sbar's padding-right
+ * reserves its lane so it never overlaps a chip. This sidesteps the whole flex-grow-shift problem instead of
+ * fighting Tailwind's `[hidden]{display:none!important}`. */
+.pp-sbar__clear { position: absolute; top: 0; right: 2px; height: 34px; margin: 0; display: inline-flex; align-items: center; white-space: nowrap; }
 
 /* ============================================================
  * SERIES VIEW -- the per-series ROW list. Each row is one badge SERIES: next-tier medallion, cover, reward
