@@ -57,12 +57,13 @@
                 </a>
                 {% endif %}
             </div>
+
+            {% comment %} Merged into the header, mirroring the Career/Collection "substance in the header"
+            pattern: the viewer's progress stats + the collapsible tier explainer, not separate cards below. {% endcomment %}
+            {% include 'trophies/partials/badge_list/badge_user_stats.html' %}
+            {% include 'trophies/partials/badge_list/badge_list_header.html' %}
         </div>
     </section>
-
-    {# ── Permanent chrome (both views): Your Badge Stats (auth) + the tier How-To ── #}
-    {% include 'trophies/partials/badge_list/badge_user_stats.html' %}
-    {% include 'trophies/partials/badge_list/badge_list_header.html' %}
 
     {% comment %} View toggle: Series (per-series rows, "what's needed") vs Gallery (per-tier medallion wall,
     catalog discovery -- filter individual tiers across every series). Sits right above the view it controls. {% endcomment %}

@@ -25,22 +25,21 @@
 
 /* ── Tier How-To: the collapsible explainer, permanent chrome on both views. --pp-* card over four
  * tier-tinted cards (backdrop art + requirement + XP in the Tally face). ── */
-.pp-howto {
-    border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); margin-bottom: 12px;
-    background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent);
-}
+/* Flush inside the page header (merged, mirroring Career/Collection substance-in-header): a divider rule
+   over the collapsible summary, no bordered panel of its own. */
+.pp-howto { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pp-border); }
 .pp-howto__summary {
-    display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; list-style: none;
+    display: flex; align-items: center; gap: 8px; padding: 2px 0; cursor: pointer; list-style: none;
     font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute);
     transition: color 0.15s ease;
 }
 .pp-howto__summary::-webkit-details-marker { display: none; }
 .pp-howto__summary > svg:first-child { width: 15px; height: 15px; color: var(--pp-primary); flex: 0 0 auto; }
 .pp-howto__summary:hover { color: var(--pp-text); }
-.pp-howto__summary:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; border-radius: var(--pp-radius-lg); }
+.pp-howto__summary:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 4px; }
 .pp-howto__chev { margin-left: auto; width: 14px; height: 14px; flex: 0 0 auto; transition: transform 0.2s ease; }
 .pp-howto[open] .pp-howto__chev { transform: rotate(180deg); }
-.pp-howto__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 14px 14px; }
+.pp-howto__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px 0 0; }
 @media (min-width: 1024px) { .pp-howto__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .pp-howto__tier {
     --tier-c: var(--pp-primary);
@@ -233,10 +232,8 @@
 .pp-slist__empty-title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
 
 /* ── User badge stats: six tiles above the list (auth only). ── */
-.pp-slist__statcard {
-    border: 1px solid var(--pp-border); border-radius: 16px; padding: 12px 14px; margin-bottom: 12px;
-    background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent);
-}
+/* Flush inside the page header (merged, like .pp-howto above): a divider rule, then the label + tile grid. */
+.pp-bhead__stats { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pp-border); }
 .pp-slist__statcard__h {
     display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
     font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute);
