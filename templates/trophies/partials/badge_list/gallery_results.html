@@ -1,10 +1,8 @@
-{% load humanize %}
 {% comment %} Swappable results for the Browse Gallery: the medallion grid. Rendered inside #browse-results
 on a full page load, and returned ALONE for an InfiniteScroller ?page=N XHR fetch (see BadgeListView
 .get_template_names) -- the scroller extracts the .pp-bgal__card nodes and appends them. No page-number
 pager: infinite scroll (the sentinel + loader live in gallery.html) owns pagination. {% endcomment %}
 {% if gallery_frames %}
-<div class="pp-bgal__meta text-xs mb-2">{{ paginator.count|intcomma }} badge{{ paginator.count|pluralize }}</div>
 <div class="pp-bgal__grid" id="items-grid" data-bgal-grid>
     {% for frame in gallery_frames %}
     {% include 'trophies/partials/badge_list/gallery_card.html' with frame=frame %}
