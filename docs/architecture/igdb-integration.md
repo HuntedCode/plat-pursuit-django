@@ -6,7 +6,7 @@ Enriches PlatPursuit Concepts with data from the Internet Game Database (IGDB), 
 
 IGDB acts as a supplementary data layer. PSN remains the source of truth for game identity (concepts, trophy lists, earn data). IGDB enrichment is best-effort: if IGDB is unavailable or a match cannot be found, the system continues normally with PSN data only.
 
-The matching system uses a confidence-based approach with a 6-strategy pipeline. Each Concept is matched to an IGDB game entry through progressively broader searches. Each concept matches independently (no family-based inheritance). Matches above 85% confidence are auto-accepted; matches at or above the review threshold (50%) are flagged for staff review. Platform overlap with the concept's games is required: results without at least one shared PlayStation platform are skipped entirely. Staff can approve, reject, or re-match via Django admin or management commands.
+The matching system uses a confidence-based approach with a 10-strategy pipeline. Each Concept is matched to an IGDB game entry through progressively broader searches. Each concept matches independently (no family-based inheritance). Matches above 85% confidence are auto-accepted; matches at or above the review threshold (50%) are flagged for staff review. Platform overlap with the concept's games is required: results without at least one shared PlayStation platform are skipped entirely. Staff can approve, reject, or re-match via Django admin or management commands.
 
 Company data is fully normalized. A single Company record represents a real-world studio (e.g. Naughty Dog), linked to Concepts via a ConceptCompany through table that tracks per-game roles (developer, publisher, porting, supporting). This supports developer badges, developer-based challenges, shovelware detection, and stats.
 
@@ -138,31 +138,51 @@ FK to Concept (many per concept). Triage queue entry for `rematch_auto_accepted`
 
 ## Key Flows
 
-### 6-Strategy Matching Pipeline
+### 10-Strategy Matching Pipeline
 
-When `IGDBService.match_concept(concept)` is called, strategies run in order until one succeeds:
+When `IGDBService.match_concept(concept)` is called, strategies run in order, **accumulating candidates**. Each strategy's best result is compared against the best-so-far; the pipeline short-circuits only when a strategy produces a candidate at or above the auto-accept threshold. Otherwise every strategy runs so a later one can beat an earlier pending-review hit. `match_game(game)` runs the same pipeline against a Game's trophy-group title, skipping Strategy 1.
 
 | # | Strategy | API Calls | What It Catches |
 |---|----------|-----------|-----------------|
-| 1 | **External PSN ID** | 1-2 | Games with PlayStation Store IDs in IGDB |
+| 1 | **External PSN ID** | 1-2 | Games with PlayStation Store IDs in IGDB. Skipped by `match_game` (SKUs tie to packaging, not trophy lists) |
 | 2 | **Fuzzy search** (PS-filtered) | 1 | Standard title matching, handles 90%+ of games |
 | 3 | **Exact name query** (PS-filtered) | 1-2 | Base games buried under DLC in fuzzy search (e.g. Batman: Arkham Knight) |
-| 4 | **Fuzzy search** (unfiltered) | 1 | PC-first games that came to PlayStation later (e.g. The Finals); confidence is reduced by 5% to reflect the looser filter |
-| 5 | **Alternative name search** | 1-2 | Regional title differences (e.g. "Sly Raccoon" -> "Sly Cooper and the Thievius Raccoonus") |
-| 6 | **Truncated title search** | 1 | Series prefix matching (e.g. "Sly 3: Honour Among Thieves" -> search "Sly 3"), capped below auto-accept threshold |
+| 4 | **Fuzzy search** (unfiltered) | 1 | PC-first games that came to PlayStation later (e.g. The Finals); confidence is reduced by 5% (floored at the review threshold) to reflect the looser filter |
+| 5 | **Alternative name search** (`/alternative_names`) | 1-2 | Regional/marketing title variants (e.g. "Sly Raccoon" -> "Sly Cooper and the Thievius Raccoonus"). Latin-script variants |
+| 6 | **Localized name search** (`/game_localizations`) | 1-2 | Per-region **native** titles (Japanese/Korean/Chinese) that live only in IGDB's localization index, not in `/games.name` or `/alternative_names` (verified: "流行り神" / Hayarigami) |
+| 7 | **Truncated title search** | 1 | Series prefix before a colon/dash (e.g. "Sly 3: Honour Among Thieves" -> search "Sly 3"), capped below auto-accept |
+| 8 | **Generic `/search` endpoint** | 1 | The website search-bar index; looser fuzziness, better alt-name recall. Capped below auto-accept (always pending review) |
+| 9 | **CJK romanization fallback** | up to 9 | Native CJK titles absent from every IGDB index. Romanizes via pykakasi / pypinyin / hangul-romanize, generates spaced + compact + rendaku-voiced variants, and re-runs the high-signal searches. Capped below auto-accept |
+| 10 | **Platform-blind last resort** | 1 | Fires ONLY when every platform-aware strategy returned nothing. Re-runs the unfiltered search with the platform-overlap gate disabled, requires a strong name match (`_PLATFORM_BLIND_NAME_FLOOR = 0.70`), and always lands in pending review with method `name_no_platform` (IGDB simply missing the PS platform, not a wrong same-named game) |
 
 All strategies (except external ID) filter out likely DLC results before scoring, using a name-pattern heuristic (entries with " - Skin", " - Pack", " - DLC", " - Season Pass", etc.).
 
+Strategies 5, 6, and 9 exist specifically to bridge foreign-language titles. See the **Foreign-title matching** gotcha below for the one class they can't handle.
+
 ### Title Cleaning
 
-Before searching IGDB, titles are cleaned to improve match rates:
+Before searching IGDB, titles are cleaned by `_clean_title_for_search` to improve match rates:
 
+- **Apicalypse/trademark glyphs stripped FIRST**: `:` `;` `"` `\` `()` `{}` `[]` `•` `™` `®` `©` are removed *before* unicode normalization. Order is load-bearing: NFKD compatibility-decomposes ™ -> "TM", ® -> "R", © -> "C", so stripping them afterward would leave "south parktm" and corrupt the search.
+- **Unicode normalized (CJK-safe)**: routed through `_unicode_normalize_for_matching` (see below).
 - **Platform suffixes stripped**: "It Takes Two PS4 & PS5" -> "It Takes Two"
-- **Edition suffixes stripped**: "Croc Legend of the Gobbos Platinum Edition" -> "Croc Legend of the Gobbos"
-- **Year suffixes stripped**: "Alone in the Dark 2 (1996)" -> "Alone in the Dark 2"
+- **Edition / year suffixes stripped**: "Croc Legend of the Gobbos Platinum Edition" -> "Croc..."; "Alone in the Dark 2 (1996)" -> "Alone in the Dark 2"
 - **Brand prefixes stripped**: "Disney Pixar Toy Story 3" -> "Toy Story 3"
-- **Unicode normalized**: smart quotes, bullets, trademark symbols removed
 - **Lowercased**: IGDB search handles ALL CAPS poorly
+- **Targeted fixups**: "neogeo" -> "neo geo" (IGDB writes it as two words); PSN trophy-group noise ("&lt;Game&gt; Trophies", "Trophies for &lt;Game&gt;") stripped, but only when stripping leaves a non-empty title.
+
+#### CJK-safe normalization
+
+`_unicode_normalize_for_matching` branches on whether the title contains any CJK-family character (`_CJK_PATTERN`: hiragana, katakana, CJK ideographs, Hangul, **and the Halfwidth/Fullwidth Forms block U+FF00-FFEF**):
+
+- **Contains CJK -> NFKC.** NFKD + combining-mark strip is correct for Latin accents (é -> e) but *destroys* Japanese: パ (U+30D1 "pa") decomposes to ハ + combining handakuten, and stripping the mark leaves "ha", a different syllable. NFKC preserves precomposed characters while still doing the compatibility conversions we want (fullwidth １ -> 1, fullwidth tilde ～ U+FF5E -> ASCII ~). CJK characters otherwise pass through **unchanged** — cleaning never transliterates.
+- **Pure Latin -> NFKD + combining-mark strip** (the accent-folding behavior).
+
+Worked example — `マクロス30～銀河を繋ぐ歌声～` (Macross 30): the fullwidth `～` puts it in the CJK branch -> NFKC -> `～` becomes `~` (not in the strip list, so it survives), `30` stays `30`, kanji/katakana preserved. The result still shares no characters with IGDB's English "Macross 30: Voices across the Galaxy" name, which is why only Strategies 5/6/9 can bridge it.
+
+#### CJK romanization (Strategy 9)
+
+When a native CJK title is absent from `/games`, `/alternative_names`, AND `/game_localizations`, `_try_romanize` transliterates it (pykakasi for Japanese, pypinyin for Chinese, hangul-romanize for Korean) and re-runs the high-signal searches with the romanized string. For pure-Japanese titles it generates three variants — morpheme-spaced ("hayari kami"), compact ("hayarikami"), and rendaku-voiced ("hayarigami", via `_RENDAKU_MAP`) — because IGDB's search keyword doesn't tolerate single-character edits. Romanization never mutates the stored title; it only produces alternate *search* strings, and every resulting match is capped below auto-accept for staff verification.
 
 ### Confidence Scoring
 
@@ -172,7 +192,7 @@ IGDB VR platforms are treated as implying their host hardware during this check:
 
 For results that survive the platform filter, the score considers:
 
-- **Title similarity**: SequenceMatcher ratio against primary name AND all alternative names
+- **Title similarity**: SequenceMatcher ratio against the primary name AND every `alternative_names[].name` AND every `game_localizations[].name`, keeping the best ratio (so a native-language localized title scores as well as the English name)
 - **Containment**: PSN title is a substring of IGDB name (or vice versa)
 - **Main game boost**: +10% for category 0 entries with name containment
 - **DLC penalty**: -15% for non-main-game categories
@@ -185,7 +205,7 @@ Thresholds: >= 85% auto-accepted, >= 50% pending review. There is no hard discar
 
 1. Match found with confidence >= 0.85: auto-accepted, enrichment applied immediately
 2. Match found with confidence 0.50-0.84: IGDBMatch created with `pending_review` status, enrichment deferred
-3. No match found by any of the 6 strategies: IGDBMatch created with `no_match` status (via `IGDBService.record_no_match`). Default enrichment runs skip these on subsequent passes; use `--retry-no-match` to re-attempt them or `--unmatched` to assign manually. `record_no_match` refuses to overwrite an existing accepted/pending/rejected row.
+3. No match found by any of the 10 strategies: IGDBMatch created with `no_match` status (via `IGDBService.record_no_match`). Default enrichment runs skip these on subsequent passes; use `--retry-no-match` to re-attempt them or `--unmatched` to assign manually. `record_no_match` refuses to overwrite an existing accepted/pending/rejected row.
 4. Staff approves pending match via admin action or `--manual`: enrichment applied
 5. Enrichment creates Company records, ConceptCompany entries, Franchise + ConceptFranchise rows (see below), updates Concept's `igdb_genres`/`igdb_themes`, and adds VR platforms to Games
 
@@ -245,7 +265,7 @@ Note: the split algorithm intentionally does NOT consult IGDB's `bundles` or `co
 
 ### Phase 3: Rematch Sweep
 
-`rematch_auto_accepted` replays the current matching pipeline against every `IGDBMatch` with `status='auto_accepted'`. The goal is to re-evaluate matches made under earlier (inferior) pipeline behaviour now that Phase 2 inputs (search-title selection, best-so-far accumulation, Strategy 6 localized-name, Strategy 7 `/search`, Strategy 9 romanization) are in place. Human-approved matches (`status='accepted'`) are intentionally excluded: the admin already signed off on those outcomes.
+`rematch_auto_accepted` replays the current matching pipeline against every `IGDBMatch` with `status='auto_accepted'`. The goal is to re-evaluate matches made under earlier (inferior) pipeline behaviour now that Phase 2 inputs (search-title selection, best-so-far accumulation, Strategy 6 localized-name, Strategy 8 `/search`, Strategy 9 romanization) are in place. Human-approved matches (`status='accepted'`) are intentionally excluded: the admin already signed off on those outcomes.
 
 For each match the command compares the new pipeline's top candidate against the stored match and applies one of four rules:
 
@@ -297,6 +317,7 @@ Properties:
 - **Distributed rate limiting**: All workers share a Redis sorted set (`igdb_rate_limit`) as a sliding window counter. Set conservatively to 3 req/sec (IGDB allows 4). Do not bypass.
 - **IGDB tokens expire**: Access tokens last ~60 days. Cached in Redis (`igdb_access_token`). Auto-refreshes on expiry.
 - **IGDB v4 field migration (category, status, external_games.category)**: IGDB v4 renamed the game-level enums `category` -> `game_type` and `status` -> `game_status`, and the external-id enum `external_games.category` -> `external_games.external_game_source`. The numeric IDs are preserved across the rename (36 still means PlayStation Store, 0 still means Main Game, 3/13 still means Bundle/Pack). `GAME_FIELDS` requests both old and new variants for the transition window; reader code should prefer the new variants and fall back to the old fields only when the new ones are absent. As of Phase 6, `search_by_external_id` filters on the new `external_games.external_game_source = 36`. The deprecated fields can be dropped from `GAME_FIELDS` once backfill confirms the new fields are universally populated.
+- **Foreign-title matching has one unfixable class: the translated subtitle.** Strategies 5 (alt-names), 6 (`/game_localizations`), and 9 (romanization) bridge most non-English titles, but they all rely on either IGDB storing the native/romanized string OR the two titles sharing characters after transliteration. When IGDB has NO localization/alt-name row and its canonical subtitle is *translated* rather than *transliterated*, nothing bridges it. Example: PSN "マクロス30～銀河を繋ぐ歌声～" (romanizes to "...ginga o tsunagu utagoe") vs IGDB "Macross 30: **Voices across the Galaxy**" — the subtitle is a translation, so romanization yields no overlapping characters and the only shared token is the "Macross 30" numeric anchor, far below threshold. These land in `no_match` **by design** and require a manual anchor (`enrich_from_igdb --manual <igdb_id> --concept-id X`, or `anchor_game_to_canonical`). This is an IGDB data gap (missing native-language row), not a matcher weakness; adding one wouldn't help because there is no romanization-independent signal to match on. Before assuming manual is required, confirm IGDB genuinely lacks a `game_localizations` / `alternative_names` entry for the title (check the game's IGDB page or the live payload) — if one exists, Strategy 6/5 should already catch it and the gap is elsewhere.
 - **IGDB search buries base games under DLC**: For games with many DLC entries (Batman: Arkham Knight has 30+), the fuzzy search returns only DLC. The exact name query (strategy 3) bypasses this.
 - **ALL CAPS titles**: IGDB search handles all-caps poorly. Title cleaning lowercases before searching.
 - **Colon in titles**: Colons break IGDB's Apicalypse query parser. Stripped from fuzzy search queries, preserved for exact name `where` clauses.

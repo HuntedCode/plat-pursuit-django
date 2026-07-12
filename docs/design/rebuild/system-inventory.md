@@ -52,7 +52,7 @@ These are the hard-won, battle-tested backend. **All Keep.** The rebuild does no
 - **Disposition:** **Keep** — core abstraction. *Recommendation:* add a `manage.py check` that verifies every model FK'd to Concept is handled in `absorb()` (turn the CLAUDE.md contract into an enforced check).
 
 ### IGDB Integration
-- **What:** 6-strategy matching pipeline + enrichment (developers, genres, themes, engines, franchises, time-to-beat, covers, release dates). Each Concept matches independently.
+- **What:** 10-strategy matching pipeline + enrichment (developers, genres, themes, engines, franchises, time-to-beat, covers, release dates). Each Concept matches independently.
 - **Lives in:** `trophies/services/igdb_service.py` (~3.2k lines), `IGDBMatch` + enrichment through-models, ~15 management commands.
 - **Status:** Shipped; ~89% concept coverage. CJK unlock + GameFamily IGDB-id keying + rematch sweep all live.
 - **Coupling:** Fed by sync; consumed by badges (dev badges), challenges (genre), browse, stats, covers. `absorb()` migrates enrichment only on `inherit_match`.

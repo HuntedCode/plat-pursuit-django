@@ -83,7 +83,7 @@ Grow the suite outward from the coupling spine identified in the
 2. Sync pipeline (`token_keeper` / `psn_api_service`) — completion detection
 3. Badge evaluation (`badge_service`) — tiers, stages, bundles, prerequisites
 4. XP (`xp_service`) — calculation + bulk update + signals
-5. IGDB matching (`igdb_service`) — the 6-strategy pipeline + enrichment
+5. IGDB matching (`igdb_service`) — the 10-strategy pipeline + enrichment
 6. Leaderboards (`redis_leaderboard_service`)
 
 ### Regression tests from hard-won bugs
