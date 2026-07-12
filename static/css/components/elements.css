@@ -33,8 +33,8 @@
 /* ---- Lab view toggle (Table / Radar) ---- */
 /* Primary view switcher (Jobs / Radar / Contracts) -- the SEGMENTED style shared with the Collection's
    Case/Gallery toggle + the Browse view toggle: one bordered container, transparent chips, tinted active. */
-.lab-views { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 4px; border-radius: 8px; border: 1px solid var(--pp-border); background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent); margin-bottom: 18px; }
-.lab-view-tab { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 600; letter-spacing: 0.03em; cursor: pointer; color: var(--pp-text-mute); background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 6px 14px; transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.15s ease, transform 0.12s ease; }
+.lab-views { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 4px; border-radius: 8px; border: 1px solid var(--pp-border); background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent); }
+.lab-view-tab { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.03em; cursor: pointer; color: var(--pp-text-mute); background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 6px 14px; transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.15s ease, transform 0.12s ease; }
 .lab-view-tab:hover { color: var(--pp-text); }
 .lab-view-tab:active { transform: translateY(1px); }
 .lab-view-tab.is-active { color: var(--pp-text); font-weight: 700; background: color-mix(in oklab, var(--pp-primary) 16%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
