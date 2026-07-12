@@ -189,6 +189,18 @@ def test_gallery_view_defaults_to_series(client):
     assert 'pp-scard' in html
 
 
+def test_gallery_cell_wires_badge_peek(client):
+    """Each Gallery cell carries its badge id (so a tap opens the public quick-peek modal) and keeps its
+    detail href as the no-JS fallback; the shared modal container is on the page."""
+    _series('rs-gpeek')
+
+    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+
+    assert 'data-badge-id=' in html       # cell carries the badge id for the peek
+    assert 'id="badge-peek"' in html      # the shared modal container
+    assert '/badges/rs-gpeek/' in html    # ... and still has the detail href fallback
+
+
 def test_gallery_badge_type_filter(client):
     """?badge_type filters to that type (per-tier, across every series of the type)."""
     _series('rs-type')  # badge_type='series'

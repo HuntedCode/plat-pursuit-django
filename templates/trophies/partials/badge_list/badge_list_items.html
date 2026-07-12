@@ -35,6 +35,7 @@
                 {% for t in item.tiers %}
                 <button type="button" class="pp-scard__node {% if user.is_authenticated and user.profile %}is-{{ t.state }}{% else %}is-catalog{% endif %}{% if t.tier == item.default_tier %} is-selected{% endif %}"
                         data-face-node="{{ t.tier }}" data-tier-key="{{ t.tier|badge_tier|lower }}"
+                        data-badge-id="{{ t.badge_id }}"
                         data-earned="{% if user.is_authenticated and user.profile and t.state == 'earned' %}1{% else %}0{% endif %}"
                         aria-pressed="{% if t.tier == item.default_tier %}true{% else %}false{% endif %}"
                         aria-label="{{ t.tier|badge_tier }} tier{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %}, earned{% elif t.state == 'active' %}, in progress{% else %}, locked{% endif %}{% endif %}"

@@ -46,11 +46,12 @@ from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db.models import Q, F, Prefetch, Max, Exists, OuterRef, Case, When, Value, IntegerField
 from django.db.models.functions import Lower
-from django.http import Http404, HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect, HttpResponseNotFound
 from urllib.parse import urlencode
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse_lazy, reverse
 from django.utils.text import slugify
+from django.views import View
 from django.views.generic import ListView, DetailView, TemplateView
 
 from trophies.mixins import ProfileHotbarMixin
@@ -473,6 +474,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
 
                 tier_faces.append({
                     'tier': b.tier,
+                    'badge_id': b.id,
                     'state': t_state,
                     'completed': t_done,
                     'required': req_t,
@@ -734,6 +736,38 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         if not is_xhr:
             track_page_view('badges_list', 'list', self.request)
         return context
+
+
+class BadgeQuickPeekView(View):
+    """PUBLIC quick-peek modal for one badge (the Series/Gallery 'pick it up'): the medallion big + its
+    stats, fetched on tap so the grids stay light. The public sibling of the collection's
+    CollectionBadgeModalView -- NOT login-gated: anonymous / unlinked viewers get the badge's showcase
+    catalog look (full colour) + its public stats; a linked viewer additionally gets their own state +
+    earn stats. Renders the SAME components/collection_badge_modal.html partial (its stat rows are all
+    conditional, so they simply fall away when a viewer has no personal data)."""
+
+    def get(self, request, badge_id):
+        badge = (
+            Badge.objects.filter(id=badge_id, is_live=True)
+            .select_related(
+                'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
+                'base_badge__franchise', 'base_badge__collection',
+                'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
+            ).first()
+        )
+        if badge is None:
+            return HttpResponseNotFound()   # explicit 404 (the project's handler404 renders at 200)
+        # Only a LINKED profile gets personal state/stats; anon + unlinked see the pure catalog look.
+        profile = getattr(request.user, 'profile', None)
+        if profile is not None and not profile.is_linked:
+            profile = None
+        frame = build_badge_frame(badge, profile)   # profile=None -> anonymous showcase ('earned') look
+        frame['dom_id'] = f'peek-{badge.id}'
+        frame['series_slug'] = badge.series_slug
+        frame['badge_id'] = badge.id
+        if profile is not None:
+            frame['owner_name'] = profile.display_psn_username or profile.psn_username
+        return render(request, 'components/collection_badge_modal.html', {'frame': frame})
 
 
 class BadgeDetailView(ProfileHotbarMixin, DetailView):

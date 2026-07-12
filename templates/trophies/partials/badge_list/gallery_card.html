@@ -1,9 +1,9 @@
 {% comment %} One Browse Gallery cell: the SHOWCASE medallion (full earned colour for everyone) + a
 card-corner ownership marker derived from owned_state (logged-in only -- earned/held gets a green check,
-in-progress a hollow ring, unearned nothing). Taps through to the full badge_detail series page (the
-login-gated collection modal is NOT used here). Expects `frame` (a showcase build_badge_frame dict +
-series_slug/badge_id). {% endcomment %}
-<a class="pp-bgal__card" data-bgal-cell data-tier="{{ frame.tier }}"
+in-progress a hollow ring, unearned nothing). Tapping opens the public quick-peek modal (JS, via
+data-badge-id); the href to the full badge_detail series page is the no-JS / middle-click fallback.
+Expects `frame` (a showcase build_badge_frame dict + series_slug/badge_id). {% endcomment %}
+<a class="pp-bgal__card" data-bgal-cell data-tier="{{ frame.tier }}" data-badge-id="{{ frame.badge_id }}"
    {% if frame.series_slug %}href="{% url 'badge_detail' frame.series_slug %}"{% endif %}>
     {% if frame.owned_state == 'earned' %}
     <span class="pp-bgal__owned pp-bgal__owned--earned" title="You've earned this">

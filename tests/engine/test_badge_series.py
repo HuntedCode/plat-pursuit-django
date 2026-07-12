@@ -185,6 +185,49 @@ def test_series_query_count_is_flat(client):
     assert len(small.captured_queries) < 25
 
 
+def test_quick_peek_is_public_showcase_for_anon(client):
+    """The quick-peek endpoint is PUBLIC (unlike the login-gated collection modal): anon gets the badge
+    partial with the full-colour showcase medallion + public stats."""
+    b = _series('rs-peek')[0]
+
+    resp = client.get(reverse('badge_quick_peek', args=[b.id]))
+    html = resp.content.decode()
+
+    assert resp.status_code == 200
+    assert 'pp-bdetail' in html and 'pp-med' in html    # modal content + the big medallion
+    assert 'data-state="earned"' in html                # anon -> showcase (full-colour) look
+
+
+def test_quick_peek_404_for_missing_or_unlive(client):
+    assert client.get(reverse('badge_quick_peek', args=[9999999])).status_code == 404
+    dead = BadgeFactory(series_slug='rs-dead', tier=1, badge_type='series', is_live=False,
+                        required_stages=5, display_series='rs-dead')
+    assert client.get(reverse('badge_quick_peek', args=[dead.id])).status_code == 404
+
+
+def test_quick_peek_linked_viewer_sees_personal_state(client):
+    """A LINKED viewer gets their real state, not the anon showcase: a badge they don't own reads 'unearned'
+    (proving the endpoint isn't just forcing the catalog look)."""
+    profile = ProfileFactory(is_linked=True)
+    b = _series('rs-peek-me')[0]
+    client.force_login(profile.user)
+
+    html = client.get(reverse('badge_quick_peek', args=[b.id])).content.decode()
+
+    assert 'data-state="unearned"' in html
+
+
+def test_series_tile_wires_badge_peek(client):
+    """The Series tile carries per-tier badge ids (so the medallion peeks the selected tier) and the shared
+    quick-peek modal container is on the page."""
+    _series('rs-peekwire')
+
+    html = client.get(SERIES).content.decode()
+
+    assert 'data-badge-id=' in html       # ladder nodes carry each tier's badge id
+    assert 'id="badge-peek"' in html      # the shared modal container
+
+
 def test_series_search_filters_by_slug(client):
     _series('elden-ring-series')
     _series('dark-souls-series')

@@ -92,6 +92,17 @@
     {% include 'trophies/partials/badge_list/series_view.html' %}
     {% endif %}
 
+    {% comment %} Quick-peek modal (shared by both views): a medallion tap fetches the public
+    badge_quick_peek partial into the body. Reuses the collection's .pp-detail-modal chrome (global CSS).
+    data-peek-url is the reverse with a 0 placeholder the JS swaps for the badge id. {% endcomment %}
+    <div class="pp-detail-modal" id="badge-peek" data-peek-url="{% url 'badge_quick_peek' 0 %}" hidden>
+        <div class="pp-detail-modal__scrim" data-peek-close></div>
+        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
+            <button type="button" class="pp-detail-modal__close" data-peek-close aria-label="Close badge detail">&times;</button>
+            <div class="pp-detail-modal__body" data-peek-body></div>
+        </div>
+    </div>
+
 {% endblock %}
 
 {% block js_scripts %}
@@ -181,8 +192,60 @@
             if (prev) { prev.disabled = (idx === 0); }
             if (next) { next.disabled = (idx === nodes.length - 1); }
         }
+
+        // Quick-peek modal: a medallion tap fetches the PUBLIC badge_quick_peek partial into the shared
+        // #badge-peek dialog (reusing the collection's .pp-detail-modal chrome). data-peek-url is the
+        // reverse with a 0 placeholder we swap for the badge id.
+        var peekEl = document.getElementById('badge-peek');
+        var peekBusy = false;
+        function openPeek(badgeId) {
+            if (!peekEl || peekBusy || !badgeId) { return; }
+            var body = peekEl.querySelector('[data-peek-body]');
+            var dialog = peekEl.querySelector('.pp-detail-modal__dialog');
+            var tmpl = peekEl.getAttribute('data-peek-url') || '';
+            var url = tmpl.replace(/0\/$/, badgeId + '/');
+            if (!url || url === tmpl) { return; }
+            peekBusy = true;
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+                .then(function (r) { if (!r.ok) { throw new Error('peek ' + r.status); } return r.text(); })
+                .then(function (html) {
+                    if (body) { body.innerHTML = html; }
+                    peekEl.hidden = false;
+                    document.body.style.overflow = 'hidden';   // lock the page scroll behind the modal
+                    if (dialog) { dialog.focus(); }
+                })
+                .catch(function () { /* leave it closed; the tile's own detail link is the fallback */ })
+                .then(function () { peekBusy = false; });
+        }
+        function closePeek() {
+            if (!peekEl || peekEl.hidden) { return; }
+            peekEl.hidden = true;
+            document.body.style.overflow = '';
+            var body = peekEl.querySelector('[data-peek-body]');
+            if (body) { body.innerHTML = ''; }
+        }
+        if (peekEl) {
+            peekEl.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('[data-peek-close]')) { closePeek(); } });
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !peekEl.hidden) { closePeek(); } });
+        }
+
         document.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
+            // Medallion -> quick-peek modal. Series: the SELECTED tier's badge; Gallery: the whole cell.
+            var medEl = e.target.closest('.pp-scard__med');
+            if (medEl) {
+                e.preventDefault();
+                var mcard = medEl.closest('.pp-scard');
+                var msel = mcard && mcard.querySelector('.pp-scard__node.is-selected');
+                openPeek(msel && msel.getAttribute('data-badge-id'));
+                return;
+            }
+            var cell = e.target.closest('.pp-bgal__card');
+            if (cell && cell.getAttribute('data-badge-id')) {
+                e.preventDefault();
+                openPeek(cell.getAttribute('data-badge-id'));
+                return;
+            }
             var node = e.target.closest('.pp-scard__node');
             if (node) { scardSelect(node.closest('.pp-scard'), node); return; }
             var arrow = e.target.closest('.pp-scard__arrow');

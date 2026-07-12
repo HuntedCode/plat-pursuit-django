@@ -7,7 +7,7 @@ Re-exports all view classes for backward compatibility with existing URL configu
 from .game_views import GamesListView, GameDetailView, GuideListView, FlaggedGamesView, RecentlyAddedView, RandomGameView
 from .trophy_views import TrophiesListView, TrophyCaseView, ToggleSelectionView
 from .profile_views import ProfilesListView, ProfileDetailView, LinkPSNView, ProfileVerifyView, ProfileEditorView
-from .badge_views import BadgeListView, BadgeDetailView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView
+from .badge_views import BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView
 # Checklist views removed during roadmap migration (DB tables retained)
 from .sync_views import ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView
 from .admin_views import (
@@ -47,7 +47,7 @@ __all__ = [
     # Profile views
     'ProfilesListView', 'ProfileDetailView', 'LinkPSNView', 'ProfileVerifyView', 'ProfileEditorView',
     # Badge views
-    'BadgeListView', 'BadgeDetailView', 'BadgeLeaderboardsView', 'OverallBadgeLeaderboardsView', 'MilestoneListView',
+    'BadgeListView', 'BadgeDetailView', 'BadgeQuickPeekView', 'BadgeLeaderboardsView', 'OverallBadgeLeaderboardsView', 'MilestoneListView',
     # Checklist views (removed, DB tables retained)
     # Sync views
     'ProfileSyncStatusView', 'TriggerSyncView', 'SearchSyncProfileView', 'AddSyncStatusView',
