@@ -153,11 +153,19 @@
 
     {% comment %} Career content: the Jobs / Radar / Contracts tabs + panels flow FREE (NOT boxed in a card),
     per the site-wide page-structure rule -- mirroring the Collection's free toggle + views. {% endcomment %}
-    {# View toggle: Jobs / Radar / Contracts (the merged Contracts board) #}
-    <div class="lab-views" role="tablist" aria-label="Career view">
-        <button type="button" id="career-tab-jobs" aria-controls="career-panel-jobs" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}">Jobs</button>
-        <button type="button" id="career-tab-radar" aria-controls="career-panel-radar" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}">Radar</button>
-        <button type="button" id="career-tab-contracts" aria-controls="career-panel-contracts" class="lab-view-tab {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}">Contracts{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
+    {# View toggle: Jobs / Radar / Contracts (the merged Contracts board). Right-aligned segmented tabs, like the Collection's. #}
+    <div class="flex items-center justify-end">
+        <div class="lab-views" role="tablist" aria-label="Career view">
+            <button type="button" id="career-tab-jobs" aria-controls="career-panel-jobs" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Jobs
+            </button>
+            <button type="button" id="career-tab-radar" aria-controls="career-panel-radar" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Radar
+            </button>
+            <button type="button" id="career-tab-contracts" aria-controls="career-panel-contracts" class="lab-view-tab {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>Contracts{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}
+            </button>
+        </div>
     </div>
 
     {# Jobs: two layouts -- Dossier (rich discipline chapters) + Character sheet (compact, shareable) #}

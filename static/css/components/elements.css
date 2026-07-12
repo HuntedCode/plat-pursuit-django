@@ -39,6 +39,7 @@
 .lab-view-tab:active { transform: translateY(1px); }
 .lab-view-tab.is-active { color: var(--pp-text); font-weight: 700; background: color-mix(in oklab, var(--pp-primary) 16%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
 .lab-view-tab:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.lab-view-tab svg { width: 15px; height: 15px; flex: none; }
 /* (B) Ignite: the pill that just became active blooms its glow once, then settles into .is-active.
    No fill-mode -- when the animation ends it hands back to the .is-active box-shadow above.
    Keyframes use rgba, never color-mix (lightningcss strips color-mix from @keyframes). */
