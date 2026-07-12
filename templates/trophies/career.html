@@ -154,7 +154,7 @@
     {% comment %} Career content: the Jobs / Radar / Contracts tabs + panels flow FREE (NOT boxed in a card),
     per the site-wide page-structure rule -- mirroring the Collection's free toggle + views. {% endcomment %}
     {# View toggle: Jobs / Radar / Contracts (the merged Contracts board). Right-aligned segmented tabs, like the Collection's. #}
-    <div class="flex items-center justify-end">
+    <div class="flex items-center justify-end mt-5">
         <div class="lab-views" role="tablist" aria-label="Career view">
             <button type="button" id="career-tab-jobs" aria-controls="career-panel-jobs" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Jobs
