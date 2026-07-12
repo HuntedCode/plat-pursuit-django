@@ -43,14 +43,10 @@
 }
 .pp-bgal__chip:has(input:focus-visible) { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; }
 
-/* Toolbar card: the controls sit on the same --pp card the Collection/Career toolbars use, so all four
-   pages' toolbars read as one system (thin border, subtle bg, soft directional lift, 12px radius). Shared
-   by the Series (.pp-sbar) and Gallery (.pp-bgal__bar) views. */
+/* Layout only for the Series (.pp-sbar) and Gallery (.pp-bgal__bar) views; the card surface comes from the
+   shared .pp-toolbar-card class (added in the markup), so all four site toolbars read as one system. */
 .pp-bgal__toolbar {
     padding: 12px 16px; margin-bottom: 18px;
-    background: color-mix(in oklab, var(--pp-bg-2) 82%, transparent);
-    border: 1px solid var(--pp-border); border-radius: 12px;
-    box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.4);
 }
 
 /* Compact toolbar (mirrors the Contracts toolbar): a one-row PRIMARY bar -- search + sort + a Filters

@@ -10,12 +10,10 @@
 /* Non-sticky by design: the hotbar sits between the sub-nav and the content, so a sticky toolbar would
    always pin BELOW it, stacking navbar + sub-nav + hotbar + toolbar into an awkwardly deep chrome pile.
    It scrolls with the wall instead. */
+/* Layout only; the card surface comes from the shared .pp-toolbar-card class (added in the markup). */
 .pp-gallery__toolbar {
     display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
     padding: 12px 16px; margin-bottom: 18px;
-    background: color-mix(in oklab, var(--pp-bg-2) 82%, transparent);
-    border: 1px solid var(--pp-border); border-radius: 12px;
-    box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.4);
 }
 .pp-gallery__fgroup {
     display: flex; align-items: center; gap: 7px; flex-wrap: wrap;

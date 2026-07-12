@@ -511,7 +511,7 @@
 /* Board toolbar: a search field above the status + discipline chip rows. */
 /* The filter/sort/search controls sit on their own card, matching the Collection gallery's .pp-gallery__toolbar
    (border + surface + soft lift). Its internal layout is unchanged -- just carded. */
-.rp-toolbar { display: flex; flex-direction: column; gap: 9px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--pp-border); background: color-mix(in oklab, var(--pp-bg-2) 82%, transparent); box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.4); }
+.rp-toolbar { display: flex; flex-direction: column; gap: 9px; padding: 12px 16px; }
 .rp-search { position: relative; max-width: 420px; }
 .rp-search__icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--pp-text-mute); pointer-events: none; }
 .rp-search__input { width: 100%; height: 38px; padding: 0 12px 0 34px; border-radius: 10px; border: 1px solid var(--pp-border); background: var(--pp-bg-1); color: var(--pp-text); font: inherit; font-size: 0.85rem; transition: border-color 0.15s ease, background 0.15s ease; }

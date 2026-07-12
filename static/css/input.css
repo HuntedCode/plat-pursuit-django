@@ -241,6 +241,12 @@
     @apply bg-base-200 rounded-lg shadow-md border-2 border-base-300;
   }
 
+  /* Toolbar card - filter/sort/search bars (Career Contracts, Collection gallery, badge Series + Gallery).
+     The header card's surface (bg-base-200/90 + border-2 base-300) with a lighter shadow and no accent bar. */
+  .pp-toolbar-card {
+    @apply bg-base-200/90 rounded-2xl shadow-md shadow-neutral border-2 border-base-300;
+  }
+
   /* Hotbar loading state - prevents flash of unstyled content */
   .hotbar-loading {
     opacity: 0;
