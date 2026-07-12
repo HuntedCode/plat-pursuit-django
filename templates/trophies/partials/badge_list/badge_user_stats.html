@@ -9,27 +9,27 @@
         </h4>
         <div class="pp-slist__statgrid">
             <div class="pp-slist__tile" data-accent="xp">
-                <div class="pp-slist__tile__n">{{ user_badge_stats.total_xp|intcomma }}</div>
+                <div class="pp-slist__tile__n pp-tally">{{ user_badge_stats.total_xp|intcomma }}</div>
                 <div class="pp-slist__tile__l">Total XP</div>
             </div>
             <div class="pp-slist__tile" data-accent="earned">
-                <div class="pp-slist__tile__n">{{ user_badge_stats.total_badges_earned }}</div>
+                <div class="pp-slist__tile__n pp-tally">{{ user_badge_stats.total_badges_earned }}</div>
                 <div class="pp-slist__tile__l">Tiers Earned</div>
             </div>
             <div class="pp-slist__tile" data-accent="plat">
-                <div class="pp-slist__tile__n">{{ user_badge_stats.stages_platted }}/{{ user_badge_stats.plat_eligible_stages }}</div>
+                <div class="pp-slist__tile__n pp-tally">{{ user_badge_stats.stages_platted }}/{{ user_badge_stats.plat_eligible_stages }}</div>
                 <div class="pp-slist__tile__l">Stages Plat</div>
             </div>
             <div class="pp-slist__tile" data-accent="hundo">
-                <div class="pp-slist__tile__n">{{ user_badge_stats.stages_completed }}/{{ user_badge_stats.total_stages }}</div>
+                <div class="pp-slist__tile__n pp-tally">{{ user_badge_stats.stages_completed }}/{{ user_badge_stats.total_stages }}</div>
                 <div class="pp-slist__tile__l">Stages 100%</div>
             </div>
             <div class="pp-slist__tile" data-accent="unique">
-                <div class="pp-slist__tile__n">{{ user_badge_stats.series_completed }}/{{ user_badge_stats.total_series }}</div>
+                <div class="pp-slist__tile__n pp-tally">{{ user_badge_stats.series_completed }}/{{ user_badge_stats.total_series }}</div>
                 <div class="pp-slist__tile__l">Unique</div>
             </div>
             <div class="pp-slist__tile" data-accent="complete">
-                <div class="pp-slist__tile__n">{{ user_badge_stats.completion_pct }}%</div>
+                <div class="pp-slist__tile__n pp-tally">{{ user_badge_stats.completion_pct }}%</div>
                 <div class="pp-slist__tile__l">Complete</div>
             </div>
         </div>

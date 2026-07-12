@@ -23,6 +23,46 @@
 }
 .pp-vtoggle__chip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
+/* ── Tier How-To: the collapsible explainer, permanent chrome on both views. --pp-* card over four
+ * tier-tinted cards (backdrop art + requirement + XP in the Tally face). ── */
+.pp-howto {
+    border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); margin-bottom: 12px;
+    background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent);
+}
+.pp-howto__summary {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; list-style: none;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute);
+    transition: color 0.15s ease;
+}
+.pp-howto__summary::-webkit-details-marker { display: none; }
+.pp-howto__summary > svg:first-child { width: 15px; height: 15px; color: var(--pp-primary); flex: 0 0 auto; }
+.pp-howto__summary:hover { color: var(--pp-text); }
+.pp-howto__summary:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; border-radius: var(--pp-radius-lg); }
+.pp-howto__chev { margin-left: auto; width: 14px; height: 14px; flex: 0 0 auto; transition: transform 0.2s ease; }
+.pp-howto[open] .pp-howto__chev { transform: rotate(180deg); }
+.pp-howto__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 14px 14px; }
+@media (min-width: 1024px) { .pp-howto__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.pp-howto__tier {
+    --tier-c: var(--pp-primary);
+    display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px;
+    padding: 12px 8px; border-radius: 12px;
+    border: 1px solid color-mix(in oklab, var(--tier-c) 25%, var(--pp-border));
+    background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 8%, var(--pp-bg-1)), var(--pp-bg-1));
+}
+.pp-howto__tier[data-howto-tier="bronze"]   { --tier-c: #cf9160; }
+.pp-howto__tier[data-howto-tier="silver"]   { --tier-c: #b9c6d6; }
+.pp-howto__tier[data-howto-tier="gold"]     { --tier-c: #e7c25c; }
+.pp-howto__tier[data-howto-tier="platinum"] { --tier-c: #8fd2ea; }
+.pp-howto__art { width: 72px; height: 72px; }
+@media (min-width: 768px) { .pp-howto__art { width: 92px; height: 92px; } }
+.pp-howto__art img { width: 100%; height: 100%; object-fit: contain; }
+.pp-howto__name { font-size: 13px; font-weight: 800; color: var(--tier-c); font-style: italic; }
+.pp-howto__req { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--pp-text-mute); }
+.pp-howto__req img { width: 14px; height: 14px; }
+.pp-howto__req b { color: var(--pp-text-dim); }
+.pp-howto__xp { font-size: 11px; color: var(--pp-text-mute); }
+.pp-howto__xp .pp-tally { font-size: 12px; color: var(--pp-text-dim); }
+
 /* ── Series toolbar: all controls on one bar (search + sort + the Type/Status chips), no collapse. There
  * are few enough controls to show inline; the row wraps gracefully on narrow screens. Reuses the Gallery's
  * .pp-bgal__search / .pp-bgal__chip / .pp-bgal__clabel so the two toolbars stay of a piece. ── */

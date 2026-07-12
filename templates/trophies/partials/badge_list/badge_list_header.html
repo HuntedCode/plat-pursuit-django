@@ -1,59 +1,38 @@
 {% load static %}
-<details class="collapse collapse-arrow bg-white/[0.03] border border-base-content/5 rounded-lg mb-3">
-    <summary class="collapse-title min-h-0 py-2.5 px-3 text-sm font-semibold text-base-content/60 flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="16" x2="12" y2="12"></line>
-            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+{% comment %} The tier explainer -- permanent chrome on both views, rebuilt to the --pp-* house style: a
+collapsible section header over four tier-tinted cards (backdrop art + requirement + XP in the Tally face). {% endcomment %}
+<details class="pp-howto">
+    <summary class="pp-howto__summary">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>
         </svg>
         How Do Badge Tiers Work?
+        <svg class="pp-howto__chev" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
     </summary>
-    <div class="collapse-content px-3 pb-3 pt-0">
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex flex-col items-center text-center">
-                <figure class="w-20 h-20 md:w-28 md:h-28 mb-2">
-                    <img src="{% static 'images/badges/backdrops/1_backdrop.png' %}" alt="Bronze badge" loading="lazy" decoding="async" class="w-full h-full object-contain" />
-                </figure>
-                <h3 class="text-sm md:text-base font-semibold italic pr-1 mb-1">Bronze</h3>
-                <div class="flex items-center gap-1 text-xs text-base-content/60 mb-1">
-                    <img src="{% static 'images/plat.png' %}" class="w-4 h-4" alt="Platinum" loading="lazy" />
-                    <span>on PS4/PS5</span>
-                </div>
-                <span class="text-xs text-base-content/40">+3,000 XP</span>
-            </div>
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex flex-col items-center text-center">
-                <figure class="w-20 h-20 md:w-28 md:h-28 mb-2">
-                    <img src="{% static 'images/badges/backdrops/2_backdrop.png' %}" alt="Silver badge" loading="lazy" decoding="async" class="w-full h-full object-contain" />
-                </figure>
-                <h3 class="text-sm md:text-base font-semibold italic pr-1 mb-1">Silver</h3>
-                <div class="flex items-center gap-1 text-xs text-base-content/60 mb-1">
-                    <span class="font-bold">100%</span>
-                    <span>on PS4/PS5</span>
-                </div>
-                <span class="text-xs text-base-content/40">+3,000 XP</span>
-            </div>
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex flex-col items-center text-center">
-                <figure class="w-20 h-20 md:w-28 md:h-28 mb-2">
-                    <img src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="Gold badge" loading="lazy" decoding="async" class="w-full h-full object-contain" />
-                </figure>
-                <h3 class="text-sm md:text-base font-semibold italic pr-1 mb-1">Gold</h3>
-                <div class="flex items-center gap-1 text-xs text-base-content/60 mb-1">
-                    <img src="{% static 'images/plat.png' %}" class="w-4 h-4" alt="Platinum" loading="lazy" />
-                    <span>on PS3/Vita</span>
-                </div>
-                <span class="text-xs text-base-content/40">+3,000 XP</span>
-            </div>
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex flex-col items-center text-center">
-                <figure class="w-20 h-20 md:w-28 md:h-28 mb-2">
-                    <img src="{% static 'images/badges/backdrops/4_backdrop.png' %}" alt="Platinum badge" loading="lazy" decoding="async" class="w-full h-full object-contain" />
-                </figure>
-                <h3 class="text-sm md:text-base font-semibold italic pr-1 mb-1">Platinum</h3>
-                <div class="flex items-center gap-1 text-xs text-base-content/60 mb-1">
-                    <span class="font-bold">100%</span>
-                    <span>on PS3/Vita</span>
-                </div>
-                <span class="text-xs text-base-content/40">+3,000 XP</span>
-            </div>
+    <div class="pp-howto__grid">
+        <div class="pp-howto__tier" data-howto-tier="bronze">
+            <span class="pp-howto__art"><img src="{% static 'images/badges/backdrops/1_backdrop.png' %}" alt="Bronze badge" loading="lazy" decoding="async" /></span>
+            <span class="pp-howto__name">Bronze</span>
+            <span class="pp-howto__req"><img src="{% static 'images/plat.png' %}" alt="Platinum" loading="lazy" /> on PS4/PS5</span>
+            <span class="pp-howto__xp"><span class="pp-tally">+3,000</span> XP</span>
+        </div>
+        <div class="pp-howto__tier" data-howto-tier="silver">
+            <span class="pp-howto__art"><img src="{% static 'images/badges/backdrops/2_backdrop.png' %}" alt="Silver badge" loading="lazy" decoding="async" /></span>
+            <span class="pp-howto__name">Silver</span>
+            <span class="pp-howto__req"><b>100%</b> on PS4/PS5</span>
+            <span class="pp-howto__xp"><span class="pp-tally">+3,000</span> XP</span>
+        </div>
+        <div class="pp-howto__tier" data-howto-tier="gold">
+            <span class="pp-howto__art"><img src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="Gold badge" loading="lazy" decoding="async" /></span>
+            <span class="pp-howto__name">Gold</span>
+            <span class="pp-howto__req"><img src="{% static 'images/plat.png' %}" alt="Platinum" loading="lazy" /> on PS3/Vita</span>
+            <span class="pp-howto__xp"><span class="pp-tally">+3,000</span> XP</span>
+        </div>
+        <div class="pp-howto__tier" data-howto-tier="platinum">
+            <span class="pp-howto__art"><img src="{% static 'images/badges/backdrops/4_backdrop.png' %}" alt="Platinum badge" loading="lazy" decoding="async" /></span>
+            <span class="pp-howto__name">Platinum</span>
+            <span class="pp-howto__req"><b>100%</b> on PS3/Vita</span>
+            <span class="pp-howto__xp"><span class="pp-tally">+3,000</span> XP</span>
         </div>
     </div>
 </details>
