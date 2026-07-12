@@ -70,16 +70,16 @@
         </div>
     </div>
 
+    {# ── Permanent chrome (both views): Your Badge Stats (auth) + the tier How-To ── #}
+    {% include 'trophies/partials/badge_list/badge_user_stats.html' %}
+    {% include 'trophies/partials/badge_list/badge_list_header.html' %}
+
     {% comment %} View toggle: Series (per-series rows, "what's needed") vs Gallery (per-tier medallion wall,
-    catalog discovery -- filter individual tiers across every series). {% endcomment %}
+    catalog discovery -- filter individual tiers across every series). Sits right above the view it controls. {% endcomment %}
     <div class="pp-vtoggle mb-3" role="tablist" aria-label="Badge view">
         <a href="{% url 'badges_list' %}" class="pp-vtoggle__chip{% if view != 'gallery' %} is-active{% endif %}" role="tab" aria-selected="{% if view != 'gallery' %}true{% else %}false{% endif %}">Series</a>
         <a href="{% url 'badges_list' %}?view=gallery" class="pp-vtoggle__chip{% if view == 'gallery' %} is-active{% endif %}" role="tab" aria-selected="{% if view == 'gallery' %}true{% else %}false{% endif %}">Gallery</a>
     </div>
-
-    {# ── Permanent chrome (both views): Your Badge Stats (auth) + the tier How-To ── #}
-    {% include 'trophies/partials/badge_list/badge_user_stats.html' %}
-    {% include 'trophies/partials/badge_list/badge_list_header.html' %}
 
     {% if view == 'gallery' %}
     {% include 'trophies/partials/badge_list/gallery.html' %}
