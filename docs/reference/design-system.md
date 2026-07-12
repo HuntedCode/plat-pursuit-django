@@ -199,6 +199,27 @@ Every rebuilt page should have a header card that establishes context and houses
 
 **Subtitle guidelines**: The subtitle should be dynamic and contextual, not generic. Change based on active filters, current sort, result count, or user state. Add personality (flavor text, playful phrasing) per the Platinum Pursuit Standard.
 
+### Tab Group / View Switcher (site-wide standard, 2026-07)
+
+**The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Case/Gallery, Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses this SEGMENTED style: one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end` row (bump the top gap, e.g. `mt-5`, when it follows a card). Retires the old free-standing per-pill style. Live examples: `.pp-collection__views` (Collection), `.pp-vtoggle` (Browse), `.lab-views`/`.lab-view-tab` (Career -- the reference, `static/css/components/elements.css`).
+
+```html
+<div class="flex items-center justify-end mt-5">
+  <div class="lab-views" role="tablist" aria-label="...">   <!-- segmented container -->
+    <button class="lab-view-tab is-active" role="tab" aria-selected="true">
+      <svg>...</svg>Tab A                                    <!-- ~15px Lucide icon + label -->
+    </button>
+    <button class="lab-view-tab" role="tab" aria-selected="false"><svg>...</svg>Tab B</button>
+  </div>
+</div>
+```
+
+- **Container**: `display:inline-flex; gap:6px; padding:4px; border-radius:8px; border:1px solid var(--pp-border); background:color-mix(in oklab, var(--pp-bg-1) 60%, transparent)`.
+- **Chip**: transparent at rest (`color:var(--pp-text-mute); background:transparent; border:1px solid transparent; border-radius:5px; padding:6px 14px`, `7px 18px` at `md:`); hover -> `color:var(--pp-text)`.
+- **Active chip**: `color:var(--pp-text); font-weight:700; background:color-mix(in oklab, var(--pp-primary) 16%, transparent); border-color:color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border))`. Settles FLAT -- no resting glow. An optional one-time activation bloom (Career's `lab-view--ignite`) is fine; it must fade to flat.
+- **Icon**: a ~15px Lucide stroke glyph before the label (`.lab-view-tab svg { width:15px; height:15px; flex:none }`). A trailing count badge (e.g. claimable count) sits after the label.
+- **A11y**: `role="tablist"` on the container, `role="tab"` + `aria-selected` on chips, `aria-controls` -> the panel; `:focus-visible` ring in `--pp-primary`.
+
 ### Filter/Search Toolbar Card
 
 Compact card for search, sort, and filter controls. Collapsible drawer for secondary filters.

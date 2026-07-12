@@ -43,6 +43,11 @@ almost always a specific detail that question surfaces:
   state -- are fine; it's the *outer content wrapper* that must not be a card.) NB: Career's original
   one-container layout was the lone exception and has been reconciled to this rule (`career.html`: hero card
   -> summary card -> free tabs + panels), so don't copy its old outer shell.
+- **Tab groups use ONE treatment: the segmented switcher** (site-wide rule, 2026-07) -- a bordered
+  container of transparent chips, active chip tinted, an icon per chip, right-aligned in a
+  `flex justify-end` row. 2-way toggles and multi-tab nav both use it; the old free-standing pills are
+  retired. Full spec + tokens in [design-system.md](../../reference/design-system.md) (Tab Group / View
+  Switcher); reference impl is Career's `.lab-views`/`.lab-view-tab`.
 - Every surface reads like it belongs to the same app as the rest of the rebuild.
 
 ### 2. Responsive: three layouts, mobile-first, actually verified
