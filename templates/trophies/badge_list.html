@@ -167,56 +167,21 @@
             if (next) { next.disabled = (idx === nodes.length - 1); }
         }
 
-        // Quick-peek modal: a medallion tap fetches the PUBLIC badge_quick_peek partial into the shared
-        // #badge-peek dialog (reusing the collection's .pp-detail-modal chrome). data-peek-url is the
-        // reverse with a 0 placeholder we swap for the badge id.
+        // Quick-peek modal: a medallion tap GROWS the PUBLIC badge_quick_peek partial into the shared
+        // #badge-peek dialog -- the collection's .pp-detail-modal chrome + the shared pick-up/put-down
+        // controller (PlatPursuit.Medallion.detailModal). data-peek-url is the reverse with a 0 placeholder.
         var peekEl = document.getElementById('badge-peek');
-        var peekBusy = false, peekLastFocus = null;
-        // Tear the medallion down: its gyro driver adds a WINDOW listener that outlives a wiped body, and a
-        // flip timer could fire on a detached node. Called before replacing the body AND on close.
-        function teardownPeekMedallion() {
-            var body = peekEl && peekEl.querySelector('[data-peek-body]');
-            var card = body && body.querySelector('.pp-bdetail__stage .pp-med__art');
-            if (card) {
-                if (card._gyroCleanup) { card._gyroCleanup(); card._gyroCleanup = null; }
-                if (card._flipTimer) { clearTimeout(card._flipTimer); card._flipTimer = null; }
-            }
-        }
-        function openPeek(badgeId) {
-            if (!peekEl || peekBusy || !badgeId) { return; }
-            var body = peekEl.querySelector('[data-peek-body]');
-            var dialog = peekEl.querySelector('.pp-detail-modal__dialog');
+        var peek = (peekEl && window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)
+            ? PlatPursuit.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
+            : null;
+        // Grow the peek from the tapped source medallion. sourceEl is the tile's .pp-scard__med or the
+        // Gallery .pp-bgal__card -- both hold the .pp-med the controller measures + hides during the peek.
+        function openPeek(badgeId, sourceEl) {
+            if (!peek || !badgeId) { return; }
             var tmpl = peekEl.getAttribute('data-peek-url') || '';
             var url = tmpl.replace(/0\/$/, badgeId + '/');
             if (!url || url === tmpl) { return; }
-            peekLastFocus = document.activeElement;   // so close returns focus to the tapped tile
-            peekBusy = true;
-            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
-                .then(function (r) { if (!r.ok) { throw new Error('peek ' + r.status); } return r.text(); })
-                .then(function (html) {
-                    teardownPeekMedallion();   // defensively clear any prior medallion before replacing
-                    if (body) { body.innerHTML = html; }
-                    if (window.PlatPursuit && PlatPursuit.Medallion) { PlatPursuit.Medallion.wire(body); }   // shared flip/tilt
-                    peekEl.hidden = false;
-                    document.body.style.overflow = 'hidden';   // lock the page scroll behind the modal
-                    if (dialog) { dialog.focus(); }
-                })
-                .catch(function () { /* leave it closed; the tile's own detail link is the fallback */ })
-                .then(function () { peekBusy = false; });
-        }
-        function closePeek() {
-            if (!peekEl || peekEl.hidden) { return; }
-            peekEl.hidden = true;
-            document.body.style.overflow = '';
-            teardownPeekMedallion();
-            var body = peekEl.querySelector('[data-peek-body]');
-            if (body) { body.innerHTML = ''; }
-            if (peekLastFocus && peekLastFocus.focus) { peekLastFocus.focus(); }   // return focus to the grid
-            peekLastFocus = null;
-        }
-        if (peekEl) {
-            peekEl.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('[data-peek-close]')) { closePeek(); } });
-            document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !peekEl.hidden) { closePeek(); } });
+            peek.open(url, sourceEl);
         }
 
         document.addEventListener('click', function (e) {
@@ -230,13 +195,13 @@
                 e.preventDefault();
                 var mcard = medEl.closest('.pp-scard');
                 var msel = mcard && mcard.querySelector('.pp-scard__node.is-selected');
-                openPeek(msel && msel.getAttribute('data-badge-id'));
+                openPeek(msel && msel.getAttribute('data-badge-id'), medEl);   // grow from the tile's medallion
                 return;
             }
             var cell = e.target.closest('.pp-bgal__card');
             if (cell && cell.getAttribute('data-badge-id')) {
                 e.preventDefault();
-                openPeek(cell.getAttribute('data-badge-id'));
+                openPeek(cell.getAttribute('data-badge-id'), cell);   // grow from the Gallery cell's medallion
                 return;
             }
             var node = e.target.closest('.pp-scard__node');
