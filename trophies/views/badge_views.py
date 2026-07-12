@@ -289,6 +289,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             'gallery_q': g.get('q', ''),
             'gallery_sorts': GALLERY_SORTS,
             'gallery_page_size': GALLERY_PAGE_SIZE,          # keeps the JS paginateBy in sync (no magic 48)
+            'user_badge_stats': self._user_badge_stats(profile) if profile else None,  # permanent page chrome
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse_lazy('home')},
                 {'text': 'Badges'},
@@ -529,6 +530,50 @@ class BadgeListView(ProfileHotbarMixin, ListView):
 
         return display_data
 
+    def _user_badge_stats(self, profile):
+        """The 'Your Badge Stats' tiles -- permanent page chrome shown on BOTH the Series and Gallery views.
+        All DB-aggregated counts (whale-safe); returns the dict, or None if the profile has no gamification
+        row yet."""
+        try:
+            gamification = profile.gamification
+        except ProfileGamification.DoesNotExist:
+            return None
+        series_completed = UserBadge.objects.filter(
+            profile=profile
+        ).values('badge__series_slug').distinct().count()
+        total_series = Badge.objects.live().filter(tier=1).exclude(
+            series_slug__isnull=True
+        ).exclude(series_slug='').count()
+        # Global stage-completion stats (all badge series).
+        total_stages = Stage.objects.filter(stage_number__gt=0).count()
+        plat_eligible_stages = Stage.objects.filter(
+            stage_number__gt=0,
+            concepts__games__defined_trophies__platinum__gt=0,
+        ).distinct().count()
+        user_stages_platted = Stage.objects.filter(
+            stage_number__gt=0,
+            concepts__games__played_by__profile=profile,
+            concepts__games__played_by__has_plat=True,
+        ).distinct().count()
+        user_stages_completed = Stage.objects.filter(
+            stage_number__gt=0,
+            concepts__games__played_by__profile=profile,
+            concepts__games__played_by__progress=100,
+        ).distinct().count()
+        return {
+            'total_xp': gamification.total_badge_xp,
+            'total_badges_earned': gamification.total_badges_earned,
+            'stages_platted': user_stages_platted,
+            'plat_eligible_stages': plat_eligible_stages,
+            'stages_completed': user_stages_completed,
+            'total_stages': total_stages,
+            'series_completed': series_completed,
+            'total_series': total_series,
+            'completion_pct': round(
+                (series_completed / total_series * 100), 1
+            ) if total_series > 0 else 0,
+        }
+
     def get_context_data(self, **kwargs):
         """
         Build context for badge list page.
@@ -669,50 +714,13 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         context['is_paginated'] = page_obj.has_other_pages()
         context['series_page_size'] = SERIES_PAGE_SIZE
 
-        # User badge stats for authenticated users
+        # 'Your Badge Stats' is now PERMANENT page chrome (shown on both views) -> computed via the shared
+        # helper. series_badge_xp is Series-tile-only (per-tile XP), so it stays here.
         if profile:
+            context['user_badge_stats'] = self._user_badge_stats(profile)
             try:
-                gamification = profile.gamification
-                series_completed = UserBadge.objects.filter(
-                    profile=profile
-                ).values('badge__series_slug').distinct().count()
-                total_series = Badge.objects.live().filter(tier=1).exclude(
-                    series_slug__isnull=True
-                ).exclude(series_slug='').count()
-
-                # Global stage completion stats (all badge series)
-                total_stages = Stage.objects.filter(stage_number__gt=0).count()
-                plat_eligible_stages = Stage.objects.filter(
-                    stage_number__gt=0,
-                    concepts__games__defined_trophies__platinum__gt=0,
-                ).distinct().count()
-                user_stages_platted = Stage.objects.filter(
-                    stage_number__gt=0,
-                    concepts__games__played_by__profile=profile,
-                    concepts__games__played_by__has_plat=True,
-                ).distinct().count()
-                user_stages_completed = Stage.objects.filter(
-                    stage_number__gt=0,
-                    concepts__games__played_by__profile=profile,
-                    concepts__games__played_by__progress=100,
-                ).distinct().count()
-
-                context['user_badge_stats'] = {
-                    'total_xp': gamification.total_badge_xp,
-                    'total_badges_earned': gamification.total_badges_earned,
-                    'stages_platted': user_stages_platted,
-                    'plat_eligible_stages': plat_eligible_stages,
-                    'stages_completed': user_stages_completed,
-                    'total_stages': total_stages,
-                    'series_completed': series_completed,
-                    'total_series': total_series,
-                    'completion_pct': round(
-                        (series_completed / total_series * 100), 1
-                    ) if total_series > 0 else 0,
-                }
-                context['series_badge_xp'] = gamification.series_badge_xp or {}
+                context['series_badge_xp'] = profile.gamification.series_badge_xp or {}
             except ProfileGamification.DoesNotExist:
-                context['user_badge_stats'] = None
                 context['series_badge_xp'] = {}
 
         # Breadcrumbs and form

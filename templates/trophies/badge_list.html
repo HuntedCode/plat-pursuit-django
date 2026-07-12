@@ -77,18 +77,14 @@
         <a href="{% url 'badges_list' %}?view=gallery" class="pp-vtoggle__chip{% if view == 'gallery' %} is-active{% endif %}" role="tab" aria-selected="{% if view == 'gallery' %}true{% else %}false{% endif %}">Gallery</a>
     </div>
 
+    {# ── Permanent chrome (both views): Your Badge Stats (auth) + the tier How-To ── #}
+    {% include 'trophies/partials/badge_list/badge_user_stats.html' %}
+    {% include 'trophies/partials/badge_list/badge_list_header.html' %}
+
     {% if view == 'gallery' %}
     {% include 'trophies/partials/badge_list/gallery.html' %}
     {% else %}
-
-    {# ── User Badge Stats ── #}
-    {% include 'trophies/partials/badge_list/badge_user_stats.html' %}
-
-    {# ── Education Header ── #}
-    {% include 'trophies/partials/badge_list/badge_list_header.html' %}
-
     {% include 'partials/ad_unit.html' with ad_slot="8195453976" %}
-
     {% include 'trophies/partials/badge_list/series_view.html' %}
     {% endif %}
 

@@ -189,6 +189,20 @@ def test_gallery_view_defaults_to_series(client):
     assert 'pp-scard' in html
 
 
+def test_permanent_chrome_shows_on_the_gallery(client):
+    """'Your Badge Stats' + the tier How-To are now PERMANENT page chrome -- they render on the Gallery
+    view, not only the Series tab."""
+    profile = ProfileFactory()
+    badges = _series('rs-chrome')
+    UserBadgeFactory(profile=profile, badge=badges[0])   # earn one -> creates the gamification row
+    client.force_login(profile.user)
+
+    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+
+    assert 'How Do Badge Tiers Work' in html    # the education header (static, both views)
+    assert 'Your Badge Stats' in html           # the stats tiles (auth)
+
+
 def test_gallery_cell_wires_badge_peek(client):
     """Each Gallery cell carries its badge id (so a tap opens the public quick-peek modal) and keeps its
     detail href as the no-JS fallback; the shared modal container is on the page."""
