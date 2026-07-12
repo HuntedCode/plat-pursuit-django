@@ -467,13 +467,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                         segments.append('active')
                     segments += [''] * (req_t - len(segments))
 
-                # Full-colour showcase medallion per tier (anon look -> no per-badge queries; the badge FKs
-                # are select_related in get_queryset). State lives in the ladder + seal, not the art.
-                frame = build_badge_frame(b, None, include_live_stats=False)
-
                 tier_faces.append({
                     'tier': b.tier,
-                    'frame': frame,
                     'state': t_state,
                     'completed': t_done,
                     'required': req_t,
@@ -484,6 +479,15 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                     'trophies': per_tier_trophies.get(b.tier, dict(_zero)),
                     'segments': segments,
                 })
+
+            # ONE medallion per tile (not four): a series' tiers share the subject art, and only the tier
+            # tint + the four site-wide, tier-keyed, cached STATIC backdrop/foreground images differ. So we
+            # render just the default tier's medallion here and retint + swap those cached images client-side
+            # on a face change (see the scardSelect handler in badge_list.html). Cuts the heaviest per-tile
+            # work -- the frame build + medallion render -- from 4x to 1x. Anon look, so no per-badge queries.
+            default_badge = next((b for b in sorted_group if b.tier == default_tier), tier1_badge)
+            default_frame = build_badge_frame(default_badge, None, include_live_stats=False)
+            default_earned = default_tier <= highest_tier
 
             # Card name: the badge's affiliation takes precedence -- Franchise > Series (IGDB collection) >
             # Developer -- else the series' Display Series (then the display title). Mirrors the medallion's
@@ -513,6 +517,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 'user_highest_tier': highest_tier,
                 'tiers': tier_faces,
                 'default_tier': default_tier,
+                'default_frame': default_frame,
+                'default_earned': default_earned,
             })
 
         return display_data

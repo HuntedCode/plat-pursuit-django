@@ -11,16 +11,14 @@
         {# Medallion (selected face) + name + type - earned. The whole tile navigates to detail (JS). #}
         <a class="pp-scard__open" href="{% url 'badge_detail' badge.series_slug %}" aria-label="{{ item.card_name }} detail">
             <span class="pp-scard__art">
-                {% for t in item.tiers %}
-                <span class="pp-scard__med" data-face="{{ t.tier }}"{% if t.tier != item.default_tier %} hidden{% endif %}>
-                    {% include 'components/badge_medallion.html' with frame=t.frame no_id=True %}
-                    {% if t.state == 'earned' %}
-                    <span class="pp-scard__seal" title="Earned">
+                {% comment %} One medallion, retinted client-side on a face swap (tiers share art; only the
+                tint + the cached tier backdrop/foreground swap). The seal toggles with the selected tier. {% endcomment %}
+                <span class="pp-scard__med">
+                    {% include 'components/badge_medallion.html' with frame=item.default_frame no_id=True %}
+                    <span class="pp-scard__seal" title="Earned"{% if not item.default_earned %} hidden{% endif %}>
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
                     </span>
-                    {% endif %}
                 </span>
-                {% endfor %}
             </span>
             <span class="pp-scard__name">{{ item.card_name }}</span>
             {% comment %} Series-level popularity (tier-1 earners) -- static across faces by design, unlike the
@@ -37,6 +35,7 @@
                 {% for t in item.tiers %}
                 <button type="button" class="pp-scard__node {% if user.is_authenticated and user.profile %}is-{{ t.state }}{% else %}is-catalog{% endif %}{% if t.tier == item.default_tier %} is-selected{% endif %}"
                         data-face-node="{{ t.tier }}" data-tier-key="{{ t.tier|badge_tier|lower }}"
+                        data-earned="{% if user.is_authenticated and user.profile and t.state == 'earned' %}1{% else %}0{% endif %}"
                         aria-pressed="{% if t.tier == item.default_tier %}true{% else %}false{% endif %}"
                         aria-label="{{ t.tier|badge_tier }} tier{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %}, earned{% elif t.state == 'active' %}, in progress{% else %}, locked{% endif %}{% endif %}"
                         title="{{ t.tier|badge_tier }}{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %} - earned{% elif t.state == 'active' %} - in progress{% else %} - locked{% endif %}{% endif %}">

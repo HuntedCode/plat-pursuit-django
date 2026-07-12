@@ -41,6 +41,7 @@ def test_series_renders_tile_with_tier_ladder(client):
     assert 'pp-scard__arrow' in html                # prev/next face-swap arrows
     assert 'pp-scard__trophies' in html             # per-tier trophy spread in the face
     assert 'pp-med' in html                         # uses the shared medallion object (not the flat badge)
+    assert html.count('pp-med__stage') == 1         # ONE medallion per tile (retinted on swap), not one per tier
     assert 'earned' in html                         # type . N earned line
     assert '/badges/rs-series/' in html
     assert 'pp-vtoggle' in html                     # shared Series|Gallery toggle present

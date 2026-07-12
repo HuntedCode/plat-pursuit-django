@@ -123,13 +123,47 @@
         // Series tile interactions: the ladder nodes / flanking arrows swap which tier face a tile shows;
         // clicking anywhere else on the tile opens its detail page. All delegated on document so infinite-
         // scroll-appended tiles work with no re-wiring (a no-op on the Gallery, which has no tiles).
+        // The tier backdrop/foreground are four site-wide, tier-keyed STATIC images (already cached); we
+        // render ONE medallion per tile and just repoint these on a swap (the subject art is shared).
+        var TIER_BACKDROP = {
+            1: "{% static 'images/badges/backdrops/1_backdrop.png' %}",
+            2: "{% static 'images/badges/backdrops/2_backdrop.png' %}",
+            3: "{% static 'images/badges/backdrops/3_backdrop.png' %}",
+            4: "{% static 'images/badges/backdrops/4_backdrop.png' %}"
+        };
+        var TIER_FOREGROUND = {
+            1: "{% static 'images/badges/foregrounds/1_foreground.png' %}",
+            2: "{% static 'images/badges/foregrounds/2_foreground.png' %}",
+            3: "{% static 'images/badges/foregrounds/3_foreground.png' %}",
+            4: "{% static 'images/badges/foregrounds/4_foreground.png' %}"
+        };
         function scardSelect(card, node) {
             if (!card || !node) { return; }
             var face = node.getAttribute('data-face-node');
-            card.querySelectorAll('.pp-scard__med, .pp-scard__face').forEach(function (el) {
+            // Stat panes swap (cheap text). The single medallion retints in place.
+            card.querySelectorAll('.pp-scard__face').forEach(function (el) {
                 if (el.getAttribute('data-face') === face) { el.removeAttribute('hidden'); }
                 else { el.setAttribute('hidden', ''); }
             });
+            var key = node.getAttribute('data-tier-key');
+            var med = card.querySelector('.pp-scard__med .pp-med');
+            if (med && key) {
+                med.className = med.className.replace(/pp-med--(bronze|silver|gold|platinum)/, 'pp-med--' + key);
+                med.setAttribute('data-tier', key);
+                var layers = med.querySelectorAll('.pp-med__art .pp-med__l');
+                if (layers[0] && TIER_BACKDROP[face]) { layers[0].src = TIER_BACKDROP[face]; }          // backdrop
+                if (layers.length >= 3 && TIER_FOREGROUND[face]) { layers[2].src = TIER_FOREGROUND[face]; }  // foreground (custom-art only)
+                // Holographic foil is a platinum-earned flourish: toggle the class, injecting the foil span
+                // once if it wasn't rendered (default tier wasn't platinum).
+                var isPlat = (face === '4');
+                med.classList.toggle('pp-med--holographic', isPlat);
+                if (isPlat && !med.querySelector('.pp-med__foil')) {
+                    var art = med.querySelector('.pp-med__art');
+                    if (art) { var foil = document.createElement('span'); foil.className = 'pp-med__foil'; foil.setAttribute('aria-hidden', 'true'); art.appendChild(foil); }
+                }
+            }
+            var seal = card.querySelector('.pp-scard__seal');
+            if (seal) { seal.hidden = (node.getAttribute('data-earned') !== '1'); }
             var nodes = card.querySelectorAll('.pp-scard__node');
             var idx = 0;
             nodes.forEach(function (n, i) {
@@ -138,7 +172,6 @@
                 n.setAttribute('aria-pressed', on ? 'true' : 'false');
                 if (on) { idx = i; }
             });
-            var key = node.getAttribute('data-tier-key');
             if (key) { card.setAttribute('data-tier', key); }
             var prev = card.querySelector('.pp-scard__arrow[data-face-step="-1"]');
             var next = card.querySelector('.pp-scard__arrow[data-face-step="1"]');
