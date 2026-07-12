@@ -11,7 +11,7 @@
     {# ── Page Header (rebuild standard: DaisyUI card shell + --pp-* substance, mirroring the Collection header) ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-5 lg:p-6">
-            <div class="flex items-start justify-between gap-3 flex-wrap">
+            <div class="flex items-start justify-between gap-3 flex-wrap pp-bhead-anim">
                 <div class="min-w-0">
                     <div class="flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -35,7 +35,7 @@
 
                 {# Catalog size as a Tally stat (mirrors the Collection header's headline number). #}
                 <div class="shrink-0 text-right">
-                    <div class="pp-tally text-2xl md:text-3xl text-primary leading-none">{{ paginator.count|intcomma }}</div>
+                    <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-badge-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</div>
                     <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">{% if view == 'gallery' %}badge{{ paginator.count|pluralize }}{% else %}series{% endif %}</div>
                 </div>
             </div>
@@ -82,6 +82,11 @@
     and page size, injected below. {% endcomment %}
     <script>
     document.addEventListener('DOMContentLoaded', function () {
+        // Header: count the catalog number up on load. countUp() honours prefers-reduced-motion (jumps
+        // straight to the target); the header's fade-in reveal masks the brief reset-to-zero.
+        var catalogCount = document.querySelector('[data-badge-count]');
+        if (catalogCount && window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(catalogCount, 900); }
+
         var CARD = '{% if view == "gallery" %}.pp-bgal__card{% else %}.pp-scard{% endif %}';
         var PAGE = {% if view == "gallery" %}{{ gallery_page_size|default:48 }}{% else %}{{ series_page_size|default:30 }}{% endif %};
         var scroller = null;

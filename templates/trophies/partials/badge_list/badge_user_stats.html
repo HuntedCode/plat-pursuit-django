@@ -2,7 +2,7 @@
 {% if user.is_authenticated and user_badge_stats %}
     {% comment %} Viewer progress as one compact stat row (the Home snapshot pattern): a value over a small
     label, no per-stat card. 3-up on mobile, a single line at lg. One primary hero (Total XP). {% endcomment %}
-    <div class="pp-bhead__stats">
+    <div class="pp-bhead__stats pp-bhead-anim pp-bhead-anim--2">
         <div class="grid grid-cols-3 lg:grid-cols-6 gap-x-3 gap-y-3 text-center">
             <div><div class="text-sm md:text-base font-bold pp-tally text-primary">{{ user_badge_stats.total_xp|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Total XP</div></div>
             <div><div class="text-sm md:text-base font-bold pp-tally">{{ user_badge_stats.total_badges_earned }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Tiers Earned</div></div>

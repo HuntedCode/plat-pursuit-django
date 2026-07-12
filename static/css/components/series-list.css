@@ -59,6 +59,36 @@
 .pp-btiers__scope { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
 .pp-btiers__foot { font-size: 12px; line-height: 1.55; color: var(--pp-text-dim); margin-top: 12px; }
 
+/* ── Header premium motion. Rung hover glow (tier-tinted lift, not scale) is always on; the entrance
+ * cascade + Platinum sheen are gated by prefers-reduced-motion. `backwards` fill (not forwards) so the
+ * reveal never locks the transform and hover keeps working. ── */
+.pp-btiers__rung { transition: transform 0.18s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
+.pp-btiers__rung:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in oklab, var(--tier-c) 55%, var(--pp-border));
+    box-shadow: 0 8px 20px -10px color-mix(in oklab, var(--tier-c) 45%, transparent);
+}
+.pp-btiers__rung[data-btier="platinum"] { position: relative; overflow: hidden; }
+.pp-btiers__rung[data-btier="platinum"]::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; transform: translateX(-130%);
+    background: linear-gradient(105deg, transparent 34%, color-mix(in oklab, #8fd2ea 40%, transparent) 50%, transparent 66%);
+}
+@keyframes ppBheadIn { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+@keyframes ppBheadFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ppRungIn { from { opacity: 0; transform: translateY(11px); } to { opacity: 1; transform: none; } }
+@keyframes ppPlatSheen { from { transform: translateX(-130%); } to { transform: translateX(130%); } }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-bhead-anim { animation: ppBheadIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+    .pp-bhead-anim--2 { animation-delay: 0.07s; }
+    .pp-bhead-fade { animation: ppBheadFade 0.5s ease 0.14s backwards; }
+    .pp-btiers[open] .pp-btiers__rung { animation: ppRungIn 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+    .pp-btiers[open] .pp-btiers__rung:nth-child(1) { animation-delay: 0.16s; }
+    .pp-btiers[open] .pp-btiers__rung:nth-child(2) { animation-delay: 0.22s; }
+    .pp-btiers[open] .pp-btiers__rung:nth-child(3) { animation-delay: 0.28s; }
+    .pp-btiers[open] .pp-btiers__rung:nth-child(4) { animation-delay: 0.34s; }
+    .pp-btiers[open] .pp-btiers__rung[data-btier="platinum"]::after { animation: ppPlatSheen 1.15s ease-in-out 0.85s 1; }
+}
+
 /* ── Series toolbar: all controls on one bar (search + sort + the Type/Status chips), no collapse. There
  * are few enough controls to show inline; the row wraps gracefully on narrow screens. Reuses the Gallery's
  * .pp-bgal__search / .pp-bgal__chip / .pp-bgal__clabel so the two toolbars stay of a piece. ── */
