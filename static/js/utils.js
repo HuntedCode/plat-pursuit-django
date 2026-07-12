@@ -745,6 +745,7 @@ const InfiniteScroller = {
      * @param {string} [config.scrollKey] - localStorage key for preserving scroll position
      * @param {string} [config.cardSelector='.card'] - CSS selector for cards in fetched HTML
      * @param {Function} [config.onTabChange] - Callback for tab change behavior
+     * @param {Function} [config.onAppend] - Called with the array of freshly-appended card nodes after each page load
      * @returns {Object} Controller with destroy() method
      */
     create(config) {
@@ -783,7 +784,10 @@ const InfiniteScroller = {
                 if (newCards.length === 0) {
                     nextPageUrl = null;
                 } else {
-                    newCards.forEach(card => grid.appendChild(card.cloneNode(true)));
+                    const appended = [];
+                    newCards.forEach(card => { const clone = card.cloneNode(true); grid.appendChild(clone); appended.push(clone); });
+                    // Optional hook so callers can wire freshly-appended cards (e.g. a scroll-reveal observer).
+                    if (typeof config.onAppend === 'function') { try { config.onAppend(appended); } catch (e) { /* non-fatal */ } }
                     page++;
                     nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
                 }
