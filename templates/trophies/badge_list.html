@@ -145,19 +145,20 @@
                     seg.animate([{ opacity: 0, transform: 'scale(0.55)' }, { opacity: 1, transform: 'none' }], { duration: 380, delay: delayMs + 250, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'backwards' });
                 });
             }
-            var step = gallery ? 24 : 38;   // denser wall -> tighter stagger
-            // Reveal in-view cards (and the rest on scroll) via the IntersectionObserver. The observer
-            // computes intersections against the SETTLED layout on its own schedule, so there's no
-            // transitional-layout misclassification (a view swap briefly lays the grid out at the wrong
-            // column count). Stagger each batch in DOM order, which for a row-major grid IS the visual
-            // reading order (top-to-bottom, left-to-right) regardless of column count -- unlike a measured
-            // position sort, which read the wrong columns on a swap and scrambled the order.
+            var step = gallery ? 16 : 28;   // denser wall -> tighter stagger
+            // Reveal the cards ALREADY in the grid NOW, in ONE synchronous DOM-order batch. DOM order == the
+            // visual reading order for a row-major grid (top-to-bottom, left-to-right) INDEPENDENT of column
+            // count or layout state -- so it stays correct even though a view swap briefly lays the grid out
+            // in the wrong (transitional) column count. One batch, no position measurement, and no observer
+            // race, so nothing can interleave. (A few below-fold initial cards animate off-screen -- harmless.)
+            grid.querySelectorAll(cfg.card + ':not(.is-revealed)').forEach(function (el, i) { reveal(el, Math.min(i * step, 560)); });
+            // The observer ONLY scroll-reveals infinite-scroll-APPENDED cards (which arrive well after any
+            // swap layout has settled), staggered in DOM order per batch.
             revealIO = new IntersectionObserver(function (entries) {
                 var shown = entries.filter(function (en) { return en.isIntersecting; }).map(function (en) { return en.target; });
                 shown.sort(function (a, b) { return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1; });
-                shown.forEach(function (el, j) { reveal(el, Math.min(j * step, 480)); revealIO.unobserve(el); });
+                shown.forEach(function (el, j) { reveal(el, Math.min(j * step, 200)); revealIO.unobserve(el); });
             }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
-            grid.querySelectorAll(cfg.card + ':not(.is-revealed)').forEach(function (el) { revealIO.observe(el); });
         }
         function initScroller(cfg) {
             if (scroller && scroller.destroy) { scroller.destroy(); scroller = null; }
