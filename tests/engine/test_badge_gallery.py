@@ -285,21 +285,56 @@ def test_gallery_cell_caption_shows_tier_set_type_and_stages(client):
     assert '5 Stages' in html       # badge type + stage count
 
 
-def test_gallery_card_name_prefers_franchise(client):
-    """The card name uses the broadest grouping: franchise when set, else the series name. A franchise-
-    linked badge shows the franchise; an unlinked one falls back to its series_name."""
-    from trophies.models import Franchise
+def test_gallery_card_name_resolution_chain(client):
+    """The card name (frame.card_name) resolves the broadest grouping: franchise -> collection -> developer
+    -> series-name fallback. Each tier outranks the ones below it, and all four are reachable."""
+    from trophies.models import Franchise, Company
     fr = Franchise.objects.create(igdb_id=4242, name='Resident Evil', slug='resident-evil-t',
                                   source_type='franchise')
+    coll = Franchise.objects.create(igdb_id=5353, name='Ezio Trilogy', slug='ezio-trilogy-t',
+                                    source_type='collection')
+    dev = Company.objects.create(igdb_id=7777, name='Naughty Dog', slug='naughty-dog-t')
+    # Franchise set -> franchise wins over an also-present series name.
     BadgeFactory(series_slug='rs-fr', tier=1, badge_type='series', is_live=True,
                  required_stages=5, display_series='RE Village Plat', franchise=fr)
-    BadgeFactory(series_slug='rs-nofr', tier=1, badge_type='series', is_live=True,
+    # No franchise, collection set -> collection wins.
+    BadgeFactory(series_slug='rs-coll', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='Ezio Series', collection=coll)
+    # No franchise/collection, developer set -> developer wins over the series name.
+    BadgeFactory(series_slug='rs-dev', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='Uncharted Series', developer=dev)
+    # None of the above -> the series name is the fallback.
+    BadgeFactory(series_slug='rs-plain', tier=1, badge_type='series', is_live=True,
                  required_stages=5, display_series='Solo Series Name')
 
     html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
 
-    assert 'Resident Evil' in html          # franchise wins the name slot when present
-    assert 'Solo Series Name' in html       # no franchise -> falls back to the series name
+    # Assert on the NAME span specifically -- the series name also leaks into the medallion's img alt text,
+    # so a bare `in html` can't prove which tier won the name slot.
+    assert 'pp-bgal__name">Resident Evil<' in html      # franchise wins
+    assert 'pp-bgal__name">Ezio Trilogy<' in html       # collection wins over its series name
+    assert 'pp-bgal__name">Naughty Dog<' in html        # developer wins over its series name
+    assert 'pp-bgal__name">Solo Series Name<' in html   # series name is the final fallback
+
+
+@pytest.mark.parametrize('sort', ['rarity', 'popular', 'newest', 'tier'])
+def test_gallery_every_sort_breaks_ties_by_set_order(client, sort):
+    """Set order is the universal tiebreaker: two badges tied on the primary sort key resolve to set-number
+    order. The two share every sortable field EXCEPT the set number -- same tier/type, zero earners, and an
+    explicitly-equalised created_at -- so the primary key is a genuine tie and only the set-order fallback
+    (type -> set number -> tier) can decide the order."""
+    from django.utils import timezone
+    from trophies.models import Badge
+    BadgeFactory(series_slug='rs-tie-hi', tier=2, badge_type='series', is_live=True,
+                 required_stages=5, display_series='Tie Hi', set_number=9)
+    BadgeFactory(series_slug='rs-tie-lo', tier=2, badge_type='series', is_live=True,
+                 required_stages=5, display_series='Tie Lo', set_number=1)
+    # Equalise created_at so the `newest` (-created_at) case is a real tie, not decided by insert order.
+    Badge.objects.filter(series_slug__in=['rs-tie-hi', 'rs-tie-lo']).update(created_at=timezone.now())
+
+    html = client.get(GALLERY, {'view': 'gallery', 'sort': sort}).content.decode()
+
+    assert html.index('/badges/rs-tie-lo/') < html.index('/badges/rs-tie-hi/')  # #0001 before #0009
 
 
 def test_gallery_sort_by_set_number(client):

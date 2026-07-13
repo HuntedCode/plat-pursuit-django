@@ -265,7 +265,8 @@
 .pp-scard__t { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
 .pp-scard__t::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--tc); flex: 0 0 auto; }
 
-/* Empty state (no series match the filters). Spans the whole tile grid. */
+/* Empty state (no series match the filters). Spans the whole tile grid. Its fade+rise entrance animation
+   (ppResultsEmptyIn) is shared with the Gallery's empty panel and lives in browse-gallery.css. */
 .pp-slist__empty {
     grid-column: 1 / -1;
     text-align: center; color: var(--pp-text-mute); padding: 48px 16px;

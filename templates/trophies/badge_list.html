@@ -391,9 +391,12 @@
             if (t.id === 'browse-results') { t.classList.remove('is-swapping'); initReveal(); initScroller(viewConfig()); }  // filter swap: just the grid
             else if (t.id === 'badge-view') { initView(); }   // view swap: whole island (leave scroll put, like Collection/Career)
         });
-        // Safety net: clear the settle dim on ANY request completion (incl. errors, where afterSwap never
-        // fires) so the results can never get stuck dimmed.
-        document.body.addEventListener('htmx:afterRequest', function () {
+        // Safety net: clear the settle dim when the FILTER request itself completes, incl. errors where
+        // afterSwap never fires. Scoped to the filter form's own request (via e.detail.elt) so an unrelated
+        // HTMX request finishing mid-debounce can't cut the dim short.
+        document.body.addEventListener('htmx:afterRequest', function (e) {
+            var elt = e.detail && e.detail.elt;
+            if (!elt || elt.id !== 'filter-form') { return; }
             var results = document.getElementById('browse-results');
             if (results) { results.classList.remove('is-swapping'); }
         });

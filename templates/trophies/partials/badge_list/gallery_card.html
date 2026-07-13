@@ -17,9 +17,11 @@ Expects `frame` (a showcase build_badge_frame dict + series_slug/badge_id). {% e
     {% endif %}
     {% include 'components/badge_medallion.html' with frame=frame no_id=True %}
     <span class="pp-bgal__caption">
-        {% comment %} Name: the broadest meaningful grouping this badge belongs to -- franchise, else its
-        series, else the developer, else the series_name fallback (which resolves to the badge name). {% endcomment %}
-        <span class="pp-bgal__name">{% firstof frame.franchise frame.series_name frame.developer frame.series_name %}</span>
+        {% comment %} Name: the broadest meaningful grouping this badge belongs to -- franchise, else
+        collection, else developer, else the series name fallback. series_name is always populated so it's the
+        guaranteed final fallback, keeping every tier above it reachable. Mirrors the medallion back-sub
+        (components/badge_medallion.html) so the card and its flip read the same subject. {% endcomment %}
+        <span class="pp-bgal__name">{% firstof frame.franchise frame.collection frame.developer frame.series_name %}</span>
         {% comment %} First meta line: catalog identity -- tier (in text, since the medallion colour alone
         isn't enough) + the edition/set number (restarts per type, so it reads alongside the type below). {% endcomment %}
         <span class="pp-bgal__meta">{{ frame.tier|title }}{% if frame.set_number %} &middot; #{{ frame.set_number|stringformat:"04d" }}{% endif %}</span>
