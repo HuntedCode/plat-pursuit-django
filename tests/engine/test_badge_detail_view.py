@@ -101,8 +101,10 @@ def test_series_stats_contract(client, stub_leaderboards):
 
 
 def test_leaderboard_links_point_to_full_board(client, stub_leaderboards):
-    # The "who owns this" path: both the leaderboard CTA and the stats "Earners"
-    # jump link to the full leaderboards page.
+    # The "who owns this" path: the leaderboard section CTA links to the full board.
+    # (The header's "Earners" stat also linked here for a 2nd occurrence, but the header
+    # is currently removed pending a from-scratch rebuild -- bump back to >= 2 when it
+    # returns with an Earners link.)
     series = "rebuild-lb-links"
     BadgeFactory(series_slug=series, tier=1, is_live=True)
     _series_with_stage(series, 1)
@@ -113,8 +115,7 @@ def test_leaderboard_links_point_to_full_board(client, stub_leaderboards):
 
     assert resp.status_code == 200
     lb_url = reverse('badge_leaderboards', args=[series])
-    # Earners jump (stats) + leaderboard section CTA both target the full board.
-    assert resp.content.decode().count(lb_url) >= 2
+    assert resp.content.decode().count(lb_url) >= 1  # leaderboard section CTA
 
 
 def test_stage_with_unobtainable_game_renders(client, stub_leaderboards):

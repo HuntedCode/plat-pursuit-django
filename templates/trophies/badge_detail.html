@@ -229,8 +229,4 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 })();
 </script>
-{% if user.is_authenticated and user.profile and user.profile.is_linked %}
-<script src="{% static 'js/badge-detail-tour.js' %}"></script>
-{% include 'trophies/partials/badge_detail/badge_detail_tour.html' %}
-{% endif %}
 {% endblock %}
