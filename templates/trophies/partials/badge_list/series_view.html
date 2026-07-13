@@ -5,7 +5,7 @@ Gallery's .pp-bgal__ search/chip classes so the two views' toolbars stay of a pi
 <div class="pp-slist" data-view="series" data-page-size="{{ series_page_size|default:30 }}">
     <form id="filter-form" method="get" action="{% url 'badges_list' %}"
           hx-get="{% url 'badges_list' %}" hx-target="#browse-results" hx-swap="innerHTML"
-          hx-push-url="true" hx-trigger="change delay:250ms, submit">
+          hx-indicator="#browse-results" hx-push-url="true" hx-trigger="change delay:250ms, submit">
         <input type="hidden" name="page" value="1" />
         <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Search</button>
         <div class="pp-bgal__toolbar pp-toolbar-card">

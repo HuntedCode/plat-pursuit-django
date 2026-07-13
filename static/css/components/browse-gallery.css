@@ -166,3 +166,18 @@
 .pp-bgal__empty { text-align: center; color: var(--pp-text-mute); padding: 48px 16px; }
 .pp-bgal__empty svg { width: 34px; height: 34px; margin: 0 auto 4px; opacity: 0.6; }
 .pp-bgal__empty-title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
+
+/* ---- Shared results-swap motion (both views target #browse-results; the empty panel is used by both) ----
+   Two touches on the filter/sort HTMX swap so results never blank-flash, both motion-gated (reduced-motion
+   viewers get an instant, flash-free swap -- no dim, no keyframe):
+   1) In-flight settle: hx-indicator="#browse-results" flags .htmx-request on the container for the request's
+      duration, so the stale grid dims (reads as "working") rather than sitting frozen; the freshly-swapped
+      cards then reveal in over it (see initReveal in badge_list.html).
+   2) Empty-state entrance: a no-results panel fades + rises in instead of hard-cutting. Fresh DOM node per
+      swap, so a plain CSS animation runs reliably on insert (no WAAPI needed here). */
+@media (prefers-reduced-motion: no-preference) {
+    #browse-results { transition: opacity 0.2s ease; }
+    #browse-results.htmx-request { opacity: 0.45; }
+    .pp-bgal__empty, .pp-slist__empty { animation: ppResultsEmptyIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+}
+@keyframes ppResultsEmptyIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }

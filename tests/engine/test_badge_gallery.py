@@ -28,6 +28,19 @@ def _series(slug, tiers=(1, 2, 3, 4)):
     ]
 
 
+def test_both_views_wire_the_inflight_swap_indicator(client):
+    """Both view toolbars point their HTMX filter/sort swap at #browse-results AND flag it as the in-flight
+    indicator, so the results container dims (rather than freezing) while the request is in flight."""
+    _series('rs-ind')
+
+    gallery = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+    series = client.get(GALLERY).content.decode()
+
+    for html in (gallery, series):
+        assert 'hx-target="#browse-results"' in html
+        assert 'hx-indicator="#browse-results"' in html
+
+
 def test_gallery_renders_showcase_wall_linking_to_detail(client):
     """Anonymous: the Gallery renders the medallion wall, every medallion in full 'earned' showcase colour,
     each card linking to the public badge_detail page (never the login-gated collection modal)."""
