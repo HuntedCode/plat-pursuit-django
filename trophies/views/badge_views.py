@@ -1376,11 +1376,11 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
         # image_urls drives the og:image / twitter:image meta blocks. The old
         # blurred-bg header (header_bg_image, recent_concept_name) was removed in
-        # the Frame-hero rebuild, so only image_urls remains.
+        # the Frame-hero rebuild, so only the social-share icon remains.
         if badge.most_recent_concept:
-            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': badge.most_recent_concept.cover_url}
+            context['image_urls'] = {'recent_concept_icon_url': badge.most_recent_concept.cover_url}
         else:
-            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': ''}
+            context['image_urls'] = {'recent_concept_icon_url': ''}
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
@@ -1506,9 +1506,9 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
 
         context['badge'] = badge
         if badge.most_recent_concept:
-            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': badge.most_recent_concept.cover_url}
+            context['image_urls'] = {'recent_concept_icon_url': badge.most_recent_concept.cover_url}
         else:
-            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': ''}
+            context['image_urls'] = {'recent_concept_icon_url': ''}
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},

@@ -503,7 +503,6 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                     screenshot_urls = igdb_match.screenshot_urls()
 
             image_urls = {
-                'bg_url': None,  # Disabled on body during redesign
                 'header_bg_url': game.concept.get_cover_url(),  # Used for frosted glass header only
                 'screenshot_urls': screenshot_urls,
             }

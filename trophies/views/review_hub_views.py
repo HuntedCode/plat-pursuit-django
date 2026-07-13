@@ -12,7 +12,7 @@ from django.http import Http404
 from django.urls import reverse
 from django.views.generic import DetailView, TemplateView
 
-from trophies.mixins import ProfileHotbarMixin, BackgroundContextMixin
+from trophies.mixins import ProfileHotbarMixin
 from trophies.models import (
     Concept, ConceptTrophyGroup, EarnedTrophy, Review, Trophy, UserConceptRating,
 )
@@ -116,7 +116,7 @@ class RateMyGamesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         return context
 
 
-class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView):
+class ReviewHubDetailView(ProfileHotbarMixin, DetailView):
     """Review Hub detail page for a game concept."""
 
     model = Concept
@@ -144,9 +144,6 @@ class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView
         context = super().get_context_data(**kwargs)
         concept = self.object
         request = self.request
-
-        # Background image
-        context['image_urls'] = self.get_background_context(concept=concept)
 
         # Breadcrumb
         context['breadcrumb'] = [

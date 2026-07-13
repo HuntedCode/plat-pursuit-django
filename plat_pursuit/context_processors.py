@@ -51,11 +51,18 @@ def moderation(request):
 
 def premium_theme_background(request):
     """
-    Inject premium user's gradient theme as a fallback site-wide background.
+    Inject premium user's gradient theme as a site-wide <body> background
+    (the user_theme_style variable).
 
-    This provides the user_theme_style variable to templates, which is used
-    when no page-specific game background (image_urls.bg_url) is set.
+    DISABLED: premium themes are turned off site-wide -- every user gets the base
+    substrate background. Flip PREMIUM_THEMES_ENABLED / remove the guard to restore
+    (the settings picker is disabled too; the settings-page rebuild will bring both
+    back).
     """
+    PREMIUM_THEMES_ENABLED = False
+    if not PREMIUM_THEMES_ENABLED:
+        return {}
+
     if not request.user.is_authenticated:
         return {}
 
