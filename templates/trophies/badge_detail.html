@@ -8,8 +8,7 @@
 {% with target_profile as profile %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
 
-    {# Rebuilt header: the Medallion collectible + series identity/progress + the series/personal stats
-       merged in as compact k/v substance. #}
+    {# Rebuilt header: Medallion hero + identity/progress + a lean at-a-glance readout (see _header.html). #}
     {% include 'trophies/partials/badge_detail/_header.html' %}
 
     {# Tier selector — tabs + self-contained requirements card (bd-*). #}
