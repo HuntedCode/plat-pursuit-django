@@ -131,6 +131,14 @@ class SettingsView(LoginRequiredMixin, View):
             return redirect('settings')
         
         elif action == 'update_premium':
+            # Theme/background customization is paused until the settings page is rebuilt (the picker + its
+            # default preview are stale vs the new substrate). The UI is hidden in settings.html; this guard
+            # also blocks any stray/crafted POST. To re-enable: drop this flag block and un-hide the picker.
+            THEME_CUSTOMIZATION_ENABLED = False
+            if not THEME_CUSTOMIZATION_ENABLED:
+                messages.info(request, 'Theme customization is temporarily unavailable while we rework this page.')
+                return redirect('settings')
+
             if not hasattr(request.user, 'profile') or not request.user.profile.user_is_premium:
                 messages.error(request, 'This feature is for premium users only!')
                 return redirect('settings')
