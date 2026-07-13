@@ -152,18 +152,19 @@
     }
 }
 
-/* Scroll-reveal: JS adds .pp-slist--reveal to the grid to HIDE the tiles, then reveals each (.is-revealed)
-   and plays the arrival via the Web Animations API (el.animate) -- reliable on first load AND an HTMX view
-   swap, where a CSS-class animation on freshly-swapped nodes silently won't restart. These rules only hold
-   the hidden base + revealed final states; the motion lives in the JS. Gated by prefers-reduced-motion;
-   without JS the class is never added, so tiles show normally. */
+/* Scroll-reveal: JS adds .pp-reveal to the grid to HIDE the cards, then reveals each (.is-revealed) and
+   plays the arrival via the Web Animations API (el.animate) -- reliable on first load AND an HTMX view swap,
+   where a CSS-class animation on freshly-swapped nodes silently won't restart. These rules only hold the
+   hidden base + revealed final states; the motion lives in the JS (shared by the Series tiles here and the
+   Gallery cells in browse-gallery.css). Gated by prefers-reduced-motion; without JS the class is never
+   added, so cards show normally. */
 @media (prefers-reduced-motion: no-preference) {
-    .pp-slist--reveal .pp-scard { opacity: 0; }
-    .pp-slist--reveal .pp-scard.is-revealed { opacity: 1; }
-    .pp-slist--reveal .pp-scard .pp-horizon__fill { transform: scaleX(0); transform-origin: left; }
-    .pp-slist--reveal .pp-scard.is-revealed .pp-horizon__fill { transform: scaleX(1); }
-    .pp-slist--reveal .pp-scard .pp-horizon__seg[data-state] { opacity: 0; transform: scale(0.55); }
-    .pp-slist--reveal .pp-scard.is-revealed .pp-horizon__seg[data-state] { opacity: 1; transform: none; }
+    .pp-reveal .pp-scard { opacity: 0; }
+    .pp-reveal .pp-scard.is-revealed { opacity: 1; }
+    .pp-reveal .pp-scard .pp-horizon__fill { transform: scaleX(0); transform-origin: left; }
+    .pp-reveal .pp-scard.is-revealed .pp-horizon__fill { transform: scaleX(1); }
+    .pp-reveal .pp-scard .pp-horizon__seg[data-state] { opacity: 0; transform: scale(0.55); }
+    .pp-reveal .pp-scard.is-revealed .pp-horizon__seg[data-state] { opacity: 1; transform: none; }
 }
 
 /* Open link (medallion + name) -> the detail page. The ladder nodes below are separate buttons. */

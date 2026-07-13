@@ -112,6 +112,14 @@
 }
 .pp-bgal__card:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; }
 
+/* Scroll-reveal: hidden/revealed states for the medallion wall -- the cells materialize onto the wall as
+   they scroll in. JS + the Web Animations API drive the motion (see the shared note in series-list.css);
+   these rules only hold the states. Gated by prefers-reduced-motion; without JS the class is never added. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-bgal__card { opacity: 0; }
+    .pp-reveal .pp-bgal__card.is-revealed { opacity: 1; }
+}
+
 /* Scroll perf: the Browse wall is ALL showcase-'earned' medallions, so every one would carry the earned
    tier-aura's filter: blur(14px) -- dozens of blur layers re-rastering on scroll cause jank (the Collection
    only ever has a few earned at once, so it stays smooth). Drop the aura here; the full-colour art + plate +

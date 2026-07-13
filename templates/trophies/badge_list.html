@@ -115,22 +115,28 @@
             if (s) { return { view: 'series', card: '.pp-scard', page: parseInt(s.getAttribute('data-page-size'), 10) || 30 }; }
             return null;
         }
-        // Series tiles reveal as they scroll into view (staggered), which also fills each tile's progress
-        // bar. Series view only (Gallery has no .pp-scard); skipped under reduced motion / no IO. The
-        // .pp-slist--reveal class is added ONLY when we're going to observe, so tiles never stick hidden.
-        function initTileReveal() {
+        // Cards reveal (staggered) as they scroll into view -- Series TILES rise + fill their bars, Gallery
+        // MEDALLIONS materialize onto the wall. Skipped under reduced motion / no IO. The .pp-reveal class is
+        // added ONLY when we're going to observe, so cards never stick hidden. Uses the Web Animations API
+        // (not a CSS-class animation) so the arrival restarts RELIABLY on freshly HTMX-swapped nodes.
+        function initReveal() {
             if (!(window.PlatPursuit && PlatPursuit.Medallion) || PlatPursuit.Medallion.prefersReducedMotion() || !window.IntersectionObserver) { return; }
             if (revealIO) { revealIO.disconnect(); revealIO = null; }   // tear down the prior grid's observer on re-init
+            var cfg = viewConfig();
             var grid = document.getElementById('items-grid');
-            if (!grid || !grid.querySelector('.pp-scard')) { return; }
-            grid.classList.add('pp-slist--reveal');   // hides the tiles; reveal() plays each tile's arrival
+            if (!cfg || !grid || !grid.querySelector(cfg.card)) { return; }
+            grid.classList.add('pp-reveal');   // hides the cards; reveal() plays each card's arrival
             var ease = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
-            // Drive the arrival with the Web Animations API, not a CSS-class animation: WAAPI restarts
-            // RELIABLY on freshly HTMX-swapped nodes (a class animation on just-swapped tiles silently won't
-            // replay). .is-revealed just holds the final visible state; el.animate() does the motion.
+            var gallery = cfg.view === 'gallery';
             function reveal(el, delayMs) {
-                el.classList.add('is-revealed');
+                el.classList.add('is-revealed');   // holds the final visible state
                 if (!el.animate) { return; }
+                if (gallery) {
+                    // Medallion materializes: fade + rise + a subtle scale-up settle (soft spring).
+                    el.animate([{ opacity: 0, transform: 'translateY(10px) scale(0.92)' }, { opacity: 1, transform: 'none' }],
+                               { duration: 480, delay: delayMs, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)', fill: 'backwards' });
+                    return;
+                }
                 el.animate([{ opacity: 0, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none' }],
                            { duration: 500, delay: delayMs, easing: ease, fill: 'backwards' });
                 var fill = el.querySelector('.pp-horizon__fill');   // linear horizon: fill grows from the left
@@ -139,17 +145,18 @@
                     seg.animate([{ opacity: 0, transform: 'scale(0.55)' }, { opacity: 1, transform: 'none' }], { duration: 380, delay: delayMs + 250, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'backwards' });
                 });
             }
+            var step = gallery ? 32 : 45;   // denser wall -> tighter stagger
             revealIO = new IntersectionObserver(function (entries) {
                 var shown = entries.filter(function (en) { return en.isIntersecting; }).map(function (en) { return en.target; });
-                shown.forEach(function (el, j) { reveal(el, Math.min(j * 45, 200)); revealIO.unobserve(el); });   // stagger a scrolled-in batch
+                shown.forEach(function (el, j) { reveal(el, Math.min(j * step, 200)); revealIO.unobserve(el); });   // stagger a scrolled-in batch
             }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
-            // Tiles already in view reveal NOW (staggered) -- reliable on both first load and a view swap.
-            // Tiles outside the viewport are observed and reveal when scrolled to.
+            // Cards already in view reveal NOW (staggered) -- reliable on both first load and a view swap.
+            // Cards outside the viewport are observed and reveal when scrolled to.
             var vh = window.innerHeight || 800, n = 0;
-            grid.querySelectorAll('.pp-scard:not(.is-revealed)').forEach(function (el) {
+            grid.querySelectorAll(cfg.card + ':not(.is-revealed)').forEach(function (el) {
                 var r = el.getBoundingClientRect();
-                if (r.top < vh && r.bottom > -1) { reveal(el, Math.min(n++ * 45, 300)); }   // in view -> reveal now
-                else { revealIO.observe(el); }                                              // below fold -> scroll-reveal
+                if (r.top < vh && r.bottom > -1) { reveal(el, Math.min(n++ * step, 320)); }   // in view -> reveal now
+                else { revealIO.observe(el); }                                                // below fold -> scroll-reveal
             });
         }
         function initScroller(cfg) {
@@ -158,9 +165,9 @@
             scroller = PlatPursuit.InfiniteScroller.create({
                 gridId: 'items-grid', sentinelId: 'bgal-sentinel', loadingId: 'bgal-loading',
                 paginateBy: cfg.page, cardSelector: cfg.card,
-                onAppend: function (nodes) {   // observe infinite-scroll-appended tiles so they reveal too
+                onAppend: function (nodes) {   // observe infinite-scroll-appended cards so they reveal too
                     if (!revealIO) { return; }
-                    nodes.forEach(function (n) { if (n.classList && n.classList.contains('pp-scard')) { revealIO.observe(n); } });
+                    nodes.forEach(function (nd) { if (nd.classList && (nd.classList.contains('pp-scard') || nd.classList.contains('pp-bgal__card'))) { revealIO.observe(nd); } });
                 },
             });
         }
@@ -363,7 +370,7 @@
         // (Re)wire everything that belongs to the current view island.
         function initView() {
             var cfg = viewConfig();
-            initTileReveal();   // before initScroller so revealIO exists for its onAppend hook
+            initReveal();   // before initScroller so revealIO exists for its onAppend hook
             initScroller(cfg);
             wireFilters();
             updateToggleActive(cfg);
@@ -373,7 +380,7 @@
             // (.pp-slist, no id) rather than the target element, which made the view-swap branch never fire.
             var t = (e.detail && e.detail.target) || e.target;
             if (!t || !t.id) { return; }
-            if (t.id === 'browse-results') { initTileReveal(); initScroller(viewConfig()); }         // filter swap: just the grid
+            if (t.id === 'browse-results') { initReveal(); initScroller(viewConfig()); }         // filter swap: just the grid
             else if (t.id === 'badge-view') { initView(); }   // view swap: whole island (leave scroll put, like Collection/Career)
         });
         // Don't re-fetch the view you're already on (a re-click on the already-active chip).
