@@ -259,16 +259,34 @@ def test_gallery_card_stat_shows_stage_progress(client):
     assert '2/5 Stages' in html             # in-progress shows the real completed count
 
 
-def test_gallery_cell_caption_is_type_and_stages(client):
-    """The card's second line is the badge type + stage count ("Series - N Stages"); the tier reads from the
-    medallion colour and the set number moved to the peek, so neither clutters the card."""
+def test_gallery_cell_caption_shows_tier_set_type_and_stages(client):
+    """The caption carries the full catalog identity across two meta lines: tier + edition/set number on the
+    first, badge type + stage count on the second."""
     BadgeFactory(series_slug='rs-setno', tier=1, badge_type='series', is_live=True,
                  required_stages=5, display_series='rs-setno', set_number=42)
 
     html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
 
-    assert '5 Stages' in html       # type + stage count on the card
-    assert '#0042' not in html      # the set number lives in the peek now, not the card
+    assert 'Bronze' in html         # tier, in text (the medallion colour alone isn't enough)
+    assert '#0042' in html          # the edition/set number is on the card
+    assert '5 Stages' in html       # badge type + stage count
+
+
+def test_gallery_card_name_prefers_franchise(client):
+    """The card name uses the broadest grouping: franchise when set, else the series name. A franchise-
+    linked badge shows the franchise; an unlinked one falls back to its series_name."""
+    from trophies.models import Franchise
+    fr = Franchise.objects.create(igdb_id=4242, name='Resident Evil', slug='resident-evil-t',
+                                  source_type='franchise')
+    BadgeFactory(series_slug='rs-fr', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='RE Village Plat', franchise=fr)
+    BadgeFactory(series_slug='rs-nofr', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='Solo Series Name')
+
+    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+
+    assert 'Resident Evil' in html          # franchise wins the name slot when present
+    assert 'Solo Series Name' in html       # no franchise -> falls back to the series name
 
 
 def test_gallery_sort_by_set_number(client):
