@@ -1,0 +1,164 @@
+# Site Rebuild — Playbook & Progress
+
+> **The single "start here" for any page rebuild.** Two jobs: (1) track which pages are done, and
+> (2) capture the shared decisions every rebuilt page inherits, so we stop re-deciding them per page.
+>
+> This doc **indexes** the authoritative docs (it does not duplicate them). When a shared decision
+> changes, update the "Shared Elements" section here **and** the authoritative doc it points to.
+
+Related: **[career-reference-standard.md](career-reference-standard.md)** (the quality bar / "what done
+means"), **[../../reference/design-system.md](../../reference/design-system.md)** (tokens, patterns,
+component blueprints), **[../visual-identity.md](../visual-identity.md)** (the constitution),
+**[../../reference/motion-patterns.md](../../reference/motion-patterns.md)** (motion),
+**[chrome-audit.md](chrome-audit.md)** (nav/tabbar/footer), **[ia-map.md](ia-map.md)** (IA),
+**[system-inventory.md](system-inventory.md)** (engine/system map).
+
+---
+
+## How to use this
+
+**Before rebuilding a page:** read the [Shared Elements](#shared-elements-every-rebuilt-page-inherits-these)
+checklist below and the [Career reference standard](career-reference-standard.md). Reuse the tokens and
+patterns; do not re-derive them.
+
+**After finishing (or advancing) a page:** update its row in [Page Status](#page-status).
+
+---
+
+## Page Status
+
+**Legend:** ✅ Done to the Career standard · 🟡 Partial (structurally aligned, full pass pending) ·
+⛔ Not started · 🗑️ Sunsetting/legacy.
+
+**Only three pages are finished to the standard: Career, Collection, Badges.** Everything else — even
+pages that already borrow the header card or shipped in an earlier phase — is NOT done: it still needs the
+full pass (depth, segmented switcher, premium motion, mobile three-layout verification).
+
+| Page | URL | Status | Notes |
+|---|---|---|---|
+| **Career** | `/career/` | ✅ | **The reference standard.** Jobs / Radar / Contracts. Depth pass applied. |
+| **Collection** | `/collection/` | ✅ | Case + Gallery. **Object-depth model** (medallion cast/rim shadows carry depth — deliberately does NOT take the card-lift). |
+| **Badges** | `/badges/` | ✅ | Series + Gallery views; dynamic HTMX view-swap; depth pass; filter/sort settle. Anon quick-peek modal deferred. |
+| **Home / Overview** | `/` | 🟡 | 4 gamification-first blocks shipped in an earlier phase; not finished to standard. Shares `.scard` (got the depth lift). |
+| **Community Hub** | `/community/` | 🟡 | Hub-of-hubs shipped in an earlier phase; not finished to standard. |
+| **Profile** | `/u/<user>/` | 🟡 | Ownership-aware chrome only; full surface pass pending. |
+| **Challenges / Franchise / Company / Game Lists / Browse pages** | various | 🟡 | Header card adopted, but **no** depth pass / segmented switcher / premium motion. Header-aligned only. |
+| **Game Detail** | `/game/<id>/` | 🟡 | Frosted-glass header (`image_urls.header_bg_url` + screenshots) retained; full pass pending. |
+| **Settings** | `/settings/` | ⛔ | Not rebuilt. Premium theme/background picker **disabled** pending rebuild (see [Gotchas](#gotchas-and-pitfalls)). |
+| **Dashboard** | `/dashboard/` | 🗑️ | Sunsetting (301 → `/`); 41-module registry retired. Do last; some `dashboard_service` providers still load-bearing. |
+| **Minigames** (Stellar Circuit) | `/arcade/...` | 🗑️ | Only remaining **ZoomScaler** page. Legacy transform-scale. |
+
+> **Chrome** (nav / tabbar / subnav / hotbar / footer) is the site-wide **FRAME**, not a page — it was
+> aligned 2026-07 (see [chrome-audit.md](chrome-audit.md)). Style it as chrome, never card-ify it.
+>
+> **ZoomScaler is effectively phased out** — only the minigame prototype still calls
+> `PlatPursuit.ZoomScaler.init()`. Rebuilt pages are mobile-first three-layout (375 / 768 / 1024+),
+> not transform-scaled.
+
+---
+
+## Shared Elements (every rebuilt page inherits these)
+
+The reusable decisions. Each is **"the decision → where it lives → the authoritative doc."** Apply all of
+them to every new page rebuild.
+
+### 1. Page structure — STACKED chrome, FREE content
+Chrome cards (page header, toolbars) are **stacked** cards; the content itself (grids, panels, tab bodies)
+flows **FREE** — never wrapped in an outer card, even when tabbed. → design-system.md (Card Variants),
+career-reference-standard.md §1.
+
+### 2. Page header = accented card with substance
+DaisyUI card shell + `--pp-*` substance: `card bg-base-200/90 border-2 border-base-300 border-l-4
+border-l-primary shadow-lg shadow-neutral`. Title + italic subtitle + a headline **Tally** stat, and pull
+**substance into the header** (stats, a collapsible explainer) rather than separate cards below (see
+Career/Collection/Badges headers). Widely adopted already.
+
+### 3. Tab groups = segmented switcher (ONE treatment site-wide)
+Bordered container + transparent chips, tinted-flat active state, an icon per chip, **right-aligned** in a
+`flex items-center justify-end` row. Implementations: `.pp-vtoggle` (Badges), `.pp-collection__views`
+(Collection), `.lab-views` (Career). Old pill tabs are retired. → design-system.md (Tab Group / View
+Switcher).
+
+### 4. Depth — the surface ladder (the "depth pass")
+Deepened 2026-07 so cards separate from the substrate by the **gap**, not by lightening anything.
+
+| Rung | Token | ~L | Role |
+|---|---|---|---|
+| Substrate (`<body>`) | `--pp-bg-0` = `--color-base-100` (dark) | 0.13 | page base (`oklch(0.13 0.012 254)`) |
+| Base cards | `--pp-bg-1` / `base-200` | 0.23 | content cards |
+| Raised / nested | `--pp-bg-2` | 0.28 | cards nested inside a base-200 header; select menus |
+| Highest | `--pp-bg-3` | 0.33 | rare |
+
+- **Content cards** catch light + cast: `box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 6px 20px
+  rgba(0,0,0,0.30)`. (`.pp-bgal__card`, `.pp-scard`, `.job`.)
+- **Nested cards** (a card *inside* a base-200 header) **step UP** `--pp-bg-1 → --pp-bg-2` + a soft lift
+  (`inset 0 1px 0 rgba(255,255,255,0.05), 0 3px 10px rgba(0,0,0,0.20)`), or they dissolve into the header.
+  (`.pp-btiers__rung`, `.scard`.)
+- **Do NOT lighten the substrate to add separation** — deepen it. Lightening flattens the gap and washes
+  out the dark identity.
+- **Exception — object-depth surfaces (Collection):** where a medallion carries its own outset cast/rim
+  shadows + pedestal, keep the card minimal/inset (a drop shadow would clip those glows). Let the *object*
+  float, not the card.
+
+### 5. Toolbars = quiet chrome, not heroes
+Base surface from the shared `.pp-toolbar-card` (`bg-base-200/90` + border), but **soften the shadow** so
+the toolbar sits back and the content cards below own the pop: `box-shadow: 0 1px 3px rgba(0,0,0,0.22)`,
+scoped per page (`.pp-bgal .pp-bgal__toolbar`, `.rp-toolbar.pp-toolbar-card`) with a 2-class selector so
+it wins over `.pp-toolbar-card` without recolouring the shared class. Compact one-row bar (search + sort +
+a Filters toggle); multi-select chips in a collapsible panel; filters auto-apply (no Apply button).
+
+### 6. Premium motion (+ always gate reduced-motion)
+Signature moments on a budget — real physics (spring settle), choreographed exits, deliberate restraint.
+Use **WAAPI (`el.animate`)** for reveals so they replay reliably on HTMX-swapped nodes (CSS-class
+animations don't restart). Every animation gates on `prefers-reduced-motion` — CSS in
+`@media (prefers-reduced-motion: no-preference)`, JS via `PlatPursuit.Medallion.prefersReducedMotion()` /
+`countUp()` (which jumps to target). → career-reference-standard.md §3, motion-patterns.md.
+
+### 7. Dynamic view swaps (HTMX innerHTML)
+View toggles swap an island via `hx-get` + `hx-target="#..." hx-swap="innerHTML" hx-push-url`, not a full
+reload. Re-init reveals/scrollers in an `htmx:afterSwap` handler keyed on `e.detail.target.id`. (Badges
+`#badge-view`, Collection, Career.)
+
+### 8. Filter/sort settle (no blank-flash)
+On a filter/sort swap, dim the results container while in flight so it never freezes/blank-flashes. Add
+the dim **on `change`** (a JS `.is-swapping` class) so it spans the `hx-trigger` debounce — not just the
+network request — then clear it in `htmx:afterSwap`. Motion-gated. Empty-state panels fade+rise in.
+
+### 9. Ad slot placement
+A horizontal `partials/ad_unit.html` goes **after the page header, before the view tabs**, outside the tab
+panels — so it shows on whichever view is loaded and a tab swap never re-inits it. (Badges, Collection,
+Career.)
+
+### 10. Modals = top of the elevation stack (insulated from the substrate)
+Scrim `rgba(2,4,8,~0.6)` + `backdrop-filter: blur(3–4px)`; dialog on `--pp-bg-1` + a big float shadow
+`0 30px 90px rgba(0,0,0,0.55)`; internal stats step up to `--pp-bg-2`. Because they float on a scrim (not
+the substrate) they need **no** depth-pass lift — the deeper substrate only helps them. Shared factory:
+`PlatPursuit.Medallion.detailModal(config)` (pick-up / put-down). (`.pp-detail-modal`, `.emodal`.)
+
+### 11. Image conventions
+Covers use `object-cover object-top` + `aspect-[3/4]`; trophy icons `object-cover` square; badges
+`object-contain`. Never `object-fill`. Cover fallback chain lives on `Game.display_image_url` — never
+reimplement inline. → project CLAUDE.md (Image Styling Conventions).
+
+### 12. Whale-safe querysets
+Per-user aggregates (counts/sums/distributions) **must** DB-aggregate (`.values().annotate(Count)` /
+`.aggregate()`), never Python iteration over a profile-scoped queryset. Preview/locked UIs must not run
+heavy providers against real user data. → project CLAUDE.md (Performance / Premium Preview).
+
+---
+
+## Gotchas and Pitfalls
+
+- **`.scard` is shared (Career + Home).** The depth lift on it improves both; a change there is not
+  Career-only. Check Home when touching it.
+- **Premium themes are OFF site-wide.** `premium_theme_background` returns `{}` behind a
+  `PREMIUM_THEMES_ENABLED` flag and the settings picker is disabled — everyone gets the base substrate.
+  The settings-page rebuild restores both. (The old `image_urls` body-background-art path was removed
+  permanently; `image_urls.header_bg_url` / `screenshot_urls` for the game-detail header remain.)
+- **Substrate is a global token.** Editing `--pp-bg-0` / `--color-base-100` touches every page — verify a
+  couple of others, not just the page you're on.
+- **Rebuild `npm run build` after any CSS/template change**, and check the value in `output.css`
+  (lightningcss reformats, e.g. `oklch(0.13 …)` → `oklch(13% …)`, and emits `color-mix` fallbacks).
+- **Don't card-ify chrome.** Nav/tabbar/subnav/hotbar/footer are the FRAME, styled as chrome, not modules.
+- **VS Code's built-in CSS linter flags Tailwind v4 at-rules** (`@plugin`/`@theme`/`@apply`) as errors —
+  false positives. `npm run build` is the real validator.

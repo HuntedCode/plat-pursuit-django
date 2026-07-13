@@ -107,6 +107,7 @@ almost always a specific detail that question surfaces:
 
 ## Related Docs
 
+- [Rebuild Playbook & Progress](rebuild-playbook.md) -- **start here:** which pages are done + the shared decisions every rebuilt page inherits (this doc is the quality bar those pages are held to).
 - [Visual Identity](../visual-identity.md) -- the constitution Career satisfies (the motion philosophy).
 - [Design System](../../reference/design-system.md) -- tokens / components / responsive how-to.
 - [Premium Motion Patterns](../../reference/motion-patterns.md) -- the motion recipes + GPU gotchas.
