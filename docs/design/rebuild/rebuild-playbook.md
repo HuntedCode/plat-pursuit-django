@@ -25,6 +25,30 @@ patterns; do not re-derive them.
 
 ---
 
+## This is a REBUILD, not a reskin — the from-scratch rule
+
+When a page is rebuilt "from scratch," the old implementation is a **data/behavior contract ONLY** -- it
+tells you *which* data exists and *what the page must do*, nothing more. Every visual and UX decision
+(palette, emphasis, density, layout, motion, curation) is **re-derived from the rebuild system**, starting
+from a blank canvas. Don't open the old file for design cues.
+
+- **Legitimate carryover:** the data contract (which fields/stats exist + what they mean), the behaviours
+  the page needs, and the **shared rebuild tokens + components** -- that IS the rebuild (see
+  [Approved Building Blocks](#approved-building-blocks)).
+- **NOT carryover:** the old page's bespoke decisions -- its colour-coding, thresholds, gradients, one-off
+  classes, and its "show every stat" density. Re-expressing those in new class names is a **reskin, not a
+  rebuild**.
+- **"Everything's a token" is NOT the bar.** You can use only approved tokens and still fail the rebuild, by
+  *applying* them like the old page did (e.g. colouring every number). The bar is: each choice is justified
+  against how Career/Collection *actually look* -- not against the old file.
+
+> **Litmus test:** if your only reason for a colour / spacing / emphasis / density choice is "the old page
+> did it," and you can't point to Career, Collection, or the design system for it, it isn't a from-scratch
+> decision. (This section exists because a badge-detail header shipped with ~90% of its palette ported from
+> the old design -- tokenised, but still a reskin.)
+
+---
+
 ## Page Status
 
 **Legend:** ✅ Done to the Career standard · 🟡 Partial (structurally aligned, full pass pending) ·
@@ -144,6 +168,51 @@ reimplement inline. → project CLAUDE.md (Image Styling Conventions).
 Per-user aggregates (counts/sums/distributions) **must** DB-aggregate (`.values().annotate(Count)` /
 `.aggregate()`), never Python iteration over a profile-scoped queryset. Preview/locked UIs must not run
 heavy providers against real user data. → project CLAUDE.md (Performance / Premium Preview).
+
+---
+
+## Approved Building Blocks
+
+**Build from these, not from the old page.** The canonical source is `static/css/input.css` (token values) +
+[design-system.md](../../reference/design-system.md) (patterns); this is the quick reference to consult
+before a from-scratch pass. When you reach for a colour/spacing/font, it should be one of these.
+
+### Tokens (`--pp-*`)
+
+| Group | Tokens |
+|---|---|
+| **Surfaces** | `--pp-bg-0` (0.13 substrate) · `--pp-bg-1` (0.23 cards) · `--pp-bg-2` (0.28 nested/raised) · `--pp-bg-3` (0.33) |
+| **Text** | `--pp-text` · `--pp-text-dim` · `--pp-text-mute` |
+| **Lines** | `--pp-border` · `--pp-divider` |
+| **Brand** | `--pp-primary` (cyan) · `--pp-secondary` (violet) · `--pp-accent` (amber) |
+| **Semantic** | `--pp-success` · `--pp-warning` · `--pp-error` · `--pp-info` |
+| **Type** | `--pp-font-display` (Bricolage — hero + numbers ONLY) · `--pp-font-body` (Inter) |
+| **Motion** | `--pp-dur-fast` (140ms) · `--pp-dur` (240ms) · `--pp-dur-slow` (520ms) · `--pp-ease` |
+| **Shape** | `--pp-border-w` (2px) · `--pp-radius-sm` / `-md` / `-lg` |
+
+DaisyUI theme colours mirror the brand/semantic tokens and are applied via Tailwind `text-*`/`bg-*`
+(`primary`, `secondary`, `accent`, `success`, `warning`, `error`, `base-100`..`base-300`).
+
+**Scoped colour families — use ONLY on their own surfaces, never as generic accents:** trophy
+`--color-trophy-{bronze,silver,gold,platinum}` · career disciplines
+`--disc-{combat,exploration,mind,heart,finesse}` · pursuer ranks `--rank-*` · tier medallion `--med-c` /
+`--med-glow` (data-tier keyed, internal to `.pp-med`).
+
+### Shared components (compose these; don't reinvent)
+
+- **Medallion** — `components/badge_medallion.html` (`.pp-med`, size via `--sz`). The badge object.
+- **Horizon** (`pp-horizon`) — progress bars. **Tally** (`.pp-tally`) — display numbers (+ `PlatPursuit.countUp`).
+- **Accented header card** — `card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral`.
+- **Stat tiles** — `.scard` (a few headline summary stats, Career/Home) · `.pp-bdetail__stat` k/v (compact, dense badge stats).
+- **Segmented switcher** (tab groups) · **`.pp-toolbar-card`** (toolbars) · depth-pass card shadows (see Depth in Shared Elements).
+
+### Colour restraint (how the rebuild actually uses colour)
+
+Colour is **earned by meaning, not decoration.** Default numbers/text to **neutral**. Reserve `--pp-primary`
+(cyan) for a **single** headline accent per surface (Career colours one stat value; Collection one Tally).
+Use semantic colours (`success`/`warning`/`error`) **only** where they carry glanceable information (a
+difficulty rating), never as per-field decoration. Scoped families (tier/disc/rank/trophy) stay on their own
+surfaces. **If a surface lights up 4+ hues, that's the old "colour-code everything" instinct — pull back.**
 
 ---
 
