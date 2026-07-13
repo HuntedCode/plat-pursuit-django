@@ -95,10 +95,10 @@
         // .pp-slist--reveal class is added ONLY when we're going to observe, so tiles never stick hidden.
         function initTileReveal() {
             if (!(window.PlatPursuit && PlatPursuit.Medallion) || PlatPursuit.Medallion.prefersReducedMotion() || !window.IntersectionObserver) { return; }
+            if (revealIO) { revealIO.disconnect(); revealIO = null; }   // tear down the prior grid's observer on re-init
             var grid = document.getElementById('items-grid');
             if (!grid || !grid.querySelector('.pp-scard')) { return; }
             grid.classList.add('pp-slist--reveal');
-            if (revealIO) { revealIO.disconnect(); }
             revealIO = new IntersectionObserver(function (entries) {
                 var shown = entries.filter(function (en) { return en.isIntersecting; }).map(function (en) { return en.target; });
                 shown.forEach(function (el, i) {

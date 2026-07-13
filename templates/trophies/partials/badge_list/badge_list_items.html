@@ -31,7 +31,7 @@
             <button type="button" class="pp-scard__arrow" data-face-step="-1" aria-label="Previous tier"{% if item.default_tier == item.tiers.0.tier %} disabled{% endif %}>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
             </button>
-            <div class="pp-scard__ladder" role="group" aria-label="Tier ladder — select a tier to view">
+            <div class="pp-scard__ladder" role="group" aria-label="Tier ladder: select a tier to view">
                 {% for t in item.tiers %}
                 <button type="button" class="pp-scard__node {% if user.is_authenticated and user.profile %}is-{{ t.state }}{% else %}is-catalog{% endif %}{% if t.tier == item.default_tier %} is-selected{% endif %}"
                         data-face-node="{{ t.tier }}" data-tier-key="{{ t.tier|badge_tier|lower }}"
