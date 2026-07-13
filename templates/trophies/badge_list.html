@@ -146,27 +146,18 @@
                 });
             }
             var step = gallery ? 24 : 38;   // denser wall -> tighter stagger
-            // Stagger by VISUAL position (top-to-bottom, then left-to-right), NOT DOM/observer order -- on a
-            // multi-column wall those don't necessarily match, which pops cards in out of sequence.
-            function byPosition(a, b) {
-                var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
-                return (ra.top - rb.top) || (ra.left - rb.left);
-            }
+            // Reveal in-view cards (and the rest on scroll) via the IntersectionObserver. The observer
+            // computes intersections against the SETTLED layout on its own schedule, so there's no
+            // transitional-layout misclassification (a view swap briefly lays the grid out at the wrong
+            // column count). Stagger each batch in DOM order, which for a row-major grid IS the visual
+            // reading order (top-to-bottom, left-to-right) regardless of column count -- unlike a measured
+            // position sort, which read the wrong columns on a swap and scrambled the order.
             revealIO = new IntersectionObserver(function (entries) {
                 var shown = entries.filter(function (en) { return en.isIntersecting; }).map(function (en) { return en.target; });
-                shown.sort(byPosition);
-                shown.forEach(function (el, j) { reveal(el, Math.min(j * step, 200)); revealIO.unobserve(el); });   // stagger a scrolled-in batch
+                shown.sort(function (a, b) { return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1; });
+                shown.forEach(function (el, j) { reveal(el, Math.min(j * step, 480)); revealIO.unobserve(el); });
             }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
-            // Cards already in view reveal NOW (position-sorted, staggered) -- reliable on load and a view
-            // swap. Cards outside the viewport are observed and reveal when scrolled to.
-            var vh = window.innerHeight || 800, inView = [];
-            grid.querySelectorAll(cfg.card + ':not(.is-revealed)').forEach(function (el) {
-                var r = el.getBoundingClientRect();
-                if (r.top < vh && r.bottom > -1) { inView.push({ el: el, y: r.top, x: r.left }); }   // in view
-                else { revealIO.observe(el); }                                                       // below fold -> scroll-reveal
-            });
-            inView.sort(function (a, b) { return (a.y - b.y) || (a.x - b.x); });
-            inView.forEach(function (item, i) { reveal(item.el, Math.min(i * step, 480)); });
+            grid.querySelectorAll(cfg.card + ':not(.is-revealed)').forEach(function (el) { revealIO.observe(el); });
         }
         function initScroller(cfg) {
             if (scroller && scroller.destroy) { scroller.destroy(); scroller = null; }
