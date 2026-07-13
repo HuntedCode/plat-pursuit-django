@@ -22,6 +22,8 @@
     color: var(--pp-text);
 }
 .pp-vtoggle__chip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-vtoggle__chip svg { width: 15px; height: 15px; flex: none; }
+@media (min-width: 768px) { .pp-vtoggle__chip { padding: 7px 18px; } }
 
 /* ── "How badges work": shown by default in the page header (new-user teaching). A short intro over a
  * four-rung tier ladder; each rung carries its requirement (platinum vs 100%) and platform scope. ── */

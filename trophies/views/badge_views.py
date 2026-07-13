@@ -102,15 +102,20 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     def get_template_names(self):
         gallery = self._view_mode() == 'gallery'
         htmx_results = getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results'
+        htmx_view = getattr(self.request, 'htmx', False) and self.request.htmx.target == 'badge-view'
         xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         if gallery:
-            # InfiniteScroller page fetch (XHR) or a filter/toggle HTMX swap -> just the gallery grid;
-            # otherwise the full page (badge_list.html branches to the gallery island on view=gallery).
+            # The view-toggle HTMX swap (target='badge-view') returns just the Gallery island; an
+            # InfiniteScroller page fetch (XHR) or a filter HTMX swap returns just the grid; else the full page.
+            if htmx_view:
+                return ['trophies/partials/badge_list/gallery.html']
             if htmx_results or xhr:
                 return ['trophies/partials/badge_list/gallery_results.html']
             return ['trophies/badge_list.html']
-        # Series: same model -- a filter/toggle HTMX swap OR an InfiniteScroller page fetch returns just
-        # the rows partial (browse_results.html); the full page otherwise.
+        # Series: same model -- the view-toggle swap returns the Series island; a filter HTMX swap OR an
+        # InfiniteScroller page fetch returns just the rows partial; the full page otherwise.
+        if htmx_view:
+            return ['trophies/partials/badge_list/series_view.html']
         if htmx_results or xhr:
             return ['trophies/partials/badge_list/browse_results.html']
         return super().get_template_names()

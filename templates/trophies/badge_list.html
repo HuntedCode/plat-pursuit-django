@@ -47,19 +47,37 @@
         </div>
     </section>
 
-    {% comment %} View toggle: Series (per-series rows, "what's needed") vs Gallery (per-tier medallion wall,
-    catalog discovery -- filter individual tiers across every series). Sits right above the view it controls. {% endcomment %}
-    <div class="pp-vtoggle mb-3" role="tablist" aria-label="Badge view">
-        <a href="{% url 'badges_list' %}" class="pp-vtoggle__chip{% if view != 'gallery' %} is-active{% endif %}" role="tab" aria-selected="{% if view != 'gallery' %}true{% else %}false{% endif %}">Series</a>
-        <a href="{% url 'badges_list' %}?view=gallery" class="pp-vtoggle__chip{% if view == 'gallery' %} is-active{% endif %}" role="tab" aria-selected="{% if view == 'gallery' %}true{% else %}false{% endif %}">Gallery</a>
+    {% comment %} Ad slot -- above the tabs, below the header, so it shows on whichever view is loaded (it sits
+    OUTSIDE #badge-view, so a view swap never re-inits it). {% endcomment %}
+    {% include 'partials/ad_unit.html' with ad_slot="8195453976" %}
+
+    {% comment %} View toggle: Series (per-series tiles) vs Gallery (per-tier medallion wall). The segmented
+    switcher standard, right-aligned; each chip HTMX-swaps the #badge-view island (target='badge-view', no full
+    reload), with its href kept as the no-JS fallback. {% endcomment %}
+    <div class="flex items-center justify-end mb-3">
+        <div class="pp-vtoggle" role="tablist" aria-label="Badge view">
+            <a href="{% url 'badges_list' %}" hx-get="{% url 'badges_list' %}" hx-target="#badge-view" hx-swap="innerHTML" hx-push-url="true"
+               class="pp-vtoggle__chip{% if view != 'gallery' %} is-active{% endif %}" data-view="series" role="tab" aria-controls="badge-view" aria-selected="{% if view != 'gallery' %}true{% else %}false{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+                Series
+            </a>
+            <a href="{% url 'badges_list' %}?view=gallery" hx-get="{% url 'badges_list' %}?view=gallery" hx-target="#badge-view" hx-swap="innerHTML" hx-push-url="true"
+               class="pp-vtoggle__chip{% if view == 'gallery' %} is-active{% endif %}" data-view="gallery" role="tab" aria-controls="badge-view" aria-selected="{% if view == 'gallery' %}true{% else %}false{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+                Gallery
+            </a>
+        </div>
     </div>
 
-    {% if view == 'gallery' %}
-    {% include 'trophies/partials/badge_list/gallery.html' %}
-    {% else %}
-    {% include 'partials/ad_unit.html' with ad_slot="8195453976" %}
-    {% include 'trophies/partials/badge_list/series_view.html' %}
-    {% endif %}
+    {% comment %} View island -- HTMX-swapped by the toggle. The view returns JUST this partial for
+    htmx.target=='badge-view'; the full page otherwise. {% endcomment %}
+    <div id="badge-view">
+        {% if view == 'gallery' %}
+        {% include 'trophies/partials/badge_list/gallery.html' %}
+        {% else %}
+        {% include 'trophies/partials/badge_list/series_view.html' %}
+        {% endif %}
+    </div>
 
     {% comment %} Quick-peek modal (shared by both views): a medallion tap fetches the public
     badge_quick_peek partial into the body. Reuses the collection's .pp-detail-modal chrome (global CSS).
@@ -87,9 +105,16 @@
         var catalogCount = document.querySelector('[data-badge-count]');
         if (catalogCount && window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(catalogCount, 900); }
 
-        var CARD = '{% if view == "gallery" %}.pp-bgal__card{% else %}.pp-scard{% endif %}';
-        var PAGE = {% if view == "gallery" %}{{ gallery_page_size|default:48 }}{% else %}{{ series_page_size|default:30 }}{% endif %};
         var scroller = null, revealIO = null;
+        // Read the active view from the swapped-in island (the toggle HTMX-swaps #badge-view, no full
+        // reload): the Gallery root is .pp-bgal, the Series root .pp-slist; each carries its own page size.
+        function viewConfig() {
+            var g = document.querySelector('#badge-view .pp-bgal');
+            if (g) { return { view: 'gallery', card: '.pp-bgal__card', page: parseInt(g.getAttribute('data-page-size'), 10) || 48 }; }
+            var s = document.querySelector('#badge-view .pp-slist');
+            if (s) { return { view: 'series', card: '.pp-scard', page: parseInt(s.getAttribute('data-page-size'), 10) || 30 }; }
+            return null;
+        }
         // Series tiles reveal as they scroll into view (staggered), which also fills each tile's progress
         // bar. Series view only (Gallery has no .pp-scard); skipped under reduced motion / no IO. The
         // .pp-slist--reveal class is added ONLY when we're going to observe, so tiles never stick hidden.
@@ -109,25 +134,18 @@
             }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
             grid.querySelectorAll('.pp-scard:not(.is-revealed)').forEach(function (el) { revealIO.observe(el); });
         }
-        function initScroller() {
-            if (scroller && scroller.destroy) { scroller.destroy(); }
-            if (window.PlatPursuit && PlatPursuit.InfiniteScroller) {
-                scroller = PlatPursuit.InfiniteScroller.create({
-                    gridId: 'items-grid', sentinelId: 'bgal-sentinel', loadingId: 'bgal-loading',
-                    paginateBy: PAGE, cardSelector: CARD,
-                    onAppend: function (nodes) {   // observe infinite-scroll-appended tiles so they reveal too
-                        if (!revealIO) { return; }
-                        nodes.forEach(function (n) { if (n.classList && n.classList.contains('pp-scard')) { revealIO.observe(n); } });
-                    },
-                });
-            }
-            initTileReveal();
+        function initScroller(cfg) {
+            if (scroller && scroller.destroy) { scroller.destroy(); scroller = null; }
+            if (!cfg || !(window.PlatPursuit && PlatPursuit.InfiniteScroller)) { return; }
+            scroller = PlatPursuit.InfiniteScroller.create({
+                gridId: 'items-grid', sentinelId: 'bgal-sentinel', loadingId: 'bgal-loading',
+                paginateBy: cfg.page, cardSelector: cfg.card,
+                onAppend: function (nodes) {   // observe infinite-scroll-appended tiles so they reveal too
+                    if (!revealIO) { return; }
+                    nodes.forEach(function (n) { if (n.classList && n.classList.contains('pp-scard')) { revealIO.observe(n); } });
+                },
+            });
         }
-        // The HTMX filter swap replaces #browse-results (a fresh #items-grid) -> re-init the scroller on it.
-        document.body.addEventListener('htmx:afterSwap', function (e) {
-            if (e.target && e.target.id === 'browse-results') { initScroller(); }
-        });
-        initScroller();
 
         // Series tile interactions: the ladder nodes / flanking arrows swap which tier face a tile shows;
         // clicking anywhere else on the tile opens its detail page. All delegated on document so infinite-
@@ -263,54 +281,86 @@
             }
         });
 
-        var form = document.getElementById('filter-form');
-        var toggle = document.getElementById('bgal-filters-toggle');
-        var panel = document.getElementById('bgal-advanced');
-        var countEl = document.getElementById('bgal-filter-count');
-
-        function setPanel(open) {
-            if (!panel || !toggle) { return; }
-            if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
-            toggle.classList.toggle('is-open', open);
-            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-        }
-        if (toggle) {
-            toggle.addEventListener('click', function () { setPanel(panel.hasAttribute('hidden')); });
-        }
-        var clearBtn = document.getElementById('bgal-clear');
-        function activeCount() {
-            return form ? form.querySelectorAll('input[type="checkbox"]:checked').length : 0;
-        }
-        function searchInput() {
-            // Both toolbars share the .pp-bgal__search wrapper (Gallery = name="q", Series = name="series_slug").
-            return form ? form.querySelector('.pp-bgal__search input') : null;
-        }
-        function searchValue() {
-            var qi = searchInput();
-            return qi ? qi.value.trim() : '';
-        }
-        function refreshControls() {
-            var n = activeCount();
-            if (countEl) { countEl.textContent = n; countEl.hidden = (n === 0); }
-            if (clearBtn) { clearBtn.hidden = (n === 0 && !searchValue()); }  // shown only when something's set
-        }
-        if (form) {
-            form.addEventListener('change', refreshControls);
-            form.addEventListener('input', refreshControls);  // live-update while typing in search
-        }
-        if (clearBtn && form) {
-            clearBtn.addEventListener('click', function () {
-                form.querySelectorAll('input[type="checkbox"]:checked').forEach(function (c) { c.checked = false; });
+        // Filter UI (clear button + active-count badge + collapsible Filters panel). Re-wired on each view
+        // swap since the form/toolbar are replaced; the actual filtering is HTMX-native (the form's hx-trigger).
+        function wireFilters() {
+            var form = document.getElementById('filter-form');
+            var toggle = document.getElementById('bgal-filters-toggle');
+            var panel = document.getElementById('bgal-advanced');
+            var countEl = document.getElementById('bgal-filter-count');
+            var clearBtn = document.getElementById('bgal-clear');
+            function setPanel(open) {
+                if (!panel || !toggle) { return; }
+                if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
+                toggle.classList.toggle('is-open', open);
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            }
+            function activeCount() {
+                return form ? form.querySelectorAll('input[type="checkbox"]:checked').length : 0;
+            }
+            function searchInput() {
+                // Both toolbars share the .pp-bgal__search wrapper (Gallery = name="q", Series = name="series_slug").
+                return form ? form.querySelector('.pp-bgal__search input') : null;
+            }
+            function searchValue() {
                 var qi = searchInput();
-                if (qi) { qi.value = ''; }
-                refreshControls();
-                form.requestSubmit();  // fires the form's submit -> HTMX reloads the (now unfiltered) results
+                return qi ? qi.value.trim() : '';
+            }
+            function refreshControls() {
+                var n = activeCount();
+                if (countEl) { countEl.textContent = n; countEl.hidden = (n === 0); }
+                if (clearBtn) { clearBtn.hidden = (n === 0 && !searchValue()); }  // shown only when something's set
+            }
+            if (toggle) {
+                toggle.addEventListener('click', function () { setPanel(panel.hasAttribute('hidden')); });
+            }
+            if (form) {
+                form.addEventListener('change', refreshControls);
+                form.addEventListener('input', refreshControls);  // live-update while typing in search
+            }
+            if (clearBtn && form) {
+                clearBtn.addEventListener('click', function () {
+                    form.querySelectorAll('input[type="checkbox"]:checked').forEach(function (c) { c.checked = false; });
+                    var qi = searchInput();
+                    if (qi) { qi.value = ''; }
+                    refreshControls();
+                    form.requestSubmit();  // fires the form's submit -> HTMX reloads the (now unfiltered) results
+                });
+            }
+            refreshControls();
+            // Collapse the panel on load (it renders open for the no-JS case); keep it open if filters are
+            // already applied, so what's active stays visible.
+            setPanel(activeCount() > 0 || searchValue());
+        }
+
+        // Keep the toggle's active chip in sync after a view swap (the toggle sits outside #badge-view).
+        function updateToggleActive(cfg) {
+            var v = cfg ? cfg.view : 'series';
+            document.querySelectorAll('.pp-vtoggle__chip[data-view]').forEach(function (chip) {
+                var on = chip.getAttribute('data-view') === v;
+                chip.classList.toggle('is-active', on);
+                chip.setAttribute('aria-selected', on ? 'true' : 'false');
             });
         }
-        refreshControls();
-        // Collapse the panel on load (it renders open for the no-JS case); keep it open if filters are
-        // already applied, so what's active stays visible.
-        setPanel(activeCount() > 0 || searchValue());
+        // (Re)wire everything that belongs to the current view island.
+        function initView() {
+            var cfg = viewConfig();
+            initScroller(cfg);
+            initTileReveal();
+            wireFilters();
+            updateToggleActive(cfg);
+        }
+        document.body.addEventListener('htmx:afterSwap', function (e) {
+            if (!e.target) { return; }
+            if (e.target.id === 'browse-results') { initScroller(viewConfig()); initTileReveal(); }         // filter swap: just the grid
+            else if (e.target.id === 'badge-view') { initView(); window.scrollTo({ top: 0, behavior: 'smooth' }); }  // view swap: whole island
+        });
+        // Don't re-fetch the view you're already on (a re-click on the already-active chip).
+        document.body.addEventListener('htmx:beforeRequest', function (e) {
+            var el = e.detail && e.detail.elt;
+            if (el && el.classList && el.classList.contains('pp-vtoggle__chip') && el.classList.contains('is-active')) { e.preventDefault(); }
+        });
+        initView();
     });
     </script>
 {% endblock %}
