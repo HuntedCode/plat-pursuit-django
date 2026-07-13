@@ -8,17 +8,13 @@
 {% with target_profile as profile %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
 
-    {# Rebuilt hero: Frame primitive as the artifact + identity/progress (chunk 1b). #}
-    {% include 'trophies/partials/badge_detail/_hero.html' %}
+    {# Rebuilt header: the Medallion collectible + series identity/progress + the series/personal stats
+       merged in as substance (replaces the old Frame hero + separate stats card). #}
+    {% include 'trophies/partials/badge_detail/_header.html' %}
 
-    {# Tier selector — rebuilt: tabs + self-contained requirements card (bd-*). #}
+    {# Tier selector — tabs + self-contained requirements card (bd-*). #}
     <div class="mt-3">
         {% include 'trophies/partials/badge_detail/badge_tier_selector.html' %}
-    </div>
-
-    {# Series stats — rebuilt: self-contained bd-card. #}
-    <div class="mt-3">
-        {% include 'trophies/partials/badge_detail/badge_series_stats.html' %}
     </div>
 
     {# Leaderboard #}
@@ -56,8 +52,6 @@
 {% endblock %}
 
 {% block js_scripts %}
-{# frame.js powers the Frame primitive (flip + states); loads after base.html's utils.js #}
-<script src="{% static 'js/frame.js' %}"></script>
 <script>
 {# Scroll preservation for tier tab switching #}
 document.addEventListener('DOMContentLoaded', function() {
@@ -72,21 +66,6 @@ document.addEventListener('DOMContentLoaded', function() {
             sessionStorage.setItem(scrollKey, window.scrollY);
         });
     });
-
-    // Arrival flourish: one gleam sweep on the hero Frame once its entrance
-    // settle finishes. Under reduced motion the entrance animation never runs,
-    // so animationend never fires and no gleam triggers (canGleam also guards).
-    const heroFrameWrap = document.querySelector('.bd-hero__frame');
-    if (heroFrameWrap) {
-        heroFrameWrap.addEventListener('animationend', function onArrive(e) {
-            if (e.animationName !== 'bd-hero-frame-arrive') return;
-            heroFrameWrap.removeEventListener('animationend', onArrive);
-            const frameEl = heroFrameWrap.querySelector('.pp-frame');
-            if (frameEl && window.PlatPursuit && window.PlatPursuit.Frame && window.PlatPursuit.Frame.triggerGleam) {
-                window.PlatPursuit.Frame.triggerGleam(frameEl);
-            }
-        });
-    }
 });
 
 {# Stage collapse/expand #}
