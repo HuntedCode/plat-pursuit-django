@@ -145,22 +145,28 @@
                     seg.animate([{ opacity: 0, transform: 'scale(0.55)' }, { opacity: 1, transform: 'none' }], { duration: 380, delay: delayMs + 250, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'backwards' });
                 });
             }
-            var step = gallery ? 32 : 45;   // denser wall -> tighter stagger
+            var step = gallery ? 24 : 38;   // denser wall -> tighter stagger
+            // Stagger by VISUAL position (top-to-bottom, then left-to-right), NOT DOM/observer order -- on a
+            // multi-column wall those don't necessarily match, which pops cards in out of sequence.
+            function byPosition(a, b) {
+                var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+                return (ra.top - rb.top) || (ra.left - rb.left);
+            }
             revealIO = new IntersectionObserver(function (entries) {
                 var shown = entries.filter(function (en) { return en.isIntersecting; }).map(function (en) { return en.target; });
-                // The observer reports a batch in an ARBITRARY order, not DOM order -- sort so the stagger
-                // reads top-to-bottom / left-to-right instead of cards popping in out of sequence.
-                shown.sort(function (a, b) { return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1; });
+                shown.sort(byPosition);
                 shown.forEach(function (el, j) { reveal(el, Math.min(j * step, 200)); revealIO.unobserve(el); });   // stagger a scrolled-in batch
             }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
-            // Cards already in view reveal NOW (staggered) -- reliable on both first load and a view swap.
-            // Cards outside the viewport are observed and reveal when scrolled to.
-            var vh = window.innerHeight || 800, n = 0;
+            // Cards already in view reveal NOW (position-sorted, staggered) -- reliable on load and a view
+            // swap. Cards outside the viewport are observed and reveal when scrolled to.
+            var vh = window.innerHeight || 800, inView = [];
             grid.querySelectorAll(cfg.card + ':not(.is-revealed)').forEach(function (el) {
                 var r = el.getBoundingClientRect();
-                if (r.top < vh && r.bottom > -1) { reveal(el, Math.min(n++ * step, 320)); }   // in view -> reveal now
-                else { revealIO.observe(el); }                                                // below fold -> scroll-reveal
+                if (r.top < vh && r.bottom > -1) { inView.push({ el: el, y: r.top, x: r.left }); }   // in view
+                else { revealIO.observe(el); }                                                       // below fold -> scroll-reveal
             });
+            inView.sort(function (a, b) { return (a.y - b.y) || (a.x - b.x); });
+            inView.forEach(function (item, i) { reveal(item.el, Math.min(i * step, 480)); });
         }
         function initScroller(cfg) {
             if (scroller && scroller.destroy) { scroller.destroy(); scroller = null; }
