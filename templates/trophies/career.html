@@ -151,6 +151,10 @@
         </div>
     </section>
 
+    {% comment %} Ad slot -- after the Career header, before the view tabs (mirrors the Badges page): a
+    horizontal unit that shows on whichever tab is loaded, sitting outside the tab panels. {% endcomment %}
+    {% include 'partials/ad_unit.html' with ad_slot="3921973254" %}
+
     {% comment %} Career content: the Jobs / Radar / Contracts tabs + panels flow FREE (NOT boxed in a card),
     per the site-wide page-structure rule -- mirroring the Collection's free toggle + views. {% endcomment %}
     {# View toggle: Jobs / Radar / Contracts (the merged Contracts board). Right-aligned segmented tabs, like the Collection's. #}

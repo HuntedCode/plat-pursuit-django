@@ -61,6 +61,10 @@
         </div>
     </section>
 
+    {% comment %} Ad slot -- after the header, before the view tabs (mirrors the Badges page): a horizontal
+    unit that shows on whichever view is loaded, sitting outside the tab panels. {% endcomment %}
+    {% include 'partials/ad_unit.html' with ad_slot="4650777169" %}
+
     {% if binder_sets %}
     {# View toggle: the Case (display piece) + the Gallery (filter / sort / search hunting tool). #}
     <div class="flex items-center justify-end mb-4">
