@@ -39,8 +39,11 @@
   prefersdark: true;
   color-scheme: "dark";
   /* Re-pointed to the bespoke dark substrate (--pp-bg-0) so the page background
-     matches the rebuild. Stays theme-aware: light mode keeps its own base-100. */
-  --color-base-100: oklch(0.17 0.012 254);
+     matches the rebuild. Stays theme-aware: light mode keeps its own base-100.
+     Depth pass: deepened 0.17 -> 0.13 so the base-200 cards separate harder off
+     the substrate (the gap, not the darkness, was what read flat). Kept in sync
+     with --pp-bg-0 below. */
+  --color-base-100: oklch(0.13 0.012 254);
   --color-base-200: oklch(23.26% 0.014 253.1);
   --color-base-300: oklch(21.15% 0.012 254.09);
   --color-base-content: oklch(97.807% 0.029 256.847);
@@ -110,7 +113,7 @@
    Source of truth: docs/design/visual-identity.md §4 + /design/style-guide/. */
 :root {
   /* Surfaces */
-  --pp-bg-0: oklch(0.17 0.012 254);
+  --pp-bg-0: oklch(0.13 0.012 254);   /* substrate, deepened from 0.17 in sync with --color-base-100 */
   --pp-bg-1: oklch(0.23 0.014 253);
   --pp-bg-2: oklch(0.28 0.016 252);
   --pp-bg-3: oklch(0.33 0.018 252);

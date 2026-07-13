@@ -46,7 +46,10 @@
     display: flex; flex-direction: column; align-items: center; text-align: center; gap: 5px;
     padding: 12px 8px; border-radius: 12px;
     border: 1px solid color-mix(in oklab, var(--tier-c) 25%, var(--pp-border));
-    background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 9%, var(--pp-bg-1)), var(--pp-bg-1));
+    /* Depth pass: step the nested rungs UP to --pp-bg-2 (they sit inside the base-200 header card and used
+       to dissolve into it) and give them a soft lift so they read as raised tiles, not flat outlines. */
+    background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 9%, var(--pp-bg-2)), var(--pp-bg-2));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 3px 10px rgba(0, 0, 0, 0.20);
 }
 .pp-btiers__rung[data-btier="bronze"]   { --tier-c: #cf9160; }
 .pp-btiers__rung[data-btier="silver"]   { --tier-c: #b9c6d6; }
@@ -135,7 +138,8 @@
     padding: 14px 12px 12px; border-radius: var(--pp-radius-lg); scroll-margin-top: 96px; cursor: pointer;
     background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 8%, var(--pp-bg-1)), var(--pp-bg-1));
     border: 1px solid color-mix(in oklab, var(--tier-c) 22%, var(--pp-border));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.18);
+    /* Depth pass: stronger top-highlight + deeper ambient shadow so the tile rises off the substrate. */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
     transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease),
                 background var(--pp-dur) var(--pp-ease);
 }

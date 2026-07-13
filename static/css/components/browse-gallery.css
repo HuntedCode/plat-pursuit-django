@@ -43,10 +43,18 @@
 }
 .pp-bgal__chip:has(input:focus-visible) { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; }
 
-/* Layout only for the Series (.pp-sbar) and Gallery (.pp-bgal__bar) views; the card surface comes from the
-   shared .pp-toolbar-card class (added in the markup), so all four site toolbars read as one system. */
+/* Layout for the Series (.pp-sbar) and Gallery (.pp-bgal__bar) views; the base card surface comes from the
+   shared .pp-toolbar-card class (added in the markup). On the badge page we quiet that surface (below). */
 .pp-bgal__toolbar {
     padding: 12px 16px; margin-bottom: 18px;
+}
+/* Depth pass: the toolbar is chrome, so it sits BACK. Keep the shared base-200 fill but soften the lift
+   (shadow-md -> a subtle shadow) so the raised content cards below own the "pop", establishing a felt
+   hierarchy (substrate -> quiet toolbar -> lifted cards). Scoped via the view wrappers so it reliably wins
+   over .pp-toolbar-card without recolouring the shared toolbar used elsewhere. */
+.pp-bgal .pp-bgal__toolbar,
+.pp-slist .pp-bgal__toolbar {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
 }
 
 /* Compact toolbar (mirrors the Contracts toolbar): a one-row PRIMARY bar -- search + sort + a Filters
@@ -90,7 +98,9 @@
        filter/blur) so the infinite-scroll wall stays smooth. */
     background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 8%, var(--pp-bg-1)), var(--pp-bg-1));
     border: 1px solid color-mix(in oklab, var(--tier-c) 22%, var(--pp-border));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.18);
+    /* Depth pass: stronger top-highlight + a deeper ambient shadow so the cell reads as catching light and
+       rising off the (now deeper) substrate. */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
     text-decoration: none; color: inherit; scroll-margin-top: 96px;
     transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
