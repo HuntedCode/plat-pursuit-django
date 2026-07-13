@@ -62,14 +62,17 @@
 /* Stat cell (Home hero + Lab). Mobile-first: a whale's 6-7 digit count overflows the full
    24px value + 18px padding at 375px, so tighten on mobile and restore the full treatment
    from md+ where the cells are wide. */
-.scard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: linear-gradient(90deg, color-mix(in oklab, var(--scard-accent, transparent) 7%, transparent), transparent 55%), var(--pp-bg-1); padding: 12px 8px; box-shadow: inset 2px 0 0 var(--scard-accent, transparent); }  /* --scard-accent (default transparent): tier-tint the trophy cells; neutral everywhere else */
+/* Depth pass: step the stat cards UP to --pp-bg-2 (they nest inside base-200 header cards and used to
+   dissolve into them, like the badge tier rungs) + a soft lift, keeping the left accent bar. Shared with
+   Home's stat tiles. */
+.scard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: linear-gradient(90deg, color-mix(in oklab, var(--scard-accent, transparent) 7%, transparent), transparent 55%), var(--pp-bg-2); padding: 12px 8px; box-shadow: inset 2px 0 0 var(--scard-accent, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 3px 10px rgba(0, 0, 0, 0.20); }  /* --scard-accent (default transparent): tier-tint the trophy cells; neutral everywhere else */
 .scard__label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 12px; }
 .scard__value { font-size: 18px; line-height: 1; }  /* face via shared .pp-tally */
 .scard__sub { font-size: 12px; color: var(--pp-text-dim); margin-top: 7px; }
 @media (min-width: 768px) { .scard { padding: 18px; } .scard__value { font-size: 24px; } }
 
 /* ---- Radar ---- */
-.radar-card { border: var(--pp-border-w) solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 24px 28px 30px; }
+.radar-card { border: var(--pp-border-w) solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 24px 28px 30px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 6px 20px rgba(0, 0, 0, 0.28); }  /* depth pass: subtle lift off the substrate */
 .radar-tabs { position: relative; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 20px; }
 /* Sliding indicator: a tinted pill that glides behind the active tab (JS positions it + sets --disc). */
 .radar-tabs__slider { position: absolute; top: 0; left: 0; border-radius: 999px; background: color-mix(in oklab, var(--disc, var(--pp-primary)) 16%, var(--pp-bg-2)); border: 1px solid var(--disc, var(--pp-primary)); box-shadow: 0 0 14px color-mix(in oklab, var(--disc, var(--pp-primary)) 32%, transparent); pointer-events: none; opacity: 0; z-index: 0; transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.3s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease; }
@@ -200,7 +203,9 @@
 .ptable__avg { font-size: 11px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
 
 /* ---- Job tile (skills-screen cell) ---- */
-.job { position: relative; border-radius: var(--pp-radius-lg); padding: 12px; min-height: 150px; background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease; display: flex; flex-direction: column; }
+/* Depth pass: resting lift (top-highlight + ambient shadow) so job cards catch light and rise off the
+   deeper substrate, matching the badge tiles. Prestige tiers (master/legend) override with their pulse. */
+.job { position: relative; border-radius: var(--pp-radius-lg); padding: 12px; min-height: 150px; background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease; display: flex; flex-direction: column; }
 .job:hover { transform: translateY(-2px); border-color: color-mix(in oklab, var(--disc) 75%, transparent); box-shadow: 0 10px 30px color-mix(in oklab, var(--disc) 24%, transparent); }
 .job__top { display: flex; align-items: center; gap: 7px; }
 .job__expand { position: absolute; top: 9px; right: 9px; width: 13px; height: 13px; color: color-mix(in oklab, var(--disc) 55%, var(--pp-text-mute)); opacity: 0.22; transition: opacity 0.15s ease; pointer-events: none; }
@@ -512,6 +517,9 @@
 /* The filter/sort/search controls sit on their own card, matching the Collection gallery's .pp-gallery__toolbar
    (border + surface + soft lift). Its internal layout is unchanged -- just carded. */
 .rp-toolbar { display: flex; flex-direction: column; gap: 9px; padding: 12px 16px; }
+/* Depth pass: quiet the shared .pp-toolbar-card lift so the Contracts toolbar sits back and the job cards
+   below own the pop (mirrors the badge page). Two-class selector to win over .pp-toolbar-card's shadow. */
+.rp-toolbar.pp-toolbar-card { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22); }
 .rp-search { position: relative; max-width: 420px; }
 .rp-search__icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--pp-text-mute); pointer-events: none; }
 .rp-search__input { width: 100%; height: 38px; padding: 0 12px 0 34px; border-radius: 10px; border: 1px solid var(--pp-border); background: var(--pp-bg-1); color: var(--pp-text); font: inherit; font-size: 0.85rem; transition: border-color 0.15s ease, background 0.15s ease; }
