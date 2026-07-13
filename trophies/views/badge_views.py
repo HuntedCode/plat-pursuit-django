@@ -33,14 +33,15 @@ SERIES_PAGE_SIZE = 30   # series rows per page (Series view infinite scroll)
 TILE_SEGMENT_CAP = 8
 # (key, label). Order mirrors the Collection Gallery's sort dropdown (name, rarest, tier, ..., set last).
 GALLERY_SORTS = [
+    ('set_number', 'Set order'),
     ('name', 'Name (A-Z)'),
     ('rarity', 'Rarest first'),
     ('tier', 'Tier (Platinum first)'),
     ('popular', 'Most earned'),
     ('newest', 'Newest'),
-    ('set_number', 'Set number'),
 ]
 GALLERY_SORT_KEYS = {k for k, _ in GALLERY_SORTS}
+GALLERY_SORT_DEFAULT = 'set_number'
 
 from django.core.cache import cache
 from django.core.paginator import Paginator
@@ -210,25 +211,28 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         # get a DEFINED, stable order across the page-1 render and the ?page=N infinite-scroll fetches
         # (otherwise Postgres could reorder ties between pages -> a duplicated or skipped medallion).
         name_key = Lower('name')
-        sort = g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else 'name'
+        # SET ORDER is the catalog's canonical ordering (default sort) AND the tiebreaker within every other
+        # sort, so cards always fall back into set order on a tie. Set numbers restart per badge type, so
+        # group by type first, then edition order (unnumbered last), then tier -- keeping each type's numbered
+        # run contiguous. ('pk' still ends every order_by as the unique final tiebreak for stable pagination.)
+        type_order = Case(
+            *[When(badge_type=t, then=Value(i)) for i, t in enumerate(_TYPE_ORDER)],
+            default=Value(len(_TYPE_ORDER)), output_field=IntegerField(),
+        )
+        set_order = (type_order, F('set_number').asc(nulls_last=True), 'tier')
+        sort = g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else GALLERY_SORT_DEFAULT
         if sort == 'set_number':
-            # Set numbers restart per badge type, so group by type first, then edition order (unnumbered
-            # last), then tier -- keeping each type's numbered run contiguous.
-            type_order = Case(
-                *[When(badge_type=t, then=Value(i)) for i, t in enumerate(_TYPE_ORDER)],
-                default=Value(len(_TYPE_ORDER)), output_field=IntegerField(),
-            )
-            qs = qs.order_by(type_order, F('set_number').asc(nulls_last=True), 'tier', 'pk')
+            qs = qs.order_by(*set_order, 'pk')
         elif sort == 'rarity':
-            qs = qs.order_by('earned_count', name_key, 'pk')      # fewest earners = rarest first
+            qs = qs.order_by('earned_count', *set_order, 'pk')    # fewest earners = rarest first
         elif sort == 'popular':
-            qs = qs.order_by('-earned_count', name_key, 'pk')
+            qs = qs.order_by('-earned_count', *set_order, 'pk')
         elif sort == 'newest':
-            qs = qs.order_by('-created_at', name_key, 'pk')
+            qs = qs.order_by('-created_at', *set_order, 'pk')
         elif sort == 'tier':
-            qs = qs.order_by('-tier', name_key, 'pk')             # platinum first (matches the Collection)
+            qs = qs.order_by('-tier', *set_order, 'pk')           # platinum first (matches the Collection)
         else:
-            qs = qs.order_by(name_key, 'tier', 'pk')
+            qs = qs.order_by(name_key, *set_order, 'pk')          # A-Z, set order on ties
         return qs
 
     def _gallery_context_data(self, **kwargs):
@@ -290,7 +294,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             'gallery_tiers': g.getlist('tier'),             # selected chip values (multi-select)
             'gallery_states': g.getlist('state'),
             'gallery_types': g.getlist('badge_type'),
-            'gallery_sort': g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else 'name',
+            'gallery_sort': g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else GALLERY_SORT_DEFAULT,
             'gallery_q': g.get('q', ''),
             'gallery_sorts': GALLERY_SORTS,
             'gallery_page_size': GALLERY_PAGE_SIZE,          # keeps the JS paginateBy in sync (no magic 48)

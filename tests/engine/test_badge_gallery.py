@@ -190,8 +190,8 @@ def test_gallery_view_defaults_to_series(client):
 
 
 def test_permanent_chrome_shows_on_the_gallery(client):
-    """'Your Badge Stats' + the tier How-To are now PERMANENT page chrome -- they render on the Gallery
-    view, not only the Series tab."""
+    """The tier explainer + the viewer's badge stats are PERMANENT page chrome (in the header) -- they render
+    on the Gallery view, not only the Series tab."""
     profile = ProfileFactory()
     badges = _series('rs-chrome')
     UserBadgeFactory(profile=profile, badge=badges[0])   # earn one -> creates the gamification row
@@ -199,8 +199,8 @@ def test_permanent_chrome_shows_on_the_gallery(client):
 
     html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
 
-    assert 'How Do Badge Tiers Work' in html    # the education header (static, both views)
-    assert 'Your Badge Stats' in html           # the stats tiles (auth)
+    assert 'How badges work' in html    # the tier explainer (static, both views)
+    assert 'Total XP' in html           # the viewer's badge stats (auth)
 
 
 def test_gallery_cell_wires_badge_peek(client):
@@ -245,9 +245,9 @@ def test_gallery_card_markers_are_distinct_per_owned_state(client):
     assert 'pp-bgal__owned--progress' in html      # in-progress -> cyan ring
 
 
-def test_gallery_card_stat_shows_stages_not_a_meaningless_ratio(client):
-    """The card stat reads as stage info: how big the badge is ("N stages"), and once you're working on it,
-    how far you've gotten ("X / N stages") -- not the medallion's showcase "N / N"."""
+def test_gallery_card_stat_shows_stage_progress(client):
+    """The card's second line reads as stage info -- how big the badge is ("N Stages"), and once you're
+    working on it, how far you've gotten ("X/N Stages") -- not the medallion's showcase "N / N"."""
     profile = ProfileFactory()
     badges = _series('rs-stat', tiers=(1,))                                           # one badge, required_stages=5
     UserBadgeProgressFactory(profile=profile, badge=badges[0], completed_concepts=2)  # 2 of 5 in progress
@@ -255,18 +255,20 @@ def test_gallery_card_stat_shows_stages_not_a_meaningless_ratio(client):
 
     html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
 
-    assert 'stages' in html                 # the stat is labelled in stages, not a bare ratio
-    assert '2 / 5 stages' in html           # in-progress shows the real completed count
+    assert 'Stages' in html                 # the stat is labelled in stages, not a bare ratio
+    assert '2/5 Stages' in html             # in-progress shows the real completed count
 
 
-def test_gallery_cell_shows_set_number(client):
-    """Each cell shows the badge's edition/set number (zero-padded, matching the Collection's #0042)."""
+def test_gallery_cell_caption_is_type_and_stages(client):
+    """The card's second line is the badge type + stage count ("Series - N Stages"); the tier reads from the
+    medallion colour and the set number moved to the peek, so neither clutters the card."""
     BadgeFactory(series_slug='rs-setno', tier=1, badge_type='series', is_live=True,
                  required_stages=5, display_series='rs-setno', set_number=42)
 
     html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
 
-    assert '#0042' in html
+    assert '5 Stages' in html       # type + stage count on the card
+    assert '#0042' not in html      # the set number lives in the peek now, not the card
 
 
 def test_gallery_sort_by_set_number(client):
@@ -292,6 +294,31 @@ def test_gallery_set_number_sort_groups_by_type(client):
     html = client.get(GALLERY, {'view': 'gallery', 'sort': 'set_number'}).content.decode()
 
     assert html.index('/badges/sr-2/') < html.index('/badges/fr-1/')  # type group wins over the raw number
+
+
+def test_gallery_defaults_to_set_order(client):
+    """With no ?sort the Gallery defaults to SET ORDER (edition within each type), not name."""
+    BadgeFactory(series_slug='dflt-a', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='dflt-a', name='AAA sorts first by name', set_number=9)
+    BadgeFactory(series_slug='dflt-z', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='dflt-z', name='ZZZ sorts last by name', set_number=1)
+
+    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+
+    # Name order and set order DISAGREE (AAA=#9, ZZZ=#1); set #1 first proves the set-order default.
+    assert html.index('/badges/dflt-z/') < html.index('/badges/dflt-a/')
+
+
+def test_gallery_name_sort_breaks_ties_by_set_order(client):
+    """Within another sort (A-Z), same-key cards fall back to SET ORDER, not an arbitrary order."""
+    BadgeFactory(series_slug='tie-hi', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='tie-hi', name='Same Name', set_number=9)
+    BadgeFactory(series_slug='tie-lo', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='tie-lo', name='Same Name', set_number=1)
+
+    html = client.get(GALLERY, {'view': 'gallery', 'sort': 'name'}).content.decode()
+
+    assert html.index('/badges/tie-lo/') < html.index('/badges/tie-hi/')  # #1 before #9 on the name tie
 
 
 def test_gallery_sort_by_tier_is_platinum_first(client):

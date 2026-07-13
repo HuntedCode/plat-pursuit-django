@@ -161,7 +161,6 @@
     font-size: 10.5px; color: var(--pp-text-dim); text-align: center; font-variant-numeric: tabular-nums;
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.pp-bgal__stat { font-size: 11px; color: var(--pp-text-dim); }
 
 /* Empty state. */
 .pp-bgal__empty { text-align: center; color: var(--pp-text-mute); padding: 48px 16px; }

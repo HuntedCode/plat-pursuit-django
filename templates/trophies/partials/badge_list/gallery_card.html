@@ -18,11 +18,9 @@ Expects `frame` (a showcase build_badge_frame dict + series_slug/badge_id). {% e
     {% include 'components/badge_medallion.html' with frame=frame no_id=True %}
     <span class="pp-bgal__caption">
         <span class="pp-bgal__name">{{ frame.series_name }}</span>
-        {% comment %} Catalog metadata: tier (in text, since colour alone isn't enough) + the badge type and
-        its edition/set number (which restarts per type, so it only reads with the type). {% endcomment %}
-        <span class="pp-bgal__meta">{{ frame.tier|title }} &middot; {{ frame.badge_type|title }}{% if frame.set_number %} &middot; #{{ frame.set_number|stringformat:"04d" }}{% endif %}</span>
-        {% comment %} The stat: how big the badge is ("N stages"), or -- once you're working on it -- how far
-        along you are ("X / N stages"). Replaces the medallion's meaningless showcase "N / N". {% endcomment %}
-        <span class="pp-bgal__stat">{% if frame.owned_state == 'in_progress' or frame.owned_state == 'maintenance' %}{{ frame.owned_stages_done|default:0 }} / {{ frame.stages_total }} stages{% else %}{{ frame.stages_total }} stage{{ frame.stages_total|pluralize }}{% endif %}</span>
+        {% comment %} Second line: badge type + stage progress, e.g. "Series - 2/3 Stages" (or "3 Stages"
+        when not yet in progress). The tier reads from the medallion colour + the card's tier tint; the set
+        number lives in the peek. {% endcomment %}
+        <span class="pp-bgal__meta">{{ frame.badge_type|title }} &middot; {% if frame.owned_state == 'in_progress' or frame.owned_state == 'maintenance' %}{{ frame.owned_stages_done|default:0 }}/{{ frame.stages_total }} Stages{% else %}{{ frame.stages_total }} Stage{{ frame.stages_total|pluralize }}{% endif %}</span>
     </span>
 </a>
