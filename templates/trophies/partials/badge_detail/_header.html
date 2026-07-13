@@ -1,156 +1,95 @@
 {% comment %}
-Badge detail header (rebuild, v2). Grounded in the Collection badge modal's "medallion + badge stats"
-language (.pp-bdetail): the Medallion is the collectible artifact beside a tight identity + progress, with
-the series/personal stats presented as compact k/v cells (not a wall of big tiles). Lives in the standard
-accented page-header card (mirrors the Collection/Career headers), stats merged in as substance.
+Badge detail header (v3, from scratch). Derived from the rebuild header language (Career / Collection), NOT
+the old page:
+  - The Medallion is the hero object, beside a NEUTRAL identity (eyebrow / title / description).
+  - Colour is restrained: neutral by default, ONE primary accent (the headline Earners Tally + the progress
+    Horizon, both the brand-progress hue -- mirrors Collection's Tally + horizon), and the Difficulty /
+    Avg-Hours traffic-light as the single earned semantic use.
+  - The readout is LEAN and curated -- the viewer's progress + four at-a-glance series facts. The fuller /
+    personal detail (community XP, tier distribution, playtime, per-trophy breakdown, dates) is deliberately
+    NOT crammed here; it belongs on a dedicated stats surface (a later rebuild chunk).
 
-Context: badge, hero_frame (build_badge_frame dict), target_profile, badge_series_stats (as `stats`).
-Keeps id="badge-header-card" for downstream anchors.
+Context: badge, hero_frame (build_badge_frame dict), target_profile, badge_series_stats (as `stats`),
+selected_tier. Keeps id="badge-header-card".
 {% endcomment %}
 {% load static custom_filters humanize %}
 {% with stats=badge_series_stats %}
 <section id="badge-header-card" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
     <div class="card-body p-4 md:p-5 lg:p-6">
 
-        {# ── Hero: the Medallion (collectible) beside the series identity + at-a-glance progress ── #}
-        <div class="flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
-            <div class="bdh-med shrink-0 mx-auto md:mx-0">
+        {# ── Hero: the Medallion + series identity + the one headline number (Earners) ── #}
+        <div class="flex flex-col sm:flex-row sm:items-start gap-4 md:gap-6">
+            <div class="bdh-med shrink-0 mx-auto sm:mx-0">
                 {% include 'components/badge_medallion.html' with frame=hero_frame no_id=True %}
             </div>
 
-            <div class="min-w-0 flex-1 text-center md:text-left">
-                <p class="bdh-eyebrow">{{ badge.effective_display_series|default:badge.name }}</p>
+            <div class="min-w-0 flex-1 text-center sm:text-left">
+                <p class="text-[0.7rem] md:text-xs font-semibold uppercase tracking-[0.14em] text-base-content/50">{{ badge.effective_display_series|default:badge.name }}</p>
                 <h1 class="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight mt-1">{{ badge.effective_display_title|default:badge.name }}</h1>
                 {% if badge.effective_description %}
-                <p class="text-sm text-base-content/60 italic mt-2 max-w-2xl mx-auto md:mx-0 pr-1">{{ badge.effective_description }}</p>
+                <p class="text-sm text-base-content/60 italic mt-2 max-w-2xl mx-auto sm:mx-0 pr-1">{{ badge.effective_description }}</p>
                 {% endif %}
-
-                {# State / progress #}
-                <div class="mt-3">
-                    {% if target_profile %}
-                        {% if hero_frame.state == 'earned' %}
-                        <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
-                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-                            Earned{% if hero_frame.earned_date %} &middot; {{ hero_frame.earned_date }}{% endif %}{% if hero_frame.next_tier_label and hero_frame.next_tier_label != 'Maxed' %} &middot; next: {{ hero_frame.next_tier_label }}{% else %} &middot; series mastered{% endif %}
-                        </span>
-                        {% elif hero_frame.state == 'in_progress' %}
-                        <div class="flex items-center gap-3 max-w-md mx-auto md:mx-0">
-                            <div class="pp-horizon flex-1 min-w-0" style="--horizon-h: 8px;">
-                                <span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-from: var(--pp-secondary); --horizon-to: var(--pp-primary); --horizon-progress: {{ hero_frame.progress_pct|default:0 }}%;"></span></span>
-                            </div>
-                            <span class="text-sm font-semibold text-base-content/70 shrink-0">{{ hero_frame.stages_done }}/{{ hero_frame.stages_total }} stages</span>
-                        </div>
-                        {% else %}
-                        <span class="text-sm text-base-content/60">Not started &middot; {{ hero_frame.stages_total }} stage{{ hero_frame.stages_total|pluralize }} to earn</span>
-                        {% endif %}
-                    {% else %}
-                        <span class="text-sm text-base-content/60 italic">A curated platinum badge &middot; sign in to track your progress</span>
-                    {% endif %}
-                </div>
             </div>
+
+            {% if stats %}
+            <a href="{% url 'badge_leaderboards' badge.series_slug %}" class="bdh-headline shrink-0 mx-auto sm:mx-0 text-center sm:text-right" title="See who owns this badge">
+                <span class="pp-tally block text-2xl md:text-3xl text-primary leading-none" data-countup="{{ stats.tier_earner_counts.1|default:0 }}">{{ stats.tier_earner_counts.1|default:0|intcomma }}</span>
+                <span class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50">earners &rsaquo;</span>
+            </a>
+            {% endif %}
         </div>
 
-        {# ── Stats: series + personal, as compact k/v cells (pp-bdetail language) ── #}
+        {# ── Substance: the viewer's progress + a lean at-a-glance facts strip ── #}
         {% if stats %}
-        <div class="mt-4 md:mt-5 pt-4 md:pt-5 border-t border-base-300/70">
+        <div class="mt-4 md:mt-5 pt-4 md:pt-5 border-t border-base-300/70 flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-10">
 
-            {# Series (everyone) #}
-            <div class="bdh-statgroup">
-                <span class="bdh-statgroup__label">Series</span>
-                <div class="bdh-stats">
-                    <div class="bdh-stat">
-                        <div class="bdh-stat__k">Games</div>
-                        <div class="bdh-stat__v pp-tally">{{ stats.total_games }}</div>
+            {# Progress / state #}
+            <div class="lg:flex-1 lg:min-w-0 text-center sm:text-left">
+                {% if target_profile %}
+                    {% if hero_frame.state == 'earned' %}
+                    <div class="inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                        {{ selected_tier|badge_tier }} earned{% if hero_frame.earned_date %} &middot; {{ hero_frame.earned_date }}{% endif %}
                     </div>
-                    <a class="bdh-stat" href="{% url 'badge_leaderboards' badge.series_slug %}" title="See who owns this badge">
-                        <div class="bdh-stat__k">Earners <svg class="bdh-stat__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg></div>
-                        <div class="bdh-stat__v pp-tally text-primary" data-countup="{{ stats.tier_earner_counts.1|default:0 }}">{{ stats.tier_earner_counts.1|default:0|intcomma }}</div>
-                    </a>
-                    <div class="bdh-stat">
-                        <div class="bdh-stat__k">Difficulty</div>
-                        {% if stats.series_avg_difficulty != None %}
-                        <div class="bdh-stat__v pp-tally {% if stats.series_avg_difficulty < 4 %}text-success{% elif stats.series_avg_difficulty < 8 %}text-warning{% else %}text-error{% endif %}">{{ stats.series_avg_difficulty }}<span class="bdh-stat__u">/10</span></div>
-                        {% else %}<div class="bdh-stat__v pp-tally text-base-content/40">&ndash;</div>{% endif %}
+                    {% elif hero_frame.state == 'in_progress' %}
+                    <div class="flex items-center justify-between text-xs text-base-content/50 mb-1.5">
+                        <span>{{ selected_tier|badge_tier }} progress</span>
+                        <span>{{ stats.user_stages_played }}/{{ stats.total_required_stages }} stages &middot; {{ stats.user_series_xp|intcomma }} XP</span>
                     </div>
-                    <div class="bdh-stat">
-                        <div class="bdh-stat__k">Avg Hours</div>
-                        {% if stats.series_avg_hours != None %}
-                        <div class="bdh-stat__v pp-tally {% if stats.series_avg_hours < 25 %}text-success{% elif stats.series_avg_hours < 75 %}text-warning{% elif stats.series_avg_hours < 100 %}text-primary{% else %}text-error{% endif %}">{{ stats.series_avg_hours }}<span class="bdh-stat__u">h</span></div>
-                        {% else %}<div class="bdh-stat__v pp-tally text-base-content/40">&ndash;</div>{% endif %}
+                    <div class="pp-horizon" style="--horizon-h: 8px;">
+                        <span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-progress: {{ hero_frame.progress_pct|default:0 }}%;"></span></span>
                     </div>
-                    <div class="bdh-stat">
-                        <div class="bdh-stat__k">XP Available</div>
-                        <div class="bdh-stat__v pp-tally text-secondary">{{ stats.total_series_xp_available|intcomma }}</div>
-                    </div>
-                    <div class="bdh-stat">
-                        <div class="bdh-stat__k">Community XP</div>
-                        <div class="bdh-stat__v pp-tally text-primary">{{ stats.community_total_xp|intcomma }}</div>
-                    </div>
-                    <div class="bdh-stat bdh-stat--wide">
-                        <div class="bdh-stat__k">Tier Earners</div>
-                        <div class="bdh-stat__tiers">
-                            {% for tier_num, count in stats.tier_earner_counts.items %}
-                            {% with tier_num|stringformat:'s' as tier_str %}
-                            <span class="bdh-stat__tier" title="{{ tier_num|badge_tier }}">
-                                <img src="{% static 'images/badges/backdrops/'|add:tier_str|add:'_backdrop.png' %}" alt="{{ tier_num|badge_tier }}" loading="lazy" />
-                                <span class="pp-tally">{{ count|intcomma }}</span>
-                            </span>
-                            {% endwith %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
+                    {% else %}
+                    <div class="text-sm text-base-content/60">{{ selected_tier|badge_tier }} &middot; not started &middot; {{ stats.total_required_stages }} stage{{ stats.total_required_stages|pluralize }} to earn</div>
+                    {% endif %}
+                {% else %}
+                    <div class="text-sm text-base-content/60 italic">A curated platinum badge &middot; sign in to track your progress</div>
+                {% endif %}
             </div>
 
-            {# Your progress (authenticated) #}
-            {% if target_profile %}
-            <div class="bdh-statgroup mt-4">
-                <span class="bdh-statgroup__label bdh-statgroup__label--you">Your progress</span>
-                <div class="bdh-stats">
-                    <div class="bdh-stat">
-                        <div class="bdh-stat__k">Stages</div>
-                        <div class="bdh-stat__v pp-tally">{{ stats.user_stages_played }}<span class="bdh-stat__u">/{{ stats.total_required_stages }}</span></div>
-                    </div>
-                    <div class="bdh-stat">
-                        <div class="bdh-stat__k">Platinumed</div>
-                        <div class="bdh-stat__v pp-tally" style="color: var(--color-trophy-platinum)">{{ stats.user_stages_platinumed }}<span class="bdh-stat__u">/{{ stats.total_required_stages }}</span></div>
-                    </div>
-                    <div class="bdh-stat">
-                        <div class="bdh-stat__k">Your XP</div>
-                        <div class="bdh-stat__v pp-tally text-primary">{{ stats.user_series_xp|intcomma }}<span class="bdh-stat__u">/{{ stats.total_series_xp_available|intcomma }}</span></div>
-                    </div>
-                    <div class="bdh-stat">
-                        <div class="bdh-stat__k">Avg Progress</div>
-                        <div class="bdh-stat__v pp-tally text-secondary">{{ stats.avg_progress }}<span class="bdh-stat__u">%</span></div>
-                    </div>
-                    <div class="bdh-stat">
-                        <div class="bdh-stat__k">Playtime</div>
-                        <div class="bdh-stat__v pp-tally">{{ stats.user_total_playtime|timedelta_hours|default:'-' }}</div>
-                    </div>
-                    <div class="bdh-stat bdh-stat--wide">
-                        <div class="bdh-stat__k">Trophies</div>
-                        <div class="bdh-stat__trophies">
-                            <span>{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-3.5 h-3.5' %}<span class="pp-tally">{{ stats.user_trophy_breakdown.bronze }}</span></span>
-                            <span>{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-3.5 h-3.5' %}<span class="pp-tally">{{ stats.user_trophy_breakdown.silver }}</span></span>
-                            <span>{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-3.5 h-3.5' %}<span class="pp-tally">{{ stats.user_trophy_breakdown.gold }}</span></span>
-                            <span>{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3.5 h-3.5' %}<span class="pp-tally">{{ stats.user_trophy_breakdown.platinum }}</span></span>
-                        </div>
-                    </div>
-                    {% if stats.first_played %}
-                    <div class="bdh-stat">
-                        <div class="bdh-stat__k">Started</div>
-                        <div class="bdh-stat__v bdh-stat__v--date">{{ stats.first_played|date:"M j, Y" }}</div>
-                    </div>
-                    {% endif %}
-                    {% if stats.most_recent_trophy %}
-                    <div class="bdh-stat">
-                        <div class="bdh-stat__k">Last Trophy</div>
-                        <div class="bdh-stat__v bdh-stat__v--date">{{ stats.most_recent_trophy|date:"M j, Y" }}</div>
-                    </div>
-                    {% endif %}
+            {# At-a-glance series facts: neutral, except the Difficulty / Avg-Hours traffic-light (real info) #}
+            <div class="bdh-facts justify-center lg:justify-end">
+                <div class="bdh-fact">
+                    <span class="bdh-fact__v pp-tally">{{ stats.total_games }}</span>
+                    <span class="bdh-fact__k">Games</span>
+                </div>
+                <div class="bdh-fact">
+                    {% if stats.series_avg_difficulty != None %}
+                    <span class="bdh-fact__v pp-tally {% if stats.series_avg_difficulty < 4 %}text-success{% elif stats.series_avg_difficulty < 8 %}text-warning{% else %}text-error{% endif %}">{{ stats.series_avg_difficulty }}<span class="bdh-fact__u">/10</span></span>
+                    {% else %}<span class="bdh-fact__v pp-tally text-base-content/40">&ndash;</span>{% endif %}
+                    <span class="bdh-fact__k">Difficulty</span>
+                </div>
+                <div class="bdh-fact">
+                    {% if stats.series_avg_hours != None %}
+                    <span class="bdh-fact__v pp-tally {% if stats.series_avg_hours < 25 %}text-success{% elif stats.series_avg_hours < 75 %}text-warning{% else %}text-error{% endif %}">{{ stats.series_avg_hours }}<span class="bdh-fact__u">h</span></span>
+                    {% else %}<span class="bdh-fact__v pp-tally text-base-content/40">&ndash;</span>{% endif %}
+                    <span class="bdh-fact__k">Avg Hours</span>
+                </div>
+                <div class="bdh-fact">
+                    <span class="bdh-fact__v pp-tally">{{ stats.total_series_xp_available|intcomma }}</span>
+                    <span class="bdh-fact__k">XP on Offer</span>
                 </div>
             </div>
-            {% endif %}
         </div>
         {% endif %}
     </div>

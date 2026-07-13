@@ -1,39 +1,26 @@
 /* Badge detail page — section components. The header is first, then the tier selector; leaderboard /
    stage sections follow. Bespoke, token-driven, DaisyUI-free. Tokens: var(--pp-*) from input.css. */
 
-/* ── Rebuild header (badge detail, v2) ──────────────────────────────────────
-   The Medallion collectible + a tight identity + the series/personal stats as compact k/v cells (reusing
-   the Collection badge modal's .pp-bdetail language, not a wall of big tiles). Lives in the standard
-   accented page-header card; the stats are merged in as substance. Only the medallion sizing + the compact
-   stat cells are bespoke here; the shell, identity, and progress horizon are shared components/utilities. */
-.bdh-eyebrow { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); }
+/* ── Rebuild header (badge detail, v3) ──────────────────────────────────────
+   Derived from the Career / Collection header language, not the old page: a Medallion hero + neutral
+   identity + a LEAN at-a-glance readout. Colour is restrained (neutral by default; the one primary accent
+   is the Earners Tally + the progress Horizon; Difficulty / Avg-Hours carry the single earned semantic
+   traffic-light). Everything else is shared components + Tailwind utilities -- the only bespoke bits are the
+   medallion sizing and the compact facts strip (which mirrors Collection's tier-composition strip). */
 .bdh-med { display: flex; justify-content: center; }
-.bdh-med .pp-med { --sz: 120px; }
-@media (min-width: 768px) { .bdh-med .pp-med { --sz: 148px; } }
-/* the identity band carries progress (horizon + count); keep the object itself clean under the medallion */
+.bdh-med .pp-med { --sz: 116px; }
+@media (min-width: 768px) { .bdh-med .pp-med { --sz: 140px; } }
+/* the substance band carries progress; keep the object itself clean (no meter/count stacked under it) */
 .bdh-med .pp-med__count, .bdh-med .pp-med__meter { display: none; }
+.bdh-headline { text-decoration: none; color: inherit; }
 
-.bdh-statgroup__label { display: block; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-accent); margin-bottom: 8px; }
-.bdh-statgroup__label--you { color: var(--pp-primary); }
-
-.bdh-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-@media (min-width: 640px)  { .bdh-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (min-width: 1024px) { .bdh-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-.bdh-stat { border: 1px solid var(--pp-border); border-radius: 10px; padding: 8px 11px; background: var(--pp-bg-2); }
-.bdh-stat--wide { grid-column: span 2; }
-.bdh-stat__k { display: inline-flex; align-items: center; gap: 4px; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-mute); }
-.bdh-stat__v { font-size: 1.05rem; font-weight: 800; line-height: 1.15; margin-top: 3px; }
-.bdh-stat__v--date { font-size: 0.82rem; font-weight: 700; color: var(--pp-text-dim); }
-.bdh-stat__u { font-size: 0.72rem; font-weight: 600; color: var(--pp-text-mute); }
-.bdh-stat__arrow { width: 11px; height: 11px; opacity: 0.5; transition: opacity 0.15s ease, color 0.15s ease; }
-a.bdh-stat { display: block; text-decoration: none; color: inherit; transition: border-color 0.15s ease; }
-@media (hover: hover) { a.bdh-stat:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); } a.bdh-stat:hover .bdh-stat__arrow { opacity: 1; color: var(--pp-primary); } }
-
-.bdh-stat__tiers { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 6px; }
-.bdh-stat__tier { display: inline-flex; align-items: center; gap: 4px; font-size: 0.9rem; font-weight: 800; }
-.bdh-stat__tier img { width: 20px; height: 20px; object-fit: contain; }
-.bdh-stat__trophies { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
-.bdh-stat__trophies > span { display: inline-flex; align-items: center; gap: 4px; font-size: 0.9rem; font-weight: 800; }
+/* At-a-glance facts: a row of stacked mini-facts (value over micro-label), echoing the Collection header's
+   tier-composition strip. Values are neutral; only Difficulty / Avg-Hours are tinted (traffic-light). */
+.bdh-facts { display: flex; flex-wrap: wrap; gap: 12px 22px; }
+.bdh-fact { display: flex; flex-direction: column; gap: 3px; }
+.bdh-fact__v { font-size: 1.15rem; font-weight: 800; line-height: 1; }
+.bdh-fact__u { font-size: 0.72rem; font-weight: 600; color: var(--pp-text-mute); margin-left: 1px; }
+.bdh-fact__k { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--pp-text-mute); }
 
 /* ── Shared "matted board" surface ──────────────────────────────────────────
    The same material as .bd-hero, reused by every post-hero section so the page
