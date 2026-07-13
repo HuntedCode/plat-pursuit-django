@@ -8,9 +8,8 @@
 {% with target_profile as profile %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
 
-    {# Rebuilt header: the Medallion collectible + series identity/progress + the series/personal stats
-       merged in as substance (replaces the old Frame hero + separate stats card). #}
-    {% include 'trophies/partials/badge_detail/_header.html' %}
+    {# Header intentionally removed -- to be rebuilt from scratch. The backend still computes the header data
+       (hero_frame, badge_series_stats) in the view; nothing renders it yet. #}
 
     {# Tier selector — tabs + self-contained requirements card (bd-*). #}
     <div class="mt-3">

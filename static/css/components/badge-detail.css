@@ -1,22 +1,6 @@
-/* Badge detail page — post-hero section components. The tier selector is first;
-   leaderboard / stage sections get appended here as each is rebuilt. Bespoke,
-   token-driven, DaisyUI-free. Tokens: var(--pp-*) from input.css. */
-
-/* ── Rebuild header (badge detail) ──────────────────────────────────────────
-   The Medallion as the collectible artifact + series identity + the series/personal
-   stats merged in as substance (replaces the old Frame hero in badge-hero.css and
-   the separate stats card). Built on the shared DaisyUI header shell + .scard stat
-   tile + Tailwind utilities; only the medallion sizing + the stat-link affordance
-   are bespoke here. */
-.bdh-med { display: flex; justify-content: center; }
-.bdh-med .pp-med { --sz: 128px; }
-@media (min-width: 768px) { .bdh-med .pp-med { --sz: 152px; } }
-/* The identity band carries progress (horizon + count), so keep the object itself
-   clean -- no meter/count stacked under the medallion in the header. */
-.bdh-med .pp-med__count, .bdh-med .pp-med__meter { display: none; }
-/* The Earners stat is a link: give the shared .scard a hover affordance as an anchor. */
-a.scard { text-decoration: none; color: inherit; transition: border-color 0.16s ease, box-shadow 0.16s ease; }
-@media (hover: hover) { a.scard:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); } }
+/* Badge detail page — section components (the header is currently removed, pending a from-scratch rebuild).
+   The tier selector is first; leaderboard / stage sections follow. Bespoke, token-driven, DaisyUI-free.
+   Tokens: var(--pp-*) from input.css. */
 
 /* ── Shared "matted board" surface ──────────────────────────────────────────
    The same material as .bd-hero, reused by every post-hero section so the page
