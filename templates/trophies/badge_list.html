@@ -363,9 +363,12 @@
             updateToggleActive(cfg);
         }
         document.body.addEventListener('htmx:afterSwap', function (e) {
-            if (!e.target) { return; }
-            if (e.target.id === 'browse-results') { initTileReveal(); initScroller(viewConfig()); }         // filter swap: just the grid
-            else if (e.target.id === 'badge-view') { initView(); }   // view swap: whole island (leave scroll put, like Collection/Career)
+            // Use HTMX's explicit swap target (e.detail.target). e.target can be the swapped-IN child
+            // (.pp-slist, no id) rather than the target element, which made the view-swap branch never fire.
+            var t = (e.detail && e.detail.target) || e.target;
+            if (!t || !t.id) { return; }
+            if (t.id === 'browse-results') { initTileReveal(); initScroller(viewConfig()); }         // filter swap: just the grid
+            else if (t.id === 'badge-view') { initView(); }   // view swap: whole island (leave scroll put, like Collection/Career)
         });
         // Don't re-fetch the view you're already on (a re-click on the already-active chip).
         document.body.addEventListener('htmx:beforeRequest', function (e) {
