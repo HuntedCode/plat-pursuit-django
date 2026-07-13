@@ -124,15 +124,27 @@
             var grid = document.getElementById('items-grid');
             if (!grid || !grid.querySelector('.pp-scard')) { return; }
             grid.classList.add('pp-slist--reveal');
+            function reveal(el, delayMs) {
+                el.style.setProperty('--reveal-delay', delayMs + 'ms');
+                el.classList.add('is-revealed');
+            }
             revealIO = new IntersectionObserver(function (entries) {
                 var shown = entries.filter(function (en) { return en.isIntersecting; }).map(function (en) { return en.target; });
-                shown.forEach(function (el, i) {
-                    el.style.setProperty('--reveal-delay', Math.min(i * 45, 300) + 'ms');   // stagger tiles that land together
-                    el.classList.add('is-revealed');
-                    revealIO.unobserve(el);
-                });
+                shown.forEach(function (el, j) { reveal(el, Math.min(j * 45, 200)); revealIO.unobserve(el); });   // stagger a scrolled-in batch
             }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
-            grid.querySelectorAll('.pp-scard:not(.is-revealed)').forEach(function (el) { revealIO.observe(el); });
+            // Tiles already in view get an EXPLICIT staggered reveal on the next frame -- this fires reliably on
+            // both first load AND an HTMX view swap (the IO's own initial callback is flaky right after a swap).
+            // Tiles outside the viewport are observed and reveal when scrolled to.
+            var vh = window.innerHeight, n = 0;
+            grid.querySelectorAll('.pp-scard:not(.is-revealed)').forEach(function (el) {
+                var r = el.getBoundingClientRect();
+                if (r.top < vh && r.bottom > 0) {
+                    var d = Math.min(n++ * 45, 300);
+                    requestAnimationFrame(function () { reveal(el, d); });
+                } else {
+                    revealIO.observe(el);
+                }
+            });
         }
         function initScroller(cfg) {
             if (scroller && scroller.destroy) { scroller.destroy(); scroller = null; }
@@ -345,14 +357,14 @@
         // (Re)wire everything that belongs to the current view island.
         function initView() {
             var cfg = viewConfig();
+            initTileReveal();   // before initScroller so revealIO exists for its onAppend hook
             initScroller(cfg);
-            initTileReveal();
             wireFilters();
             updateToggleActive(cfg);
         }
         document.body.addEventListener('htmx:afterSwap', function (e) {
             if (!e.target) { return; }
-            if (e.target.id === 'browse-results') { initScroller(viewConfig()); initTileReveal(); }         // filter swap: just the grid
+            if (e.target.id === 'browse-results') { initTileReveal(); initScroller(viewConfig()); }         // filter swap: just the grid
             else if (e.target.id === 'badge-view') { initView(); }   // view swap: whole island (leave scroll put, like Collection/Career)
         });
         // Don't re-fetch the view you're already on (a re-click on the already-active chip).
