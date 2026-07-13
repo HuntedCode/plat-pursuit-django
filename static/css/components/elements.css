@@ -518,7 +518,9 @@
    (border + surface + soft lift). Its internal layout is unchanged -- just carded. */
 .rp-toolbar { display: flex; flex-direction: column; gap: 9px; padding: 12px 16px; }
 /* Depth pass: quiet the shared .pp-toolbar-card lift so the Contracts toolbar sits back and the job cards
-   below own the pop (mirrors the badge page). Two-class selector to win over .pp-toolbar-card's shadow. */
+   below own the pop (mirrors the badge page). The .rp-toolbar.pp-toolbar-card selector scopes this to the
+   Contracts toolbar only (not every .pp-toolbar-card); it wins the cascade because component CSS is
+   unlayered while .pp-toolbar-card is in @layer base -- unlayered always beats layered, not specificity. */
 .rp-toolbar.pp-toolbar-card { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22); }
 .rp-search { position: relative; max-width: 420px; }
 .rp-search__icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--pp-text-mute); pointer-events: none; }

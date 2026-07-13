@@ -50,8 +50,10 @@
 }
 /* Depth pass: the toolbar is chrome, so it sits BACK. Keep the shared base-200 fill but soften the lift
    (shadow-md -> a subtle shadow) so the raised content cards below own the "pop", establishing a felt
-   hierarchy (substrate -> quiet toolbar -> lifted cards). Scoped via the view wrappers so it reliably wins
-   over .pp-toolbar-card without recolouring the shared toolbar used elsewhere. */
+   hierarchy (substrate -> quiet toolbar -> lifted cards). Scoped to the badge views (via their wrappers) so
+   it quiets ONLY these toolbars, not the shared .pp-toolbar-card used on other pages. (It wins the cascade
+   because component CSS is @imported unlayered while .pp-toolbar-card lives in @layer base -- unlayered
+   always beats layered, regardless of specificity; the wrapper scoping is about reach, not winning.) */
 .pp-bgal .pp-bgal__toolbar,
 .pp-slist .pp-bgal__toolbar {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
