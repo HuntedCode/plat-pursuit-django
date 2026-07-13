@@ -343,6 +343,13 @@
             if (form) {
                 form.addEventListener('change', refreshControls);
                 form.addEventListener('input', refreshControls);  // live-update while typing in search
+                // Settle the results the INSTANT a filter/sort changes -- this spans the hx-trigger's 250ms
+                // debounce (most of the felt wait on a fast server), so the dim is actually perceptible
+                // rather than a few-ms flash during the request. Cleared when the new grid swaps in (below).
+                form.addEventListener('change', function () {
+                    var results = document.getElementById('browse-results');
+                    if (results) { results.classList.add('is-swapping'); }
+                });
             }
             if (clearBtn && form) {
                 clearBtn.addEventListener('click', function () {
@@ -381,8 +388,14 @@
             // (.pp-slist, no id) rather than the target element, which made the view-swap branch never fire.
             var t = (e.detail && e.detail.target) || e.target;
             if (!t || !t.id) { return; }
-            if (t.id === 'browse-results') { initReveal(); initScroller(viewConfig()); }         // filter swap: just the grid
+            if (t.id === 'browse-results') { t.classList.remove('is-swapping'); initReveal(); initScroller(viewConfig()); }  // filter swap: just the grid
             else if (t.id === 'badge-view') { initView(); }   // view swap: whole island (leave scroll put, like Collection/Career)
+        });
+        // Safety net: clear the settle dim on ANY request completion (incl. errors, where afterSwap never
+        // fires) so the results can never get stuck dimmed.
+        document.body.addEventListener('htmx:afterRequest', function () {
+            var results = document.getElementById('browse-results');
+            if (results) { results.classList.remove('is-swapping'); }
         });
         // Don't re-fetch the view you're already on (a re-click on the already-active chip).
         document.body.addEventListener('htmx:beforeRequest', function (e) {
