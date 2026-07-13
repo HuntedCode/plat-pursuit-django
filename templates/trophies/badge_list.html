@@ -123,7 +123,12 @@
             if (revealIO) { revealIO.disconnect(); revealIO = null; }   // tear down the prior grid's observer on re-init
             var grid = document.getElementById('items-grid');
             if (!grid || !grid.querySelector('.pp-scard')) { return; }
-            grid.classList.add('pp-slist--reveal');
+            grid.classList.add('pp-slist--reveal');   // hides tiles (opacity:0) + parks each bar fill at scaleX(0)
+            // Commit that hidden base state to the render tree BEFORE we add .is-revealed. Without this flush,
+            // adding the class in the same frame (esp. right after an HTMX swap) means the bar-fill TRANSITION
+            // has no starting style and silently no-ops -- the arrival animation "doesn't replay". The reflow
+            // makes the reveal restart cleanly on both first load and a view swap.
+            void grid.offsetWidth;
             function reveal(el, delayMs) {
                 el.style.setProperty('--reveal-delay', delayMs + 'ms');
                 el.classList.add('is-revealed');
@@ -132,18 +137,13 @@
                 var shown = entries.filter(function (en) { return en.isIntersecting; }).map(function (en) { return en.target; });
                 shown.forEach(function (el, j) { reveal(el, Math.min(j * 45, 200)); revealIO.unobserve(el); });   // stagger a scrolled-in batch
             }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
-            // Tiles already in view get an EXPLICIT staggered reveal on the next frame -- this fires reliably on
-            // both first load AND an HTMX view swap (the IO's own initial callback is flaky right after a swap).
+            // Tiles already in view reveal NOW (staggered) -- reliable on both first load and a view swap.
             // Tiles outside the viewport are observed and reveal when scrolled to.
-            var vh = window.innerHeight, n = 0;
+            var vh = window.innerHeight || 800, n = 0;
             grid.querySelectorAll('.pp-scard:not(.is-revealed)').forEach(function (el) {
                 var r = el.getBoundingClientRect();
-                if (r.top < vh && r.bottom > 0) {
-                    var d = Math.min(n++ * 45, 300);
-                    requestAnimationFrame(function () { reveal(el, d); });
-                } else {
-                    revealIO.observe(el);
-                }
+                if (r.top < vh && r.bottom > -1) { reveal(el, Math.min(n++ * 45, 300)); }   // in view -> reveal now
+                else { revealIO.observe(el); }                                              // below fold -> scroll-reveal
             });
         }
         function initScroller(cfg) {
