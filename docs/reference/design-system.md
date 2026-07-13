@@ -201,7 +201,7 @@ Every rebuilt page should have a header card that establishes context and houses
 
 ### Tab Group / View Switcher (site-wide standard, 2026-07)
 
-**The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Case/Gallery, Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses this SEGMENTED style: one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end` row (bump the top gap, e.g. `mt-5`, when it follows a card). Retires the old free-standing per-pill style. Live examples: `.pp-collection__views` (Collection), `.pp-vtoggle` (Browse), `.lab-views`/`.lab-view-tab` (Career -- the reference, `static/css/components/elements.css`).
+**The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Case/Gallery, Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses this SEGMENTED style: one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end mt-5` row -- `mt-5` is the standard top gap above the switcher (it sits below the page-header card / whatever chrome precedes it). Applied site-wide: Career, badges (Series/Gallery), Collection. Retires the old free-standing per-pill style. Live examples: `.pp-collection__views` (Collection), `.pp-vtoggle` (Browse), `.lab-views`/`.lab-view-tab` (Career -- the reference, `static/css/components/elements.css`).
 
 ```html
 <div class="flex items-center justify-end mt-5">

@@ -54,7 +54,7 @@
     {% comment %} View toggle: Series (per-series tiles) vs Gallery (per-tier medallion wall). The segmented
     switcher standard, right-aligned; each chip HTMX-swaps the #badge-view island (target='badge-view', no full
     reload), with its href kept as the no-JS fallback. {% endcomment %}
-    <div class="flex items-center justify-end mb-3">
+    <div class="flex items-center justify-end mt-5 mb-3">
         <div class="pp-vtoggle" role="tablist" aria-label="Badge view">
             <a href="{% url 'badges_list' %}" hx-get="{% url 'badges_list' %}" hx-target="#badge-view" hx-swap="innerHTML" hx-push-url="true"
                class="pp-vtoggle__chip{% if view != 'gallery' %} is-active{% endif %}" data-view="series" role="tab" aria-controls="badge-view" aria-selected="{% if view != 'gallery' %}true{% else %}false{% endif %}">
@@ -353,7 +353,7 @@
         document.body.addEventListener('htmx:afterSwap', function (e) {
             if (!e.target) { return; }
             if (e.target.id === 'browse-results') { initScroller(viewConfig()); initTileReveal(); }         // filter swap: just the grid
-            else if (e.target.id === 'badge-view') { initView(); window.scrollTo({ top: 0, behavior: 'smooth' }); }  // view swap: whole island
+            else if (e.target.id === 'badge-view') { initView(); }   // view swap: whole island (leave scroll put, like Collection/Career)
         });
         // Don't re-fetch the view you're already on (a re-click on the already-active chip).
         document.body.addEventListener('htmx:beforeRequest', function (e) {
