@@ -1434,6 +1434,8 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                 'is_complete': tier_comp.get(stage.stage_number, False),
             })
         context['tier_req_stages'] = tier_req_stages
+        # Completed count among this tier's required stages -- drives the "X of N stages" progress line.
+        context['tier_req_done'] = sum(1 for r in tier_req_stages if r['is_complete'])
 
         logger.debug(f"Badge detail loaded {len(structured_data)} stage data entries for {series_slug}")
 

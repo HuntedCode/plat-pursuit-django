@@ -215,6 +215,28 @@ def test_header_maintenance_state(client, stub_leaderboards):
     assert 'not started' not in html   # NOT the unearned branch
 
 
+def test_requirements_section_is_the_tile_grid(client, stub_leaderboards):
+    """The rebuilt requirements section (bd-req): the Ask headline + a compact stage-tile grid, NOT the old
+    full-width rows. Signed in, the progress line reads "X of N stages" and the XP tooltip is present."""
+    series = "req-grid"
+    BadgeFactory(series_slug=series, tier=1, is_live=True, required_stages=1)   # tier 1 = platinum ask
+    _series_with_stage(series, 1)
+    profile = ProfileFactory()
+    client.force_login(profile.user)
+
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+    html = resp.content.decode()
+
+    assert resp.context['tier_req_done'] == 0            # nothing completed yet
+    assert 'bd-req__grid' in html                        # the tile grid
+    assert 'bd-req__tile' in html                        # at least one stage tile
+    assert 'Platinum in every stage' in html             # the Ask headline (plat tier)
+    assert 'of 1 stages' in html                         # the progress line ("<b>0</b> of 1 stages")
+    assert 'tier bonus +' in html                        # the XP breakdown lives in the tooltip
+    # The old full-width rows are fully gone.
+    assert 'bd-treq' not in html
+
+
 def test_maintenance_defaults_to_lowest_lapsed_tier(client, stub_leaderboards):
     """A series with lapsed low tiers must open on the LOWEST maintenance tier (the one to re-earn), not
     skip to the next clean win. Bronze+Silver lapsed, Gold+Plat unearned -> lands on Bronze (tier 1), and

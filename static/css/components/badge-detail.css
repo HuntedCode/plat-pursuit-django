@@ -106,43 +106,41 @@
 /* ── Selected tier's requirements ───────────────────────────────────────────
    A panel with the tier-colour left accent (the one accent); neutral text, success-green only on the
    completed-stage checks. */
-.bd-treq {
-    --tier-c: var(--pp-primary);
-    border: 1px solid var(--pp-border); border-left: 3px solid var(--tier-c);
-    border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 14px 16px;
-}
-.bd-treq--bronze   { --tier-c: #cf9160; }
-.bd-treq--silver   { --tier-c: #b9c6d6; }
-.bd-treq--gold     { --tier-c: #e7c25c; }
-.bd-treq--platinum { --tier-c: #8fd2ea; }
-.bd-treq__head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
-@media (min-width: 768px) { .bd-treq__head { flex-direction: row; align-items: center; justify-content: space-between; } }
-.bd-treq__ask { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.9rem; font-weight: 700; color: var(--pp-text); }
-.bd-treq__ico { width: 18px; height: 18px; }
-.bd-treq__n { font-family: var(--pp-font-display); font-weight: 800; }
-.bd-treq__pct { font-weight: 800; }
-.bd-treq__xp { display: flex; flex-direction: column; gap: 1px; }
-@media (min-width: 768px) { .bd-treq__xp { align-items: flex-end; } }
-.bd-treq__xp-val { font-size: 1rem; font-weight: 800; color: var(--pp-text); }
-.bd-treq__xp-sep { color: var(--pp-text-mute); margin: 0 2px; font-weight: 600; }
-.bd-treq__xp-unit { font-size: 0.7rem; color: var(--pp-text-mute); margin-left: 3px; font-weight: 600; }
-.bd-treq__xp-note { font-size: 0.62rem; color: var(--pp-text-mute); }
-.bd-treq__stages-label { display: flex; align-items: center; gap: 7px; font-size: 0.64rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 8px; }
-.bd-treq__stages-n { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--pp-bg-3); color: var(--pp-text-dim); font-size: 0.62rem; font-weight: 700; }
-.bd-treq__list { display: flex; flex-direction: column; gap: 4px; }
-.bd-treq__row {
-    display: flex; align-items: center; gap: 9px; padding: 6px 9px; border-radius: var(--pp-radius-md);
-    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+/* Rebuilt from scratch: an OPEN section under the tier ladder (top divider, no nested card) -- the Ask
+   headline, a quiet progress/XP line, then the compact stage-tile grid. */
+.bd-req { --tier-c: var(--pp-primary); padding-top: 14px; border-top: 1px solid var(--pp-divider); }
+.bd-req--bronze   { --tier-c: #cf9160; }
+.bd-req--silver   { --tier-c: #b9c6d6; }
+.bd-req--gold     { --tier-c: #e7c25c; }
+.bd-req--platinum { --tier-c: #8fd2ea; }
+/* The Ask: the section headline -- what earning this tier takes. */
+.bd-req__ask { display: flex; align-items: center; gap: 10px; }
+.bd-req__ask-ico { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; }
+.bd-req__ask-ico img { width: 24px; height: 24px; }
+.bd-req__pct { font-size: 0.72rem; font-weight: 800; letter-spacing: -0.02em; color: var(--tier-c); }
+.bd-req__ask-text { font-size: 0.98rem; font-weight: 700; line-height: 1.25; color: var(--pp-text); }
+.bd-req__ask-text b { font-family: var(--pp-font-display); font-weight: 800; color: var(--tier-c); }
+/* Quiet supporting line: stage progress + the XP reward (breakdown in the title tooltip). */
+.bd-req__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; font-size: 0.78rem; color: var(--pp-text-mute); }
+.bd-req__meta .pp-tally { font-weight: 700; color: var(--pp-text-dim); }
+.bd-req__count b { color: var(--pp-text); }
+.bd-req__xp { cursor: help; }
+/* The stages: compact tile grid (replaced the full-width rows -- art fills the space, names stay visible). */
+.bd-req__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
+.bd-req__tile {
+    position: relative; display: flex; align-items: center; gap: 9px; padding: 9px 10px;
+    border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
     text-decoration: none; color: var(--pp-text-dim);
-    transition: border-color 0.15s ease, color 0.15s ease;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
-@media (hover: hover) { .bd-treq__row:hover { border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); color: var(--pp-text); } }
-.bd-treq__row.is-done { color: var(--pp-text-mute); }
-.bd-treq__status { width: 16px; height: 16px; flex-shrink: 0; display: grid; place-items: center; color: var(--pp-success); }
-.bd-treq__status svg { width: 15px; height: 15px; }
-.bd-treq__stage-ico { width: 22px; height: 22px; border-radius: var(--pp-radius-sm); object-fit: cover; flex-shrink: 0; }
-.bd-treq__stage-name { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bd-treq__stage-num { color: var(--pp-text-mute); font-weight: 700; margin-right: 7px; }
+@media (hover: hover) { .bd-req__tile:hover { border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border)); color: var(--pp-text); } }
+.bd-req__tile-ico { width: 40px; height: 40px; border-radius: var(--pp-radius-sm); object-fit: cover; flex-shrink: 0; }
+.bd-req__tile-meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bd-req__tile-num { font-size: 0.58rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-mute); }
+.bd-req__tile-name { font-size: 0.8rem; font-weight: 600; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.bd-req__tile.is-done { background: color-mix(in oklab, var(--pp-success) 8%, var(--pp-bg-2)); border-color: color-mix(in oklab, var(--pp-success) 28%, var(--pp-border)); }
+.bd-req__tile-check { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--pp-success); color: #06140d; display: grid; place-items: center; box-shadow: 0 0 8px -2px color-mix(in oklab, var(--pp-success) 70%, transparent); }
+.bd-req__tile-check svg { width: 11px; height: 11px; }
 
 /* ── Series stats ───────────────────────────────────────────────────────────
    The Tally primitive: clean stat tiles, numbers in the display face. Color is

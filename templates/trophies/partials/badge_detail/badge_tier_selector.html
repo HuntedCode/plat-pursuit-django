@@ -34,41 +34,44 @@ badge_tier_xp_bonus, tier_req_stages, badge.badge_type.
         {% endfor %}
     </div>
 
-    {# ── Selected tier's requirements ── #}
+    {% comment %} ── Selected tier's requirements (rebuilt from scratch: the Ask headline + a quiet progress/XP
+    line, then the compact stage-tile grid). An open section under the ladder (top divider, no nested card),
+    per the "stacked chrome, free content" rule. {% endcomment %}
     {% if selected_tier_badge %}
-    <div class="bd-treq bd-treq--{{ selected_tier|badge_tier|lower }}">
-        <div class="bd-treq__head">
-            <div class="bd-treq__ask">
-                {% if badge.badge_type == 'megamix' %}
-                    Earn <img class="bd-treq__ico" src="{% static 'images/plat.png' %}" alt="Platinum" loading="lazy" /><span class="bd-treq__n">{{ selected_tier_requirements }}</span> platinums
-                {% elif selected_tier_is_plat %}
-                    <img class="bd-treq__ico" src="{% static 'images/plat.png' %}" alt="Platinum" loading="lazy" /> Earn Platinum in every stage
-                {% else %}
-                    <span class="bd-treq__pct">100%</span> Earn every trophy in every stage
-                {% endif %}
-            </div>
-            <div class="bd-treq__xp">
-                <span class="bd-treq__xp-val pp-tally">{% if target_profile %}{{ selected_tier_user_xp|intcomma }}<span class="bd-treq__xp-sep">/</span>{% endif %}{{ selected_tier_total_xp|intcomma }}<span class="bd-treq__xp-unit">XP</span></span>
-                <span class="bd-treq__xp-note">{{ badge_tier_xp_bonus|intcomma }} bonus + {{ selected_tier|badge_tier_xp }}/stage</span>
-            </div>
-        </div>
+    <div class="bd-req bd-req--{{ selected_tier|badge_tier|lower }}">
 
-        <div class="bd-treq__stages">
-            <div class="bd-treq__stages-label">Stages required <span class="bd-treq__stages-n">{{ tier_req_stages|length }}</span></div>
-            <div class="bd-treq__list">
-                {% for req in tier_req_stages %}
-                <a href="#stage-{{ req.stage.stage_number }}" data-stage-link="{{ req.stage.stage_number }}"
-                   class="bd-treq__row{% if req.is_complete %} is-done{% endif %}">
-                    <span class="bd-treq__status" aria-hidden="true">
-                        {% if target_profile and req.is_complete %}
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-                        {% endif %}
-                    </span>
-                    <img src="{{ req.stage.stage_icon }}" alt="" class="bd-treq__stage-ico" loading="lazy" />
-                    <span class="bd-treq__stage-name"><span class="bd-treq__stage-num">{{ req.stage.stage_number }}</span>{{ req.stage.title }}</span>
-                </a>
-                {% endfor %}
-            </div>
+        {# The Ask: the headline statement of what earning this tier takes. #}
+        <p class="bd-req__ask">
+            <span class="bd-req__ask-ico" aria-hidden="true">
+                {% if selected_tier_is_plat or badge.badge_type == 'megamix' %}<img src="{% static 'images/plat.png' %}" alt="" loading="lazy" />{% else %}<span class="bd-req__pct">100%</span>{% endif %}
+            </span>
+            <span class="bd-req__ask-text">
+                {% if badge.badge_type == 'megamix' %}Earn <b>{{ selected_tier_requirements }}</b> platinums from this set{% elif selected_tier_is_plat %}Earn the Platinum in every stage{% else %}Earn 100% of every trophy in every stage{% endif %}
+            </span>
+        </p>
+
+        {# One quiet supporting line: stage progress (signed in) or count (anon) + the XP reward (breakdown on hover). #}
+        <p class="bd-req__meta">
+            <span class="bd-req__count">{% if target_profile %}<b class="pp-tally">{{ tier_req_done }}</b> of {{ tier_req_stages|length }} stages{% else %}<b class="pp-tally">{{ tier_req_stages|length }}</b> stage{{ tier_req_stages|length|pluralize }}{% endif %}</span>
+            <span class="bd-req__dot" aria-hidden="true">&middot;</span>
+            <span class="bd-req__xp" title="{{ badge_tier_xp_bonus|intcomma }} tier bonus + {{ selected_tier|badge_tier_xp|intcomma }} per stage">{% if target_profile %}<b class="pp-tally">{{ selected_tier_user_xp|intcomma }}</b> / {% endif %}<span class="pp-tally">{{ selected_tier_total_xp|intcomma }}</span> XP</span>
+        </p>
+
+        {# The stages: the compact tile grid. Each tile jumps to that stage in the journey below (data-stage-link). #}
+        <div class="bd-req__grid">
+            {% for req in tier_req_stages %}
+            <a href="#stage-{{ req.stage.stage_number }}" data-stage-link="{{ req.stage.stage_number }}"
+               class="bd-req__tile{% if target_profile and req.is_complete %} is-done{% endif %}">
+                <img src="{{ req.stage.stage_icon }}" alt="" class="bd-req__tile-ico" loading="lazy" />
+                <span class="bd-req__tile-meta">
+                    <span class="bd-req__tile-num">Stage {{ req.stage.stage_number }}</span>
+                    <span class="bd-req__tile-name">{{ req.stage.title }}</span>
+                </span>
+                {% if target_profile and req.is_complete %}
+                <span class="bd-req__tile-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                {% endif %}
+            </a>
+            {% endfor %}
         </div>
     </div>
     {% endif %}
