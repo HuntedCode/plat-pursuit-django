@@ -675,6 +675,59 @@ class RequirementsChecklistWorkshopView(TemplateView):
         return ctx
 
 
+class StageCardsWorkshopView(TemplateView):
+    """Design workshop (/design/stage-cards/): the badge-detail stage journey rebuilt from scratch --
+    the stage card + the game card, now with CONTRACT awareness (each game's home Contract + its jobs/XP,
+    a cross-link into the gamification system). Renders the REAL crash-bandicoot games + their real live
+    contracts, with fabricated per-game states so every card look (100% / plat / in-progress / unplayed)
+    and the multi-job contract chip all render. Two game-card variants to compare. Not a product surface.
+    """
+    template_name = 'design/stage_cards_workshop.html'
+
+    def get_context_data(self, **kwargs):
+        from trophies.models import Stage
+        from trophies.util_modules.constants import CONTRACT_XP_TOTAL
+        ctx = super().get_context_data(**kwargs)
+        stages = Stage.objects.filter(series_slug='crash-bandicoot').order_by('stage_number').prefetch_related(
+            'concepts__games__concept__contract_membership__contract__jobs'
+        )
+        # Fabricated states (no user here) so every card look renders across the grid.
+        _states = [
+            {'progress': 100, 'has_plat': True},    # done + plat
+            {'progress': 100, 'has_plat': False},   # 100%, no plat
+            {'progress': 68, 'has_plat': False},    # in progress
+            {'progress': 34, 'has_plat': False},    # early
+            {'progress': 0, 'has_plat': False},     # unplayed
+            {'progress': 90, 'has_plat': True},     # near-max + plat
+        ]
+        seen, games, i = set(), [], 0
+        for s in stages:
+            for concept in s.concepts.all():
+                for g in concept.games.all():
+                    if g.id in seen:
+                        continue
+                    seen.add(g.id)
+                    cm = getattr(g.concept, 'contract_membership', None)
+                    ct = cm.contract if (cm and cm.contract.is_live) else None
+                    st = _states[i % len(_states)]
+                    games.append({
+                        'game': g,
+                        'stage_num': s.stage_number,
+                        'progress': st['progress'],
+                        'has_plat': st['has_plat'],
+                        'plat_available': bool((g.defined_trophies or {}).get('platinum')),
+                        'diff': round(2.5 + (i % 5) * 1.6, 1),
+                        'hours': 18 + (i % 4) * 24,
+                        'contract': ct,
+                        'contract_xp': (ct.xp_total_override or CONTRACT_XP_TOTAL) if ct else 0,
+                        'jobs': list(ct.jobs.all()) if ct else [],
+                    })
+                    i += 1
+        ctx['games'] = games
+        ctx['stage_title'] = 'Crash Bandicoot 4: It’s About Time'
+        return ctx
+
+
 class PursuerCardRanksPreviewView(TemplateView):
     """Preview the *production* Pursuer Card at every rank tier (/design/pursuer-card-ranks/).
 

@@ -1,0 +1,25 @@
+{% load static %}
+{% comment %} Workshop game card -- Variant B (compact; contract as an inline chip among the facts). {% endcomment %}
+<div class="scw-b">
+    <div class="scw-cov{% if g.progress == 0 %} scw-cov--dim{% endif %}">
+        <img src="{{ g.game.display_image_url }}" alt="{{ g.game.title_name }}" loading="lazy">
+        {% if g.progress == 100 %}<span class="scw-flag scw-flag--done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+        {% elif g.has_plat %}<span class="scw-flag scw-flag--plat">{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3.5 h-3.5' %}</span>{% endif %}
+        {% if g.progress > 0 %}<span class="scw-cov__bar"><span class="{% if g.progress < 33 %}scw-p--low{% elif g.progress < 66 %}scw-p--mid{% elif g.progress < 100 %}scw-p--high{% else %}scw-p--max{% endif %}" style="width: {{ g.progress }}%"></span></span>{% endif %}
+    </div>
+    <div class="scw-b__body">
+        <span class="scw-b__name">{{ g.game.title_name }}</span>
+        <span class="scw-b__row">
+            <span class="scw-b__pct">{{ g.progress }}%</span>
+            {% if g.plat_available %}<span class="{% if g.has_plat %}scw-plat--earned{% endif %}">{% if g.has_plat %}Platinum{% else %}Has plat{% endif %}</span>{% else %}<span class="scw-plat--none">No plat</span>{% endif %}
+            <span>{{ g.diff }} &middot; {{ g.hours }}h</span>
+        </span>
+        {% if g.contract %}
+        <a class="scw-chip" href="{% url 'contract_modal' g.contract.slug %}" title="Contract: {{ g.contract.name }} &middot; {% for job in g.jobs %}{{ job.name }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+            {{ g.contract_xp }} XP
+            <span class="scw-chip__pips">{% for job in g.jobs|slice:":6" %}<span class="scw-chip__pip" style="background: {{ job.color|default:'currentColor' }}"></span>{% endfor %}</span>
+        </a>
+        {% endif %}
+    </div>
+</div>

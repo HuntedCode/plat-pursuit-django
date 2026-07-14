@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+{% block title %}Stage cards workshop{% endblock %}
+
+{% block content %}
+{% comment %} Design decision aid (NOT a product surface): the badge-detail stage journey rebuilt from
+scratch. Real crash-bandicoot games + their real live contracts (jobs + XP); per-game states fabricated so
+every card look renders. Two game-card variants differ in how prominent the NEW contract hook is. {% endcomment %}
+<style>
+    .scw { max-width: 1100px; margin: 0 auto; padding: 24px 16px 100px; }
+    .scw h1 { font-family: var(--pp-font-display); font-size: 1.6rem; font-weight: 800; color: var(--pp-text); }
+    .scw__sub { color: var(--pp-text-dim); font-size: 0.9rem; margin-top: 6px; }
+    .scw__block { margin-top: 40px; }
+    .scw__tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 14px; }
+    .scw__tag b { color: var(--pp-primary); }
+    .scw__note { font-size: 0.78rem; color: var(--pp-text-mute); margin-top: 12px; font-style: italic; }
+    .scw__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 12px; }
+
+    /* ── Stage card shell (from scratch) ── */
+    .scw-stage { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 6px 20px rgba(0,0,0,0.30); overflow: hidden; }
+    .scw-stage__head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+    .scw-stage__ico { width: 44px; height: 44px; border-radius: var(--pp-radius-md); overflow: hidden; border: 1px solid var(--pp-border); flex-shrink: 0; }
+    .scw-stage__ico img { width: 100%; height: 100%; object-fit: cover; }
+    .scw-stage__id { flex: 1; min-width: 0; }
+    .scw-stage__eyebrow { font-size: 0.58rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-accent); }
+    .scw-stage__title { font-family: var(--pp-font-display); font-size: 1rem; font-weight: 800; color: var(--pp-text); line-height: 1.2; margin-top: 1px; }
+    .scw-stage__meta { display: flex; flex-wrap: wrap; gap: 3px 12px; margin-top: 4px; font-size: 0.66rem; color: var(--pp-text-mute); }
+    .scw-stage__prog { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .scw-stage__pill { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.8rem; padding: 3px 10px; border-radius: 999px; background: color-mix(in oklab, var(--pp-success) 14%, var(--pp-bg-2)); color: var(--pp-success); border: 1px solid color-mix(in oklab, var(--pp-success) 30%, transparent); }
+    .scw-stage__body { padding: 0 14px 14px; }
+
+    /* ── Shared cover ── */
+    .scw-cov { position: relative; aspect-ratio: 3/4; background: var(--pp-bg-3); overflow: hidden; }
+    .scw-cov img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+    .scw-cov--dim img { opacity: 0.4; }
+    .scw-flag { position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+    .scw-flag--done { background: var(--pp-success); color: #06140d; }
+    .scw-flag--done svg { width: 13px; height: 13px; }
+    .scw-flag--plat { background: rgba(4,8,14,0.7); }
+    .scw-cov__bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(2,4,8,0.5); }
+    .scw-cov__bar span { display: block; height: 100%; }
+    .scw-p--low { background: var(--pp-error); } .scw-p--mid { background: var(--pp-warning); } .scw-p--high { background: var(--pp-success); } .scw-p--max { background: var(--pp-primary); }
+
+    /* ── Variant A: cover-forward + a distinct CONTRACT footer band ── */
+    .scw-a { display: flex; flex-direction: column; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); overflow: hidden; background: var(--pp-bg-2); text-decoration: none; transition: border-color .15s ease, box-shadow .15s ease; }
+    .scw-a:hover { border-color: color-mix(in oklab, var(--pp-primary) 50%, transparent); box-shadow: 0 0 16px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+    .scw-a__body { padding: 8px 9px; display: flex; flex-direction: column; gap: 5px; }
+    .scw-a__name { font-size: 0.78rem; font-weight: 600; line-height: 1.2; color: var(--pp-text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .scw-a__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 9px; font-size: 0.64rem; color: var(--pp-text-mute); font-weight: 600; }
+    .scw-a__facts .scw-plat--earned { color: var(--pp-warning); } .scw-a__facts .scw-plat--none { color: color-mix(in oklab, var(--pp-error) 70%, var(--pp-text-mute)); }
+    .scw-a__pct { color: var(--pp-text-dim); font-weight: 700; }
+    /* Contract band -- the hook, tinted + arrowed like a CTA. */
+    .scw-ctr { display: flex; align-items: center; gap: 7px; padding: 7px 9px; margin-top: auto; text-decoration: none;
+        background: color-mix(in oklab, var(--pp-secondary) 12%, var(--pp-bg-1)); border-top: 1px solid color-mix(in oklab, var(--pp-secondary) 28%, var(--pp-border)); }
+    .scw-a:hover .scw-ctr { background: color-mix(in oklab, var(--pp-secondary) 20%, var(--pp-bg-1)); }
+    .scw-ctr__ico { width: 15px; height: 15px; color: var(--pp-secondary); flex-shrink: 0; }
+    .scw-ctr__jobs { display: flex; gap: 3px; flex-shrink: 0; }
+    .scw-ctr__pip { width: 8px; height: 8px; border-radius: 2px; }
+    .scw-ctr__label { flex: 1; min-width: 0; font-size: 0.64rem; font-weight: 700; color: var(--pp-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .scw-ctr__xp { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.68rem; color: var(--pp-secondary); flex-shrink: 0; }
+    .scw-ctr__arrow { width: 12px; height: 12px; color: var(--pp-secondary); flex-shrink: 0; }
+
+    /* ── Variant B: compact, CONTRACT as an inline chip among the facts ── */
+    .scw-b { display: flex; flex-direction: column; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); overflow: hidden; background: var(--pp-bg-2); text-decoration: none; transition: border-color .15s ease, box-shadow .15s ease; }
+    .scw-b:hover { border-color: color-mix(in oklab, var(--pp-primary) 50%, transparent); box-shadow: 0 0 16px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+    .scw-b__body { padding: 8px 9px; display: flex; flex-direction: column; gap: 6px; }
+    .scw-b__name { font-size: 0.78rem; font-weight: 600; line-height: 1.2; color: var(--pp-text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .scw-b__row { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 0.64rem; color: var(--pp-text-mute); font-weight: 600; }
+    .scw-b__pct { color: var(--pp-text-dim); font-weight: 700; }
+    .scw-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 999px; font-size: 0.6rem; font-weight: 700; text-decoration: none;
+        background: color-mix(in oklab, var(--pp-secondary) 14%, transparent); border: 1px solid color-mix(in oklab, var(--pp-secondary) 32%, transparent); color: var(--pp-secondary); align-self: flex-start; }
+    .scw-chip svg { width: 11px; height: 11px; }
+    .scw-chip__pips { display: inline-flex; gap: 2px; }
+    .scw-chip__pip { width: 6px; height: 6px; border-radius: 1px; }
+</style>
+
+<div class="scw">
+    <h1>Stage journey &amp; cards &mdash; from scratch</h1>
+    <p class="scw__sub">Real <b>Crash Bandicoot</b> games + their real live Contracts (jobs + XP). Per-game
+        states are fabricated so every look renders. The new piece is <b>contract awareness</b> on each game
+        card &mdash; the two variants differ in how prominent that hook is.</p>
+
+    {# ── Stage card shell ── #}
+    <div class="scw__block">
+        <div class="scw__tag">Stage card &mdash; header + shell</div>
+        <div class="scw-stage">
+            <div class="scw-stage__head">
+                <span class="scw-stage__ico"><img src="{{ games.0.game.display_image_url }}" alt=""></span>
+                <div class="scw-stage__id">
+                    <div class="scw-stage__eyebrow">Stage 4</div>
+                    <div class="scw-stage__title">{{ stage_title }}</div>
+                    <div class="scw-stage__meta"><span>7 games</span><span>4h played</span><span>2 platted</span></div>
+                </div>
+                <div class="scw-stage__prog"><span class="scw-stage__pill">4/7</span></div>
+            </div>
+            <div class="scw-stage__body">
+                <div class="scw__grid">
+                    {% for g in games %}{% include 'design/_scw_card_a.html' with g=g only %}{% endfor %}
+                </div>
+            </div>
+        </div>
+        <p class="scw__note">The stage header: identity (icon + title) + your state (X/7 + a quiet stats line), collapse chevron omitted here. Cards inside = Variant A.</p>
+    </div>
+
+    {# ── Variant A ── #}
+    <div class="scw__block">
+        <div class="scw__tag"><b>Variant A</b> &mdash; contract as a footer band</div>
+        <div class="scw__grid">
+            {% for g in games %}{% include 'design/_scw_card_a.html' with g=g only %}{% endfor %}
+        </div>
+        <p class="scw__note">The Contract is a distinct tinted band with an arrow &mdash; reads as a clear "take this too" CTA. Job pips + XP + the contract name.</p>
+    </div>
+
+    {# ── Variant B ── #}
+    <div class="scw__block">
+        <div class="scw__tag"><b>Variant B</b> &mdash; contract as an inline chip</div>
+        <div class="scw__grid">
+            {% for g in games %}{% include 'design/_scw_card_b.html' with g=g only %}{% endfor %}
+        </div>
+        <p class="scw__note">The Contract is a compact chip among the facts &mdash; lighter touch, less visual weight, more games-per-screen.</p>
+    </div>
+</div>
+{% endblock %}
