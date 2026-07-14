@@ -30,10 +30,13 @@ journey node. {% endcomment %}
     </span>
     {% endif %}
 
+    {% comment %} One always-present pill slot (no collapse toggle -> no layout shift): your X/Y progress when
+    signed in, else a static game count. The X/Y denominator already carries the total. {% endcomment %}
     {% if target_profile and stage.stage_number != 0 and data.stage_progress %}
     <span class="bd-stage__pill bd-stage__pill--{% if data.stage_progress.completed == data.stage_progress.total %}done{% elif data.stage_progress.completed > 0 %}partial{% else %}todo{% endif %}">{{ data.stage_progress.completed }}/{{ data.stage_progress.total }}</span>
+    {% else %}
+    <span class="bd-stage__count">{{ data.games|length }} game{{ data.games|length|pluralize }}</span>
     {% endif %}
 
-    <span class="bd-stage__count hidden" data-stage-game-count="{{ stage.stage_number }}">{{ data.games|length }}</span>
     <svg class="bd-stage__chevron" data-stage-chevron="{{ stage.stage_number }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
 </div>

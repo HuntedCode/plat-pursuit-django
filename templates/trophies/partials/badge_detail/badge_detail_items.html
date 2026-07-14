@@ -22,6 +22,10 @@ container, not one big <a>. {% endcomment %}
         </div>
         <div class="bd-gcard__body">
             <p class="bd-gcard__name">{{ game.title_name }}</p>
+            <div class="bd-gcard__badges">
+                {% for platform in game.title_platform reversed %}<span class="bd-meta-tag bd-meta-tag--{{ platform|platform_color_str }}">{{ platform }}</span>{% endfor %}
+                {% include 'partials/region_badges.html' with game=game badge_size='badge-xs' %}
+            </div>
             <div class="bd-gcard__facts">
                 {% if pgame %}<span class="bd-gcard__pct{% if pgame.progress == 100 %} is-done{% endif %}">{{ prog }}%</span>{% endif %}
                 {% if game.defined_trophies.platinum %}

@@ -167,18 +167,15 @@ document.addEventListener('DOMContentLoaded', function() {
         var gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
         var chevron = document.querySelector('[data-stage-chevron="' + stageNum + '"]');
         var toggle = document.querySelector('[data-stage-toggle="' + stageNum + '"]');
-        var gameCount = document.querySelector('[data-stage-game-count="' + stageNum + '"]');
         if (!gamesContainer) return;
         if (collapsed) {
             gamesContainer.style.gridTemplateRows = '0fr';
             if (chevron) chevron.style.transform = 'rotate(-90deg)';
             if (toggle) toggle.setAttribute('aria-expanded', 'false');
-            if (gameCount) gameCount.classList.remove('hidden');
         } else {
             gamesContainer.style.gridTemplateRows = '1fr';
             if (chevron) chevron.style.transform = '';
             if (toggle) toggle.setAttribute('aria-expanded', 'true');
-            if (gameCount) gameCount.classList.add('hidden');
         }
     }
     function updateBulkButton() {

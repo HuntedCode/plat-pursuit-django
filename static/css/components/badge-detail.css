@@ -296,6 +296,7 @@
 /* Body */
 .bd-gcard__body { display: flex; flex-direction: column; gap: 5px; padding: 8px 9px; flex: 1; }
 .bd-gcard__name { font-size: 0.76rem; font-weight: 600; line-height: 1.2; color: var(--pp-text); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; transition: color var(--pp-dur) var(--pp-ease); }
+.bd-gcard__badges { display: flex; flex-wrap: wrap; gap: 3px; }
 .bd-gcard__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 9px; margin-top: auto; font-size: 0.64rem; font-weight: 600; color: var(--pp-text-mute); }
 .bd-gcard__pct { color: var(--pp-text-dim); font-weight: 700; font-variant-numeric: tabular-nums; }
 .bd-gcard__pct.is-done { color: var(--pp-success); }
