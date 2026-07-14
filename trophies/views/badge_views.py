@@ -1399,6 +1399,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             'total_earners_count': get_earners_count(series_slug),
             'total_progressers_count': get_progress_count(series_slug),
             'user_total_playtime': user_total_playtime,
+            'user_playtime_hours': round(user_total_playtime.total_seconds() / 3600) if user_total_playtime else 0,
             'user_stages_played': user_stages_played,
             'user_stages_platinumed': user_stages_platinumed,
             'total_required_stages': total_required_stages,
@@ -1435,6 +1436,13 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             }
             for t in (1, 2, 3, 4)
         ]
+
+        # Segmented "stages platted" meter for the My Stats modal (<= the medallion's 12-segment cap; above
+        # it the template falls back to a smooth bar off avg_progress).
+        if target_profile and 0 < total_required_stages <= 12:
+            context['stages_platted_segments'] = [
+                i < user_stages_platinumed for i in range(total_required_stages)
+            ]
 
         # Build tier requirements stage list (for the tier selector panel)
         # Uses structured_data to avoid re-querying stages

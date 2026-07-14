@@ -301,8 +301,10 @@ def test_context_band_and_stats_modal_for_member(client, stub_leaderboards):
     assert 'bd-rank' in html                          # your standing row (signed-in ranks)
     assert 'bd-band__stats-btn' in html               # the My Stats button
     assert 'id="badge-stats-modal"' in html           # the modal container (not just the JS ref)
-    assert 'Your Stats' in html                       # ... its personal group
-    assert 'bd-stat__trophy' in html                  # ... the trophy breakdown
+    assert 'bd-mystats' in html                       # ... the from-scratch modal body
+    assert 'bd-mystats__hero' in html                 # ... its hero investment numbers
+    assert 'bd-mystats__loot' in html                 # ... the trophy haul
+    assert 'journey' in html                          # ... the narrative title
     assert 'badge-leaderboard-section' not in html    # the old standalone section is gone
 
 
@@ -321,7 +323,7 @@ def test_context_band_anon_hides_ranks_and_stats(client, stub_leaderboards):
     assert 'Progressers' in html                       # anon community-totals branch
     assert 'bd-band__stats-btn' not in html            # no My Stats button
     assert 'id="badge-stats-modal"' not in html        # no modal container rendered
-    assert 'Your Stats' not in html                    # ... and no modal content
+    assert 'bd-mystats' not in html                    # ... and no modal content
 
 
 def test_rarity_bar_counts_all_tiers_earned_not_peak(client, stub_leaderboards):

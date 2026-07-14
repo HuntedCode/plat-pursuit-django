@@ -1,77 +1,80 @@
 {% load static custom_filters humanize %}
-{% comment %} My Stats modal body: the deep breakdown the condensed band links to. Reuses the pre-built
-.bd-stats scaffolding -- a personal "Your Stats" group (cyan) + a "Series Stats" community group (orange).
-All values come from the already-computed badge_series_stats (series-scoped, cheap), so this is inline (no
-extra request). Rendered only when target_profile exists (see badge_detail.html). {% endcomment %}
+{% comment %} My Stats modal (rebuilt from scratch): a narrative of the viewer's journey with this series --
+hero investment (three big Tally numbers) -> stage progress (segmented Horizon) -> trophy haul -> a
+first-played/last-trophy timeline -> a quiet series-context footer. Composes the APPROVED primitives
+(.pp-tally, pp-horizon); no reused stat-grid. All values come from the already-computed badge_series_stats.
+Rendered only when a profile is on display (see badge_detail.html). {% endcomment %}
 {% with stats=badge_series_stats %}
-<div class="bd-stats">
-    <div class="bd-stats__group bd-stats__group--you">
-        <div class="bd-stats__label">{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s Stats{% else %}Your Stats{% endif %}</div>
-        <div class="bd-stats__grid">
-            <div class="bd-stat">
-                <span class="bd-stat__value bd-stat__value--xp">{{ stats.user_series_xp|intcomma }}</span>
-                <span class="bd-stat__label">Series XP</span>
-            </div>
-            <div class="bd-stat">
-                {% if stats.user_total_playtime %}<span class="bd-stat__value">{{ stats.user_total_playtime|timedelta_hours }}</span>{% else %}<span class="bd-stat__value bd-stat__value--muted">&ndash;</span>{% endif %}
-                <span class="bd-stat__label">Playtime</span>
-            </div>
-            <div class="bd-stat">
-                <span class="bd-stat__value">{{ stats.user_stages_platinumed }}<span class="bd-stat__unit">/{{ stats.total_required_stages }}</span></span>
-                <span class="bd-stat__label">Stages Platted</span>
-            </div>
-            <div class="bd-stat">
-                <span class="bd-stat__value">{{ stats.avg_progress }}<span class="bd-stat__unit">%</span></span>
-                <span class="bd-stat__label">Avg Progress</span>
-            </div>
-            <div class="bd-stat bd-stat--wide">
-                <span class="bd-stat__trophies">
-                    <span class="bd-stat__trophy" style="color: var(--color-trophy-bronze)">{{ stats.user_trophy_breakdown.bronze|intcomma }}</span>
-                    <span class="bd-stat__trophy" style="color: var(--color-trophy-silver)">{{ stats.user_trophy_breakdown.silver|intcomma }}</span>
-                    <span class="bd-stat__trophy" style="color: var(--color-trophy-gold)">{{ stats.user_trophy_breakdown.gold|intcomma }}</span>
-                    <span class="bd-stat__trophy" style="color: var(--color-trophy-platinum)">{{ stats.user_trophy_breakdown.platinum|intcomma }}</span>
-                </span>
-                <span class="bd-stat__label">Trophies Earned</span>
-            </div>
-            <div class="bd-stat">
-                <span class="bd-stat__value bd-stat__value--date">{{ stats.first_played|date:"M Y"|default:"&ndash;" }}</span>
-                <span class="bd-stat__label">First Played</span>
-            </div>
-            <div class="bd-stat">
-                <span class="bd-stat__value bd-stat__value--date">{{ stats.most_recent_trophy|date:"M j, Y"|default:"&ndash;" }}</span>
-                <span class="bd-stat__label">Last Trophy</span>
-            </div>
+<div class="bd-mystats">
+    <h2 class="bd-mystats__title">{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s{% else %}Your{% endif %} {{ badge.effective_display_series|default:badge.name }} journey</h2>
+
+    {# Hero: the investment -- three big numbers, XP in the one accent. #}
+    <div class="bd-mystats__hero">
+        <div class="bd-mystats__big">
+            <span class="pp-tally bd-mystats__big-v bd-mystats__big-v--xp">{{ stats.user_series_xp|intcomma }}</span>
+            <span class="bd-mystats__big-k">Series XP</span>
+        </div>
+        <div class="bd-mystats__big">
+            <span class="pp-tally bd-mystats__big-v">{{ stats.user_playtime_hours|intcomma }}<span class="bd-mystats__big-u">h</span></span>
+            <span class="bd-mystats__big-k">Playtime</span>
+        </div>
+        <div class="bd-mystats__big">
+            <span class="pp-tally bd-mystats__big-v">{{ stats.total_trophies_earned|intcomma }}</span>
+            <span class="bd-mystats__big-k">Trophies</span>
         </div>
     </div>
 
-    <div class="bd-stats__group bd-stats__group--series">
-        <div class="bd-stats__label">Series Stats</div>
-        <div class="bd-stats__grid">
-            <div class="bd-stat">
-                <span class="bd-stat__value">{{ stats.total_games }}</span>
-                <span class="bd-stat__label">Games</span>
-            </div>
-            <div class="bd-stat">
-                {% if stats.series_avg_difficulty != None %}<span class="bd-stat__value {% if stats.series_avg_difficulty < 4 %}bd-stat__value--good{% elif stats.series_avg_difficulty < 8 %}bd-stat__value--mid{% else %}bd-stat__value--hard{% endif %}">{{ stats.series_avg_difficulty }}<span class="bd-stat__unit">/10</span></span>{% else %}<span class="bd-stat__value bd-stat__value--muted">&ndash;</span>{% endif %}
-                <span class="bd-stat__label">Difficulty</span>
-            </div>
-            <div class="bd-stat">
-                {% if stats.series_avg_hours != None %}<span class="bd-stat__value">{{ stats.series_avg_hours }}<span class="bd-stat__unit">h</span></span>{% else %}<span class="bd-stat__value bd-stat__value--muted">&ndash;</span>{% endif %}
-                <span class="bd-stat__label">Avg Hours</span>
-            </div>
-            <div class="bd-stat">
-                <span class="bd-stat__value">{{ stats.total_earners_count|intcomma }}</span>
-                <span class="bd-stat__label">Earners</span>
-            </div>
-            <div class="bd-stat">
-                <span class="bd-stat__value bd-stat__value--xp-alt">{{ stats.community_total_xp|intcomma }}</span>
-                <span class="bd-stat__label">Community XP</span>
-            </div>
-            <div class="bd-stat">
-                <span class="bd-stat__value">{{ stats.total_series_xp_available|intcomma }}</span>
-                <span class="bd-stat__label">XP on Offer</span>
-            </div>
+    {# Progress: stages platted, segmented Horizon (smooth bar above the cap). #}
+    <div class="bd-mystats__row">
+        <div class="bd-mystats__row-head">
+            <span class="bd-mystats__row-label">Stages platted</span>
+            <span class="bd-mystats__row-val"><b>{{ stats.user_stages_platinumed }}</b> of {{ stats.total_required_stages }}</span>
         </div>
+        {% if stages_platted_segments %}
+        <span class="pp-horizon pp-horizon--segmented" role="progressbar" aria-valuenow="{{ stats.user_stages_platinumed }}" aria-valuemin="0" aria-valuemax="{{ stats.total_required_stages }}" style="--horizon-h: 8px;">
+            {% for on in stages_platted_segments %}<span class="pp-horizon__seg"{% if on %} data-state="done"{% endif %}></span>{% endfor %}
+        </span>
+        {% else %}
+        <div class="pp-horizon" style="--horizon-h: 8px;"><span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-progress: {{ stats.avg_progress }}%;"></span></span></div>
+        {% endif %}
+    </div>
+
+    {# Trophy haul: the four types, their real colours. #}
+    <div class="bd-mystats__row">
+        <div class="bd-mystats__row-head"><span class="bd-mystats__row-label">Your haul</span></div>
+        <div class="bd-mystats__haul">
+            <span class="bd-mystats__loot"><span class="bd-mystats__pip" style="background: var(--color-trophy-bronze)"></span>{{ stats.user_trophy_breakdown.bronze|intcomma }}</span>
+            <span class="bd-mystats__loot"><span class="bd-mystats__pip" style="background: var(--color-trophy-silver)"></span>{{ stats.user_trophy_breakdown.silver|intcomma }}</span>
+            <span class="bd-mystats__loot"><span class="bd-mystats__pip" style="background: var(--color-trophy-gold)"></span>{{ stats.user_trophy_breakdown.gold|intcomma }}</span>
+            <span class="bd-mystats__loot"><span class="bd-mystats__pip" style="background: var(--color-trophy-platinum)"></span>{{ stats.user_trophy_breakdown.platinum|intcomma }}</span>
+        </div>
+    </div>
+
+    {# Timeline: the viewer's span with the series. #}
+    {% if stats.first_played or stats.most_recent_trophy %}
+    <div class="bd-mystats__timeline">
+        <div class="bd-mystats__tl-pt">
+            <span class="bd-mystats__tl-date">{{ stats.first_played|date:"M Y"|default:"&ndash;" }}</span>
+            <span class="bd-mystats__tl-cap">First played</span>
+        </div>
+        <span class="bd-mystats__tl-line" aria-hidden="true"></span>
+        <div class="bd-mystats__tl-pt bd-mystats__tl-pt--end">
+            <span class="bd-mystats__tl-date">{{ stats.most_recent_trophy|date:"M j, Y"|default:"&ndash;" }}</span>
+            <span class="bd-mystats__tl-cap">Last trophy</span>
+        </div>
+    </div>
+    {% endif %}
+
+    {# Quiet series-context footer -- not your stats, so demoted. #}
+    <div class="bd-mystats__context">
+        <span class="bd-mystats__ctx-label">This series</span>
+        <span class="bd-mystats__ctx-items">
+            <span>{{ stats.total_games }} game{{ stats.total_games|pluralize }}</span>
+            {% if stats.series_avg_difficulty != None %}<span>{{ stats.series_avg_difficulty }}/10 difficulty</span>{% endif %}
+            {% if stats.series_avg_hours != None %}<span>~{{ stats.series_avg_hours }}h avg</span>{% endif %}
+            <span>{{ stats.total_earners_count|intcomma }} earner{{ stats.total_earners_count|pluralize }}</span>
+            <span>{{ stats.total_series_xp_available|intcomma }} XP on offer</span>
+        </span>
     </div>
 </div>
 {% endwith %}

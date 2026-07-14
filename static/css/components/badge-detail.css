@@ -155,102 +155,49 @@
 .bd-req__tile-check { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--pp-success); color: #06140d; display: grid; place-items: center; box-shadow: 0 0 8px -2px color-mix(in oklab, var(--pp-success) 70%, transparent); }
 .bd-req__tile-check svg { width: 11px; height: 11px; }
 
-/* ── Series stats ───────────────────────────────────────────────────────────
-   The Tally primitive: clean stat tiles, numbers in the display face. Color is
-   reserved for signals that carry meaning (XP, difficulty/hours traffic-light,
-   trophy tiers); plain counts stay neutral so the readout reads premium, not
-   like a generic colored dashboard. */
-.bd-stats { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
-.bd-stats__group { display: flex; flex-direction: column; gap: 8px; }
-.bd-stats__label {
-    display: flex; align-items: center; gap: 7px;
-    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--pp-text-dim);
-}
-.bd-stats__label::before {
-    content: ""; width: 3px; height: 12px; border-radius: 2px;
-    background: var(--pp-text-mute);
-}
-/* Each section carries its own accent: warm orange (forge-spark) for the
-   community "Series Stats", cool cyan (pursuer) for personal "Your Stats". The
-   distinct colors give each an identity without competing — warm community,
-   cool personal. */
-.bd-stats__group--series .bd-stats__label { color: var(--pp-accent); }
-.bd-stats__group--series .bd-stats__label::before { background: var(--pp-accent); }
-/* "Your Stats" — the pursuer's own data. Separated from the community stats and
-   carrying the cyan pursuer accent so it clearly reads as personal, not buried
-   in one undifferentiated wall of series stats. */
-.bd-stats__group--you { padding-top: 14px; border-top: 1px solid var(--pp-border); }
-.bd-stats__group--you .bd-stats__label { color: var(--pp-primary); }
-.bd-stats__group--you .bd-stats__label::before { background: var(--pp-primary); }
-.bd-stats__grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
-@media (min-width: 768px) { .bd-stats__grid { grid-template-columns: repeat(4, 1fr); } }
-
-.bd-stat {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 3px; padding: 9px 6px; text-align: center;
-    background: var(--pp-bg-2);
-    border: 1px solid oklch(1 0 0 / 0.05);
-    border-radius: var(--pp-radius-md);
-}
-.bd-stat--wide { grid-column: span 2; }
-.bd-stat__value {
-    font-family: var(--pp-font-display);
-    font-size: 1.05rem; font-weight: 800; line-height: 1; color: var(--pp-text);
-}
-.bd-stat__unit {
-    font-family: var(--pp-font-body); font-size: 0.6rem; font-weight: 600;
-    color: var(--pp-text-mute);
-}
-.bd-stat__label {
-    font-size: 0.53rem; font-weight: 600; letter-spacing: 0.07em;
-    text-transform: uppercase; color: var(--pp-text-dim); line-height: 1.15;
-}
-/* Meaning-bearing accents (semantic, not decorative glow). */
-.bd-stat__value--xp { color: var(--pp-primary); }
-.bd-stat__value--xp-alt { color: var(--pp-secondary); }
-.bd-stat__value--plat { color: var(--color-trophy-platinum); }
+/* Rating traffic-light colours -- the only survivors of the old .bd-stat scaffolding, still used on the
+   stage game cards' difficulty / hours ratings (.bd-game__rating in badge_detail_items.html). */
 .bd-stat__value--good { color: var(--pp-success); }
 .bd-stat__value--mid { color: var(--pp-warning); }
 .bd-stat__value--hard { color: var(--pp-error); }
-.bd-stat__value--muted { color: var(--pp-text-mute); }
-.bd-stat__value--date {
-    font-family: var(--pp-font-body); font-size: 0.8rem;
-    font-weight: 700; color: var(--pp-text-dim);
-}
 
-/* Composite tiles: tier distribution + trophy breakdown (icons inline with counts). */
-.bd-stat__inline {
-    display: flex; align-items: center; justify-content: center;
-    gap: 10px; flex-wrap: wrap;
-}
-.bd-stat__inline-item { display: inline-flex; align-items: center; gap: 4px; }
-.bd-stat__inline-item img { width: 18px; height: 18px; object-fit: contain; }
-.bd-stat__inline-item span { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.8rem; }
-.bd-stat__trophies { display: flex; align-items: center; justify-content: center; gap: 7px; }
-.bd-stat__trophy {
-    display: inline-flex; align-items: center; gap: 3px;
-    font-family: var(--pp-font-display); font-weight: 800; font-size: 0.72rem;
-}
-
-/* A stat tile that links somewhere (e.g. Earners -> full leaderboards). Hover
-   earns the cyan action accent; a small arrow marks it as a jump. */
-a.bd-stat { color: inherit; text-decoration: none; }
-.bd-stat--link {
-    cursor: pointer;
-    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
-}
-.bd-stat--link:hover {
-    border-color: color-mix(in oklch, var(--pp-primary) 45%, transparent);
-    background: color-mix(in oklch, var(--pp-primary) 6%, var(--pp-bg-2));
-}
-.bd-stat--link:hover .bd-stat__value { color: var(--pp-primary); }
-.bd-stat__link-arrow {
-    display: inline-block;   /* override Tailwind preflight's svg { display: block } */
-    width: 10px; height: 10px; margin-left: 3px; vertical-align: -1px;
-    opacity: 0.75; transition: opacity var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
-}
-.bd-stat--link:hover .bd-stat__link-arrow { opacity: 1; color: var(--pp-primary); }
+/* ── My Stats modal (rebuilt from scratch) ───────────────────────────────────
+   A narrative of the viewer's journey with the series -- hero investment (big Tally numbers) -> stage
+   progress (segmented Horizon) -> trophy haul -> a first/last timeline -> a quiet series-context footer.
+   Differentiated by importance (not a uniform tile grid); composes the approved primitives only. */
+.bd-mystats { display: flex; flex-direction: column; gap: 18px; padding: 2px; }
+.bd-mystats__title { font-family: var(--pp-font-display); font-size: 1.15rem; font-weight: 800; line-height: 1.2; color: var(--pp-text); padding-right: 30px; }
+/* Hero: three big investment numbers (XP carries the one accent). */
+.bd-mystats__hero { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.bd-mystats__big { display: flex; flex-direction: column; gap: 3px; }
+.bd-mystats__big-v { font-family: var(--pp-font-display); font-size: 1.7rem; font-weight: 800; line-height: 1; color: var(--pp-text); }
+.bd-mystats__big-v--xp { color: var(--pp-primary); }
+.bd-mystats__big-u { font-size: 0.85rem; font-weight: 700; color: var(--pp-text-mute); margin-left: 1px; }
+.bd-mystats__big-k { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-dim); }
+/* Progress + haul rows. */
+.bd-mystats__row { display: flex; flex-direction: column; gap: 7px; }
+.bd-mystats__row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.bd-mystats__row-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-dim); }
+.bd-mystats__row-val { font-size: 0.82rem; color: var(--pp-text-mute); }
+.bd-mystats__row-val b { font-family: var(--pp-font-display); font-weight: 800; color: var(--pp-text); }
+.bd-mystats__haul { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.bd-mystats__loot { display: inline-flex; align-items: center; gap: 6px; font-family: var(--pp-font-display); font-weight: 800; font-size: 0.95rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.bd-mystats__pip { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+/* Timeline: the viewer's span with the series. */
+.bd-mystats__timeline { display: flex; align-items: center; gap: 12px; padding-top: 14px; border-top: 1px solid var(--pp-divider); }
+.bd-mystats__tl-pt { display: flex; flex-direction: column; gap: 1px; }
+.bd-mystats__tl-pt--end { text-align: right; }
+.bd-mystats__tl-date { font-size: 0.82rem; font-weight: 700; color: var(--pp-text-dim); }
+.bd-mystats__tl-cap { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); }
+.bd-mystats__tl-line { position: relative; flex: 1; height: 2px; border-radius: 1px; background: linear-gradient(90deg, var(--pp-primary), color-mix(in oklab, var(--pp-primary) 20%, transparent)); }
+.bd-mystats__tl-line::before, .bd-mystats__tl-line::after { content: ""; position: absolute; top: 50%; width: 7px; height: 7px; border-radius: 50%; transform: translateY(-50%); }
+.bd-mystats__tl-line::before { left: 0; background: var(--pp-primary); }
+.bd-mystats__tl-line::after { right: 0; background: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-bg-2)); box-shadow: 0 0 0 1px var(--pp-primary); }
+/* Quiet series-context footer -- not the viewer's stats, so demoted. */
+.bd-mystats__context { display: flex; flex-direction: column; gap: 5px; padding-top: 14px; border-top: 1px solid var(--pp-divider); }
+.bd-mystats__ctx-label { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+.bd-mystats__ctx-items { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.76rem; color: var(--pp-text-mute); }
+.bd-mystats__ctx-items span { white-space: nowrap; }
 
 /* ── Section header (generic, reusable across sections) ─────────────────────── */
 .bd-head {
