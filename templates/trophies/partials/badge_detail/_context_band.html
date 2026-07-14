@@ -1,9 +1,10 @@
 {% load static custom_filters humanize %}
 {% comment %} Condensed context band (below the header, above the tier ladder): the badge's competitive /
-rarity layer the header doesn't cover. ONE stacked rarity bar (segments = each earner's PEAK tier, so they
-partition all earners) + a legend, then a single foot row -- your ranks (community totals for anon) + the
-Leaderboards CTA + a My Stats button that opens the deep-breakdown modal. Series-wide, so it rides the
-tier-swap island; the bar lifts the selected tier's segment. Anon: no ranks/My Stats button. {% endcomment %}
+rarity layer the header doesn't cover. ONE stacked rarity bar (segments = how many earned EACH tier -- tiers
+are independent, so we count every tier earned, not a peak-tier partition) + a legend, then a single foot row
+-- your ranks (community totals for anon) + the Leaderboards CTA + a My Stats button that opens the
+deep-breakdown modal. Series-wide, so it rides the tier-swap island; the bar lifts the selected tier's
+segment. Anon: no ranks/My Stats button. {% endcomment %}
 {% with stats=badge_series_stats %}
 {% if stats %}
 <section class="bd-band bd-card">
@@ -11,8 +12,8 @@ tier-swap island; the bar lifts the selected tier's segment. Anon: no ranks/My S
     {# Rarity: one stacked bar (peak-tier distribution) + a legend with the counts. #}
     <div class="bd-band__rarity">
         <div class="bd-head">Rarity</div>
-        <div class="bd-rbar" role="img" aria-label="Distribution of earners by their highest tier reached">
-            {% for seg in rarity_segments %}{% if seg.pct %}<span class="bd-rbar__seg bd-rbar__seg--{{ seg.key }}{% if seg.tier == selected_tier %} is-selected{% endif %}" style="width: {{ seg.pct }}%;" title="{{ seg.name }} peak &middot; {{ seg.count|intcomma }} earner{{ seg.count|pluralize }} &middot; {{ seg.pct }}%"></span>{% endif %}{% endfor %}
+        <div class="bd-rbar" role="img" aria-label="How the earned tiers break down across this series">
+            {% for seg in rarity_segments %}{% if seg.pct %}<span class="bd-rbar__seg bd-rbar__seg--{{ seg.key }}{% if seg.tier == selected_tier %} is-selected{% endif %}" style="width: {{ seg.pct }}%;" title="{{ seg.name }} &middot; {{ seg.count|intcomma }} earned"></span>{% endif %}{% endfor %}
         </div>
         <div class="bd-rlegend">
             {% for seg in rarity_segments %}

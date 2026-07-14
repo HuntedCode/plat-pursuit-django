@@ -1419,16 +1419,19 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             'community_total_xp': community_total_xp,
         }
 
-        # Rarity bar for the context band: ONE stacked bar segmented by each earner's PEAK tier
-        # (max_tier_counts partitions all earners, so the segments sum to 100% -- unlike the cumulative
-        # tier_earner_counts, which would double-count every higher-tier earner). Platinum reads as a thin
-        # sliver = the prestige story in one line.
+        # Rarity bar for the context band: ONE stacked bar segmented by how many earned EACH tier. Tiers are
+        # INDEPENDENT (a higher tier doesn't require the lower ones), so we count every tier earned -- NOT a
+        # "peak tier" partition, which would falsely assume nesting. Each segment's width is that tier's share
+        # of all tier-earns (a user who holds several tiers counts in each); Platinum still reads as a thin
+        # sliver = the rarity story. The legend shows the raw per-tier earner counts.
         _tier_names = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
+        _tier_counts = {t: tier_earner_counts.get(t, 0) for t in (1, 2, 3, 4)}
+        _rarity_total = sum(_tier_counts.values()) or 1
         context['rarity_segments'] = [
             {
                 'tier': t, 'name': _tier_names[t], 'key': _tier_names[t].lower(),
-                'count': max_tier_counts.get(t, 0),
-                'pct': max_tier_pcts.get(t, 0),
+                'count': _tier_counts[t],
+                'pct': round(_tier_counts[t] / _rarity_total * 100, 1),
             }
             for t in (1, 2, 3, 4)
         ]

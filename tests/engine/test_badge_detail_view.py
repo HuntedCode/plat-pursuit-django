@@ -324,6 +324,26 @@ def test_context_band_anon_hides_ranks_and_stats(client, stub_leaderboards):
     assert 'Your Stats' not in html                    # ... and no modal content
 
 
+def test_rarity_bar_counts_all_tiers_earned_not_peak(client, stub_leaderboards):
+    """Tiers are INDEPENDENT, so the rarity bar counts EVERY tier earned. A Platinum-only badge (no Bronze
+    earners) must still fill the Platinum segment -- a peak/nesting model would divide by the (zero) Bronze
+    count and drop it entirely."""
+    series = "rarity-indep"
+    BadgeFactory(series_slug=series, tier=1, is_live=True, earned_count=0)   # no Bronze earners
+    BadgeFactory(series_slug=series, tier=2, is_live=True, earned_count=0)
+    BadgeFactory(series_slug=series, tier=3, is_live=True, earned_count=0)
+    BadgeFactory(series_slug=series, tier=4, is_live=True, earned_count=1)   # Platinum-only
+    _series_with_stage(series, 1)
+
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+    segs = {s['tier']: s for s in resp.context['rarity_segments']}
+
+    assert len(resp.context['rarity_segments']) == 4
+    assert segs[4]['count'] == 1        # the Platinum earner is counted...
+    assert segs[4]['pct'] == 100.0      # ... and fills the bar (all-earned), not dropped (peak would /0)
+    assert segs[1]['count'] == 0        # no Bronze earners
+
+
 def test_maintenance_defaults_to_lowest_lapsed_tier(client, stub_leaderboards):
     """A series with lapsed low tiers must open on the LOWEST maintenance tier (the one to re-earn), not
     skip to the next clean win. Bronze+Silver lapsed, Gold+Plat unearned -> lands on Bronze (tier 1), and
