@@ -54,15 +54,16 @@ from a blank canvas. Don't open the old file for design cues.
 **Legend:** ✅ Done to the Career standard · 🟡 Partial (structurally aligned, full pass pending) ·
 ⛔ Not started · 🗑️ Sunsetting/legacy.
 
-**Only three pages are finished to the standard: Career, Collection, Badges.** Everything else — even
-pages that already borrow the header card or shipped in an earlier phase — is NOT done: it still needs the
-full pass (depth, segmented switcher, premium motion, mobile three-layout verification).
+**Only four pages are finished to the standard: Career, Collection, Badges, Badge Detail.** Everything
+else — even pages that already borrow the header card or shipped in an earlier phase — is NOT done: it
+still needs the full pass (depth, segmented switcher, premium motion, mobile three-layout verification).
 
 | Page | URL | Status | Notes |
 |---|---|---|---|
 | **Career** | `/career/` | ✅ | **The reference standard.** Jobs / Radar / Contracts. Depth pass applied. |
 | **Collection** | `/collection/` | ✅ | Case + Gallery. **Object-depth model** (medallion cast/rim shadows carry depth — deliberately does NOT take the card-lift). |
 | **Badges** | `/badges/` | ✅ | Series + Gallery views; dynamic HTMX view-swap; depth pass; filter/sort settle. Anon quick-peek modal deferred. |
+| **Badge Detail** | `/badges/<slug>/` | ✅ | From-scratch: header + tier ladder + how-to-earn grid + context band (rarity/ranks/My Stats modal) + stage journey (game cards w/ **contract band → in-place modal**, bundle, delisted strip, numbered spine w/ "Up next"). Audited. |
 | **Home / Overview** | `/` | 🟡 | 4 gamification-first blocks shipped in an earlier phase; not finished to standard. Shares `.scard` (got the depth lift). |
 | **Community Hub** | `/community/` | 🟡 | Hub-of-hubs shipped in an earlier phase; not finished to standard. |
 | **Profile** | `/u/<user>/` | 🟡 | Ownership-aware chrome only; full surface pass pending. |
