@@ -236,6 +236,9 @@
 }
 .pp-scard__node.is-earned .pp-scard__dot { background: var(--nc); box-shadow: 0 0 6px color-mix(in oklab, var(--nc) 55%, transparent); }
 .pp-scard__node.is-active .pp-scard__dot { background: transparent; box-shadow: 0 0 7px color-mix(in oklab, var(--nc) 55%, transparent); }
+/* Maintenance (held but lapsed -> needs re-earning): an amber "attention" dot, distinct from the
+   tier-filled earned dot and the hollow active dot. Mirrors the badge-detail header's warning tone. */
+.pp-scard__node.is-maintenance .pp-scard__dot { background: var(--pp-warning); border-color: var(--pp-warning); box-shadow: 0 0 7px color-mix(in oklab, var(--pp-warning) 60%, transparent); }
 .pp-scard__node.is-locked .pp-scard__dot { border-color: color-mix(in oklab, var(--nc) 45%, var(--pp-border)); opacity: 0.55; }
 /* Catalog (anon / no-profile): neutral tier dots -- no earned/active/locked emphasis, since there's no
    personal progress to imply. Just the four tier colours, so the ladder reads as a clean catalog. */
@@ -256,6 +259,7 @@
     border: 1px solid color-mix(in oklab, var(--tier-c) 45%, transparent);
 }
 .pp-scard__state { font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--pp-text-mute); }
+.pp-scard__state[data-state="maintenance"] { color: var(--pp-warning); }
 .pp-scard__prog-row { display: flex; align-items: center; gap: 7px; width: 100%; }
 .pp-scard__prog-row .pp-horizon { flex: 1 1 auto; }
 .pp-scard__rem { flex: 0 0 auto; font-size: 9.5px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }

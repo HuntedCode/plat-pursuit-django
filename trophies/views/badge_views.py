@@ -383,10 +383,17 @@ class BadgeListView(ProfileHotbarMixin, ListView):
 
         # Get user progress data if authenticated
         earned_dict = {}
+        maint_dict = {}
         progress_dict = {}
         if profile:
             user_earned = UserBadge.objects.filter(profile=profile).values('badge__series_slug').annotate(max_tier=Max('badge__tier'))
             earned_dict = {e['badge__series_slug']: e['max_tier'] for e in user_earned}
+            # Maintenance (lapsed) tiers -- HELD but need re-earning. A UserBadge is never deleted; when a series
+            # grows and the user lapses, its status flips to 'maintenance'. It still counts as held (so it's in
+            # earned_dict's max, earn_rank stays permanent), but it must read as a REPAIR state and be the tile's
+            # resting face -- not a clean 'earned' tier the working rung skips past. Maintenance is rare -> cheap.
+            for _slug, _tier in UserBadge.objects.filter(profile=profile, status='maintenance').values_list('badge__series_slug', 'badge__tier'):
+                maint_dict.setdefault(_slug, set()).add(_tier)
 
             all_badges_ids = [b.id for group in grouped_badges.values() for b in group]
             progress_qs = UserBadgeProgress.objects.filter(
@@ -445,12 +452,24 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             # whale-safe. The resting face (`default_tier`) is the tier you're working on (the lowest unearned
             # tier); Bronze if nothing is started, the top tier if the series is finished; anon sees Bronze.
             present_tiers = [b.tier for b in sorted_group]
+            maint_tiers = maint_dict.get(slug, set())
             working_rung = next((t for t in present_tiers if t > highest_tier), None)
-            default_tier = working_rung or present_tiers[-1]
+            # A lapsed (maintenance) tier needs re-earning, so it -- not the next unearned rung -- is the
+            # resting face (the lowest such tier). Otherwise: the tier you're working on, then the top tier.
+            default_tier = min(maint_tiers) if maint_tiers else (working_rung or present_tiers[-1])
             tier_faces = []
             for b in sorted_group:
                 req_t = b.required_stages
-                if b.tier <= highest_tier:
+                if b.tier in maint_tiers:
+                    # Held but lapsed -> a repair state showing the CURRENT progress, not a clean earned bar.
+                    t_state = 'maintenance'
+                    pr = progress_dict.get(b.id)
+                    if pr and b.badge_type in EVALUATABLE_BADGE_TYPES:
+                        t_done = pr.completed_concepts
+                        t_pct = round((t_done / req_t) * 100, 1) if req_t else 0
+                    else:
+                        t_done, t_pct = 0, 0
+                elif b.tier <= highest_tier:
                     t_state, t_done, t_pct = 'earned', req_t, 100
                 elif b.tier == working_rung:
                     t_state = 'active'
@@ -478,7 +497,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 segments = None
                 if 0 < req_t <= TILE_SEGMENT_CAP:
                     segments = ['done'] * min(t_done, req_t)
-                    if t_state == 'active' and t_done < req_t:
+                    if t_state in ('active', 'maintenance') and t_done < req_t:
                         segments.append('active')
                     segments += [''] * (req_t - len(segments))
 
@@ -503,7 +522,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             # work -- the frame build + medallion render -- from 4x to 1x. Anon look, so no per-badge queries.
             default_badge = next((b for b in sorted_group if b.tier == default_tier), tier1_badge)
             default_frame = build_badge_frame(default_badge, None, include_live_stats=False)
-            default_earned = default_tier <= highest_tier
+            # A lapsed default tier is HELD but not clean-earned -> no seal (it reads as a repair state).
+            default_earned = default_tier <= highest_tier and default_tier not in maint_tiers
 
             # Card name: the badge's affiliation takes precedence -- Franchise > Series (IGDB collection) >
             # Developer -- else the series' Display Series (then the display title). Mirrors the medallion's

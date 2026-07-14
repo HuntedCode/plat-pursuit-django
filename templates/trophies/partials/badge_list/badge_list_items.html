@@ -38,8 +38,8 @@
                         data-badge-id="{{ t.badge_id }}"
                         data-earned="{% if user.is_authenticated and user.profile and t.state == 'earned' %}1{% else %}0{% endif %}"
                         aria-pressed="{% if t.tier == item.default_tier %}true{% else %}false{% endif %}"
-                        aria-label="{{ t.tier|badge_tier }} tier{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %}, earned{% elif t.state == 'active' %}, in progress{% else %}, locked{% endif %}{% endif %}"
-                        title="{{ t.tier|badge_tier }}{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %} - earned{% elif t.state == 'active' %} - in progress{% else %} - locked{% endif %}{% endif %}">
+                        aria-label="{{ t.tier|badge_tier }} tier{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %}, earned{% elif t.state == 'maintenance' %}, lapsed - needs re-earning{% elif t.state == 'active' %}, in progress{% else %}, locked{% endif %}{% endif %}"
+                        title="{{ t.tier|badge_tier }}{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %} - earned{% elif t.state == 'maintenance' %} - lapsed, needs re-earning{% elif t.state == 'active' %} - in progress{% else %} - locked{% endif %}{% endif %}">
                     <span class="pp-scard__dot"></span>
                 </button>
                 {% endfor %}
@@ -56,7 +56,7 @@
                 <div class="pp-scard__face-top">
                     <span class="pp-scard__grade">{{ t.tier|badge_tier }}</span>
                     {% if user.is_authenticated and user.profile %}
-                        <span class="pp-scard__state">{% if t.state == 'earned' %}Earned{% elif t.state == 'active' %}Working{% else %}Locked{% endif %}</span>
+                        <span class="pp-scard__state" data-state="{{ t.state }}">{% if t.state == 'earned' %}Earned{% elif t.state == 'maintenance' %}Lapsed{% elif t.state == 'active' %}Working{% else %}Locked{% endif %}</span>
                     {% endif %}
                 </div>
 

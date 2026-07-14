@@ -75,6 +75,25 @@ def test_series_default_face_is_the_working_tier(client):
     assert 'pp-scard__seal' in html                      # ... and the earned face carries the seal
 
 
+def test_series_lapsed_tier_reads_maintenance_and_is_the_resting_face(client):
+    """A held-but-lapsed (maintenance) tier must read as a REPAIR state, and be the tile's resting face --
+    NOT count as a clean 'earned' tier the default face skips past. Earn Bronze, then let Silver lapse:
+    the tile rests on Silver (data-tier='silver'), Silver's node is is-maintenance (not is-earned), the
+    face chip says 'Lapsed', and no earned seal shows (it needs re-earning)."""
+    profile = ProfileFactory()
+    badges = _series('rs-lapsed')
+    UserBadgeFactory(profile=profile, badge=badges[0])                          # Bronze cleanly earned
+    UserBadgeFactory(profile=profile, badge=badges[1], status='maintenance')    # Silver lapsed
+    client.force_login(profile.user)
+
+    html = client.get(SERIES).content.decode()
+
+    assert 'data-tier="silver"' in html                  # rests on the lapsed tier, not Gold (the next rung)
+    assert 'pp-scard__node is-maintenance' in html       # Silver node reads maintenance, not earned
+    assert 'Lapsed' in html                              # the face state chip
+    assert 'pp-scard__node is-earned' in html            # Bronze still reads cleanly earned
+
+
 def test_series_default_face_finished_is_top_tier(client):
     """A finished series (all tiers earned) defaults to the top tier's face (data-tier='platinum')."""
     profile = ProfileFactory()
@@ -163,7 +182,9 @@ def test_series_big_tier_falls_back_to_smooth_bar(client):
     html = client.get(SERIES).content.decode()
 
     assert 'pp-horizon__track' in html               # the big tier's smooth fallback bar
-    assert html.count('pp-horizon__seg') == 4        # only the small tier segments; the big one does NOT sliver
+    # Count the rendered SEGMENTS only (class="..."), not the entrance-animation JS's
+    # `.pp-horizon__seg[data-state]` selector string, which a bare substring count would also catch.
+    assert html.count('class="pp-horizon__seg"') == 4  # only the small tier segments; the big one does NOT sliver
 
 
 def test_series_query_count_is_flat(client):
