@@ -9,8 +9,8 @@
     <div class="pp-scard{% if item.has_maintenance %} is-maintenance{% endif %}" data-tier="{{ item.default_tier|badge_tier|lower }}">
 
         {% if item.has_maintenance %}
-        {# A lapsed rung -> a red "M" in the top-left corner (mirrors the Gallery/Case maintenance mark), so the
-           "needs re-earning" signal reads before you scroll the ladder. #}
+        {% comment %} A lapsed rung -> a red "M" in the top-left corner (mirrors the Gallery/Case maintenance
+        mark), so the "needs re-earning" signal reads before you scroll the ladder. {% endcomment %}
         <span class="pp-scard__m" title="Maintenance -- a held tier has lapsed and needs re-earning"><span aria-hidden="true">M</span><span class="sr-only">Maintenance needed</span></span>
         {% endif %}
 
