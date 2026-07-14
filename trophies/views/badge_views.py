@@ -780,6 +780,41 @@ class BadgeQuickPeekView(View):
         return render(request, 'components/badge_peek_modal.html', {'frame': frame})
 
 
+class BadgeProgressPeekView(View):
+    """Profile-aware badge peek for the badge detail page: the medallion in the DISPLAYED profile's REAL
+    state (earned / in-progress / unearned) + personalised base, for whichever tier is inspected. Keyed to
+    the profile in the URL (the page's target_profile), so it's correct whether you're viewing your OWN page
+    or another Pursuer's. Auth-gated -- a specific Pursuer's progress is only shown to signed-in viewers,
+    matching the badge detail page; anonymous visitors use the generic showcase BadgeQuickPeekView."""
+
+    def get(self, request, psn_username, badge_id):
+        if not request.user.is_authenticated:
+            return HttpResponseNotFound()
+        from trophies.services.frame_service import build_badge_frame
+        profile = get_object_or_404(Profile, psn_username__iexact=psn_username)
+        badge = (
+            Badge.objects.filter(id=badge_id, is_live=True)
+            .select_related(
+                'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
+                'base_badge__franchise', 'base_badge__collection',
+                'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
+            ).first()
+        )
+        if badge is None:
+            return HttpResponseNotFound()
+        frame = build_badge_frame(badge, profile)   # single hero: full stats + live rank/XP in the real state
+        frame['series_slug'] = badge.series_slug
+        frame['badge_id'] = badge.id
+        frame['tier_xp'] = _badge_xp(badge)
+        if frame.get('state') in ('earned', 'maintenance'):
+            frame['owner_name'] = profile.display_psn_username or profile.psn_username   # engraved on the base
+        # When the inspected profile isn't the viewer's own (the /badges/<slug>/<username>/ variant), tell the
+        # modal whose progress this is so it can't be mistaken for your own.
+        if profile != getattr(request.user, 'profile', None):
+            frame['viewing_other_name'] = profile.display_psn_username or profile.psn_username
+        return render(request, 'components/collection_badge_modal.html', {'frame': frame})
+
+
 class BadgeDetailView(ProfileHotbarMixin, DetailView):
     """
     Display detailed badge series information with progress tracking.
@@ -849,6 +884,10 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             target_profile = None
 
         context['target_profile'] = target_profile
+        # When the page is showing SOMEONE ELSE'S progress (the /<slug>/<username>/ variant), surface whose
+        # -- the header + inspect modal make it unmistakable you're not looking at your own.
+        viewer_profile = self.request.user.profile if (self.request.user.is_authenticated and hasattr(self.request.user, 'profile')) else None
+        context['viewing_other_profile'] = target_profile if (target_profile and target_profile != viewer_profile) else None
 
         badge = None
         is_earned = False

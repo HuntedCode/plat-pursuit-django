@@ -14,6 +14,14 @@
 .bdh-med .pp-med__count, .bdh-med .pp-med__meter { display: none; }
 .bdh-headline { text-decoration: none; color: inherit; }
 
+/* "Viewing someone else's progress" banner (the /<slug>/<username>/ variant) -- secondary accent so it
+   clearly reads as NOT your own. */
+.bdh-viewing { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 12px; padding: 8px 12px; border-radius: var(--pp-radius-md); border: 1px solid color-mix(in oklab, var(--pp-secondary) 42%, var(--pp-border)); background: color-mix(in oklab, var(--pp-secondary) 13%, var(--pp-bg-2)); font-size: 0.82rem; color: var(--pp-text-dim); }
+.bdh-viewing__ico { width: 16px; height: 16px; color: var(--pp-secondary); flex: 0 0 auto; }
+.bdh-viewing strong { color: var(--pp-text); font-weight: 800; }
+.bdh-viewing__mine { margin-left: auto; color: var(--pp-primary); font-weight: 700; text-decoration: none; white-space: nowrap; }
+@media (hover: hover) { .bdh-viewing__mine:hover { text-decoration: underline; } }
+
 /* At-a-glance facts: a row of stacked mini-facts (value over micro-label), echoing the Collection header's
    tier-composition strip. Values are neutral; only Difficulty / Avg-Hours are tinted (traffic-light). */
 .bdh-facts { display: flex; flex-wrap: wrap; gap: 12px 22px; }

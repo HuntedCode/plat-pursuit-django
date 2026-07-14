@@ -102,9 +102,8 @@ def test_tier_switch_full_page_without_htmx(client, stub_leaderboards):
 
 
 def test_hero_medallion_inspect_is_profile_aware(client, stub_leaderboards):
-    """The hero medallion inspect fetches the PROFILE-AWARE collection modal for a linked Pursuer (so the
-    medallion shows their real earned state + personalised base), and the generic showcase peek for anon.
-    Either way the dialog is present and the hero medallion carries a badge id to peek."""
+    """The hero medallion inspect fetches the PROFILE-AWARE peek keyed to the DISPLAYED profile (so the
+    medallion shows their real earned state + personalised base), and the generic showcase peek for anon."""
     series = "rebuild-peek-aware"
     BadgeFactory(series_slug=series, tier=1, is_live=True)
     _series_with_stage(series, 1)
@@ -115,14 +114,40 @@ def test_hero_medallion_inspect_is_profile_aware(client, stub_leaderboards):
     assert 'id="badge-peek"' in anon
     assert 'data-badge-id' in anon
     assert '/badge-peek/0/' in anon
-    assert '/collection/badge/0/' not in anon
+    assert '/badge-progress-peek/' not in anon
 
-    # Linked Pursuer -> the profile-aware collection modal (real state + owner engraving).
-    profile = ProfileFactory(is_linked=True)
+    # Signed-in -> the profile-aware peek keyed to the displayed (own) profile.
+    profile = ProfileFactory()
     client.force_login(profile.user)
     authed = client.get(url).content.decode()
-    assert '/collection/badge/0/' in authed
+    assert '/badge-progress-peek/' + profile.psn_username + '/0/' in authed
     assert '/badge-peek/0/' not in authed
+
+
+def test_viewing_another_profile_flags_it(client, stub_leaderboards):
+    """The /<slug>/<username>/ variant shows an unmistakable 'viewing X's progress' header banner AND points
+    the inspect at THAT profile's peek -- not the viewer's own."""
+    series = "rebuild-peek-variant"
+    BadgeFactory(series_slug=series, tier=1, is_live=True)
+    _series_with_stage(series, 1)
+
+    other = ProfileFactory()
+    viewer = ProfileFactory()
+    client.force_login(viewer.user)
+
+    # The /<slug>/<username>/ path is Cloudflare-guarded; simulate the CF-Ray header so the guard middleware
+    # doesn't 302 it back to the proxy origin (see plat_pursuit.middleware).
+    resp = client.get(reverse('badge_detail_with_profile',
+                              kwargs={'series_slug': series, 'psn_username': other.psn_username}),
+                      HTTP_CF_RAY="test-ray")
+
+    assert resp.status_code == 200
+    html = resp.content.decode()
+    assert 'bdh-viewing' in html                     # the header "not your own" banner
+    assert other.psn_username in html                # names the displayed Pursuer
+    # Inspect targets the DISPLAYED profile's peek, not the viewer's.
+    assert '/badge-progress-peek/' + other.psn_username + '/0/' in html
+    assert '/badge-progress-peek/' + viewer.psn_username + '/0/' not in html
 
 
 def _series_with_games(series, n_games=2, stage_number=1):

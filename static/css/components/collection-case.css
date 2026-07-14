@@ -347,6 +347,9 @@
     }
     .pp-bdetail__stage .pp-med__art.is-tilting .pp-med__glare { opacity: 1; }
 }
+/* "Not your own" chip -- only set when a badge-detail peek inspects ANOTHER Pursuer's progress
+   (frame.viewing_other_name). The collection's own modal never sets it. */
+.pp-bdetail__viewing { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 10px; padding: 3px 10px; border-radius: 999px; background: color-mix(in oklab, var(--pp-secondary) 16%, transparent); border: 1px solid color-mix(in oklab, var(--pp-secondary) 42%, transparent); font-size: 11px; font-weight: 800; color: var(--pp-secondary); }
 .pp-bdetail__eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); }
 .pp-bdetail__title { font-size: 26px; font-weight: 800; margin: 4px 0 2px; letter-spacing: -0.01em; }
 .pp-bdetail__state { font-size: 13px; font-weight: 700; color: var(--pp-primary); margin-bottom: 12px; }

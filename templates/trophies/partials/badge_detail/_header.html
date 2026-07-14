@@ -17,6 +17,15 @@ selected_tier. Keeps id="badge-header-card".
 <section id="badge-header-card" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
     <div class="card-body p-4 md:p-5 lg:p-6">
 
+        {% if viewing_other_profile %}
+        {# Unmistakable "not your own" banner for the /<slug>/<username>/ variant. #}
+        <div class="bdh-viewing">
+            <svg class="bdh-viewing__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span>Viewing <strong>{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}</strong>'s progress</span>
+            <a href="{% url 'badge_detail' badge.series_slug %}" class="bdh-viewing__mine">View mine &rsaquo;</a>
+        </div>
+        {% endif %}
+
         {# ── Hero: the Medallion + series identity + the one headline number (Earners) ── #}
         <div class="flex flex-col sm:flex-row sm:items-start gap-4 md:gap-6">
             <div class="bdh-med shrink-0 mx-auto sm:mx-0">

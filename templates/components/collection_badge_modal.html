@@ -10,6 +10,7 @@ CollectionBadgeModalView and fetched on tap. Expects `frame` (a full build_badge
         {% include 'components/badge_medallion.html' with frame=frame no_id=True with_back=True %}
     </div>
     <div class="pp-bdetail__info">
+        {% if frame.viewing_other_name %}<div class="pp-bdetail__viewing">{{ frame.viewing_other_name }}'s progress</div>{% endif %}
         <div class="pp-bdetail__eyebrow">{{ frame.series_name }}</div>
         <h2 class="pp-bdetail__title">{{ frame.badge_name }}</h2>
         <div class="pp-bdetail__state">{{ frame.tier|title }}
