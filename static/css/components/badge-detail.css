@@ -316,6 +316,10 @@
 .bd-gcard__ctr-more { font-size: 0.6rem; font-weight: 800; color: var(--pp-text-dim); }
 .bd-gcard__ctr-xp { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.72rem; color: var(--ctr-accent, var(--pp-secondary)); flex-shrink: 0; }
 .bd-gcard__ctr-arrow { width: 12px; height: 12px; color: var(--ctr-accent, var(--pp-secondary)); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
+/* Contract modal: the ContractModalView (.rpm__*) partial injected in place. Its content is wide + tall, so
+   give the shared pp-detail-modal dialog room + a scroll, and let the rpm content own its padding. */
+.pp-detail-modal--contract .pp-detail-modal__dialog { width: min(92vw, 640px); max-height: 88vh; overflow-y: auto; padding: 0; }
+.pp-detail-modal--contract .pp-detail-modal__body { min-height: 0; }
 
 /* ── Stage section ──────────────────────────────────────────────────────────
    A stage is a .bd-card holding a clickable header (collapse toggle), an

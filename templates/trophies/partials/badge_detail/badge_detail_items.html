@@ -38,7 +38,7 @@ container, not one big <a>. {% endcomment %}
     {% comment %} Contract hook -- opens the contract modal in place (data-contract-slug, wired in
     badge_detail.html); the href is the career board as the no-JS / anon fallback. {% endcomment %}
     {% if contract %}
-    <a class="bd-gcard__ctr" href="{% url 'career' %}?view=contracts" data-contract-slug="{{ contract.slug }}"
+    <a class="bd-gcard__ctr" href="{% url 'career' %}?view=contracts" data-contract-url="{% url 'contract_modal' contract.slug %}"
        style="{% if contract.band_bg %}background: {{ contract.band_bg }};{% endif %}{% if contract.accent %}--ctr-accent: {{ contract.accent }};{% endif %}"
        title="Contract: {{ contract.name }} &middot; {% for job in contract.jobs %}{{ job.name }}{% if not forloop.last %}, {% endif %}{% endfor %}">
         <span class="bd-gcard__ctr-jobs">

@@ -41,6 +41,19 @@
         </div>
     </div>
     {% endif %}
+
+    {% comment %} Contract modal: a game card's contract band opens THAT contract in place (fetched lazily
+    from ContractModalView, reusing the career modal partial). Rendered when a profile is on display; anon /
+    non-linked fall back to the career board via the band's href. {% endcomment %}
+    {% if target_profile %}
+    <div class="pp-detail-modal pp-detail-modal--contract" id="badge-contract-modal" hidden>
+        <div class="pp-detail-modal__scrim" data-contract-close></div>
+        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Contract" tabindex="-1">
+            <button type="button" class="pp-detail-modal__close" data-contract-close aria-label="Close contract">&times;</button>
+            <div class="pp-detail-modal__body" data-contract-body></div>
+        </div>
+    </div>
+    {% endif %}
 {% endblock %}
 
 {% block js_scripts %}
@@ -91,6 +104,37 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !statsModal.hidden) { closeStats(); } });
+    }
+
+    // ── Contract modal ──
+    // A game card's contract band opens THAT contract in place: lazily fetch the ContractModalView partial and
+    // inject it. Delegated (the bands re-render on tier swaps); the modal lives outside the island. On a
+    // non-200 (logged-in-but-not-linked -> 404) or a network error, fall back to the band's href (career board).
+    var contractModal = document.getElementById('badge-contract-modal');
+    if (contractModal) {
+        var contractBody = contractModal.querySelector('[data-contract-body]');
+        var closeContract = function () { contractModal.hidden = true; contractBody.innerHTML = ''; document.body.style.overflow = ''; };
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            var link = e.target.closest('[data-contract-url]');
+            if (link) {
+                if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }   // let modified clicks open normally
+                e.preventDefault();
+                fetch(link.getAttribute('data-contract-url'), { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+                    .then(function (r) { return r.ok ? r.text() : null; })
+                    .then(function (html) {
+                        if (html == null) { window.location.href = link.getAttribute('href'); return; }   // not linked -> career board
+                        contractBody.innerHTML = html;
+                        contractModal.hidden = false;
+                        document.body.style.overflow = 'hidden';
+                        var d = contractModal.querySelector('.pp-detail-modal__dialog'); if (d) { d.focus(); }
+                    })
+                    .catch(function () { window.location.href = link.getAttribute('href'); });
+                return;
+            }
+            if (e.target.closest('[data-contract-close]')) { closeContract(); }
+        });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !contractModal.hidden) { closeContract(); } });
     }
 
     // ── Stage collapse / expand ──
