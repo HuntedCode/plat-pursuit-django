@@ -35,8 +35,8 @@ badge_tier_xp_bonus, tier_req_stages, badge.badge_type.
     </div>
 
     {% comment %} ── Selected tier's requirements (rebuilt from scratch: the Ask headline + a quiet progress/XP
-    line, then the compact stage-tile grid). An open section under the ladder (top divider, no nested card),
-    per the "stacked chrome, free content" rule. {% endcomment %}
+    line, then the compact stage-tile grid). A discrete section, so it lives in a card (tier-accent left
+    border) -- free/uncarded content is reserved for the big page-filling grids like the stage journey. {% endcomment %}
     {% if selected_tier_badge %}
     <div class="bd-req bd-req--{{ selected_tier|badge_tier|lower }}">
 
