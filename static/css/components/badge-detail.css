@@ -14,6 +14,13 @@
 .bdh-med .pp-med__count, .bdh-med .pp-med__meter { display: none; }
 .bdh-headline { text-decoration: none; color: inherit; }
 
+/* Header progress bar tinted with the SELECTED tier's colour (via the Horizon --horizon-accent), so it
+   matches the medallion's own meter + the badge-list Series tiles rather than a generic accent. */
+.bdh-progress[data-tier="bronze"]   { --horizon-accent: #cf9160; }
+.bdh-progress[data-tier="silver"]   { --horizon-accent: #b9c6d6; }
+.bdh-progress[data-tier="gold"]     { --horizon-accent: #e7c25c; }
+.bdh-progress[data-tier="platinum"] { --horizon-accent: #8fd2ea; }
+
 /* "Viewing someone else's progress" banner (the /<slug>/<username>/ variant) -- secondary accent so it
    clearly reads as NOT your own. */
 .bdh-viewing { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 12px; padding: 8px 12px; border-radius: var(--pp-radius-md); border: 1px solid color-mix(in oklab, var(--pp-secondary) 42%, var(--pp-border)); background: color-mix(in oklab, var(--pp-secondary) 13%, var(--pp-bg-2)); font-size: 0.82rem; color: var(--pp-text-dim); }
