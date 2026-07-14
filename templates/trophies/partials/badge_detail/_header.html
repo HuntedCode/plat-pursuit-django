@@ -60,28 +60,36 @@ selected_tier. Keeps id="badge-header-card".
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
                         {{ selected_tier|badge_tier }} earned{% if hero_frame.earned_date %} &middot; {{ hero_frame.earned_date }}{% endif %}
                     </div>
+                    {% elif hero_frame.state == 'maintenance' %}
+                    {# Lapsed (held but needs re-earning): warning tone + wrench, mirroring the medallion's repair state. #}
+                    <div class="flex items-center justify-between text-xs mb-1.5">
+                        <span class="inline-flex items-center gap-1 font-bold text-warning"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> {{ selected_tier|badge_tier }} lapsed</span>
+                        <span class="text-base-content/50">{{ hero_frame.stages_done }}/{{ hero_frame.stages_total }} to re-earn</span>
+                    </div>
                     {% elif hero_frame.state == 'in_progress' %}
                     <div class="flex items-center justify-between text-xs text-base-content/50 mb-1.5">
                         <span>{{ selected_tier|badge_tier }} progress</span>
-                        <span>{{ stats.user_stages_played }}/{{ stats.total_required_stages }} stages &middot; {{ stats.user_series_xp|intcomma }} XP</span>
+                        <span>{{ hero_frame.stages_done }}/{{ hero_frame.stages_total }} stages &middot; {{ stats.user_series_xp|intcomma }} XP</span>
                     </div>
                     {% else %}
-                    <div class="text-sm text-base-content/60">{{ selected_tier|badge_tier }} &middot; not started &middot; {{ stats.total_required_stages }} stage{{ stats.total_required_stages|pluralize }} to earn</div>
+                    <div class="flex items-center justify-between text-xs text-base-content/50 mb-1.5">
+                        <span>{{ selected_tier|badge_tier }} &middot; not started</span>
+                        <span>{{ hero_frame.stages_total }} stage{{ hero_frame.stages_total|pluralize }} to earn</span>
+                    </div>
                     {% endif %}
 
-                    {% comment %} Progress bar for earned (full) + in_progress, so all tracked states read consistently.
-                    Segmented when frame.segments is set (<= SEGMENT_CAP stages, matching the medallion), else smooth;
-                    tinted with the selected tier's colour via --horizon-accent (like the badge-list Series tiles). {% endcomment %}
-                    {% if hero_frame.state == 'earned' or hero_frame.state == 'in_progress' %}
-                        {% if hero_frame.segments %}
-                        <span class="pp-horizon pp-horizon--segmented bdh-progress" data-tier="{{ hero_frame.tier }}" role="progressbar" aria-valuenow="{% if hero_frame.state == 'earned' %}100{% else %}{{ hero_frame.progress_pct|default:0 }}{% endif %}" aria-valuemin="0" aria-valuemax="100" style="--horizon-h: 8px;">
-                            {% for on in hero_frame.segments %}<span class="pp-horizon__seg"{% if on or hero_frame.state == 'earned' %} data-state="done"{% endif %}></span>{% endfor %}
-                        </span>
-                        {% else %}
-                        <div class="pp-horizon bdh-progress" data-tier="{{ hero_frame.tier }}" style="--horizon-h: 8px;">
-                            <span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-progress: {% if hero_frame.state == 'earned' %}100{% else %}{{ hero_frame.progress_pct|default:0 }}{% endif %}%;"></span></span>
-                        </div>
-                        {% endif %}
+                    {% comment %} Progress bar for EVERY tracked state so the header reads consistently: earned = full,
+                    maintenance / in_progress = partial (repair / current progress), not started = empty. Segmented when
+                    frame.segments (<= SEGMENT_CAP stages, matching the medallion), else smooth; tinted with the selected
+                    tier's colour via --horizon-accent (like the badge-list Series tiles). {% endcomment %}
+                    {% if hero_frame.segments %}
+                    <span class="pp-horizon pp-horizon--segmented bdh-progress" data-tier="{{ hero_frame.tier }}" role="progressbar" aria-valuenow="{% if hero_frame.state == 'earned' %}100{% else %}{{ hero_frame.progress_pct|default:0 }}{% endif %}" aria-valuemin="0" aria-valuemax="100" style="--horizon-h: 8px;">
+                        {% for on in hero_frame.segments %}<span class="pp-horizon__seg"{% if on or hero_frame.state == 'earned' %} data-state="done"{% endif %}></span>{% endfor %}
+                    </span>
+                    {% else %}
+                    <div class="pp-horizon bdh-progress" data-tier="{{ hero_frame.tier }}" style="--horizon-h: 8px;">
+                        <span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-progress: {% if hero_frame.state == 'earned' %}100{% else %}{{ hero_frame.progress_pct|default:0 }}{% endif %}%;"></span></span>
+                    </div>
                     {% endif %}
                 {% else %}
                     <div class="text-sm text-base-content/60 italic">A curated platinum badge &middot; sign in to track your progress</div>

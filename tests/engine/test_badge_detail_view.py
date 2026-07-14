@@ -194,6 +194,24 @@ def test_progress_peek_endpoint_reflects_real_state(client, stub_leaderboards):
     assert other.psn_username in other_html
 
 
+def test_header_maintenance_state(client, stub_leaderboards):
+    """A lapsed (maintenance) hero badge renders the maintenance treatment ('lapsed'), not the 'not started'
+    branch it used to fall into."""
+    series = "peek-maint"
+    badge = BadgeFactory(series_slug=series, tier=1, is_live=True, required_stages=3)
+    _series_with_stage(series, 1)
+    profile = ProfileFactory()
+    UserBadgeFactory(profile=profile, badge=badge, status='maintenance')   # held but lapsed
+    client.force_login(profile.user)
+
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+
+    assert resp.status_code == 200
+    html = resp.content.decode()
+    assert 'lapsed' in html            # the maintenance branch (wrench + "lapsed")
+    assert 'not started' not in html   # NOT the unearned branch
+
+
 def _series_with_games(series, n_games=2, stage_number=1):
     """One stage (applies to all tiers) whose concept holds n_games games."""
     concept = ConceptFactory()
