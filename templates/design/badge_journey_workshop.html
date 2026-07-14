@@ -32,6 +32,10 @@ variant wraps the SAME condensed stage block, so the real choice is NODE RICHNES
     .bjw-stage__title { font-family: var(--pp-font-display); font-size: 0.98rem; font-weight: 800; color: var(--pp-text); line-height: 1.2; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bjw-stage__pill { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.74rem; padding: 2px 10px; border-radius: 999px; flex-shrink: 0; background: var(--pp-bg-2); color: var(--pp-text-dim); border: 1px solid var(--pp-border); }
     .bjw-stage--done .bjw-stage__pill { background: color-mix(in oklch, var(--pp-success) 14%, var(--pp-bg-2)); color: var(--pp-success); border-color: color-mix(in oklch, var(--pp-success) 30%, transparent); }
+    /* Suggested "do this next" (the lowest open stage) -- a cyan/primary lift on the block. */
+    .bjw-stage--next { border-color: color-mix(in oklch, var(--pp-primary) 45%, var(--pp-border)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 22px color-mix(in oklch, var(--pp-primary) 16%, transparent); }
+    .bjw-stage--next .bjw-stage__eyebrow { color: var(--pp-primary); }
+    .bjw-stage--next .bjw-stage__pill { background: color-mix(in oklch, var(--pp-primary) 14%, var(--pp-bg-2)); color: var(--pp-primary); border-color: color-mix(in oklch, var(--pp-primary) 30%, transparent); }
 
     /* Aggregate completion meter -- a quantity (3 of 6), decoupled from any node position. */
     .bjw-count { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; font-size: 0.78rem; color: var(--pp-text-dim); font-weight: 600; }
@@ -46,18 +50,20 @@ variant wraps the SAME condensed stage block, so the real choice is NODE RICHNES
     .bjw-v1__node { position: absolute; left: -34px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--pp-bg-2); border: 2px solid var(--pp-border); z-index: 2; }
     .bjw-v1__node svg { width: 11px; height: 11px; }
     .bjw-v1__row--done .bjw-v1__node { background: var(--pp-success); border-color: var(--pp-success); color: #06140d; box-shadow: 0 0 0 3px color-mix(in oklch, var(--pp-success) 16%, transparent); }
+    .bjw-v1__row--next .bjw-v1__node { background: var(--pp-primary); border-color: var(--pp-primary); --pulse-col: var(--pp-primary); animation: bjw-pulse 2.2s var(--pp-ease) infinite; }
     .bjw-v1__row--bonus .bjw-v1__node { border-radius: 4px; transform: translateY(-50%) rotate(45deg); border-style: dashed; border-color: var(--pp-accent); color: var(--pp-accent); }
 
     /* ══════ VARIANT 2 — Milestone nodes (numbered; each node carries its OWN state) ══════ */
-    .bjw-v2 { position: relative; padding-left: 62px; display: flex; flex-direction: column; gap: 16px; }
+    .bjw-v2 { position: relative; padding-left: 50px; display: flex; flex-direction: column; gap: 16px; }
     .bjw-v2__row { position: relative; }
-    .bjw-v2__node { position: absolute; left: -62px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; z-index: 2;
-        font-family: var(--pp-font-display); font-weight: 800; font-size: 1.05rem; background: var(--pp-bg-2); border: 2px solid var(--pp-border); color: var(--pp-text-mute); }
-    .bjw-v2__node svg { width: 20px; height: 20px; }
+    .bjw-v2__node { position: absolute; left: -50px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; z-index: 2;
+        font-family: var(--pp-font-display); font-weight: 800; font-size: 0.9rem; background: var(--pp-bg-2); border: 2px solid var(--pp-border); color: var(--pp-text-mute); }
+    .bjw-v2__node svg { width: 16px; height: 16px; }
     /* Neutral connector (uniform -- order-free, so it never encodes "progress so far"). */
-    .bjw-v2__row::after { content: ""; position: absolute; left: -40px; top: calc(50% + 22px); width: 2px; height: calc(100% + 16px - 44px); background: var(--pp-border); z-index: 1; }
+    .bjw-v2__row::after { content: ""; position: absolute; left: -34px; top: calc(50% + 17px); width: 2px; height: calc(100% + 16px - 34px); background: var(--pp-border); z-index: 1; }
     .bjw-v2__row:last-child::after { display: none; }
     .bjw-v2__row--done .bjw-v2__node { background: var(--pp-success); border-color: var(--pp-success); color: #06140d; }
+    .bjw-v2__row--next .bjw-v2__node { border-color: var(--pp-primary); color: var(--pp-primary); background: color-mix(in oklch, var(--pp-primary) 12%, var(--pp-bg-2)); --pulse-col: var(--pp-primary); animation: bjw-pulse 2.2s var(--pp-ease) infinite; }
     .bjw-v2__row--bonus .bjw-v2__node { border-style: dashed; border-color: var(--pp-accent); color: var(--pp-accent); background: color-mix(in oklch, var(--pp-accent) 8%, var(--pp-bg-2)); }
 
     /* ══════ VARIANT 3 — Tier-coloured path (nodes carry stage art; tier tint is decorative) ══════ */
@@ -68,9 +74,17 @@ variant wraps the SAME condensed stage block, so the real choice is NODE RICHNES
     .bjw-v3__node--dim img { opacity: 0.35; filter: saturate(0.4); }
     .bjw-v3__check { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklch, var(--pp-success) 62%, transparent); color: #06140d; }
     .bjw-v3__check svg { width: 16px; height: 16px; }
+    .bjw-v3__row--next .bjw-v3__node { border-color: var(--pp-primary); box-shadow: 0 0 0 3px color-mix(in oklch, var(--pp-primary) 20%, transparent); --pulse-col: var(--pp-primary); animation: bjw-pulse 2.2s var(--pp-ease) infinite; }
     /* Decorative tier tint on the connector -- uniform low opacity, NOT a progress signal. */
     .bjw-v3__row::after { content: ""; position: absolute; left: -40px; top: calc(50% + 20px); width: 3px; height: calc(100% + 16px - 40px); border-radius: 2px; background: var(--tier-col, var(--pp-border)); opacity: 0.3; z-index: 1; }
     .bjw-v3__row:last-child::after { display: none; }
+
+    /* Shared "do this next" pulse. Colour comes from a hoisted var (never color-mix inside a keyframe). */
+    @keyframes bjw-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 var(--pulse-col); }
+        50% { box-shadow: 0 0 0 6px transparent; }
+    }
+    @media (prefers-reduced-motion: reduce) { .bjw-v1__node, .bjw-v2__node, .bjw-v3__node { animation: none !important; } }
 </style>
 
 <div class="bjw">
@@ -78,10 +92,11 @@ variant wraps the SAME condensed stage block, so the real choice is NODE RICHNES
     <p class="bjw__sub">The connective <b>spine</b> that threads the stages into one set. Real
         <b>{{ series_title }}</b> stages.</p>
     <div class="bjw__callout"><b>Stages complete in any order</b> &mdash; so this is fabricated scattered:
-        <b>1, 3, 4 done; 2, 5, 6 not</b>. That kills the "climb / fill-to-progress" idea (a spine can't fill
-        top-to-bottom when completion is out of order) and the single "you are here" pointer. Each node just
-        carries its own done / to-do state; overall progress is an aggregate <b>{{ done_count }} of {{ total_count }}</b>
-        count up top. The real choice below is <b>how rich each node is</b>: a dot, a number, or the stage art.</p>
+        <b>1, 3, 4 done; 2, 5, 6 not</b>. That kills the top-to-bottom "fill" gauge, but we keep a light
+        <b>&ldquo;Up next&rdquo;</b> nudge: the lowest open stage (here, <b>Stage 2</b>) gets the cyan pulse as a
+        recommended entry point &mdash; a suggestion, never a lock. Everything else carries its own done /
+        to-do state; overall progress is an aggregate <b>{{ done_count }} of {{ total_count }}</b> count up top.
+        The real choice below is <b>how rich each node is</b>: a dot, a number, or the stage art.</p>
 
     {% comment %} ── Variant 1: minimal dots ── {% endcomment %}
     <div class="bjw__block">
@@ -133,7 +148,7 @@ variant wraps the SAME condensed stage block, so the real choice is NODE RICHNES
             {% comment %} Tier colours cycle down the ladder as decoration (a nod to the badge's tiers), NOT a
             progress signal -- completion is per-node and out of order. {% endcomment %}
             <div class="bjw-v3__row bjw-v3__row--{{ s.state }}" style="--tier-col: {% cycle 'var(--color-trophy-bronze)' 'var(--color-trophy-silver)' 'var(--color-trophy-gold)' 'var(--color-trophy-platinum)' %};">
-                <span class="bjw-v3__node{% if s.state != 'done' %} bjw-v3__node--dim{% endif %}">
+                <span class="bjw-v3__node{% if s.state == 'todo' or s.state == 'bonus' %} bjw-v3__node--dim{% endif %}">
                     <img src="{{ s.icon }}" alt="">
                     {% if s.state == 'done' %}<span class="bjw-v3__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
                 </span>

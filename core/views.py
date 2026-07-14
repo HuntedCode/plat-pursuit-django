@@ -748,12 +748,18 @@ class BadgeJourneyWorkshopView(TemplateView):
         # Scattered completion (stages complete in any order): 1, 3, 4 done; 2, 5, 6 not.
         done_set = {1, 3, 4}
         counts = [(4, 4), (2, 6), (5, 5), (6, 6), (1, 4), (0, 3)]  # (completed, total) games per stage
+        # Suggested "do this next" = the LOWEST-numbered open stage (a recommended entry point that never
+        # forces order). Bonus (stage 0) is excluded from the suggestion.
+        open_numbers = [s.stage_number for s in raw if s.stage_number != 0 and s.stage_number not in done_set]
+        next_number = min(open_numbers) if open_numbers else None
         stages = []
         for idx, s in enumerate(raw):
             if s.stage_number == 0:
                 state = 'bonus'
             elif s.stage_number in done_set:
                 state = 'done'
+            elif s.stage_number == next_number:
+                state = 'next'
             else:
                 state = 'todo'
             comp, total = counts[idx % len(counts)]
