@@ -915,10 +915,11 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         # Whether selected tier requires platinum (tiers 1/3) or 100% (tiers 2/4)
         context['selected_tier_is_plat'] = selected_tier in [1, 3]
 
-        # Hero frame: the Frame primitive for the tier the viewer is looking at.
+        # Hero frame: the medallion for the tier the viewer is looking at.
         from trophies.services.frame_service import build_badge_frame
         hero_badge = series_badges.filter(tier=selected_tier).first() or badge
         context['hero_frame'] = build_badge_frame(hero_badge, target_profile)
+        context['hero_frame']['badge_id'] = hero_badge.id   # enables the medallion inspect peek
 
         # Same Game queryset is reused for both the standalone concepts prefetch
         # and the bundle members prefetch. raw_response is the full IGDB API blob

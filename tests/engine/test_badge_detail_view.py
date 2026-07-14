@@ -101,6 +101,21 @@ def test_tier_switch_full_page_without_htmx(client, stub_leaderboards):
     assert 'bd-tierlad' in html
 
 
+def test_hero_medallion_is_inspectable(client, stub_leaderboards):
+    """The hero medallion carries its badge id + the page has the inspect (#badge-peek) dialog, so tapping
+    the medallion opens the pick-up/put-down peek."""
+    series = "rebuild-peek"
+    BadgeFactory(series_slug=series, tier=1, is_live=True)
+    _series_with_stage(series, 1)
+
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+
+    assert resp.status_code == 200
+    html = resp.content.decode()
+    assert 'id="badge-peek"' in html    # the inspect dialog is present
+    assert 'data-badge-id' in html      # the hero medallion carries a badge id to peek (the view sets it)
+
+
 def _series_with_games(series, n_games=2, stage_number=1):
     """One stage (applies to all tiers) whose concept holds n_games games."""
     concept = ConceptFactory()

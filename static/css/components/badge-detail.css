@@ -8,7 +8,7 @@
    traffic-light). Everything else is shared components + Tailwind utilities -- the only bespoke bits are the
    medallion sizing and the compact facts strip (which mirrors Collection's tier-composition strip). */
 .bdh-med { display: flex; justify-content: center; }
-.bdh-med .pp-med { --sz: 116px; }
+.bdh-med .pp-med { --sz: 116px; cursor: pointer; }   /* tap to inspect (pick-up / put-down peek) */
 @media (min-width: 768px) { .bdh-med .pp-med { --sz: 140px; } }
 /* the substance band carries progress; keep the object itself clean (no meter/count stacked under it) */
 .bdh-med .pp-med__count, .bdh-med .pp-med__meter { display: none; }

@@ -7,10 +7,21 @@
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
 
-    {# Everything tier-scoped lives in this island; the tier chips HTMX-swap its innerHTML (no full reload).
-       The view returns badge_detail_tier_view.html alone for those requests (see get_template_names). #}
+    {% comment %} Everything tier-scoped lives in this island; the tier chips HTMX-swap its innerHTML (no
+    full reload). The view returns badge_detail_tier_view.html alone for those requests (get_template_names). {% endcomment %}
     <div id="badge-tier-view">
         {% include 'trophies/partials/badge_detail/badge_detail_tier_view.html' %}
+    </div>
+
+    {% comment %} Medallion inspect (pick-up / put-down): tapping the hero medallion grows the public
+    badge_quick_peek into this shared dialog (the collection's .pp-detail-modal chrome). Lives OUTSIDE the
+    swap island so it persists across tier switches. {% endcomment %}
+    <div class="pp-detail-modal" id="badge-peek" data-peek-url="{% url 'badge_quick_peek' 0 %}" hidden>
+        <div class="pp-detail-modal__scrim" data-peek-close></div>
+        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
+            <button type="button" class="pp-detail-modal__close" data-peek-close aria-label="Close badge detail">&times;</button>
+            <div class="pp-detail-modal__body" data-peek-body></div>
+        </div>
     </div>
 {% endblock %}
 
@@ -20,6 +31,26 @@ document.addEventListener('DOMContentLoaded', function() {
     // ── Header count-up (initial load only; countUp honours reduced motion) ──
     document.querySelectorAll('#badge-header-card [data-countup]').forEach(function(el) {
         if (window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(el); }
+    });
+
+    // ── Medallion inspect (pick-up / put-down) ──
+    // Tapping the hero medallion grows the public badge_quick_peek into the shared #badge-peek dialog (the
+    // collection's pick-up/put-down controller). Delegated so it survives tier swaps; the badge id is read
+    // from the current hero medallion (which re-renders per tier).
+    var peekEl = document.getElementById('badge-peek');
+    var peek = (peekEl && window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)
+        ? PlatPursuit.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
+        : null;
+    document.addEventListener('click', function(e) {
+        if (!peek || !e.target.closest) { return; }
+        if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }
+        var med = e.target.closest('.bdh-med .pp-med');
+        var badgeId = med && med.getAttribute('data-badge-id');
+        if (!badgeId) { return; }
+        e.preventDefault();
+        var tmpl = peekEl.getAttribute('data-peek-url') || '';
+        var url = tmpl.replace(/0\/$/, badgeId + '/');
+        if (url && url !== tmpl) { peek.open(url, med); }
     });
 
     // ── Stage collapse / expand ──
