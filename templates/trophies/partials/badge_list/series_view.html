@@ -1,7 +1,7 @@
-{% comment %} Series view island: the per-series TILE grid + a single-row toolbar (search + sort + the
-multi-select Type/Status chips, all inline -- few enough controls that the collapse isn't needed). Filters
-apply instantly via HTMX (#browse-results swap); InfiniteScroller appends tiles on scroll. Reuses the
-Gallery's .pp-bgal__ search/chip classes so the two views' toolbars stay of a piece. {% endcomment %}
+{% comment %} Series view island: the per-series TILE grid + the compact toolbar SHARED with the Gallery --
+a one-row primary bar (search + sort + a Filters toggle) with the multi-select Type/Status chips in a
+collapsible advanced panel. Filters apply instantly via HTMX (#browse-results swap); InfiniteScroller
+appends tiles on scroll. Reuses the Gallery's .pp-bgal__ toolbar classes so the two views look identical. {% endcomment %}
 <div class="pp-slist" data-view="series" data-page-size="{{ series_page_size|default:30 }}">
     <form id="filter-form" method="get" action="{% url 'badges_list' %}"
           hx-get="{% url 'badges_list' %}" hx-target="#browse-results" hx-swap="innerHTML"
@@ -9,7 +9,7 @@ Gallery's .pp-bgal__ search/chip classes so the two views' toolbars stay of a pi
         <input type="hidden" name="page" value="1" />
         <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Search</button>
         <div class="pp-bgal__toolbar pp-toolbar-card">
-            <div class="pp-sbar">
+            <div class="pp-bgal__bar">
                 <span class="pp-bgal__search">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                     <input type="search" name="series_slug" value="{{ series_q }}" placeholder="Search a series&hellip;" aria-label="Search series" />
@@ -19,24 +19,36 @@ Gallery's .pp-bgal__ search/chip classes so the two views' toolbars stay of a pi
                     <option value="{{ value }}"{% if series_sort == value %} selected{% endif %}>{{ display }}</option>
                     {% endfor %}
                 </select>
+                <button type="button" class="pp-bgal__advbtn" id="bgal-filters-toggle" aria-expanded="false" aria-controls="bgal-advanced">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+                    <span class="hidden md:inline">Filters</span>
+                    <span class="pp-bgal__advbtn__n" id="bgal-filter-count" hidden>0</span>
+                </button>
+            </div>
 
-                <span class="pp-sbar__group">
-                    <span class="pp-bgal__clabel">Type</span>
-                    {% for value, display in form.badge_type.field.choices %}{% if value %}
-                    <label class="pp-bgal__chip"><input type="checkbox" name="badge_type" value="{{ value }}"{% if value in selected_badge_types %} checked{% endif %}>{{ display }}</label>
-                    {% endif %}{% endfor %}
-                </span>
+            {% comment %} No `hidden` here: without JS the panel stays OPEN so the chips are usable (progressive
+            enhancement); the shared wireFilters() script collapses it on load. {% endcomment %}
+            <div class="pp-bgal__advanced" id="bgal-advanced">
+                <div class="pp-bgal__filters">
+                    <div class="pp-bgal__crow">
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">Type</span>
+                            {% for value, display in form.badge_type.field.choices %}{% if value %}
+                            <label class="pp-bgal__chip"><input type="checkbox" name="badge_type" value="{{ value }}"{% if value in selected_badge_types %} checked{% endif %}>{{ display }}</label>
+                            {% endif %}{% endfor %}
+                        </div>
 
-                {% if user.is_authenticated %}
-                <span class="pp-sbar__group">
-                    <span class="pp-bgal__clabel">Status</span>
-                    {% for value, display in form.completion_status.field.choices %}{% if value %}
-                    <label class="pp-bgal__chip"><input type="checkbox" name="completion_status" value="{{ value }}"{% if value in selected_completion_statuses %} checked{% endif %}>{{ display }}</label>
-                    {% endif %}{% endfor %}
-                </span>
-                {% endif %}
-
-                <button type="button" class="pp-bgal__clear pp-sbar__clear" id="bgal-clear" hidden>Clear</button>
+                        {% if user.is_authenticated %}
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">Status</span>
+                            {% for value, display in form.completion_status.field.choices %}{% if value %}
+                            <label class="pp-bgal__chip"><input type="checkbox" name="completion_status" value="{{ value }}"{% if value in selected_completion_statuses %} checked{% endif %}>{{ display }}</label>
+                            {% endif %}{% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <button type="button" class="pp-bgal__clear" id="bgal-clear" hidden>Clear filters</button>
             </div>
         </div>
     </form>

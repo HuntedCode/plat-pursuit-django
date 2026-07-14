@@ -1,7 +1,7 @@
 /* ============================================================
  * BADGES BROWSE -- the /badges/ Series view + shared page chrome, rebuilt to the --pp-* house style so
- * the page reads as one piece next to the Browse Gallery. Reuses the Gallery's .pp-bgal__ search/chip
- * classes; adds the inline toolbar (.pp-sbar) and the per-series tier-ladder TILE (.pp-scard).
+ * the page reads as one piece next to the Browse Gallery. Reuses the Gallery's .pp-bgal__ toolbar (bar +
+ * Filters toggle + advanced panel) verbatim; adds the per-series tier-ladder TILE (.pp-scard).
  * ============================================================ */
 
 /* View toggle (Series | Gallery): a segmented pill, mirroring the Collection's Case/Gallery toggle. */
@@ -94,20 +94,9 @@
     .pp-btiers[open] .pp-btiers__rung[data-btier="platinum"]::after { animation: ppPlatSheen 1.15s ease-in-out 0.85s 1; }
 }
 
-/* ── Series toolbar: all controls on one bar (search + sort + the Type/Status chips), no collapse. There
- * are few enough controls to show inline; the row wraps gracefully on narrow screens. Reuses the Gallery's
- * .pp-bgal__search / .pp-bgal__chip / .pp-bgal__clabel so the two toolbars stay of a piece. ── */
-.pp-sbar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-right: 60px; }
-.pp-sbar .pp-bgal__search { flex: 1 1 180px; min-width: 150px; }
-.pp-sbar .pp-gallery__select { flex: 0 0 auto; }
-/* A chip group (Type / Status) with its inline label; wraps its own chips before spilling to a new row. */
-.pp-sbar__group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.pp-sbar__group .pp-bgal__clabel { min-width: 0; }   /* the shared label's 42px min isn't needed inline */
-/* Clear is pinned to the toolbar's top-right corner, OUT of the flex flow -- so toggling it (the JS sets the
- * `hidden` attribute -> display:none) can't reflow the search/sort/chips at all. .pp-sbar's padding-right
- * reserves its lane so it never overlaps a chip. This sidesteps the whole flex-grow-shift problem instead of
- * fighting Tailwind's `[hidden]{display:none!important}`. */
-.pp-sbar__clear { position: absolute; top: 0; right: 2px; height: 34px; margin: 0; display: inline-flex; align-items: center; white-space: nowrap; }
+/* Series toolbar: the Series view now uses the Gallery's compact toolbar verbatim -- .pp-bgal__bar + a
+ * Filters toggle + a collapsible .pp-bgal__advanced panel (all styled in browse-gallery.css). No Series-
+ * specific toolbar CSS is needed anymore; the old inline .pp-sbar layout was removed. */
 
 /* ============================================================
  * SERIES VIEW -- the per-series ROW list. Each row is one badge SERIES: next-tier medallion, cover, reward
