@@ -7,7 +7,7 @@ from trophies.constants import EVALUATABLE_BADGE_TYPES
 from trophies.services.xp_service import get_tier_xp
 from trophies.util_modules.constants import (
     BADGE_TIER_XP, BRONZE_STAGE_XP, SILVER_STAGE_XP,
-    GOLD_STAGE_XP, PLAT_STAGE_XP,
+    GOLD_STAGE_XP, PLAT_STAGE_XP, CONTRACT_XP_TOTAL,
     platform_display_rank,
 )
 
@@ -45,6 +45,7 @@ GALLERY_SORT_DEFAULT = 'set_number'
 
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.core.cache import cache
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.paginator import Paginator
 from django.db.models import Q, F, Prefetch, Max, Exists, OuterRef, Case, When, Value, IntegerField
 from django.db.models.functions import Lower
@@ -1002,7 +1003,13 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         # loading raw_response inflates each game by ~30 KB for nothing —
         # multiplied across all stages + concurrent requests, it was the trigger
         # for the May 2026 web-server OOM.
-        _badge_game_qs = Game.objects.select_related('concept', 'concept__igdb_match').defer(
+        # concept__contract_membership__contract: each game's home Contract (for the card's contract hook).
+        # Bounded (a badge has ~handful of games), so the extra join + jobs prefetch is whale-safe.
+        _badge_game_qs = Game.objects.select_related(
+            'concept', 'concept__igdb_match', 'concept__contract_membership__contract',
+        ).prefetch_related(
+            'concept__contract_membership__contract__jobs',
+        ).defer(
             'concept__igdb_match__raw_response',
         )
         stages = list(Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
@@ -1069,6 +1076,22 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
         from trophies.services.rating_service import RatingService
 
+        def _game_contract(game):
+            # The game's home Contract (concept.contract_membership OneToOne), only when live. Returns a
+            # compact dict for the card's contract hook, or None (games without a live contract omit it).
+            try:
+                contract = game.concept.contract_membership.contract
+            except ObjectDoesNotExist:
+                return None
+            if not contract.is_live:
+                return None
+            return {
+                'name': contract.name,
+                'slug': contract.slug,
+                'xp': contract.xp_total_override or CONTRACT_XP_TOTAL,
+                'jobs': list(contract.jobs.all()),
+            }
+
         def _build_game_entry(game, community_ratings_cache):
             if game not in community_ratings_cache:
                 community_ratings_cache[game] = RatingService.get_cached_community_averages(game.concept)
@@ -1077,6 +1100,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                 'profile_game': profile_games.get(game.id),
                 'community_ratings': community_ratings_cache[game],
                 'has_guide': bool(game.concept.guide_slug),
+                'contract': _game_contract(game),
             }
 
         structured_data = []

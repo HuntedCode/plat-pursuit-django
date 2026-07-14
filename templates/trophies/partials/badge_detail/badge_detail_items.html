@@ -1,88 +1,50 @@
-{% load custom_filters static %}
-
-{% comment %} Stage game card. Expects: game, pgame (profile_game), ratings, has_guide, profile. {% endcomment %}
-<a href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}"
-   class="bd-game{% if pgame.progress == 100 %} bd-game--done{% elif pgame.earned_trophies.platinum == 1 %} bd-game--plat{% endif %}">
-
-    {# Cover #}
-    <div class="bd-game__cover{% if not pgame or pgame.progress == 0 %} bd-game__cover--dim{% endif %}">
-        <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}" loading="lazy" />
-
-        {# Completion / platinum flag #}
-        {% if pgame.progress == 100 %}
-        <span class="bd-game__flag bd-game__flag--done" title="Completed 100%">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        </span>
-        {% elif pgame.earned_trophies.platinum == 1 %}
-        <span class="bd-game__flag bd-game__flag--plat" title="Platinum earned">
-            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-4 h-4' %}
-        </span>
-        {% endif %}
-
-        {# Roadmap available #}
-        {% if has_guide %}
-        <span class="bd-game__flag bd-game__flag--guide" title="Roadmap available">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-        </span>
-        {% endif %}
-
-        {# Progress bar on the image #}
-        {% if pgame and pgame.progress != None %}
-        <div class="bd-game__imgbar">
-            <div class="bd-game__imgbar-fill {% if pgame.progress < 33 %}bd-prog--low{% elif pgame.progress < 66 %}bd-prog--mid{% elif pgame.progress < 100 %}bd-prog--high{% else %}bd-prog--max{% endif %}" style="width: {{ pgame.progress }}%"></div>
-        </div>
-        {% endif %}
-    </div>
-
-    {# Body #}
-    <div class="bd-game__body">
-        <p class="bd-game__title">{{ game.title_name }}</p>
-
-        {% include 'trophies/partials/_game_flags.html' with game=game %}
-
-        <div class="bd-game__badges">
-            {% for platform in game.title_platform reversed %}
-                <span class="bd-meta-tag bd-meta-tag--{{ platform|platform_color_str }}">{{ platform }}</span>
-            {% endfor %}
-            {% include 'partials/region_badges.html' with game=game badge_size='badge-xs' %}
-        </div>
-
-        {# Platinum status + progress #}
-        <div class="bd-game__foot">
-            {% if game.defined_trophies.platinum %}
-                {% if pgame.earned_trophies.platinum == 1 %}
-                    <span class="bd-game__plat bd-game__plat--earned">
-                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3' %}Earned
-                    </span>
-                {% else %}
-                    <span class="bd-game__plat bd-game__plat--has">
-                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3 opacity-40' %}Has Plat
-                    </span>
-                {% endif %}
-            {% else %}
-                <span class="bd-game__plat bd-game__plat--none">No Plat</span>
+{% load custom_filters static humanize %}
+{% comment %} Stage game card, rebuilt from scratch (Variant A): cover-forward + a distinct CONTRACT footer
+band (the game's home Contract -- jobs + XP -- a hook into the gamification system). Curated to what a
+hunter needs at a glance: cover (state overlay + one progress bar), name, your % + plat status, community
+difficulty/hours. Expects: game, pgame (profile_game), ratings, has_guide, contract, profile.
+The card body links to the GAME; the contract band is its OWN link (different target) -- so the card is a
+container, not one big <a>. {% endcomment %}
+{% with prog=pgame.progress|default:0 %}
+<div class="bd-gcard{% if pgame.progress == 100 %} is-done{% elif pgame.earned_trophies.platinum == 1 %} is-plat{% endif %}">
+    <a class="bd-gcard__main" href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}">
+        <div class="bd-gcard__cover{% if not pgame or pgame.progress == 0 %} is-dim{% endif %}">
+            <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}" loading="lazy" />
+            {% if pgame.progress == 100 %}
+            <span class="bd-gcard__flag bd-gcard__flag--done" title="Completed 100%"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
+            {% elif pgame.earned_trophies.platinum == 1 %}
+            <span class="bd-gcard__flag bd-gcard__flag--plat" title="Platinum earned">{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3.5 h-3.5' %}</span>
             {% endif %}
-
-            <span class="bd-game__prog">
-                <span class="bd-game__prog-track">
-                    <span class="bd-game__prog-fill {% if pgame.progress < 33 %}bd-prog--low{% elif pgame.progress < 66 %}bd-prog--mid{% elif pgame.progress < 100 %}bd-prog--high{% else %}bd-prog--max{% endif %}" style="width: {{ pgame.progress|default:0 }}%"></span>
-                </span>
-                <span class="bd-game__prog-pct{% if pgame.progress == 100 %} bd-game__prog-pct--done{% endif %}">{{ pgame.progress|default:0 }}%</span>
-            </span>
+            {% if has_guide %}<span class="bd-gcard__flag bd-gcard__flag--guide" title="Roadmap available"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>{% endif %}
+            {% if pgame and prog > 0 %}
+            <span class="bd-gcard__cbar"><span class="{% if prog < 33 %}bd-prog--low{% elif prog < 66 %}bd-prog--mid{% elif prog < 100 %}bd-prog--high{% else %}bd-prog--max{% endif %}" style="width: {{ prog }}%"></span></span>
+            {% endif %}
         </div>
-
-        {# Community ratings #}
-        {% if ratings %}
-        <div class="bd-game__ratings">
-            <span class="bd-game__rating {% if ratings.avg_difficulty < 4 %}bd-stat__value--good{% elif ratings.avg_difficulty < 8 %}bd-stat__value--mid{% else %}bd-stat__value--hard{% endif %}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2 6.3-6.4 2.1 2-6.3z"/></svg>
-                {{ ratings.avg_difficulty|floatformat:1 }}
-            </span>
-            <span class="bd-game__rating {% if ratings.avg_hours < 25 %}bd-stat__value--good{% elif ratings.avg_hours < 75 %}bd-stat__value--mid{% else %}bd-stat__value--hard{% endif %}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                {{ ratings.avg_hours|floatformat:0 }}h
-            </span>
+        <div class="bd-gcard__body">
+            <p class="bd-gcard__name">{{ game.title_name }}</p>
+            <div class="bd-gcard__facts">
+                {% if pgame %}<span class="bd-gcard__pct{% if pgame.progress == 100 %} is-done{% endif %}">{{ prog }}%</span>{% endif %}
+                {% if game.defined_trophies.platinum %}
+                    {% if pgame.earned_trophies.platinum == 1 %}<span class="bd-gcard__plat is-earned">{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3' %}Plat</span>
+                    {% else %}<span class="bd-gcard__plat">Has plat</span>{% endif %}
+                {% else %}<span class="bd-gcard__plat is-none">No plat</span>{% endif %}
+                {% if ratings %}
+                <span class="bd-gcard__rt {% if ratings.avg_difficulty < 4 %}bd-stat__value--good{% elif ratings.avg_difficulty < 8 %}bd-stat__value--mid{% else %}bd-stat__value--hard{% endif %}" title="Community difficulty">{{ ratings.avg_difficulty|floatformat:1 }}</span>
+                <span class="bd-gcard__rt {% if ratings.avg_hours < 25 %}bd-stat__value--good{% elif ratings.avg_hours < 75 %}bd-stat__value--mid{% else %}bd-stat__value--hard{% endif %}" title="Community avg hours">{{ ratings.avg_hours|floatformat:0 }}h</span>
+                {% endif %}
+            </div>
         </div>
-        {% endif %}
-    </div>
-</a>
+    </a>
+    {% comment %} Contract hook -- opens the contract modal in place (data-contract-slug, wired in
+    badge_detail.html); the href is the career board as the no-JS / anon fallback. {% endcomment %}
+    {% if contract %}
+    <a class="bd-gcard__ctr" href="{% url 'career' %}?view=contracts" data-contract-slug="{{ contract.slug }}" title="Contract: {{ contract.name }}">
+        <svg class="bd-gcard__ctr-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+        <span class="bd-gcard__ctr-jobs">{% for job in contract.jobs|slice:":4" %}<span class="bd-gcard__ctr-pip" style="background: {{ job.color|default:'var(--pp-secondary)' }}"></span>{% endfor %}</span>
+        <span class="bd-gcard__ctr-label">{% for job in contract.jobs|slice:":2" %}{{ job.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if contract.jobs|length > 2 %} +{{ contract.jobs|length|add:"-2" }}{% endif %}</span>
+        <span class="bd-gcard__ctr-xp">{{ contract.xp|intcomma }} XP</span>
+        <svg class="bd-gcard__ctr-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+    </a>
+    {% endif %}
+</div>
+{% endwith %}

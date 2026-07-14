@@ -36,7 +36,7 @@ synthesized platinum (every member at 100%). is_satisfied is tier-aware.
     <div class="bd-bundle__grid">
         {% for member in bundle.members %}
             {% for entry in member.games %}
-                {% with game=entry.game pgame=entry.profile_game ratings=entry.community_ratings has_guide=entry.has_guide %}
+                {% with game=entry.game pgame=entry.profile_game ratings=entry.community_ratings has_guide=entry.has_guide contract=entry.contract %}
                     {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
                 {% endwith %}
             {% endfor %}

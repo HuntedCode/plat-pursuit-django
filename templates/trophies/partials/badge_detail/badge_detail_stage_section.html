@@ -44,7 +44,7 @@
 
                 <div class="bd-stage__grid">
                     {% for games in data.obtainable_games %}
-                    {% with game=games.game pgame=games.profile_game ratings=games.community_ratings has_guide=games.has_guide %}
+                    {% with game=games.game pgame=games.profile_game ratings=games.community_ratings has_guide=games.has_guide contract=games.contract %}
                         {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
                     {% endwith %}
                     {% endfor %}
@@ -53,7 +53,7 @@
                 {# All games unobtainable/delisted: show them in the grid #}
                 <div class="bd-stage__grid">
                     {% for games in data.games %}
-                    {% with game=games.game pgame=games.profile_game ratings=games.community_ratings has_guide=games.has_guide %}
+                    {% with game=games.game pgame=games.profile_game ratings=games.community_ratings has_guide=games.has_guide contract=games.contract %}
                         {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
                     {% endwith %}
                     {% endfor %}

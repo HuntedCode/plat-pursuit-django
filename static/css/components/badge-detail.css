@@ -262,91 +262,57 @@
     .bd-band__cta:hover .bd-band__cta-arrow { transform: translateX(2px); color: var(--pp-primary); }
 }
 
-/* ── Stage game card ────────────────────────────────────────────────────────
-   A game within a stage: cover art + state-driven chrome + progress / plat /
-   ratings. Completed and has-plat states EARN their border + a hover glow;
-   default games are neutral with a primary hover. Hover = glow, not scale. */
-.bd-game {
-    position: relative; display: flex; flex-direction: column;
-    border: 2px solid var(--pp-border); border-radius: var(--pp-radius-md);
-    overflow: hidden; background: var(--pp-bg-1); text-decoration: none;
-    transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+/* ── Stage game card (rebuilt: cover-forward + a CONTRACT footer band) ────────
+   Curated to what a hunter needs at a glance -- cover (state overlay + one progress bar), name, your % +
+   plat status, community difficulty/hours -- plus the game's home Contract (jobs + XP) as a distinct hook
+   into the gamification layer. Card body links to the game; the contract band is its OWN link. */
+.bd-gcard { display: flex; flex-direction: column; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); overflow: hidden; background: var(--pp-bg-2); transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease); }
+.bd-gcard.is-done { border-color: color-mix(in oklch, var(--pp-success) 40%, transparent); }
+.bd-gcard.is-plat { border-color: color-mix(in oklch, var(--pp-warning) 40%, transparent); }
+.bd-gcard__main { display: flex; flex-direction: column; flex: 1; text-decoration: none; color: inherit; }
+@media (hover: hover) {
+    .bd-gcard:hover { border-color: color-mix(in oklch, var(--pp-primary) 50%, transparent); box-shadow: 0 0 16px color-mix(in oklch, var(--pp-primary) 18%, transparent); }
+    .bd-gcard.is-done:hover { border-color: var(--pp-success); box-shadow: 0 0 16px color-mix(in oklch, var(--pp-success) 22%, transparent); }
+    .bd-gcard.is-plat:hover { border-color: var(--pp-warning); box-shadow: 0 0 16px color-mix(in oklch, var(--pp-warning) 22%, transparent); }
+    .bd-gcard:hover .bd-gcard__name { color: var(--pp-primary); }
 }
-.bd-game:hover {
-    border-color: color-mix(in oklch, var(--pp-primary) 50%, transparent);
-    box-shadow: 0 0 16px color-mix(in oklch, var(--pp-primary) 20%, transparent);
-}
-.bd-game--done { border-color: color-mix(in oklch, var(--pp-success) 45%, transparent); }
-.bd-game--done:hover {
-    border-color: var(--pp-success);
-    box-shadow: 0 0 16px color-mix(in oklch, var(--pp-success) 24%, transparent);
-}
-.bd-game--plat { border-color: color-mix(in oklch, var(--pp-warning) 45%, transparent); }
-.bd-game--plat:hover {
-    border-color: var(--pp-warning);
-    box-shadow: 0 0 16px color-mix(in oklch, var(--pp-warning) 24%, transparent);
-}
-
 /* Cover */
-.bd-game__cover { position: relative; aspect-ratio: 3 / 4; overflow: hidden; background: var(--pp-bg-3); }
-.bd-game__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
-.bd-game__cover--dim img { opacity: 0.45; }
-
-.bd-game__flag {
-    position: absolute; display: flex; align-items: center; justify-content: center;
-    border-radius: 999px;
-}
-.bd-game__flag--done {
-    top: 4px; right: 4px; width: 18px; height: 18px;
-    background: var(--pp-success); color: var(--pp-bg-0);
-    box-shadow: 0 1px 3px oklch(0 0 0 / 0.4);
-}
-.bd-game__flag--plat { top: 4px; right: 4px; filter: drop-shadow(0 1px 2px oklch(0 0 0 / 0.5)); }
-.bd-game__flag--guide {
-    top: 4px; left: 4px; width: 17px; height: 17px;
-    background: color-mix(in oklch, var(--pp-accent) 88%, transparent); color: var(--pp-bg-0);
-    box-shadow: 0 1px 3px oklch(0 0 0 / 0.4);
-}
-.bd-game__flag--done svg { width: 12px; height: 12px; }
-.bd-game__flag--guide svg { width: 11px; height: 11px; }
-
-.bd-game__imgbar { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: oklch(0 0 0 / 0.45); }
-.bd-game__imgbar-fill { display: block; height: 100%; }
-
-/* Progress traffic-light (shared by image bar + footer mini bar). */
+.bd-gcard__cover { position: relative; aspect-ratio: 3 / 4; overflow: hidden; background: var(--pp-bg-3); }
+.bd-gcard__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.bd-gcard__cover.is-dim img { opacity: 0.42; }
+.bd-gcard__flag { position: absolute; display: grid; place-items: center; border-radius: 999px; box-shadow: 0 1px 3px oklch(0 0 0 / 0.5); }
+.bd-gcard__flag--done { top: 5px; right: 5px; width: 20px; height: 20px; background: var(--pp-success); color: var(--pp-bg-0); }
+.bd-gcard__flag--done svg { width: 12px; height: 12px; }
+.bd-gcard__flag--plat { top: 5px; right: 5px; box-shadow: none; filter: drop-shadow(0 1px 2px oklch(0 0 0 / 0.5)); }
+.bd-gcard__flag--guide { top: 5px; left: 5px; width: 18px; height: 18px; background: color-mix(in oklch, var(--pp-accent) 88%, transparent); color: var(--pp-bg-0); }
+.bd-gcard__flag--guide svg { width: 11px; height: 11px; }
+.bd-gcard__cbar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: oklch(0 0 0 / 0.45); }
+.bd-gcard__cbar span { display: block; height: 100%; }
+/* Progress traffic-light (shared) */
 .bd-prog--low { background: var(--pp-error); }
 .bd-prog--mid { background: var(--pp-warning); }
 .bd-prog--high { background: var(--pp-success); }
 .bd-prog--max { background: var(--pp-primary); }
-
 /* Body */
-.bd-game__body { display: flex; flex-direction: column; gap: 4px; padding: 6px 7px; background: var(--pp-bg-2); flex: 1; }
-.bd-game__title {
-    font-size: 0.72rem; font-weight: 600; line-height: 1.2; color: var(--pp-text);
-    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-    transition: color var(--pp-dur) var(--pp-ease);
-}
-.bd-game:hover .bd-game__title { color: var(--pp-primary); }
-.bd-game__badges { display: flex; flex-wrap: wrap; gap: 2px; }
-
-.bd-game__foot {
-    display: flex; align-items: center; justify-content: space-between; gap: 6px;
-    margin-top: auto; padding-top: 5px;
-    border-top: 1px solid oklch(1 0 0 / 0.06);
-}
-.bd-game__plat { display: inline-flex; align-items: center; gap: 3px; font-size: 0.6rem; font-weight: 700; }
-.bd-game__plat--earned { color: var(--pp-warning); }
-.bd-game__plat--has { color: var(--pp-text-mute); }
-.bd-game__plat--none { color: color-mix(in oklch, var(--pp-error) 75%, var(--pp-text-mute)); }
-.bd-game__prog { display: flex; align-items: center; gap: 4px; }
-.bd-game__prog-track { display: block; width: 36px; height: 4px; border-radius: 999px; background: oklch(1 0 0 / 0.1); overflow: hidden; flex-shrink: 0; }
-.bd-game__prog-fill { display: block; height: 100%; border-radius: 999px; }
-.bd-game__prog-pct { font-size: 0.6rem; font-weight: 700; color: var(--pp-text-mute); }
-.bd-game__prog-pct--done { color: var(--pp-success); }
-
-.bd-game__ratings { display: flex; align-items: center; gap: 8px; font-size: 0.55rem; font-weight: 700; }
-.bd-game__rating { display: inline-flex; align-items: center; gap: 2px; }
-.bd-game__rating svg { width: 9px; height: 9px; }
+.bd-gcard__body { display: flex; flex-direction: column; gap: 5px; padding: 8px 9px; flex: 1; }
+.bd-gcard__name { font-size: 0.76rem; font-weight: 600; line-height: 1.2; color: var(--pp-text); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; transition: color var(--pp-dur) var(--pp-ease); }
+.bd-gcard__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 9px; margin-top: auto; font-size: 0.64rem; font-weight: 600; color: var(--pp-text-mute); }
+.bd-gcard__pct { color: var(--pp-text-dim); font-weight: 700; font-variant-numeric: tabular-nums; }
+.bd-gcard__pct.is-done { color: var(--pp-success); }
+.bd-gcard__plat { display: inline-flex; align-items: center; gap: 3px; }
+.bd-gcard__plat.is-earned { color: var(--pp-warning); }
+.bd-gcard__plat.is-none { color: color-mix(in oklch, var(--pp-error) 70%, var(--pp-text-mute)); }
+.bd-gcard__rt { display: inline-flex; align-items: center; gap: 2px; font-weight: 700; }
+/* Contract footer band -- the hook into the gamification system (secondary accent, earned arrow on hover). */
+.bd-gcard__ctr { display: flex; align-items: center; gap: 7px; padding: 7px 9px; text-decoration: none;
+    background: color-mix(in oklab, var(--pp-secondary) 12%, var(--pp-bg-1)); border-top: 1px solid color-mix(in oklab, var(--pp-secondary) 28%, var(--pp-border)); transition: background var(--pp-dur) var(--pp-ease); }
+@media (hover: hover) { .bd-gcard__ctr:hover { background: color-mix(in oklab, var(--pp-secondary) 22%, var(--pp-bg-1)); } .bd-gcard__ctr:hover .bd-gcard__ctr-arrow { transform: translateX(2px); } }
+.bd-gcard__ctr-ico { width: 15px; height: 15px; color: var(--pp-secondary); flex-shrink: 0; }
+.bd-gcard__ctr-jobs { display: flex; gap: 3px; flex-shrink: 0; }
+.bd-gcard__ctr-pip { width: 8px; height: 8px; border-radius: 2px; }
+.bd-gcard__ctr-label { flex: 1; min-width: 0; font-size: 0.64rem; font-weight: 700; color: var(--pp-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bd-gcard__ctr-xp { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.68rem; color: var(--pp-secondary); flex-shrink: 0; }
+.bd-gcard__ctr-arrow { width: 12px; height: 12px; color: var(--pp-secondary); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
 
 /* ── Stage section ──────────────────────────────────────────────────────────
    A stage is a .bd-card holding a clickable header (collapse toggle), an
