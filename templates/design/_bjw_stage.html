@@ -1,0 +1,11 @@
+{% load static %}
+{% comment %} Condensed stage block, identical across all badge-journey spine variants so only the spine
+varies. Expects `s`: {number, title, icon, state, completed, total}. {% endcomment %}
+<div class="bjw-stage bjw-stage--{{ s.state }}">
+    <span class="bjw-stage__ico"><img src="{{ s.icon }}" alt="" loading="lazy"></span>
+    <div class="bjw-stage__id">
+        <div class="bjw-stage__eyebrow">{% if s.state == 'bonus' %}Bonus{% else %}Stage {{ s.number }}{% endif %}</div>
+        <div class="bjw-stage__title">{{ s.title }}</div>
+    </div>
+    <span class="bjw-stage__pill">{{ s.completed }}/{{ s.total }}</span>
+</div>

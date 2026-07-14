@@ -728,6 +728,57 @@ class StageCardsWorkshopView(TemplateView):
         return ctx
 
 
+class BadgeJourneyWorkshopView(TemplateView):
+    """Design workshop (/design/badge-journey/): how should the LADDER -- the connective spine that threads
+    the badge-detail stages into a climb -- look? The production spine is a barely-there grey rule with a
+    dot per stage; this renders the REAL crash-bandicoot stages (icons + titles) inside three spine
+    treatments so the ladder itself (not the stage contents) can be chosen. Each variant wraps the SAME
+    condensed stage block so only the spine varies. Not a product surface.
+
+    Fabricated per-stage state (no user here): the first stages complete, one "current" in-progress stage,
+    the rest to-do -- so every node state (done / current / locked) and a partial spine fill render.
+    """
+    template_name = 'design/badge_journey_workshop.html'
+
+    def get_context_data(self, **kwargs):
+        from trophies.models import Stage
+        ctx = super().get_context_data(**kwargs)
+        raw = list(Stage.objects.filter(series_slug='crash-bandicoot').order_by('stage_number'))
+        # Fabricated states: mark a cursor so done / current / to-do all render. `current` is the first
+        # incomplete stage (the "you are here" node); everything after it is locked/to-do.
+        done_upto = 2
+        counts = [(4, 4), (6, 6), (2, 5), (0, 6), (0, 4), (0, 3)]  # (completed, total) games per stage
+        stages = []
+        for idx, s in enumerate(raw):
+            if s.stage_number == 0:
+                state = 'bonus'
+            elif s.stage_number <= done_upto:
+                state = 'done'
+            elif s.stage_number == done_upto + 1:
+                state = 'current'
+            else:
+                state = 'todo'
+            comp, total = counts[idx % len(counts)]
+            if state == 'done':
+                comp = total
+            stages.append({
+                'number': s.stage_number, 'title': s.title, 'icon': s.stage_icon,
+                'state': state, 'completed': comp, 'total': total,
+                'pct': round(comp / total * 100) if total else 0,
+            })
+        ranked = [s for s in stages if s['state'] != 'bonus']
+        done_n = sum(1 for s in ranked if s['state'] == 'done')
+        # Overall climb for the gauge spine: whole done stages + the current stage's partial progress.
+        current = next((s for s in ranked if s['state'] == 'current'), None)
+        climb = done_n + (current['pct'] / 100 if current else 0)
+        ctx['stages'] = stages
+        ctx['fill_pct'] = round(climb / len(ranked) * 100) if ranked else 0
+        ctx['done_count'] = done_n
+        ctx['total_count'] = len(ranked)
+        ctx['series_title'] = 'Crash Bandicoot'
+        return ctx
+
+
 class PursuerCardRanksPreviewView(TemplateView):
     """Preview the *production* Pursuer Card at every rank tier (/design/pursuer-card-ranks/).
 
