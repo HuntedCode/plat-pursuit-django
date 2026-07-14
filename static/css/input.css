@@ -119,7 +119,7 @@
   /* Text */
   --pp-text: oklch(0.97 0.012 256);
   --pp-text-dim: oklch(0.72 0.02 256);
-  --pp-text-mute: oklch(0.55 0.02 256);
+  --pp-text-mute: oklch(0.66 0.02 256);   /* raised 0.55 -> 0.66 for WCAG AA (~4.5:1 on bg-2) site-wide */
   /* Lines */
   --pp-border: oklch(0.40 0.02 254 / 0.55);
   --pp-divider: oklch(0.40 0.02 254 / 0.30);
