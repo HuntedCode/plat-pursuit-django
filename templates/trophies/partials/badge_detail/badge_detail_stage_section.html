@@ -9,31 +9,36 @@
             {% if data.obtainable_games %}
                 {% with data.unobtainable_games as unobtainable %}
                 {% if unobtainable %}
-                <details class="bd-stage__unobt {% if data.unobtainable_completed == unobtainable|length %}bd-stage__unobt--done{% elif data.unobtainable_completed > 0 %}bd-stage__unobt--partial{% else %}bd-stage__unobt--todo{% endif %}">
-                    <summary class="bd-stage__unobt-summary">
-                        {% if data.unobtainable_completed == unobtainable|length %}
-                            <svg class="bd-stage__check--done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        {% else %}
-                            <svg class="{% if data.unobtainable_completed > 0 %}bd-stage__check--partial{% else %}bd-stage__check--todo{% endif %}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                        {% endif %}
-                        {{ unobtainable|length }} Unobtainable/Delisted Title{{ unobtainable|length|pluralize }}
-                        {% if data.unobtainable_completed %}<span class="bd-meta-tag">{{ data.unobtainable_completed }}/{{ unobtainable|length }}</span>{% endif %}
+                <details class="bd-delisted is-{% if data.unobtainable_completed == unobtainable|length %}done{% elif data.unobtainable_completed > 0 %}partial{% else %}todo{% endif %}">
+                    <summary class="bd-delisted__summary">
+                        <span class="bd-delisted__ico" aria-hidden="true">
+                            {% if data.unobtainable_completed == unobtainable|length %}
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            {% else %}
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line></svg>
+                            {% endif %}
+                        </span>
+                        <span class="bd-delisted__label">{{ unobtainable|length }} unobtainable / delisted title{{ unobtainable|length|pluralize }}</span>
+                        {% if data.unobtainable_completed %}<span class="bd-delisted__count">{{ data.unobtainable_completed }}/{{ unobtainable|length }}</span>{% endif %}
+                        <svg class="bd-delisted__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </summary>
-                    <div class="bd-stage__unobt-list">
+                    <div class="bd-delisted__list">
                         {% for games in unobtainable %}
                         {% with game=games.game pgame=games.profile_game %}
-                        <a href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="bd-stage__unobt-row">
-                            {% if pgame and pgame.progress == 100 %}
-                                <svg class="bd-stage__unobt-status bd-stage__check--done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                            {% elif pgame and pgame.earned_trophies.platinum == 1 %}
-                                <span class="bd-stage__unobt-status">{% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3.5 h-3.5' %}</span>
-                            {% else %}
-                                <svg class="bd-stage__unobt-status" viewBox="0 0 24 24" fill="none" stroke="var(--pp-text-mute)" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle></svg>
-                            {% endif %}
-                            <span class="bd-stage__unobt-thumb{% if not pgame or pgame.progress == 0 %} bd-stage__unobt-thumb--dim{% endif %}"><img src="{{ game.display_image_url }}" alt="" loading="lazy" /></span>
-                            <span class="bd-stage__unobt-name">{{ game.title_name }}</span>
+                        <a href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="bd-delisted__row">
+                            <span class="bd-delisted__status" aria-hidden="true">
+                                {% if pgame and pgame.progress == 100 %}
+                                <svg class="bd-delisted__status--done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                {% elif pgame and pgame.earned_trophies.platinum == 1 %}
+                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3.5 h-3.5' %}
+                                {% else %}
+                                <svg viewBox="0 0 24 24" fill="none" stroke="var(--pp-text-mute)" stroke-width="2"><circle cx="12" cy="12" r="9"></circle></svg>
+                                {% endif %}
+                            </span>
+                            <span class="bd-delisted__thumb{% if not pgame or pgame.progress == 0 %} is-dim{% endif %}"><img src="{{ game.display_image_url }}" alt="" loading="lazy" /></span>
+                            <span class="bd-delisted__name">{{ game.title_name }}</span>
                             {% for platform in game.title_platform reversed %}<span class="bd-meta-tag bd-meta-tag--{{ platform|platform_color_str }}">{{ platform }}</span>{% endfor %}
-                            {% if pgame and pgame.progress %}<span class="bd-stage__unobt-pct">{{ pgame.progress }}%</span>{% endif %}
+                            {% if pgame and pgame.progress %}<span class="bd-delisted__pct">{{ pgame.progress }}%</span>{% endif %}
                         </a>
                         {% endwith %}
                         {% endfor %}

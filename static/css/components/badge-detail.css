@@ -155,12 +155,6 @@
 .bd-req__tile-check { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--pp-success); color: #06140d; display: grid; place-items: center; box-shadow: 0 0 8px -2px color-mix(in oklab, var(--pp-success) 70%, transparent); }
 .bd-req__tile-check svg { width: 11px; height: 11px; }
 
-/* Rating traffic-light colours -- the only survivors of the old .bd-stat scaffolding, still used on the
-   stage game cards' difficulty / hours ratings (.bd-game__rating in badge_detail_items.html). */
-.bd-stat__value--good { color: var(--pp-success); }
-.bd-stat__value--mid { color: var(--pp-warning); }
-.bd-stat__value--hard { color: var(--pp-error); }
-
 /* ── My Stats modal (rebuilt from scratch) ───────────────────────────────────
    A narrative of the viewer's journey with the series -- hero investment (big Tally numbers) -> stage
    progress (segmented Horizon) -> trophy haul -> a first/last timeline -> a quiet series-context footer.
@@ -288,11 +282,10 @@
 .bd-gcard__flag--guide svg { width: 11px; height: 11px; }
 .bd-gcard__cbar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: oklch(0 0 0 / 0.45); }
 .bd-gcard__cbar span { display: block; height: 100%; }
-/* Progress traffic-light (shared) */
-.bd-prog--low { background: var(--pp-error); }
-.bd-prog--mid { background: var(--pp-warning); }
-.bd-prog--high { background: var(--pp-success); }
-.bd-prog--max { background: var(--pp-primary); }
+.bd-gcard__cbar--low { background: var(--pp-error); }
+.bd-gcard__cbar--mid { background: var(--pp-warning); }
+.bd-gcard__cbar--high { background: var(--pp-success); }
+.bd-gcard__cbar--max { background: var(--pp-primary); }
 /* Body */
 .bd-gcard__body { display: flex; flex-direction: column; gap: 5px; padding: 8px 9px; flex: 1; }
 .bd-gcard__name { font-size: 0.76rem; font-weight: 600; line-height: 1.2; color: var(--pp-text); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; transition: color var(--pp-dur) var(--pp-ease); }
@@ -304,6 +297,9 @@
 .bd-gcard__plat.is-earned { color: var(--pp-warning); }
 .bd-gcard__plat.is-none { color: color-mix(in oklch, var(--pp-error) 70%, var(--pp-text-mute)); }
 .bd-gcard__rt { display: inline-flex; align-items: center; gap: 2px; font-weight: 700; }
+.bd-gcard__rt--good { color: var(--pp-success); }
+.bd-gcard__rt--mid { color: var(--pp-warning); }
+.bd-gcard__rt--hard { color: var(--pp-error); }
 /* Contract footer band -- the hook into the gamification system. Its background blends the contract's job
    DISCIPLINE family colours (set inline via band_bg; --ctr-accent = the dominant one) so the band says what
    kind of contract it is; the real job icons sit on top. Falls back to the secondary accent when no jobs. */
@@ -379,10 +375,6 @@
 .bd-stage__stats { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 2px; }
 .bd-stage__stat { display: inline-flex; align-items: center; gap: 3px; font-size: 0.62rem; font-weight: 600; color: var(--pp-text-mute); }
 .bd-stage__stat svg { width: 10px; height: 10px; flex-shrink: 0; }
-/* State-colour helpers for the unobtainable-list status icons (rebuilt in the next slice). */
-.bd-stage__check--done { color: var(--pp-success); }
-.bd-stage__check--partial { color: var(--pp-warning); }
-.bd-stage__check--todo { color: var(--pp-error); }
 
 /* Collapse body — the grid-rows trick (JS toggles grid-template-rows on
    [data-stage-games]). The inner grid is padded so card hover-glows breathe
@@ -397,57 +389,80 @@
 @media (min-width: 1024px) { .bd-stage__grid { grid-template-columns: repeat(4, 1fr); } }
 @media (min-width: 1280px) { .bd-stage__grid { grid-template-columns: repeat(5, 1fr); } }
 
-/* Unobtainable / delisted titles — compact collapsible list above the grid. */
-.bd-stage__unobt { margin: 0 14px; border: 1px solid; border-radius: var(--pp-radius-md); }
-.bd-stage__unobt--done { border-color: color-mix(in oklch, var(--pp-success) 25%, transparent); background: color-mix(in oklch, var(--pp-success) 6%, transparent); }
-.bd-stage__unobt--partial { border-color: color-mix(in oklch, var(--pp-warning) 25%, transparent); background: color-mix(in oklch, var(--pp-warning) 6%, transparent); }
-.bd-stage__unobt--todo { border-color: color-mix(in oklch, var(--pp-error) 22%, transparent); background: color-mix(in oklch, var(--pp-error) 6%, transparent); }
-.bd-stage__unobt-summary {
-    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
-    padding: 7px 10px; font-size: 0.72rem; font-weight: 600; color: var(--pp-text-dim);
+/* Unobtainable / delisted titles — a quiet, collapsible strip above the grid. These can't be earned
+   anymore, so they read muted; the summary icon + a hairline left rail carry the done/partial state. */
+.bd-delisted {
+    margin: 0 14px; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
+    background: color-mix(in oklch, var(--pp-bg-1) 60%, transparent);
+    position: relative; overflow: hidden;
 }
-.bd-stage__unobt-summary::-webkit-details-marker { display: none; }
-.bd-stage__unobt-summary svg { width: 14px; height: 14px; flex-shrink: 0; }
-.bd-stage__unobt-summary::after {
-    content: ""; width: 7px; height: 7px; margin-left: auto;
-    border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
-    transform: rotate(45deg); transition: transform var(--pp-dur) var(--pp-ease);
+.bd-delisted::before {
+    content: ""; position: absolute; inset: 0 auto 0 0; width: 2px;
+    background: var(--pp-text-mute); opacity: 0.5;
 }
-.bd-stage__unobt[open] .bd-stage__unobt-summary::after { transform: rotate(-135deg); }
-.bd-stage__unobt-list { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 8px; }
-.bd-stage__unobt-row {
+.bd-delisted.is-done::before { background: var(--pp-success); opacity: 0.8; }
+.bd-delisted.is-partial::before { background: var(--pp-warning); opacity: 0.8; }
+.bd-delisted__summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    padding: 8px 11px 8px 13px; font-size: 0.74rem; font-weight: 600; color: var(--pp-text-dim);
+}
+.bd-delisted__summary::-webkit-details-marker { display: none; }
+.bd-delisted__ico { display: grid; place-items: center; width: 15px; height: 15px; flex-shrink: 0; color: var(--pp-text-mute); }
+.bd-delisted.is-done .bd-delisted__ico { color: var(--pp-success); }
+.bd-delisted.is-partial .bd-delisted__ico { color: var(--pp-warning); }
+.bd-delisted__ico svg { width: 100%; height: 100%; }
+.bd-delisted__label { flex: 1; min-width: 0; }
+.bd-delisted__count { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.66rem; color: var(--pp-text-mute); flex-shrink: 0; letter-spacing: 0.02em; }
+.bd-delisted__caret { width: 14px; height: 14px; color: var(--pp-text-mute); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
+.bd-delisted[open] .bd-delisted__caret { transform: rotate(180deg); }
+.bd-delisted__list { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 8px 11px; }
+.bd-delisted__row {
     display: flex; align-items: center; gap: 8px; padding: 4px 6px;
     border-radius: var(--pp-radius-sm); text-decoration: none;
     transition: background var(--pp-dur-fast) var(--pp-ease);
 }
-.bd-stage__unobt-row:hover { background: oklch(1 0 0 / 0.05); }
-.bd-stage__unobt-status { width: 14px; height: 14px; flex-shrink: 0; }
-.bd-stage__unobt-thumb { width: 22px; height: 22px; border-radius: var(--pp-radius-sm); overflow: hidden; flex-shrink: 0; }
-.bd-stage__unobt-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
-.bd-stage__unobt-thumb--dim img { opacity: 0.4; }
-.bd-stage__unobt-name {
-    flex: 1; font-size: 0.7rem; font-style: italic; color: var(--pp-text-mute);
+@media (hover: hover) { .bd-delisted__row:hover { background: oklch(1 0 0 / 0.05); } }
+.bd-delisted__status { display: grid; place-items: center; width: 15px; height: 15px; flex-shrink: 0; }
+.bd-delisted__status svg { width: 14px; height: 14px; }
+.bd-delisted__status--done { color: var(--pp-success); }
+.bd-delisted__thumb { width: 22px; height: 22px; border-radius: var(--pp-radius-sm); overflow: hidden; flex-shrink: 0; }
+.bd-delisted__thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.bd-delisted__thumb.is-dim img { opacity: 0.4; }
+.bd-delisted__name {
+    flex: 1; font-size: 0.72rem; color: var(--pp-text-mute);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 0.25rem;
 }
-.bd-stage__unobt-pct { font-size: 0.58rem; font-weight: 700; color: var(--pp-text-mute); flex-shrink: 0; }
+.bd-delisted__pct { font-size: 0.58rem; font-weight: 700; color: var(--pp-text-mute); flex-shrink: 0; }
 
-/* Concept bundle qualifier. */
-.bd-bundle { margin: 0 14px 4px; border: 1px solid; border-radius: var(--pp-radius-md); }
-.bd-bundle--done { border-color: color-mix(in oklch, var(--pp-success) 35%, transparent); background: color-mix(in oklch, var(--pp-success) 6%, transparent); }
-.bd-bundle--todo { border-color: color-mix(in oklch, var(--pp-info) 30%, transparent); background: color-mix(in oklch, var(--pp-info) 6%, transparent); }
-.bd-bundle__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; }
-.bd-bundle__icon { display: flex; flex-shrink: 0; width: 18px; height: 18px; }
-.bd-bundle__icon--done { color: var(--pp-success); }
-.bd-bundle__icon--todo { color: var(--pp-info); }
-.bd-bundle__label { font-size: 0.85rem; font-weight: 600; color: var(--pp-text); }
-.bd-bundle__note { font-size: 0.65rem; font-style: italic; color: var(--pp-text-mute); margin-left: auto; padding-right: 0.25rem; }
-.bd-bundle__grid {
+/* Concept-bundle qualifier — a grouped set of lists that TOGETHER satisfy a stage. Reads as a titled
+   sub-panel: a header row (mark + label + status + requirement) over its own game grid. */
+.bd-qual {
+    margin: 0 14px 4px; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
+    background: color-mix(in oklch, var(--pp-bg-1) 55%, transparent);
+}
+.bd-qual.is-done { border-color: color-mix(in oklch, var(--pp-success) 30%, var(--pp-border)); }
+.bd-qual__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 9px 12px; }
+.bd-qual__mark { display: grid; place-items: center; width: 17px; height: 17px; flex-shrink: 0; color: var(--pp-text-mute); }
+.bd-qual.is-done .bd-qual__mark { color: var(--pp-success); }
+.bd-qual__mark svg { width: 100%; height: 100%; }
+.bd-qual__label { font-size: 0.82rem; font-weight: 700; color: var(--pp-text); }
+.bd-qual__status {
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 0.66rem; letter-spacing: 0.02em;
+    color: var(--pp-text-dim); padding: 2px 8px; border-radius: 999px;
+    background: color-mix(in oklch, var(--pp-bg-2) 70%, transparent); border: 1px solid var(--pp-border);
+}
+.bd-qual.is-done .bd-qual__status {
+    color: var(--pp-success); border-color: color-mix(in oklch, var(--pp-success) 35%, transparent);
+    background: color-mix(in oklch, var(--pp-success) 10%, transparent);
+}
+.bd-qual__req { font-size: 0.65rem; font-style: italic; color: var(--pp-text-mute); margin-left: auto; padding-right: 0.25rem; }
+.bd-qual__grid {
     display: grid; gap: 10px; padding: 0 12px 12px;
     grid-template-columns: repeat(2, 1fr);
 }
-@media (min-width: 768px)  { .bd-bundle__grid { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 1024px) { .bd-bundle__grid { grid-template-columns: repeat(4, 1fr); } }
-@media (min-width: 1280px) { .bd-bundle__grid { grid-template-columns: repeat(5, 1fr); } }
+@media (min-width: 768px)  { .bd-qual__grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1024px) { .bd-qual__grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1280px) { .bd-qual__grid { grid-template-columns: repeat(5, 1fr); } }
 
 /* Stage list as a vertical journey. A spine ties the stages together (it shows
    through the gaps between cards) with a node per stage, so they read as
