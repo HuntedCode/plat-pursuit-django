@@ -212,6 +212,31 @@ def test_header_maintenance_state(client, stub_leaderboards):
     assert 'not started' not in html   # NOT the unearned branch
 
 
+def test_maintenance_defaults_to_lowest_lapsed_tier(client, stub_leaderboards):
+    """A series with lapsed low tiers must open on the LOWEST maintenance tier (the one to re-earn), not
+    skip to the next clean win. Bronze+Silver lapsed, Gold+Plat unearned -> lands on Bronze (tier 1), and
+    the ladder marks those rungs as maintenance ('M'), not a clean earned check."""
+    series = "maint-default"
+    b1 = BadgeFactory(series_slug=series, tier=1, is_live=True, required_stages=2)
+    b2 = BadgeFactory(series_slug=series, tier=2, is_live=True, required_stages=2)
+    BadgeFactory(series_slug=series, tier=3, is_live=True, required_stages=2)
+    BadgeFactory(series_slug=series, tier=4, is_live=True, required_stages=2)
+    _series_with_stage(series, 1)
+    profile = ProfileFactory()
+    UserBadgeFactory(profile=profile, badge=b1, status='maintenance')
+    UserBadgeFactory(profile=profile, badge=b2, status='maintenance')
+    client.force_login(profile.user)
+
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+
+    assert resp.status_code == 200
+    assert resp.context['selected_tier'] == 1              # opens on lapsed Bronze, NOT Gold (the next win)
+    assert resp.context['maint_tiers'] == {1, 2}
+    html = resp.content.decode()
+    assert 'bd-tierstep--bronze is-active is-maintenance' in html   # Bronze (the open rung) shows maintenance
+    assert 'bd-tierstep--silver is-maintenance' in html             # ... and Silver, not a clean earned check
+
+
 def _series_with_games(series, n_games=2, stage_number=1):
     """One stage (applies to all tiers) whose concept holds n_games games."""
     concept = ConceptFactory()

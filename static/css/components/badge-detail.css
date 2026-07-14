@@ -87,6 +87,11 @@
 }
 .bd-tierstep__mark svg { width: 12px; height: 12px; }
 .bd-tierstep.is-earned .bd-tierstep__mark { background: var(--tier-c); border-color: var(--tier-c); }
+/* Held-but-lapsed rung: a red "M" disc instead of the tier-filled earned check (site-wide maintenance red). */
+.bd-tierstep.is-maintenance .bd-tierstep__mark {
+    background: var(--pp-maint, #e23026); border-color: var(--pp-maint, #e23026);
+    color: #fff; font-size: 0.72rem; font-weight: 800; line-height: 1;
+}
 .bd-tierstep__name { font-size: 0.82rem; font-weight: 800; color: var(--pp-text-dim); }
 .bd-tierstep__req { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute); }
 @media (hover: hover) { .bd-tierstep:hover { border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border)); transform: translateY(-1px); } }

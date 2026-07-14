@@ -917,6 +917,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         # Tiers are independent (a higher tier can be held without a lower one),
         # so the earned SET — not just the max — drives per-tab "earned" marks.
         earned_tiers = set()
+        maint_tiers = set()   # held-but-lapsed tiers -> need re-earning (drive the default-tier pick)
         max_tier = series_badges.aggregate(max_tier=Max('tier'))['max_tier'] or 0
 
         # Bulk-fetch progress for all badges in this series (single query, reused below)
@@ -932,11 +933,13 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         if target_profile:
             # Tiers are independent, so we need the full earned-tier SET (not just
             # the max) to default-select the right tab below.
-            earned_tiers = set(
+            earned_rows = list(
                 UserBadge.objects.filter(
                     profile=target_profile, badge__series_slug=self.kwargs['series_slug']
-                ).values_list('badge__tier', flat=True)
+                ).values_list('badge__tier', 'status')
             )
+            earned_tiers = {t for t, _ in earned_rows}
+            maint_tiers = {t for t, s in earned_rows if s == 'maintenance'}
             highest_tier_earned = max(earned_tiers) if earned_tiers else 0
             badge = series_badges.filter(tier=highest_tier_earned).first()
             if badge and highest_tier_earned > 0:
@@ -965,10 +968,15 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
         if selected_tier is None:
             if target_profile:
-                # Tiers are independent: default to the lowest tier NOT yet earned
-                # (the next available win), or the highest tier if all are earned.
-                unearned = [t for t in range(1, max_tier + 1) if t not in earned_tiers]
-                selected_tier = unearned[0] if unearned else (max_tier or 1)
+                if maint_tiers:
+                    # A lapsed (maintenance) tier needs re-earning -> default to the lowest such tier, ahead
+                    # of the next clean win (mirrors the Series tile's resting face).
+                    selected_tier = min(maint_tiers)
+                else:
+                    # Tiers are independent: default to the lowest tier NOT yet earned
+                    # (the next available win), or the highest tier if all are earned.
+                    unearned = [t for t in range(1, max_tier + 1) if t not in earned_tiers]
+                    selected_tier = unearned[0] if unearned else (max_tier or 1)
             else:
                 selected_tier = 1
         context['selected_tier'] = selected_tier
@@ -1439,8 +1447,10 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['is_earned'] = is_earned
         context['highest_tier_earned'] = highest_tier_earned
         # Exposed so the tier tabs mark each tier by actual earned-set membership
-        # (tiers are independent — see earned_tiers init above).
+        # (tiers are independent — see earned_tiers init above). maint_tiers is the held-but-lapsed subset,
+        # so the ladder can show a repair mark instead of a clean earned check on those rungs.
         context['earned_tiers'] = earned_tiers
+        context['maint_tiers'] = maint_tiers
 
         # image_urls drives the og:image / twitter:image meta blocks. The old
         # blurred-bg header (header_bg_image, recent_concept_name) was removed in

@@ -20,11 +20,11 @@ badge_tier_xp_bonus, tier_req_stages, badge.badge_type.
         <a href="{{ request.path }}?tier={{ tb.tier }}"
            hx-get="{{ request.path }}?tier={{ tb.tier }}" hx-target="#badge-tier-view" hx-swap="innerHTML"
            hx-push-url="true" hx-indicator="#badge-tier-view" data-tier="{{ tb.tier }}"
-           class="bd-tierstep bd-tierstep--{{ tb.tier|badge_tier|lower }}{% if tb.tier == selected_tier %} is-active{% endif %}{% if tb.tier in earned_tiers %} is-earned{% endif %}"
+           class="bd-tierstep bd-tierstep--{{ tb.tier|badge_tier|lower }}{% if tb.tier == selected_tier %} is-active{% endif %}{% if tb.tier in maint_tiers %} is-maintenance{% elif tb.tier in earned_tiers %} is-earned{% endif %}"
            role="tab" aria-selected="{% if tb.tier == selected_tier %}true{% else %}false{% endif %}"
-           aria-label="{{ tb.tier|badge_tier }} tier{% if tb.tier in earned_tiers %}, earned{% endif %}">
+           aria-label="{{ tb.tier|badge_tier }} tier{% if tb.tier in maint_tiers %}, lapsed - needs re-earning{% elif tb.tier in earned_tiers %}, earned{% endif %}">
             <span class="bd-tierstep__mark" aria-hidden="true">
-                {% if tb.tier in earned_tiers %}
+                {% if tb.tier in maint_tiers %}M{% elif tb.tier in earned_tiers %}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
                 {% endif %}
             </span>
