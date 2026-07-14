@@ -195,10 +195,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
     initStages();
 
-    // Re-init after a tier swap (the #badge-tier-view island's inner HTML was replaced).
+    // ── Tier swap: re-init stages + hold the scroll position steady ──
+    // #badge-tier-view is most of the page; replacing its innerHTML wholesale makes the browser lose its
+    // scroll anchor and jump (typically to the bottom) unless you were already at the top. Snapshot scrollY
+    // before the swap and re-assert it after (afterSwap catches the pre-paint jump; afterSettle catches any
+    // deferred scroll-anchoring), so switching tiers updates the content in place wherever you're scrolled.
+    var tierScrollY = null;
+    document.body.addEventListener('htmx:beforeSwap', function(e) {
+        var t = (e.detail && e.detail.target) || e.target;
+        if (t && t.id === 'badge-tier-view') { tierScrollY = window.scrollY; }
+    });
     document.body.addEventListener('htmx:afterSwap', function(e) {
         var t = (e.detail && e.detail.target) || e.target;
-        if (t && t.id === 'badge-tier-view') { initStages(); }
+        if (t && t.id === 'badge-tier-view') {
+            initStages();
+            if (tierScrollY !== null) { window.scrollTo(0, tierScrollY); }
+        }
+    });
+    document.body.addEventListener('htmx:afterSettle', function(e) {
+        var t = (e.detail && e.detail.target) || e.target;
+        if (t && t.id === 'badge-tier-view' && tierScrollY !== null) {
+            window.scrollTo(0, tierScrollY);
+            tierScrollY = null;
+        }
     });
 });
 </script>
