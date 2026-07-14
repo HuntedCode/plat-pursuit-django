@@ -292,7 +292,8 @@ def test_context_band_and_stats_modal_for_member(client, stub_leaderboards):
     profile = ProfileFactory()
     client.force_login(profile.user)
 
-    html = client.get(reverse('badge_detail', kwargs={'series_slug': series})).content.decode()
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+    html = resp.content.decode()
 
     assert 'bd-band' in html                          # the context band
     assert 'bd-rbar' in html                          # the single stacked rarity bar
@@ -306,6 +307,44 @@ def test_context_band_and_stats_modal_for_member(client, stub_leaderboards):
     assert 'bd-mystats__loot' in html                 # ... the trophy haul
     assert 'journey' in html                          # ... the narrative title
     assert 'badge-leaderboard-section' not in html    # the old standalone section is gone
+    assert resp.context['badge_series_stats']['user_playtime_hours'] == 0   # no games -> 0h (None -> 0 branch)
+
+
+def test_stats_modal_labels_another_pursuers_stats(client, stub_leaderboards):
+    """On the /<slug>/<username>/ variant the My Stats button + modal still render (a profile is on display)
+    but are labelled with THAT Pursuer's name, not 'My Stats'."""
+    series = "stats-variant"
+    BadgeFactory(series_slug=series, tier=1, is_live=True)
+    _series_with_stage(series, 1)
+    other = ProfileFactory()
+    viewer = ProfileFactory()
+    client.force_login(viewer.user)
+
+    resp = client.get(reverse('badge_detail_with_profile',
+                              kwargs={'series_slug': series, 'psn_username': other.psn_username}),
+                      HTTP_CF_RAY="test-ray")
+    html = resp.content.decode()
+
+    assert other.psn_username + "'s Stats" in html     # the button names the DISPLAYED Pursuer, not "My Stats"
+    assert other.psn_username in html and 'journey' in html   # the modal title names them too
+
+
+def test_stats_modal_tracks_platted_and_hundred_separately(client, stub_leaderboards):
+    """The My Stats modal shows two stage-progress bars -- platted (plat tiers) and 100%'d (100% tiers). A
+    game at 100% but WITHOUT a platinum counts toward 100%'d only, not platted."""
+    series = "stats-2bars"
+    BadgeFactory(series_slug=series, tier=1, is_live=True, required_stages=1)
+    _, games = _series_with_games(series, 1)
+    profile = ProfileFactory()
+    ProfileGameFactory(profile=profile, game=games[0], progress=100, has_plat=False)  # 100%'d, not platted
+    client.force_login(profile.user)
+
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+    stats = resp.context['badge_series_stats']
+
+    assert stats['user_stages_hundred_percented'] == 1   # counted for 100%'d
+    assert stats['user_stages_platinumed'] == 0          # ... but not platted (no platinum)
+    assert "Stages 100%'d" in resp.content.decode()      # the second bar renders
 
 
 def test_context_band_anon_hides_ranks_and_stats(client, stub_leaderboards):

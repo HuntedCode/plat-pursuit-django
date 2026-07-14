@@ -24,7 +24,9 @@ Rendered only when a profile is on display (see badge_detail.html). {% endcommen
         </div>
     </div>
 
-    {# Progress: stages platted, segmented Horizon (smooth bar above the cap). #}
+    {% comment %} Progress: stages platted (plat tiers) + stages 100%'d (100% tiers), each a segmented
+    Horizon (smooth bar above the segment cap). Two metrics because the badge's plat tiers need every stage
+    platted while its 100% tiers need every stage at 100%. {% endcomment %}
     <div class="bd-mystats__row">
         <div class="bd-mystats__row-head">
             <span class="bd-mystats__row-label">Stages platted</span>
@@ -35,7 +37,20 @@ Rendered only when a profile is on display (see badge_detail.html). {% endcommen
             {% for on in stages_platted_segments %}<span class="pp-horizon__seg"{% if on %} data-state="done"{% endif %}></span>{% endfor %}
         </span>
         {% else %}
-        <div class="pp-horizon" style="--horizon-h: 8px;"><span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-progress: {{ stats.avg_progress }}%;"></span></span></div>
+        <div class="pp-horizon" style="--horizon-h: 8px;"><span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-progress: {% if stats.total_required_stages %}{% widthratio stats.user_stages_platinumed stats.total_required_stages 100 %}{% else %}0{% endif %}%;"></span></span></div>
+        {% endif %}
+    </div>
+    <div class="bd-mystats__row">
+        <div class="bd-mystats__row-head">
+            <span class="bd-mystats__row-label">Stages 100%'d</span>
+            <span class="bd-mystats__row-val"><b>{{ stats.user_stages_hundred_percented }}</b> of {{ stats.total_required_stages }}</span>
+        </div>
+        {% if stages_hundred_segments %}
+        <span class="pp-horizon pp-horizon--segmented" role="progressbar" aria-valuenow="{{ stats.user_stages_hundred_percented }}" aria-valuemin="0" aria-valuemax="{{ stats.total_required_stages }}" style="--horizon-h: 8px; --horizon-accent: var(--pp-success);">
+            {% for on in stages_hundred_segments %}<span class="pp-horizon__seg"{% if on %} data-state="done"{% endif %}></span>{% endfor %}
+        </span>
+        {% else %}
+        <div class="pp-horizon" style="--horizon-h: 8px; --horizon-accent: var(--pp-success);"><span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-progress: {% if stats.total_required_stages %}{% widthratio stats.user_stages_hundred_percented stats.total_required_stages 100 %}{% else %}0{% endif %}%;"></span></span></div>
         {% endif %}
     </div>
 
@@ -54,12 +69,12 @@ Rendered only when a profile is on display (see badge_detail.html). {% endcommen
     {% if stats.first_played or stats.most_recent_trophy %}
     <div class="bd-mystats__timeline">
         <div class="bd-mystats__tl-pt">
-            <span class="bd-mystats__tl-date">{{ stats.first_played|date:"M Y"|default:"&ndash;" }}</span>
+            <span class="bd-mystats__tl-date">{% if stats.first_played %}{{ stats.first_played|date:"M Y" }}{% else %}&ndash;{% endif %}</span>
             <span class="bd-mystats__tl-cap">First played</span>
         </div>
         <span class="bd-mystats__tl-line" aria-hidden="true"></span>
         <div class="bd-mystats__tl-pt bd-mystats__tl-pt--end">
-            <span class="bd-mystats__tl-date">{{ stats.most_recent_trophy|date:"M j, Y"|default:"&ndash;" }}</span>
+            <span class="bd-mystats__tl-date">{% if stats.most_recent_trophy %}{{ stats.most_recent_trophy|date:"M j, Y" }}{% else %}&ndash;{% endif %}</span>
             <span class="bd-mystats__tl-cap">Last trophy</span>
         </div>
     </div>

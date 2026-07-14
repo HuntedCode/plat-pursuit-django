@@ -1234,6 +1234,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                 stage_duration = timedelta()
                 stage_played = 0
                 stage_plats = 0
+                stage_hundreds = 0
                 stage_completed = 0
                 for game_id in stage_game_ids:
                     pg = profile_games.get(game_id)
@@ -1243,6 +1244,8 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                             stage_duration += pg.play_duration
                         if pg.has_plat:
                             stage_plats += 1
+                        if pg.progress == 100:
+                            stage_hundreds += 1
                         if (is_plat_tier and pg.has_plat) or (not is_plat_tier and pg.progress == 100):
                             stage_completed += 1
                 total_stage_games = len(stage_game_ids)
@@ -1251,6 +1254,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                     'games_played': stage_played,
                     'total_games': total_stage_games,
                     'platinums': stage_plats,
+                    'hundreds': stage_hundreds,
                 }
                 data['stage_progress'] = {
                     'completed': stage_completed,
@@ -1314,16 +1318,10 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         series_avg_difficulty = round(total_difficulty / rated_games_count, 1) if rated_games_count else None
         series_avg_hours = round(total_hours / rated_games_count, 1) if rated_games_count else None
 
-        # Max Tier Distribution: exclusive % showing each earner's highest tier
+        # Tier-1 earner count -- exposed as total_unique_earners below. (The old peak-tier distribution
+        # derived from t1-t4 was removed with the rarity rebuild: tiers are independent, so the bar counts
+        # every tier earned, not a nesting partition.)
         t1 = tier_earner_counts.get(1, 0)
-        t2 = tier_earner_counts.get(2, 0)
-        t3 = tier_earner_counts.get(3, 0)
-        t4 = tier_earner_counts.get(4, 0)
-        max_tier_counts = {1: max(0, t1 - t2), 2: max(0, t2 - t3), 3: max(0, t3 - t4), 4: t4}
-        max_tier_pcts = {
-            tier: round(count / t1 * 100, 1) if t1 else 0
-            for tier, count in max_tier_counts.items()
-        }
 
         # Community total XP for this series
         community_total_xp = get_community_xp(series_slug)
@@ -1372,9 +1370,12 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                     if is_complete:
                         series_stages_completed += 1
 
-        # Stage-level user stats (excluding stage 0)
+        # Stage-level user stats (excluding stage 0). Platted vs 100%'d are tracked separately: the badge's
+        # plat tiers (1/3) need every stage platted, the 100% tiers (2/4) need every stage at 100% -- both
+        # are meaningful progress, so the My Stats modal shows a bar for each.
         user_stages_played = 0
         user_stages_platinumed = 0
+        user_stages_hundred_percented = 0
         total_required_stages = 0
         if target_profile:
             for data in structured_data:
@@ -1387,6 +1388,8 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                         user_stages_played += 1
                     if stage_stats['platinums'] > 0:
                         user_stages_platinumed += 1
+                    if stage_stats['hundreds'] > 0:
+                        user_stages_hundred_percented += 1
         else:
             total_required_stages = sum(1 for d in structured_data if d['stage'].stage_number != 0)
 
@@ -1402,6 +1405,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             'user_playtime_hours': round(user_total_playtime.total_seconds() / 3600) if user_total_playtime else 0,
             'user_stages_played': user_stages_played,
             'user_stages_platinumed': user_stages_platinumed,
+            'user_stages_hundred_percented': user_stages_hundred_percented,
             'total_required_stages': total_required_stages,
             'avg_progress': avg_progress,
             'total_trophies_earned': total_trophies_earned,
@@ -1412,7 +1416,6 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             'series_avg_hours': series_avg_hours,
             'rated_games_count': rated_games_count,
             'user_trophy_breakdown': user_trophy_breakdown,
-            'max_tier_pcts': max_tier_pcts,
             'total_unique_earners': t1,
             'first_played': first_played,
             'most_recent_trophy': most_recent_trophy,
@@ -1437,11 +1440,14 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             for t in (1, 2, 3, 4)
         ]
 
-        # Segmented "stages platted" meter for the My Stats modal (<= the medallion's 12-segment cap; above
-        # it the template falls back to a smooth bar off avg_progress).
+        # Segmented "stages platted" + "stages 100%'d" meters for the My Stats modal (<= the medallion's
+        # 12-segment cap; above it the template falls back to a smooth bar off avg_progress).
         if target_profile and 0 < total_required_stages <= 12:
             context['stages_platted_segments'] = [
                 i < user_stages_platinumed for i in range(total_required_stages)
+            ]
+            context['stages_hundred_segments'] = [
+                i < user_stages_hundred_percented for i in range(total_required_stages)
             ]
 
         # Build tier requirements stage list (for the tier selector panel)

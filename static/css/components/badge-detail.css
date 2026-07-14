@@ -168,7 +168,8 @@
 .bd-mystats { display: flex; flex-direction: column; gap: 18px; padding: 2px; }
 .bd-mystats__title { font-family: var(--pp-font-display); font-size: 1.15rem; font-weight: 800; line-height: 1.2; color: var(--pp-text); padding-right: 30px; }
 /* Hero: three big investment numbers (XP carries the one accent). */
-.bd-mystats__hero { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+/* minmax(0,1fr) so a large value (whale XP/playtime) can't force horizontal overflow at 375px. */
+.bd-mystats__hero { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .bd-mystats__big { display: flex; flex-direction: column; gap: 3px; }
 .bd-mystats__big-v { font-family: var(--pp-font-display); font-size: 1.7rem; font-weight: 800; line-height: 1; color: var(--pp-text); }
 .bd-mystats__big-v--xp { color: var(--pp-primary); }
@@ -211,13 +212,13 @@
 }
 
 /* ── Context band ────────────────────────────────────────────────────────────
-   Condensed competitive/rarity layer below the header: ONE stacked rarity bar (peak-tier distribution) +
-   legend, then a foot row of your ranks + the Leaderboards CTA + a My Stats button. Depth-pass card. */
+   Condensed competitive/rarity layer below the header: ONE stacked rarity bar (per-tier earn distribution)
+   + legend, then a foot row of your ranks + the Leaderboards CTA + a My Stats button. Depth-pass card. */
 .bd-band { padding: 14px 16px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30); }
 .bd-band__rarity { display: flex; flex-direction: column; gap: 9px; }
 
-/* The stacked bar: each segment's width is its tier's share of earners (by PEAK tier), so they sum to 100%.
-   A thin inner seam separates tiers without gaps that would distort the proportions. */
+/* The stacked bar: each segment's width is that tier's share of all tier-earns (tiers are independent, so
+   every tier earned counts). A thin inner seam separates tiers without gaps that would distort proportions. */
 .bd-rbar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--pp-bg-3); }
 .bd-rbar__seg { height: 100%; min-width: 5px; box-shadow: inset -1px 0 0 rgba(2, 4, 8, 0.35); }
 .bd-rbar__seg:last-child { box-shadow: none; }
@@ -228,7 +229,7 @@
 /* Selected tier: an inner ring (not clipped by the bar's overflow) + a touch brighter, tying it to the switcher. */
 .bd-rbar__seg.is-selected { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.9); filter: brightness(1.08); }
 
-/* Legend: tier swatch + name + count (matching the bar's peak counts). */
+/* Legend: tier swatch + name + count (matching the bar's per-tier earn counts). */
 .bd-rlegend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.72rem; color: var(--pp-text-mute); }
 .bd-rlegend__item { display: inline-flex; align-items: center; gap: 5px; }
 .bd-rlegend__dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
