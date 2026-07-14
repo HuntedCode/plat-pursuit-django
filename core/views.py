@@ -735,8 +735,9 @@ class BadgeJourneyWorkshopView(TemplateView):
     treatments so the ladder itself (not the stage contents) can be chosen. Each variant wraps the SAME
     condensed stage block so only the spine varies. Not a product surface.
 
-    Fabricated per-stage state (no user here): the first stages complete, one "current" in-progress stage,
-    the rest to-do -- so every node state (done / current / locked) and a partial spine fill render.
+    Stages are NON-SEQUENTIAL (completed in any order), so the fabricated state is deliberately SCATTERED
+    -- stages 1, 3, 4 done; 2, 5, 6 not -- to stress-test each spine against real, out-of-order completion
+    (no "climb" gauge, no single "you are here" pointer; each node is independently done / to-do).
     """
     template_name = 'design/badge_journey_workshop.html'
 
@@ -744,18 +745,15 @@ class BadgeJourneyWorkshopView(TemplateView):
         from trophies.models import Stage
         ctx = super().get_context_data(**kwargs)
         raw = list(Stage.objects.filter(series_slug='crash-bandicoot').order_by('stage_number'))
-        # Fabricated states: mark a cursor so done / current / to-do all render. `current` is the first
-        # incomplete stage (the "you are here" node); everything after it is locked/to-do.
-        done_upto = 2
-        counts = [(4, 4), (6, 6), (2, 5), (0, 6), (0, 4), (0, 3)]  # (completed, total) games per stage
+        # Scattered completion (stages complete in any order): 1, 3, 4 done; 2, 5, 6 not.
+        done_set = {1, 3, 4}
+        counts = [(4, 4), (2, 6), (5, 5), (6, 6), (1, 4), (0, 3)]  # (completed, total) games per stage
         stages = []
         for idx, s in enumerate(raw):
             if s.stage_number == 0:
                 state = 'bonus'
-            elif s.stage_number <= done_upto:
+            elif s.stage_number in done_set:
                 state = 'done'
-            elif s.stage_number == done_upto + 1:
-                state = 'current'
             else:
                 state = 'todo'
             comp, total = counts[idx % len(counts)]
@@ -768,11 +766,9 @@ class BadgeJourneyWorkshopView(TemplateView):
             })
         ranked = [s for s in stages if s['state'] != 'bonus']
         done_n = sum(1 for s in ranked if s['state'] == 'done')
-        # Overall climb for the gauge spine: whole done stages + the current stage's partial progress.
-        current = next((s for s in ranked if s['state'] == 'current'), None)
-        climb = done_n + (current['pct'] / 100 if current else 0)
+        # Aggregate count only (a quantity, NOT a spatial position on the spine): 3 of 6 stages.
         ctx['stages'] = stages
-        ctx['fill_pct'] = round(climb / len(ranked) * 100) if ranked else 0
+        ctx['done_pct'] = round(done_n / len(ranked) * 100) if ranked else 0
         ctx['done_count'] = done_n
         ctx['total_count'] = len(ranked)
         ctx['series_title'] = 'Crash Bandicoot'

@@ -4,13 +4,17 @@
 
 {% block content %}
 {% comment %} Design decision aid (NOT a product surface): how should the LADDER -- the spine that threads
-the badge stages into a climb -- look? Real crash-bandicoot stages; states fabricated so done / current /
-to-do nodes + a partial spine fill all render. Each variant wraps the SAME condensed stage block, so only
-the spine treatment varies. Pick one; the winner gets wired into badge_detail. {% endcomment %}
+the badge stages into one set -- look? Stages complete in ANY order, so the fabricated state is scattered
+(1, 3, 4 done; 2, 5, 6 not). There is no "climb" gauge and no single "you are here" pointer; each node is
+independently done / to-do. The spine is a connective/grouping device + an aggregate header count. Each
+variant wraps the SAME condensed stage block, so the real choice is NODE RICHNESS (dot / number / art). {% endcomment %}
 <style>
     .bjw { max-width: 760px; margin: 0 auto; padding: 24px 16px 120px; }
     .bjw h1 { font-family: var(--pp-font-display); font-size: 1.6rem; font-weight: 800; color: var(--pp-text); }
     .bjw__sub { color: var(--pp-text-dim); font-size: 0.9rem; margin-top: 6px; line-height: 1.5; }
+    .bjw__callout { margin-top: 16px; padding: 12px 14px; border-radius: var(--pp-radius-md); font-size: 0.82rem; line-height: 1.5; color: var(--pp-text-dim);
+        background: color-mix(in oklch, var(--pp-accent) 8%, var(--pp-bg-1)); border: 1px solid color-mix(in oklch, var(--pp-accent) 25%, var(--pp-border)); }
+    .bjw__callout b { color: var(--pp-text); }
     .bjw__block { margin-top: 48px; }
     .bjw__tag { display: flex; align-items: baseline; gap: 10px; margin-bottom: 18px; }
     .bjw__tag b { font-family: var(--pp-font-display); font-size: 1.05rem; font-weight: 800; color: var(--pp-primary); }
@@ -20,83 +24,71 @@ the spine treatment varies. Pick one; the winner gets wired into badge_detail. {
     /* ── Shared condensed stage block (identical across all variants) ── */
     .bjw-stage { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 14px rgba(0,0,0,0.22); }
     .bjw-stage--done { background: color-mix(in oklch, var(--pp-success) 7%, var(--pp-bg-1)); border-color: color-mix(in oklch, var(--pp-success) 22%, var(--pp-border)); }
-    .bjw-stage--current { border-color: color-mix(in oklch, var(--pp-primary) 45%, var(--pp-border)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 22px color-mix(in oklch, var(--pp-primary) 18%, transparent); }
     .bjw-stage__ico { width: 42px; height: 42px; border-radius: var(--pp-radius-md); overflow: hidden; border: 1px solid var(--pp-border); flex-shrink: 0; }
     .bjw-stage__ico img { width: 100%; height: 100%; object-fit: cover; }
     .bjw-stage__id { flex: 1; min-width: 0; }
     .bjw-stage__eyebrow { font-size: 0.58rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-accent); }
     .bjw-stage--done .bjw-stage__eyebrow { color: var(--pp-success); }
-    .bjw-stage--current .bjw-stage__eyebrow { color: var(--pp-primary); }
     .bjw-stage__title { font-family: var(--pp-font-display); font-size: 0.98rem; font-weight: 800; color: var(--pp-text); line-height: 1.2; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bjw-stage__pill { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.74rem; padding: 2px 10px; border-radius: 999px; flex-shrink: 0; background: var(--pp-bg-2); color: var(--pp-text-dim); border: 1px solid var(--pp-border); }
     .bjw-stage--done .bjw-stage__pill { background: color-mix(in oklch, var(--pp-success) 14%, var(--pp-bg-2)); color: var(--pp-success); border-color: color-mix(in oklch, var(--pp-success) 30%, transparent); }
-    .bjw-stage--current .bjw-stage__pill { background: color-mix(in oklch, var(--pp-primary) 14%, var(--pp-bg-2)); color: var(--pp-primary); border-color: color-mix(in oklch, var(--pp-primary) 30%, transparent); }
 
-    /* Overall climb header shared by the variants. */
-    .bjw-climb { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 0.78rem; color: var(--pp-text-dim); font-weight: 600; }
-    .bjw-climb b { font-family: var(--pp-font-display); font-weight: 800; color: var(--pp-text); }
-    .bjw-climb__bar { flex: 1; height: 6px; border-radius: 3px; background: var(--pp-bg-3); overflow: hidden; }
-    .bjw-climb__bar span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--pp-success), var(--pp-primary)); }
+    /* Aggregate completion meter -- a quantity (3 of 6), decoupled from any node position. */
+    .bjw-count { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; font-size: 0.78rem; color: var(--pp-text-dim); font-weight: 600; }
+    .bjw-count b { font-family: var(--pp-font-display); font-weight: 800; color: var(--pp-text); }
+    .bjw-count__bar { flex: 1; height: 6px; border-radius: 3px; background: var(--pp-bg-3); overflow: hidden; }
+    .bjw-count__bar span { display: block; height: 100%; border-radius: 3px; background: var(--pp-success); }
 
-    /* ══════ VARIANT 1 — Gauge spine (the line itself fills to your climb) ══════ */
+    /* ══════ VARIANT 1 — Minimal dots (neutral spine, independent node dots) ══════ */
     .bjw-v1 { position: relative; padding-left: 34px; display: flex; flex-direction: column; gap: 14px; }
-    .bjw-v1__track { position: absolute; left: 10px; top: 22px; bottom: 22px; width: 4px; border-radius: 2px; background: var(--pp-bg-3); overflow: hidden; }
-    .bjw-v1__fill { position: absolute; left: 0; top: 0; width: 100%; border-radius: 2px; background: linear-gradient(180deg, var(--pp-success), var(--pp-primary)); box-shadow: 0 0 10px color-mix(in oklch, var(--pp-primary) 45%, transparent); }
+    .bjw-v1__track { position: absolute; left: 10px; top: 22px; bottom: 22px; width: 3px; border-radius: 2px; background: var(--pp-border); }
     .bjw-v1__row { position: relative; }
     .bjw-v1__node { position: absolute; left: -34px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--pp-bg-2); border: 2px solid var(--pp-border); z-index: 2; }
     .bjw-v1__node svg { width: 11px; height: 11px; }
-    .bjw-v1__row--done .bjw-v1__node { background: var(--pp-success); border-color: var(--pp-success); color: #06140d; }
-    .bjw-v1__row--current .bjw-v1__node { background: var(--pp-primary); border-color: var(--pp-primary); color: #05101c; --pulse-col: var(--pp-primary); animation: bjw-pulse 2.2s var(--pp-ease) infinite; }
+    .bjw-v1__row--done .bjw-v1__node { background: var(--pp-success); border-color: var(--pp-success); color: #06140d; box-shadow: 0 0 0 3px color-mix(in oklch, var(--pp-success) 16%, transparent); }
     .bjw-v1__row--bonus .bjw-v1__node { border-radius: 4px; transform: translateY(-50%) rotate(45deg); border-style: dashed; border-color: var(--pp-accent); color: var(--pp-accent); }
 
-    /* ══════ VARIANT 2 — Milestone nodes (numbered waypoints; connector is quiet) ══════ */
+    /* ══════ VARIANT 2 — Milestone nodes (numbered; each node carries its OWN state) ══════ */
     .bjw-v2 { position: relative; padding-left: 62px; display: flex; flex-direction: column; gap: 16px; }
     .bjw-v2__row { position: relative; }
     .bjw-v2__node { position: absolute; left: -62px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; z-index: 2;
         font-family: var(--pp-font-display); font-weight: 800; font-size: 1.05rem; background: var(--pp-bg-2); border: 2px solid var(--pp-border); color: var(--pp-text-mute); }
     .bjw-v2__node svg { width: 20px; height: 20px; }
-    /* Connector segment BELOW each node (skipped on the last via :last-child). */
-    .bjw-v2__row::after { content: ""; position: absolute; left: -40px; top: calc(50% + 22px); width: 2px; height: calc(100% + 16px - 44px); background: repeating-linear-gradient(180deg, var(--pp-border) 0 4px, transparent 4px 8px); z-index: 1; }
+    /* Neutral connector (uniform -- order-free, so it never encodes "progress so far"). */
+    .bjw-v2__row::after { content: ""; position: absolute; left: -40px; top: calc(50% + 22px); width: 2px; height: calc(100% + 16px - 44px); background: var(--pp-border); z-index: 1; }
     .bjw-v2__row:last-child::after { display: none; }
-    .bjw-v2__row--done::after { background: var(--pp-success); }
     .bjw-v2__row--done .bjw-v2__node { background: var(--pp-success); border-color: var(--pp-success); color: #06140d; }
-    .bjw-v2__row--current .bjw-v2__node { border-color: var(--pp-primary); color: var(--pp-primary); background: color-mix(in oklch, var(--pp-primary) 12%, var(--pp-bg-2)); --pulse-col: var(--pp-primary); animation: bjw-pulse 2.2s var(--pp-ease) infinite; }
     .bjw-v2__row--bonus .bjw-v2__node { border-style: dashed; border-color: var(--pp-accent); color: var(--pp-accent); background: color-mix(in oklch, var(--pp-accent) 8%, var(--pp-bg-2)); }
 
-    /* ══════ VARIANT 3 — Tier-coloured path (the climb shifts bronze→silver→gold→plat; nodes carry art) ══════ */
+    /* ══════ VARIANT 3 — Tier-coloured path (nodes carry stage art; tier tint is decorative) ══════ */
     .bjw-v3 { position: relative; padding-left: 58px; display: flex; flex-direction: column; gap: 16px; }
     .bjw-v3__row { position: relative; }
     .bjw-v3__node { position: absolute; left: -58px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 50%; overflow: hidden; z-index: 2; border: 2px solid var(--tier-col, var(--pp-border)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--tier-col, var(--pp-border)) 16%, transparent); background: var(--pp-bg-2); }
     .bjw-v3__node img { width: 100%; height: 100%; object-fit: cover; }
     .bjw-v3__node--dim img { opacity: 0.35; filter: saturate(0.4); }
-    .bjw-v3__check { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklch, var(--tier-col) 55%, transparent); color: #06140d; }
+    .bjw-v3__check { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklch, var(--pp-success) 62%, transparent); color: #06140d; }
     .bjw-v3__check svg { width: 16px; height: 16px; }
-    .bjw-v3__row::after { content: ""; position: absolute; left: -40px; top: calc(50% + 20px); width: 3px; height: calc(100% + 16px - 40px); border-radius: 2px; background: var(--tier-col, var(--pp-border)); opacity: 0.5; z-index: 1; }
+    /* Decorative tier tint on the connector -- uniform low opacity, NOT a progress signal. */
+    .bjw-v3__row::after { content: ""; position: absolute; left: -40px; top: calc(50% + 20px); width: 3px; height: calc(100% + 16px - 40px); border-radius: 2px; background: var(--tier-col, var(--pp-border)); opacity: 0.3; z-index: 1; }
     .bjw-v3__row:last-child::after { display: none; }
-    .bjw-v3__row--todo::after, .bjw-v3__row--bonus::after { opacity: 0.22; }
-    .bjw-v3__row--current .bjw-v3__node { animation: bjw-pulse 2.2s var(--pp-ease) infinite; --pulse-col: var(--tier-col); }
-
-    /* Shared "current" pulse. Colour comes from a hoisted var (never color-mix inside a keyframe). */
-    @keyframes bjw-pulse {
-        0%, 100% { box-shadow: 0 0 0 0 var(--pulse-col); }
-        50% { box-shadow: 0 0 0 6px transparent; }
-    }
-    @media (prefers-reduced-motion: reduce) { .bjw-v1__node, .bjw-v2__node, .bjw-v3__node { animation: none !important; } }
 </style>
 
 <div class="bjw">
     <h1>Badge journey &mdash; the ladder, from scratch</h1>
-    <p class="bjw__sub">The connective <b>spine</b> that threads the stages into a climb. Real
-        <b>{{ series_title }}</b> stages; states are fabricated so <b>done</b>, the <b>current</b> "you are
-        here" node, and <b>to-do</b> stages all render. Each variant wraps the <i>same</i> stage block &mdash;
-        only the spine treatment differs. Pick one and it gets wired into the real page.</p>
+    <p class="bjw__sub">The connective <b>spine</b> that threads the stages into one set. Real
+        <b>{{ series_title }}</b> stages.</p>
+    <div class="bjw__callout"><b>Stages complete in any order</b> &mdash; so this is fabricated scattered:
+        <b>1, 3, 4 done; 2, 5, 6 not</b>. That kills the "climb / fill-to-progress" idea (a spine can't fill
+        top-to-bottom when completion is out of order) and the single "you are here" pointer. Each node just
+        carries its own done / to-do state; overall progress is an aggregate <b>{{ done_count }} of {{ total_count }}</b>
+        count up top. The real choice below is <b>how rich each node is</b>: a dot, a number, or the stage art.</p>
 
-    {% comment %} ── Variant 1: gauge spine ── {% endcomment %}
+    {% comment %} ── Variant 1: minimal dots ── {% endcomment %}
     <div class="bjw__block">
-        <div class="bjw__tag"><b>Variant 1</b><span>Gauge spine &mdash; the line fills to your climb</span></div>
-        <div class="bjw-climb"><span>Climb</span><div class="bjw-climb__bar"><span style="width: {{ fill_pct }}%"></span></div><b>{{ done_count }}/{{ total_count }} stages</b></div>
+        <div class="bjw__tag"><b>Variant 1</b><span>Minimal dots &mdash; neutral spine</span></div>
+        <div class="bjw-count"><span>Complete</span><div class="bjw-count__bar"><span style="width: {{ done_pct }}%"></span></div><b>{{ done_count }}/{{ total_count }} stages</b></div>
         <div class="bjw-v1">
-            <div class="bjw-v1__track"><div class="bjw-v1__fill" style="height: {{ fill_pct }}%"></div></div>
+            <div class="bjw-v1__track"></div>
             {% for s in stages %}
             <div class="bjw-v1__row bjw-v1__row--{{ s.state }}">
                 <span class="bjw-v1__node">
@@ -106,14 +98,15 @@ the spine treatment varies. Pick one; the winner gets wired into badge_detail. {
             </div>
             {% endfor %}
         </div>
-        <p class="bjw__note">The spine itself is a gauge: a filled gradient rises to how far you've climbed
-            (whole done stages + the current stage's partial %). Node dots fill green when done; the current
-            node is the live primary marker. Reads as one continuous ascent.</p>
+        <p class="bjw__note">The spine is a plain grey connector; each node dot fills green independently when
+            that stage is done (with a soft ring), hollow when not. The aggregate meter up top carries the
+            count. Lightest touch &mdash; a refined version of what's there now.</p>
     </div>
 
     {% comment %} ── Variant 2: milestone nodes ── {% endcomment %}
     <div class="bjw__block">
-        <div class="bjw__tag"><b>Variant 2</b><span>Milestone nodes &mdash; numbered waypoints</span></div>
+        <div class="bjw__tag"><b>Variant 2</b><span>Milestone nodes &mdash; numbered</span></div>
+        <div class="bjw-count"><span>Complete</span><div class="bjw-count__bar"><span style="width: {{ done_pct }}%"></span></div><b>{{ done_count }}/{{ total_count }} stages</b></div>
         <div class="bjw-v2">
             {% for s in stages %}
             <div class="bjw-v2__row bjw-v2__row--{{ s.state }}">
@@ -126,19 +119,21 @@ the spine treatment varies. Pick one; the winner gets wired into badge_detail. {
             </div>
             {% endfor %}
         </div>
-        <p class="bjw__note">The nodes carry the weight: big numbered waypoints with rich states (check when
-            done, an accent ring on the current one, muted numbers ahead). The connector is a quiet dashed
-            line that goes solid green behind cleared stages. Reads as discrete milestones.</p>
+        <p class="bjw__note">Bigger numbered waypoints, each carrying its own state (a check when done, a muted
+            number when not). The connector is a uniform neutral rail &mdash; it groups the stages without
+            implying an order. The stage number stays legible, which helps when completion is scattered.</p>
     </div>
 
     {% comment %} ── Variant 3: tier-coloured path ── {% endcomment %}
     <div class="bjw__block">
         <div class="bjw__tag"><b>Variant 3</b><span>Tier-coloured path &mdash; nodes carry the stage art</span></div>
+        <div class="bjw-count"><span>Complete</span><div class="bjw-count__bar"><span style="width: {{ done_pct }}%"></span></div><b>{{ done_count }}/{{ total_count }} stages</b></div>
         <div class="bjw-v3">
             {% for s in stages %}
-            {% comment %} Cycle the four trophy-tier colours down the climb so the ladder belongs to a badge. {% endcomment %}
+            {% comment %} Tier colours cycle down the ladder as decoration (a nod to the badge's tiers), NOT a
+            progress signal -- completion is per-node and out of order. {% endcomment %}
             <div class="bjw-v3__row bjw-v3__row--{{ s.state }}" style="--tier-col: {% cycle 'var(--color-trophy-bronze)' 'var(--color-trophy-silver)' 'var(--color-trophy-gold)' 'var(--color-trophy-platinum)' %};">
-                <span class="bjw-v3__node{% if s.state == 'todo' or s.state == 'bonus' %} bjw-v3__node--dim{% endif %}">
+                <span class="bjw-v3__node{% if s.state != 'done' %} bjw-v3__node--dim{% endif %}">
                     <img src="{{ s.icon }}" alt="">
                     {% if s.state == 'done' %}<span class="bjw-v3__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
                 </span>
@@ -146,9 +141,10 @@ the spine treatment varies. Pick one; the winner gets wired into badge_detail. {
             </div>
             {% endfor %}
         </div>
-        <p class="bjw__note">The path echoes the badge's tier climb &mdash; bronze &rarr; silver &rarr; gold
-            &rarr; platinum &mdash; and each node shows the real stage artwork (dimmed until reached, a check
-            overlay when done). The most "this badge" of the three; the busiest.</p>
+        <p class="bjw__note">Each node shows the real stage artwork (full-colour + a green check when done,
+            dimmed when not). Tier colours cycle down the rail as a decorative nod to the badge &mdash; not a
+            progress signal, since completion is out of order. Most "this badge," but it doubles the artwork
+            already inside each card, and the silver/gold tokens are muted.</p>
     </div>
 </div>
 {% endblock %}
