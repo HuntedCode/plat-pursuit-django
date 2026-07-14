@@ -44,10 +44,10 @@ Real crash-bandicoot stages, a fabricated half-done state so both completion loo
 
     /* ── Option B: coins strip ── */
     .rcw-coins { display: flex; flex-wrap: wrap; gap: 14px; }
-    .rcw-coin { position: relative; width: 58px; text-decoration: none; }
-    .rcw-coin__disc { position: relative; width: 58px; height: 58px; border-radius: 50%; overflow: hidden; border: 2px solid var(--pp-border); transition: border-color 0.15s ease, transform 0.15s ease; }
+    .rcw-coin { position: relative; display: flex; flex-direction: column; align-items: center; width: 58px; text-decoration: none; }
+    .rcw-coin__disc { position: relative; display: block; width: 58px; height: 58px; border-radius: 50%; border: 2px solid var(--pp-border); transition: border-color 0.15s ease, transform 0.15s ease; }
     .rcw-coin:hover .rcw-coin__disc { transform: translateY(-2px); border-color: color-mix(in oklab, var(--tier-c) 50%, var(--pp-border)); }
-    .rcw-coin__disc img { width: 100%; height: 100%; object-fit: cover; }
+    .rcw-coin__disc img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
     .rcw-coin:not(.is-done) .rcw-coin__disc img { filter: grayscale(1) brightness(0.5); }
     .rcw-coin.is-done .rcw-coin__disc { border-color: var(--pp-success); box-shadow: 0 0 10px -3px color-mix(in oklab, var(--pp-success) 60%, transparent); }
     .rcw-coin__num { display: block; text-align: center; margin-top: 5px; font-size: 0.62rem; font-weight: 700; color: var(--pp-text-mute); }
