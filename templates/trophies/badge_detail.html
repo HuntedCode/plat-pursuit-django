@@ -200,24 +200,23 @@ document.addEventListener('DOMContentLoaded', function() {
     // scroll anchor and jump (typically to the bottom) unless you were already at the top. Snapshot scrollY
     // before the swap and re-assert it after (afterSwap catches the pre-paint jump; afterSettle catches any
     // deferred scroll-anchoring), so switching tiers updates the content in place wherever you're scrolled.
+    // behavior:'instant' overrides the global `scroll-behavior: smooth` so the restore is a jump, not a
+    // (jarring) animated scroll back to place.
     var tierScrollY = null;
+    function restoreTierScroll() {
+        if (tierScrollY !== null) { window.scrollTo({ top: tierScrollY, left: 0, behavior: 'instant' }); }
+    }
     document.body.addEventListener('htmx:beforeSwap', function(e) {
         var t = (e.detail && e.detail.target) || e.target;
         if (t && t.id === 'badge-tier-view') { tierScrollY = window.scrollY; }
     });
     document.body.addEventListener('htmx:afterSwap', function(e) {
         var t = (e.detail && e.detail.target) || e.target;
-        if (t && t.id === 'badge-tier-view') {
-            initStages();
-            if (tierScrollY !== null) { window.scrollTo(0, tierScrollY); }
-        }
+        if (t && t.id === 'badge-tier-view') { initStages(); restoreTierScroll(); }
     });
     document.body.addEventListener('htmx:afterSettle', function(e) {
         var t = (e.detail && e.detail.target) || e.target;
-        if (t && t.id === 'badge-tier-view' && tierScrollY !== null) {
-            window.scrollTo(0, tierScrollY);
-            tierScrollY = null;
-        }
+        if (t && t.id === 'badge-tier-view') { restoreTierScroll(); tierScrollY = null; }
     });
 });
 </script>
