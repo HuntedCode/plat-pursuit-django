@@ -39,156 +39,83 @@
   border-top-left-radius: inherit; border-top-right-radius: inherit;
 }
 
-/* ── Tier selector ──────────────────────────────────────────────────────── */
-.bd-tiers { margin-bottom: 12px; scroll-margin-top: 1rem; }
+/* ── Tier selector (rebuild) ────────────────────────────────────────────────
+   A colour-forward tier LADDER (not a segmented switcher -- the tiers are a collectible progression). Tier
+   colour is the one accent, using the rebuild's medallion tier family (bronze/silver/gold/platinum) scoped
+   to the ladder steps + the requirements' left accent; everything else is neutral, with success-green only
+   on completed stages (real info). */
+.bd-tiers { scroll-margin-top: 1rem; }
 
-/* Tabs: a centered segmented row. Each tab carries its trophy-tier accent
-   (--tier) so the selector mirrors the Frame's tier identity rather than a
-   generic semantic palette. */
-.bd-tiers__tabs {
-  display: flex; justify-content: center; flex-wrap: wrap;
-  gap: 8px; margin-bottom: 12px;
+/* The ladder: four equal tier steps, read left-to-right as the progression. */
+.bd-tierlad { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.bd-tierstep {
+    --tier-c: var(--pp-text-mute);
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px;
+    padding: 12px 8px 10px; border-radius: var(--pp-radius-lg);
+    border: 1px solid var(--pp-border); background: var(--pp-bg-2); text-decoration: none;
+    transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
 }
+.bd-tierstep--bronze   { --tier-c: #cf9160; }
+.bd-tierstep--silver   { --tier-c: #b9c6d6; }
+.bd-tierstep--gold     { --tier-c: #e7c25c; }
+.bd-tierstep--platinum { --tier-c: #8fd2ea; }
+.bd-tierstep__mark {
+    width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center;
+    border: 2px solid color-mix(in oklab, var(--tier-c) 50%, var(--pp-border)); color: var(--pp-bg-0);
+}
+.bd-tierstep__mark svg { width: 12px; height: 12px; }
+.bd-tierstep.is-earned .bd-tierstep__mark { background: var(--tier-c); border-color: var(--tier-c); }
+.bd-tierstep__name { font-size: 0.82rem; font-weight: 800; color: var(--pp-text-dim); }
+.bd-tierstep__req { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute); }
+@media (hover: hover) { .bd-tierstep:hover { border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border)); transform: translateY(-1px); } }
+.bd-tierstep.is-active {
+    border-color: color-mix(in oklab, var(--tier-c) 60%, var(--pp-border));
+    background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 15%, var(--pp-bg-2)), var(--pp-bg-2));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px color-mix(in oklab, var(--tier-c) 30%, transparent), 0 6px 18px -10px color-mix(in oklab, var(--tier-c) 50%, #000);
+}
+.bd-tierstep.is-active .bd-tierstep__name { color: var(--tier-c); }
+.bd-tierstep:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
-.bd-tier {
-  --tier: var(--pp-text-mute);
-  position: relative;
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 14px;
-  border: var(--pp-border-w) solid var(--pp-border);
-  border-radius: var(--pp-radius-md);
-  background: var(--pp-bg-2);
-  color: var(--pp-text-mute);
-  font-family: var(--pp-font-body);
-  font-size: 0.8rem; font-weight: 700; font-style: italic;
-  text-decoration: none; white-space: nowrap;
-  transition: color var(--pp-dur) var(--pp-ease),
-              border-color var(--pp-dur) var(--pp-ease),
-              background var(--pp-dur) var(--pp-ease),
-              box-shadow var(--pp-dur) var(--pp-ease);
+/* ── Selected tier's requirements ───────────────────────────────────────────
+   A panel with the tier-colour left accent (the one accent); neutral text, success-green only on the
+   completed-stage checks. */
+.bd-treq {
+    --tier-c: var(--pp-primary);
+    border: 1px solid var(--pp-border); border-left: 3px solid var(--tier-c);
+    border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 14px 16px;
 }
-.bd-tier__icon { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
-.bd-tier__label { display: none; }
-@media (min-width: 768px) { .bd-tier__label { display: inline; } }
-
-/* Hover brings in the tier color (border + text) — but no fill or glow. Those
-   are reserved for the selected state. */
-.bd-tier:hover {
-  color: var(--tier);
-  border-color: color-mix(in oklch, var(--tier) 55%, transparent);
+.bd-treq--bronze   { --tier-c: #cf9160; }
+.bd-treq--silver   { --tier-c: #b9c6d6; }
+.bd-treq--gold     { --tier-c: #e7c25c; }
+.bd-treq--platinum { --tier-c: #8fd2ea; }
+.bd-treq__head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+@media (min-width: 768px) { .bd-treq__head { flex-direction: row; align-items: center; justify-content: space-between; } }
+.bd-treq__ask { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.9rem; font-weight: 700; color: var(--pp-text); }
+.bd-treq__ico { width: 18px; height: 18px; }
+.bd-treq__n { font-family: var(--pp-font-display); font-weight: 800; }
+.bd-treq__pct { font-weight: 800; }
+.bd-treq__xp { display: flex; flex-direction: column; gap: 1px; }
+@media (min-width: 768px) { .bd-treq__xp { align-items: flex-end; } }
+.bd-treq__xp-val { font-size: 1rem; font-weight: 800; color: var(--pp-text); }
+.bd-treq__xp-sep { color: var(--pp-text-mute); margin: 0 2px; font-weight: 600; }
+.bd-treq__xp-unit { font-size: 0.7rem; color: var(--pp-text-mute); margin-left: 3px; font-weight: 600; }
+.bd-treq__xp-note { font-size: 0.62rem; color: var(--pp-text-mute); }
+.bd-treq__stages-label { display: flex; align-items: center; gap: 7px; font-size: 0.64rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 8px; }
+.bd-treq__stages-n { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--pp-bg-3); color: var(--pp-text-dim); font-size: 0.62rem; font-weight: 700; }
+.bd-treq__list { display: flex; flex-direction: column; gap: 4px; }
+.bd-treq__row {
+    display: flex; align-items: center; gap: 9px; padding: 6px 9px; border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    text-decoration: none; color: var(--pp-text-dim);
+    transition: border-color 0.15s ease, color 0.15s ease;
 }
-
-/* Selected: tier border + tier-tinted fill + a restrained tier glow. This is the
-   one place the selector earns neon — the active state. */
-.bd-tier--active {
-  color: var(--tier);
-  border-color: var(--tier);
-  background: color-mix(in oklch, var(--tier) 14%, var(--pp-bg-2));
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--tier) 35%, transparent),
-              0 0 16px color-mix(in oklch, var(--tier) 26%, transparent);
-}
-
-/* Earned medallion — by earned-SET membership (tiers are independent, so a held
-   higher tier must NOT imply lower tiers are marked). */
-.bd-tier__earned {
-  position: absolute; top: -6px; right: -6px;
-  width: 16px; height: 16px; border-radius: 999px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--pp-success); color: var(--pp-bg-0);
-  box-shadow: 0 1px 3px oklch(0 0 0 / 0.45);
-}
-.bd-tier__earned svg { width: 10px; height: 10px; }
-
-/* Per-tier accents — the trophy tiers, tuned for the dark slate substrate. */
-.bd-tier--1 { --tier: oklch(0.70 0.11 55); }    /* bronze   */
-.bd-tier--2 { --tier: oklch(0.82 0.012 256); }  /* silver   */
-.bd-tier--3 { --tier: oklch(0.85 0.16 90); }    /* gold     */
-.bd-tier--4 { --tier: var(--pp-primary); }      /* platinum (cyan pinnacle) */
-
-/* ── Tier requirements panel ────────────────────────────────────────────── */
-.bd-req {
-  --tier: var(--pp-primary);
-  padding: 14px 16px;
-  border-left: 4px solid var(--tier);
-}
-.bd-req--1 { --tier: oklch(0.70 0.11 55); }
-.bd-req--2 { --tier: oklch(0.82 0.012 256); }
-.bd-req--3 { --tier: oklch(0.85 0.16 90); }
-.bd-req--4 { --tier: var(--pp-primary); }
-
-.bd-req__head {
-  display: flex; flex-direction: column; gap: 8px;
-  margin-bottom: 12px;
-}
-@media (min-width: 768px) {
-  .bd-req__head { flex-direction: row; align-items: center; justify-content: space-between; }
-}
-
-.bd-req__type {
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  font-family: var(--pp-font-body);
-  font-size: 0.85rem; font-weight: 700; font-style: italic; color: var(--pp-text);
-}
-.bd-req__type img { width: 18px; height: 18px; }
-.bd-req__type-count { font-style: normal; font-size: 1.05rem; color: var(--tier); }
-.bd-req__type-pct { font-style: normal; color: var(--pp-warning); }
-
-.bd-req__xp { display: flex; flex-direction: column; gap: 1px; }
-@media (min-width: 768px) { .bd-req__xp { align-items: flex-end; } }
-.bd-req__xp-val {
-  /* Numbers earn the display face. */
-  font-family: var(--pp-font-display);
-  font-size: 0.95rem; font-weight: 800; color: var(--tier);
-}
-.bd-req__xp-note { font-size: 0.62rem; color: var(--pp-text-mute); }
-
-/* Collapsible stage checklist — native <details>, no JS or DaisyUI. */
-.bd-req__stages {
-  border: 1px solid oklch(1 0 0 / 0.06);
-  border-radius: var(--pp-radius-md);
-  background: oklch(1 0 0 / 0.03);
-}
-.bd-req__stages-summary {
-  list-style: none; cursor: pointer;
-  display: flex; align-items: center; gap: 6px;
-  padding: 8px 12px;
-  font-size: 0.78rem; font-weight: 700; color: var(--pp-text-dim);
-  user-select: none;
-}
-.bd-req__stages-summary::-webkit-details-marker { display: none; }
-.bd-req__stages-summary::after {
-  content: ""; width: 8px; height: 8px; margin-left: auto;
-  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
-  transform: rotate(45deg); transition: transform var(--pp-dur) var(--pp-ease);
-}
-.bd-req__stages[open] .bd-req__stages-summary::after { transform: rotate(-135deg); }
-
-.bd-req__list { display: flex; flex-direction: column; gap: 4px; padding: 0 8px 8px; }
-.bd-req__row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 8px; border-radius: var(--pp-radius-md);
-  background: var(--pp-bg-2); border: 1px solid oklch(1 0 0 / 0.05);
-}
-.bd-req__row--done {
-  background: color-mix(in oklch, var(--pp-success) 10%, var(--pp-bg-2));
-  border-color: color-mix(in oklch, var(--pp-success) 22%, transparent);
-}
-.bd-req__status { width: 16px; height: 16px; flex-shrink: 0; }
-.bd-req__status--done { color: var(--pp-success); }
-.bd-req__status--todo { color: var(--pp-error); }
-.bd-req__status--anon { color: var(--pp-text-mute); }
-.bd-req__stage-icon {
-  width: 22px; height: 22px; border-radius: var(--pp-radius-sm);
-  object-fit: cover; flex-shrink: 0;
-}
-.bd-req__stage-link {
-  font-size: 0.8rem; color: var(--pp-text-dim); text-decoration: none;
-  padding-right: 0.25rem;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  transition: color var(--pp-dur-fast) var(--pp-ease);
-}
-.bd-req__stage-link:hover { color: var(--pp-primary); }
-.bd-req__stage-num { color: var(--pp-primary); font-weight: 700; }
+@media (hover: hover) { .bd-treq__row:hover { border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); color: var(--pp-text); } }
+.bd-treq__row.is-done { color: var(--pp-text-mute); }
+.bd-treq__status { width: 16px; height: 16px; flex-shrink: 0; display: grid; place-items: center; color: var(--pp-success); }
+.bd-treq__status svg { width: 15px; height: 15px; }
+.bd-treq__stage-ico { width: 22px; height: 22px; border-radius: var(--pp-radius-sm); object-fit: cover; flex-shrink: 0; }
+.bd-treq__stage-name { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-treq__stage-num { color: var(--pp-text-mute); font-weight: 700; margin-right: 7px; }
 
 /* ── Series stats ───────────────────────────────────────────────────────────
    The Tally primitive: clean stat tiles, numbers in the display face. Color is

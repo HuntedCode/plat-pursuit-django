@@ -1,78 +1,73 @@
-{% load static custom_filters humanize %}
+{% comment %}
+Tier selector (rebuild, from scratch). Derived from the rebuild's tier-ladder pattern (the badge-list Series
+tile ladder), NOT a segmented switcher -- the four tiers are a collectible PROGRESSION, not parallel views.
 
+  - A colour-forward ladder: four tier steps (Bronze -> Platinum), each carrying its tier colour + name + the
+    requirement it asks for (Platinum / 100%) + earned state. Tier colour is the one accent -- a scoped
+    family on its own surface, per the restraint rule. The selected step is the tier-tinted active one.
+  - Below it, the selected tier's requirements: the requirement line, the XP reward, and the stage checklist.
+
+Data contract (unchanged): all_tier_badges, selected_tier, earned_tiers, selected_tier_badge,
+selected_tier_is_plat, selected_tier_requirements, selected_tier_total_xp, selected_tier_user_xp,
+badge_tier_xp_bonus, tier_req_stages, badge.badge_type.
+{% endcomment %}
+{% load static custom_filters humanize %}
 <div id="tier-selector" class="bd-tiers">
-    {# Tier tabs: one per tier, tinted with its trophy-tier accent; earned mark uses earned-set membership (tiers are independent). #}
-    <div class="bd-tiers__tabs">
+
+    {# ── Tier ladder: the progression, colour-forward ── #}
+    <div class="bd-tierlad" role="tablist" aria-label="Badge tier">
         {% for tb in all_tier_badges %}
-        <a href="?tier={{ tb.tier }}"
-           class="bd-tier bd-tier--{{ tb.tier }}{% if tb.tier == selected_tier %} bd-tier--active{% endif %}"
-           data-tier-tab>
-            {% with tb.tier|stringformat:'s' as tier_str %}
-            <img src="{% static 'images/badges/backdrops/'|add:tier_str|add:'_backdrop.png' %}"
-                 alt="{{ tb.tier|badge_tier }}" class="bd-tier__icon" loading="lazy" />
-            {% endwith %}
-            <span class="bd-tier__label">{{ tb.tier|badge_tier }}</span>
-            {% if tb.tier in earned_tiers %}
-            <span class="bd-tier__earned" title="Earned">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        <a href="?tier={{ tb.tier }}" data-tier-tab data-tier="{{ tb.tier }}"
+           class="bd-tierstep bd-tierstep--{{ tb.tier|badge_tier|lower }}{% if tb.tier == selected_tier %} is-active{% endif %}{% if tb.tier in earned_tiers %} is-earned{% endif %}"
+           role="tab" aria-selected="{% if tb.tier == selected_tier %}true{% else %}false{% endif %}"
+           aria-label="{{ tb.tier|badge_tier }} tier{% if tb.tier in earned_tiers %}, earned{% endif %}">
+            <span class="bd-tierstep__mark" aria-hidden="true">
+                {% if tb.tier in earned_tiers %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                {% endif %}
             </span>
-            {% endif %}
+            <span class="bd-tierstep__name">{{ tb.tier|badge_tier }}</span>
+            <span class="bd-tierstep__req">{% if tb.tier|divisibleby:2 %}100%{% else %}Platinum{% endif %}</span>
         </a>
         {% endfor %}
     </div>
 
-    {# Tier requirements panel #}
+    {# ── Selected tier's requirements ── #}
     {% if selected_tier_badge %}
-    <div class="bd-card bd-req bd-req--{{ selected_tier }}">
-        {# Header: requirement type (left) + XP reward (right) #}
-        <div class="bd-req__head">
-            <div class="bd-req__type">
+    <div class="bd-treq bd-treq--{{ selected_tier|badge_tier|lower }}">
+        <div class="bd-treq__head">
+            <div class="bd-treq__ask">
                 {% if badge.badge_type == 'megamix' %}
-                    <span>Earn</span>
-                    <img src="{% static 'images/plat.png' %}" alt="Platinum" loading="lazy" />
-                    <span class="bd-req__type-count">{{ selected_tier_requirements }}</span>
-                    <span>platinums in:</span>
+                    Earn <img class="bd-treq__ico" src="{% static 'images/plat.png' %}" alt="Platinum" loading="lazy" /><span class="bd-treq__n">{{ selected_tier_requirements }}</span> platinums
                 {% elif selected_tier_is_plat %}
-                    <img src="{% static 'images/plat.png' %}" alt="Platinum" loading="lazy" />
-                    <span>Earn Platinum in all stages:</span>
+                    <img class="bd-treq__ico" src="{% static 'images/plat.png' %}" alt="Platinum" loading="lazy" /> Earn Platinum in every stage
                 {% else %}
-                    <span class="bd-req__type-pct">100%</span>
-                    <span>Earn every trophy in all stages:</span>
+                    <span class="bd-treq__pct">100%</span> Earn every trophy in every stage
                 {% endif %}
             </div>
-            <div class="bd-req__xp">
-                {% if target_profile %}
-                    <span class="bd-req__xp-val">{{ selected_tier_user_xp|intcomma }} / {{ selected_tier_total_xp|intcomma }} XP</span>
-                {% else %}
-                    <span class="bd-req__xp-val">{{ selected_tier_total_xp|intcomma }} XP</span>
-                {% endif %}
-                <span class="bd-req__xp-note">{{ badge_tier_xp_bonus|intcomma }} bonus + {{ selected_tier|badge_tier_xp }} XP/stage</span>
+            <div class="bd-treq__xp">
+                <span class="bd-treq__xp-val pp-tally">{% if target_profile %}{{ selected_tier_user_xp|intcomma }}<span class="bd-treq__xp-sep">/</span>{% endif %}{{ selected_tier_total_xp|intcomma }}<span class="bd-treq__xp-unit">XP</span></span>
+                <span class="bd-treq__xp-note">{{ badge_tier_xp_bonus|intcomma }} bonus + {{ selected_tier|badge_tier_xp }}/stage</span>
             </div>
         </div>
 
-        {# Stage checklist (native collapsible, open by default) #}
-        <details class="bd-req__stages" open>
-            <summary class="bd-req__stages-summary">Stage Requirements ({{ tier_req_stages|length }})</summary>
-            <div class="bd-req__list">
+        <div class="bd-treq__stages">
+            <div class="bd-treq__stages-label">Stages required <span class="bd-treq__stages-n">{{ tier_req_stages|length }}</span></div>
+            <div class="bd-treq__list">
                 {% for req in tier_req_stages %}
-                <div class="bd-req__row{% if req.is_complete %} bd-req__row--done{% endif %}">
-                    {% if target_profile %}
-                        {% if req.is_complete %}
-                            <svg class="bd-req__status bd-req__status--done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        {% else %}
-                            <svg class="bd-req__status bd-req__status--todo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <a href="#stage-{{ req.stage.stage_number }}" data-stage-link="{{ req.stage.stage_number }}"
+                   class="bd-treq__row{% if req.is_complete %} is-done{% endif %}">
+                    <span class="bd-treq__status" aria-hidden="true">
+                        {% if target_profile and req.is_complete %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
                         {% endif %}
-                    {% else %}
-                        <svg class="bd-req__status bd-req__status--anon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle></svg>
-                    {% endif %}
-                    <img src="{{ req.stage.stage_icon }}" alt="" class="bd-req__stage-icon" loading="lazy" />
-                    <a href="#stage-{{ req.stage.stage_number }}" data-stage-link="{{ req.stage.stage_number }}" class="bd-req__stage-link">
-                        <span class="bd-req__stage-num">{{ req.stage.stage_number }}:</span> {{ req.stage.title }}
-                    </a>
-                </div>
+                    </span>
+                    <img src="{{ req.stage.stage_icon }}" alt="" class="bd-treq__stage-ico" loading="lazy" />
+                    <span class="bd-treq__stage-name"><span class="bd-treq__stage-num">{{ req.stage.stage_number }}</span>{{ req.stage.title }}</span>
+                </a>
                 {% endfor %}
             </div>
-        </details>
+        </div>
     </div>
     {% endif %}
 </div>
