@@ -26,6 +26,21 @@
             <div class="pp-detail-modal__body" data-peek-body></div>
         </div>
     </div>
+
+    {% comment %} My Stats modal: the deep per-user breakdown the context band's "My Stats" button opens.
+    Rendered inline (the stats are series-scoped + already computed) OUTSIDE the swap island so it survives
+    tier switches, and only when a profile is on display. {% endcomment %}
+    {% if target_profile %}
+    <div class="pp-detail-modal" id="badge-stats-modal" hidden>
+        <div class="pp-detail-modal__scrim" data-stats-close></div>
+        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s{% else %}Your{% endif %} badge stats" tabindex="-1">
+            <button type="button" class="pp-detail-modal__close" data-stats-close aria-label="Close stats">&times;</button>
+            <div class="pp-detail-modal__body">
+                {% include 'trophies/partials/badge_detail/_stats_modal.html' %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 {% endblock %}
 
 {% block js_scripts %}
@@ -55,6 +70,28 @@ document.addEventListener('DOMContentLoaded', function() {
         var url = tmpl.replace(/0\/$/, badgeId + '/');
         if (url && url !== tmpl) { peek.open(url, med); }
     });
+
+    // ── My Stats modal ──
+    // The opener ([data-stats-open]) lives in the context band INSIDE the swap island (re-rendered on a tier
+    // switch), so the handler is delegated on document; the modal itself lives outside the island and
+    // persists. Toggling [hidden] both shows/hides and triggers the shared pp-detail-modal entrance.
+    var statsModal = document.getElementById('badge-stats-modal');
+    if (statsModal) {
+        var closeStats = function () { statsModal.hidden = true; document.body.style.overflow = ''; };
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            if (e.target.closest('[data-stats-open]')) {
+                e.preventDefault();
+                statsModal.hidden = false;
+                document.body.style.overflow = 'hidden';
+                var dlg = statsModal.querySelector('.pp-detail-modal__dialog');
+                if (dlg) { dlg.focus(); }
+            } else if (e.target.closest('[data-stats-close]')) {
+                closeStats();
+            }
+        });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !statsModal.hidden) { closeStats(); } });
+    }
 
     // ── Stage collapse / expand ──
     // The stage journey re-renders on a tier swap, so init is a re-runnable function. The collapse state is

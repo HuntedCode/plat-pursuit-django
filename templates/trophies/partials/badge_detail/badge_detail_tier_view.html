@@ -1,25 +1,27 @@
 {% comment %}
-The tier-dependent island for the badge detail page: header + tier selector + leaderboard + the stage
+The tier-dependent island for the badge detail page: header + context band + tier selector + the stage
 journey. Rendered inside #badge-tier-view on a full page load, and returned ALONE for an HTMX tier switch
 (see BadgeDetailView.get_template_names) so switching tiers swaps this in place -- no full reload.
 
 Everything tier-scoped (the hero medallion, the selector, the stages) lives here so one swap keeps them
-consistent; the leaderboard is series-wide but rides along (cheap, cache-backed). `profile` is aliased here
-(not in badge_detail.html) so the partial resolves it whether included or rendered standalone for the swap.
+consistent; the context band is series-wide but rides along (cheap, cache-backed) and highlights the
+selected tier in its rarity funnel. `profile` is aliased here (not in badge_detail.html) so the partial
+resolves it whether included or rendered standalone for the swap.
 {% endcomment %}
 {% load static custom_filters humanize %}
 {% with target_profile as profile %}
     {# Rebuilt header: Medallion hero + identity/progress + a lean at-a-glance readout (see _header.html). #}
     {% include 'trophies/partials/badge_detail/_header.html' %}
 
+    {# Context band (series-wide): rarity funnel + your ranks + Leaderboards CTA + My Stats button. Rides the
+       swap; the My Stats button opens the deep-breakdown modal that lives outside the island. #}
+    <div class="mt-3">
+        {% include 'trophies/partials/badge_detail/_context_band.html' %}
+    </div>
+
     {# Tier selector: the colour-forward tier ladder + the selected tier's requirements. #}
     <div class="mt-3">
         {% include 'trophies/partials/badge_detail/badge_tier_selector.html' %}
-    </div>
-
-    {# Leaderboard (series-wide). #}
-    <div id="badge-leaderboard-section" class="mt-3">
-        {% include 'trophies/partials/badge_detail/badge_leaderboard_section.html' %}
     </div>
 
     {# Bulk stage toggle. #}

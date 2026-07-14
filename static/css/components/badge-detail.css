@@ -263,13 +263,9 @@ a.bd-stat { color: inherit; text-decoration: none; }
     background: var(--pp-text-mute);
 }
 
-/* ── Leaderboard section ────────────────────────────────────────────────────── */
-.bd-lb { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
-/* Anon rank summary is only 2 tiles — keep them side-by-side at every width
-   (the 4-col stats grid would strand them in the left half on tablet+). */
-.bd-lb__grid-duo { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
-/* Prominent CTA to the full leaderboards page (the "who owns this" list). The
-   cyan action accent is earned on hover, not painted on at rest. */
+/* ── Leaderboards CTA (reused by the context band) ──────────────────────────────
+   Prominent link to the full leaderboards page (the "who owns this" list). The cyan action accent is
+   earned on hover, not painted on at rest. */
 .bd-lb__cta {
     display: flex; align-items: center; gap: 12px;
     padding: 10px 12px;
@@ -298,6 +294,41 @@ a.bd-stat { color: inherit; text-decoration: none; }
     transition: transform var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
 }
 .bd-lb__cta:hover .bd-lb__cta-arrow { transform: translateX(2px); color: var(--pp-primary); }
+
+/* ── Context band ────────────────────────────────────────────────────────────
+   Condensed competitive/rarity layer below the header: a rarity funnel + your ranks + the Leaderboards CTA
+   + a My Stats button (opens the deep-breakdown modal). Depth-pass card; two columns on desktop, stacked
+   on mobile. */
+.bd-band { padding: 14px 16px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30); }
+.bd-band__grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 768px) { .bd-band__grid { grid-template-columns: 1.15fr 1fr; gap: 26px; align-items: center; } }
+.bd-band__rarity { display: flex; flex-direction: column; gap: 9px; }
+.bd-band__side { display: flex; flex-direction: column; gap: 10px; }
+.bd-band__ranks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.bd-band__actions { display: flex; flex-direction: column; gap: 8px; }
+.bd-band__stats-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 9px 12px; border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border); background: var(--pp-bg-2); color: var(--pp-text-dim);
+    font-size: 0.82rem; font-weight: 700; cursor: pointer;
+    transition: border-color var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) { .bd-band__stats-btn:hover { border-color: color-mix(in oklch, var(--pp-primary) 45%, transparent); color: var(--pp-text); background: color-mix(in oklch, var(--pp-primary) 6%, var(--pp-bg-2)); } }
+.bd-band__stats-btn svg { width: 15px; height: 15px; }
+
+/* Rarity funnel rows: tier label + a proportional bar (vs the Bronze max) + the earner count. */
+.bd-rarity { display: flex; flex-direction: column; gap: 6px; }
+.bd-rarity__row { display: grid; grid-template-columns: 56px 1fr auto; align-items: center; gap: 9px; }
+.bd-rarity__row--bronze   { --tier-c: #cf9160; }
+.bd-rarity__row--silver   { --tier-c: #b9c6d6; }
+.bd-rarity__row--gold     { --tier-c: #e7c25c; }
+.bd-rarity__row--platinum { --tier-c: #8fd2ea; }
+.bd-rarity__tier { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--tier-c); }
+.bd-rarity__track { height: 8px; border-radius: 4px; background: var(--pp-bg-3); overflow: hidden; }
+.bd-rarity__bar { display: block; height: 100%; border-radius: 4px; background: var(--tier-c); min-width: 2px; transition: width var(--pp-dur) var(--pp-ease); }
+.bd-rarity__count { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.74rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.bd-rarity__row.is-selected .bd-rarity__tier { text-shadow: 0 0 8px color-mix(in oklab, var(--tier-c) 55%, transparent); }
+.bd-rarity__row.is-selected .bd-rarity__bar { box-shadow: 0 0 8px -1px color-mix(in oklab, var(--tier-c) 70%, transparent); }
 
 /* ── Stage game card ────────────────────────────────────────────────────────
    A game within a stage: cover art + state-driven chrome + progress / plat /
