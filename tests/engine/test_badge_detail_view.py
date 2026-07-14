@@ -477,7 +477,51 @@ def test_stage_with_unobtainable_game_renders(client, stub_leaderboards):
     resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
 
     assert resp.status_code == 200
-    assert 'Unobtainable/Delisted' in resp.content.decode()
+    html = resp.content.decode()
+    assert 'unobtainable / delisted' in html      # the rebuilt .bd-delisted collapsible strip
+    assert 'bd-delisted' in html
+
+
+def test_stage_journey_marks_lowest_open_stage_up_next(client, stub_leaderboards):
+    """The stage journey flags the LOWEST-numbered open (incomplete) stage as 'up next' -- a suggested entry
+    point. Stages complete in ANY order, so completing a HIGHER stage must still leave the lower open one
+    marked next (never sequential), and the completed stage is not the suggestion."""
+    series = "journey-next"
+    BadgeFactory(series_slug=series, tier=1, is_live=True, required_stages=2)
+    c1 = ConceptFactory(); GameFactory(concept=c1)
+    s1 = StageFactory(series_slug=series, stage_number=1, required_tiers=[]); s1.concepts.add(c1)
+    c2 = ConceptFactory(); g2 = GameFactory(concept=c2)
+    s2 = StageFactory(series_slug=series, stage_number=2, required_tiers=[]); s2.concepts.add(c2)
+
+    profile = ProfileFactory()
+    ProfileGameFactory(profile=profile, game=g2, progress=100, has_plat=True)   # complete the HIGHER stage
+    client.force_login(profile.user)
+
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+    assert resp.status_code == 200
+    sd = {d['stage'].stage_number: d for d in resp.context['stage_data']}
+    assert sd[2]['stage_completion_state'] == 'complete'
+    assert sd[1].get('is_next') is True            # the lowest OPEN stage is the suggestion...
+    assert sd[2].get('is_next') is not True        # ... not the completed higher one
+    html = resp.content.decode()
+    assert 'bd-node--next' in html                 # the pulsing gutter node
+    assert 'bd-node--done' in html                 # ... and the completed stage's green check node
+    assert 'bd-stage__eyebrow--next' in html       # the cyan "Stage N * Up next" eyebrow (no pill)
+    assert 'Up next' in html
+
+
+def test_stage_journey_no_up_next_for_anonymous(client, stub_leaderboards):
+    """Anonymous viewers have no known progress, so there is no 'up next' suggestion -- the spine nodes
+    render (numbered) but none pulse cyan."""
+    series = "journey-next-anon"
+    BadgeFactory(series_slug=series, tier=1, is_live=True)
+    _series_with_stage(series, 1)
+
+    html = client.get(reverse('badge_detail', kwargs={'series_slug': series})).content.decode()
+
+    assert 'bd-node' in html                        # numbered spine nodes still render
+    assert 'bd-node--next' not in html              # ... but nothing is suggested (no progress known)
+    assert 'bd-stage__eyebrow--next' not in html
 
 
 def test_anonymous_viewer_has_empty_earned_tiers(client, stub_leaderboards):

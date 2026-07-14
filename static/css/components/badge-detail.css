@@ -349,6 +349,8 @@
 .bd-stage__id { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
 .bd-stage__eyebrow { font-size: 0.56rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-accent); }
 .bd-stage--done .bd-stage__eyebrow { color: var(--pp-success); }
+/* Lowest open stage -- the whole eyebrow ("Stage N * Up next") goes cyan to echo the pulsing spine node. */
+.bd-stage__eyebrow--next { color: var(--pp-primary); }
 .bd-stage__title { font-size: 0.92rem; font-weight: 700; color: var(--pp-text); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Tiers this stage feeds -- small tier-colour dots, filled when done for that tier. */
@@ -464,28 +466,46 @@
 @media (min-width: 1024px) { .bd-qual__grid { grid-template-columns: repeat(4, 1fr); } }
 @media (min-width: 1280px) { .bd-qual__grid { grid-template-columns: repeat(5, 1fr); } }
 
-/* Stage list as a vertical journey. A spine ties the stages together (it shows
-   through the gaps between cards) with a node per stage, so they read as
-   sequential steps toward the badge rather than floating cards. Completed stages
-   fill their node green — progress down the path. */
-.bd-stages { position: relative; padding-left: 28px; }
-.bd-stages::before {
-    content: ""; position: absolute; left: 9px; top: 28px; bottom: 24px;
-    width: 2px; border-radius: 1px; z-index: 0;
-    background: var(--pp-border);
-}
+/* Stage list as a vertical journey. A neutral spine ties the stages into one set
+   (it shows through the gaps between cards) with a NUMBERED milestone node per
+   stage. Stages complete in ANY order, so the rail never encodes progress — each
+   node is independent: a green check when done, the plain number when to-do, a
+   cyan "up next" pulse on the lowest open stage, a star for bonus stages. */
+.bd-stages { position: relative; padding-left: 52px; }
 .bd-stages > .bd-stage { position: relative; z-index: 1; }
-.bd-stages > .bd-stage::before {
-    content: ""; position: absolute; left: -24px; top: 23px;
-    width: 12px; height: 12px; border-radius: 50%; z-index: 1;
-    background: var(--pp-bg-2); border: 2px solid var(--pp-border);
+/* Connector rail: runs from below this node down to the next stage's node. Uses ::after (NOT ::before --
+   .bd-card::before is the top-highlight hairline). Geometry tracks the node (top 16px, height 34px) + the
+   mt-3 (12px) card gap: node centre sits at x -35px from the card's left edge. */
+.bd-stages > .bd-stage::after {
+    content: ""; position: absolute; left: -35px; top: 50px; bottom: -32px;
+    width: 2px; z-index: 0; background: var(--pp-border);
+}
+.bd-stages > .bd-stage:last-child::after { display: none; }
+.bd-node {
+    position: absolute; left: -52px; top: 16px; z-index: 2;
+    width: 34px; height: 34px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 0.9rem;
+    background: var(--pp-bg-2); border: 2px solid var(--pp-border); color: var(--pp-text-mute);
     transition: background var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease);
 }
-.bd-stages > .bd-stage--done::before {
-    background: var(--pp-success);
-    border-color: var(--pp-success);
-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--pp-success) 18%, transparent);
+.bd-node svg { width: 16px; height: 16px; }
+.bd-node--done { background: var(--pp-success); border-color: var(--pp-success); color: #06140d; }
+.bd-node--next {
+    border-color: var(--pp-primary); color: var(--pp-primary);
+    background: color-mix(in oklch, var(--pp-primary) 12%, var(--pp-bg-2));
+    --pulse-col: var(--pp-primary); animation: bd-node-pulse 2.2s var(--pp-ease) infinite;
 }
+.bd-node--bonus {
+    border-style: dashed; border-color: var(--pp-accent); color: var(--pp-accent);
+    background: color-mix(in oklch, var(--pp-accent) 8%, var(--pp-bg-2));
+}
+/* Pulse colour comes from a hoisted var (never color-mix inside a keyframe). */
+@keyframes bd-node-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 var(--pulse-col); }
+    50% { box-shadow: 0 0 0 6px transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .bd-node { animation: none !important; } }
 
 /* Bulk "collapse/expand all" toggle (a quiet text button). */
 .bd-collapse-all {

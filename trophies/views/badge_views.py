@@ -1519,6 +1519,17 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                 applicable_stages.append(data)
             else:
                 other_tier_stages.append(data)
+        # "Up next" nudge on the stage journey: the lowest-numbered non-bonus applicable stage not yet
+        # complete for this tier. Stages complete in ANY order, so this is a suggested entry point (the
+        # spine node pulses), never a lock. Only meaningful when we know the viewer's progress.
+        if target_profile:
+            open_stages = [
+                d for d in applicable_stages
+                if d['stage'].stage_number != 0 and d.get('stage_completion_state') != 'complete'
+            ]
+            if open_stages:
+                nxt = min(open_stages, key=lambda d: d['stage'].stage_number)
+                nxt['is_next'] = True
         context['stage_data'] = applicable_stages
         context['other_tier_stages'] = other_tier_stages
         context['completion'] = badge_completion

@@ -13,7 +13,7 @@ journey node. {% endcomment %}
     <span class="bd-stage__ico"><img src="{{ stage.stage_icon }}" alt="" loading="lazy" /></span>
 
     <div class="bd-stage__id">
-        <span class="bd-stage__eyebrow">{% if stage.stage_number == 0 %}Bonus{% else %}Stage {{ stage.stage_number }}{% endif %}</span>
+        <span class="bd-stage__eyebrow{% if data.is_next %} bd-stage__eyebrow--next{% endif %}">{% if stage.stage_number == 0 %}Bonus{% else %}Stage {{ stage.stage_number }}{% endif %}{% if data.is_next %} &middot; Up next{% endif %}</span>
         <span class="bd-stage__title">{{ stage.title }}</span>
         {% include 'trophies/partials/badge_detail/badge_stage_stats.html' %}
     </div>

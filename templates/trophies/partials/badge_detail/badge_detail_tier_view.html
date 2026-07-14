@@ -43,7 +43,7 @@ resolves it whether included or rendered standalone for the swap.
     {% if other_tier_stages %}
     <details class="bd-other-tiers mt-3">
         <summary class="bd-other-tiers__summary">{{ other_tier_stages|length }} stage{{ other_tier_stages|length|pluralize }} required only for higher tiers</summary>
-        <div>
+        <div class="bd-stages">
             {% for data in other_tier_stages %}
                 {% include 'trophies/partials/badge_detail/badge_detail_stage_section.html' %}
             {% endfor %}
