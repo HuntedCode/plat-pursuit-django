@@ -61,6 +61,7 @@ badge_tier_xp_bonus, tier_req_stages, badge.badge_type.
         <div class="bd-req__grid">
             {% for req in tier_req_stages %}
             <a href="#stage-{{ req.stage.stage_number }}" data-stage-link="{{ req.stage.stage_number }}"
+               title="Stage {{ req.stage.stage_number }}: {{ req.stage.title }}"
                class="bd-req__tile{% if target_profile and req.is_complete %} is-done{% endif %}">
                 <img src="{{ req.stage.stage_icon }}" alt="" class="bd-req__tile-ico" loading="lazy" />
                 <span class="bd-req__tile-meta">

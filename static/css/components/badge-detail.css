@@ -136,7 +136,10 @@
 .bd-req__count b { color: var(--pp-text); }
 .bd-req__xp { cursor: help; }
 /* The stages: compact tile grid (replaced the full-width rows -- art fills the space, names stay visible). */
-.bd-req__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
+/* Wider min (200 vs a cramped 150) so the game name gets ~60% more room (2 lines hold long titles like
+   "Crash Team Racing Nitro-Fueled"); the title tooltip catches the rare extreme. ~3 cols desktop, 1 up
+   mobile. Height is unchanged per tile -- widening trades a column, not tile height, so it stays compact. */
+.bd-req__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-top: 12px; }
 .bd-req__tile {
     position: relative; display: flex; align-items: center; gap: 9px; padding: 9px 10px;
     border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
