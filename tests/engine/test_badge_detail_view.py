@@ -67,6 +67,40 @@ def test_tier_tabs_mark_by_earned_set_not_max(client, stub_leaderboards):
     assert 3 not in resp.context['earned_tiers']
 
 
+def test_tier_switch_returns_island_partial_for_htmx(client, stub_leaderboards):
+    """A tier switch is an HTMX swap of #badge-tier-view: the view returns just the tier-view island partial
+    (header + selector + stages), NOT the full page, so switching tiers updates in place."""
+    series = "rebuild-tier-swap"
+    BadgeFactory(series_slug=series, tier=1, is_live=True)
+    BadgeFactory(series_slug=series, tier=2, is_live=True)
+    _series_with_stage(series, 1)
+
+    url = reverse('badge_detail', kwargs={'series_slug': series}) + '?tier=2'
+    resp = client.get(url, HTTP_HX_REQUEST='true', HTTP_HX_TARGET='badge-tier-view')
+
+    assert resp.status_code == 200
+    html = resp.content.decode()
+    assert 'bd-tierlad' in html             # the tier ladder is in the partial
+    assert 'badge-header-card' in html      # the header rides along in the island
+    assert '<!doctype' not in html.lower()  # NOT the full page (no base.html chrome)
+    assert 'id="badge-tier-view"' not in html   # the partial is the ISLAND INNER, not the wrapper
+
+
+def test_tier_switch_full_page_without_htmx(client, stub_leaderboards):
+    """Without HTMX the same URL returns the full page: base.html + the #badge-tier-view island wrapper."""
+    series = "rebuild-tier-full"
+    BadgeFactory(series_slug=series, tier=1, is_live=True)
+    BadgeFactory(series_slug=series, tier=2, is_live=True)
+    _series_with_stage(series, 1)
+
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}) + '?tier=2')
+
+    assert resp.status_code == 200
+    html = resp.content.decode()
+    assert 'id="badge-tier-view"' in html   # full page has the island wrapper
+    assert 'bd-tierlad' in html
+
+
 def _series_with_games(series, n_games=2, stage_number=1):
     """One stage (applies to all tiers) whose concept holds n_games games."""
     concept = ConceptFactory()

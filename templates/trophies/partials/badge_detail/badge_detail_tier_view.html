@@ -1,0 +1,51 @@
+{% comment %}
+The tier-dependent island for the badge detail page: header + tier selector + leaderboard + the stage
+journey. Rendered inside #badge-tier-view on a full page load, and returned ALONE for an HTMX tier switch
+(see BadgeDetailView.get_template_names) so switching tiers swaps this in place -- no full reload.
+
+Everything tier-scoped (the hero medallion, the selector, the stages) lives here so one swap keeps them
+consistent; the leaderboard is series-wide but rides along (cheap, cache-backed). `profile` is aliased here
+(not in badge_detail.html) so the partial resolves it whether included or rendered standalone for the swap.
+{% endcomment %}
+{% load static custom_filters humanize %}
+{% with target_profile as profile %}
+    {# Rebuilt header: Medallion hero + identity/progress + a lean at-a-glance readout (see _header.html). #}
+    {% include 'trophies/partials/badge_detail/_header.html' %}
+
+    {# Tier selector: the colour-forward tier ladder + the selected tier's requirements. #}
+    <div class="mt-3">
+        {% include 'trophies/partials/badge_detail/badge_tier_selector.html' %}
+    </div>
+
+    {# Leaderboard (series-wide). #}
+    <div id="badge-leaderboard-section" class="mt-3">
+        {% include 'trophies/partials/badge_detail/badge_leaderboard_section.html' %}
+    </div>
+
+    {# Bulk stage toggle. #}
+    <div class="flex justify-end mt-3">
+        <button id="badge-stage-toggle-all" class="bd-collapse-all">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            <span>Collapse All</span>
+        </button>
+    </div>
+
+    {# Stage sections (applicable to the selected tier) -- a vertical journey (spine + nodes). #}
+    <div class="bd-stages">
+        {% for data in stage_data %}
+            {% include 'trophies/partials/badge_detail/badge_detail_stage_section.html' %}
+        {% endfor %}
+    </div>
+
+    {# Stages required only for higher tiers (collapsed by default). #}
+    {% if other_tier_stages %}
+    <details class="bd-other-tiers mt-3">
+        <summary class="bd-other-tiers__summary">{{ other_tier_stages|length }} stage{{ other_tier_stages|length|pluralize }} required only for higher tiers</summary>
+        <div>
+            {% for data in other_tier_stages %}
+                {% include 'trophies/partials/badge_detail/badge_detail_stage_section.html' %}
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+{% endwith %}

@@ -819,6 +819,13 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             'most_recent_concept', 'most_recent_concept__igdb_match',
         )
 
+    def get_template_names(self):
+        # A tier switch HTMX-swaps the #badge-tier-view island: return just that partial (no base.html), so
+        # switching tiers re-renders the tier-scoped content in place instead of a full page reload.
+        if getattr(self.request, 'htmx', False) and self.request.htmx.target == 'badge-tier-view':
+            return ['trophies/partials/badge_detail/badge_detail_tier_view.html']
+        return [self.template_name]
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         series_badges = context['object']

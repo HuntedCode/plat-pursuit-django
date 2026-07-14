@@ -46,6 +46,13 @@
    on completed stages (real info). */
 .bd-tiers { scroll-margin-top: 1rem; }
 
+/* Tier swap settle: dim the island while the tier request is in flight (hx-indicator="#badge-tier-view"),
+   so the swap reads as a deliberate update rather than a hard flash. Motion-gated (reduced-motion = instant). */
+@media (prefers-reduced-motion: no-preference) {
+    #badge-tier-view { transition: opacity 0.18s ease; }
+    #badge-tier-view.htmx-request { opacity: 0.55; }
+}
+
 /* The ladder: four equal tier steps, read left-to-right as the progression. */
 .bd-tierlad { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
 .bd-tierstep {

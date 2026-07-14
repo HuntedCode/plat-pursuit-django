@@ -5,94 +5,45 @@
 {% block twitter_image %}{% if image_urls.recent_concept_icon_url %}{{ image_urls.recent_concept_icon_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 
 {% block content %}
-{% with target_profile as profile %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
 
-    {# Rebuilt header: Medallion hero + identity/progress + a lean at-a-glance readout (see _header.html). #}
-    {% include 'trophies/partials/badge_detail/_header.html' %}
-
-    {# Tier selector — tabs + self-contained requirements card (bd-*). #}
-    <div class="mt-3">
-        {% include 'trophies/partials/badge_detail/badge_tier_selector.html' %}
+    {# Everything tier-scoped lives in this island; the tier chips HTMX-swap its innerHTML (no full reload).
+       The view returns badge_detail_tier_view.html alone for those requests (see get_template_names). #}
+    <div id="badge-tier-view">
+        {% include 'trophies/partials/badge_detail/badge_detail_tier_view.html' %}
     </div>
-
-    {# Leaderboard #}
-    <div id="badge-leaderboard-section" class="mt-3">
-        {% include 'trophies/partials/badge_detail/badge_leaderboard_section.html' %}
-    </div>
-
-    {# Bulk Stage Toggle #}
-    <div class="flex justify-end mt-3">
-        <button id="badge-stage-toggle-all" class="bd-collapse-all">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            <span>Collapse All</span>
-        </button>
-    </div>
-
-    {# Stage Sections (applicable to selected tier) — laid out as a vertical journey (spine + nodes). #}
-    <div class="bd-stages">
-        {% for data in stage_data %}
-            {% include 'trophies/partials/badge_detail/badge_detail_stage_section.html' %}
-        {% endfor %}
-    </div>
-
-    {# Stages required only for higher tiers (collapsed by default) #}
-    {% if other_tier_stages %}
-    <details class="bd-other-tiers mt-3">
-        <summary class="bd-other-tiers__summary">{{ other_tier_stages|length }} stage{{ other_tier_stages|length|pluralize }} required only for higher tiers</summary>
-        <div>
-            {% for data in other_tier_stages %}
-                {% include 'trophies/partials/badge_detail/badge_detail_stage_section.html' %}
-            {% endfor %}
-        </div>
-    </details>
-    {% endif %}
-{% endwith %}
 {% endblock %}
 
 {% block js_scripts %}
 <script>
-{# Scroll preservation for tier tab switching #}
 document.addEventListener('DOMContentLoaded', function() {
-    const scrollKey = 'badgeDetailScrollPos';
-    const saved = sessionStorage.getItem(scrollKey);
-    if (saved !== null) {
-        sessionStorage.removeItem(scrollKey);
-        window.scrollTo(0, parseInt(saved, 10));
-    }
-    document.querySelectorAll('[data-tier-tab]').forEach(function(tab) {
-        tab.addEventListener('click', function() {
-            sessionStorage.setItem(scrollKey, window.scrollY);
-        });
-    });
-
-    // Count up the header's headline number (Earners). countUp honours reduced motion (jumps to target).
+    // ── Header count-up (initial load only; countUp honours reduced motion) ──
     document.querySelectorAll('#badge-header-card [data-countup]').forEach(function(el) {
         if (window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(el); }
     });
-});
 
-{# Stage collapse/expand #}
-(function() {
-    const STORAGE_KEY = 'badge_stage_collapse_{{ badge.series_slug }}_{{ selected_tier }}';
-
+    // ── Stage collapse / expand ──
+    // The stage journey re-renders on a tier swap, so init is a re-runnable function. The collapse state is
+    // per (series, tier); the tier is read from the DOM (the active tier step) so the key stays correct after
+    // a swap. Per-element handlers (bulk button, stage-requirement links) are (re)wired here with a guard;
+    // the individual toggle + keyboard handlers are delegated on document (attached once, survive swaps).
+    var SLUG = '{{ badge.series_slug|escapejs }}';
+    function storageKey() {
+        var active = document.querySelector('.bd-tierstep.is-active');
+        return 'badge_stage_collapse_' + SLUG + '_' + (active ? (active.getAttribute('data-tier') || '') : '');
+    }
     function loadState() {
-        try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
-        catch { return {}; }
+        try { return JSON.parse(localStorage.getItem(storageKey())) || {}; } catch (e) { return {}; }
     }
-
     function saveState(state) {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-        catch(e) { /* quota exceeded or private browsing */ }
+        try { localStorage.setItem(storageKey(), JSON.stringify(state)); } catch (e) { /* quota / private */ }
     }
-
     function setStageCollapsed(stageNum, collapsed) {
-        const gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
-        const chevron = document.querySelector('[data-stage-chevron="' + stageNum + '"]');
-        const toggle = document.querySelector('[data-stage-toggle="' + stageNum + '"]');
-        const gameCount = document.querySelector('[data-stage-game-count="' + stageNum + '"]');
+        var gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
+        var chevron = document.querySelector('[data-stage-chevron="' + stageNum + '"]');
+        var toggle = document.querySelector('[data-stage-toggle="' + stageNum + '"]');
+        var gameCount = document.querySelector('[data-stage-game-count="' + stageNum + '"]');
         if (!gamesContainer) return;
-
         if (collapsed) {
             gamesContainer.style.gridTemplateRows = '0fr';
             if (chevron) chevron.style.transform = 'rotate(-90deg)';
@@ -105,133 +56,116 @@ document.addEventListener('DOMContentLoaded', function() {
             if (gameCount) gameCount.classList.add('hidden');
         }
     }
-
-    const bulkBtn = document.getElementById('badge-stage-toggle-all');
-
     function updateBulkButton() {
+        var bulkBtn = document.getElementById('badge-stage-toggle-all');
         if (!bulkBtn) return;
-        const state = loadState();
-        const hasCollapsed = Object.keys(state).length > 0;
-        const label = bulkBtn.querySelector('span');
-        const icon = bulkBtn.querySelector('svg');
+        var hasCollapsed = Object.keys(loadState()).length > 0;
+        var label = bulkBtn.querySelector('span');
+        var icon = bulkBtn.querySelector('svg');
         if (label) label.textContent = hasCollapsed ? 'Expand All' : 'Collapse All';
         if (icon) icon.style.transform = hasCollapsed ? 'rotate(-90deg)' : '';
     }
 
-    // Initialize: apply saved state + auto-collapse completed stages (including newly completed)
-    const savedState = loadState();
-    let stateChanged = false;
-    document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
-        const stageNum = toggle.dataset.stageToggle;
-        const isComplete = toggle.dataset.stageComplete === 'true';
-        const isBonus = toggle.dataset.stageBonus === 'true';
-        // Collapse if: explicitly saved as collapsed, OR completed/bonus but not yet tracked
-        const shouldCollapse = savedState[stageNum] || ((isComplete || isBonus) && !savedState[stageNum]);
-        if (shouldCollapse) {
-            const gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
-            if (gamesContainer) {
-                gamesContainer.style.transition = 'none';
-                setStageCollapsed(stageNum, true);
-                if (!savedState[stageNum]) {
-                    savedState[stageNum] = true;
-                    stateChanged = true;
+    function initStages() {
+        // Apply saved state + auto-collapse completed/bonus stages (incl. newly completed).
+        var savedState = loadState();
+        var stateChanged = false;
+        document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
+            var stageNum = toggle.dataset.stageToggle;
+            var isComplete = toggle.dataset.stageComplete === 'true';
+            var isBonus = toggle.dataset.stageBonus === 'true';
+            var shouldCollapse = savedState[stageNum] || ((isComplete || isBonus) && !savedState[stageNum]);
+            if (shouldCollapse) {
+                var gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
+                if (gamesContainer) {
+                    gamesContainer.style.transition = 'none';
+                    setStageCollapsed(stageNum, true);
+                    if (!savedState[stageNum]) { savedState[stageNum] = true; stateChanged = true; }
+                    requestAnimationFrame(function() { requestAnimationFrame(function() { gamesContainer.style.transition = ''; }); });
                 }
-                requestAnimationFrame(function() {
-                    requestAnimationFrame(function() {
-                        gamesContainer.style.transition = '';
-                    });
-                });
             }
+        });
+        if (stateChanged) saveState(savedState);
+        updateBulkButton();
+
+        // Bulk toggle (swap-local; wire once per element).
+        var bulkBtn = document.getElementById('badge-stage-toggle-all');
+        if (bulkBtn && !bulkBtn._wired) {
+            bulkBtn._wired = true;
+            bulkBtn.addEventListener('click', function() {
+                var state = loadState();
+                var hasCollapsed = Object.keys(state).length > 0;
+                var newState = {};
+                document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
+                    var stageNum = toggle.dataset.stageToggle;
+                    if (hasCollapsed) { setStageCollapsed(stageNum, false); }
+                    else { setStageCollapsed(stageNum, true); newState[stageNum] = true; }
+                });
+                saveState(newState);
+                updateBulkButton();
+            });
         }
-    });
-    if (stateChanged) saveState(savedState);
-    updateBulkButton();
 
-    // Stage requirement links: scroll to stage, then expand after scroll settles
-    document.querySelectorAll('[data-stage-link]').forEach(function(link) {
-        link.addEventListener('click', function(e) {
-            const stageNum = link.dataset.stageLink;
-            const state = loadState();
-            if (!state[stageNum]) return;
-
-            e.preventDefault();
-            const target = document.getElementById('stage-' + stageNum);
-            if (!target) return;
-
-            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-            let scrollTimer;
-            function onScrollEnd() {
-                clearTimeout(scrollTimer);
+        // Stage-requirement links: scroll to the stage, then expand it once the scroll settles.
+        document.querySelectorAll('[data-stage-link]').forEach(function(link) {
+            if (link._wired) return;
+            link._wired = true;
+            link.addEventListener('click', function(e) {
+                var stageNum = link.dataset.stageLink;
+                var state = loadState();
+                if (!state[stageNum]) return;
+                e.preventDefault();
+                var target = document.getElementById('stage-' + stageNum);
+                if (!target) return;
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                var scrollTimer;
+                function onScrollEnd() {
+                    clearTimeout(scrollTimer);
+                    scrollTimer = setTimeout(function() {
+                        window.removeEventListener('scroll', onScrollEnd);
+                        setStageCollapsed(stageNum, false);
+                        delete state[stageNum]; saveState(state); updateBulkButton();
+                    }, 100);
+                }
+                window.addEventListener('scroll', onScrollEnd);
                 scrollTimer = setTimeout(function() {
                     window.removeEventListener('scroll', onScrollEnd);
                     setStageCollapsed(stageNum, false);
-                    delete state[stageNum];
-                    saveState(state);
-                    updateBulkButton();
-                }, 100);
-            }
-            window.addEventListener('scroll', onScrollEnd);
-            // Fallback if already at position (no scroll events fire)
-            scrollTimer = setTimeout(function() {
-                window.removeEventListener('scroll', onScrollEnd);
-                setStageCollapsed(stageNum, false);
-                delete state[stageNum];
-                saveState(state);
-                updateBulkButton();
-            }, 600);
+                    delete state[stageNum]; saveState(state); updateBulkButton();
+                }, 600);
+            });
         });
-    });
+    }
 
-    // Individual stage toggle
+    // Delegated handlers — attached ONCE; they survive the tier-swap re-render.
     document.addEventListener('click', function(e) {
-        const toggle = e.target.closest('[data-stage-toggle]');
+        var toggle = e.target.closest('[data-stage-toggle]');
         if (!toggle) return;
         if (e.target.closest('a')) return;
-
-        const stageNum = toggle.dataset.stageToggle;
-        const state = loadState();
-        const isCollapsed = !!state[stageNum];
-
+        var stageNum = toggle.dataset.stageToggle;
+        var state = loadState();
+        var isCollapsed = !!state[stageNum];
         setStageCollapsed(stageNum, !isCollapsed);
-
-        if (isCollapsed) { delete state[stageNum]; }
-        else { state[stageNum] = true; }
+        if (isCollapsed) { delete state[stageNum]; } else { state[stageNum] = true; }
         saveState(state);
         updateBulkButton();
     });
-
-    // Keyboard support
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' || e.key === ' ') {
-            const tag = e.target.tagName;
+            var tag = e.target.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-            const toggle = e.target.closest('[data-stage-toggle]');
+            var toggle = e.target.closest('[data-stage-toggle]');
             if (toggle) { e.preventDefault(); toggle.click(); }
         }
     });
 
-    // Bulk toggle
-    if (bulkBtn) {
-        bulkBtn.addEventListener('click', function() {
-            const state = loadState();
-            const hasCollapsed = Object.keys(state).length > 0;
-            const newState = {};
+    initStages();
 
-            document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
-                const stageNum = toggle.dataset.stageToggle;
-                if (hasCollapsed) {
-                    setStageCollapsed(stageNum, false);
-                } else {
-                    setStageCollapsed(stageNum, true);
-                    newState[stageNum] = true;
-                }
-            });
-
-            saveState(newState);
-            updateBulkButton();
-        });
-    }
-})();
+    // Re-init after a tier swap (the #badge-tier-view island's inner HTML was replaced).
+    document.body.addEventListener('htmx:afterSwap', function(e) {
+        var t = (e.detail && e.detail.target) || e.target;
+        if (t && t.id === 'badge-tier-view') { initStages(); }
+    });
+});
 </script>
 {% endblock %}
