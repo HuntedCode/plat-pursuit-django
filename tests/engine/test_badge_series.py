@@ -124,6 +124,22 @@ def test_series_anon_sees_neutral_catalog_ladder(client):
     assert 'Working' not in html            # no personal-progress state chips for anon
 
 
+def test_series_toolbar_matches_gallery_collapsible(client):
+    """The Series toolbar is the SHARED Gallery toolbar -- a Filters toggle over a collapsible advanced panel
+    with the Type/Status chips -- not the old inline pp-sbar. The shared wireFilters() JS keys off these ids."""
+    _series('ts-series')
+
+    html = client.get(SERIES).content.decode()
+
+    assert 'pp-bgal__bar' in html                 # the shared one-row primary bar
+    assert 'id="bgal-filters-toggle"' in html     # the Filters toggle
+    assert 'id="bgal-advanced"' in html           # the collapsible advanced panel it controls
+    assert 'id="bgal-filter-count"' in html       # the active-filter count badge
+    assert 'pp-bgal__advanced' in html            # chips live in the advanced panel
+    assert 'name="badge_type"' in html            # ... the Type chips are present
+    assert 'pp-sbar' not in html                  # the old inline toolbar is gone
+
+
 def test_series_multi_badge_type_filter_ORs(client):
     """?badge_type=series&badge_type=developer returns BOTH (badge_type__in), not just one."""
     _series('rs-a', badge_type='series')

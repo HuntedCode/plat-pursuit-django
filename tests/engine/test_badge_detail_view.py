@@ -231,10 +231,55 @@ def test_requirements_section_is_the_tile_grid(client, stub_leaderboards):
     assert 'bd-req__grid' in html                        # the tile grid
     assert 'bd-req__tile' in html                        # at least one stage tile
     assert 'Platinum in every stage' in html             # the Ask headline (plat tier)
-    assert 'of 1 stages' in html                         # the progress line ("<b>0</b> of 1 stages")
+    assert 'of 1 stage' in html                          # the progress line ("<b>0</b> of 1 stage", pluralized)
     assert 'tier bonus +' in html                        # the XP breakdown lives in the tooltip
     # The old full-width rows are fully gone.
     assert 'bd-treq' not in html
+
+
+def test_requirements_completed_stage_marks_done(client, stub_leaderboards):
+    """A completed stage (platted, tier 1) marks its tile done -- green tint (is-done) + check + a screen-
+    reader 'completed' -- and increments the "X of N" count."""
+    series = "req-done"
+    BadgeFactory(series_slug=series, tier=1, is_live=True, required_stages=1)   # tier 1 => plat check
+    _, games = _series_with_games(series, 1)
+    profile = ProfileFactory()
+    ProfileGameFactory(profile=profile, game=games[0], progress=100, has_plat=True)
+    client.force_login(profile.user)
+
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+    html = resp.content.decode()
+
+    assert resp.context['tier_req_done'] == 1            # the completed stage is counted
+    assert 'bd-req__tile is-done' in html                # the tile carries the done treatment
+    assert 'bd-req__tile-check' in html                  # ... the corner check
+    assert 'completed' in html                           # ... and the sr-only completion cue
+
+
+def test_requirements_anon_has_no_completion_state(client, stub_leaderboards):
+    """Anonymous viewers get the grid + a plain stage count, but NEVER a done tile / check (no progress)."""
+    series = "req-anon"
+    BadgeFactory(series_slug=series, tier=1, is_live=True, required_stages=1)
+    _series_with_stage(series, 1)
+
+    html = client.get(reverse('badge_detail', kwargs={'series_slug': series})).content.decode()
+
+    assert 'bd-req__grid' in html                        # the grid still renders for anon
+    assert 'is-done' not in html                         # ... but nothing is marked done
+    assert 'bd-req__tile-check' not in html              # ... no check marks
+    assert 'of 1' not in html                            # plain "N stage(s)" count, not "X of N"
+
+
+def test_requirements_megamix_ask_wording(client, stub_leaderboards):
+    """A megamix tier asks for a platinum COUNT from the set, not 'in every stage'."""
+    series = "req-mega"
+    BadgeFactory(series_slug=series, tier=1, is_live=True, badge_type='megamix', required_stages=1)
+    _series_with_stage(series, 1)
+
+    html = client.get(reverse('badge_detail', kwargs={'series_slug': series})).content.decode()
+
+    assert 'platinums from this set' in html
+    assert 'in every stage' not in html
 
 
 def test_maintenance_defaults_to_lowest_lapsed_tier(client, stub_leaderboards):
