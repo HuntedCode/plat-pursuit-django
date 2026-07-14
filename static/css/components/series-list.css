@@ -156,6 +156,31 @@
     }
 }
 
+/* Maintenance tile: a held rung has lapsed. Warm the whole card red/amber (mirrors the Case group's
+   maintenance niche) so "needs re-earning" reads at a glance -- the repair signal owns the card over the
+   tier accent while it's lapsed. The corner "M" (same mark as the Gallery/Case) is the explicit badge. */
+.pp-scard.is-maintenance {
+    border-color: color-mix(in oklab, var(--pp-maint, #e23026) 42%, var(--pp-border));
+    background: linear-gradient(to bottom, color-mix(in oklab, #eeae42 14%, var(--pp-bg-1)), var(--pp-bg-1));
+}
+@media (hover: hover) {
+    .pp-scard.is-maintenance:hover {
+        border-color: color-mix(in oklab, var(--pp-maint, #e23026) 60%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                    0 0 0 1px color-mix(in oklab, var(--pp-maint, #e23026) 30%, transparent),
+                    0 12px 30px -14px color-mix(in oklab, var(--pp-maint, #e23026) 48%, #000);
+    }
+}
+/* Red "M" disc, top-left -- the explicit maintenance mark (geometry mirrors the Gallery's .pp-gallery__badge-m). */
+.pp-scard__m {
+    position: absolute; top: 8px; left: 8px; z-index: 4;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--pp-maint, #e23026); color: #fff;
+    font-size: 11px; font-weight: 800; line-height: 1; letter-spacing: -0.02em;
+    box-shadow: 0 0 8px -1px color-mix(in oklab, var(--pp-maint, #e23026) 70%, transparent);
+}
+
 /* Scroll-reveal: JS adds .pp-reveal to the grid to HIDE the cards, then reveals each (.is-revealed) and
    plays the arrival via the Web Animations API (el.animate) -- reliable on first load AND an HTMX view swap,
    where a CSS-class animation on freshly-swapped nodes silently won't restart. These rules only hold the
@@ -236,9 +261,9 @@
 }
 .pp-scard__node.is-earned .pp-scard__dot { background: var(--nc); box-shadow: 0 0 6px color-mix(in oklab, var(--nc) 55%, transparent); }
 .pp-scard__node.is-active .pp-scard__dot { background: transparent; box-shadow: 0 0 7px color-mix(in oklab, var(--nc) 55%, transparent); }
-/* Maintenance (held but lapsed -> needs re-earning): an amber "attention" dot, distinct from the
-   tier-filled earned dot and the hollow active dot. Mirrors the badge-detail header's warning tone. */
-.pp-scard__node.is-maintenance .pp-scard__dot { background: var(--pp-warning); border-color: var(--pp-warning); box-shadow: 0 0 7px color-mix(in oklab, var(--pp-warning) 60%, transparent); }
+/* Maintenance (held but lapsed -> needs re-earning): a RED "attention" dot, distinct from the tier-filled
+   earned dot and the hollow active dot. Red is the site-wide maintenance colour (Gallery "M", Case niche). */
+.pp-scard__node.is-maintenance .pp-scard__dot { background: var(--pp-maint, #e23026); border-color: var(--pp-maint, #e23026); box-shadow: 0 0 7px color-mix(in oklab, var(--pp-maint, #e23026) 60%, transparent); }
 .pp-scard__node.is-locked .pp-scard__dot { border-color: color-mix(in oklab, var(--nc) 45%, var(--pp-border)); opacity: 0.55; }
 /* Catalog (anon / no-profile): neutral tier dots -- no earned/active/locked emphasis, since there's no
    personal progress to imply. Just the four tier colours, so the ladder reads as a clean catalog. */
@@ -259,7 +284,7 @@
     border: 1px solid color-mix(in oklab, var(--tier-c) 45%, transparent);
 }
 .pp-scard__state { font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--pp-text-mute); }
-.pp-scard__state[data-state="maintenance"] { color: var(--pp-warning); }
+.pp-scard__state[data-state="maintenance"] { color: color-mix(in oklab, var(--pp-maint, #e23026) 82%, var(--pp-text)); }
 .pp-scard__prog-row { display: flex; align-items: center; gap: 7px; width: 100%; }
 .pp-scard__prog-row .pp-horizon { flex: 1 1 auto; }
 .pp-scard__rem { flex: 0 0 auto; font-size: 9.5px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }

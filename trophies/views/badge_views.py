@@ -555,6 +555,9 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 'default_tier': default_tier,
                 'default_frame': default_frame,
                 'default_earned': default_earned,
+                # Any lapsed rung flips the whole tile into a maintenance treatment (corner "M" + red floor),
+                # so the "needs re-earning" signal reads at a glance without opening every face.
+                'has_maintenance': bool(maint_tiers),
             })
 
         return display_data

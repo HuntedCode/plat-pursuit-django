@@ -6,7 +6,13 @@
     tier) is retinted in place on a swap (tiers share art); each tier's stat face renders once, hidden, and
     the ladder nodes / flanking arrows toggle them client-side (delegated handler in badge_list.html). The
     resting face is item.default_tier (the tier you're working on). See series-list.css for the rationale. {% endcomment %}
-    <div class="pp-scard" data-tier="{{ item.default_tier|badge_tier|lower }}">
+    <div class="pp-scard{% if item.has_maintenance %} is-maintenance{% endif %}" data-tier="{{ item.default_tier|badge_tier|lower }}">
+
+        {% if item.has_maintenance %}
+        {# A lapsed rung -> a red "M" in the top-left corner (mirrors the Gallery/Case maintenance mark), so the
+           "needs re-earning" signal reads before you scroll the ladder. #}
+        <span class="pp-scard__m" title="Maintenance -- a held tier has lapsed and needs re-earning"><span aria-hidden="true">M</span><span class="sr-only">Maintenance needed</span></span>
+        {% endif %}
 
         {# Medallion (selected face) + name + type - earned. The whole tile navigates to detail (JS). #}
         <a class="pp-scard__open" href="{% url 'badge_detail' badge.series_slug %}" aria-label="{{ item.card_name }} detail">
