@@ -1,4 +1,4 @@
-{% load custom_filters static humanize %}
+{% load custom_filters static humanize job_icons %}
 {% comment %} Stage game card, rebuilt from scratch (Variant A): cover-forward + a distinct CONTRACT footer
 band (the game's home Contract -- jobs + XP -- a hook into the gamification system). Curated to what a
 hunter needs at a glance: cover (state overlay + one progress bar), name, your % + plat status, community
@@ -38,10 +38,13 @@ container, not one big <a>. {% endcomment %}
     {% comment %} Contract hook -- opens the contract modal in place (data-contract-slug, wired in
     badge_detail.html); the href is the career board as the no-JS / anon fallback. {% endcomment %}
     {% if contract %}
-    <a class="bd-gcard__ctr" href="{% url 'career' %}?view=contracts" data-contract-slug="{{ contract.slug }}" title="Contract: {{ contract.name }}">
-        <svg class="bd-gcard__ctr-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-        <span class="bd-gcard__ctr-jobs">{% for job in contract.jobs|slice:":4" %}<span class="bd-gcard__ctr-pip" style="background: {{ job.color|default:'var(--pp-secondary)' }}"></span>{% endfor %}</span>
-        <span class="bd-gcard__ctr-label">{% for job in contract.jobs|slice:":2" %}{{ job.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if contract.jobs|length > 2 %} +{{ contract.jobs|length|add:"-2" }}{% endif %}</span>
+    <a class="bd-gcard__ctr" href="{% url 'career' %}?view=contracts" data-contract-slug="{{ contract.slug }}"
+       style="{% if contract.band_bg %}background: {{ contract.band_bg }};{% endif %}{% if contract.accent %}--ctr-accent: {{ contract.accent }};{% endif %}"
+       title="Contract: {{ contract.name }} &middot; {% for job in contract.jobs %}{{ job.name }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+        <span class="bd-gcard__ctr-jobs">
+            {% for job in contract.jobs|slice:":4" %}<span class="bd-gcard__ctr-job" style="color: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon job.icon 'w-full h-full' %}</span>{% endfor %}
+            {% if contract.jobs|length > 4 %}<span class="bd-gcard__ctr-more">+{{ contract.jobs|length|add:"-4" }}</span>{% endif %}
+        </span>
         <span class="bd-gcard__ctr-xp">{{ contract.xp|intcomma }} XP</span>
         <svg class="bd-gcard__ctr-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
     </a>

@@ -1085,11 +1085,26 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                 return None
             if not contract.is_live:
                 return None
+            jobs = list(contract.jobs.all())
+            # Family mix: the band's accent blends the distinct disciplines of the contract's jobs (their
+            # --disc-* family colours), so the band SAYS what kind of contract it is at a glance. Per-job
+            # `color` isn't populated yet, so we key off discipline. First discipline drives the solid accent
+            # (XP / arrow / border); the gradient tints across all of them.
+            disc_slugs = list(dict.fromkeys(j.discipline for j in jobs if j.discipline))
+            band_bg, accent = '', ''
+            if disc_slugs:
+                stops = [f'color-mix(in oklab, var(--disc-{d}) 15%, var(--pp-bg-1))' for d in disc_slugs]
+                if len(stops) == 1:
+                    stops *= 2   # a gradient needs >=2 stops; repeat -> a clean solid
+                band_bg = f'linear-gradient(105deg, {", ".join(stops)})'
+                accent = f'var(--disc-{disc_slugs[0]})'
             return {
                 'name': contract.name,
                 'slug': contract.slug,
                 'xp': contract.xp_total_override or CONTRACT_XP_TOTAL,
-                'jobs': list(contract.jobs.all()),
+                'jobs': jobs,
+                'band_bg': band_bg,
+                'accent': accent,
             }
 
         def _build_game_entry(game, community_ratings_cache):

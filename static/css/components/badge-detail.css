@@ -303,16 +303,19 @@
 .bd-gcard__plat.is-earned { color: var(--pp-warning); }
 .bd-gcard__plat.is-none { color: color-mix(in oklch, var(--pp-error) 70%, var(--pp-text-mute)); }
 .bd-gcard__rt { display: inline-flex; align-items: center; gap: 2px; font-weight: 700; }
-/* Contract footer band -- the hook into the gamification system (secondary accent, earned arrow on hover). */
-.bd-gcard__ctr { display: flex; align-items: center; gap: 7px; padding: 7px 9px; text-decoration: none;
-    background: color-mix(in oklab, var(--pp-secondary) 12%, var(--pp-bg-1)); border-top: 1px solid color-mix(in oklab, var(--pp-secondary) 28%, var(--pp-border)); transition: background var(--pp-dur) var(--pp-ease); }
-@media (hover: hover) { .bd-gcard__ctr:hover { background: color-mix(in oklab, var(--pp-secondary) 22%, var(--pp-bg-1)); } .bd-gcard__ctr:hover .bd-gcard__ctr-arrow { transform: translateX(2px); } }
-.bd-gcard__ctr-ico { width: 15px; height: 15px; color: var(--pp-secondary); flex-shrink: 0; }
-.bd-gcard__ctr-jobs { display: flex; gap: 3px; flex-shrink: 0; }
-.bd-gcard__ctr-pip { width: 8px; height: 8px; border-radius: 2px; }
-.bd-gcard__ctr-label { flex: 1; min-width: 0; font-size: 0.64rem; font-weight: 700; color: var(--pp-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bd-gcard__ctr-xp { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.68rem; color: var(--pp-secondary); flex-shrink: 0; }
-.bd-gcard__ctr-arrow { width: 12px; height: 12px; color: var(--pp-secondary); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
+/* Contract footer band -- the hook into the gamification system. Its background blends the contract's job
+   DISCIPLINE family colours (set inline via band_bg; --ctr-accent = the dominant one) so the band says what
+   kind of contract it is; the real job icons sit on top. Falls back to the secondary accent when no jobs. */
+.bd-gcard__ctr { display: flex; align-items: center; gap: 8px; padding: 7px 9px; text-decoration: none;
+    background: color-mix(in oklab, var(--pp-secondary) 12%, var(--pp-bg-1));
+    border-top: 1px solid color-mix(in oklab, var(--ctr-accent, var(--pp-secondary)) 30%, var(--pp-border));
+    transition: filter var(--pp-dur) var(--pp-ease); }
+@media (hover: hover) { .bd-gcard__ctr:hover { filter: brightness(1.15); } .bd-gcard__ctr:hover .bd-gcard__ctr-arrow { transform: translateX(2px); } }
+.bd-gcard__ctr-jobs { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
+.bd-gcard__ctr-job { width: 15px; height: 15px; flex-shrink: 0; }
+.bd-gcard__ctr-more { font-size: 0.6rem; font-weight: 800; color: var(--pp-text-dim); }
+.bd-gcard__ctr-xp { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.72rem; color: var(--ctr-accent, var(--pp-secondary)); flex-shrink: 0; }
+.bd-gcard__ctr-arrow { width: 12px; height: 12px; color: var(--ctr-accent, var(--pp-secondary)); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
 
 /* ── Stage section ──────────────────────────────────────────────────────────
    A stage is a .bd-card holding a clickable header (collapse toggle), an
