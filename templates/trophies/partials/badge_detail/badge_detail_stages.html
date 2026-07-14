@@ -1,60 +1,39 @@
 {% load static custom_filters %}
-{% comment %} Stage header = the collapse toggle. Stage state (.bd-stage--done) lives on the section wrapper. {% endcomment %}
+{% comment %} Stage header (rebuilt from scratch) = the collapse toggle. Preserves the data-attrs the collapse
+JS reads (data-stage-toggle / -complete / -bonus / -chevron / -game-count). Layout: stage art + an eyebrow
+(Stage N / Bonus) over the title + a quiet stats caption; then the tiers-this-stage-feeds dots, an X/Y state
+pill, and the chevron. Stage completion (.bd-stage--done) lives on the section wrapper -> header tint + the
+journey node. {% endcomment %}
 <div class="bd-stage__head"
      data-stage-toggle="{{ stage.stage_number }}"
      data-stage-complete="{% if data.stage_completion_state == 'complete' %}true{% else %}false{% endif %}"
      data-stage-bonus="{% if stage.stage_number == 0 %}true{% else %}false{% endif %}"
      role="button" aria-expanded="true" tabindex="0">
 
-    <div class="bd-stage__icon">
-        <img src="{{ stage.stage_icon }}" alt="{{ stage.title }}" loading="lazy" />
-    </div>
+    <span class="bd-stage__ico"><img src="{{ stage.stage_icon }}" alt="" loading="lazy" /></span>
 
     <div class="bd-stage__id">
-        <div class="bd-stage__title">
-            <span class="bd-stage__num">{% if stage.stage_number == 0 %}Bonus{% else %}<span class="md:hidden">S{{ stage.stage_number }}</span><span class="hidden md:inline">Stage {{ stage.stage_number }}</span>{% endif %}:</span>
-            <span class="bd-stage__title-text">{{ stage.title }}</span>
-            {% if target_profile and data.stage_completion_state and stage.stage_number != 0 %}
-                {% if data.stage_completion_state == 'complete' %}
-                    <svg class="bd-stage__check bd-stage__check--done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                {% elif data.stage_completion_state == 'partial' %}
-                    <svg class="bd-stage__check bd-stage__check--partial" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                {% else %}
-                    <svg class="bd-stage__check bd-stage__check--todo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                {% endif %}
-                {% if data.stage_progress %}
-                <span class="bd-stage__pcount {% if data.stage_progress.completed == data.stage_progress.total %}bd-stage__check--done{% elif data.stage_progress.completed > 0 %}bd-stage__check--partial{% else %}bd-stage__check--todo{% endif %}">{{ data.stage_progress.completed }}/{{ data.stage_progress.total }}</span>
-                {% endif %}
-            {% endif %}
-        </div>
+        <span class="bd-stage__eyebrow">{% if stage.stage_number == 0 %}Bonus{% else %}Stage {{ stage.stage_number }}{% endif %}</span>
+        <span class="bd-stage__title">{{ stage.title }}</span>
         {% include 'trophies/partials/badge_detail/badge_stage_stats.html' %}
     </div>
 
     {% if stage.stage_number != 0 %}
-    <div class="bd-stage__tiers">
-        {% if not stage.required_tiers %}
-            {% for i in '1234' %}
-                {% with completion|dict_get:i as comp %}{% with stage.stage_number as num %}{% with comp|dict_get:num as earned %}
-                <span class="bd-stage__tier{% if earned %} bd-stage__tier--earned{% endif %}">
-                    <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" alt="{{ i|badge_tier }}" loading="lazy" />
-                    {% if earned %}<svg class="bd-stage__tier-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>{% endif %}
-                </span>
-                {% endwith %}{% endwith %}{% endwith %}
-            {% endfor %}
-        {% else %}
-            {% for i in stage.required_tiers %}
-                {% with completion|dict_get:i as comp %}{% with stage.stage_number as num %}{% with comp|dict_get:num as earned %}
-                <span class="bd-stage__tier{% if earned %} bd-stage__tier--earned{% endif %}">
-                    {% with i|stringformat:'s' as i_str %}<img src="{% static 'images/badges/backdrops/'|add:i_str|add:'_backdrop.png' %}" alt="{{ i|badge_tier }}" loading="lazy" />{% endwith %}
-                    {% if earned %}<svg class="bd-stage__tier-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>{% endif %}
-                </span>
-                {% endwith %}{% endwith %}{% endwith %}
-            {% endfor %}
-        {% endif %}
-    </div>
+    {% comment %} Which tiers this stage counts toward -- a compact row of tier-colour dots, filled when the
+    stage is complete for that tier (completion[tier][stage_number]). Demoted vs the old tier-art strip. {% endcomment %}
+    <span class="bd-stage__tiers" aria-hidden="true" title="Tiers this stage counts toward">
+        {% for i in stage.required_tiers|default:'1234' %}
+            {% with completion|dict_get:i as comp %}
+            <span class="bd-stage__tier bd-stage__tier--{{ i|badge_tier|lower }}{% if comp|dict_get:stage.stage_number %} is-done{% endif %}"></span>
+            {% endwith %}
+        {% endfor %}
+    </span>
+    {% endif %}
+
+    {% if target_profile and stage.stage_number != 0 and data.stage_progress %}
+    <span class="bd-stage__pill bd-stage__pill--{% if data.stage_progress.completed == data.stage_progress.total %}done{% elif data.stage_progress.completed > 0 %}partial{% else %}todo{% endif %}">{{ data.stage_progress.completed }}/{{ data.stage_progress.total }}</span>
     {% endif %}
 
     <span class="bd-stage__count hidden" data-stage-game-count="{{ stage.stage_number }}">{{ data.games|length }}</span>
-
-    <svg class="bd-stage__chevron" data-stage-chevron="{{ stage.stage_number }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    <svg class="bd-stage__chevron" data-stage-chevron="{{ stage.stage_number }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
 </div>
