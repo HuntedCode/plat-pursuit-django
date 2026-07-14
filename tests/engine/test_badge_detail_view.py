@@ -150,6 +150,50 @@ def test_viewing_another_profile_flags_it(client, stub_leaderboards):
     assert '/badge-progress-peek/' + viewer.psn_username + '/0/' not in html
 
 
+def test_progress_peek_endpoint_auth_and_404s(client, stub_leaderboards):
+    """The profile-aware peek endpoint: anonymous -> 404 (a Pursuer's progress is signed-in only); unknown
+    profile / non-live badge -> 404."""
+    profile = ProfileFactory()
+    live = BadgeFactory(series_slug="peek-live", tier=1, is_live=True)
+    dead = BadgeFactory(series_slug="peek-dead", tier=1, is_live=False)
+
+    def peek_url(username, badge_id):
+        return reverse('badge_progress_peek', kwargs={'psn_username': username, 'badge_id': badge_id})
+
+    # Anonymous -> 404 (auth gate).
+    assert client.get(peek_url(profile.psn_username, live.id)).status_code == 404
+
+    client.force_login(profile.user)
+    assert client.get(peek_url('nobody-here', live.id)).status_code == 404   # unknown profile
+    assert client.get(peek_url(profile.psn_username, dead.id)).status_code == 404   # non-live badge
+
+
+def test_progress_peek_endpoint_reflects_real_state(client, stub_leaderboards):
+    """The peek renders the profile's REAL state -- an earned badge shows 'earned' (with owner engraving),
+    an unearned one shows 'unearned' -- not the always-earned showcase; and it flags another Pursuer's."""
+    earned = BadgeFactory(series_slug="peek-e", tier=1, is_live=True)
+    unearned = BadgeFactory(series_slug="peek-u", tier=1, is_live=True)
+    profile = ProfileFactory()
+    UserBadgeFactory(profile=profile, badge=earned)
+    client.force_login(profile.user)
+
+    def peek(username, badge_id):
+        return client.get(reverse('badge_progress_peek',
+                                  kwargs={'psn_username': username, 'badge_id': badge_id})).content.decode()
+
+    own_earned = peek(profile.psn_username, earned.id)
+    own_unearned = peek(profile.psn_username, unearned.id)
+    assert 'data-state="earned"' in own_earned        # real earned state
+    assert 'data-state="unearned"' in own_unearned     # real unearned state (not showcase)
+    assert 'pp-bdetail__viewing' not in own_earned      # own progress -> no "viewing other" chip
+
+    # Viewing ANOTHER Pursuer -> the "X's progress" chip is set.
+    other = ProfileFactory()
+    other_html = peek(other.psn_username, earned.id)
+    assert 'pp-bdetail__viewing' in other_html
+    assert other.psn_username in other_html
+
+
 def _series_with_games(series, n_games=2, stage_number=1):
     """One stage (applies to all tiers) whose concept holds n_games games."""
     concept = ConceptFactory()

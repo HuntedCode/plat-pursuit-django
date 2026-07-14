@@ -790,7 +790,6 @@ class BadgeProgressPeekView(View):
     def get(self, request, psn_username, badge_id):
         if not request.user.is_authenticated:
             return HttpResponseNotFound()
-        from trophies.services.frame_service import build_badge_frame
         profile = get_object_or_404(Profile, psn_username__iexact=psn_username)
         badge = (
             Badge.objects.filter(id=badge_id, is_live=True)
@@ -955,7 +954,6 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['selected_tier_is_plat'] = selected_tier in [1, 3]
 
         # Hero frame: the medallion for the tier the viewer is looking at.
-        from trophies.services.frame_service import build_badge_frame
         hero_badge = series_badges.filter(tier=selected_tier).first() or badge
         context['hero_frame'] = build_badge_frame(hero_badge, target_profile)
         context['hero_frame']['badge_id'] = hero_badge.id   # enables the medallion inspect peek
