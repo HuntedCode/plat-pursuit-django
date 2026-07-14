@@ -316,9 +316,10 @@
 .bd-gcard__ctr-more { font-size: 0.6rem; font-weight: 800; color: var(--pp-text-dim); }
 .bd-gcard__ctr-xp { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.72rem; color: var(--ctr-accent, var(--pp-secondary)); flex-shrink: 0; }
 .bd-gcard__ctr-arrow { width: 12px; height: 12px; color: var(--ctr-accent, var(--pp-secondary)); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
-/* Contract modal: the ContractModalView (.rpm__*) partial injected in place. Its content is wide + tall, so
-   give the shared pp-detail-modal dialog room + a scroll, and let the rpm content own its padding. */
-.pp-detail-modal--contract .pp-detail-modal__dialog { width: min(92vw, 640px); max-height: 88vh; overflow-y: auto; padding: 0; }
+/* Contract modal: the ContractModalView (.rpm__*) partial injected in place. Match the career page's contract
+   dialog (.emodal__dialog--wide: 680px, padding 0 so the rpm content owns its own spacing) so the modal reads
+   at the SAME proportions as on the contracts board. */
+.pp-detail-modal--contract .pp-detail-modal__dialog { width: min(680px, 100%); max-height: 88vh; overflow-y: auto; padding: 0; }
 .pp-detail-modal--contract .pp-detail-modal__body { min-height: 0; }
 /* Onward hook: a sticky footer link from one game's contract into the whole board. */
 .bd-ctrmodal__more { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 11px; background: var(--pp-bg-1); border-top: 1px solid var(--pp-border); color: var(--pp-primary); font-size: 0.8rem; font-weight: 700; text-decoration: none; transition: background var(--pp-dur) var(--pp-ease); }
