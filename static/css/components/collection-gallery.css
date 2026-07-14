@@ -195,7 +195,6 @@
     box-shadow: 0 0 14px -5px color-mix(in oklab, var(--pp-earned) 48%, transparent);
 }
 .pp-gallery__card[data-state="maintenance"] {
-    --pp-maint: #e23026;
     border-color: color-mix(in oklab, var(--pp-maint) 58%, var(--pp-border));
     box-shadow: 0 0 14px -5px color-mix(in oklab, var(--pp-maint) 44%, transparent);
 }

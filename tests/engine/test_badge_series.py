@@ -94,6 +94,10 @@ def test_series_lapsed_tier_reads_maintenance_and_is_the_resting_face(client):
     assert 'pp-scard__node is-earned' in html            # Bronze still reads cleanly earned
     assert 'pp-scard is-maintenance' in html             # whole tile flips to the maintenance treatment
     assert 'pp-scard__m' in html                         # ... with the explicit corner "M" mark
+    # The resting face is a lapsed tier -> its earned seal is suppressed (default_earned is False).
+    assert 'pp-scard__seal" title="Earned" hidden' in html
+    # Gold/Platinum are genuinely unearned -> NOT maintenance: exactly one node (Silver) is maintenance.
+    assert html.count('pp-scard__node is-maintenance') == 1
 
 
 def test_series_default_face_finished_is_top_tier(client):

@@ -65,6 +65,9 @@ def test_tier_tabs_mark_by_earned_set_not_max(client, stub_leaderboards):
     assert resp.context['highest_tier_earned'] == 2
     assert 1 not in resp.context['earned_tiers']
     assert 3 not in resp.context['earned_tiers']
+    # A cleanly-earned tier keeps the earned check, never the maintenance "M".
+    assert resp.context['maint_tiers'] == set()
+    assert 'is-maintenance' not in resp.content.decode()
 
 
 def test_tier_switch_returns_island_partial_for_htmx(client, stub_leaderboards):
@@ -235,6 +238,8 @@ def test_maintenance_defaults_to_lowest_lapsed_tier(client, stub_leaderboards):
     html = resp.content.decode()
     assert 'bd-tierstep--bronze is-active is-maintenance' in html   # Bronze (the open rung) shows maintenance
     assert 'bd-tierstep--silver is-maintenance' in html             # ... and Silver, not a clean earned check
+    # Gold/Platinum are genuinely unearned -> exactly the two lapsed rungs carry the maintenance mark.
+    assert html.count('is-maintenance') == 2
 
 
 def _series_with_games(series, n_games=2, stage_number=1):

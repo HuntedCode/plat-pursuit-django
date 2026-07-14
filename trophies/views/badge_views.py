@@ -43,6 +43,7 @@ GALLERY_SORTS = [
 GALLERY_SORT_KEYS = {k for k, _ in GALLERY_SORTS}
 GALLERY_SORT_DEFAULT = 'set_number'
 
+from django.contrib.postgres.aggregates import ArrayAgg
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db.models import Q, F, Prefetch, Max, Exists, OuterRef, Case, When, Value, IntegerField
@@ -391,9 +392,13 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             # Maintenance (lapsed) tiers -- HELD but need re-earning. A UserBadge is never deleted; when a series
             # grows and the user lapses, its status flips to 'maintenance'. It still counts as held (so it's in
             # earned_dict's max, earn_rank stays permanent), but it must read as a REPAIR state and be the tile's
-            # resting face -- not a clean 'earned' tier the working rung skips past. Maintenance is rare -> cheap.
-            for _slug, _tier in UserBadge.objects.filter(profile=profile, status='maintenance').values_list('badge__series_slug', 'badge__tier'):
-                maint_dict.setdefault(_slug, set()).add(_tier)
+            # resting face -- not a clean 'earned' tier the working rung skips past. DB-aggregated to a
+            # {series_slug: [tiers]} map (one row per series), matching earned_dict's whale-safe pattern.
+            maint_dict = {
+                m['badge__series_slug']: set(m['tiers'])
+                for m in UserBadge.objects.filter(profile=profile, status='maintenance')
+                .values('badge__series_slug').annotate(tiers=ArrayAgg('badge__tier'))
+            }
 
             all_badges_ids = [b.id for group in grouped_badges.values() for b in group]
             progress_qs = UserBadgeProgress.objects.filter(
@@ -452,7 +457,9 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             # whale-safe. The resting face (`default_tier`) is the tier you're working on (the lowest unearned
             # tier); Bronze if nothing is started, the top tier if the series is finished; anon sees Bronze.
             present_tiers = [b.tier for b in sorted_group]
-            maint_tiers = maint_dict.get(slug, set())
+            # Intersect with the tiers actually rendered on this tile: a held tier whose badge went non-live
+            # would otherwise make default_tier point at a face that doesn't exist (every pane stays hidden).
+            maint_tiers = maint_dict.get(slug, set()) & set(present_tiers)
             working_rung = next((t for t in present_tiers if t > highest_tier), None)
             # A lapsed (maintenance) tier needs re-earning, so it -- not the next unearned rung -- is the
             # resting face (the lowest such tier). Otherwise: the tier you're working on, then the top tier.
