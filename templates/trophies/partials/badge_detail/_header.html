@@ -65,9 +65,16 @@ selected_tier. Keeps id="badge-header-card".
                         <span>{{ selected_tier|badge_tier }} progress</span>
                         <span>{{ stats.user_stages_played }}/{{ stats.total_required_stages }} stages &middot; {{ stats.user_series_xp|intcomma }} XP</span>
                     </div>
+                    {% if hero_frame.segments %}
+                    {# Segmented meter -- one cell per stage (frame.segments is prebuilt, capped at SEGMENT_CAP); matches the medallion. #}
+                    <span class="pp-horizon pp-horizon--segmented" role="progressbar" aria-valuenow="{{ hero_frame.progress_pct|default:0 }}" aria-valuemin="0" aria-valuemax="100" style="--horizon-from: var(--pp-secondary); --horizon-to: var(--pp-primary); --horizon-h: 8px;">
+                        {% for on in hero_frame.segments %}<span class="pp-horizon__seg"{% if on %} data-state="done"{% endif %}></span>{% endfor %}
+                    </span>
+                    {% else %}
                     <div class="pp-horizon" style="--horizon-h: 8px;">
                         <span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-progress: {{ hero_frame.progress_pct|default:0 }}%;"></span></span>
                     </div>
+                    {% endif %}
                     {% else %}
                     <div class="text-sm text-base-content/60">{{ selected_tier|badge_tier }} &middot; not started &middot; {{ stats.total_required_stages }} stage{{ stats.total_required_stages|pluralize }} to earn</div>
                     {% endif %}

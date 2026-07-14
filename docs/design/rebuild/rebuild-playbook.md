@@ -201,7 +201,13 @@ DaisyUI theme colours mirror the brand/semantic tokens and are applied via Tailw
 ### Shared components (compose these; don't reinvent)
 
 - **Medallion** — `components/badge_medallion.html` (`.pp-med`, size via `--sz`). The badge object.
-- **Horizon** (`pp-horizon`) — progress bars. **Tally** (`.pp-tally`) — display numbers (+ `PlatPursuit.countUp`).
+- **Horizon** (`pp-horizon`) — progress bars: smooth by default, or **`pp-horizon--segmented`** for a
+  discrete meter (one `pp-horizon__seg` cell per unit, `data-state="done"/"active"`, gradient
+  `--horizon-from`→`--horizon-to`). **Cap the segment count (~8–12) and fall back to the smooth bar above
+  it** so cells don't turn into slivers: `SEGMENT_CAP=12` (medallion meter, `frame_service`) /
+  `TILE_SEGMENT_CAP=8` (tile horizons, `badge_views`); `frame.segments` (booleans) is prebuilt for a
+  medallion's tier. Reduced-motion gated. Used on the Series-tile tiers, the milestone ladder, the medallion
+  meter, and the badge-detail header. **Tally** (`.pp-tally`) — display numbers (+ `PlatPursuit.countUp`).
 - **Accented header card** — `card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral`.
 - **Stat tiles** — `.scard` (a few headline summary stats, Career/Home) · `.pp-bdetail__stat` k/v (compact, dense badge stats).
 - **Segmented switcher** (tab groups) · **`.pp-toolbar-card`** (toolbars) · depth-pass card shadows (see Depth in Shared Elements).
