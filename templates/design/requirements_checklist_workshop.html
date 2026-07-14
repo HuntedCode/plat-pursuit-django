@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Requirements checklist workshop{% endblock %}
+
+{% block content %}
+{% comment %} Design decision aid (NOT a product surface): the badge-detail tier "how-to-earn" stage list.
+The current .bd-treq rows run full-width + tall with lots of dead space; A/B are denser alternatives.
+Real crash-bandicoot stages, a fabricated half-done state so both completion looks render. {% endcomment %}
+<style>
+    .rcw-wrap { max-width: 720px; margin: 0 auto; padding: 24px 16px 80px; }
+    .rcw-h1 { font-family: var(--pp-font-display); font-size: 1.6rem; font-weight: 800; color: var(--pp-text); }
+    .rcw-sub { color: var(--pp-text-dim); font-size: 0.9rem; margin-top: 6px; margin-bottom: 8px; }
+    .rcw-block { margin-top: 34px; }
+    .rcw-tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 12px; }
+    .rcw-tag b { color: var(--pp-primary); font-weight: 800; }
+    .rcw-note { font-size: 0.78rem; color: var(--pp-text-mute); margin-top: 10px; font-style: italic; }
+
+    /* Shared panel shell (mirrors the production .bd-treq frame) so A/B/current sit in the same context. */
+    .rcw-panel { --tier-c: #e7c25c; border: 1px solid var(--pp-border); border-left: 3px solid var(--tier-c);
+        border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 14px 16px; }
+    .rcw-head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+    @media (min-width: 640px) { .rcw-head { flex-direction: row; align-items: center; justify-content: space-between; } }
+    .rcw-ask { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; font-weight: 700; color: var(--pp-text); }
+    .rcw-ask img { width: 18px; height: 18px; }
+    .rcw-xp { font-size: 1rem; font-weight: 800; color: var(--pp-text); white-space: nowrap; }
+    .rcw-xp span { color: var(--pp-text-mute); font-weight: 600; font-size: 0.7rem; margin-left: 3px; }
+    .rcw-slabel { display: flex; align-items: center; gap: 7px; font-size: 0.64rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 10px; }
+    .rcw-slabel b { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--pp-bg-3); color: var(--pp-text-dim); font-size: 0.62rem; }
+
+    /* ── Option A: compact tile grid ── */
+    .rcw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 8px; }
+    .rcw-tile { position: relative; display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: var(--pp-radius-md);
+        background: var(--pp-bg-2); border: 1px solid var(--pp-border); text-decoration: none; color: var(--pp-text-dim); transition: border-color 0.15s ease, color 0.15s ease; }
+    .rcw-tile:hover { border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border)); color: var(--pp-text); }
+    .rcw-tile img { width: 40px; height: 40px; border-radius: var(--pp-radius-sm); object-fit: cover; flex-shrink: 0; }
+    .rcw-tile__meta { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .rcw-tile__num { font-size: 0.6rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute); }
+    .rcw-tile__name { font-size: 0.8rem; font-weight: 600; color: inherit; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.15; }
+    .rcw-tile.is-done { background: color-mix(in oklab, var(--pp-success) 8%, var(--pp-bg-2)); border-color: color-mix(in oklab, var(--pp-success) 28%, var(--pp-border)); }
+    .rcw-tile.is-done img { filter: none; }
+    .rcw-tile:not(.is-done) img { filter: grayscale(0.55) brightness(0.85); }
+    .rcw-check { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--pp-success); color: #06140d; display: grid; place-items: center; box-shadow: 0 0 8px -2px color-mix(in oklab, var(--pp-success) 70%, transparent); }
+    .rcw-check svg { width: 11px; height: 11px; }
+
+    /* ── Option B: coins strip ── */
+    .rcw-coins { display: flex; flex-wrap: wrap; gap: 14px; }
+    .rcw-coin { position: relative; width: 58px; text-decoration: none; }
+    .rcw-coin__disc { position: relative; width: 58px; height: 58px; border-radius: 50%; overflow: hidden; border: 2px solid var(--pp-border); transition: border-color 0.15s ease, transform 0.15s ease; }
+    .rcw-coin:hover .rcw-coin__disc { transform: translateY(-2px); border-color: color-mix(in oklab, var(--tier-c) 50%, var(--pp-border)); }
+    .rcw-coin__disc img { width: 100%; height: 100%; object-fit: cover; }
+    .rcw-coin:not(.is-done) .rcw-coin__disc img { filter: grayscale(1) brightness(0.5); }
+    .rcw-coin.is-done .rcw-coin__disc { border-color: var(--pp-success); box-shadow: 0 0 10px -3px color-mix(in oklab, var(--pp-success) 60%, transparent); }
+    .rcw-coin__num { display: block; text-align: center; margin-top: 5px; font-size: 0.62rem; font-weight: 700; color: var(--pp-text-mute); }
+    .rcw-coin__check { position: absolute; bottom: -2px; right: -2px; width: 20px; height: 20px; border-radius: 50%; background: var(--pp-success); color: #06140d; display: grid; place-items: center; border: 2px solid var(--pp-bg-1); }
+    .rcw-coin__check svg { width: 10px; height: 10px; }
+    .rcw-coinlegend { font-size: 0.72rem; color: var(--pp-text-mute); margin-top: 12px; }
+
+    /* ── Current design (production .bd-treq rows) reproduced for side-by-side ── */
+    .rcw-rows { display: flex; flex-direction: column; gap: 4px; }
+    .rcw-row { display: flex; align-items: center; gap: 9px; padding: 6px 9px; border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text-dim); }
+    .rcw-row.is-done { color: var(--pp-text-mute); }
+    .rcw-row__status { width: 16px; height: 16px; flex-shrink: 0; display: grid; place-items: center; color: var(--pp-success); }
+    .rcw-row__status svg { width: 15px; height: 15px; }
+    .rcw-row img { width: 22px; height: 22px; border-radius: var(--pp-radius-sm); object-fit: cover; flex-shrink: 0; }
+    .rcw-row__name { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rcw-row__num { color: var(--pp-text-mute); font-weight: 700; margin-right: 7px; }
+</style>
+
+<div class="rcw-wrap">
+    <h1 class="rcw-h1">Requirements checklist &mdash; layout options</h1>
+    <p class="rcw-sub">Badge detail &rarr; tier selector &rarr; the "how-to-earn" stage list. Real
+        <b>Crash Bandicoot</b> stages (6), a fabricated 3-of-6 done state so both looks render. Gold tier accent.</p>
+
+    {% comment %} ── CURRENT ── {% endcomment %}
+    <div class="rcw-block">
+        <div class="rcw-tag">Current &mdash; full-width rows</div>
+        <div class="rcw-panel">
+            <div class="rcw-head">
+                <span class="rcw-ask"><img src="{% static 'images/plat.png' %}" alt="Platinum"> Earn Platinum in every stage</span>
+                <span class="rcw-xp">{{ user_xp }} / {{ total_xp }}<span>XP</span></span>
+            </div>
+            <div class="rcw-slabel">Stages required <b>{{ total_count }}</b></div>
+            <div class="rcw-rows">
+                {% for s in stages %}
+                <div class="rcw-row{% if s.is_complete %} is-done{% endif %}">
+                    <span class="rcw-row__status">{% if s.is_complete %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{% endif %}</span>
+                    <img src="{{ s.icon }}" alt="">
+                    <span class="rcw-row__name"><span class="rcw-row__num">{{ s.number }}</span>{{ s.title }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <p class="rcw-note">The problem: the right half of every row is dead space, and the panel runs tall.</p>
+    </div>
+
+    {% comment %} ── OPTION A: tile grid ── {% endcomment %}
+    <div class="rcw-block">
+        <div class="rcw-tag"><b>Option A</b> &mdash; compact tile grid</div>
+        <div class="rcw-panel">
+            <div class="rcw-head">
+                <span class="rcw-ask"><img src="{% static 'images/plat.png' %}" alt="Platinum"> Earn Platinum in every stage</span>
+                <span class="rcw-xp">{{ user_xp }} / {{ total_xp }}<span>XP</span></span>
+            </div>
+            <div class="rcw-slabel">Stages required <b>{{ total_count }}</b></div>
+            <div class="rcw-grid">
+                {% for s in stages %}
+                <a href="#" class="rcw-tile{% if s.is_complete %} is-done{% endif %}">
+                    <img src="{{ s.icon }}" alt="">
+                    <span class="rcw-tile__meta">
+                        <span class="rcw-tile__num">Stage {{ s.number }}</span>
+                        <span class="rcw-tile__name">{{ s.title }}</span>
+                    </span>
+                    {% if s.is_complete %}<span class="rcw-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>{% endif %}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        <p class="rcw-note">Names stay visible; the stage art fills the space; ~half the height. Each tile jumps to the stage.</p>
+    </div>
+
+    {% comment %} ── OPTION B: coins strip ── {% endcomment %}
+    <div class="rcw-block">
+        <div class="rcw-tag"><b>Option B</b> &mdash; coins strip</div>
+        <div class="rcw-panel">
+            <div class="rcw-head">
+                <span class="rcw-ask"><img src="{% static 'images/plat.png' %}" alt="Platinum"> Earn Platinum in every stage
+                    &middot; <span style="color: var(--pp-text-mute); font-weight: 700;">{{ done_count }} of {{ total_count }}</span></span>
+                <span class="rcw-xp">{{ user_xp }} / {{ total_xp }}<span>XP</span></span>
+            </div>
+            <div class="rcw-coins">
+                {% for s in stages %}
+                <a href="#" class="rcw-coin{% if s.is_complete %} is-done{% endif %}" title="Stage {{ s.number }}: {{ s.title }}">
+                    <span class="rcw-coin__disc">
+                        <img src="{{ s.icon }}" alt="{{ s.title }}">
+                        {% if s.is_complete %}<span class="rcw-coin__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>{% endif %}
+                    </span>
+                    <span class="rcw-coin__num">{{ s.number }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        <p class="rcw-note">Densest &mdash; completion reads at a glance; names live in the journey below (shown on hover here). Leans on the stage cards for detail.</p>
+    </div>
+</div>
+{% endblock %}

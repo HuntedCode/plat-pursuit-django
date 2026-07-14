@@ -644,6 +644,37 @@ class BadgePresentationView(TemplateView):
         return ctx
 
 
+class RequirementsChecklistWorkshopView(TemplateView):
+    """Design workshop (/design/requirements-checklist/): how should the badge-detail tier "how-to-earn"
+    stage list be displayed?
+
+    The production panel (badge_tier_selector.html .bd-treq) stacks the required stages as full-width rows,
+    leaving the right half of each row empty and running tall. This renders the REAL crash-bandicoot stages
+    (icons + names) in the current design next to two denser alternatives -- a compact tile grid and a
+    coins strip -- so the layout can be decided with real artwork in front of us. Not a product surface.
+    """
+    template_name = 'design/requirements_checklist_workshop.html'
+
+    def get_context_data(self, **kwargs):
+        from trophies.models import Stage
+        ctx = super().get_context_data(**kwargs)
+        stages = list(Stage.objects.filter(series_slug='crash-bandicoot').order_by('stage_number'))
+        # Fabricated completion for the preview (there's no user here): mark the first few done so both the
+        # done and to-do states render in every layout.
+        done_upto = 3
+        ctx['stages'] = [
+            {'number': s.stage_number, 'title': s.title, 'icon': s.stage_icon,
+             'is_complete': s.stage_number <= done_upto}
+            for s in stages
+        ]
+        ctx['done_count'] = sum(1 for s in stages if s.stage_number <= done_upto)
+        ctx['total_count'] = len(stages)
+        ctx['tier_name'] = 'gold'          # one tier's accent, just to colour the panels
+        ctx['user_xp'] = 1250
+        ctx['total_xp'] = 2000
+        return ctx
+
+
 class PursuerCardRanksPreviewView(TemplateView):
     """Preview the *production* Pursuer Card at every rank tier (/design/pursuer-card-ranks/).
 
