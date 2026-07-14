@@ -368,7 +368,8 @@
 .bd-stage__pill--partial { background: color-mix(in oklab, var(--pp-warning) 13%, var(--pp-bg-2)); color: var(--pp-warning); border: 1px solid color-mix(in oklab, var(--pp-warning) 30%, transparent); }
 .bd-stage__pill--todo { background: var(--pp-bg-2); color: var(--pp-text-mute); border: 1px solid var(--pp-border); }
 
-/* Game count -- hidden by default (Tailwind .hidden); the collapse JS reveals it as a pill when collapsed. */
+/* Static game-count pill -- the always-present slot shown for anon viewers and bonus stages (the signed-in
+   X/Y progress pill takes its place otherwise). No JS toggles it; kept present so expanding never shifts. */
 .bd-stage__count { font-size: 0.6rem; font-weight: 700; color: var(--pp-text-mute); padding: 1px 7px; border-radius: 999px; background: var(--pp-bg-2); flex-shrink: 0; }
 .bd-stage__chevron { width: 18px; height: 18px; color: var(--pp-text-mute); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
 

@@ -53,7 +53,7 @@ badge_tier_xp_bonus, tier_req_stages, badge.badge_type.
         {# One quiet supporting line: stage progress (signed in) or count (anon) + the XP reward (breakdown on hover). #}
         <p class="bd-req__meta">
             <span class="bd-req__count">{% if target_profile %}<b class="pp-tally">{{ tier_req_done }}</b> of {{ tier_req_stages|length }} stage{{ tier_req_stages|length|pluralize }}{% else %}<b class="pp-tally">{{ tier_req_stages|length }}</b> stage{{ tier_req_stages|length|pluralize }}{% endif %}</span>
-            <span class="bd-req__dot" aria-hidden="true">&middot;</span>
+            <span aria-hidden="true">&middot;</span>
             <span class="bd-req__xp" title="{{ badge_tier_xp_bonus|intcomma }} tier bonus + {{ selected_tier|badge_tier_xp|intcomma }} per stage">{% if target_profile %}<b class="pp-tally">{{ selected_tier_user_xp|intcomma }}</b> / {% endif %}<span class="pp-tally">{{ selected_tier_total_xp|intcomma }}</span> XP</span>
         </p>
 
