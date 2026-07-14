@@ -13,10 +13,14 @@
         {% include 'trophies/partials/badge_detail/badge_detail_tier_view.html' %}
     </div>
 
-    {% comment %} Medallion inspect (pick-up / put-down): tapping the hero medallion grows the public
-    badge_quick_peek into this shared dialog (the collection's .pp-detail-modal chrome). Lives OUTSIDE the
-    swap island so it persists across tier switches. {% endcomment %}
-    <div class="pp-detail-modal" id="badge-peek" data-peek-url="{% url 'badge_quick_peek' 0 %}" hidden>
+    {% comment %} Medallion inspect (pick-up / put-down): tapping the hero medallion grows a peek into this
+    shared dialog (the collection's .pp-detail-modal chrome). For a linked Pursuer it fetches the SAME
+    profile-aware modal the collection uses (collection_badge_modal) -- so the medallion shows the viewer's
+    real EARNED state + personalised base (owner engraving, earn rank), per the selected tier. Anonymous
+    visitors get the generic showcase peek. Lives OUTSIDE the swap island so it persists across tier
+    switches. {% endcomment %}
+    <div class="pp-detail-modal" id="badge-peek"
+         data-peek-url="{% if user.is_authenticated and user.profile and user.profile.is_linked %}{% url 'collection_badge_modal' 0 %}{% else %}{% url 'badge_quick_peek' 0 %}{% endif %}" hidden>
         <div class="pp-detail-modal__scrim" data-peek-close></div>
         <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
             <button type="button" class="pp-detail-modal__close" data-peek-close aria-label="Close badge detail">&times;</button>

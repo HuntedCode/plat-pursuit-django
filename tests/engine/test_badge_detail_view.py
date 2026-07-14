@@ -101,19 +101,28 @@ def test_tier_switch_full_page_without_htmx(client, stub_leaderboards):
     assert 'bd-tierlad' in html
 
 
-def test_hero_medallion_is_inspectable(client, stub_leaderboards):
-    """The hero medallion carries its badge id + the page has the inspect (#badge-peek) dialog, so tapping
-    the medallion opens the pick-up/put-down peek."""
-    series = "rebuild-peek"
+def test_hero_medallion_inspect_is_profile_aware(client, stub_leaderboards):
+    """The hero medallion inspect fetches the PROFILE-AWARE collection modal for a linked Pursuer (so the
+    medallion shows their real earned state + personalised base), and the generic showcase peek for anon.
+    Either way the dialog is present and the hero medallion carries a badge id to peek."""
+    series = "rebuild-peek-aware"
     BadgeFactory(series_slug=series, tier=1, is_live=True)
     _series_with_stage(series, 1)
+    url = reverse('badge_detail', kwargs={'series_slug': series})
 
-    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+    # Anonymous -> generic showcase quick-peek.
+    anon = client.get(url).content.decode()
+    assert 'id="badge-peek"' in anon
+    assert 'data-badge-id' in anon
+    assert '/badge-peek/0/' in anon
+    assert '/collection/badge/0/' not in anon
 
-    assert resp.status_code == 200
-    html = resp.content.decode()
-    assert 'id="badge-peek"' in html    # the inspect dialog is present
-    assert 'data-badge-id' in html      # the hero medallion carries a badge id to peek (the view sets it)
+    # Linked Pursuer -> the profile-aware collection modal (real state + owner engraving).
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    authed = client.get(url).content.decode()
+    assert '/collection/badge/0/' in authed
+    assert '/badge-peek/0/' not in authed
 
 
 def _series_with_games(series, n_games=2, stage_number=1):
