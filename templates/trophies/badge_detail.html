@@ -51,6 +51,11 @@
         <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Contract" tabindex="-1">
             <button type="button" class="pp-detail-modal__close" data-contract-close aria-label="Close contract">&times;</button>
             <div class="pp-detail-modal__body" data-contract-body></div>
+            {% comment %} Onward hook: from one game's Contract into the whole board. {% endcomment %}
+            <a class="bd-ctrmodal__more" href="{% url 'career' %}?view=contracts">
+                Browse all Contracts
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+            </a>
         </div>
     </div>
     {% endif %}
@@ -125,6 +130,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     .then(function (html) {
                         if (html == null) { window.location.href = link.getAttribute('href'); return; }   // not linked -> career board
                         contractBody.innerHTML = html;
+                        // The rpm job pills + game cards ship at opacity:0 (the career page reveals them via
+                        // .rpm-in); do the same here, plus set each game's progress-bar width from data-fill.
+                        var i = 0;
+                        contractBody.querySelectorAll('.rpm-job, .rpg').forEach(function (el) { el.style.animationDelay = (i++ * 45) + 'ms'; el.classList.add('rpm-in'); });
+                        contractBody.querySelectorAll('.rpg__prog-fill').forEach(function (f) { if (f.dataset.fill) { f.style.width = f.dataset.fill; } });
                         contractModal.hidden = false;
                         document.body.style.overflow = 'hidden';
                         var d = contractModal.querySelector('.pp-detail-modal__dialog'); if (d) { d.focus(); }

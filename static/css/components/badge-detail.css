@@ -320,6 +320,10 @@
    give the shared pp-detail-modal dialog room + a scroll, and let the rpm content own its padding. */
 .pp-detail-modal--contract .pp-detail-modal__dialog { width: min(92vw, 640px); max-height: 88vh; overflow-y: auto; padding: 0; }
 .pp-detail-modal--contract .pp-detail-modal__body { min-height: 0; }
+/* Onward hook: a sticky footer link from one game's contract into the whole board. */
+.bd-ctrmodal__more { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 11px; background: var(--pp-bg-1); border-top: 1px solid var(--pp-border); color: var(--pp-primary); font-size: 0.8rem; font-weight: 700; text-decoration: none; transition: background var(--pp-dur) var(--pp-ease); }
+.bd-ctrmodal__more svg { width: 14px; height: 14px; }
+@media (hover: hover) { .bd-ctrmodal__more:hover { background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-1)); } }
 
 /* ── Stage section ──────────────────────────────────────────────────────────
    A stage is a .bd-card holding a clickable header (collapse toggle), an
