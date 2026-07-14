@@ -283,9 +283,9 @@ def test_requirements_megamix_ask_wording(client, stub_leaderboards):
 
 
 def test_context_band_and_stats_modal_for_member(client, stub_leaderboards):
-    """The context band renders the rarity funnel + your ranks + the Leaderboards CTA + a My Stats button,
-    and the profile-aware My Stats modal (deep breakdown) is present for a signed-in viewer. The old
-    standalone leaderboard section is gone (folded in)."""
+    """The context band renders the stacked rarity bar + a 4-tier legend + your ranks + the Leaderboards CTA
+    + a My Stats button, and the profile-aware My Stats modal (deep breakdown) is present for a signed-in
+    viewer. The old standalone leaderboard section is gone (folded in)."""
     series = "band-member"
     BadgeFactory(series_slug=series, tier=1, is_live=True, required_stages=1)
     _series_with_stage(series, 1)
@@ -295,9 +295,10 @@ def test_context_band_and_stats_modal_for_member(client, stub_leaderboards):
     html = client.get(reverse('badge_detail', kwargs={'series_slug': series})).content.decode()
 
     assert 'bd-band' in html                          # the context band
-    assert html.count('bd-rarity__track') == 4          # the four-tier rarity funnel
+    assert 'bd-rbar' in html                          # the single stacked rarity bar
+    assert html.count('bd-rlegend__dot') == 4         # the four-tier legend (always all tiers)
     assert 'Leaderboards' in html                     # the CTA (moved into the band)
-    assert 'Earners Rank' in html                     # your rank (signed-in branch)
+    assert 'bd-rank' in html                          # your standing row (signed-in ranks)
     assert 'bd-band__stats-btn' in html               # the My Stats button
     assert 'id="badge-stats-modal"' in html           # the modal container (not just the JS ref)
     assert 'Your Stats' in html                       # ... its personal group
@@ -306,8 +307,8 @@ def test_context_band_and_stats_modal_for_member(client, stub_leaderboards):
 
 
 def test_context_band_anon_hides_ranks_and_stats(client, stub_leaderboards):
-    """Anon gets the band (rarity funnel + community totals + CTA) but NO personal ranks, My Stats button,
-    or stats modal."""
+    """Anon gets the band (rarity bar + legend + community totals + CTA) but NO personal My Stats button or
+    stats modal."""
     series = "band-anon"
     BadgeFactory(series_slug=series, tier=1, is_live=True, required_stages=1)
     _series_with_stage(series, 1)
@@ -315,9 +316,9 @@ def test_context_band_anon_hides_ranks_and_stats(client, stub_leaderboards):
     html = client.get(reverse('badge_detail', kwargs={'series_slug': series})).content.decode()
 
     assert 'bd-band' in html
-    assert html.count('bd-rarity__track') == 4
+    assert 'bd-rbar' in html
+    assert html.count('bd-rlegend__dot') == 4
     assert 'Progressers' in html                       # anon community-totals branch
-    assert 'Earners Rank' not in html                  # no personal rank for anon
     assert 'bd-band__stats-btn' not in html            # no My Stats button
     assert 'id="badge-stats-modal"' not in html        # no modal container rendered
     assert 'Your Stats' not in html                    # ... and no modal content

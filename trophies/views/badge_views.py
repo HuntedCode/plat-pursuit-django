@@ -1419,15 +1419,16 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             'community_total_xp': community_total_xp,
         }
 
-        # Rarity funnel for the context band: earners holding each tier, with a bar width relative to the
-        # Bronze (tier-1) max -- so Platinum reads as a thin sliver, showing the difficulty ramp at a glance.
+        # Rarity bar for the context band: ONE stacked bar segmented by each earner's PEAK tier
+        # (max_tier_counts partitions all earners, so the segments sum to 100% -- unlike the cumulative
+        # tier_earner_counts, which would double-count every higher-tier earner). Platinum reads as a thin
+        # sliver = the prestige story in one line.
         _tier_names = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
-        _rarity_max = tier_earner_counts.get(1, 0) or 1
-        context['rarity_rows'] = [
+        context['rarity_segments'] = [
             {
                 'tier': t, 'name': _tier_names[t], 'key': _tier_names[t].lower(),
-                'count': tier_earner_counts.get(t, 0),
-                'pct': round(tier_earner_counts.get(t, 0) / _rarity_max * 100),
+                'count': max_tier_counts.get(t, 0),
+                'pct': max_tier_pcts.get(t, 0),
             }
             for t in (1, 2, 3, 4)
         ]

@@ -1,71 +1,50 @@
 {% load static custom_filters humanize %}
 {% comment %} Condensed context band (below the header, above the tier ladder): the badge's competitive /
-rarity layer the header doesn't cover -- a Bronze->Platinum rarity funnel + your ranks (with totals as
-context) + the Leaderboards CTA + a My Stats button that opens the deep-breakdown modal. Series-wide, so it
-rides the tier-swap island; the funnel highlights the selected tier. Anon: totals instead of ranks, no My
-Stats button. {% endcomment %}
+rarity layer the header doesn't cover. ONE stacked rarity bar (segments = each earner's PEAK tier, so they
+partition all earners) + a legend, then a single foot row -- your ranks (community totals for anon) + the
+Leaderboards CTA + a My Stats button that opens the deep-breakdown modal. Series-wide, so it rides the
+tier-swap island; the bar lifts the selected tier's segment. Anon: no ranks/My Stats button. {% endcomment %}
 {% with stats=badge_series_stats %}
 {% if stats %}
 <section class="bd-band bd-card">
-    <div class="bd-band__grid">
 
-        {# Rarity funnel: how many hold each tier (bars vs the Bronze max). #}
-        <div class="bd-band__rarity">
-            <div class="bd-head">Rarity</div>
-            <div class="bd-rarity">
-                {% for row in rarity_rows %}
-                <div class="bd-rarity__row bd-rarity__row--{{ row.key }}{% if row.tier == selected_tier %} is-selected{% endif %}">
-                    <span class="bd-rarity__tier">{{ row.name }}</span>
-                    <span class="bd-rarity__track"><span class="bd-rarity__bar" style="width: {{ row.pct }}%;"></span></span>
-                    <span class="bd-rarity__count">{{ row.count|intcomma }}</span>
-                </div>
-                {% endfor %}
-            </div>
+    {# Rarity: one stacked bar (peak-tier distribution) + a legend with the counts. #}
+    <div class="bd-band__rarity">
+        <div class="bd-head">Rarity</div>
+        <div class="bd-rbar" role="img" aria-label="Distribution of earners by their highest tier reached">
+            {% for seg in rarity_segments %}{% if seg.pct %}<span class="bd-rbar__seg bd-rbar__seg--{{ seg.key }}{% if seg.tier == selected_tier %} is-selected{% endif %}" style="width: {{ seg.pct }}%;" title="{{ seg.name }} peak &middot; {{ seg.count|intcomma }} earner{{ seg.count|pluralize }} &middot; {{ seg.pct }}%"></span>{% endif %}{% endfor %}
+        </div>
+        <div class="bd-rlegend">
+            {% for seg in rarity_segments %}
+            <span class="bd-rlegend__item bd-rlegend__item--{{ seg.key }}"><span class="bd-rlegend__dot"></span>{{ seg.name }} <b>{{ seg.count|intcomma }}</b></span>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# Foot: your standing (or community totals) + the actions, all on one row. #}
+    <div class="bd-band__foot">
+        <div class="bd-band__ranks">
+            {% if target_profile %}
+            <span class="bd-rank">Earners <b>{% if stats.user_lb_rank %}#{{ stats.user_lb_rank|intcomma }}{% else %}&ndash;{% endif %}</b>{% if stats.total_earners_count %} <span class="bd-rank__of">of {{ stats.total_earners_count|intcomma }}</span>{% endif %}</span>
+            <span class="bd-rank">Progress <b>{% if stats.user_lb_progress_rank %}#{{ stats.user_lb_progress_rank|intcomma }}{% else %}&ndash;{% endif %}</b>{% if stats.total_progressers_count %} <span class="bd-rank__of">of {{ stats.total_progressers_count|intcomma }}</span>{% endif %}</span>
+            {% else %}
+            <span class="bd-rank"><b>{{ stats.total_earners_count|intcomma }}</b> <span class="bd-rank__of">Earners</span></span>
+            <span class="bd-rank"><b>{{ stats.total_progressers_count|intcomma }}</b> <span class="bd-rank__of">Progressers</span></span>
+            {% endif %}
         </div>
 
-        {# Your standing (signed in) or the community totals (anon) + the actions. #}
-        <div class="bd-band__side">
-            <div class="bd-band__ranks">
-                {% if target_profile %}
-                <div class="bd-stat">
-                    {% if stats.user_lb_rank %}<span class="bd-stat__value bd-stat__value--xp">#{{ stats.user_lb_rank|intcomma }}</span>{% else %}<span class="bd-stat__value bd-stat__value--muted">Unranked</span>{% endif %}
-                    <span class="bd-stat__label">Earners Rank{% if stats.total_earners_count %} &middot; of {{ stats.total_earners_count|intcomma }}{% endif %}</span>
-                </div>
-                <div class="bd-stat">
-                    {% if stats.user_lb_progress_rank %}<span class="bd-stat__value bd-stat__value--xp">#{{ stats.user_lb_progress_rank|intcomma }}</span>{% else %}<span class="bd-stat__value bd-stat__value--muted">Unranked</span>{% endif %}
-                    <span class="bd-stat__label">Progress Rank{% if stats.total_progressers_count %} &middot; of {{ stats.total_progressers_count|intcomma }}{% endif %}</span>
-                </div>
-                {% else %}
-                <div class="bd-stat">
-                    <span class="bd-stat__value">{{ stats.total_earners_count|intcomma }}</span>
-                    <span class="bd-stat__label">Earners</span>
-                </div>
-                <div class="bd-stat">
-                    <span class="bd-stat__value">{{ stats.total_progressers_count|intcomma }}</span>
-                    <span class="bd-stat__label">Progressers</span>
-                </div>
-                {% endif %}
-            </div>
-
-            <div class="bd-band__actions">
-                <a class="bd-lb__cta" href="{% url 'badge_leaderboards' badge.series_slug %}">
-                    <span class="bd-lb__cta-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>
-                    </span>
-                    <span class="bd-lb__cta-body">
-                        <span class="bd-lb__cta-title">Leaderboards</span>
-                        <span class="bd-lb__cta-sub">{{ stats.total_earners_count|intcomma }} earner{{ stats.total_earners_count|pluralize }} competing</span>
-                    </span>
-                    <svg class="bd-lb__cta-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                </a>
-
-                {% if target_profile %}
-                <button type="button" class="bd-band__stats-btn" data-stats-open aria-haspopup="dialog">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="5"/><rect x="12" y="8" width="3" height="9"/><rect x="17" y="5" width="3" height="12"/></svg>
-                    {% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s Stats{% else %}My Stats{% endif %}
-                </button>
-                {% endif %}
-            </div>
+        <div class="bd-band__actions">
+            <a class="bd-band__cta" href="{% url 'badge_leaderboards' badge.series_slug %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>
+                Leaderboards
+                <svg class="bd-band__cta-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </a>
+            {% if target_profile %}
+            <button type="button" class="bd-band__stats-btn" data-stats-open aria-haspopup="dialog">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="5"/><rect x="12" y="8" width="3" height="9"/><rect x="17" y="5" width="3" height="12"/></svg>
+                {% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s Stats{% else %}My Stats{% endif %}
+            </button>
+            {% endif %}
         </div>
     </div>
 </section>
