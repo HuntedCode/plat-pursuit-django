@@ -533,3 +533,33 @@
     transform: rotate(45deg); transition: transform var(--pp-dur) var(--pp-ease);
 }
 .bd-other-tiers[open] .bd-other-tiers__summary::after { transform: rotate(-135deg); }
+
+/* ── Accessibility ──────────────────────────────────────────────────────────
+   A consistent keyboard focus ring across the page's interactive controls (matches .bd-tierstep /
+   .bd-stage__head, which already define their own). Without this they fall back to the low-contrast UA
+   default on our dark surfaces. */
+.bdh-med:focus-visible,
+.bdh-headline:focus-visible,
+.bdh-viewing__mine:focus-visible,
+.bd-gcard__main:focus-visible,
+.bd-gcard__ctr:focus-visible,
+.bd-req__tile:focus-visible,
+.bd-delisted__row:focus-visible,
+.bd-delisted__summary:focus-visible,
+.bd-other-tiers__summary:focus-visible,
+.bd-band__cta:focus-visible,
+.bd-band__stats-btn:focus-visible,
+.bd-collapse-all:focus-visible,
+.bd-ctrmodal__more:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px;
+}
+/* The hero medallion is round -- give its focus ring room to clear the art. */
+.bdh-med:focus-visible { outline-offset: 4px; border-radius: 50%; }
+
+/* Respect reduced motion for the stage collapse + chevron (the pulse, tier-swap dim, modal entrance,
+   count-up, and the contract reveal are already gated at their own definitions). */
+@media (prefers-reduced-motion: reduce) {
+    .bd-stage__collapse { transition: none; }
+    .bd-stage__chevron { transition: none; }
+    .bd-collapse-all svg { transition: none; }
+}

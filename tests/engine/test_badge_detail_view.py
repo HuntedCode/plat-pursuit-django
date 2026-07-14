@@ -524,6 +524,35 @@ def test_stage_journey_no_up_next_for_anonymous(client, stub_leaderboards):
     assert 'bd-stage__eyebrow--next' not in html
 
 
+def test_badge_detail_a11y_contracts(client, stub_leaderboards):
+    """Accessibility contracts the a11y pass established, so they don't silently regress:
+    - the hero medallion inspect is a real keyboard control (role=button + tabindex + name);
+    - the tier ladder is navigation, NOT a false ARIA tablist (no role=tab; active carries aria-current);
+    - each stage section is a named region (aria-labelledby -> its title);
+    - the stage progress pill exposes completion state as text (not colour-only), signed in."""
+    series = "a11y-contracts"
+    BadgeFactory(series_slug=series, tier=1, is_live=True, required_stages=1)
+    BadgeFactory(series_slug=series, tier=2, is_live=True)
+    _series_with_stage(series, 1)
+    profile = ProfileFactory()
+    client.force_login(profile.user)
+
+    html = client.get(reverse('badge_detail', kwargs={'series_slug': series})).content.decode()
+
+    # Medallion inspect: keyboard-operable, named.
+    assert 'class="bdh-med' in html and 'role="button"' in html
+    assert 'aria-label="Inspect' in html
+    # Tier ladder: navigation, not a tablist.
+    assert '<nav class="bd-tierlad"' in html
+    assert 'role="tab"' not in html and 'role="tablist"' not in html
+    assert 'aria-current="true"' in html            # the selected tier
+    # Stage section is a named region tied to its title.
+    assert 'aria-labelledby="stage-title-1"' in html
+    assert 'id="stage-title-1"' in html
+    # Completion state is text for SR (signed in, nothing done -> incomplete).
+    assert 'Stage incomplete,' in html
+
+
 def test_anonymous_viewer_has_empty_earned_tiers(client, stub_leaderboards):
     series = "rebuild-tier-tabs-anon"
     BadgeFactory(series_slug=series, tier=1, is_live=True)

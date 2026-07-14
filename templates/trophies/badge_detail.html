@@ -69,24 +69,66 @@ document.addEventListener('DOMContentLoaded', function() {
         if (window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(el); }
     });
 
+    // ── Shared modal a11y: trap Tab within the dialog + restore focus to the opener on close. ──
+    // The peek modal gets this from PlatPursuit.Medallion.detailModal already; the stats + contract modals
+    // are hand-rolled, so give them the same guarantees. (Refactor candidate: hoist this + the detailModal
+    // copy into a single PlatPursuit.FocusTrap util.)
+    function modalA11y(modal, dialogSel) {
+        var opener = null;
+        function focusables() {
+            var dlg = modal.querySelector(dialogSel);
+            if (!dlg) { return []; }
+            return Array.prototype.slice.call(dlg.querySelectorAll(
+                'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            )).filter(function (el) { return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement; });
+        }
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Tab' || modal.hidden) { return; }
+            var dlg = modal.querySelector(dialogSel);
+            var f = focusables();
+            if (!f.length) { if (dlg) { e.preventDefault(); dlg.focus(); } return; }
+            var first = f[0], last = f[f.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }, true);
+        return {
+            opened: function (el) { opener = el || document.activeElement; },
+            closed: function () { if (opener && opener.focus) { try { opener.focus(); } catch (err) { /* gone */ } } opener = null; }
+        };
+    }
+
     // ── Medallion inspect (pick-up / put-down) ──
-    // Tapping the hero medallion grows the public badge_quick_peek into the shared #badge-peek dialog (the
-    // collection's pick-up/put-down controller). Delegated so it survives tier swaps; the badge id is read
-    // from the current hero medallion (which re-renders per tier).
+    // Tapping OR keyboard-activating the hero medallion (a role=button, see _header.html) grows the public
+    // badge_quick_peek into the shared #badge-peek dialog (the collection's pick-up/put-down controller).
+    // Delegated so it survives tier swaps; the badge id is read from the current hero medallion (per tier).
     var peekEl = document.getElementById('badge-peek');
     var peek = (peekEl && window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)
         ? PlatPursuit.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
         : null;
+    function openMedallionPeek(med) {
+        if (!peek) { return; }
+        var badgeId = med && med.getAttribute('data-badge-id');
+        if (!badgeId) { return; }
+        var tmpl = peekEl.getAttribute('data-peek-url') || '';
+        var url = tmpl.replace(/0\/$/, badgeId + '/');
+        if (url && url !== tmpl) { peek.open(url, med); }
+    }
     document.addEventListener('click', function(e) {
         if (!peek || !e.target.closest) { return; }
         if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }
         var med = e.target.closest('.bdh-med .pp-med');
-        var badgeId = med && med.getAttribute('data-badge-id');
-        if (!badgeId) { return; }
+        if (!med) { return; }
         e.preventDefault();
-        var tmpl = peekEl.getAttribute('data-peek-url') || '';
-        var url = tmpl.replace(/0\/$/, badgeId + '/');
-        if (url && url !== tmpl) { peek.open(url, med); }
+        openMedallionPeek(med);
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter' && e.key !== ' ') { return; }
+        var host = e.target.closest && e.target.closest('.bdh-med[role="button"]');
+        if (!host) { return; }
+        var med = host.querySelector('.pp-med[data-badge-id]');
+        if (!med) { return; }
+        e.preventDefault();
+        openMedallionPeek(med);
     });
 
     // ── My Stats modal ──
@@ -95,11 +137,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // persists. Toggling [hidden] both shows/hides and triggers the shared pp-detail-modal entrance.
     var statsModal = document.getElementById('badge-stats-modal');
     if (statsModal) {
-        var closeStats = function () { statsModal.hidden = true; document.body.style.overflow = ''; };
+        var statsA11y = modalA11y(statsModal, '.pp-detail-modal__dialog');
+        var closeStats = function () { statsModal.hidden = true; document.body.style.overflow = ''; statsA11y.closed(); };
         document.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
-            if (e.target.closest('[data-stats-open]')) {
+            var opener = e.target.closest('[data-stats-open]');
+            if (opener) {
                 e.preventDefault();
+                statsA11y.opened(opener);
                 statsModal.hidden = false;
                 document.body.style.overflow = 'hidden';
                 var dlg = statsModal.querySelector('.pp-detail-modal__dialog');
@@ -118,13 +163,15 @@ document.addEventListener('DOMContentLoaded', function() {
     var contractModal = document.getElementById('badge-contract-modal');
     if (contractModal) {
         var contractBody = contractModal.querySelector('[data-contract-body]');
-        var closeContract = function () { contractModal.hidden = true; contractBody.innerHTML = ''; document.body.style.overflow = ''; };
+        var contractA11y = modalA11y(contractModal, '.pp-detail-modal__dialog');
+        var closeContract = function () { contractModal.hidden = true; contractBody.innerHTML = ''; document.body.style.overflow = ''; contractA11y.closed(); };
         document.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
             var link = e.target.closest('[data-contract-url]');
             if (link) {
                 if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }   // let modified clicks open normally
                 e.preventDefault();
+                contractA11y.opened(link);
                 fetch(link.getAttribute('data-contract-url'), { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
                     .then(function (r) { return r.ok ? r.text() : null; })
                     .then(function (html) {
@@ -300,7 +347,14 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     document.body.addEventListener('htmx:afterSwap', function(e) {
         var t = (e.detail && e.detail.target) || e.target;
-        if (t && t.id === 'badge-tier-view') { initStages(); restoreTierScroll(); }
+        if (t && t.id === 'badge-tier-view') {
+            initStages();
+            restoreTierScroll();
+            // The activated tier step was replaced by the swap; keyboard focus fell to <body>. Move it to
+            // the now-active step (preventScroll so it doesn't fight the scroll restore above).
+            var active = document.querySelector('#badge-tier-view .bd-tierstep.is-active');
+            if (active && active.focus) { try { active.focus({ preventScroll: true }); } catch (err) { active.focus(); } }
+        }
     });
     document.body.addEventListener('htmx:afterSettle', function(e) {
         var t = (e.detail && e.detail.target) || e.target;

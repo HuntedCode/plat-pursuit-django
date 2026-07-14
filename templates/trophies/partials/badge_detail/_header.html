@@ -28,7 +28,8 @@ selected_tier. Keeps id="badge-header-card".
 
         {# ── Hero: the Medallion + series identity + the one headline number (Earners) ── #}
         <div class="flex flex-col sm:flex-row sm:items-start gap-4 md:gap-6">
-            <div class="bdh-med shrink-0 mx-auto sm:mx-0">
+            <div class="bdh-med shrink-0 mx-auto sm:mx-0" role="button" tabindex="0"
+                 aria-label="Inspect {{ badge.effective_display_series|default:badge.name }} badge">
                 {% include 'components/badge_medallion.html' with frame=hero_frame no_id=True %}
             </div>
 

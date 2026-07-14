@@ -181,6 +181,7 @@
 }
 .pp-detail-modal__close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: var(--pp-text-mute); font-size: 28px; line-height: 1; cursor: pointer; z-index: 2; }
 .pp-detail-modal__close:hover { color: var(--pp-text); }
+.pp-detail-modal__close:focus-visible { color: var(--pp-text); outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: var(--pp-radius-sm); }
 .pp-detail-modal:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrim 0.2s ease; }
 .pp-detail-modal:not([hidden]) .pp-detail-modal__dialog { animation: ppDetailIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes ppDetailScrim { from { opacity: 0; } }

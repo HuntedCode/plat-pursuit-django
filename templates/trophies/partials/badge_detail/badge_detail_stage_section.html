@@ -1,6 +1,6 @@
 {% load static custom_filters %}
 {% with data.stage as stage %}
-<section id="stage-{{ stage.stage_number }}" class="bd-card bd-stage mt-3{% if data.stage_completion_state == 'complete' %} bd-stage--done{% endif %}">
+<section id="stage-{{ stage.stage_number }}" aria-labelledby="stage-title-{{ stage.stage_number }}" class="bd-card bd-stage mt-3{% if data.stage_completion_state == 'complete' %} bd-stage--done{% endif %}">
     {% comment %} Journey-spine node: a numbered milestone in the left gutter. Stages complete in any order,
     so each node is independent (done check / bonus star / "up next" cyan pulse / plain to-do number). {% endcomment %}
     <span class="bd-node bd-node--{% if data.stage_completion_state == 'complete' %}done{% elif stage.stage_number == 0 %}bonus{% elif data.is_next %}next{% else %}todo{% endif %}" aria-hidden="true">

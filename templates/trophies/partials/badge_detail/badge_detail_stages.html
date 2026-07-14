@@ -14,7 +14,7 @@ journey node. {% endcomment %}
 
     <div class="bd-stage__id">
         <span class="bd-stage__eyebrow{% if data.is_next %} bd-stage__eyebrow--next{% endif %}">{% if stage.stage_number == 0 %}Bonus{% else %}Stage {{ stage.stage_number }}{% endif %}{% if data.is_next %} &middot; Up next{% endif %}</span>
-        <span class="bd-stage__title">{{ stage.title }}</span>
+        <span class="bd-stage__title" id="stage-title-{{ stage.stage_number }}">{{ stage.title }}</span>
         {% include 'trophies/partials/badge_detail/badge_stage_stats.html' %}
     </div>
 
@@ -33,7 +33,9 @@ journey node. {% endcomment %}
     {% comment %} One always-present pill slot (no collapse toggle -> no layout shift): your X/Y progress when
     signed in, else a static game count. The X/Y denominator already carries the total. {% endcomment %}
     {% if target_profile and stage.stage_number != 0 and data.stage_progress %}
-    <span class="bd-stage__pill bd-stage__pill--{% if data.stage_progress.completed == data.stage_progress.total %}done{% elif data.stage_progress.completed > 0 %}partial{% else %}todo{% endif %}">{{ data.stage_progress.completed }}/{{ data.stage_progress.total }}</span>
+    {% with sp=data.stage_progress %}
+    <span class="bd-stage__pill bd-stage__pill--{% if sp.completed == sp.total %}done{% elif sp.completed > 0 %}partial{% else %}todo{% endif %}"><span class="sr-only">{% if sp.completed == sp.total %}Stage complete, {% elif sp.completed > 0 %}Stage in progress, {% else %}Stage incomplete, {% endif %}</span>{{ sp.completed }}/{{ sp.total }}</span>
+    {% endwith %}
     {% else %}
     <span class="bd-stage__count">{{ data.games|length }} game{{ data.games|length|pluralize }}</span>
     {% endif %}
