@@ -14,8 +14,8 @@ badge_tier_xp_bonus, tier_req_stages, badge.badge_type.
 {% load static custom_filters humanize %}
 <div id="tier-selector" class="bd-tiers">
 
-    {# ── Tier ladder: the progression, colour-forward. Each step is a real link that HTMX-swaps the tier
-       island + pushes the URL, so this is NAVIGATION, not an ARIA tablist (no tabpanels / roving focus). #}
+    {% comment %} Tier ladder: the progression, colour-forward. Each step is a real link that HTMX-swaps the
+    tier island + pushes the URL, so this is NAVIGATION, not an ARIA tablist (no tabpanels / roving focus). {% endcomment %}
     <nav class="bd-tierlad" aria-label="Badge tier">
         {% for tb in all_tier_badges %}
         <a href="{{ request.path }}?tier={{ tb.tier }}"
