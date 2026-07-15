@@ -18,7 +18,6 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import TemplateView
 
-from trophies.mixins import ProfileHotbarMixin
 from trophies.services import contracts_service
 from trophies.services.career_service import build_career_context
 from trophies.util_modules.constants import ALL_PLATFORMS, CONTRACT_XP_TOTAL
@@ -58,7 +57,7 @@ def _board_facets(profile, disc_levels, params, total):
     return {**f, 'suggest': suggest}
 
 
-class CareerView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class CareerView(LoginRequiredMixin, TemplateView):
     """The Pursuer's Career. Linked-profile gated; renders the viewer's job identity + the
     Contracts (job board) browse + the pending-rewards rail on one surface."""
     template_name = 'trophies/career.html'

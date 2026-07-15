@@ -379,7 +379,7 @@
     .edetail__bar .pp-horizon__fill { transition: none; }
 }
 /* Recede: only the page CONTENT (#page-recede, the wrapper around block content) steps back; the chrome --
-   nav/sub-nav/footer AND the sticky hotbar, all its siblings -- holds still. The DIM is left to whatever
+   nav/sub-nav/footer, all its siblings -- holds still. The DIM is left to whatever
    floats in front (the modal's dark+blurred backdrop, the ceremony's scrim) -- NO filter on the page. A
    `filter: brightness` here re-rasterized the whole subtree every frame the page scaled, which stuttered
    the modal's opening animations on tall mobile pages (and was redundant with the backdrop anyway). */

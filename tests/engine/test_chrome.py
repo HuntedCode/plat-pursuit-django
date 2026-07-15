@@ -1,4 +1,4 @@
-"""Chrome (nav / footer / hotbar) rebuild-alignment tests.
+"""Chrome (nav / sub-nav / footer) rebuild-alignment tests.
 
 The permanent chrome frames every page, so these pin the structural facts that page-level tests
 would otherwise miss: the footer's 4-hub restructure (the pre-unify My Pursuit + Dashboard columns

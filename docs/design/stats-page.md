@@ -5,7 +5,7 @@
 ## Status: Implemented (Staff-Only)
 
 **URL:** `/my-stats/`
-**View:** `MyStatsView` (StaffRequiredMixin + ProfileHotbarMixin + TemplateView)
+**View:** `MyStatsView` (StaffRequiredMixin + TemplateView)
 **Service:** `trophies/services/stats_service.py`
 **API:** `GET /api/v1/stats/premium/` (returns rendered premium sections HTML)
 **Template:** `templates/trophies/my_stats.html` + 13 partials in `templates/trophies/partials/stats/`

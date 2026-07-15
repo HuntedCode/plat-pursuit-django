@@ -17,7 +17,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views import View
 from django.views.generic import ListView, DetailView
 from urllib.parse import urlencode
-from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
+from trophies.mixins import HtmxListMixin
 from ..constants import CACHE_TIMEOUT_IMAGES
 from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, UserConceptRating, ConceptFranchise
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
@@ -30,7 +30,7 @@ from .browse_helpers import (
 logger = logging.getLogger("psn_api")
 
 
-class GamesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
+class GamesListView(HtmxListMixin, ListView):
     """
     Display paginated list of games with filtering and sorting options.
 
@@ -205,7 +205,7 @@ class RandomGameView(View):
 
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')
-class GameDetailView(ProfileHotbarMixin, DetailView):
+class GameDetailView(DetailView):
     """
     Display detailed game information including trophies, statistics, and user progress.
 
@@ -1027,7 +1027,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         # Always keyed to the viewer's own profile, regardless of whose page is being viewed.
         return context
 
-class GuideListView(ProfileHotbarMixin, ListView):
+class GuideListView(ListView):
     """
     Display list of available trophy guides (PPTV section).
 
@@ -1105,7 +1105,7 @@ class GuideListView(ProfileHotbarMixin, ListView):
         return context
 
 
-class FlaggedGamesView(HtmxListMixin, ProfileHotbarMixin, ListView):
+class FlaggedGamesView(HtmxListMixin, ListView):
     """Dedicated browse page for games with community-reported flag status.
 
     Landing state shows category cards with counts. Selecting a category
@@ -1259,7 +1259,7 @@ class FlaggedGamesView(HtmxListMixin, ProfileHotbarMixin, ListView):
         return context
 
 
-class RecentlyAddedView(HtmxListMixin, ProfileHotbarMixin, ListView):
+class RecentlyAddedView(HtmxListMixin, ListView):
     """Browse recently discovered base games and DLC trophy lists.
 
     Landing state shows two category cards (base games, DLC) with 30-day counts.

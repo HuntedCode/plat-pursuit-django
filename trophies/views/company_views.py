@@ -9,7 +9,7 @@ from django.db.models.functions import Lower
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView
 
-from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
+from trophies.mixins import HtmxListMixin
 from trophies.services import game_grouping_service as grouping
 from ..models import Company, ConceptCompany, Game, UserConceptRating, ProfileGame
 from ..forms import CompanySearchForm
@@ -50,7 +50,7 @@ _ROLE_SPECS = [
 ]
 
 
-class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
+class CompanyListView(HtmxListMixin, ListView):
     """Browse page for game developers and publishers."""
     model = Company
     template_name = 'trophies/company_list.html'
@@ -207,7 +207,7 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         return context
 
 
-class CompanyDetailView(ProfileHotbarMixin, DetailView):
+class CompanyDetailView(DetailView):
     """Detail page for a single company showing their games by role.
 
     Games are grouped by IGDB id so multi-platform releases stack as versions

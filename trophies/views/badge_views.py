@@ -57,7 +57,6 @@ from django.utils.text import slugify
 from django.views import View
 from django.views.generic import ListView, DetailView, TemplateView
 
-from trophies.mixins import ProfileHotbarMixin
 from ..models import (
     Game, Profile, ProfileGame, Badge, UserBadge, UserBadgeProgress,
     Concept, Stage, Milestone, UserMilestone, UserMilestoneProgress,
@@ -82,7 +81,7 @@ from trophies.milestone_constants import (
 logger = logging.getLogger("psn_api")
 
 
-class BadgeListView(ProfileHotbarMixin, ListView):
+class BadgeListView(ListView):
     """
     Display list of all badge series with progress tracking for authenticated users.
 
@@ -240,8 +239,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     def _gallery_context_data(self, **kwargs):
         """Build the Browse Gallery context: paginate the per-tier queryset (self.object_list), then
         batch-build SHOWCASE frames for the page. Whale-safe -- three bulk maps + include_live_stats=False
-        means zero per-badge queries/Redis (the frame_service prescribed batch path). super() preserves
-        the hotbar + base context from ProfileHotbarMixin."""
+        means zero per-badge queries/Redis (the frame_service prescribed batch path)."""
         context = super().get_context_data(**kwargs)
         paginator = Paginator(self.object_list, GALLERY_PAGE_SIZE)
         page_obj = paginator.get_page(self.request.GET.get('page'))
@@ -845,7 +843,7 @@ class BadgeProgressPeekView(View):
         return render(request, 'components/collection_badge_modal.html', {'frame': frame})
 
 
-class BadgeDetailView(ProfileHotbarMixin, DetailView):
+class BadgeDetailView(DetailView):
     """
     Display detailed badge series information with progress tracking.
 
@@ -1579,7 +1577,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         return context
 
 
-class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
+class BadgeLeaderboardsView(DetailView):
     """
     Display leaderboards for a specific badge series.
 
@@ -1679,7 +1677,7 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
         return context
 
 
-class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
+class OverallBadgeLeaderboardsView(TemplateView):
     """
     Display overall badge leaderboards across all badge series.
 
@@ -1843,7 +1841,7 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
 
 
 
-class MilestoneListView(ProfileHotbarMixin, ListView):
+class MilestoneListView(ListView):
     """
     Display milestones organized by category tabs with tier ladder progression.
 

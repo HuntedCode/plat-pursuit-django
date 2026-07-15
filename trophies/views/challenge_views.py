@@ -18,7 +18,6 @@ from django.shortcuts import redirect
 from django.urls import reverse_lazy, reverse
 from django.views.generic import DetailView, TemplateView
 
-from trophies.mixins import ProfileHotbarMixin
 from trophies.models import Challenge, ProfileGame
 from trophies.themes import get_available_themes_for_grid
 from trophies.services.challenge_service import (
@@ -46,7 +45,7 @@ def _attach_cover_images(challenges):
                     break
 
 
-class ChallengeHubView(ProfileHotbarMixin, TemplateView):
+class ChallengeHubView(TemplateView):
     """
     Public challenge hub with tab-based navigation between challenge types.
 
@@ -188,7 +187,7 @@ class ChallengeHubView(ProfileHotbarMixin, TemplateView):
         return [self.template_name]
 
 
-class MyChallengesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class MyChallengesView(LoginRequiredMixin, TemplateView):
     """
     User's challenge hub: active challenges, create CTAs, and history.
 
@@ -275,7 +274,7 @@ class MyChallengesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         return context
 
 
-class AZChallengeCreateView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class AZChallengeCreateView(LoginRequiredMixin, TemplateView):
     """
     Create a new A-Z Challenge.
 
@@ -327,7 +326,7 @@ class AZChallengeCreateView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView
             return redirect('my_challenges')
 
 
-class AZChallengeSetupView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
+class AZChallengeSetupView(LoginRequiredMixin, DetailView):
     """
     Guided setup wizard for A-Z Challenge.
 
@@ -389,7 +388,7 @@ class AZChallengeSetupView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
         return context
 
 
-class AZChallengeDetailView(ProfileHotbarMixin, DetailView):
+class AZChallengeDetailView(DetailView):
     """
     Public progress view for an A-Z Challenge.
 
@@ -487,7 +486,7 @@ class AZChallengeDetailView(ProfileHotbarMixin, DetailView):
         return context
 
 
-class AZChallengeEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
+class AZChallengeEditView(LoginRequiredMixin, DetailView):
     """
     Edit page for A-Z Challenge.
 
@@ -552,7 +551,7 @@ class AZChallengeEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
 # ─── Platinum Calendar Challenge Views ────────────────────────────────────────
 
 
-class CalendarChallengeCreateView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class CalendarChallengeCreateView(LoginRequiredMixin, TemplateView):
     """
     Create a new Platinum Calendar Challenge.
 
@@ -604,7 +603,7 @@ class CalendarChallengeCreateView(LoginRequiredMixin, ProfileHotbarMixin, Templa
             return redirect('my_challenges')
 
 
-class CalendarChallengeDetailView(ProfileHotbarMixin, DetailView):
+class CalendarChallengeDetailView(DetailView):
     """
     Public progress view for a Platinum Calendar Challenge.
 
@@ -675,7 +674,7 @@ class CalendarChallengeDetailView(ProfileHotbarMixin, DetailView):
 # ─── Genre Challenge Views ─────────────────────────────────────────────────
 
 
-class GenreChallengeCreateView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class GenreChallengeCreateView(LoginRequiredMixin, TemplateView):
     """
     Create a new Genre Challenge.
 
@@ -733,7 +732,7 @@ class GenreChallengeCreateView(LoginRequiredMixin, ProfileHotbarMixin, TemplateV
             return redirect('my_challenges')
 
 
-class GenreChallengeSetupView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
+class GenreChallengeSetupView(LoginRequiredMixin, DetailView):
     """
     Guided setup wizard for Genre Challenge.
 
@@ -815,7 +814,7 @@ class GenreChallengeSetupView(LoginRequiredMixin, ProfileHotbarMixin, DetailView
         return context
 
 
-class GenreChallengeDetailView(ProfileHotbarMixin, DetailView):
+class GenreChallengeDetailView(DetailView):
     """
     Public progress view for a Genre Challenge.
 
@@ -1002,7 +1001,7 @@ class GenreChallengeDetailView(ProfileHotbarMixin, DetailView):
         return context
 
 
-class GenreChallengeEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
+class GenreChallengeEditView(LoginRequiredMixin, DetailView):
     """
     Edit page for Genre Challenge.
 

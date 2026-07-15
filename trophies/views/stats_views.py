@@ -4,14 +4,13 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import TemplateView
 
-from trophies.mixins import ProfileHotbarMixin
 from trophies.services.stats_service import (
     get_career_overview,
     get_teaser_records,
 )
 
 
-class MyStatsView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class MyStatsView(LoginRequiredMixin, TemplateView):
     """Personal stats page at /my-stats/.
 
     Public to all logged-in users (Phase 9 of the Community Hub initiative

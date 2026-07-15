@@ -12,7 +12,6 @@ from django.http import Http404
 from django.urls import reverse
 from django.views.generic import DetailView, TemplateView
 
-from trophies.mixins import ProfileHotbarMixin
 from trophies.models import (
     Concept, ConceptTrophyGroup, EarnedTrophy, Review, Trophy, UserConceptRating,
 )
@@ -25,7 +24,7 @@ from trophies.forms import UserConceptRatingForm
 logger = logging.getLogger('psn_api')
 
 
-class ReviewsArchivedView(ProfileHotbarMixin, TemplateView):
+class ReviewsArchivedView(TemplateView):
     """Notice page shown where the Review Hub used to live.
 
     The text-review system was retired in 2026-05 after a data-handling
@@ -52,7 +51,7 @@ class ReviewsArchivedView(ProfileHotbarMixin, TemplateView):
         return context
 
 
-class ReviewHubLandingView(ProfileHotbarMixin, TemplateView):
+class ReviewHubLandingView(TemplateView):
     """DORMANT (reviews archived 2026-05). Kept for a possible future
     rebuild; no longer routed. ReviewsArchivedView serves the URL."""
 
@@ -87,7 +86,7 @@ class ReviewHubLandingView(ProfileHotbarMixin, TemplateView):
         return context
 
 
-class RateMyGamesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class RateMyGamesView(LoginRequiredMixin, TemplateView):
     """Wizard for quickly rating and reviewing platinumed games."""
 
     template_name = 'trophies/rate_my_games.html'
@@ -116,7 +115,7 @@ class RateMyGamesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         return context
 
 
-class ReviewHubDetailView(ProfileHotbarMixin, DetailView):
+class ReviewHubDetailView(DetailView):
     """Review Hub detail page for a game concept."""
 
     model = Concept

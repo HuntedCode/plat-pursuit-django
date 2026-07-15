@@ -33,7 +33,6 @@ from django.utils import timezone
 from django.views.generic import TemplateView
 
 from core.services.tracking import track_page_view
-from trophies.mixins import ProfileHotbarMixin
 from trophies.models import EarnedTrophy, Challenge
 from trophies.themes import get_available_themes_for_grid
 
@@ -57,7 +56,7 @@ class _RequireLinkedProfileMixin:
         return super().dispatch(request, *args, **kwargs)
 
 
-class MyShareablesView(LoginRequiredMixin, _RequireLinkedProfileMixin, ProfileHotbarMixin, TemplateView):
+class MyShareablesView(LoginRequiredMixin, _RequireLinkedProfileMixin, TemplateView):
     """
     My Shareables landing page at `/dashboard/shareables/`.
 
@@ -84,7 +83,7 @@ class MyShareablesView(LoginRequiredMixin, _RequireLinkedProfileMixin, ProfileHo
         return context
 
 
-class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, ProfileHotbarMixin, TemplateView):
+class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, TemplateView):
     """
     Platinum share images browse page at `/dashboard/shareables/platinums/`.
 
@@ -180,7 +179,7 @@ class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Profi
         return context
 
 
-class MyChallengeSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, ProfileHotbarMixin, TemplateView):
+class MyChallengeSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, TemplateView):
     """
     Challenge share cards page at `/dashboard/shareables/challenges/`.
 
@@ -264,7 +263,7 @@ class MyChallengeSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Prof
         return context
 
 
-class MyProfileCardView(LoginRequiredMixin, _RequireLinkedProfileMixin, ProfileHotbarMixin, TemplateView):
+class MyProfileCardView(LoginRequiredMixin, _RequireLinkedProfileMixin, TemplateView):
     """
     Profile card builder page at `/dashboard/shareables/profile-card/`.
 

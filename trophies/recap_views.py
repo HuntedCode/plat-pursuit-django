@@ -11,14 +11,14 @@ from django.shortcuts import redirect, render
 
 from core.services.tracking import track_page_view, track_site_event
 from trophies.services.monthly_recap_service import MonthlyRecapService
-from trophies.mixins import ProfileHotbarMixin, RecapSyncGateMixin
+from trophies.mixins import RecapSyncGateMixin
 from trophies.recap_utils import (
     get_user_local_now, get_most_recent_completed_month, check_sync_freshness,
 )
 from trophies.themes import get_available_themes_for_grid
 
 
-class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin, TemplateView):
+class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
     """
     Recap index page - redirects to most recent completed month or shows month picker.
     """
@@ -91,7 +91,7 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         return context
 
 
-class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin, TemplateView):
+class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
     """
     Main recap slide presentation view.
     """

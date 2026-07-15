@@ -1,7 +1,6 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.shortcuts import redirect
-from django.views.generic import View
 
 
 class PremiumRequiredMixin(LoginRequiredMixin):
@@ -176,30 +175,6 @@ class RecapSyncGateMixin:
                 'breadcrumb': breadcrumb,
             })
         return None
-
-
-class ProfileHotbarMixin(View):
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
-            profile = self.request.user.profile
-            seconds_to_next_sync = profile.get_seconds_to_next_sync()
-            hotbar_data = {
-                'active': True,
-                'profile': profile,
-                'sync_status': profile.sync_status,
-                'sync_progress': profile.sync_progress_value,
-                'sync_target': profile.sync_progress_target,
-                'progress_percentage': profile.sync_percentage,
-                'seconds_to_next_sync': seconds_to_next_sync,
-            }
-
-            if profile.sync_status == 'syncing':
-                from trophies.views.sync_views import _get_queue_position
-                hotbar_data['queue_position'] = _get_queue_position(profile.id)
-
-            context['hotbar'] = hotbar_data
-        return context
 
 
 class HtmxListMixin:

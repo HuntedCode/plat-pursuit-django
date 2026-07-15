@@ -14,13 +14,12 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import TemplateView
 
-from trophies.mixins import ProfileHotbarMixin
 from trophies.models import Badge
 from trophies.services.collection_service import build_collection_context
 from trophies.services.frame_service import build_badge_frame
 
 
-class CollectionView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class CollectionView(LoginRequiredMixin, TemplateView):
     """The Pursuer's badge collection album. Linked-profile gated; renders the viewer's own."""
     template_name = 'trophies/collection.html'
 

@@ -7,9 +7,8 @@
  * ============================================================ */
 
 /* ── Toolbar: filters + search + sort (--pp-* tokens; tier chips speak the medallion palette) ── */
-/* Non-sticky by design: the hotbar sits between the sub-nav and the content, so a sticky toolbar would
-   always pin BELOW it, stacking navbar + sub-nav + hotbar + toolbar into an awkwardly deep chrome pile.
-   It scrolls with the wall instead. */
+/* Non-sticky by design: a sticky toolbar would pin below the navbar + sub-nav into an awkwardly deep
+   chrome pile (a sticky Gallery toolbar was tried and reverted). It scrolls with the wall instead. */
 /* Layout only; the card surface comes from the shared .pp-toolbar-card class (added in the markup). */
 .pp-gallery__toolbar {
     display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;

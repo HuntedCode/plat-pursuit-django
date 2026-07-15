@@ -41,14 +41,14 @@ from ..models import (
     Trophy,
     UserConceptRating,
 )
-from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
+from trophies.mixins import HtmxListMixin
 from .browse_helpers import annotate_community_ratings
 from trophies.psn_manager import PSNManager
 
 logger = logging.getLogger("psn_api")
 
 
-class ProfilesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
+class ProfilesListView(HtmxListMixin, ListView):
     """
     Display paginated list of user profiles with filtering and sorting.
 
@@ -163,7 +163,7 @@ class ProfilesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         return context
 
 
-class ProfileDetailView(ProfileHotbarMixin, DetailView):
+class ProfileDetailView(DetailView):
     """
     Display profile detail page with tabbed interface for games, trophies, and badges.
 
@@ -999,7 +999,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         return super().get_template_names()
 
 
-class ProfileEditorView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class ProfileEditorView(LoginRequiredMixin, TemplateView):
     """
     Steam-style profile customization editor. Users pick showcase types,
     reorder them, and configure per-type item selection.

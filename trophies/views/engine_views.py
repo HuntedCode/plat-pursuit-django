@@ -19,7 +19,6 @@ from django.http import Http404
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 
-from trophies.mixins import ProfileHotbarMixin
 from trophies.services import game_grouping_service as grouping
 from ..models import GameEngine, Game, ConceptEngine
 from .genre_views import TagDetailBaseView
@@ -37,7 +36,7 @@ ENGINE_LIST_SORT_CHOICES = [
 ]
 
 
-class EngineListView(ProfileHotbarMixin, TemplateView):
+class EngineListView(TemplateView):
     """Browse page for game engines (Unreal, Unity, Decima, etc.)."""
     template_name = 'trophies/engine_list.html'
 

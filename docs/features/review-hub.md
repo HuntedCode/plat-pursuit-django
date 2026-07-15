@@ -168,13 +168,13 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 
 **Route**: `/reviews/` (public, no auth required)
 
-**ReviewHubLandingView** extends `ProfileHotbarMixin` + `TemplateView`. Shows a game search typeahead (searches concepts via `ConceptReviewSearchView` API), community stats (total reviews, ratings, reviewers, helpful votes), most-reviewed games sidebar, trending reviews sidebar, and an infinite-scroll recent reviews feed (sortable by newest/most helpful) via `RecentReviewsView` API. Authenticated users see a CTA card with unrated/unreviewed platinum counts. Accessible via "Review Hub" link in both desktop navbar (Community dropdown) and mobile tabbar (More drawer, Community section).
+**ReviewHubLandingView** extends `TemplateView`. Shows a game search typeahead (searches concepts via `ConceptReviewSearchView` API), community stats (total reviews, ratings, reviewers, helpful votes), most-reviewed games sidebar, trending reviews sidebar, and an infinite-scroll recent reviews feed (sortable by newest/most helpful) via `RecentReviewsView` API. Authenticated users see a CTA card with unrated/unreviewed platinum counts. Accessible via "Review Hub" link in both desktop navbar (Community dropdown) and mobile tabbar (More drawer, Community section).
 
 ### Detail Page
 
 **Route**: `/reviews/<slug>/` with optional `?group=<trophy_group_id>` query param (public, no auth required).
 
-**ReviewHubDetailView** extends `ProfileHotbarMixin` + `BackgroundContextMixin` + `DetailView`. Uses Concept slug for URL lookup. Shovelware gate returns 404 if all games in concept are flagged. Games queryset is cached in `get_object()` to avoid redundant queries.
+**ReviewHubDetailView** extends `BackgroundContextMixin` + `DetailView`. Uses Concept slug for URL lookup. Shovelware gate returns 404 if all games in concept are flagged. Games queryset is cached in `get_object()` to avoid redundant queries.
 
 **Layout**: Two-column on desktop (sidebar 33%, main 67%), stacked on tablet. Tab bar for trophy groups (hidden if only base game).
 
@@ -186,7 +186,7 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 
 **Route**: `/reviews/rate-my-games/` (requires login)
 
-**RateMyGamesView** extends `LoginRequiredMixin` + `ProfileHotbarMixin` + `TemplateView`. Side-by-side wizard for quickly rating and reviewing platinumed games. Left panel shows game queue (base games and 100%-completed DLC), right panel shows rating form + review form with progress bar. Fetches game queue via `WizardQueueView` API.
+**RateMyGamesView** extends `LoginRequiredMixin` + `TemplateView`. Side-by-side wizard for quickly rating and reviewing platinumed games. Left panel shows game queue (base games and 100%-completed DLC), right panel shows rating form + review form with progress bar. Fetches game queue via `WizardQueueView` API.
 
 **Split submit buttons**: Two distinct submit actions: "Submit Rating" (or "Submit Rating & Review" when review is ready) submits the rating and optionally the review. "Submit Review Only" submits just the review without touching the rating. The review-only button is hidden when the game already has a review.
 

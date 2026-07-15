@@ -10,7 +10,7 @@ from django.http import Http404
 from django.urls import reverse_lazy
 from django.views.generic import ListView, TemplateView
 
-from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
+from trophies.mixins import HtmxListMixin
 from ..models import (
     Genre, Theme, Game, Trophy, Badge, UserConceptRating, ProfileGame,
     ConceptGenre, ConceptTheme,
@@ -25,7 +25,7 @@ from .browse_helpers import (
 logger = logging.getLogger("psn_api")
 
 
-class GenreThemeListView(ProfileHotbarMixin, TemplateView):
+class GenreThemeListView(TemplateView):
     """Combined browse page for genres and themes with a tab toggle."""
     template_name = 'trophies/genre_theme_list.html'
 
@@ -122,7 +122,7 @@ class GenreThemeListView(ProfileHotbarMixin, TemplateView):
         return context
 
 
-class TagDetailBaseView(HtmxListMixin, ProfileHotbarMixin, ListView):
+class TagDetailBaseView(HtmxListMixin, ListView):
     """Base view for genre and theme detail pages. Shares filter/sort logic."""
     model = Game
     partial_template_name = 'trophies/partials/tag_detail/browse_results.html'

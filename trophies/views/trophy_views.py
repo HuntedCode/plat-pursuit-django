@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.views.generic import ListView, View
 from urllib.parse import urlencode
-from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
+from trophies.mixins import HtmxListMixin
 from .browse_helpers import annotate_community_ratings
 from ..models import Trophy, EarnedTrophy, Profile, UserTrophySelection
 from ..forms import TrophySearchForm, TrophyCaseForm
@@ -17,7 +17,7 @@ from trophies.util_modules.constants import MODERN_PLATFORMS
 logger = logging.getLogger("psn_api")
 
 
-class TrophiesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
+class TrophiesListView(HtmxListMixin, ListView):
     """
     Display paginated list of trophies with filtering and sorting options.
 
@@ -168,7 +168,7 @@ class TrophiesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         return context
 
 
-class TrophyCaseView(ProfileHotbarMixin, ListView):
+class TrophyCaseView(ListView):
     """
     Display user's platinum trophy collection for trophy case selection.
 
@@ -305,7 +305,7 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
         track_page_view('trophy_case', profile.id, self.request)
         return context
 
-class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):
+class ToggleSelectionView(LoginRequiredMixin, View):
     """
     AJAX endpoint to add or remove trophies from user's trophy case selection.
 

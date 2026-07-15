@@ -15,7 +15,7 @@ from django.http import Http404
 from django.shortcuts import redirect
 from django.views.generic import DetailView
 
-from trophies.mixins import ProfileHotbarMixin, RoadmapAuthorRequiredMixin
+from trophies.mixins import RoadmapAuthorRequiredMixin
 from trophies.models import EarnedTrophy, Game
 from trophies.permissions.roadmap_permissions import can_view_editor
 from trophies.services.rating_service import RatingService
@@ -24,7 +24,7 @@ from trophies.services.roadmap_service import RoadmapService
 logger = logging.getLogger('psn_api')
 
 
-class RoadmapDetailView(ProfileHotbarMixin, DetailView):
+class RoadmapDetailView(DetailView):
     """Public roadmap detail page for a specific trophy group.
 
     Each CTG (base game + each DLC) is its own Roadmap and renders at its
@@ -639,10 +639,6 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
     sections, editor-only deletes, publisher-only status toggle) is
     enforced server-side in the merge / publish endpoints, with the
     editor UI hiding affordances the current role lacks.
-
-    Note: ProfileHotbarMixin is intentionally NOT mixed in. The hotbar
-    competes with the sticky page header for vertical space and adds
-    noise that's irrelevant to authoring.
     """
     model = Game
     template_name = 'trophies/roadmap_edit.html'

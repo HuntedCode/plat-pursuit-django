@@ -13,7 +13,6 @@ from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils.safestring import mark_safe
 
-from trophies.mixins import ProfileHotbarMixin
 from trophies.models import EarnedTrophy, ProfileGame
 from trophies.themes import get_available_themes_for_grid
 
@@ -22,7 +21,7 @@ from django.views.generic import TemplateView
 logger = logging.getLogger(__name__)
 
 
-class PlatinumGridView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class PlatinumGridView(LoginRequiredMixin, TemplateView):
     """
     Wizard page for building a shareable platinum trophy grid image.
 

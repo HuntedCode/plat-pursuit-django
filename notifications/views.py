@@ -6,14 +6,14 @@ from django.utils import timezone
 from datetime import datetime
 
 from core.services.tracking import track_page_view
-from trophies.mixins import ProfileHotbarMixin, StaffRequiredMixin
+from trophies.mixins import StaffRequiredMixin
 from notifications.models import (
     NotificationTemplate, ScheduledNotification, NotificationLog
 )
 from notifications.services.scheduled_notification_service import ScheduledNotificationService
 
 
-class NotificationInboxView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class NotificationInboxView(LoginRequiredMixin, TemplateView):
     """
     Gmail-style notification inbox with split-pane layout.
     Uses AJAX to load notifications via existing API endpoints.

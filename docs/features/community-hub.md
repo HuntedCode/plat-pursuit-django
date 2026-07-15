@@ -36,13 +36,13 @@ The personal halves do NOT violate the "wayfinder, not aggregator" rule. They an
 
 The Community Hub is a single fixed-layout page (no drag-and-drop, no module library, no per-user customization) composed of feature spotlight cards plus a hero, an optional fundraiser banner, and a permanent Discord callout. All four feature cards are read-only aggregations that pull from existing services (no new data layer was needed).
 
-`CommunityHubView` lives in `core/views.py` next to `HomeView` for symmetry. It is a `TemplateView` with `ProfileHotbarMixin`. The page-data assembler is `core/services/community_hub_service.py`, which orchestrates calls to the underlying services (`ReviewHubService`, `redis_leaderboard_service`, the `Challenge` and `GameList` models directly) and assembles a single context dict.
+`CommunityHubView` lives in `core/views.py` next to `HomeView` for symmetry. It is a `TemplateView`. The page-data assembler is `core/services/community_hub_service.py`, which orchestrates calls to the underlying services (`ReviewHubService`, `redis_leaderboard_service`, the `Challenge` and `GameList` models directly) and assembles a single context dict.
 
 ## File Map
 
 | File | Purpose |
 |------|---------|
-| `core/views.py` | `CommunityHubView` (TemplateView, ProfileHotbarMixin). Resolves the viewer profile and collapses anonymous / unlinked into a single None signal so the personal-half helpers all branch on one thing. |
+| `core/views.py` | `CommunityHubView` (TemplateView). Resolves the viewer profile and collapses anonymous / unlinked into a single None signal so the personal-half helpers all branch on one thing. |
 | `core/services/community_hub_service.py` | Page-data assembler. Houses the four community-pulse helpers, the four personal-hook helpers, and `_pad_to_limit` (which right-pads each list to `SPOTLIGHT_LIMIT` rows so cards stay visually balanced). |
 | `templates/community/hub.html` | Community Hub page template |
 | `templates/community/partials/personal_half_empty.html` | Shared empty-state for the personal half of every feature card. Renders a "Sign in" CTA for anonymous viewers and a "Link your PSN" CTA for authenticated-but-unlinked viewers, in a dashed box that matches the populated bottom half's vertical space. |

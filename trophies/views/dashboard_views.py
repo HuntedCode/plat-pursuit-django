@@ -15,7 +15,6 @@ from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import TemplateView
 
-from trophies.mixins import ProfileHotbarMixin
 from trophies.models import DashboardConfig
 from trophies.services.dashboard_service import (
     get_dashboard_tabs,
@@ -106,7 +105,7 @@ def build_dashboard_context(request, profile):
     }
 
 
-class DashboardView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class DashboardView(LoginRequiredMixin, TemplateView):
     """
     Personal trophy hunting dashboard with tabbed navigation.
 

@@ -15,7 +15,7 @@ from django.views.generic import TemplateView, View
 
 from core.services.analytics_service import get_dashboard_data as get_analytics_dashboard_data
 from core.services.community_hub_service import build_community_hub_context
-from trophies.mixins import ProfileHotbarMixin, StaffRequiredMixin
+from trophies.mixins import StaffRequiredMixin
 from trophies.util_modules.cache import redis_client
 from trophies.views.dashboard_views import _get_site_heartbeat
 from core.services import home_service
@@ -1372,7 +1372,7 @@ class ResearchPanelView(JobsWorkshopView):
         return ctx
 
 
-class CommunityHubView(ProfileHotbarMixin, TemplateView):
+class CommunityHubView(TemplateView):
     """The Community Hub destination page at /community/.
 
     A fixed-layout **Feature Spotlight** page (NOT an aggregator) composed
@@ -1509,7 +1509,7 @@ class AnalyticsReportView(StaffRequiredMixin, View):
         return response
 
 
-class SupportHubView(ProfileHotbarMixin, TemplateView):
+class SupportHubView(TemplateView):
     """The Support hub landing: the always-on badge-art fundraiser + (coming) the membership
     store. Public -- unlike the site banner (gated to linked viewers), anyone can land here to
     support PlatPursuit."""
@@ -1522,7 +1522,7 @@ class SupportHubView(ProfileHotbarMixin, TemplateView):
         return context
 
 
-class HomeView(ProfileHotbarMixin, TemplateView):
+class HomeView(TemplateView):
     """
     Site home page router.
 
@@ -1567,8 +1567,6 @@ class HomeView(ProfileHotbarMixin, TemplateView):
         return 'synced'
 
     def get_context_data(self, **kwargs):
-        # ProfileHotbarMixin attaches the hotbar context for any logged-in user
-        # with a profile, so all four states get a working hotbar where applicable.
         context = super().get_context_data(**kwargs)
         state = self._resolve_state()
         context['home_state'] = state

@@ -129,7 +129,6 @@ Defined in `trophies/mixins.py`:
 | `StaffRequiredMixin` | Staff gate for page views | Unauthenticated to login, non-staff to home |
 | `StaffRequiredAPIMixin` | Staff gate for JSON APIs | Returns 401/403 JSON responses |
 | `RecapSyncGateMixin` | Gate recap until sync complete | Shows gated template if no profile or not synced |
-| `ProfileHotbarMixin` | Inject sync status into context | Adds `hotbar` dict with profile, sync progress, queue position |
 | `BackgroundContextMixin` | Page-specific background image | Builds `image_urls` dict from Concept `bg_url` |
 
 ## Template Patterns

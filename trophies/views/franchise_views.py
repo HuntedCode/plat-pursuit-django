@@ -4,7 +4,7 @@ from django.db.models.functions import Lower
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView
 
-from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
+from trophies.mixins import HtmxListMixin
 from trophies.services import game_grouping_service as grouping
 from ..models import Franchise, ConceptFranchise, Game
 
@@ -62,7 +62,7 @@ def _franchise_cover_annotations():
     }
 
 
-class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
+class FranchiseListView(HtmxListMixin, ListView):
     """Browse page for game franchises and collections."""
     model = Franchise
     template_name = 'trophies/franchise_list.html'
@@ -210,7 +210,7 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         return context
 
 
-class FranchiseDetailView(ProfileHotbarMixin, DetailView):
+class FranchiseDetailView(DetailView):
     """Detail page for a single franchise showing games grouped by IGDB entry."""
     model = Franchise
     template_name = 'trophies/franchise_detail.html'

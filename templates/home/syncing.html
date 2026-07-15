@@ -31,7 +31,7 @@
                             is down the user can't act on an error anyway (the trigger sync
                             endpoint returns 503), so showing "Sync paused" with the outage
                             explanation is more accurate and reassuring than "We hit a snag,
-                            retry from the hotbar" which they literally cannot do.
+                            retry from your account menu" which they literally cannot do.
                             {% endcomment %}
                             {% if psn_outage %}
                                 Sync paused
@@ -62,7 +62,7 @@
                         {% if psn_outage %}
                             PlayStation Network is currently unavailable, so we've parked your sync where it is. The moment PSN is back, we'll pick up right where we left off, no action needed on your end.
                         {% elif profile.sync_status == 'error' %}
-                            Something tripped up the last sync. Try again from the hotbar above. If it keeps happening, double-check that your PSN "Gaming History" permission is set to "Anyone".
+                            Something tripped up the last sync. Try again from your account menu in the top-right. If it keeps happening, double-check that your PSN "Gaming History" permission is set to "Anyone".
                         {% elif is_initial_sync %}
                             Welcome aboard, <span class="font-bold text-base-content/80">{{ profile.display_psn_username|default:profile.psn_username }}</span>. First syncs are the heaviest one you'll ever do: we're pulling every trophy you've ever popped on PSN. This can take 10-30 minutes depending on the size of your library, but every future refresh will be much faster. Stretch, grab a drink, and we'll have you on the dashboard before you know it.
                         {% else %}
@@ -72,9 +72,9 @@
 
                     {% if profile.sync_status == 'syncing' and not psn_outage %}
                     {% comment %}
-                    Live progress bar. Initial values are server-rendered; hotbar.js dispatches
+                    Live progress bar. Initial values are server-rendered; navsync.js dispatches
                     'platpursuit:sync-progress' on every poll and the listener below keeps these
-                    elements in lockstep with the hotbar's progress bar.
+                    elements in lockstep with the navbar sync panel's progress.
                     {% endcomment %}
                     <div class="mt-3 md:mt-4">
                         <div class="flex items-center justify-between text-xs md:text-sm mb-1.5">
@@ -93,7 +93,7 @@
                                   max="100"
                                   aria-label="Sync progress"></progress>
                         <p id="home-sync-phase-text" class="text-[10px] md:text-xs text-base-content/40 mt-1.5">
-                            Watch the hotbar above for live progress. The second it flips to synced, we'll throw you straight onto your dashboard.
+                            This updates live as we go. The second it flips to synced, we'll throw you straight onto your dashboard.
                         </p>
                     </div>
                     {% endif %}
@@ -222,7 +222,7 @@
     });
 
     // ──────────────────────────────────────────────────────────────────
-    // Live progress: hotbar.js dispatches 'platpursuit:sync-progress' on
+    // Live progress: navsync.js dispatches 'platpursuit:sync-progress' on
     // every successful poll. Mirror its values into the larger progress
     // card so the two never visibly diverge.
     // ──────────────────────────────────────────────────────────────────

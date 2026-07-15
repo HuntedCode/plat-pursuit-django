@@ -18,7 +18,6 @@ from django.shortcuts import redirect
 from django.urls import reverse_lazy, reverse
 from django.views.generic import ListView, DetailView, TemplateView
 
-from trophies.mixins import ProfileHotbarMixin
 from ..models import (
     GameList, GameListItem, GameListLike, ProfileGame,
     GAME_LIST_FREE_MAX_LISTS, GAME_LIST_FREE_MAX_ITEMS,
@@ -28,7 +27,7 @@ from .browse_helpers import annotate_community_ratings
 logger = logging.getLogger("psn_api")
 
 
-class BrowseListsView(ProfileHotbarMixin, ListView):
+class BrowseListsView(ListView):
     """
     Public hub for browsing user-created game lists.
 
@@ -121,7 +120,7 @@ class BrowseListsView(ProfileHotbarMixin, ListView):
         return context
 
 
-class GameListDetailView(ProfileHotbarMixin, DetailView):
+class GameListDetailView(DetailView):
     """
     Display a game list with its games.
 
@@ -266,7 +265,7 @@ class GameListDetailView(ProfileHotbarMixin, DetailView):
         return context
 
 
-class GameListEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
+class GameListEditView(LoginRequiredMixin, DetailView):
     """
     Edit a game list: add/remove games, reorder, edit name/description, toggle visibility.
 
@@ -317,7 +316,7 @@ class GameListEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
         return context
 
 
-class GameListCreateView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class GameListCreateView(LoginRequiredMixin, TemplateView):
     """
     Create a new game list.
 
@@ -363,7 +362,7 @@ class GameListCreateView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         return context
 
 
-class MyListsView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class MyListsView(LoginRequiredMixin, TemplateView):
     """
     Display the user's game lists hub.
 

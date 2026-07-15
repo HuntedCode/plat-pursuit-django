@@ -209,27 +209,6 @@
     @apply bg-base-200/90 rounded-2xl shadow-md shadow-neutral border-2 border-base-300;
   }
 
-  /* Hotbar loading state - prevents flash of unstyled content */
-  .hotbar-loading {
-    opacity: 0;
-    transition: opacity 0.3s ease-in-out;
-  }
-
-  /* Hotbar toggle pulse when collapsed */
-  .hotbar-toggle-pulse {
-    --hbp-a: 0 4px 6px -1px color-mix(in oklch, var(--color-primary) 15%, transparent);
-    --hbp-b: 0 4px 14px -1px color-mix(in oklch, var(--color-primary) 35%, transparent);
-    animation: hotbar-pulse 2.5s ease-in-out infinite;
-  }
-  @keyframes hotbar-pulse {
-    0%, 100% {
-      box-shadow: var(--hbp-a);
-    }
-    50% {
-      box-shadow: var(--hbp-b);
-    }
-  }
-
   /* Interactive card with standard hover effect */
   .card-interactive {
     @apply transition-all duration-300 cursor-pointer hover:scale-105;
@@ -2062,13 +2041,6 @@ details[open]::details-content {
     display: none;
   }
   /* (Sub-nav sheet RM handling now lives with .pp-sub__sheet in components/chrome.css.) */
-  /* Hotbar: kill the infinite collapsed-state pulse + make collapse/expand instant under RM. */
-  .hotbar-toggle-pulse {
-    animation: none;
-  }
-  #hotbar-wrapper, #hotbar-container, #toggle-icon {
-    transition: none;
-  }
   /* Community "live" heartbeat dot: no perpetual ping for reduced-motion users (the dot stays). */
   .animate-ping {
     animation: none;
