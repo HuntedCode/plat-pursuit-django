@@ -341,14 +341,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 var stageNum = link.dataset.stageLink;
                 var target = document.getElementById('stage-' + stageNum);
                 if (!target) return;
-                // Landing flash: a one-shot glow bloom on the stage HEADER (the section carries a lingering
-                // reveal animation that would win the slot) so the eye catches where it landed.
-                var head = target.querySelector('[data-stage-toggle]');
-                function flash() { if (!head) return; head.classList.remove('is-landed'); void head.offsetWidth; head.classList.add('is-landed'); }
+                // Landing flash: glow the whole stage CARD border, fired AFTER it's revealed + expanded, so
+                // it reads as "you are here". box-shadow TRANSITION (not a keyframe) to dodge the section's
+                // lingering reveal animation; bloom in, hold, then fade out on class removal.
+                function flashSection() {
+                    target.classList.remove('is-landing'); void target.offsetWidth; target.classList.add('is-landing');
+                    setTimeout(function () { target.classList.remove('is-landing'); }, 340);
+                }
                 var openState = loadOpen();
                 if (openState[stageNum]) {
-                    // Already open: let the browser do the native #stage-N jump, then flash once it settles.
-                    setTimeout(flash, 380);
+                    setTimeout(flashSection, 400);   // already open: after the native #stage-N jump settles
                     return;
                 }
                 e.preventDefault();
@@ -356,7 +358,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 function openNow() {
                     setStageCollapsed(stageNum, false);
                     openState[stageNum] = true; saveOpen(openState); updateBulkButton();
-                    flash();
+                    setTimeout(flashSection, 450);   // wait for the reveal + expand to finish, then flash
                 }
                 var scrollTimer;
                 function onScrollEnd() {
