@@ -341,8 +341,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 var stageNum = link.dataset.stageLink;
                 var target = document.getElementById('stage-' + stageNum);
                 if (!target) return;
-                // Landing flash: a one-shot glow bloom on the stage CARD so the eye catches where it landed.
-                function flash() { target.classList.remove('is-landed'); void target.offsetWidth; target.classList.add('is-landed'); }
+                // Landing flash: a one-shot glow bloom on the stage HEADER (the section carries a lingering
+                // reveal animation that would win the slot) so the eye catches where it landed.
+                var head = target.querySelector('[data-stage-toggle]');
+                function flash() { if (!head) return; head.classList.remove('is-landed'); void head.offsetWidth; head.classList.add('is-landed'); }
                 var openState = loadOpen();
                 if (openState[stageNum]) {
                     // Already open: let the browser do the native #stage-N jump, then flash once it settles.
