@@ -51,8 +51,9 @@
         <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Contract" tabindex="-1">
             <button type="button" class="pp-detail-modal__close" data-contract-close aria-label="Close contract">&times;</button>
             <div class="pp-detail-modal__body" data-contract-body></div>
-            {% comment %} Onward hook: from one game's Contract into the whole board. {% endcomment %}
-            <a class="bd-ctrmodal__more" href="{% url 'career' %}?view=contracts">
+            {% comment %} Onward hook: from one game's Contract into the whole board. The fragment lands on
+            the contracts panel (scroll-padding-top offsets the sticky chrome). {% endcomment %}
+            <a class="bd-ctrmodal__more" href="{% url 'career' %}?view=contracts#career-panel-contracts">
                 Browse all Contracts
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
             </a>
@@ -202,12 +203,14 @@ document.addEventListener('DOMContentLoaded', function() {
     var SLUG = '{{ badge.series_slug|escapejs }}';
     function storageKey() {
         var active = document.querySelector('.bd-tierstep.is-active');
-        return 'badge_stage_collapse_' + SLUG + '_' + (active ? (active.getAttribute('data-tier') || '') : '');
+        // Stores the stages the user has explicitly OPENED (default is all-collapsed), per (series, tier).
+        // Distinct key name from the old collapsed-set model so stale data is cleanly ignored.
+        return 'badge_stage_open_' + SLUG + '_' + (active ? (active.getAttribute('data-tier') || '') : '');
     }
-    function loadState() {
+    function loadOpen() {
         try { return JSON.parse(localStorage.getItem(storageKey())) || {}; } catch (e) { return {}; }
     }
-    function saveState(state) {
+    function saveOpen(state) {
         try { localStorage.setItem(storageKey(), JSON.stringify(state)); } catch (e) { /* quota / private */ }
     }
     function setStageCollapsed(stageNum, collapsed) {
@@ -228,33 +231,27 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateBulkButton() {
         var bulkBtn = document.getElementById('badge-stage-toggle-all');
         if (!bulkBtn) return;
-        var hasCollapsed = Object.keys(loadState()).length > 0;
+        var anyOpen = Object.keys(loadOpen()).length > 0;
         var label = bulkBtn.querySelector('span');
         var icon = bulkBtn.querySelector('svg');
-        if (label) label.textContent = hasCollapsed ? 'Expand All' : 'Collapse All';
-        if (icon) icon.style.transform = hasCollapsed ? 'rotate(-90deg)' : '';
+        if (label) label.textContent = anyOpen ? 'Collapse All' : 'Expand All';
+        if (icon) icon.style.transform = anyOpen ? '' : 'rotate(-90deg)';
     }
 
     function initStages() {
-        // Apply saved state + auto-collapse completed/bonus stages (incl. newly completed).
-        var savedState = loadState();
-        var stateChanged = false;
+        // Default: EVERY stage collapsed (cleaner scanning + navigation). localStorage remembers only the
+        // stages the user has explicitly OPENED, per (series, tier); a fresh visit collapses them all.
+        var openState = loadOpen();
         document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
             var stageNum = toggle.dataset.stageToggle;
-            var isComplete = toggle.dataset.stageComplete === 'true';
-            var isBonus = toggle.dataset.stageBonus === 'true';
-            var shouldCollapse = savedState[stageNum] || ((isComplete || isBonus) && !savedState[stageNum]);
-            if (shouldCollapse) {
-                var gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
-                if (gamesContainer) {
-                    gamesContainer.style.transition = 'none';
-                    setStageCollapsed(stageNum, true);
-                    if (!savedState[stageNum]) { savedState[stageNum] = true; stateChanged = true; }
-                    requestAnimationFrame(function() { requestAnimationFrame(function() { gamesContainer.style.transition = ''; }); });
-                }
+            var open = !!openState[stageNum];
+            var gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
+            if (gamesContainer) {
+                gamesContainer.style.transition = 'none';
+                setStageCollapsed(stageNum, !open);
+                requestAnimationFrame(function() { requestAnimationFrame(function() { gamesContainer.style.transition = ''; }); });
             }
         });
-        if (stateChanged) saveState(savedState);
         updateBulkButton();
 
         // Bulk toggle (swap-local; wire once per element).
@@ -262,45 +259,46 @@ document.addEventListener('DOMContentLoaded', function() {
         if (bulkBtn && !bulkBtn._wired) {
             bulkBtn._wired = true;
             bulkBtn.addEventListener('click', function() {
-                var state = loadState();
-                var hasCollapsed = Object.keys(state).length > 0;
+                var anyOpen = Object.keys(loadOpen()).length > 0;
                 var newState = {};
                 document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
                     var stageNum = toggle.dataset.stageToggle;
-                    if (hasCollapsed) { setStageCollapsed(stageNum, false); }
-                    else { setStageCollapsed(stageNum, true); newState[stageNum] = true; }
+                    if (anyOpen) { setStageCollapsed(stageNum, true); }               // collapse all
+                    else { setStageCollapsed(stageNum, false); newState[stageNum] = true; }   // expand all
                 });
-                saveState(newState);
+                saveOpen(newState);
                 updateBulkButton();
             });
         }
 
-        // Stage-requirement links: scroll to the stage, then expand it once the scroll settles.
+        // Stage-requirement links: scroll to the stage, then open it once the scroll settles.
         document.querySelectorAll('[data-stage-link]').forEach(function(link) {
             if (link._wired) return;
             link._wired = true;
             link.addEventListener('click', function(e) {
                 var stageNum = link.dataset.stageLink;
-                var state = loadState();
-                if (!state[stageNum]) return;
+                var openState = loadOpen();
+                if (openState[stageNum]) return;   // already open -> let the anchor jump handle it
                 e.preventDefault();
                 var target = document.getElementById('stage-' + stageNum);
                 if (!target) return;
                 target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                function openNow() {
+                    setStageCollapsed(stageNum, false);
+                    openState[stageNum] = true; saveOpen(openState); updateBulkButton();
+                }
                 var scrollTimer;
                 function onScrollEnd() {
                     clearTimeout(scrollTimer);
                     scrollTimer = setTimeout(function() {
                         window.removeEventListener('scroll', onScrollEnd);
-                        setStageCollapsed(stageNum, false);
-                        delete state[stageNum]; saveState(state); updateBulkButton();
+                        openNow();
                     }, 100);
                 }
                 window.addEventListener('scroll', onScrollEnd);
                 scrollTimer = setTimeout(function() {
                     window.removeEventListener('scroll', onScrollEnd);
-                    setStageCollapsed(stageNum, false);
-                    delete state[stageNum]; saveState(state); updateBulkButton();
+                    openNow();
                 }, 600);
             });
         });
@@ -312,11 +310,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!toggle) return;
         if (e.target.closest('a')) return;
         var stageNum = toggle.dataset.stageToggle;
-        var state = loadState();
-        var isCollapsed = !!state[stageNum];
-        setStageCollapsed(stageNum, !isCollapsed);
-        if (isCollapsed) { delete state[stageNum]; } else { state[stageNum] = true; }
-        saveState(state);
+        var openState = loadOpen();
+        var isOpen = !!openState[stageNum];
+        setStageCollapsed(stageNum, isOpen);   // open -> collapse; collapsed -> open
+        if (isOpen) { delete openState[stageNum]; } else { openState[stageNum] = true; }
+        saveOpen(openState);
         updateBulkButton();
     });
     document.addEventListener('keydown', function(e) {
