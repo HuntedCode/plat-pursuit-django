@@ -104,16 +104,22 @@
 .pp-navsearch__input::placeholder { color: var(--pp-text-mute); }
 .pp-navsearch__input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 
+/* Display is gated behind :not(.hidden)/:not([hidden]) rather than set unconditionally: chrome.css is
+   unlayered, so a bare `display:` would beat Tailwind's `.hidden` utility (which lives in @layer
+   utilities) and these toggled elements would never hide -- the spinner spun forever and the Visit
+   anchor showed with an empty href. Gating means the hidden state has no competing author display. */
 .pp-navsearch__spin {
-    width: 15px; height: 15px; margin-right: 10px; flex-shrink: 0; border-radius: 50%; display: inline-block;
+    width: 15px; height: 15px; margin-right: 10px; flex-shrink: 0; border-radius: 50%;
     border: 2px solid color-mix(in oklab, var(--pp-primary) 30%, transparent); border-top-color: var(--pp-primary);
     animation: ppAvSpin 0.7s linear infinite;
 }
+.pp-navsearch__spin:not(.hidden) { display: inline-block; }
 .pp-navsearch__clear {
-    width: 26px; height: 26px; margin-right: 5px; flex-shrink: 0; display: grid; place-items: center;
+    width: 26px; height: 26px; margin-right: 5px; flex-shrink: 0; place-items: center;
     border: none; background: none; color: var(--pp-text-mute); cursor: pointer; border-radius: var(--pp-radius-sm);
     transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease);
 }
+.pp-navsearch__clear:not(.hidden) { display: grid; }
 @media (hover: hover) { .pp-navsearch__clear:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.06); } }
 .pp-navsearch__clear svg { width: 14px; height: 14px; }
 
@@ -142,10 +148,13 @@
 .pp-navsearch__plats::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--color-trophy-platinum); }
 
 .pp-navsearch__add, .pp-navsearch__visit {
-    display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 9px; border-radius: var(--pp-radius-md);
+    align-items: center; gap: 9px; width: 100%; padding: 8px 9px; border-radius: var(--pp-radius-md);
     font-size: 0.8rem; font-weight: 600; text-decoration: none; cursor: pointer; border: none; text-align: left; background: none;
     color: var(--pp-text-dim); transition: background var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease);
 }
+/* Gated display (see the spin/clear note above): keeps the add + Visit rows hidden until JS reveals them. */
+.pp-navsearch__add:not([hidden]) { display: flex; }
+.pp-navsearch__visit:not(.hidden) { display: flex; }
 .pp-navsearch__add { color: var(--pp-primary); }
 .pp-navsearch__add.is-active, .pp-navsearch__add:hover { background: color-mix(in oklab, var(--pp-primary) 12%, transparent); }
 .pp-navsearch__add svg { width: 18px; height: 18px; flex-shrink: 0; }
