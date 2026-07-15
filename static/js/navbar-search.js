@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const PSN_RE = /^[a-zA-Z0-9_-]{3,16}$/;
 
     let pollInterval = null;
+    let addStartTimer = null;  // delay before the add-and-sync poll begins
     let items = [];        // navigable elements currently in the panel
     let activeIndex = -1;  // keyboard-highlighted item
 
@@ -52,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
         input.removeAttribute('aria-activedescendant');
         activeIndex = -1;
         items = [];
+        resetAddSync();   // tear down any in-flight add-and-sync when the results dismiss
     }
     function refreshItems() {
         items = Array.from(panel.querySelectorAll(
@@ -71,6 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- Reset any in-flight add-and-sync UI back to the resting bar ----
     function resetAddSync() {
+        if (addStartTimer) { clearTimeout(addStartTimer); addStartTimer = null; }
         if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
         hide(spinner);
         hide(visitAnchor);
@@ -124,9 +127,10 @@ document.addEventListener('DOMContentLoaded', () => {
         addBtn.hidden = !PSN_RE.test(q);
 
         refreshItems();
-        openPanel();
-        // Highlight the first suggestion (or the add row if there are none).
-        setActive(0);
+        // Only open when there's something to show (a suggestion or the add row); a 2-char
+        // non-PSN query with no matches would otherwise flash an empty bordered panel.
+        if (items.length) { openPanel(); setActive(0); }
+        else { closePanel(); }
     }
 
     const fetchSuggest = PlatPursuit.debounce((q) => {
@@ -166,12 +170,13 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (root.classList.contains('is-open')) { closeSheet(); }
         } else if (e.key === 'Enter') {
             const el = items[activeIndex];
-            if (el && el.classList.contains('pp-navsearch__opt')) {
-                // Navigate to the highlighted profile; the form must not submit.
+            if (el && el.tagName === 'A') {
+                // A highlighted link (a profile suggestion or the Visit anchor): navigate,
+                // don't let the form submit and re-fire the add-and-sync.
                 window.location.href = el.href;
                 e.preventDefault();
             }
-            // Otherwise fall through: the native submit fires runAddSync (below).
+            // Otherwise fall through: the native submit fires the add-and-sync (below).
         }
     });
 
@@ -213,8 +218,11 @@ document.addEventListener('DOMContentLoaded', () => {
             .then((data) => {
                 if (data.success) {
                     input.focus();
-                    // First status lands a couple seconds after ingestion kicks off.
-                    setTimeout(() => {
+                    // First status lands a couple seconds after ingestion kicks off. Track the
+                    // timer so resetAddSync (clear / retype / dismiss) can cancel it before it
+                    // spins up an orphaned poll.
+                    addStartTimer = setTimeout(() => {
+                        addStartTimer = null;
                         pollInterval = setInterval(() => pollAddSync(data.psn_username), 2500);
                     }, 2500);
                 } else {

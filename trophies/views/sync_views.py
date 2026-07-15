@@ -132,10 +132,12 @@ class ProfileSuggestView(View):
     back to the add-and-sync flow (SearchSyncProfileView) when the typed name
     isn't tracked yet.
 
-    Prefix match only (istartswith): it rides the psn_username index, is the
-    intuitive typeahead behaviour, and bounds the scan. Ordering rides the
-    total_plats index; the prefix filter caps the set before the sort, so this
-    stays a small, whale-safe query (<=8 rows) regardless of table size.
+    Prefix match only (istartswith): the intuitive typeahead behaviour, and it
+    bounds the candidate set. (istartswith compiles to a case-insensitive LIKE
+    that a plain btree on psn_username can't serve, so Postgres leans on the
+    total_plats index scan + filter; a rare prefix may scan a way before
+    collecting 8 rows, but the LIMIT keeps this a small, whale-safe query
+    regardless of table size.)
     """
     def get(self, request):
         # Read-only + cheap, so a more generous bucket than the sync search:
