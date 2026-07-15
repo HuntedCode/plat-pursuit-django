@@ -11,12 +11,14 @@
  * ================================================================ */
 
 /* ── The navbar bar ──────────────────────────────────────────────────────── */
+/* The bar background + border are full-bleed; the CONTENT sits in a centred
+   container so it lines up with the page content instead of floating to the edge. */
 .pp-nav {
-    display: flex; align-items: center; gap: 16px; height: 58px; padding: 0 16px;
     background: color-mix(in oklab, var(--pp-bg-1) 90%, transparent);
     backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--pp-border);
 }
+.pp-nav__inner { display: flex; align-items: center; gap: 16px; height: 58px; padding: 0 16px; }
 .pp-nav__brand { display: flex; align-items: center; gap: 9px; flex-shrink: 0; text-decoration: none; }
 .pp-nav__logo { width: 30px; height: 30px; border-radius: var(--pp-radius-md); object-fit: cover; }
 .pp-nav__word { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.02rem; color: var(--pp-text); letter-spacing: -0.01em; white-space: nowrap; }
@@ -67,13 +69,13 @@
 .pp-av__img svg { width: 20px; height: 20px; }
 .pp-av::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--ring, var(--pp-border)); pointer-events: none; }
 .pp-av:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 4px; border-radius: 50%; }
+/* Traffic-light status (intuitive for sync): green synced / amber syncing / red error. */
 .pp-av[data-sync="synced"] { --ring: var(--pp-success); }
 .pp-av[data-sync="error"]  { --ring: var(--pp-error); }
-/* syncing = in-progress -> the ONE cyan brand accent (visual-identity: cyan = "currently active / in progress") */
-.pp-av[data-sync="syncing"] { --ring: var(--pp-primary); }
+.pp-av[data-sync="syncing"] { --ring: var(--pp-warning); }
 .pp-av[data-sync="syncing"]::before {
     content: ""; position: absolute; inset: -4px; border-radius: 50%;
-    background: conic-gradient(var(--pp-primary) 0deg 90deg, transparent 90deg 360deg);
+    background: conic-gradient(var(--pp-warning) 0deg 90deg, transparent 90deg 360deg);
     -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
             mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
     animation: ppAvSpin 1.1s linear infinite;
@@ -91,7 +93,7 @@
 .pp-avstatus { display: inline-flex; align-items: center; gap: 5px; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.02em; margin-top: 2px; }
 .pp-avstatus::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .pp-avstatus[data-sync="synced"] { color: var(--pp-success); }
-.pp-avstatus[data-sync="syncing"] { color: var(--pp-primary); }
+.pp-avstatus[data-sync="syncing"] { color: var(--pp-warning); }
 .pp-avstatus[data-sync="error"] { color: var(--pp-error); }
 
 .pp-avsync { padding: 13px 14px; }

@@ -75,6 +75,7 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
         if not hasattr(request.user, 'profile'):
             return JsonResponse({'error': 'No linked profile'}, status=400)
 
+        from django.contrib.humanize.templatetags.humanize import naturaltime
         profile = request.user.profile
         seconds_to_next_sync = profile.get_seconds_to_next_sync()
         logger.debug(f"Sync status check for {profile.psn_username}: {seconds_to_next_sync}s until next sync")
@@ -87,6 +88,13 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
             'psn_outage': bool(redis_client.get('site:psn_outage')),
             'is_finalizing': False,
             'finalize_phase': None,
+            # Fresh headline stats so the navbar panel updates live on sync completion
+            # (the counts + last-synced are server-rendered at page load, else stale).
+            'stats': {
+                'plats': profile.total_plats, 'golds': profile.total_golds,
+                'silvers': profile.total_silvers, 'bronzes': profile.total_bronzes,
+            },
+            'last_synced': naturaltime(profile.last_synced) if profile.last_synced else None,
         }
 
         if profile.sync_status == 'syncing':

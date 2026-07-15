@@ -5,6 +5,7 @@ The old hotbar is ABSORBED here: the avatar is status-aware (ring = sync state) 
 data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search + notification dropdowns keep their exact
 JS hooks (navbar-search.js / notifications.js); only their trigger buttons are restyled. {% endcomment %}
 <nav class="pp-nav" role="navigation" aria-label="Main navigation">
+<div class="pp-nav__inner container mx-auto">
 
     {# Brand #}
     <a href="/" class="pp-nav__brand" aria-label="Platinum Pursuit Home">
@@ -115,18 +116,18 @@ JS hooks (navbar-search.js / notifications.js); only their trigger buttons are r
 
                 <div class="pp-avsync">
                     <div class="pp-avsync__prog" data-nav-prog{% if navsync.sync_status != 'syncing' %} hidden{% endif %}>
-                        <div class="pp-horizon" style="--horizon-h: 6px;"><span class="pp-horizon__track"><span class="pp-horizon__fill" data-nav-fill style="--horizon-progress: {{ navsync.progress_percentage|floatformat:0|default:0 }}%;"></span></span></div>
+                        <div class="pp-horizon" style="--horizon-h: 6px; --horizon-accent: var(--pp-warning);"><span class="pp-horizon__track"><span class="pp-horizon__fill" data-nav-fill style="--horizon-progress: {{ navsync.progress_percentage|floatformat:0|default:0 }}%;"></span></span></div>
                         <div class="pp-avsync__meta"><span data-nav-pct>{{ navsync.progress_percentage|floatformat:0|default:0 }}%</span><span data-nav-queue{% if not navsync.queue_position %} hidden{% endif %}>{% if navsync.queue_position %}~{{ navsync.queue_position }} ahead{% endif %}</span></div>
                     </div>
                     <div class="pp-avsync__row">
-                        <span class="pp-avsync__when">{% if navsync.profile.last_synced %}Synced {{ navsync.profile.last_synced|naturaltime }}{% else %}Not synced yet{% endif %}</span>
+                        <span class="pp-avsync__when" data-nav-when>{% if navsync.profile.last_synced %}Synced {{ navsync.profile.last_synced|naturaltime }}{% else %}Not synced yet{% endif %}</span>
                         <button type="button" class="pp-avbtn" data-nav-syncnow>Sync Now</button>
                     </div>
                     <div class="pp-avsync__loot">
-                        <i><span class="pp-avsync__pip" style="background:var(--color-trophy-platinum)"></span>{{ navsync.profile.total_plats|intcomma }}</i>
-                        <i><span class="pp-avsync__pip" style="background:var(--color-trophy-gold)"></span>{{ navsync.profile.total_golds|intcomma }}</i>
-                        <i><span class="pp-avsync__pip" style="background:var(--color-trophy-silver)"></span>{{ navsync.profile.total_silvers|intcomma }}</i>
-                        <i><span class="pp-avsync__pip" style="background:var(--color-trophy-bronze)"></span>{{ navsync.profile.total_bronzes|intcomma }}</i>
+                        <i><span class="pp-avsync__pip" style="background:var(--color-trophy-platinum)"></span><span data-nav-loot="platinum">{{ navsync.profile.total_plats|intcomma }}</span></i>
+                        <i><span class="pp-avsync__pip" style="background:var(--color-trophy-gold)"></span><span data-nav-loot="gold">{{ navsync.profile.total_golds|intcomma }}</span></i>
+                        <i><span class="pp-avsync__pip" style="background:var(--color-trophy-silver)"></span><span data-nav-loot="silver">{{ navsync.profile.total_silvers|intcomma }}</span></i>
+                        <i><span class="pp-avsync__pip" style="background:var(--color-trophy-bronze)"></span><span data-nav-loot="bronze">{{ navsync.profile.total_bronzes|intcomma }}</span></i>
                     </div>
                 </div>
                 <div class="sr-only" data-nav-live aria-live="polite" aria-atomic="true"></div>
@@ -172,4 +173,5 @@ JS hooks (navbar-search.js / notifications.js); only their trigger buttons are r
         </div>
         {% endif %}
     </div>
+</div>
 </nav>

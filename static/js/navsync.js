@@ -26,6 +26,11 @@ document.addEventListener('DOMContentLoaded', function () {
     var queue = root.querySelector('[data-nav-queue]');
     var syncBtn = root.querySelector('[data-nav-syncnow]');
     var live = root.querySelector('[data-nav-live]');
+    var whenEl = root.querySelector('[data-nav-when]');
+    var loot = {
+        plats: root.querySelector('[data-nav-loot="platinum"]'), golds: root.querySelector('[data-nav-loot="gold"]'),
+        silvers: root.querySelector('[data-nav-loot="silver"]'), bronzes: root.querySelector('[data-nav-loot="bronze"]')
+    };
 
     // Finalize sub-phase labels (keys match _job_sync_complete() in token_keeper.py).
     var PHASE = { health_check: 'Verifying', stats_badges: 'Badges', milestones: 'Milestones', challenges: 'Challenges', finishing: 'Wrapping up' };
@@ -41,6 +46,18 @@ document.addEventListener('DOMContentLoaded', function () {
     function txt(el, t) { if (el) { el.textContent = t; } }
     function show(el) { if (el) { el.hidden = false; } }
     function hide(el) { if (el) { el.hidden = true; } }
+
+    // Refresh the panel's server-rendered stats (trophy loot + last-synced) from the poll response, so they
+    // don't go stale after a sync finishes without a page reload.
+    function applyStats(data) {
+        if (data.stats) {
+            if (loot.plats) { loot.plats.textContent = (data.stats.plats || 0).toLocaleString(); }
+            if (loot.golds) { loot.golds.textContent = (data.stats.golds || 0).toLocaleString(); }
+            if (loot.silvers) { loot.silvers.textContent = (data.stats.silvers || 0).toLocaleString(); }
+            if (loot.bronzes) { loot.bronzes.textContent = (data.stats.bronzes || 0).toLocaleString(); }
+        }
+        if (data.last_synced && whenEl) { whenEl.textContent = 'Synced ' + data.last_synced; }
+    }
 
     function update(data) {
         var s = data.sync_status;
@@ -69,6 +86,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setSync('error'); txt(statusEl, 'Sync error'); hide(prog);
             txt(live, 'Profile sync encountered an error'); stopPoll(); countdown(data.seconds_to_next_sync);
         }
+        applyStats(data);   // keep the loot + last-synced fresh (no reload needed)
         dispatch(s);
         document.dispatchEvent(new CustomEvent('platpursuit:sync-progress', { detail: data }));
     }
