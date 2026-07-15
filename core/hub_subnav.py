@@ -42,7 +42,8 @@ class HubSubnavItem:
     url_name: str
     icon: str | None = None
     auth_required: bool = False
-    divider_before: bool = False  # render a group divider before this item (e.g. tools vs core)
+    group: str = ''  # the rail group this item belongs to (e.g. 'Catalog' / 'Curation'). Items are
+                     # defined in group order so the template can {% regroup %} consecutive runs.
 
 
 @dataclass(frozen=True)
@@ -59,12 +60,15 @@ class RenderedSubnavItem:
     ``icon`` is an optional Lucide-style icon name. The template renders
     a matching SVG inline when set; items without an icon render as
     label-only pills.
+
+    ``group`` is the rail group label (e.g. 'Catalog'); the template groups
+    consecutive same-group items under a quiet separator.
     """
     slug: str
     label: str
     url: str
     icon: str | None = None
-    divider_before: bool = False
+    group: str = ''
 
 
 @dataclass(frozen=True)
@@ -105,16 +109,18 @@ BROWSE_HUB = HubSubnavConfig(
         '/themes/',
         '/engines/',
     ),
+    # Grouped rail (locked in the chrome workshop): Catalog = the core browse surfaces;
+    # Curation = the cross-cutting groupings + data-quality. Order = group order (regroup-ready).
     items=(
-        HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2'),
-        HubSubnavItem('trophies', 'Trophies', 'trophies_list', 'trophy'),
-        HubSubnavItem('badges', 'Badges', 'badges_list', 'award'),
-        HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock'),
-        HubSubnavItem('flagged', 'Flagged Games', 'flagged_games', 'flag'),
-        HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers'),
-        HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag'),
-        HubSubnavItem('companies', 'Companies', 'companies_list', 'building'),
-        HubSubnavItem('engines', 'Engines', 'engines_list', 'cpu'),
+        HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2', group='Catalog'),
+        HubSubnavItem('trophies', 'Trophies', 'trophies_list', 'trophy', group='Catalog'),
+        HubSubnavItem('badges', 'Badges', 'badges_list', 'award', group='Catalog'),
+        HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock', group='Catalog'),
+        HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers', group='Curation'),
+        HubSubnavItem('companies', 'Companies', 'companies_list', 'building', group='Curation'),
+        HubSubnavItem('engines', 'Engines', 'engines_list', 'cpu', group='Curation'),
+        HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag', group='Curation'),
+        HubSubnavItem('flagged', 'Flagged Games', 'flagged_games', 'flag', group='Curation'),
     ),
 )
 
@@ -124,13 +130,14 @@ COMMUNITY_HUB = HubSubnavConfig(
     label='Community',
     icon='users',
     prefixes=('/community/',),
+    # Grouped rail: Explore = the social/discovery surfaces; Create = the participatory ones.
     items=(
-        HubSubnavItem('hub', 'Hub', 'community_hub', 'home'),
-        HubSubnavItem('profiles', 'Profiles', 'profiles_list', 'user'),
-        HubSubnavItem('rate_my_games', 'Rate My Games', 'rate_my_games', 'star'),
-        HubSubnavItem('challenges', 'Challenges', 'challenges_browse', 'target'),
-        HubSubnavItem('lists', 'Lists', 'lists_browse', 'list'),
-        HubSubnavItem('leaderboards', 'Leaderboards', 'overall_badge_leaderboards', 'bar-chart'),
+        HubSubnavItem('hub', 'Hub', 'community_hub', 'home', group='Explore'),
+        HubSubnavItem('profiles', 'Profiles', 'profiles_list', 'user', group='Explore'),
+        HubSubnavItem('leaderboards', 'Leaderboards', 'overall_badge_leaderboards', 'bar-chart', group='Explore'),
+        HubSubnavItem('rate_my_games', 'Rate My Games', 'rate_my_games', 'star', group='Create'),
+        HubSubnavItem('challenges', 'Challenges', 'challenges_browse', 'target', group='Create'),
+        HubSubnavItem('lists', 'Lists', 'lists_browse', 'list', group='Create'),
     ),
 )
 
@@ -148,17 +155,17 @@ MY_PURSUIT_HUB = HubSubnavConfig(
         '/collection/', '/career/', '/milestones/', '/titles/',
         '/profile-editor/', '/stats/', '/shareables/', '/recap/',
     ),
+    # Grouped rail: Progress = the gamification progression surfaces (Career merges the old Lab +
+    # Research Panel); Tools = personal outputs. Profile is appended to Tools as a dynamic extra.
     items=(
-        # Core: the gamification progression surfaces. Career merges the old Lab + Research Panel.
-        HubSubnavItem('overview', 'Overview', 'home', 'home'),
-        HubSubnavItem('collection', 'Collection', 'badge_collection', 'award', auth_required=True),
-        HubSubnavItem('career', 'Career', 'career', 'briefcase', auth_required=True),
-        HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag'),
-        HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True),
-        # Tools/outputs (divider before). Profile is appended after these as a dynamic extra.
-        HubSubnavItem('stats', 'My Stats', 'my_stats', 'bar-chart-3', auth_required=True, divider_before=True),
-        HubSubnavItem('shareables', 'My Shareables', 'my_shareables', 'image', auth_required=True),
-        HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True),
+        HubSubnavItem('overview', 'Overview', 'home', 'home', group='Progress'),
+        HubSubnavItem('collection', 'Collection', 'badge_collection', 'award', auth_required=True, group='Progress'),
+        HubSubnavItem('career', 'Career', 'career', 'briefcase', auth_required=True, group='Progress'),
+        HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag', group='Progress'),
+        HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True, group='Progress'),
+        HubSubnavItem('stats', 'My Stats', 'my_stats', 'bar-chart-3', auth_required=True, group='Tools'),
+        HubSubnavItem('shareables', 'My Shareables', 'my_shareables', 'image', auth_required=True, group='Tools'),
+        HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True, group='Tools'),
     ),
 )
 
@@ -347,6 +354,6 @@ def build_rendered_items(
         except NoReverseMatch:
             continue
         rendered.append(RenderedSubnavItem(
-            slug=item.slug, label=item.label, url=url, divider_before=item.divider_before))
+            slug=item.slug, label=item.label, url=url, icon=item.icon, group=item.group))
     rendered.extend(extras)
     return tuple(rendered)

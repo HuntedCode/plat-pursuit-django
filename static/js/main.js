@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!navbar) return;
         const navH = Math.round(navbar.getBoundingClientRect().height);
 
-        const subnav = document.querySelector('.hub-subnav');
+        const subnav = document.querySelector('.pp-sub');
         let subnavH = 0;
         if (subnav) {
             subnav.style.top = navH + 'px';
@@ -57,37 +57,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.fonts.ready.then(alignStickyChrome);
     }
 
-    // ===== Personal-hub mobile sub-nav (collapse-to-grid) =====
-    // The panel is absolute (drops over content), so opening it doesn't reflow the sticky chrome.
-    (function() {
-        function setPanel(open) {
-            const panel = document.getElementById('hub-subnav-panel');
-            if (!panel) return;
-            const btn = document.querySelector('[data-hub-subnav-toggle]');
-            const chev = document.querySelector('.hub-subnav-chev');
-            panel.classList.toggle('is-open', open);
-            panel.setAttribute('aria-hidden', open ? 'false' : 'true');
-            if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-            if (chev) chev.classList.toggle('is-open', open);
-        }
-        document.addEventListener('click', function(e) {
-            const panel = document.getElementById('hub-subnav-panel');
-            if (!panel) return;
-            if (e.target.closest('[data-hub-subnav-toggle]')) {
-                setPanel(!panel.classList.contains('is-open'));
-            } else if (panel.classList.contains('is-open') && !panel.contains(e.target)) {
-                setPanel(false);
-            }
-        });
-        document.addEventListener('keydown', function(e) {
-            if (e.key !== 'Escape') return;
-            const panel = document.getElementById('hub-subnav-panel');
-            if (!panel || !panel.classList.contains('is-open')) return;
-            setPanel(false);
-            const btn = document.querySelector('[data-hub-subnav-toggle]');
-            if (btn) btn.focus();
-        });
-    })();
+    // (The hub sub-nav's mobile sheet + desktop overflow "More" moved to static/js/subnav.js.)
 
     // ===== Back to top button =====
     const backToTop = document.getElementById('back-to-top');

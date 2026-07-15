@@ -15,14 +15,14 @@
     </div>
 </div>
 <style>
-    /* Push the sticky navbar + hub-subnav down by the banner's height so
-       they stack vertically below it instead of being overlapped. :has()
-       scopes this to the case where the banner is actually rendered. */
-    body:has(#site-banner-psn-outage) .navbar { top: 36px; }
-    body:has(#site-banner-psn-outage) .hub-subnav { top: calc(36px + 4rem); }
+    /* Push the sticky navbar + sub-nav down by the banner's height so they stack vertically below it
+       instead of being overlapped. :has() scopes this to when the banner is actually rendered.
+       (Class names track the rebuilt chrome: .pp-nav / .pp-sub.) */
+    body:has(#site-banner-psn-outage) .pp-nav { top: 36px; }
+    body:has(#site-banner-psn-outage) .pp-sub { top: calc(36px + 3.625rem); }
     @media (min-width: 1024px) {
-        body:has(#site-banner-psn-outage) .navbar { top: 40px; }
-        body:has(#site-banner-psn-outage) .hub-subnav { top: calc(40px + 4rem); }
+        body:has(#site-banner-psn-outage) .pp-nav { top: 40px; }
+        body:has(#site-banner-psn-outage) .pp-sub { top: calc(40px + 3.625rem); }
     }
 </style>
 {% endif %}

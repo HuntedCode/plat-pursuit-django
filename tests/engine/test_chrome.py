@@ -130,3 +130,36 @@ def test_profile_suggest_open_to_anonymous(client):
     resp = client.get(reverse('profile_suggest'), {'q': 'public'})
     assert resp.status_code == 200
     assert [r['psn_username'] for r in resp.json()['results']] == ['public_one']
+
+
+# --- Sub-nav: grouped rail rebuild (--pp-* house style, workshop direction) ---
+
+def test_subnav_renders_grouped_pp_rail(client):
+    # /community/ renders 200 with the Explore/Create rail (/games/ 302s to add default filters).
+    resp = client.get('/community/')
+    assert resp.status_code == 200
+    c = resp.content
+    assert b'class="pp-sub"' in c                    # house-style rail, not the old DaisyUI strip
+    assert b'data-subnav-rail' in c
+    assert b'data-subnav-pill' in c
+    assert b'Explore' in c and b'Create' in c        # the Community groups
+    assert b'data-group="Explore"' in c
+
+
+def test_subnav_marks_active_pill(client):
+    # Hub is the active Community item -> tinted-active + aria-current.
+    resp = client.get('/community/')
+    assert b'pp-subpill is-active' in resp.content
+    assert b'aria-current="page"' in resp.content
+
+
+def test_subnav_mobile_sheet_present(client):
+    c = client.get('/community/').content
+    assert b'data-subnav-sheet' in c                 # the grouped mobile sheet
+    assert b'pp-sub__sheetgrid' in c
+    assert b'data-subnav-toggle' in c
+
+
+def test_subnav_hidden_on_itemless_hub(client):
+    # Support has items=() -> the {% if hub_section and hub_subnav_items %} guard renders nothing.
+    assert b'class="pp-sub"' not in client.get('/support/').content

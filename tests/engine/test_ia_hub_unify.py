@@ -43,6 +43,33 @@ def test_personal_pages_resolve_to_my_pursuit(path, slug):
 
 def test_other_hubs_unchanged():
     assert resolve_hub_subnav(_req('/community/challenges/'))['hub'].key == 'community'
+
+
+def _grouped(ctx):
+    groups = {}
+    for i in ctx['hub_subnav_items']:
+        groups.setdefault(i.group, []).append(i.slug)
+    return groups
+
+
+def test_browse_items_grouped_catalog_curation():
+    # The rail groups locked in the chrome workshop.
+    groups = _grouped(hub_subnav(_req('/games/')))
+    assert groups['Catalog'] == ['games', 'trophies', 'badges', 'recently-added']
+    assert groups['Curation'] == ['franchises', 'companies', 'engines', 'genres', 'flagged']
+
+
+def test_community_items_grouped_explore_create():
+    groups = _grouped(hub_subnav(_req('/community/')))
+    assert groups['Explore'] == ['hub', 'profiles', 'leaderboards']
+    assert groups['Create'] == ['rate_my_games', 'challenges', 'lists']
+
+
+def test_my_pursuit_items_grouped_progress_tools():
+    profile = ProfileFactory(is_linked=True)
+    groups = _grouped(hub_subnav(_req('/', user=profile.user)))
+    assert groups['Progress'] == ['overview', 'collection', 'career', 'milestones', 'titles']
+    assert groups['Tools'] == ['stats', 'shareables', 'recap', 'profile']   # Profile is the dynamic extra
     assert resolve_hub_subnav(_req('/games/'))['hub'].key == 'browse'
 
 
@@ -112,7 +139,7 @@ def test_strip_shown_for_authed_home_with_overview_profile_and_divider():
     assert slugs[0] == 'overview'
     assert 'profile' in slugs                                   # dynamic extra for linked viewers
     stats = next(i for i in ctx['hub_subnav_items'] if i.slug == 'stats')
-    assert stats.divider_before is True                         # the 6+4 group divider
+    assert stats.group == 'Tools'                               # the Progress|Tools group boundary
 
 
 # --- My Pursuit nav button + mobile tab are login-gated ---

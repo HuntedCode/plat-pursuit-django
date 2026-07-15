@@ -238,7 +238,7 @@ def _profile_subnav_extra(request):
         url = reverse('profile_detail', kwargs={'psn_username': profile.psn_username})
     except NoReverseMatch:
         return ()
-    return (RenderedSubnavItem(slug='profile', label='Profile', url=url, icon='user'),)
+    return (RenderedSubnavItem(slug='profile', label='Profile', url=url, icon='user', group='Tools'),)
 
 
 def _is_own_profile_page(request):

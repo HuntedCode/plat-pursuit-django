@@ -689,37 +689,37 @@ class WelcomeTourManager {
     _createSubnavClone(step, accent) {
         this._removeSubnavClone();
 
-        const realSubnav = document.querySelector('.hub-subnav');
+        const realSubnav = document.querySelector('.pp-sub');
         if (!realSubnav) return;
 
         const clone = realSubnav.cloneNode(true);
         clone.classList.add('tour-subnav-clone', 'visible');
-        clone.classList.remove('sticky');
         clone.removeAttribute('aria-label');
+        clone.removeAttribute('data-subnav');   // inert clone: keep subnav.js off it
 
         // Replace the hub label and icon to match the current step
         const hubInfo = TOUR_HUB_LABELS[step];
         if (hubInfo) {
-            const labelSpan = clone.querySelector('.hub-subnav-scroll .uppercase span');
+            const labelSpan = clone.querySelector('.pp-sub__hub b');
             if (labelSpan) labelSpan.textContent = hubInfo.label;
 
-            const iconSvg = clone.querySelector('.hub-subnav-scroll .uppercase svg');
+            const iconSvg = clone.querySelector('.pp-sub__hub svg');
             if (iconSvg && TOUR_HUB_ICONS[hubInfo.icon]) {
                 iconSvg.innerHTML = TOUR_HUB_ICONS[hubInfo.icon];
             }
         }
 
-        // Replace the sub-nav items with this step's hub items
-        const ul = clone.querySelector('ul');
-        if (ul) {
+        // Replace the rail with this step's hub items as pills (first = active). Drop the overflow
+        // "More" -- no measurement runs on the static clone.
+        const rail = clone.querySelector('.pp-sub__rail');
+        if (rail) {
             const items = TOUR_SUBNAV_ITEMS[step] || [];
-            ul.innerHTML = items.map((label, i) =>
-                `<li class="shrink-0">
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all ${i === 0 ? 'bg-primary/15 border border-primary/30 shadow-sm' : 'text-base-content/70 border border-transparent'}"
-                          style="${i === 0 ? 'color: ' + accent + ';' : ''}">${label}</span>
-                </li>`
-            ).join('');
+            rail.innerHTML = '<div class="pp-sub__group">' + items.map((label, i) =>
+                `<span class="pp-subpill${i === 0 ? ' is-active' : ''}"${i === 0 ? ` style="color:${accent}"` : ''}>${label}</span>`
+            ).join('') + '</div>';
         }
+        const moreEl = clone.querySelector('.pp-sub__more');
+        if (moreEl) moreEl.remove();
 
         // Disable link clicks
         clone.querySelectorAll('a').forEach(a => {
