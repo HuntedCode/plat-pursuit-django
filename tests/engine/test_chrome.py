@@ -6,6 +6,7 @@ merged into one hub sitemap, a Support column added), and its auth-gated visibil
 """
 import pytest
 from django.template.loader import render_to_string
+from django.urls import reverse
 
 from tests.factories import ProfileFactory
 
@@ -69,3 +70,63 @@ def test_avatar_partial_falls_back_to_glyph_without_url():
     # the fix's whole point: never emit the non-existent default-avatar asset path
     assert 'default-avatar' not in html
     assert 'default_avatar' not in html
+
+
+# --- Navbar PSN search: persistent bar + typeahead suggest endpoint ---
+
+def test_navbar_renders_persistent_search_bar(client):
+    resp = client.get('/support/')
+    assert resp.status_code == 200
+    # The search is now a persistent bar wired to the suggest endpoint, not a bare dropdown.
+    assert b'class="pp-navsearch"' in resp.content
+    assert b'data-url-suggest' in resp.content
+    assert b'id="navbar-sync-form"' in resp.content
+
+
+def test_profile_suggest_ranks_prefix_matches_by_plats(client):
+    ProfileFactory(psn_username='zed_low', total_plats=5)
+    ProfileFactory(psn_username='zed_high', total_plats=120)
+    ProfileFactory(psn_username='other_hunter', total_plats=999)  # different prefix: excluded
+
+    resp = client.get(reverse('profile_suggest'), {'q': 'zed'})
+    assert resp.status_code == 200
+    results = resp.json()['results']
+
+    names = [r['psn_username'] for r in results]
+    assert names == ['zed_high', 'zed_low']            # ranked by total_plats desc
+    assert 'other_hunter' not in names                 # prefix filter excludes non-matches
+
+    top = results[0]
+    assert top['display'] == 'zed_high'                # falls back to psn_username when no display name
+    assert top['plats'] == 120
+    assert top['url'] == reverse('profile_detail', kwargs={'psn_username': 'zed_high'})
+    assert 'avatar_url' in top
+
+
+def test_profile_suggest_display_name_and_case_insensitive(client):
+    # psn_username is stored lowercased; display_psn_username carries the original case.
+    ProfileFactory(psn_username='camelhunter', display_psn_username='CamelHunter', total_plats=1)
+    resp = client.get(reverse('profile_suggest'), {'q': 'CAMEL'})   # upper query still matches
+    results = resp.json()['results']
+    assert [r['psn_username'] for r in results] == ['camelhunter']
+    assert results[0]['display'] == 'CamelHunter'                   # original-case display preferred
+
+
+def test_profile_suggest_short_query_returns_empty(client):
+    ProfileFactory(psn_username='ab_hunter', total_plats=1)
+    resp = client.get(reverse('profile_suggest'), {'q': 'a'})   # < 2 chars
+    assert resp.status_code == 200
+    assert resp.json()['results'] == []
+
+
+def test_profile_suggest_rejects_overlong_query(client):
+    resp = client.get(reverse('profile_suggest'), {'q': 'a' * 65})
+    assert resp.status_code == 400
+
+
+def test_profile_suggest_open_to_anonymous(client):
+    # Profiles are public pages, so the read-only lookup is anon-accessible.
+    ProfileFactory(psn_username='public_one', total_plats=3)
+    resp = client.get(reverse('profile_suggest'), {'q': 'public'})
+    assert resp.status_code == 200
+    assert [r['psn_username'] for r in resp.json()['results']] == ['public_one']

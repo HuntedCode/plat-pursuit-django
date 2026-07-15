@@ -28,37 +28,47 @@ JS hooks (navbar-search.js / notifications.js); only their trigger buttons are r
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>Support</a>
     </div>
 
-    <div class="pp-nav__end">
+    {% comment %} PSN profile search: a persistent typeahead bar on md+ that collapses to an icon
+    trigger below md (navbar-search.js drives it: #navbar-sync-form + data-search-* hooks for the
+    typeahead over tracked profiles, and the .add-sync-* hooks for the add-and-sync fallback). {% endcomment %}
+    <div class="pp-navsearch" id="navbar-search">
+        {# Mobile trigger: opens the bar as a sheet below the nav (hidden on md+). #}
+        <button type="button" class="pp-navsearch__trigger md:hidden" id="navbar-sync-search-btn" aria-label="Search PSN profiles" aria-expanded="false" aria-controls="navbar-sync-form">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </button>
 
-        {# Sync-Search (navbar-search.js: #navbar-sync-search / -btn / -hint / #navbar-sync-form / .add-sync-*). #}
-        <div class="dropdown dropdown-end" id="navbar-sync-search">
-            <button id="navbar-sync-search-btn" tabindex="0" class="pp-navicon" aria-label="Sync a PSN profile" aria-haspopup="true" aria-expanded="false">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            </button>
-            <div id="navbar-search-hint" class="absolute top-full right-0 mt-2 w-64 z-[100] hidden" role="status">
-                <div class="absolute -top-2 right-3 w-4 h-4 bg-base-200 border-l-2 border-t-2 border-primary rotate-45"></div>
-                <div class="relative bg-base-200 border-2 border-primary rounded-box shadow-lg shadow-primary/30 p-3 pr-7">
-                    <button id="navbar-search-hint-close" type="button" class="absolute top-1 right-1 btn btn-ghost btn-xs btn-circle" aria-label="Dismiss tip">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-                    </button>
-                    <p class="text-sm font-semibold">Search PSN profiles</p>
-                    <p class="text-xs text-base-content/70 mt-0.5">Look up any hunter (yours or a friend's) from any page.</p>
-                </div>
+        <form id="navbar-sync-form" class="pp-navsearch__form" method="post" action="{% url 'search_sync_profile' %}" role="search"
+              data-form-type="other" data-url-add-sync="{% url 'add_sync_status' %}" data-url-suggest="{% url 'profile_suggest' %}">
+            {% csrf_token %}
+            <div class="pp-navsearch__field">
+                <svg class="pp-navsearch__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <input type="search" name="psn_username" class="add-sync-input pp-navsearch__input" placeholder="Search hunters&hellip;"
+                       aria-label="Search PSN profiles" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="navbar-search-results"
+                       autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="16"
+                       data-form-type="other" data-lpignore="true" required />
+                <span class="add-sync-load pp-navsearch__spin hidden" role="status" aria-label="Working"></span>
+                <button type="button" class="pp-navsearch__clear hidden" data-search-clear aria-label="Clear search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
             </div>
-            <div tabindex="0" class="dropdown-content z-[100] card card-compact w-72 sm:w-80 p-4 shadow-2xl bg-base-200 mt-3 border-2 border-base-300 max-md:fixed max-md:top-16 max-md:left-2 max-md:right-2 max-md:w-auto">
-                <h3 class="font-bold text-sm mb-2">Sync a PSN profile</h3>
-                <form id="navbar-sync-form" method="post" action="{% url 'search_sync_profile' %}" data-form-type="other" data-url-add-sync="{% url 'add_sync_status' %}">
-                    {% csrf_token %}
-                    <div class="flex items-center gap-2">
-                        <input type="search" name="psn_username" placeholder="PSN Username" class="add-sync-input input input-accent input-sm flex-1 min-w-0" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" data-form-type="other" data-lpignore="true" readonly onfocus="this.removeAttribute('readonly')" required />
-                        <button type="submit" class="add-sync-btn btn btn-accent btn-sm border border-base-300 shrink-0" aria-label="Sync new profile">Sync</button>
-                        <a href="" class="add-sync-anchor btn btn-success btn-sm border border-base-300 hidden shrink-0" aria-label="Visit synced profile">Visit</a>
-                        <span class="add-sync-load loading loading-spinner loading-sm hidden shrink-0" role="status" aria-label="Syncing profile"></span>
-                    </div>
-                    <p id="add-sync-error-text" class="text-xs text-error font-bold italic hidden mt-2"></p>
-                </form>
+
+            {# Typeahead results + the add-and-sync fallback. #}
+            <div class="pp-navsearch__panel" id="navbar-search-results" role="listbox" aria-label="Profile suggestions" hidden>
+                <div class="pp-navsearch__list" data-search-list></div>
+                <button type="submit" id="navsearch-add" class="pp-navsearch__add add-sync-btn" data-search-add hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M11 8v6M8 11h6"/></svg>
+                    <span>Sync &ldquo;<b data-search-term></b>&rdquo; &mdash; a new hunter</span>
+                </button>
+                <a href="" id="navsearch-visit" class="pp-navsearch__visit add-sync-anchor hidden" aria-label="Visit synced profile">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    <span>Visit profile</span>
+                </a>
+                <p id="add-sync-error-text" class="pp-navsearch__msg pp-navsearch__msg--err hidden"></p>
             </div>
-        </div>
+        </form>
+    </div>
+
+    <div class="pp-nav__end">
 
         {# Notifications (notifications.js: #notification-dropdown / -badge / -list / mark-all-read). #}
         {% if user.is_authenticated %}

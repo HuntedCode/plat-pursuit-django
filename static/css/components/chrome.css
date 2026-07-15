@@ -41,7 +41,9 @@
     background: var(--pp-primary); box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 55%, transparent);
 }
 
-.pp-nav__end { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+/* No auto-margin: the search bar (flex:1 on md+) fills the middle and pushes the end cluster to the
+   right edge; below md the search collapses to a trigger and .pp-navsearch carries the auto-margin. */
+.pp-nav__end { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .pp-navicon {
     position: relative; width: 36px; height: 36px; border-radius: var(--pp-radius-md); display: grid; place-items: center;
     color: var(--pp-text-mute); background: none; border: none; cursor: pointer;
@@ -63,6 +65,104 @@
 }
 @media (hover: hover) { .pp-navpremium:hover { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); } }
 .pp-navpremium svg { width: 14px; height: 14px; }
+
+/* ── PSN profile search: persistent typeahead bar (md+), icon-collapse (<md) ── */
+/* Chrome stays calm: matte field at rest, cyan focus ring only when engaged (the one active accent). */
+.pp-navsearch { position: relative; display: flex; align-items: center; margin-left: auto; flex-shrink: 0; }
+
+/* Mobile trigger (matches .pp-navicon); hidden on md+ where the bar is inline. */
+.pp-navsearch__trigger {
+    width: 36px; height: 36px; border-radius: var(--pp-radius-md); display: grid; place-items: center;
+    color: var(--pp-text-mute); background: none; border: none; cursor: pointer;
+    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) { .pp-navsearch__trigger:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.05); } }
+.pp-navsearch__trigger:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-navsearch__trigger svg { width: 19px; height: 19px; }
+
+/* Form: a sheet dropped below the nav on mobile (hidden until .is-open); an inline bar on md+.
+   The form is the positioning context for the results panel so the panel aligns to the visible bar
+   (which caps at 440px and centres inside the grown container), not the full-width flex container. */
+.pp-navsearch__form { display: none; }
+.pp-navsearch.is-open .pp-navsearch__form { display: block; position: absolute; top: calc(100% + 8px); right: 0; width: min(92vw, 360px); z-index: 100; }
+
+.pp-navsearch__field {
+    position: relative; display: flex; align-items: center;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
+    transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.pp-navsearch__field:focus-within {
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent);
+    background: var(--pp-bg-3);
+}
+.pp-navsearch__icon { width: 16px; height: 16px; margin-left: 11px; color: var(--pp-text-mute); flex-shrink: 0; pointer-events: none; }
+.pp-navsearch__input {
+    flex: 1; min-width: 0; height: 38px; padding: 0 8px; border: none; background: none; outline: none;
+    color: var(--pp-text); font-size: 0.84rem; font-weight: 500;
+}
+.pp-navsearch__input::placeholder { color: var(--pp-text-mute); }
+.pp-navsearch__input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+
+.pp-navsearch__spin {
+    width: 15px; height: 15px; margin-right: 10px; flex-shrink: 0; border-radius: 50%; display: inline-block;
+    border: 2px solid color-mix(in oklab, var(--pp-primary) 30%, transparent); border-top-color: var(--pp-primary);
+    animation: ppAvSpin 0.7s linear infinite;
+}
+.pp-navsearch__clear {
+    width: 26px; height: 26px; margin-right: 5px; flex-shrink: 0; display: grid; place-items: center;
+    border: none; background: none; color: var(--pp-text-mute); cursor: pointer; border-radius: var(--pp-radius-sm);
+    transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease);
+}
+@media (hover: hover) { .pp-navsearch__clear:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.06); } }
+.pp-navsearch__clear svg { width: 14px; height: 14px; }
+
+/* Results panel (typeahead rows + the add-and-sync fallback). */
+.pp-navsearch__panel {
+    position: absolute; top: calc(100% + 7px); left: 0; right: 0; z-index: 100; padding: 6px; overflow: hidden;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 44px rgba(0,0,0,0.45);
+}
+.pp-navsearch__panel[hidden] { display: none; }
+.pp-navsearch__list:empty { display: none; }
+
+.pp-navsearch__opt {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 9px; border-radius: var(--pp-radius-md);
+    text-decoration: none; color: var(--pp-text); cursor: pointer; border: none; background: none; text-align: left;
+    transition: background var(--pp-dur-fast) var(--pp-ease);
+}
+.pp-navsearch__opt.is-active, .pp-navsearch__opt:hover { background: oklch(1 0 0 / 0.06); }
+.pp-navsearch__opt img, .pp-navsearch__ph {
+    width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--pp-bg-3), var(--pp-bg-2)); display: grid; place-items: center; color: var(--pp-text-dim);
+}
+.pp-navsearch__ph svg { width: 16px; height: 16px; }
+.pp-navsearch__opt b { flex: 1; min-width: 0; font-size: 0.83rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-navsearch__plats { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; font-weight: 700; color: var(--pp-text-dim); flex-shrink: 0; }
+.pp-navsearch__plats::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--color-trophy-platinum); }
+
+.pp-navsearch__add, .pp-navsearch__visit {
+    display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 9px; border-radius: var(--pp-radius-md);
+    font-size: 0.8rem; font-weight: 600; text-decoration: none; cursor: pointer; border: none; text-align: left; background: none;
+    color: var(--pp-text-dim); transition: background var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease);
+}
+.pp-navsearch__add { color: var(--pp-primary); }
+.pp-navsearch__add.is-active, .pp-navsearch__add:hover { background: color-mix(in oklab, var(--pp-primary) 12%, transparent); }
+.pp-navsearch__add svg { width: 18px; height: 18px; flex-shrink: 0; }
+.pp-navsearch__add b { font-weight: 800; }
+.pp-navsearch__visit { color: var(--pp-success); }
+.pp-navsearch__visit.is-active, .pp-navsearch__visit:hover { background: color-mix(in oklab, var(--pp-success) 14%, transparent); }
+.pp-navsearch__visit svg { width: 16px; height: 16px; flex-shrink: 0; }
+.pp-navsearch__msg { padding: 7px 9px; font-size: 0.74rem; font-weight: 600; }
+.pp-navsearch__msg--err { color: var(--pp-error); font-style: italic; }
+
+/* md+: persistent inline bar. The container grows to fill the whole centre gap (pushing the end
+   cluster to the right edge); the visible bar caps at 440px and centres within it. */
+@media (min-width: 768px) {
+    .pp-navsearch { flex: 1 1 auto; min-width: 0; justify-content: center; margin: 0 14px; }
+    .pp-navsearch__trigger { display: none; }
+    .pp-navsearch__form, .pp-navsearch.is-open .pp-navsearch__form { display: block; position: relative; width: 100%; max-width: 440px; }
+}
 
 /* ── Status-aware avatar: the ring colour IS the sync state ───────────────── */
 .pp-av { position: relative; width: 38px; height: 38px; border-radius: 50%; cursor: pointer; flex-shrink: 0; padding: 0; border: none; background: none; }

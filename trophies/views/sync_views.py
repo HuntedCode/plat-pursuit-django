@@ -120,6 +120,68 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
 
         return JsonResponse(data)
 
+class ProfileSuggestView(View):
+    """
+    AJAX typeahead for the navbar search bar.
+
+    Suggests EXISTING tracked profiles whose PSN username starts with the
+    query, ranked by trophy weight (most prominent hunter first) so the
+    dropdown surfaces the profile the searcher most likely means. Read-only
+    public lookup (profiles are public pages), so it's open to anonymous
+    users; rate-limited like the sync search it sits beside. The client falls
+    back to the add-and-sync flow (SearchSyncProfileView) when the typed name
+    isn't tracked yet.
+
+    Prefix match only (istartswith): it rides the psn_username index, is the
+    intuitive typeahead behaviour, and bounds the scan. Ordering rides the
+    total_plats index; the prefix filter caps the set before the sort, so this
+    stays a small, whale-safe query (<=8 rows) regardless of table size.
+    """
+    def get(self, request):
+        # Read-only + cheap, so a more generous bucket than the sync search:
+        # authed users are user-keyed, anon IP-keyed.
+        if request.user.is_authenticated:
+            limited = is_ratelimited(
+                request, group='profile_suggest:user', key='user',
+                rate='30/m', method='GET', increment=True,
+            )
+        else:
+            limited = is_ratelimited(
+                request, group='profile_suggest:ip', key='ip',
+                rate='20/m', method='GET', increment=True,
+            )
+        if limited:
+            return JsonResponse({'results': [], 'throttled': True}, status=429)
+
+        q = request.GET.get('q', '').strip()
+        if len(q) < 2:
+            return JsonResponse({'results': []})
+        # Bound the query so a giant string can't stress the LIKE comparison
+        # (PSN usernames max at 16 chars; the slack covers paste accidents).
+        if len(q) > 64:
+            return JsonResponse({'error': 'Query too long'}, status=400)
+
+        from django.urls import reverse
+        matches = (
+            Profile.objects
+            .filter(psn_username__istartswith=q)
+            .order_by('-total_plats', 'psn_username')
+            .values('psn_username', 'display_psn_username', 'avatar_url', 'total_plats')
+            [:8]
+        )
+        results = [
+            {
+                'psn_username': m['psn_username'],
+                'display': m['display_psn_username'] or m['psn_username'],
+                'avatar_url': m['avatar_url'] or '',
+                'plats': m['total_plats'],
+                'url': reverse('profile_detail', kwargs={'psn_username': m['psn_username']}),
+            }
+            for m in matches
+        ]
+        return JsonResponse({'results': results})
+
+
 class TriggerSyncView(LoginRequiredMixin, View):
     """
     AJAX endpoint to manually trigger profile sync from navigation hotbar.

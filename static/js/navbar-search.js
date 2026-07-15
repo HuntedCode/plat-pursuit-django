@@ -1,145 +1,269 @@
 /**
- * Navbar Sync Search
+ * Navbar PSN search.
  *
- * Handles the "Sync a PSN profile" dropdown form in the navbar. Previously
- * lived inside the hotbar (templates/partials/hotbar.html) as both a desktop
- * inline form and a collapsible mobile row, which crowded the hotbar's flex
- * row and caused Safari to overlap the sync-now button with the search
- * controls in the 768-1023px tablet band.
+ * A persistent typeahead bar (md+) that collapses to an icon trigger below md.
+ * Two behaviours share one #navbar-sync-form:
+ *   1. Typeahead over EXISTING tracked profiles (GET profile_suggest, debounced)
+ *      -> a dropdown of matching hunters, each linking to their profile page.
+ *   2. Add-and-sync fallback for a name that isn't tracked yet: the form posts
+ *      to search_sync_profile, then polls add_sync_status until the new profile
+ *      finishes basic ingestion (-> Visit link) or errors.
  *
- * Moved to the navbar so the hotbar can stay compact and so search is
- * reachable on every page that renders the navbar (the hotbar is only
- * rendered for auth users with a profile, but the navbar is global).
- *
- * The form posts to `search_sync_profile` to kick off the add, then polls
- * `add_sync_status` until either the new profile finishes basic ingestion
- * (data.account_id appears → show Visit link) or errors out.
+ * Rows are built with DOM APIs (not innerHTML interpolation) so PSN-sourced
+ * display names and avatar URLs can never inject markup.
  */
 document.addEventListener('DOMContentLoaded', () => {
+    const root = document.getElementById('navbar-search');
     const form = document.getElementById('navbar-sync-form');
-    if (!form) return;
+    if (!root || !form) return;
 
+    const suggestUrl = form.dataset.urlSuggest;
     const addSyncStatusUrl = form.dataset.urlAddSync;
+    const input = form.querySelector('.add-sync-input');
+    const panel = document.getElementById('navbar-search-results');
+    const list = form.querySelector('[data-search-list]');
+    const addBtn = form.querySelector('[data-search-add]');
+    const addTerm = form.querySelector('[data-search-term]');
+    const visitAnchor = form.querySelector('.add-sync-anchor');
+    const spinner = form.querySelector('.add-sync-load');
+    const clearBtn = form.querySelector('[data-search-clear]');
     const errorText = document.getElementById('add-sync-error-text');
-    let pollInterval;
+    const trigger = document.getElementById('navbar-sync-search-btn');
 
-    function show(el) { el?.classList.remove('hidden'); }
-    function hide(el) { el?.classList.add('hidden'); }
+    // PSN Online IDs are 3-16 chars of [a-zA-Z0-9_-]; only offer the add-and-sync
+    // fallback when the query could actually be one.
+    const PSN_RE = /^[a-zA-Z0-9_-]{3,16}$/;
 
-    function getRefs() {
-        return {
-            btn:    form.querySelector('.add-sync-btn'),
-            load:   form.querySelector('.add-sync-load'),
-            anchor: form.querySelector('.add-sync-anchor'),
-            input:  form.querySelector('.add-sync-input'),
-        };
+    let pollInterval = null;
+    let items = [];        // navigable elements currently in the panel
+    let activeIndex = -1;  // keyboard-highlighted item
+
+    const show = (el) => el && el.classList.remove('hidden');
+    const hide = (el) => el && el.classList.add('hidden');
+
+    // ---- Panel open / close + keyboard cursor ----
+    function openPanel() {
+        panel.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
     }
-
-    function checkAddSync(data, refs) {
-        if (data.sync_status === 'error') {
-            // Restore the Sync button and keep the input visible so the user can
-            // fix the username and retry in place. Hiding the focused input would
-            // drop focus to <body> and collapse the daisyUI dropdown
-            // (:focus-within), so the error text inside it would never be seen.
-            hide(refs.load);
-            show(refs.btn);
-            if (errorText) {
-                errorText.textContent = 'Sync error: check the spelling and account permissions, then try again.';
-                show(errorText);
-            }
-            refs.input?.focus();
-            clearInterval(pollInterval);
-        } else if (data.account_id) {
-            hide(refs.load);
-            if (refs.anchor) {
-                refs.anchor.href = data.slug;
-                show(refs.anchor);
-            }
-            clearInterval(pollInterval);
+    function closePanel() {
+        panel.hidden = true;
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+        activeIndex = -1;
+        items = [];
+    }
+    function refreshItems() {
+        items = Array.from(panel.querySelectorAll(
+            '.pp-navsearch__opt, [data-search-add]:not([hidden]), .add-sync-anchor:not(.hidden)'
+        ));
+    }
+    function setActive(i) {
+        if (!items.length) { activeIndex = -1; return; }
+        activeIndex = (i + items.length) % items.length;
+        items.forEach((el, idx) => el.classList.toggle('is-active', idx === activeIndex));
+        const el = items[activeIndex];
+        if (el) {
+            el.scrollIntoView({ block: 'nearest' });
+            if (el.id) input.setAttribute('aria-activedescendant', el.id);
         }
     }
 
-    function pollAddSync(psn_username, refs) {
+    // ---- Reset any in-flight add-and-sync UI back to the resting bar ----
+    function resetAddSync() {
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        hide(spinner);
+        hide(visitAnchor);
+        if (visitAnchor) visitAnchor.href = '';
+        hide(errorText);
+        if (errorText) errorText.textContent = '';
+    }
+
+    // ---- Typeahead rendering ----
+    function personPlaceholder() {
+        const span = document.createElement('span');
+        span.className = 'pp-navsearch__ph';
+        span.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+        return span;
+    }
+    function buildRow(p, i) {
+        const a = document.createElement('a');
+        a.className = 'pp-navsearch__opt';
+        a.href = p.url;
+        a.id = 'navsearch-opt-' + i;
+        a.setAttribute('role', 'option');
+
+        if (p.avatar_url) {
+            const img = document.createElement('img');
+            img.src = p.avatar_url;            // property assignment: no markup injection
+            img.alt = '';
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            a.appendChild(img);
+        } else {
+            a.appendChild(personPlaceholder());
+        }
+
+        const name = document.createElement('b');
+        name.textContent = p.display;          // textContent: safe
+        a.appendChild(name);
+
+        const plats = document.createElement('span');
+        plats.className = 'pp-navsearch__plats';
+        plats.textContent = Number(p.plats || 0).toLocaleString();
+        plats.title = 'Platinums';
+        a.appendChild(plats);
+        return a;
+    }
+    function renderSuggestions(results, q) {
+        resetAddSync();
+        list.textContent = '';
+        results.forEach((p, i) => list.appendChild(buildRow(p, i)));
+
+        if (addTerm) addTerm.textContent = q;
+        addBtn.hidden = !PSN_RE.test(q);
+
+        refreshItems();
+        openPanel();
+        // Highlight the first suggestion (or the add row if there are none).
+        setActive(0);
+    }
+
+    const fetchSuggest = PlatPursuit.debounce((q) => {
+        if (!suggestUrl) return;
+        PlatPursuit.API.get(`${suggestUrl}?q=${encodeURIComponent(q)}`)
+            .then((data) => {
+                if (input.value.trim() !== q) return;   // stale: input moved on
+                renderSuggestions(data.results || [], q);
+            })
+            .catch(() => {
+                // Network hiccup / throttle: keep the field usable. If the name is
+                // a valid PSN id, still offer the add-and-sync fallback.
+                if (input.value.trim() !== q) return;
+                renderSuggestions([], q);
+            });
+    }, 180);
+
+    function onInput() {
+        const q = input.value.trim();
+        clearBtn.classList.toggle('hidden', !q);
+        resetAddSync();
+        if (q.length < 2) { closePanel(); return; }
+        fetchSuggest(q);
+    }
+    input.addEventListener('input', onInput);
+    input.addEventListener('focus', () => { if (input.value.trim().length >= 2) fetchSuggest(input.value.trim()); });
+
+    // ---- Keyboard navigation ----
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') {
+            if (panel.hidden) { onInput(); } else { setActive(activeIndex + 1); }
+            e.preventDefault();
+        } else if (e.key === 'ArrowUp') {
+            if (!panel.hidden) { setActive(activeIndex - 1); e.preventDefault(); }
+        } else if (e.key === 'Escape') {
+            if (!panel.hidden) { closePanel(); e.preventDefault(); }
+            else if (root.classList.contains('is-open')) { closeSheet(); }
+        } else if (e.key === 'Enter') {
+            const el = items[activeIndex];
+            if (el && el.classList.contains('pp-navsearch__opt')) {
+                // Navigate to the highlighted profile; the form must not submit.
+                window.location.href = el.href;
+                e.preventDefault();
+            }
+            // Otherwise fall through: the native submit fires runAddSync (below).
+        }
+    });
+
+    // ---- Add-and-sync fallback (unknown name) ----
+    function pollAddSync(psn_username) {
         if (!psn_username || !addSyncStatusUrl) return;
-        const url = `${addSyncStatusUrl}?psn_username=${encodeURIComponent(psn_username)}`;
-        PlatPursuit.API.get(url)
-            .then(data => checkAddSync(data, refs))
-            .catch(error => console.error('Add sync polling error:', error));
+        PlatPursuit.API.get(`${addSyncStatusUrl}?psn_username=${encodeURIComponent(psn_username)}`)
+            .then((data) => {
+                if (data.sync_status === 'error') {
+                    hide(spinner);
+                    if (errorText) {
+                        errorText.textContent = 'Sync error: check the spelling and account permissions, then try again.';
+                        show(errorText);
+                    }
+                    input.focus();
+                    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+                } else if (data.account_id) {
+                    hide(spinner);
+                    if (visitAnchor) { visitAnchor.href = data.slug; show(visitAnchor); refreshItems(); }
+                    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+                }
+            })
+            .catch((error) => console.error('Add sync polling error:', error));
     }
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
-        const refs = getRefs();
-        if (errorText) hide(errorText);
+        const q = input.value.trim();
+        if (!PSN_RE.test(q)) { input.focus(); return; }
+
+        hide(errorText);
+        addBtn.hidden = true;
+        list.textContent = '';
+        show(spinner);
+        openPanel();
 
         const formData = new FormData(form);
         PlatPursuit.API.postFormData(form.action, formData)
-            .then(data => {
+            .then((data) => {
                 if (data.success) {
-                    hide(refs.btn);
-                    show(refs.load);
-                    // Pressing Enter activates the (now-hidden) submit button, so
-                    // focus would fall to <body> and break the daisyUI dropdown's
-                    // :focus-within open state. Refocus the still-visible input to
-                    // keep the dropdown open while the sync runs.
-                    refs.input?.focus();
+                    input.focus();
+                    // First status lands a couple seconds after ingestion kicks off.
                     setTimeout(() => {
-                        pollInterval = setInterval(() => pollAddSync(data.psn_username, refs), 2500);
+                        pollInterval = setInterval(() => pollAddSync(data.psn_username), 2500);
                     }, 2500);
                 } else {
+                    hide(spinner);
                     PlatPursuit.ToastManager.error(data.error || 'Failed to sync profile. Check the username and try again.');
                 }
             })
-            .catch(error => {
+            .catch((error) => {
                 console.error('Sync form error:', error);
+                hide(spinner);
                 PlatPursuit.ToastManager.error('Failed to sync profile. Please try again.');
             });
+    });
+
+    // ---- Clear ----
+    clearBtn.addEventListener('click', () => {
+        input.value = '';
+        hide(clearBtn);
+        resetAddSync();
+        closePanel();
+        input.focus();
+    });
+
+    // ---- Mobile sheet toggle ----
+    function openSheet() {
+        root.classList.add('is-open');
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+        // Wait a frame so the now-visible input can receive focus.
+        requestAnimationFrame(() => input.focus());
+    }
+    function closeSheet() {
+        root.classList.remove('is-open');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        closePanel();
+    }
+    if (trigger) {
+        trigger.addEventListener('click', () => {
+            if (root.classList.contains('is-open')) closeSheet(); else openSheet();
+        });
+    }
+
+    // ---- Dismiss on outside click ----
+    document.addEventListener('click', (e) => {
+        if (root.contains(e.target)) return;
+        closePanel();
+        if (root.classList.contains('is-open')) closeSheet();
     });
 
     window.addEventListener('beforeunload', () => {
         if (pollInterval) clearInterval(pollInterval);
     });
-
-    // --- First-load discovery hint ---
-    // Pulse + tooltip bubble that points at the search button on first load.
-    // Dismissed (and the localStorage flag set) on any of:
-    //   - Click of the close 'x' inside the hint bubble
-    //   - Click of the search button (user found it themselves)
-    //   - Focus of the search button (keyboard nav, opening the dropdown)
-
-    const HINT_STORAGE_KEY = 'navbar_search_hint_dismissed';
-    const searchBtn = document.getElementById('navbar-sync-search-btn');
-    const hint = document.getElementById('navbar-search-hint');
-    const hintClose = document.getElementById('navbar-search-hint-close');
-
-    if (hint && searchBtn && localStorage.getItem(HINT_STORAGE_KEY) !== 'true') {
-        const dismissHint = () => {
-            hint.classList.add('hidden');
-            searchBtn.classList.remove('navbar-search-pulse');
-            localStorage.setItem(HINT_STORAGE_KEY, 'true');
-        };
-
-        // Small delay so the page settles (avoids layout flash during font swap
-        // and the alignStickyChrome() re-measure that runs on font-ready).
-        setTimeout(() => {
-            if (localStorage.getItem(HINT_STORAGE_KEY) === 'true') return;
-            hint.classList.remove('hidden');
-            searchBtn.classList.add('navbar-search-pulse');
-        }, 800);
-
-        // The hint lives inside the daisyUI .dropdown container, which opens
-        // on :focus-within. A normal click on the X would focus the close
-        // button -> trigger :focus-within -> pop the search dropdown open
-        // before the click handler can dismiss the hint. Suppressing focus
-        // on mousedown stops that chain; the click handler then dismisses
-        // cleanly. Keyboard activation (Tab to X, then Enter) still works
-        // via the click handler.
-        hintClose?.addEventListener('mousedown', (e) => e.preventDefault());
-        hintClose?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            dismissHint();
-        });
-        searchBtn.addEventListener('click', dismissHint, { once: true });
-        searchBtn.addEventListener('focus', dismissHint, { once: true });
-    }
 });
