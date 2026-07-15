@@ -43,7 +43,6 @@ Strategic-identity docs and long-form vision documents for systems not yet fully
 | [Premium = Membership](design/rebuild/premium-proposal.md) | Premium direction: support-led membership (not a paywall), four buckets, v1 = positioning/storefront/flair, value flagships on a published roadmap. |
 | [Platinum Journey](design/platinum-journey.md) | Premium "patient companion": **Phase C of the Data Intelligence arc** — the insight engine spoken rather than charted; knows the user, helps plan their next pursuits |
 | [Stats Page](design/stats-page.md) | Premium `/my-stats/` page: video game stats screen with 100+ trophy hunting stats |
-| [Tutorial System](design/tutorial-system.md) | 3-tour onboarding: Welcome Tour (hub navigation), Game Detail Tour (community features), Badge Detail Tour (progression system) |
 
 ## Features
 

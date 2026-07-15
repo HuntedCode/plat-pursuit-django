@@ -20,7 +20,7 @@ The cleanest resolution: **kill "My Pursuit" as a personal-utility menu, and reu
 - Avoids introducing new vocabulary
 - Frees the personal-utility pages to live in the right place (Dashboard sub-nav)
 
-The cost is a one-time relearning ("the menu items moved"), mitigated by 301 redirects on every legacy URL and the [Tutorial System](../design/tutorial-system.md): a Welcome Tour runs once on first PSN-link to introduce each hub, and a Badge Detail Tour (coach marks) walks new users through badge series mechanics on their first badge detail page visit.
+The cost is a one-time relearning ("the menu items moved"), mitigated by 301 redirects on every legacy URL. (A legacy onboarding tour that also softened this was removed in the chrome rebuild.)
 
 ## Why there's no dedicated landing page
 
@@ -100,7 +100,6 @@ The reverse-name strategy keeps existing `{% url 'badges_list' %}` and `reverse(
 - [Badge System](../architecture/badge-system.md): the underlying source of badge data, progress tracking, and the badge views that act as the hub landing + first sub-nav item
 - [Gamification](../architecture/gamification.md): the existing gamification scaffolding (`ProfileGamification`, `StatType`, `StageStatValue`) that the next initiative will build on top of
 - [Gamification Vision](../design/gamification-vision.md): the full RPG system that this hub will host after the next initiative ships
-- [Tutorial System](../design/tutorial-system.md): Welcome Tour (hub intro) + Badge Detail Tour (coach marks on badge pages)
 - [Community Hub](community-hub.md): the parallel hub design (community discovery vs personal progression)
 - [Dashboard](dashboard.md): the personal cockpit at `/` that surfaces personal-utility features as modules; the My Pursuit hub is for structured progression pages, the dashboard is for the modular cockpit
 
@@ -110,7 +109,7 @@ The reverse-name strategy keeps existing `{% url 'badges_list' %}` and `reverse(
 
 - **No dedicated landing page (yet).** `/my-pursuit/` is a 301 redirect to `/my-pursuit/badges/`. If you're tempted to build a landing page for the section, first check whether the section has grown beyond ~5 sub-items. If not, the Badges page is still the right landing. The redirect target lives in `plat_pursuit/urls.py` under `name='my_pursuit_hub'`, so when the day comes to build a landing page, change the URL pattern from a `RedirectView` to a real `TemplateView` and the navbar button (which targets `name='my_pursuit_hub'`) automatically points at the new landing without any template changes.
 
-- **"My Pursuit" name reuse risk**: existing users have a mental model where "My Pursuit" = the personal-utility menu (Customization, Recap, etc.). After this initiative, "My Pursuit" became the badge/milestone/title hub. The personal-utility items relocated to the Dashboard sub-nav. Mitigation: the planned [Tutorial System](../design/tutorial-system.md) Welcome Tour will explicitly introduce each hub on first PSN-link, and every legacy URL (`/my-stats/`, `/my-shareables/`, `/recap/`) 301-redirects to its new home so muscle memory still works.
+- **"My Pursuit" name reuse risk**: existing users have a mental model where "My Pursuit" = the personal-utility menu (Customization, Recap, etc.). After this initiative, "My Pursuit" became the badge/milestone/title hub. The personal-utility items relocated to the Dashboard sub-nav. Mitigation: every legacy URL (`/my-stats/`, `/my-shareables/`, `/recap/`) 301-redirects to its new home so muscle memory still works.
 
 - **Sub-nav active state for `/my-pursuit/badges/<slug>/`**: the sub-nav strip should highlight "Badges" as active even on the badge detail page. The URL prefix matcher in the [sub-nav infrastructure](../architecture/ia-and-subnav.md) handles this via longest-prefix matching plus an explicit URL-name override map (`badge_detail` → `('my_pursuit', 'badges')`).
 
@@ -128,5 +127,4 @@ The reverse-name strategy keeps existing `{% url 'badges_list' %}` and `reverse(
 - [Badge System](../architecture/badge-system.md): the source of badge data
 - [Gamification](../architecture/gamification.md): the existing gamification scaffolding
 - [Gamification Vision](../design/gamification-vision.md): the full RPG system this hub will host
-- [Tutorial System](../design/tutorial-system.md): Welcome Tour (hub intro) + Badge Detail Tour (coach marks on badge pages)
 - [Navigation](navigation.md): the navbar, footer, mobile drawer, sub-nav structure

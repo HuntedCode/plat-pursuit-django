@@ -184,14 +184,14 @@ This is the heart of the rebuild. **The foundation (Badge XP) is shipped and sol
 - **Disposition:** **Adapt (re-anchor)** — this is the most important presentation-layer decision. The tokens are good and mostly survive, but the system needs to be re-grounded on the new center of gravity (Pursuit home + Logbook + Badge Gallery, built natively in the visual identity) rather than the Dashboard. Section 4 (Tokens) was deliberately deferred until these surfaces are designed — that's the moment to open it. **This is what the design/product charter must resolve.**
 
 ### JS Utilities (`utils.js`) + page-specific JS
-- **What:** ~1100-line shared lib (API, ToastManager, InfiniteScroller, DragReorderManager, CoachMarks, etc.) + ~40 feature JS files.
-- **Status:** utils.js shipped/stable. Feature files mixed: some modern (frame.js, welcome-tour.js, browse-filters.js), some predate the redesign; a few likely stale (navbar-search.js).
+- **What:** ~900-line shared lib (API, ToastManager, InfiniteScroller, DragReorderManager, etc.) + ~40 feature JS files.
+- **Status:** utils.js shipped/stable. Feature files mixed: some modern (frame.js, browse-filters.js), some predate the redesign.
 - **Disposition:** **Keep** utils.js (extend the namespace pattern for new primitive controllers); **Keep + Audit** feature JS — build new primitive controllers (Tally/Horizon/Pursuer Card) fresh in frame.js's style, don't extend old files; prune confirmed-dead files during conversion.
 
-### Tutorial System (3 tours)
+### Tutorial System (3 tours) — REMOVED
 - **What:** Welcome Tour (hub nav) + Game Detail + Badge Detail coach-mark tours; per-user dismissal.
-- **Status:** Shipped.
-- **Disposition:** **Keep** — add tours for new surfaces (Logbook/Pursuit home) if UX testing warrants; reuse the CoachMarks + dismissal-endpoint pattern.
+- **Status:** **Removed** in the chrome rebuild (the welcome tour's chrome clone had broken against the rebuilt navbar; all three were legacy). The `Profile.*_tour_completed_at` fields remain as orphaned columns pending a drop.
+- **Disposition:** Rebuild from scratch if/when onboarding is revisited.
 
 ### Profile Cards & Forum Signatures
 - **What:** Shareable profile PNGs (social + forum sig) via Playwright (social) / pre-rendered (sig).

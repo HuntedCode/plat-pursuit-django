@@ -209,12 +209,11 @@ Profile pages live under `/community/profiles/<u>/`, so they show the Community 
 
 ## Onboarding
 
-The hub-of-hubs IA is a power-user design that prioritizes cleanliness over first-visit discoverability. The [Tutorial System](../design/tutorial-system.md) compensates: a 4-step Welcome Tour runs once after PSN linking, walking new users through each hub and its sub-nav strip. Page-level coach marks on the Game Detail and Badge Detail pages teach feature-specific interactions. The "Welcome Tour" button in the avatar dropdown and "Page Guide" buttons on individual pages allow re-triggering.
+The hub-of-hubs IA is a power-user design that prioritizes cleanliness over first-visit discoverability. (A legacy onboarding tour system that once compensated for this was removed as part of the chrome rebuild; if reintroduced it will be rebuilt from scratch.)
 
 ## Related Docs
 
 - [IA and Sub-Nav](../architecture/ia-and-subnav.md): the hub-of-hubs IA structure, sub-nav infrastructure, URL prefix matching
-- [Tutorial System](../design/tutorial-system.md): Welcome Tour, Game Detail Tour, Badge Detail Tour
 - [Community Hub](community-hub.md): the Community hub destination at `/community/`
 - [My Pursuit Hub](my-pursuit-hub.md): the My Pursuit hub destination at `/my-pursuit/`
 - [Dashboard](dashboard.md): the personal cockpit at `/`
