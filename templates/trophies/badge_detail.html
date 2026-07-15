@@ -12,12 +12,17 @@
     <div id="badge-tier-view">
         {% include 'trophies/partials/badge_detail/badge_detail_tier_view.html' %}
     </div>
+{% endblock %}
 
+{% comment %} The modals live in fixed_overlays -- OUTSIDE #page-recede (base.html) -- so the modal pull-back
+(.pp-receded scales #page-recede to 0.95) never scales/displaces the fixed modals themselves. They also sit
+outside the #badge-tier-view swap island, so they persist across tier switches. {% endcomment %}
+{% block fixed_overlays %}
     {% comment %} Medallion inspect (pick-up / put-down): tapping the hero medallion grows a peek into this
     shared dialog. When a profile is on display it fetches the profile-aware modal keyed to THAT profile
     (badge_progress_peek) -- so the medallion shows the DISPLAYED Pursuer's real earned state + personalised
     base, per the selected tier, correct on your own page AND another Pursuer's. Anonymous visitors get the
-    generic showcase peek. Lives OUTSIDE the swap island so it persists across tier switches. {% endcomment %}
+    generic showcase peek. {% endcomment %}
     <div class="pp-detail-modal" id="badge-peek"
          data-peek-url="{% if target_profile %}{% url 'badge_progress_peek' target_profile.psn_username 0 %}{% else %}{% url 'badge_quick_peek' 0 %}{% endif %}" hidden>
         <div class="pp-detail-modal__scrim" data-peek-close></div>
@@ -28,8 +33,7 @@
     </div>
 
     {% comment %} My Stats modal: the deep per-user breakdown the context band's "My Stats" button opens.
-    Rendered inline (the stats are series-scoped + already computed) OUTSIDE the swap island so it survives
-    tier switches, and only when a profile is on display. {% endcomment %}
+    Rendered inline (the stats are series-scoped + already computed), only when a profile is on display. {% endcomment %}
     {% if target_profile %}
     <div class="pp-detail-modal" id="badge-stats-modal" hidden>
         <div class="pp-detail-modal__scrim" data-stats-close></div>
@@ -157,15 +161,13 @@ document.addEventListener('DOMContentLoaded', function() {
         openMedallionPeek(host);
     });
 
-    // ── Earned-badge specular sheen (one-shot, once per session per series) ──
+    // ── Earned-badge specular sheen (once per page load) ──
     // A calm "this one is yours" reward beat on an EARNED hero medallion -- the Frame's sheen gesture, NOT
-    // the full Earn ceremony. Initial load only (not tier swaps), skipped for reduced motion.
+    // the full Earn ceremony. Fires once each page load (not on tier swaps), skipped for reduced motion.
     (function () {
         var med = document.querySelector('.bdh-med[data-earned]');
         if (!med) { return; }
         if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
-        var key = 'bd_sheen_{{ badge.series_slug|escapejs }}';
-        try { if (sessionStorage.getItem(key)) { return; } sessionStorage.setItem(key, '1'); } catch (e) { /* private mode */ }
         setTimeout(function () { med.classList.add('is-sheen'); }, 420);
     })();
 
