@@ -233,6 +233,12 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
         frame["funded_by"] = funder.display_psn_username or funder.psn_username  # artwork-funder credit (back footer)
     if earn_rank:
         frame["engraving_rank"] = earn_rank   # permanent "Nth to earn" engraving
+        # Rare-earn flourish: the very first to earn a tier, or an early (top ~1%) earner -- a meaningful,
+        # scarce reward the header can celebrate. Consumers that don't want it simply ignore the flags.
+        if earn_rank == 1:
+            frame["earn_is_first"] = True
+        elif badge.earned_count and earn_rank <= max(1, badge.earned_count // 100):
+            frame["earn_is_early"] = True
     if current_rank_v is not None:
         frame["current_rank"] = current_rank_v  # live per-series position (labeled "Current")
     if series_xp_v:

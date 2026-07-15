@@ -531,6 +531,31 @@ def test_earned_badge_gates_the_reward_beats(client, stub_leaderboards):
     assert 'bdh-med__sheen' in earned                # ... and the sheen hook is present
 
 
+def test_rare_earn_flourish_gating(client, stub_leaderboards):
+    """The first-to-earn a tier gets the rare-earn flourish under the medallion (gold crown + 'First to
+    earn'); an ordinary-rank earner gets the plain engraving with no flourish."""
+    series = "rare-earn"
+    badge = BadgeFactory(series_slug=series, tier=1, is_live=True)
+    _series_with_stage(series, 1)
+    profile = ProfileFactory()
+    ub = UserBadgeFactory(profile=profile, badge=badge, earn_rank=1)   # the very first earner
+    client.force_login(profile.user)
+
+    first = client.get(reverse('badge_detail', kwargs={'series_slug': series})).content.decode()
+    assert 'bdh-earnrank--first' in first
+    assert 'First to earn' in first
+
+    # Ordinary rank (50th of 200 earners -> not first, not top-1%): plain engraving, no flourish.
+    ub.earn_rank = 50
+    ub.save(update_fields=['earn_rank'])
+    badge.earned_count = 200
+    badge.save(update_fields=['earned_count'])
+    ordinary = client.get(reverse('badge_detail', kwargs={'series_slug': series})).content.decode()
+    assert 'bdh-earnrank' in ordinary            # the engraving still renders...
+    assert 'bdh-earnrank--first' not in ordinary  # ... without the flourish
+    assert 'bdh-earnrank--early' not in ordinary
+
+
 def test_stage_journey_no_up_next_for_anonymous(client, stub_leaderboards):
     """Anonymous viewers have no known progress, so there is no 'up next' suggestion -- the spine nodes
     render (numbered) but none pulse cyan."""

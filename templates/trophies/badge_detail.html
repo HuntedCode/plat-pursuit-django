@@ -171,6 +171,19 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(function () { med.classList.add('is-sheen'); }, 420);
     })();
 
+    // ── Hero medallion resting physicality ──
+    // Wire the hero for the same tilt + tracking glare the modal medallion has, so the focal object feels
+    // handleable at rest. FINE-POINTER ONLY (canTilt gate) -- a grid/wall of medallions must never tilt (a
+    // hero affordance, not a thumbnail one), and this also avoids the mobile gyro path leaking on tier swaps.
+    // The hero has no back plate, so wire() gives tilt + glare, no flip. Re-wired per hero (tier swaps re-render).
+    function wireHeroMedallion() {
+        if (!(window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.wire
+              && PlatPursuit.Medallion.canTilt && PlatPursuit.Medallion.canTilt())) { return; }
+        var hero = document.querySelector('.bdh-med');
+        if (hero && !hero._medWired) { hero._medWired = true; PlatPursuit.Medallion.wire(hero, '.pp-med__stage'); }
+    }
+    wireHeroMedallion();
+
     // ── My Stats modal ──
     // The opener ([data-stats-open]) lives in the context band INSIDE the swap island (re-rendered on a tier
     // switch), so the handler is delegated on document; the modal itself lives outside the island and
@@ -448,6 +461,7 @@ document.addEventListener('DOMContentLoaded', function() {
             initStages();
             armStageReveal();   // the fresh stack re-reveals when in view (e.g. swapping tiers while scrolled to it)
             igniteActiveTier(); // the newly-active step blooms
+            wireHeroMedallion(); // re-wire the re-rendered hero for resting tilt
             restoreTierScroll();
             // The activated tier step was replaced by the swap; keyboard focus fell to <body>. Move it to
             // the now-active step (preventScroll so it doesn't fight the scroll restore above).

@@ -39,7 +39,13 @@ selected_tier. Keeps id="badge-header-card".
                 </div>
                 {% comment %} Provenance, engraved under the object: the permanent earn rank -- the
                 limited-edition serial of the trading-card metaphor. {% endcomment %}
-                {% if hero_frame.state == 'earned' and hero_frame.engraving_rank %}<div class="bdh-earnrank" title="You were the {{ hero_frame.engraving_rank|ordinal }} to earn this badge">Earn <span class="pp-tally">#{{ hero_frame.engraving_rank|intcomma }}</span></div>{% endif %}
+                {% if hero_frame.state == 'earned' and hero_frame.engraving_rank %}
+                <div class="bdh-earnrank{% if hero_frame.earn_is_first %} bdh-earnrank--first{% elif hero_frame.earn_is_early %} bdh-earnrank--early{% endif %}" title="You were the {{ hero_frame.engraving_rank|ordinal }} to earn this badge{% if hero_frame.earn_is_first %} -- the very first!{% elif hero_frame.earn_is_early %} -- a top 1% early earner{% endif %}">
+                    {% if hero_frame.earn_is_first %}<svg class="bdh-earnrank__ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 16 3 6l5.5 4L12 4l3.5 6L21 6l-2 10H5zm0 2.4h14V21H5z"/></svg>{% elif hero_frame.earn_is_early %}<svg class="bdh-earnrank__ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2 2.4 6.9H21l-5.3 4.1 2 7L12 15.8 6.3 20l2-7L3 8.9h6.6z"/></svg>{% endif %}
+                    Earn <span class="pp-tally">#{{ hero_frame.engraving_rank|intcomma }}</span>
+                    {% if hero_frame.earn_is_first %}<span class="bdh-earnrank__tag">First to earn</span>{% elif hero_frame.earn_is_early %}<span class="bdh-earnrank__tag">Top 1%</span>{% endif %}
+                </div>
+                {% endif %}
             </div>
 
             <div class="min-w-0 flex-1 text-center sm:text-left">
@@ -52,7 +58,7 @@ selected_tier. Keeps id="badge-header-card".
 
             {% if stats %}
             <a href="{% url 'badge_leaderboards' badge.series_slug %}" class="bdh-headline shrink-0 mx-auto sm:mx-0 text-center sm:text-right" title="See who owns this badge">
-                <span class="pp-tally block text-2xl md:text-3xl text-primary leading-none" data-countup="{{ stats.tier_earner_counts.1|default:0 }}">{{ stats.tier_earner_counts.1|default:0|intcomma }}</span>
+                <span class="pp-tally pp-tally--lg block text-primary" data-countup="{{ stats.tier_earner_counts.1|default:0 }}">{{ stats.tier_earner_counts.1|default:0|intcomma }}</span>
                 <span class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50">earners &rsaquo;</span>
             </a>
             {% endif %}

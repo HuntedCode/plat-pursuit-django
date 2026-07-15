@@ -24,13 +24,29 @@
 @keyframes bdhSheen { to { transform: translateX(360%) rotate(8deg); } }
 @media (prefers-reduced-motion: reduce) { .bdh-med.is-sheen .bdh-med__sheen { opacity: 0; } }
 
-/* Earn-rank engraving directly under the medallion -- a faux-deboss serial ("Earn #47"). */
+/* Earn-rank engraving directly under the medallion -- a faux-deboss serial ("Earn #47"), with a rare-earn
+   flourish: first-to-earn (gold + crown + a one-time glow pulse) or a top-1% early earner (accent + star). */
 .bdh-earnrank {
-    display: inline-flex; align-items: baseline; gap: 4px;
+    display: inline-flex; align-items: center; gap: 4px;
     font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--pp-text-mute); text-shadow: 0 1px 0 oklch(1 0 0 / 0.06);
 }
 .bdh-earnrank .pp-tally { font-size: 0.82rem; font-weight: 800; letter-spacing: 0; color: var(--pp-text-dim); }
+.bdh-earnrank__ico { width: 13px; height: 13px; }
+.bdh-earnrank__tag {
+    font-size: 0.56rem; font-weight: 800; padding: 1px 6px; border-radius: 999px; letter-spacing: 0.05em;
+    background: color-mix(in oklab, currentColor 15%, transparent); border: 1px solid color-mix(in oklab, currentColor 34%, transparent);
+}
+.bdh-earnrank--first { color: #e7c25c; --first-glow: color-mix(in oklab, #e7c25c 60%, transparent); }
+.bdh-earnrank--first .pp-tally { color: #e7c25c; }
+.bdh-earnrank--early { color: var(--pp-accent); }
+.bdh-earnrank--early .pp-tally { color: var(--pp-accent); }
+/* One-time celebratory glow for the first-to-earn (colour hoisted -- never color-mix inside @keyframes). */
+@keyframes bdhFirstPulse {
+    0%, 100% { text-shadow: 0 1px 0 oklch(1 0 0 / 0.06); }
+    45% { text-shadow: 0 1px 0 oklch(1 0 0 / 0.06), 0 0 11px var(--first-glow); }
+}
+@media (prefers-reduced-motion: no-preference) { .bdh-earnrank--first { animation: bdhFirstPulse 1.7s ease-out 0.7s; } }
 @media (min-width: 768px) { .bdh-med .pp-med { --sz: 140px; } }
 /* the substance band carries progress; keep the object itself clean (no meter/count stacked under it) */
 .bdh-med .pp-med__count, .bdh-med .pp-med__meter { display: none; }
@@ -55,7 +71,7 @@
    tier-composition strip. Values are neutral; only Difficulty / Avg-Hours are tinted (traffic-light). */
 .bdh-facts { display: flex; flex-wrap: wrap; gap: 12px 22px; }
 .bdh-fact { display: flex; flex-direction: column; gap: 3px; }
-.bdh-fact__v { font-size: 1.15rem; font-weight: 800; line-height: 1; }
+.bdh-fact__v { font-size: 1.15rem; font-weight: 800; line-height: 1; font-variation-settings: "opsz" 18, "wght" 800; }   /* engage the Tally optical-size axis */
 .bdh-fact__u { font-size: 0.72rem; font-weight: 600; color: var(--pp-text-mute); margin-left: 1px; }
 .bdh-fact__k { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--pp-text-mute); }
 

@@ -5,8 +5,10 @@
  * The CSS it drives (perspective, is-tilting/is-flipping transitions, .pp-med__glare, --tx/--ty vars) is
  * global, so this works anywhere a .pp-bdetail__stage medallion renders.
  *
- *   PlatPursuit.Medallion.wire(scope)   Wire the .pp-bdetail__stage medallion inside `scope` (a freshly
- *                                       injected modal body / hero container). No-op under reduced motion.
+ *   PlatPursuit.Medallion.wire(scope, sceneSel)   Wire the medallion inside `scope`. sceneSel selects the
+ *                                       .pp-med__stage (default '.pp-bdetail__stage .pp-med__stage', the
+ *                                       modal; a focal resting hero passes its own '.pp-med__stage').
+ *                                       No-op under reduced motion.
  *   PlatPursuit.Medallion.prefersReducedMotion() / .canTilt()   The shared motion gates, so a host page's
  *                                       own grow/wiggle checks can't drift out of sync with the tilt's.
  *
@@ -35,9 +37,12 @@
     // A handled object: click/tap FLIPS it to its engraved base (all pointers, motion-OK), and on a fine
     // pointer you can TILT whichever face is up toward the cursor. Both drive ONE transform on the card via
     // render() -- flip = a 180deg base, tilt adds rotateX/Y on top -- so they compose instead of fighting.
-    function wire(scope) {
+    function wire(scope, sceneSel) {
         if (!scope || prefersReducedMotion()) return;
-        var scene = scope.querySelector('.pp-bdetail__stage .pp-med__stage');
+        // Default targets the MODAL's grown medallion; a focal resting medallion (e.g. the badge-detail hero)
+        // opts in by passing its own '.pp-med__stage'. Grid/wall medallions deliberately never wire (a wall
+        // of tilting thumbnails reads as noise, not premium).
+        var scene = scope.querySelector(sceneSel || '.pp-bdetail__stage .pp-med__stage');
         var card = scene && scene.querySelector('.pp-med__art');
         if (!card) return;
         var back = card.querySelector('.pp-med__back');   // present only with_back (modal)
