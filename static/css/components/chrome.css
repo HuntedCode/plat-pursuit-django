@@ -54,9 +54,12 @@
 .pp-navicon svg { width: 19px; height: 19px; }
 .pp-navicon__badge {
     position: absolute; top: 4px; right: 4px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 999px;
-    background: var(--pp-error); color: #fff; font-size: 0.56rem; font-weight: 800; display: grid; place-items: center;
+    background: var(--pp-error); color: #fff; font-size: 0.56rem; font-weight: 800; place-items: center;
     border: 2px solid var(--pp-bg-1);
 }
+/* Gated display so notifications.js's .hidden toggle actually hides it (unlayered display would
+   otherwise beat the .hidden utility and strand a "0" badge -- same trap as .pp-navsearch__*). */
+.pp-navicon__badge:not(.hidden) { display: grid; }
 .pp-navpremium {
     display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; border-radius: 999px;
     font-size: 0.76rem; font-weight: 700; text-decoration: none; color: var(--pp-primary);
