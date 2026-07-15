@@ -98,6 +98,23 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
+    // Choreographed modal EXIT: add .is-closing to reverse the entrance (CSS bdModalOut + scrim fade),
+    // then hide + run cleanup on animationend (with a timeout fallback). Reduced motion -> hide instantly.
+    function closeModalAnimated(modal, cleanup) {
+        var dlg = modal.querySelector('.pp-detail-modal__dialog');
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        function finish() {
+            modal.hidden = true; modal.classList.remove('is-closing'); document.body.style.overflow = '';
+            if (cleanup) { cleanup(); }
+        }
+        if (reduce || !dlg) { finish(); return; }
+        modal.classList.add('is-closing');
+        var done = false;
+        var onEnd = function (e) { if (e.target !== dlg) { return; } done = true; dlg.removeEventListener('animationend', onEnd); finish(); };
+        dlg.addEventListener('animationend', onEnd);
+        setTimeout(function () { if (!done) { dlg.removeEventListener('animationend', onEnd); finish(); } }, 320);
+    }
+
     // ── Medallion inspect (pick-up / put-down) ──
     // Tapping OR keyboard-activating the hero medallion (a role=button, see _header.html) grows the public
     // badge_quick_peek into the shared #badge-peek dialog (the collection's pick-up/put-down controller).
@@ -132,6 +149,18 @@ document.addEventListener('DOMContentLoaded', function() {
         openMedallionPeek(med);
     });
 
+    // ── Earned-badge specular sheen (one-shot, once per session per series) ──
+    // A calm "this one is yours" reward beat on an EARNED hero medallion -- the Frame's sheen gesture, NOT
+    // the full Earn ceremony. Initial load only (not tier swaps), skipped for reduced motion.
+    (function () {
+        var med = document.querySelector('.bdh-med[data-earned]');
+        if (!med) { return; }
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+        var key = 'bd_sheen_{{ badge.series_slug|escapejs }}';
+        try { if (sessionStorage.getItem(key)) { return; } sessionStorage.setItem(key, '1'); } catch (e) { /* private mode */ }
+        setTimeout(function () { med.classList.add('is-sheen'); }, 420);
+    })();
+
     // ── My Stats modal ──
     // The opener ([data-stats-open]) lives in the context band INSIDE the swap island (re-rendered on a tier
     // switch), so the handler is delegated on document; the modal itself lives outside the island and
@@ -139,7 +168,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var statsModal = document.getElementById('badge-stats-modal');
     if (statsModal) {
         var statsA11y = modalA11y(statsModal, '.pp-detail-modal__dialog');
-        var closeStats = function () { statsModal.hidden = true; document.body.style.overflow = ''; statsA11y.closed(); };
+        var closeStats = function () { closeModalAnimated(statsModal, function () { statsA11y.closed(); }); };
         document.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
             var opener = e.target.closest('[data-stats-open]');
@@ -165,7 +194,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (contractModal) {
         var contractBody = contractModal.querySelector('[data-contract-body]');
         var contractA11y = modalA11y(contractModal, '.pp-detail-modal__dialog');
-        var closeContract = function () { contractModal.hidden = true; contractBody.innerHTML = ''; document.body.style.overflow = ''; contractA11y.closed(); };
+        var closeContract = function () { closeModalAnimated(contractModal, function () { contractBody.innerHTML = ''; contractA11y.closed(); }); };
         document.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
             var link = e.target.closest('[data-contract-url]');
@@ -261,11 +290,19 @@ document.addEventListener('DOMContentLoaded', function() {
             bulkBtn.addEventListener('click', function() {
                 var anyOpen = Object.keys(loadOpen()).length > 0;
                 var newState = {};
+                // Bulk = INSTANT: animating every stage's grid-template-rows at once forces layout of the
+                // whole card grid each frame -- brutal on tall mobile. Kill transitions for the bulk change,
+                // restore after two frames so subsequent single toggles still animate.
+                var containers = document.querySelectorAll('[data-stage-games]');
+                containers.forEach(function(c) { c.style.transition = 'none'; });
                 document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
                     var stageNum = toggle.dataset.stageToggle;
                     if (anyOpen) { setStageCollapsed(stageNum, true); }               // collapse all
                     else { setStageCollapsed(stageNum, false); newState[stageNum] = true; }   // expand all
                 });
+                requestAnimationFrame(function() { requestAnimationFrame(function() {
+                    containers.forEach(function(c) { c.style.transition = ''; });
+                }); });
                 saveOpen(newState);
                 updateBulkButton();
             });

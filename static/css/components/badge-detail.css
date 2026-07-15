@@ -7,8 +7,30 @@
    is the Earners Tally + the progress Horizon; Difficulty / Avg-Hours carry the single earned semantic
    traffic-light). Everything else is shared components + Tailwind utilities -- the only bespoke bits are the
    medallion sizing and the compact facts strip (which mirrors Collection's tier-composition strip). */
-.bdh-med { display: flex; justify-content: center; }
+.bdh-med { display: flex; justify-content: center; position: relative; }
 .bdh-med .pp-med { --sz: 116px; cursor: pointer; }   /* tap to inspect (pick-up / put-down peek) */
+
+/* One-shot specular sheen on an EARNED hero medallion (JS adds .is-sheen once per session). A single
+   diagonal light band sweeps across -- the canonical PlatPursuit reward gesture, calm (not the Earn Moment).
+   Clipped to a circle (medallions are ~round) so the light reads as crossing the badge. */
+.bdh-med__sheen { position: absolute; inset: 0; z-index: 4; border-radius: 50%; overflow: hidden; pointer-events: none; opacity: 0; }
+.bdh-med.is-sheen .bdh-med__sheen { opacity: 1; }
+.bdh-med.is-sheen .bdh-med__sheen::before {
+    content: ""; position: absolute; top: -25%; left: 0; width: 42%; height: 150%;
+    background: linear-gradient(100deg, transparent, oklch(1 0 0 / 0.5), transparent);
+    transform: translateX(-170%) rotate(8deg); mix-blend-mode: screen;
+    animation: bdhSheen 900ms cubic-bezier(0.3, 0.7, 0.4, 1) forwards;
+}
+@keyframes bdhSheen { to { transform: translateX(360%) rotate(8deg); } }
+@media (prefers-reduced-motion: reduce) { .bdh-med.is-sheen .bdh-med__sheen { opacity: 0; } }
+
+/* Earn-rank engraving under the earned row -- a faux-deboss serial ("Earn #47"). */
+.bdh-earnrank {
+    display: inline-flex; align-items: baseline; gap: 4px; margin-bottom: 8px;
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--pp-text-mute); text-shadow: 0 1px 0 oklch(1 0 0 / 0.06);
+}
+.bdh-earnrank .pp-tally { font-size: 0.82rem; font-weight: 800; letter-spacing: 0; color: var(--pp-text-dim); }
 @media (min-width: 768px) { .bdh-med .pp-med { --sz: 140px; } }
 /* the substance band carries progress; keep the object itself clean (no meter/count stacked under it) */
 .bdh-med .pp-med__count, .bdh-med .pp-med__meter { display: none; }
@@ -260,7 +282,9 @@
    Curated to what a hunter needs at a glance -- cover (state overlay + one progress bar), name, your % +
    plat status, community difficulty/hours -- plus the game's home Contract (jobs + XP) as a distinct hook
    into the gamification layer. Card body links to the game; the contract band is its OWN link. */
-.bd-gcard { display: flex; flex-direction: column; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); overflow: hidden; background: var(--pp-bg-2); transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease); }
+.bd-gcard { display: flex; flex-direction: column; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); overflow: hidden; background: var(--pp-bg-2); transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease), transform 120ms var(--pp-ease); }
+/* Tactile press (mobile has no hover glow, so this is its only down-state). */
+.bd-gcard:active { transform: scale(0.99); }
 .bd-gcard.is-done { border-color: color-mix(in oklch, var(--pp-success) 40%, transparent); }
 .bd-gcard.is-plat { border-color: color-mix(in oklch, var(--pp-warning) 40%, transparent); }
 .bd-gcard__main { display: flex; flex-direction: column; flex: 1; text-decoration: none; color: inherit; }
@@ -272,7 +296,10 @@
 }
 /* Cover */
 .bd-gcard__cover { position: relative; aspect-ratio: 3 / 4; overflow: hidden; background: var(--pp-bg-3); }
-.bd-gcard__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.bd-gcard__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; transition: transform 0.45s var(--pp-ease); }
+/* Slow cover zoom on hover -- the art (the moat) responds; clipped by the cover's overflow, compositor-cheap. */
+@media (hover: hover) { .bd-gcard:hover .bd-gcard__cover img { transform: scale(1.05); } }
+@media (prefers-reduced-motion: reduce) { .bd-gcard__cover img { transition: none; } }
 .bd-gcard__cover.is-dim img { opacity: 0.42; }
 .bd-gcard__flag { position: absolute; display: grid; place-items: center; border-radius: 999px; box-shadow: 0 1px 3px oklch(0 0 0 / 0.5); }
 .bd-gcard__flag--done { top: 5px; right: 5px; width: 20px; height: 20px; background: var(--pp-success); color: var(--pp-bg-0); }
@@ -304,10 +331,20 @@
    DISCIPLINE family colours (set inline via band_bg; --ctr-accent = the dominant one) so the band says what
    kind of contract it is; the real job icons sit on top. Falls back to the secondary accent when no jobs. */
 .bd-gcard__ctr { display: flex; align-items: center; gap: 8px; padding: 7px 9px; text-decoration: none;
+    position: relative; overflow: hidden;
     background: color-mix(in oklab, var(--pp-secondary) 12%, var(--pp-bg-1));
-    border-top: 1px solid color-mix(in oklab, var(--ctr-accent, var(--pp-secondary)) 30%, var(--pp-border));
-    transition: filter var(--pp-dur) var(--pp-ease); }
-@media (hover: hover) { .bd-gcard__ctr:hover { filter: brightness(1.15); } .bd-gcard__ctr:hover .bd-gcard__ctr-arrow { transform: translateX(2px); } }
+    border-top: 1px solid color-mix(in oklab, var(--ctr-accent, var(--pp-secondary)) 30%, var(--pp-border)); }
+/* Specular sheen sweep on hover -- reads more premium AND is compositor-friendly (the old brightness filter
+   re-rasterized the family-mix gradient every frame). The band clips the sweep via overflow:hidden. */
+.bd-gcard__ctr::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(105deg, transparent 32%, oklch(1 0 0 / 0.22) 50%, transparent 68%);
+    transform: translateX(-100%); opacity: 0; }
+@media (hover: hover) {
+    .bd-gcard__ctr:hover::after { animation: bdCtrSheen 0.7s var(--pp-ease); }
+    .bd-gcard__ctr:hover .bd-gcard__ctr-arrow { transform: translateX(2px); }
+}
+@keyframes bdCtrSheen { 0% { transform: translateX(-100%); opacity: 1; } 100% { transform: translateX(100%); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .bd-gcard__ctr:hover::after { animation: none; } }
 .bd-gcard__ctr-jobs { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
 .bd-gcard__ctr-job { width: 15px; height: 15px; flex-shrink: 0; }
 .bd-gcard__ctr-more { font-size: 0.6rem; font-weight: 800; color: var(--pp-text-dim); }
@@ -333,9 +370,10 @@
     display: flex; align-items: center; gap: 12px;
     padding: 11px 14px; cursor: pointer;
     border-radius: var(--pp-radius-lg);
-    transition: background var(--pp-dur) var(--pp-ease);
+    transition: background var(--pp-dur) var(--pp-ease), transform 120ms var(--pp-ease);
 }
 .bd-stage__head:hover { background: oklch(1 0 0 / 0.03); }
+.bd-stage__head:active { transform: translateY(1px); }   /* tactile press (esp. mobile, no hover) */
 .bd-stage__head:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
 .bd-stage--done .bd-stage__head { background: color-mix(in oklch, var(--pp-success) 8%, transparent); }
 .bd-stage--done .bd-stage__head:hover { background: color-mix(in oklch, var(--pp-success) 13%, transparent); }
@@ -562,4 +600,25 @@
     .bd-stage__collapse { transition: none; }
     .bd-stage__chevron { transition: none; }
     .bd-collapse-all svg { transition: none; }
+}
+
+/* Choreographed EXIT for the badge Stats + Contract modals (the peek modal already grows back to source;
+   these used to snap shut -- a named miss vs the Career bar). JS adds .is-closing, hides on animationend.
+   Higher specificity (id) than the shared .pp-detail-modal entrance rule, so it wins the reverse. */
+@keyframes bdModalOut { to { opacity: 0; transform: translateY(8px) scale(0.98); } }
+#badge-stats-modal.is-closing:not([hidden]) .pp-detail-modal__dialog,
+#badge-contract-modal.is-closing:not([hidden]) .pp-detail-modal__dialog { animation: bdModalOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+#badge-stats-modal.is-closing:not([hidden]) .pp-detail-modal__scrim,
+#badge-contract-modal.is-closing:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrimOut 0.22s ease forwards; }
+
+/* First-paint reveal: the stage stack settles in as one set (reuses the shipped ppRevealIn). Default-collapsed
+   means only headers animate, so it stays cheap; `both` fill holds the from-state so there's no FOUC. */
+@media (prefers-reduced-motion: no-preference) {
+    .bd-stages > .bd-stage { animation: ppRevealIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .bd-stages > .bd-stage:nth-child(2) { animation-delay: 0.05s; }
+    .bd-stages > .bd-stage:nth-child(3) { animation-delay: 0.1s; }
+    .bd-stages > .bd-stage:nth-child(4) { animation-delay: 0.15s; }
+    .bd-stages > .bd-stage:nth-child(5) { animation-delay: 0.2s; }
+    .bd-stages > .bd-stage:nth-child(6) { animation-delay: 0.25s; }
+    .bd-stages > .bd-stage:nth-child(n+7) { animation-delay: 0.3s; }
 }

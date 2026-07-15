@@ -510,6 +510,27 @@ def test_stage_journey_marks_lowest_open_stage_up_next(client, stub_leaderboards
     assert 'Up next' in html
 
 
+def test_earned_badge_gates_the_reward_beats(client, stub_leaderboards):
+    """The premium reward beats on the hero header -- the one-shot specular sheen hook (.bdh-med__sheen +
+    data-earned, driven by JS once per session) -- render ONLY for an earned hero badge, never for an
+    unearned one (the earn celebration must not fire when you don't hold it)."""
+    series = "reward-beats"
+    badge = BadgeFactory(series_slug=series, tier=1, is_live=True)
+    _series_with_stage(series, 1)
+    profile = ProfileFactory()
+    client.force_login(profile.user)
+
+    unearned = client.get(reverse('badge_detail', kwargs={'series_slug': series})).content.decode()
+    assert 'data-earned="true"' not in unearned
+    assert 'bdh-med__sheen' not in unearned
+    assert 'bdh-earnrank' not in unearned
+
+    UserBadgeFactory(profile=profile, badge=badge)   # now hold it
+    earned = client.get(reverse('badge_detail', kwargs={'series_slug': series})).content.decode()
+    assert 'data-earned="true"' in earned            # the medallion is flagged earned...
+    assert 'bdh-med__sheen' in earned                # ... and the sheen hook is present
+
+
 def test_stage_journey_no_up_next_for_anonymous(client, stub_leaderboards):
     """Anonymous viewers have no known progress, so there is no 'up next' suggestion -- the spine nodes
     render (numbered) but none pulse cyan."""
