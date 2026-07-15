@@ -14,6 +14,7 @@
 /* The bar background + border are full-bleed; the CONTENT sits in a centred
    container so it lines up with the page content instead of floating to the edge. */
 .pp-nav {
+    position: sticky; top: 0; z-index: 50;   /* pins the frame; sits above the sub-nav (z-40) */
     background: color-mix(in oklab, var(--pp-bg-1) 90%, transparent);
     backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--pp-border);
