@@ -654,10 +654,16 @@
 
 /* V2.4 Landing flash: a one-shot cyan glow bloom around a stage card you JUST jumped to (from a requirement
    tile), so the eye catches where it landed. z-index lifts it over the neighbouring cards' edges. */
-.bd-stage.is-landed { animation: bdStageLand 1.1s cubic-bezier(0.22, 1, 0.36, 1); position: relative; z-index: 3; }
+/* Colours hoisted to custom props -- lightningcss DROPS any @keyframes containing color-mix() (see
+   feedback_no_colormix_in_keyframes); referencing var() inside the frames is the sanctioned workaround. */
+.bd-stage.is-landed {
+    --land-ring: color-mix(in oklab, var(--pp-primary) 48%, transparent);
+    --land-halo: color-mix(in oklab, var(--pp-primary) 38%, transparent);
+    animation: bdStageLand 1.1s cubic-bezier(0.22, 1, 0.36, 1); position: relative; z-index: 3;
+}
 @keyframes bdStageLand {
-    0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--pp-primary) 55%, transparent); }
-    16%  { box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 45%, transparent), 0 0 22px 4px color-mix(in oklab, var(--pp-primary) 38%, transparent); }
+    0%   { box-shadow: 0 0 0 0 var(--land-ring); }
+    16%  { box-shadow: 0 0 0 3px var(--land-ring), 0 0 22px 4px var(--land-halo); }
     100% { box-shadow: 0 0 0 0 transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
