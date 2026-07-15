@@ -98,7 +98,7 @@ class HubSubnavConfig:
 BROWSE_HUB = HubSubnavConfig(
     key='browse',
     label='Browse',
-    icon='compass',
+    icon='search',   # matches the navbar's Browse hub icon
     prefixes=(
         '/games/',
         '/trophies/',
@@ -150,7 +150,7 @@ COMMUNITY_HUB = HubSubnavConfig(
 MY_PURSUIT_HUB = HubSubnavConfig(
     key='my_pursuit',
     label='My Pursuit',
-    icon='trophy',
+    icon='layers',   # matches the navbar's My Pursuit hub icon
     prefixes=(
         '/collection/', '/career/', '/milestones/', '/titles/',
         '/profile-editor/', '/stats/', '/shareables/', '/recap/',
