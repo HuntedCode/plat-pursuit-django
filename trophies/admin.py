@@ -38,9 +38,6 @@ class ProfileAdmin(admin.ModelAdmin):
         "is_plus",
         "total_trophies",
         "total_unearned",
-        "tour_completed_at",
-        "game_detail_tour_completed_at",
-        "badge_detail_tour_completed_at",
     )
     list_filter = (
         "is_linked",
@@ -76,7 +73,7 @@ class ProfileAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Core Info",
-            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "user_is_premium", "roadmap_role", "is_linked", "psn_history_public", "guidelines_agreed", "tour_completed_at", "game_detail_tour_completed_at", "badge_detail_tour_completed_at", "hide_hiddens", "discord_id", "discord_linked_at", "is_discord_verified", "verification_code")},
+            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "user_is_premium", "roadmap_role", "is_linked", "psn_history_public", "guidelines_agreed", "hide_hiddens", "discord_id", "discord_linked_at", "is_discord_verified", "verification_code")},
         ),
         (
             "Profile Details",

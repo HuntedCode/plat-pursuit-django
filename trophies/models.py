@@ -138,9 +138,6 @@ class Profile(models.Model):
     hide_zeros = models.BooleanField(default=False, help_text="If true, hide games with no trophies earned.")
     guidelines_agreed = models.BooleanField(default=False, help_text="True if user has agreed to community guidelines for commenting.")
     guidelines_agreed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user agreed to community guidelines.")
-    tour_completed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user completed or skipped the Welcome Tour.")
-    game_detail_tour_completed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user completed or skipped the Game Detail Tour.")
-    badge_detail_tour_completed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user completed or skipped the Badge Detail Tour.")
     view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
     roadmap_role = models.CharField(
         max_length=20,
