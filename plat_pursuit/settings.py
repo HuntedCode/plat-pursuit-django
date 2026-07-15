@@ -330,6 +330,7 @@ TEMPLATES = [
                 "plat_pursuit.context_processors.active_fundraiser",
                 "art_reveal.context_processors.art_reveal_banner",
                 "plat_pursuit.context_processors.hub_subnav",
+                "plat_pursuit.context_processors.navsync",
             ],
         },
     },

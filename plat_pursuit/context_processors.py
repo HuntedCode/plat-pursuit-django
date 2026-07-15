@@ -270,3 +270,31 @@ def _active_fundraiser_or_none(request=None):
     except Exception:
         logger.debug("Failed to resolve active fundraiser", exc_info=True)
         return None
+
+
+def navsync(request):
+    """Global profile sync state for the navbar's status-aware avatar + panel.
+
+    The old hotbar was a per-view bar (ProfileHotbarMixin); the sync surface now
+    lives in the always-present navbar, so its context must be global. Cheap: every
+    value reads off the already-loaded ``request.user.profile`` (no new queries; the
+    queue lookup only runs mid-sync). Anon / profile-less viewers get nothing, so the
+    navbar renders the plain account avatar with no sync ring.
+    """
+    user = getattr(request, "user", None)
+    if not (user and user.is_authenticated and hasattr(user, "profile")):
+        return {}
+    profile = user.profile
+    data = {
+        "profile": profile,
+        "sync_status": profile.sync_status,
+        "progress_percentage": profile.sync_percentage,
+        "seconds_to_next_sync": profile.get_seconds_to_next_sync(),
+    }
+    if profile.sync_status == "syncing":
+        try:
+            from trophies.views.sync_views import _get_queue_position
+            data["queue_position"] = _get_queue_position(profile.id)
+        except Exception:
+            logger.debug("Failed to resolve sync queue position", exc_info=True)
+    return {"navsync": data}
