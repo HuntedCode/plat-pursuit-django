@@ -339,18 +339,22 @@ document.addEventListener('DOMContentLoaded', function() {
             link._wired = true;
             link.addEventListener('click', function(e) {
                 var stageNum = link.dataset.stageLink;
-                var openState = loadOpen();
-                if (openState[stageNum]) return;   // already open -> let the anchor jump handle it
-                e.preventDefault();
                 var target = document.getElementById('stage-' + stageNum);
                 if (!target) return;
+                // Landing flash: a one-shot glow bloom on the stage CARD so the eye catches where it landed.
+                function flash() { target.classList.remove('is-landed'); void target.offsetWidth; target.classList.add('is-landed'); }
+                var openState = loadOpen();
+                if (openState[stageNum]) {
+                    // Already open: let the browser do the native #stage-N jump, then flash once it settles.
+                    setTimeout(flash, 380);
+                    return;
+                }
+                e.preventDefault();
                 target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 function openNow() {
                     setStageCollapsed(stageNum, false);
                     openState[stageNum] = true; saveOpen(openState); updateBulkButton();
-                    // Landing flash: a one-shot ring pulse so the eye catches the stage it jumped to.
-                    var head = document.querySelector('[data-stage-toggle="' + stageNum + '"]');
-                    if (head) { head.classList.remove('is-landed'); void head.offsetWidth; head.classList.add('is-landed'); }
+                    flash();
                 }
                 var scrollTimer;
                 function onScrollEnd() {
