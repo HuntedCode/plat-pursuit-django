@@ -12,8 +12,8 @@ JS hooks (navbar-search.js / notifications.js); only their trigger buttons are r
         <span class="pp-nav__word hidden sm:inline">Platinum Pursuit</span>
     </a>
 
-    {# Hub-of-hubs nav (desktop; the bottom tab bar covers <lg). Active hub = hub_section from the
-       hub_subnav context processor; marked by a single primary underline. #}
+    {% comment %} Hub-of-hubs nav (desktop; the bottom tab bar covers <lg). Active hub = hub_section from the
+    hub_subnav context processor; marked by a single primary underline. {% endcomment %}
     <div class="pp-nav__hubs hidden lg:flex">
         {% if user.is_authenticated %}
         <a href="{% url 'home' %}" class="pp-navhub{% if hub_section == 'my_pursuit' %} is-active{% endif %}"{% if hub_section == 'my_pursuit' %} aria-current="page"{% endif %}>
