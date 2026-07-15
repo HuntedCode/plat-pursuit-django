@@ -169,7 +169,5 @@
     {% endif %}
     {% if user.is_authenticated and user.profile and user.profile.is_linked %}
     <script src="{% static 'js/game-flag.js' %}"></script>
-    <script src="{% static 'js/game-detail-tour.js' %}"></script>
-    {% include 'trophies/partials/game_detail/game_detail_tour.html' %}
     {% endif %}
 {% endblock %}
