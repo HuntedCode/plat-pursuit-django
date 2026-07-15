@@ -625,3 +625,42 @@
     .bd-stages--armed.is-inview > .bd-stage:nth-child(6) { animation-delay: 0.25s; }
     .bd-stages--armed.is-inview > .bd-stage:nth-child(n+7) { animation-delay: 0.3s; }
 }
+
+/* ── Premium pass v2 ─────────────────────────────────────────────────────────
+
+   V2.1 Tier-switch ignite: a one-shot tier-tinted glow bloom on the step that just became active (fades to
+   flat -- the sanctioned selection acknowledgment). A ::after so the step's resting active box-shadow is
+   untouched; z-index -1 blooms behind the content. */
+.bd-tierstep.is-igniting::after {
+    content: ""; position: absolute; inset: -1px; z-index: -1; border-radius: inherit; pointer-events: none;
+    box-shadow: 0 0 20px 3px color-mix(in oklab, var(--tier-c) 55%, transparent);
+    animation: bdTierIgnite 0.6s ease-out forwards;
+}
+@keyframes bdTierIgnite { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+
+/* V2.2 Stats-modal reveal-on-open: the numbers count up (JS) and the two Horizons wipe in from the left, a
+   beat after, so the modal tells the journey instead of opening fully formed. (The dialog's will-change
+   already isolates it from the scrim's backdrop-filter, so the per-frame count-up repaint doesn't re-blur.) */
+@media (prefers-reduced-motion: no-preference) {
+    .bd-mystats.is-revealing .pp-horizon { transform-origin: left; animation: bdHzReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both; }
+}
+@keyframes bdHzReveal { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* V2.3 Contract-band loading affordance: while the contract modal is being fetched, the tapped band shimmers
+   (the sheen sweep, looping) so the tap isn't dead on a slow link. JS adds .is-loading after a 150ms grace
+   so instant loads don't flash it. */
+.bd-gcard__ctr.is-loading { cursor: progress; }
+.bd-gcard__ctr.is-loading::after { animation: bdCtrSheen 0.9s var(--pp-ease) infinite; }
+
+/* V2.4 Landing flash: a one-shot cyan ring pulse on a stage header you JUST jumped to (from a requirement
+   tile), so the eye catches where it landed. */
+.bd-stage__head.is-landed { animation: bdStageLand 0.9s var(--pp-ease); }
+@keyframes bdStageLand {
+    0% { box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--pp-primary) 60%, transparent); }
+    100% { box-shadow: inset 0 0 0 2px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bd-tierstep.is-igniting::after,
+    .bd-gcard__ctr.is-loading::after,
+    .bd-stage__head.is-landed { animation: none; }
+}

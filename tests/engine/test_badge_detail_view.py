@@ -362,7 +362,7 @@ def test_context_band_anon_hides_ranks_and_stats(client, stub_leaderboards):
     assert 'Progressers' in html                       # anon community-totals branch
     assert 'bd-band__stats-btn' not in html            # no My Stats button
     assert 'id="badge-stats-modal"' not in html        # no modal container rendered
-    assert 'bd-mystats' not in html                    # ... and no modal content
+    assert '<div class="bd-mystats"' not in html       # ... and no modal content div (the JS may ref the class)
 
 
 def test_rarity_bar_counts_all_tiers_earned_not_peak(client, stub_leaderboards):

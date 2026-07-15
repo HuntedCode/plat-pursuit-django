@@ -11,15 +11,16 @@ Rendered only when a profile is on display (see badge_detail.html). {% endcommen
     {# Hero: the investment -- three big numbers, XP in the one accent. #}
     <div class="bd-mystats__hero">
         <div class="bd-mystats__big">
-            <span class="pp-tally bd-mystats__big-v bd-mystats__big-v--xp">{{ stats.user_series_xp|intcomma }}</span>
+            <span class="pp-tally bd-mystats__big-v bd-mystats__big-v--xp" data-countup="{{ stats.user_series_xp }}">{{ stats.user_series_xp|intcomma }}</span>
             <span class="bd-mystats__big-k">Series XP</span>
         </div>
         <div class="bd-mystats__big">
-            <span class="pp-tally bd-mystats__big-v">{{ stats.user_playtime_hours|intcomma }}<span class="bd-mystats__big-u">h</span></span>
+            {% comment %} Number wrapped so count-up (sets textContent) doesn't clobber the "h" unit. {% endcomment %}
+            <span class="pp-tally bd-mystats__big-v"><span data-countup="{{ stats.user_playtime_hours }}">{{ stats.user_playtime_hours|intcomma }}</span><span class="bd-mystats__big-u">h</span></span>
             <span class="bd-mystats__big-k">Playtime</span>
         </div>
         <div class="bd-mystats__big">
-            <span class="pp-tally bd-mystats__big-v">{{ stats.total_trophies_earned|intcomma }}</span>
+            <span class="pp-tally bd-mystats__big-v" data-countup="{{ stats.total_trophies_earned }}">{{ stats.total_trophies_earned|intcomma }}</span>
             <span class="bd-mystats__big-k">Trophies</span>
         </div>
     </div>

@@ -188,6 +188,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 statsModal.hidden = false;
                 pageRecede(true);
                 document.body.style.overflow = 'hidden';
+                // Reveal-on-open: the numbers count up + the Horizons wipe in, so the modal TELLS the journey.
+                var mystats = statsModal.querySelector('.bd-mystats');
+                if (mystats) {
+                    mystats.classList.remove('is-revealing'); void mystats.offsetWidth; mystats.classList.add('is-revealing');
+                    mystats.querySelectorAll('[data-countup]').forEach(function (n, i) {
+                        setTimeout(function () { if (window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(n); } }, i * 60);
+                    });
+                }
                 var dlg = statsModal.querySelector('.pp-detail-modal__dialog');
                 if (dlg) { dlg.focus(); }
             } else if (e.target.closest('[data-stats-close]')) {
@@ -213,10 +221,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }   // let modified clicks open normally
                 e.preventDefault();
                 contractA11y.opened(link);
+                // Loading affordance: shimmer the tapped band while the modal is fetched, after a 150ms grace
+                // so instant loads don't flash it.
+                var loadTimer = setTimeout(function () { link.classList.add('is-loading'); }, 150);
+                function clearLoading() { clearTimeout(loadTimer); link.classList.remove('is-loading'); }
                 fetch(link.getAttribute('data-contract-url'), { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
                     .then(function (r) { return r.ok ? r.text() : null; })
                     .then(function (html) {
-                        if (html == null) { window.location.href = link.getAttribute('href'); return; }   // not linked -> career board
+                        if (html == null) { clearLoading(); window.location.href = link.getAttribute('href'); return; }   // not linked -> career board
                         contractBody.innerHTML = html;
                         // The rpm job pills + game cards ship at opacity:0 (the career page reveals them via
                         // .rpm-in); do the same here, plus set each game's progress-bar width from data-fill.
@@ -226,9 +238,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         contractModal.hidden = false;
                         pageRecede(true);
                         document.body.style.overflow = 'hidden';
+                        clearLoading();
                         var d = contractModal.querySelector('.pp-detail-modal__dialog'); if (d) { d.focus(); }
                     })
-                    .catch(function () { window.location.href = link.getAttribute('href'); });
+                    .catch(function () { clearLoading(); window.location.href = link.getAttribute('href'); });
                 return;
             }
             if (e.target.closest('[data-contract-close]')) { closeContract(); }
@@ -335,6 +348,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 function openNow() {
                     setStageCollapsed(stageNum, false);
                     openState[stageNum] = true; saveOpen(openState); updateBulkButton();
+                    // Landing flash: a one-shot ring pulse so the eye catches the stage it jumped to.
+                    var head = document.querySelector('[data-stage-toggle="' + stageNum + '"]');
+                    if (head) { head.classList.remove('is-landed'); void head.offsetWidth; head.classList.add('is-landed'); }
                 }
                 var scrollTimer;
                 function onScrollEnd() {
@@ -390,8 +406,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // ── Tier-switch ignite ──
+    // A one-shot tier-tinted glow bloom on the step that just became active (selection acknowledgment). The
+    // CSS animation is reduced-motion gated, so adding the class is harmless there.
+    function igniteActiveTier() {
+        var active = document.querySelector('#badge-tier-view .bd-tierstep.is-active');
+        if (!active) { return; }
+        active.classList.remove('is-igniting'); void active.offsetWidth; active.classList.add('is-igniting');
+    }
+
     initStages();
     armStageReveal();
+    setTimeout(igniteActiveTier, 250);   // the initial tier "comes alive" a beat after load
 
     // ── Tier swap: re-init stages + hold the scroll position steady ──
     // #badge-tier-view is most of the page; replacing its innerHTML wholesale makes the browser lose its
@@ -413,6 +439,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (t && t.id === 'badge-tier-view') {
             initStages();
             armStageReveal();   // the fresh stack re-reveals when in view (e.g. swapping tiers while scrolled to it)
+            igniteActiveTier(); // the newly-active step blooms
             restoreTierScroll();
             // The activated tier step was replaced by the swap; keyboard focus fell to <body>. Move it to
             // the now-active step (preventScroll so it doesn't fight the scroll restore above).
