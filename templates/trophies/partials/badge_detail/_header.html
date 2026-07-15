@@ -28,13 +28,18 @@ selected_tier. Keeps id="badge-header-card".
 
         {# ── Hero: the Medallion + series identity + the one headline number (Earners) ── #}
         <div class="flex flex-col sm:flex-row sm:items-start gap-4 md:gap-6">
-            <div class="bdh-med shrink-0 mx-auto sm:mx-0" role="button" tabindex="0"
-                 aria-label="Inspect {{ badge.effective_display_series|default:badge.name }} badge"
-                 {% if hero_frame.state == 'earned' %}data-earned="true"{% endif %}>
-                {% include 'components/badge_medallion.html' with frame=hero_frame no_id=True %}
-                {% comment %} One-shot specular sheen swept across an EARNED hero medallion (JS adds .is-sheen
-                once per session) -- a calm "this one is yours" reward beat, not the full Earn ceremony. {% endcomment %}
-                {% if hero_frame.state == 'earned' %}<span class="bdh-med__sheen" aria-hidden="true"></span>{% endif %}
+            <div class="shrink-0 mx-auto sm:mx-0 flex flex-col items-center gap-2">
+                <div class="bdh-med" role="button" tabindex="0"
+                     aria-label="Inspect {{ badge.effective_display_series|default:badge.name }} badge"
+                     {% if hero_frame.state == 'earned' %}data-earned="true"{% endif %}>
+                    {% include 'components/badge_medallion.html' with frame=hero_frame no_id=True %}
+                    {% comment %} One-shot specular sheen swept across an EARNED hero medallion (JS adds .is-sheen
+                    once per session) -- a calm "this one is yours" reward beat, not the full Earn ceremony. {% endcomment %}
+                    {% if hero_frame.state == 'earned' %}<span class="bdh-med__sheen" aria-hidden="true"></span>{% endif %}
+                </div>
+                {% comment %} Provenance, engraved under the object: the permanent earn rank -- the
+                limited-edition serial of the trading-card metaphor. {% endcomment %}
+                {% if hero_frame.state == 'earned' and hero_frame.engraving_rank %}<div class="bdh-earnrank" title="You were the {{ hero_frame.engraving_rank|ordinal }} to earn this badge">Earn <span class="pp-tally">#{{ hero_frame.engraving_rank|intcomma }}</span></div>{% endif %}
             </div>
 
             <div class="min-w-0 flex-1 text-center sm:text-left">
@@ -65,8 +70,6 @@ selected_tier. Keeps id="badge-header-card".
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
                         {{ selected_tier|badge_tier }} earned{% if hero_frame.earned_date %} &middot; {{ hero_frame.earned_date }}{% endif %}
                     </div>
-                    {% comment %} Provenance: the permanent earn rank -- the limited-edition serial of the trading-card metaphor. {% endcomment %}
-                    {% if hero_frame.engraving_rank %}<div class="bdh-earnrank" title="You were the {{ hero_frame.engraving_rank|ordinal }} to earn this badge">Earn <span class="pp-tally">#{{ hero_frame.engraving_rank|intcomma }}</span></div>{% endif %}
                     {% elif hero_frame.state == 'maintenance' %}
                     {# Lapsed (held but needs re-earning): warning tone + wrench, mirroring the medallion's repair state. #}
                     <div class="flex items-center justify-between text-xs mb-1.5">

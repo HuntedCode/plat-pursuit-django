@@ -98,9 +98,16 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
+    // The career-style "page pushes back": scale #page-recede down while a modal is open (shared mechanism --
+    // .pp-receded on #zoom-container; CSS owns the transition + reduced-motion gate). NOT used for the peek
+    // modal (its pick-up/put-down grow reads as the depth already).
+    var zoomEl = document.getElementById('zoom-container');
+    function pageRecede(on) { if (zoomEl) { zoomEl.classList.toggle('pp-receded', on); } }
+
     // Choreographed modal EXIT: add .is-closing to reverse the entrance (CSS bdModalOut + scrim fade),
     // then hide + run cleanup on animationend (with a timeout fallback). Reduced motion -> hide instantly.
     function closeModalAnimated(modal, cleanup) {
+        pageRecede(false);   // the page steps back forward as the modal leaves
         var dlg = modal.querySelector('.pp-detail-modal__dialog');
         var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         function finish() {
@@ -123,30 +130,31 @@ document.addEventListener('DOMContentLoaded', function() {
     var peek = (peekEl && window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)
         ? PlatPursuit.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
         : null;
-    function openMedallionPeek(med) {
-        if (!peek) { return; }
+    function openMedallionPeek(host) {
+        if (!peek || !host) { return; }
+        var med = host.querySelector('.pp-med[data-badge-id]');
         var badgeId = med && med.getAttribute('data-badge-id');
         if (!badgeId) { return; }
         var tmpl = peekEl.getAttribute('data-peek-url') || '';
         var url = tmpl.replace(/0\/$/, badgeId + '/');
-        if (url && url !== tmpl) { peek.open(url, med); }
+        // Pass the CONTAINER (not the .pp-med): detailModal.open does sourceEl.querySelector('.pp-med'), so it
+        // needs an ancestor to find the disc and GROW from it -- the pick-up/put-down every other page uses.
+        if (url && url !== tmpl) { peek.open(url, host); }
     }
     document.addEventListener('click', function(e) {
         if (!peek || !e.target.closest) { return; }
         if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }
-        var med = e.target.closest('.bdh-med .pp-med');
-        if (!med) { return; }
+        var host = e.target.closest('.bdh-med');
+        if (!host || !host.querySelector('.pp-med[data-badge-id]')) { return; }
         e.preventDefault();
-        openMedallionPeek(med);
+        openMedallionPeek(host);
     });
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Enter' && e.key !== ' ') { return; }
         var host = e.target.closest && e.target.closest('.bdh-med[role="button"]');
         if (!host) { return; }
-        var med = host.querySelector('.pp-med[data-badge-id]');
-        if (!med) { return; }
         e.preventDefault();
-        openMedallionPeek(med);
+        openMedallionPeek(host);
     });
 
     // ── Earned-badge specular sheen (one-shot, once per session per series) ──
@@ -176,6 +184,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 e.preventDefault();
                 statsA11y.opened(opener);
                 statsModal.hidden = false;
+                pageRecede(true);
                 document.body.style.overflow = 'hidden';
                 var dlg = statsModal.querySelector('.pp-detail-modal__dialog');
                 if (dlg) { dlg.focus(); }
@@ -213,6 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         contractBody.querySelectorAll('.rpm-job, .rpg').forEach(function (el) { el.style.animationDelay = (i++ * 45) + 'ms'; el.classList.add('rpm-in'); });
                         contractBody.querySelectorAll('.rpg__prog-fill').forEach(function (f) { if (f.dataset.fill) { f.style.width = f.dataset.fill; } });
                         contractModal.hidden = false;
+                        pageRecede(true);
                         document.body.style.overflow = 'hidden';
                         var d = contractModal.querySelector('.pp-detail-modal__dialog'); if (d) { d.focus(); }
                     })
@@ -363,7 +373,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // ── Stage-stack reveal on scroll-in ──
+    // Fire the reveal when the journey scrolls into view (it's usually below the fold, so a load-time reveal
+    // is missed). Armed by JS so no-JS keeps the stages visible; reduced motion skips it (the CSS is gated).
+    var stageReveal = ('IntersectionObserver' in window) ? new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('is-inview'); stageReveal.unobserve(en.target); } });
+    }, { rootMargin: '0px 0px -12% 0px' }) : null;
+    function armStageReveal() {
+        if (!stageReveal) { return; }
+        document.querySelectorAll('.bd-stages').forEach(function (s) {
+            if (s.classList.contains('bd-stages--armed')) { return; }
+            s.classList.add('bd-stages--armed');
+            stageReveal.observe(s);
+        });
+    }
+
     initStages();
+    armStageReveal();
 
     // ── Tier swap: re-init stages + hold the scroll position steady ──
     // #badge-tier-view is most of the page; replacing its innerHTML wholesale makes the browser lose its
@@ -384,6 +410,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var t = (e.detail && e.detail.target) || e.target;
         if (t && t.id === 'badge-tier-view') {
             initStages();
+            armStageReveal();   // the fresh stack re-reveals when in view (e.g. swapping tiers while scrolled to it)
             restoreTierScroll();
             // The activated tier step was replaced by the swap; keyboard focus fell to <body>. Move it to
             // the now-active step (preventScroll so it doesn't fight the scroll restore above).

@@ -24,9 +24,9 @@
 @keyframes bdhSheen { to { transform: translateX(360%) rotate(8deg); } }
 @media (prefers-reduced-motion: reduce) { .bdh-med.is-sheen .bdh-med__sheen { opacity: 0; } }
 
-/* Earn-rank engraving under the earned row -- a faux-deboss serial ("Earn #47"). */
+/* Earn-rank engraving directly under the medallion -- a faux-deboss serial ("Earn #47"). */
 .bdh-earnrank {
-    display: inline-flex; align-items: baseline; gap: 4px; margin-bottom: 8px;
+    display: inline-flex; align-items: baseline; gap: 4px;
     font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--pp-text-mute); text-shadow: 0 1px 0 oklch(1 0 0 / 0.06);
 }
@@ -611,14 +611,17 @@
 #badge-stats-modal.is-closing:not([hidden]) .pp-detail-modal__scrim,
 #badge-contract-modal.is-closing:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrimOut 0.22s ease forwards; }
 
-/* First-paint reveal: the stage stack settles in as one set (reuses the shipped ppRevealIn). Default-collapsed
-   means only headers animate, so it stays cheap; `both` fill holds the from-state so there's no FOUC. */
+/* Stage-stack reveal: settles in as one set (reuses the shipped ppRevealIn). Fires when the journey scrolls
+   INTO view (JS adds .is-inview) rather than on load -- it's usually below the fold, so a load-time reveal is
+   missed. Armed by JS (.bd-stages--armed) so no-JS keeps the stages visible; default-collapsed = headers only
+   animate, so it stays cheap; `both` fill holds the from-state so there's no FOUC once armed. */
 @media (prefers-reduced-motion: no-preference) {
-    .bd-stages > .bd-stage { animation: ppRevealIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
-    .bd-stages > .bd-stage:nth-child(2) { animation-delay: 0.05s; }
-    .bd-stages > .bd-stage:nth-child(3) { animation-delay: 0.1s; }
-    .bd-stages > .bd-stage:nth-child(4) { animation-delay: 0.15s; }
-    .bd-stages > .bd-stage:nth-child(5) { animation-delay: 0.2s; }
-    .bd-stages > .bd-stage:nth-child(6) { animation-delay: 0.25s; }
-    .bd-stages > .bd-stage:nth-child(n+7) { animation-delay: 0.3s; }
+    .bd-stages--armed > .bd-stage { opacity: 0; }
+    .bd-stages--armed.is-inview > .bd-stage { animation: ppRevealIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .bd-stages--armed.is-inview > .bd-stage:nth-child(2) { animation-delay: 0.05s; }
+    .bd-stages--armed.is-inview > .bd-stage:nth-child(3) { animation-delay: 0.1s; }
+    .bd-stages--armed.is-inview > .bd-stage:nth-child(4) { animation-delay: 0.15s; }
+    .bd-stages--armed.is-inview > .bd-stage:nth-child(5) { animation-delay: 0.2s; }
+    .bd-stages--armed.is-inview > .bd-stage:nth-child(6) { animation-delay: 0.25s; }
+    .bd-stages--armed.is-inview > .bd-stage:nth-child(n+7) { animation-delay: 0.3s; }
 }
