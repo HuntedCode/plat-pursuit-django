@@ -16,7 +16,9 @@
 .pp-nav {
     position: sticky; top: 0; z-index: 50;   /* pins the frame; sits above the sub-nav (z-40) */
     background: color-mix(in oklab, var(--pp-bg-1) 90%, transparent);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    /* One standard declaration only -- lightningcss autoprefixes. Hand-writing -webkit- alongside it
+       made the minifier drop the STANDARD property, so the frosted blur never rendered off-webkit. */
+    backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--pp-border);
 }
 /* Modern app-nav layout: brand + hub nav clustered on the LEFT, the action cluster on the right. The
@@ -245,7 +247,7 @@
 .pp-sub {
     position: sticky; top: 58px; z-index: 40;   /* top re-measured by main.js */
     background: color-mix(in oklab, var(--pp-bg-1) 82%, transparent);
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);   /* standard only; lightningcss autoprefixes (see .pp-nav note) */
     border-bottom: 1px solid var(--pp-border);
 }
 /* No `display` here: the template toggles the row with Tailwind `hidden lg:flex`, and an unlayered
