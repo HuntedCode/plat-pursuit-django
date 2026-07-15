@@ -114,9 +114,8 @@
   4. Scene definitions (menu, race, results)
   5. Entry point (creates the Phaser game instance, must be last)
 
-  NOTE: We do NOT call PlatPursuit.ZoomScaler.init() on this page.
-  Phaser has its own Scale Manager that handles canvas sizing independently.
-  The ZoomScaler's CSS transforms would conflict with Phaser's coordinate system.
+  NOTE: Phaser has its own Scale Manager that handles canvas sizing independently, so this page
+  must not be wrapped in any page-scaling CSS transform (it would conflict with Phaser's coordinates).
 -->
 <script defer src="{% static 'vendor/phaser.min.js' %}"></script>
 

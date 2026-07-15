@@ -382,13 +382,10 @@
    nav/sub-nav/footer AND the sticky hotbar, all its siblings -- holds still. The DIM is left to whatever
    floats in front (the modal's dark+blurred backdrop, the ceremony's scrim) -- NO filter on the page. A
    `filter: brightness` here re-rasterized the whole subtree every frame the page scaled, which stuttered
-   the modal's opening animations on tall mobile pages (and was redundant with the backdrop anyway). Scale
-   scoped to non-legacy pages so it doesn't compound with the ZoomScaler's wrapper transform. */
-#zoom-container:not(.zoom-active) #page-recede { transition: transform 0.34s cubic-bezier(0.2, 0.8, 0.2, 1); }
-#zoom-container:not(.zoom-active).pp-receded #page-recede { transform: scale(0.95); }
-/* Both overrides MUST repeat :not(.zoom-active) to match the base rule's specificity -- media queries add
-   none, so without it the base scale(0.95) wins and the "no step-back" never takes effect. */
-@media (prefers-reduced-motion: reduce) { #zoom-container:not(.zoom-active).pp-receded #page-recede { transform: none; } }
+   the modal's opening animations on tall mobile pages (and was redundant with the backdrop anyway). */
+#page-recede { transition: transform 0.34s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.pp-receded #page-recede { transform: scale(0.95); }
+@media (prefers-reduced-motion: reduce) { .pp-receded #page-recede { transform: none; } }
 
 .edetail__head { display: flex; align-items: center; gap: 14px; }
 .edetail__glyph { width: 54px; height: 54px; flex: none; display: grid; place-items: center; border-radius: 13px; background: color-mix(in oklab, var(--disc) 15%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); color: var(--disc); }

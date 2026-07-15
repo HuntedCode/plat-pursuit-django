@@ -845,55 +845,13 @@ const InfiniteScroller = {
 };
 
 /**
- * Zoom Scaler - Uniform sub-768px page scaling via transform: scale()
- * Adds .zoom-active to #zoom-container which activates CSS rules in input.css.
- * Handles height correction since transform: scale() doesn't change the layout box.
+ * ZoomAwareObserver - Drop-in IntersectionObserver replacement.
  *
- * Usage: PlatPursuit.ZoomScaler.init()  (call once per page in {% block js_scripts %})
- */
-const ZoomScaler = {
-    init() {
-        const container = document.getElementById('zoom-container');
-        const wrapper = document.getElementById('zoom-wrapper');
-        if (!container || !wrapper) return;
-
-        container.classList.add('zoom-active');
-
-        function fixHeight() {
-            if (window.innerWidth >= 768) {
-                container.style.height = '';
-                wrapper.style.minHeight = '';
-                return;
-            }
-            var style = getComputedStyle(wrapper);
-            var matrix = new DOMMatrixReadOnly(style.transform);
-            var scale = matrix.a;
-            if (scale > 0 && scale < 1) {
-                // Wrapper needs min-height of viewport/scale so footer reaches bottom after scaling
-                wrapper.style.minHeight = Math.ceil(window.innerHeight / scale) + 'px';
-                var scaledHeight = Math.ceil(wrapper.scrollHeight * scale);
-                container.style.height = Math.max(scaledHeight, window.innerHeight) + 'px';
-            }
-        }
-
-        fixHeight();
-        window.addEventListener('resize', fixHeight);
-
-        new MutationObserver(function() {
-            requestAnimationFrame(fixHeight);
-        }).observe(wrapper, { childList: true, subtree: true });
-
-        wrapper.addEventListener('load', fixHeight, true);
-    }
-};
-
-/**
- * ZoomAwareObserver - Drop-in IntersectionObserver replacement that works under ZoomScaler.
- *
- * When ZoomScaler is active (sub-768px), CSS transform: scale() + overflow: hidden on
- * #zoom-container breaks IntersectionObserver's clipping calculations. This utility
- * switches to a scroll-event fallback using getBoundingClientRect() (which correctly
- * accounts for CSS transforms) when zoom scaling is detected.
+ * Historically paired with the retired ZoomScaler: when a page scaled itself sub-768px via
+ * transform: scale() + overflow:hidden on #zoom-container, native IntersectionObserver clipping
+ * broke, so this fell back to a scroll-event + getBoundingClientRect() path. ZoomScaler is gone,
+ * so `_isZoomActive()` is always false and this delegates 100% to native IntersectionObserver --
+ * kept as a drop-in so its several callers don't need touching; the fallback path is now dead-but-inert.
  *
  * On desktop (no zoom), delegates 100% to native IntersectionObserver with zero overhead.
  *
@@ -1644,7 +1602,6 @@ window.PlatPursuit.debounce = debounce;
 window.PlatPursuit.countUp = countUp;
 window.PlatPursuit.InfiniteScroller = InfiniteScroller;
 window.PlatPursuit.DragReorderManager = DragReorderManager;
-window.PlatPursuit.ZoomScaler = ZoomScaler;
 window.PlatPursuit.ZoomAwareObserver = ZoomAwareObserver;
 window.PlatPursuit.LeaderboardUtils = LeaderboardUtils;
 window.PlatPursuit.ReviewProgressTiers = ReviewProgressTiers;

@@ -39,7 +39,7 @@ chrome — provided the deviations are intentional and consistent, not accidenta
 1. ✅ **`:focus-visible` rings** — added to tabbar items, sub-nav pills (desktop + mobile), and the hotbar toggle.
 2. ✅ **`aria-current` parity** — added to navbar hub buttons + mobile tabs (the sub-nav already had it).
 3. ✅ **`prefers-reduced-motion`** — the hotbar's infinite pulse + collapse transition now stop under RM.
-4. ✅ **Verified:** the only `ZoomScaler.init()` caller is `minigames/stellar-circuit.html` (not a hub page), so the sticky/fixed chrome is safe.
+4. ✅ **ZoomScaler removed** (it had no callers), so the sticky/fixed chrome has no scaling ancestor to fear.
 
 ## Work sequence + status
 
@@ -74,12 +74,12 @@ Files: `templates/partials/navbar.html`, `mobile_tabbar.html`, `hub_subnav.html`
 - ✅ Fixed the stale comments: `navbar.html` "mega menus" → "hub buttons"; the "Dashboard / … / My Pursuit" enumeration → "My Pursuit / Browse / Community / Support".
 - ✅ Added the `heart` branch to the desktop sub-nav icon switch (all 4 hub icons now covered) so Support renders if it ever gains items.
 - ✅ **Verified `w-15`** resolves — Tailwind v4 dynamic spacing generates it (`3.75rem`, present in `output.css`). No change needed.
-- ✅ **Verified `ZoomScaler.init()`** runs only on `templates/minigames/stellar-circuit.html` — no hub page, so the sticky/fixed chrome is safe.
+- ✅ **ZoomScaler removed** (no callers remained) — the sticky/fixed chrome has no scaling ancestor.
 - Deferred (optional): extract shared hub SVGs into an icon partial (tabbar ↔ sub-nav duplication) — cosmetic, low value.
 - Tests: `tests/engine/test_chrome.py` `test_navbar_and_tabbar_mark_active_hub_with_aria_current` (anchored on `/support/`, which has no sub-nav items, so the assertion isolates the navbar + tab).
 
 ## Gotchas and Pitfalls
 
 - **Don't card-ify the chrome.** The bar is the universal standard (responsive, a11y, tokens, glow-by-state), not the card blueprint. Forcing `card bg-base-200/90 …` onto the hotbar/footer would make chrome compete with content — the opposite of the brief.
-- **Sticky chrome + ZoomScaler are mutually exclusive.** A `transform: scale()` ancestor breaks `position: sticky/fixed`; the whole top-chrome set lives inside `#zoom-wrapper`. Safe only because hub pages don't call `ZoomScaler.init()` — verify before assuming.
+- **Sticky chrome lives inside `#zoom-wrapper`**, which no longer transforms at rest (ZoomScaler removed), so `position: sticky/fixed` is always safe there. The sibling `#page-recede` takes a transient `transform: scale(0.95)` during a ceremony/modal recede, but the chrome is its sibling (not descendant) and holds still.
 - **Rebuild Tailwind after chrome edits** that introduce new class combos (`npm run build`); the footer's `text-[0.65rem]` / opacity variants needed it.

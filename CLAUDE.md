@@ -16,7 +16,7 @@ The full visual constitution lives in **[docs/design/visual-identity.md](docs/de
 
 Every page in PlatPursuit is being rebuilt into one coherent, polished product. This is a full redesign, not a re-style. The dashboard seeded the design language; the **Career page (`/career/`) is now the finished-quality standard** every page is measured against (see Reference Implementation below). The goal: every page should feel like it belongs to the same app, at the same level of polish.
 
-**Redesign in progress**: Pages are being rebuilt incrementally. Each page goes through a three-part process (backend audit, frontend rebuild, polish). Redesigned and legacy pages coexist safely due to the opt-in ZoomScaler architecture.
+**Redesign in progress**: Pages are being rebuilt incrementally. Each page goes through a three-part process (backend audit, frontend rebuild, polish). All pages now build mobile-first; the legacy ZoomScaler scaling system has been removed (see below).
 
 ### Three-Part Process Per Page
 
@@ -64,25 +64,18 @@ All styling tokens, patterns, component blueprints, and rules are documented in 
 
 The dashboard (`templates/trophies/dashboard.html`) seeded the design language and is still a useful token/pattern reference, but it is being sunset; Career is the current bar.
 
-### ZoomScaler Legacy System (Non-Redesigned Pages)
+### ZoomScaler (removed)
 
-Pages not yet redesigned still use the ZoomScaler transform-scale system. This is being phased out as pages are rebuilt.
+The legacy ZoomScaler transform-scale system (a `.zoom-active` class that scaled a 768px layout down
+to fit smaller screens) has been **removed** -- it had no remaining callers. All pages now build
+mobile-first (`base(375) -> md(768) -> lg(1024)`), so `grid-cols-1 md:grid-cols-2`-style patterns are
+correct everywhere.
 
-**How it works**: The `#zoom-container` and `#zoom-wrapper` divs in `base.html` are always present but inert. When a page calls `PlatPursuit.ZoomScaler.init()`, it adds `.zoom-active` which activates CSS transform rules that scale the 768px layout down to fit smaller screens.
-
-**For non-redesigned pages:**
-- Base styles target 768px (tablet), `lg:` targets desktop
-- Do NOT use `grid-cols-1 md:grid-cols-2` patterns (base must show the tablet layout)
-- Verify layout at exactly 768px wide (the baseline that gets scaled down)
-
-**To redesign a page:**
-1. Backend audit: review view, queryset, services for optimization opportunities
-2. Remove `PlatPursuit.ZoomScaler.init()` from the page's JS
-3. Rebuild templates from scratch using design system tokens and component patterns
-4. Run `npm run build` to regenerate Tailwind CSS
-5. Test at 375px, 768px, and 1024px+
-
-Fixed-position elements (toasts, modals, mobile tabbar) live OUTSIDE the wrapper divs in `base.html` and are unaffected by either system.
+The `#zoom-container` / `#zoom-wrapper` divs in `base.html` **remain**, but only as the host for the
+modal/ceremony **recede** effect: JS toggles `.pp-receded` on `#zoom-container` and CSS steps back
+`#page-recede` (the wrapper around block content) so the page sits behind a ceremony/modal. The chrome
+(nav, sub-nav, footer) are siblings of `#page-recede` and hold still. Fixed-position elements (toasts,
+modals, mobile tabbar) live OUTSIDE the wrapper divs and are unaffected.
 
 ---
 
@@ -218,7 +211,7 @@ The global CLAUDE.md defines the three-phase workflow (Plan, Build, Polish). Bel
 ### Phase 1 Additions: Reuse Targets
 
 Before exiting plan mode, specifically search:
-- `static/js/utils.js` for utilities (API, ToastManager, HTMLUtils, debounce, InfiniteScroller, UnsavedChangesManager, ZoomScaler)
+- `static/js/utils.js` for utilities (API, ToastManager, HTMLUtils, debounce, InfiniteScroller, UnsavedChangesManager, ZoomAwareObserver)
 - Existing JS files for similar UI patterns (modals, tabs, infinite scroll, form handling)
 - Existing templates for component patterns that can be reused or extended
 - Existing Django views/services for logic that can be shared rather than duplicated
