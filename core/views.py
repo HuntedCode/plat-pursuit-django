@@ -675,6 +675,33 @@ class RequirementsChecklistWorkshopView(TemplateView):
         return ctx
 
 
+class ChromeWorkshopView(TemplateView):
+    """Design workshop (/design/chrome/): rebuild the site CHROME (navbar + sub-nav) into the --pp-* house
+    style and ABSORB the hotbar's live-sync surface into a status-aware avatar + unified panel.
+
+    The current chrome is still DaisyUI; the hotbar is a separate per-page bar. This renders static mock-ups
+    (no live sync JS) of: the rebuilt navbar across sync states (synced / syncing / error), the open avatar
+    panel (sync progress + trophy counts + last-synced + Sync Now, then the user menu), and the redesigned
+    sub-nav. Not a product surface -- a decision aid before the site-wide wire-up.
+    """
+    template_name = 'design/chrome_workshop.html'
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # The navbar is shown once per sync state so the status-aware avatar ring is visible in each.
+        ctx['state_rows'] = [('synced', 'Synced'), ('syncing', 'Syncing'), ('error', 'Sync error')]
+        # A hub's sub-nav items (mirrors core/hub_subnav.py Browse, the busiest, so overflow shows), grouped.
+        ctx['subnav_groups'] = [
+            {'label': 'Catalog', 'items': [
+                {'name': 'Games', 'active': True}, {'name': 'Trophies'}, {'name': 'Badges'},
+                {'name': 'Recently Added'}]},
+            {'label': 'Curation', 'items': [
+                {'name': 'Franchises'}, {'name': 'Companies'}, {'name': 'Engines'},
+                {'name': 'Genres & Themes'}, {'name': 'Flagged'}]},
+        ]
+        return ctx
+
+
 class StageCardsWorkshopView(TemplateView):
     """Design workshop (/design/stage-cards/): the badge-detail stage journey rebuilt from scratch --
     the stage card + the game card, now with CONTRACT awareness (each game's home Contract + its jobs/XP,
