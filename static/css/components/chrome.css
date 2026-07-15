@@ -1,0 +1,121 @@
+/* ================================================================
+ * Chrome — the site FRAME (navbar + sub-nav), rebuilt to the house style.
+ *
+ * Chrome is the calm matte frame that holds the art without competing with it
+ * (visual-identity §1). So: resting = calm/neutral; glow is earned by STATE only
+ * (active nav, sync status, hover). Never card-ified. The hotbar is absorbed here:
+ * the avatar carries the sync state (ring + dot) and opens a unified panel.
+ *
+ * Naming: .pp-nav* (top bar) · .pp-av* (status-aware avatar) · .pp-avpanel* (the
+ * unified sync + account panel) · .pp-sub* (the hub sub-nav, added with that slice).
+ * ================================================================ */
+
+/* ── The navbar bar ──────────────────────────────────────────────────────── */
+.pp-nav {
+    display: flex; align-items: center; gap: 16px; height: 58px; padding: 0 16px;
+    background: color-mix(in oklab, var(--pp-bg-1) 90%, transparent);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--pp-border);
+}
+.pp-nav__brand { display: flex; align-items: center; gap: 9px; flex-shrink: 0; text-decoration: none; }
+.pp-nav__logo { width: 30px; height: 30px; border-radius: var(--pp-radius-md); object-fit: cover; }
+.pp-nav__word { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.02rem; color: var(--pp-text); letter-spacing: -0.01em; white-space: nowrap; }
+
+.pp-nav__hubs { display: flex; align-items: center; gap: 4px; margin-left: 6px; }
+.pp-navhub {
+    position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px;
+    border-radius: var(--pp-radius-md); font-size: 0.82rem; font-weight: 600; color: var(--pp-text-dim);
+    text-decoration: none; transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.pp-navhub svg { width: 16px; height: 16px; }
+@media (hover: hover) { .pp-navhub:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.04); } }
+.pp-navhub:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-navhub.is-active { color: var(--pp-primary); }
+/* active = a single primary underline with a soft glow (state, not painted-on surface) */
+.pp-navhub.is-active::after {
+    content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; border-radius: 2px;
+    background: var(--pp-primary); box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 55%, transparent);
+}
+
+.pp-nav__end { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.pp-navicon {
+    position: relative; width: 36px; height: 36px; border-radius: var(--pp-radius-md); display: grid; place-items: center;
+    color: var(--pp-text-mute); background: none; border: none; cursor: pointer;
+    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) { .pp-navicon:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.05); } }
+.pp-navicon:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-navicon svg { width: 19px; height: 19px; }
+.pp-navicon__badge {
+    position: absolute; top: 4px; right: 4px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 999px;
+    background: var(--pp-error); color: #fff; font-size: 0.56rem; font-weight: 800; display: grid; place-items: center;
+    border: 2px solid var(--pp-bg-1);
+}
+.pp-navpremium {
+    display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; border-radius: 999px;
+    font-size: 0.76rem; font-weight: 700; text-decoration: none; color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 12%, transparent); border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, transparent);
+    transition: background var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) { .pp-navpremium:hover { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); } }
+.pp-navpremium svg { width: 14px; height: 14px; }
+
+/* ── Status-aware avatar: the ring colour IS the sync state ───────────────── */
+.pp-av { position: relative; width: 38px; height: 38px; border-radius: 50%; cursor: pointer; flex-shrink: 0; padding: 0; border: none; background: none; }
+.pp-av__img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--pp-bg-3), var(--pp-bg-2)); color: var(--pp-text-dim); }
+.pp-av__img svg { width: 20px; height: 20px; }
+.pp-av::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--ring, var(--pp-border)); pointer-events: none; }
+.pp-av:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 4px; border-radius: 50%; }
+.pp-av[data-sync="synced"] { --ring: var(--pp-success); }
+.pp-av[data-sync="error"]  { --ring: var(--pp-error); }
+/* syncing = in-progress -> the ONE cyan brand accent (visual-identity: cyan = "currently active / in progress") */
+.pp-av[data-sync="syncing"] { --ring: var(--pp-primary); }
+.pp-av[data-sync="syncing"]::before {
+    content: ""; position: absolute; inset: -4px; border-radius: 50%;
+    background: conic-gradient(var(--pp-primary) 0deg 90deg, transparent 90deg 360deg);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+            mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+    animation: ppAvSpin 1.1s linear infinite;
+}
+@keyframes ppAvSpin { to { transform: rotate(360deg); } }
+.pp-av__dot { position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--pp-bg-1); background: var(--ring, var(--pp-border)); }
+@media (prefers-reduced-motion: reduce) { .pp-av[data-sync="syncing"]::before { animation: none; } }
+
+/* ── The unified avatar PANEL (absorbs the hotbar) ────────────────────────── */
+.pp-avpanel { width: 300px; max-width: calc(100vw - 24px); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-2); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 44px rgba(0,0,0,0.45); overflow: hidden; }
+.pp-avpanel__head { display: flex; align-items: center; gap: 11px; padding: 14px; border-bottom: 1px solid var(--pp-divider); }
+.pp-avpanel__name { flex: 1; min-width: 0; }
+.pp-avpanel__name b { display: block; font-size: 0.9rem; font-weight: 700; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-avstatus { display: inline-flex; align-items: center; gap: 5px; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.02em; margin-top: 2px; }
+.pp-avstatus::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pp-avstatus[data-sync="synced"] { color: var(--pp-success); }
+.pp-avstatus[data-sync="syncing"] { color: var(--pp-primary); }
+.pp-avstatus[data-sync="error"] { color: var(--pp-error); }
+
+.pp-avsync { padding: 13px 14px; }
+.pp-avsync__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pp-avsync__when { font-size: 0.72rem; color: var(--pp-text-mute); }
+.pp-avsync__loot { display: flex; align-items: center; gap: 12px; margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--pp-divider); }
+.pp-avsync__loot i { font-style: normal; display: inline-flex; align-items: center; gap: 5px; font-size: 0.76rem; font-weight: 700; color: var(--pp-text-dim); }
+.pp-avsync__pip { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+.pp-avbtn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: var(--pp-radius-md);
+    font-size: 0.76rem; font-weight: 700; cursor: pointer; border: 1px solid transparent; text-decoration: none;
+    background: var(--pp-primary); color: #05101c; }
+@media (hover: hover) { .pp-avbtn:hover { filter: brightness(1.08); } }
+.pp-avbtn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-avbtn:disabled { opacity: 0.5; cursor: default; }
+
+.pp-avmenu { padding: 6px; border-top: 1px solid var(--pp-divider); }
+.pp-avmenu a, .pp-avmenu button {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: var(--pp-radius-md);
+    font-size: 0.82rem; color: var(--pp-text-dim); text-decoration: none; background: none; border: none; cursor: pointer; text-align: left;
+    transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease);
+}
+@media (hover: hover) { .pp-avmenu a:hover, .pp-avmenu button:hover { background: oklch(1 0 0 / 0.05); color: var(--pp-text); } }
+.pp-avmenu a:focus-visible, .pp-avmenu button:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+.pp-avmenu svg { width: 16px; height: 16px; color: var(--pp-text-mute); flex-shrink: 0; }
+.pp-avmenu__danger:hover { color: var(--pp-error) !important; }
+.pp-avmenu__count { margin-left: auto; font-size: 0.7rem; font-weight: 800; color: var(--pp-error); }

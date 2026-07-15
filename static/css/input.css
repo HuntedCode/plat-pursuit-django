@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./components/chips.css";
 @import "./components/buttons.css";
+@import "./components/chrome.css";
 @import "./components/frame.css";
 @import "./components/badge-medallion.css";
 @import "./components/tally.css";
