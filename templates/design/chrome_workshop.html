@@ -50,10 +50,11 @@ redesigned sub-nav. Chrome stays a calm matte FRAME (glow by state, never card-i
     .cw-av::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--ring, var(--pp-border)); }
     .cw-av[data-state="synced"] { --ring: var(--pp-success); }
     .cw-av[data-state="error"]  { --ring: var(--pp-error); }
-    .cw-av[data-state="syncing"] { --ring: var(--pp-warning); }
+    /* syncing = in progress -> the ONE cyan brand accent (visual-identity: cyan is "currently active / in progress") */
+    .cw-av[data-state="syncing"] { --ring: var(--pp-primary); }
     /* syncing: an animated arc sweeps the ring */
     .cw-av[data-state="syncing"]::before { content: ""; position: absolute; inset: -4px; border-radius: 50%;
-        background: conic-gradient(var(--pp-warning) 0deg 90deg, transparent 90deg 360deg);
+        background: conic-gradient(var(--pp-primary) 0deg 90deg, transparent 90deg 360deg);
         -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
                 mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
         animation: cwSpin 1.1s linear infinite; }
@@ -70,7 +71,7 @@ redesigned sub-nav. Chrome stays a calm matte FRAME (glow by state, never card-i
     .cw-status { display: inline-flex; align-items: center; gap: 5px; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.02em; margin-top: 2px; }
     .cw-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
     .cw-status--synced { color: var(--pp-success); }
-    .cw-status--syncing { color: var(--pp-warning); }
+    .cw-status--syncing { color: var(--pp-primary); }
     .cw-sync { padding: 13px 14px; }
     .cw-sync__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .cw-sync__when { font-size: 0.72rem; color: var(--pp-text-mute); }
@@ -81,7 +82,8 @@ redesigned sub-nav. Chrome stays a calm matte FRAME (glow by state, never card-i
     .cw-btn[disabled] { opacity: 0.5; cursor: default; }
     .cw-prog { margin: 4px 0 2px; }
     .cw-prog__bar { height: 6px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
-    .cw-prog__fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--pp-warning), var(--pp-primary)); }
+    /* the Horizon primitive's themed fill (cyan): cool-toward-warm leading edge + a soft glow */
+    .cw-prog__fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--pp-primary) 55%, var(--pp-bg-3)), var(--pp-primary)); box-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 50%, transparent); }
     .cw-prog__meta { display: flex; justify-content: space-between; font-size: 0.66rem; color: var(--pp-text-mute); margin-top: 5px; }
     .cw-loot { display: flex; align-items: center; gap: 12px; margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--pp-divider); }
     .cw-loot__i { display: inline-flex; align-items: center; gap: 5px; font-size: 0.76rem; font-weight: 700; color: var(--pp-text-dim); }
@@ -157,8 +159,8 @@ redesigned sub-nav. Chrome stays a calm matte FRAME (glow by state, never card-i
             </nav>
             {% endfor %}
         </div>
-        <p class="cw__note">The avatar ring + corner dot carry the sync state (green synced / amber syncing,
-            with a sweeping arc / red error) &mdash; identity and status become one object, so the whole hotbar
+        <p class="cw__note">The avatar ring + corner dot carry the sync state (green synced / <b>cyan</b> syncing,
+            with a sweeping arc / red error &mdash; cyan is the kit's "in progress" accent) &mdash; identity and status become one object, so the whole hotbar
             bar disappears. Everything else is the calm matte frame: neutral hub text, active hub marked by a
             single primary underline, ghost icon buttons.</p>
     </div>
