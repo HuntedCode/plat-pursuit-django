@@ -1,301 +1,175 @@
-{% load static %}
-<nav class="navbar sticky top-0 z-50 bg-base-200 shadow-lg border-b-2 border-primary/30" role="navigation" aria-label="Main navigation">
+{% load static custom_filters humanize %}
+{% comment %} Navbar (rebuilt to the --pp-* house style, chrome-audit fold). Calm matte frame, glow by state.
+The old hotbar is ABSORBED here: the avatar is status-aware (ring = sync state) and opens a unified panel
+(sync progress + trophy loot + Sync Now, then the account menu). navsync.js drives the sync bits via the
+data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search + notification dropdowns keep their exact
+JS hooks (navbar-search.js / notifications.js); only their trigger buttons are restyled. {% endcomment %}
+<nav class="pp-nav" role="navigation" aria-label="Main navigation">
 
-    <!-- navbar-start: Logo -->
-    <div class="navbar-start flex items-center">
-        <a href="/" class="btn btn-ghost items-center text-xl font-logo hidden md:flex" aria-label="Platinum Pursuit Home">
-            <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="h-8 w-8 mr-2 rounded-full" loading="eager" decoding="async" />
-            Platinum Pursuit
-        </a>
+    {# Brand #}
+    <a href="/" class="pp-nav__brand" aria-label="Platinum Pursuit Home">
+        <img src="{% static 'images/logo.png' %}" alt="" class="pp-nav__logo" loading="eager" decoding="async" />
+        <span class="pp-nav__word hidden sm:inline">Platinum Pursuit</span>
+    </a>
+
+    {# Hub-of-hubs nav (desktop; the bottom tab bar covers <lg). Active hub = hub_section from the
+       hub_subnav context processor; marked by a single primary underline. #}
+    <div class="pp-nav__hubs hidden lg:flex">
+        {% if user.is_authenticated %}
+        <a href="{% url 'home' %}" class="pp-navhub{% if hub_section == 'my_pursuit' %} is-active{% endif %}"{% if hub_section == 'my_pursuit' %} aria-current="page"{% endif %}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>My Pursuit</a>
+        {% endif %}
+        <a href="{% url 'games_list' %}" class="pp-navhub{% if hub_section == 'browse' %} is-active{% endif %}"{% if hub_section == 'browse' %} aria-current="page"{% endif %}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Browse</a>
+        <a href="{% url 'community_hub' %}" class="pp-navhub{% if hub_section == 'community' %} is-active{% endif %}"{% if hub_section == 'community' %} aria-current="page"{% endif %}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>Community</a>
+        <a href="{% url 'support_hub' %}" class="pp-navhub{% if hub_section == 'support' %} is-active{% endif %}"{% if hub_section == 'support' %} aria-current="page"{% endif %}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>Support</a>
     </div>
 
-    <!-- navbar-center: Mobile logo (md:hidden). Desktop hub buttons are the block below (lg:flex). -->
-    <div class="navbar-center flex md:hidden">
-        <a href="/" class="btn btn-ghost flex items-center text-lg font-logo" aria-label="Platinum Pursuit Home">
-            <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="h-8 w-8 mr-2 rounded-full" loading="eager" decoding="async" />
-            Plat Pursuit
-        </a>
-    </div>
+    <div class="pp-nav__end">
 
-    {# ── Hub-of-Hubs navigation: 4 direct-link hub destinations ──                          #}
-    {# 4 buttons: My Pursuit / Browse / Community / Support. Each has its own sub-nav       #}
-    {# strip rendered globally below this navbar (templates/partials/hub_subnav.html) which #}
-    {# surfaces sub-pages on every URL in the hub's family. Customization is killed —       #}
-    {# Settings (avatar dropdown) + the dashboard's Edit Layout controls cover all the      #}
-    {# old customization touchpoints.                                                        #}
-    {#                                                                                       #}
-    {# Active state: hub_section comes from the hub_subnav context processor (always set    #}
-    {# for hub-family URLs, None for settings/auth/staff pages). The matching button         #}
-    {# highlights as btn-primary; the others use btn-ghost. Mobile uses the bottom tab bar  #}
-    {# for the same 4-hub navigation; the navbar's hub buttons are hidden on <lg:.          #}
-    {# See docs/architecture/ia-and-subnav.md for the design rationale.                      #}
-    <div class="navbar-center hidden lg:flex">
-        <ul class="menu menu-horizontal px-1 gap-1">
-            {% if user.is_authenticated %}
-            <li>
-                {# Personal hub: the logged-in Home (/) is its Overview. Anon-hidden -- for logged-out #}
-                {# visitors it's just the hero (the logo already goes there) and has no pursuit to show. #}
-                <a href="{% url 'home' %}"
-                   class="btn btn-sm font-semibold {% if hub_section == 'my_pursuit' %}btn-primary{% else %}btn-ghost{% endif %}"
-                   {% if hub_section == 'my_pursuit' %}aria-current="page"{% endif %}>
-                    My Pursuit
-                </a>
-            </li>
-            {% endif %}
-            <li>
-                <a href="{% url 'games_list' %}"
-                   class="btn btn-sm font-semibold {% if hub_section == 'browse' %}btn-primary{% else %}btn-ghost{% endif %}"
-                   {% if hub_section == 'browse' %}aria-current="page"{% endif %}>
-                    Browse
-                </a>
-            </li>
-            <li>
-                <a href="{% url 'community_hub' %}"
-                   class="btn btn-sm font-semibold {% if hub_section == 'community' %}btn-primary{% else %}btn-ghost{% endif %}"
-                   {% if hub_section == 'community' %}aria-current="page"{% endif %}>
-                    Community
-                </a>
-            </li>
-            <li>
-                <a href="{% url 'support_hub' %}"
-                   class="btn btn-sm font-semibold {% if hub_section == 'support' %}btn-primary{% else %}btn-ghost{% endif %}"
-                   {% if hub_section == 'support' %}aria-current="page"{% endif %}>
-                    Support
-                </a>
-            </li>
-        </ul>
-    </div>
-
-    <!-- navbar-end: Sync Search, Notifications, User dropdown -->
-    <div class="navbar-end flex items-center gap-0 md:gap-2 md:mr-2">
-
-        {# Sync Search dropdown. Lives in the navbar so the hotbar's inner row can     #}
-        {# stay compact at narrow viewports — having the search inside the hotbar      #}
-        {# squeezed left-side controls together in Safari's tablet band (768-1023px)   #}
-        {# and caused buttons to visually overlap. Open to everyone: anon users get    #}
-        {# the navigation benefit, with the backend rate-limiting anon at 3/min by IP  #}
-        {# vs. 15/min by user for signed-in users (see SearchSyncProfileView).         #}
+        {# Sync-Search (navbar-search.js: #navbar-sync-search / -btn / -hint / #navbar-sync-form / .add-sync-*). #}
         <div class="dropdown dropdown-end" id="navbar-sync-search">
-            <button
-                id="navbar-sync-search-btn"
-                tabindex="0"
-                class="btn btn-ghost btn-sm btn-circle"
-                aria-label="Sync a PSN profile"
-                aria-haspopup="true"
-                aria-expanded="false">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <title>Sync a PSN profile</title>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+            <button id="navbar-sync-search-btn" tabindex="0" class="pp-navicon" aria-label="Sync a PSN profile" aria-haspopup="true" aria-expanded="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             </button>
-            {# First-load discovery hint: shown once per user, dismissed on close-click  #}
-            {# or on first interaction with the search button. localStorage flag        #}
-            {# `navbar_search_hint_dismissed` gates display. See navbar-search.js.      #}
-            <div id="navbar-search-hint"
-                 class="absolute top-full right-0 mt-2 w-64 z-[100] hidden"
-                 role="status">
+            <div id="navbar-search-hint" class="absolute top-full right-0 mt-2 w-64 z-[100] hidden" role="status">
                 <div class="absolute -top-2 right-3 w-4 h-4 bg-base-200 border-l-2 border-t-2 border-primary rotate-45"></div>
                 <div class="relative bg-base-200 border-2 border-primary rounded-box shadow-lg shadow-primary/30 p-3 pr-7">
-                    <button id="navbar-search-hint-close"
-                            type="button"
-                            class="absolute top-1 right-1 btn btn-ghost btn-xs btn-circle"
-                            aria-label="Dismiss tip">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
-                        </svg>
+                    <button id="navbar-search-hint-close" type="button" class="absolute top-1 right-1 btn btn-ghost btn-xs btn-circle" aria-label="Dismiss tip">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
                     </button>
                     <p class="text-sm font-semibold">Search PSN profiles</p>
                     <p class="text-xs text-base-content/70 mt-0.5">Look up any hunter (yours or a friend's) from any page.</p>
                 </div>
             </div>
-            {# Mobile (max-md): pin to the viewport with `fixed` + side insets — same Safari #}
-            {# anchor-positioning fallback issue as the notification dropdown below.          #}
             <div tabindex="0" class="dropdown-content z-[100] card card-compact w-72 sm:w-80 p-4 shadow-2xl bg-base-200 mt-3 border-2 border-base-300 max-md:fixed max-md:top-16 max-md:left-2 max-md:right-2 max-md:w-auto">
                 <h3 class="font-bold text-sm mb-2">Sync a PSN profile</h3>
-                <form id="navbar-sync-form"
-                      method="post"
-                      action="{% url 'search_sync_profile' %}"
-                      data-form-type="other"
-                      data-url-add-sync="{% url 'add_sync_status' %}">
+                <form id="navbar-sync-form" method="post" action="{% url 'search_sync_profile' %}" data-form-type="other" data-url-add-sync="{% url 'add_sync_status' %}">
                     {% csrf_token %}
                     <div class="flex items-center gap-2">
-                        <input type="search"
-                               name="psn_username"
-                               placeholder="PSN Username"
-                               class="add-sync-input input input-accent input-sm flex-1 min-w-0"
-                               autocomplete="off"
-                               autocapitalize="none"
-                               autocorrect="off"
-                               spellcheck="false"
-                               data-form-type="other"
-                               data-lpignore="true"
-                               readonly
-                               onfocus="this.removeAttribute('readonly')"
-                               required />
-                        <button type="submit"
-                                class="add-sync-btn btn btn-accent btn-sm border border-base-300 shrink-0"
-                                aria-label="Sync new profile">Sync</button>
-                        <a href=""
-                           class="add-sync-anchor btn btn-success btn-sm border border-base-300 hidden shrink-0"
-                           aria-label="Visit synced profile">Visit</a>
-                        <span class="add-sync-load loading loading-spinner loading-sm hidden shrink-0"
-                              role="status"
-                              aria-label="Syncing profile"></span>
+                        <input type="search" name="psn_username" placeholder="PSN Username" class="add-sync-input input input-accent input-sm flex-1 min-w-0" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" data-form-type="other" data-lpignore="true" readonly onfocus="this.removeAttribute('readonly')" required />
+                        <button type="submit" class="add-sync-btn btn btn-accent btn-sm border border-base-300 shrink-0" aria-label="Sync new profile">Sync</button>
+                        <a href="" class="add-sync-anchor btn btn-success btn-sm border border-base-300 hidden shrink-0" aria-label="Visit synced profile">Visit</a>
+                        <span class="add-sync-load loading loading-spinner loading-sm hidden shrink-0" role="status" aria-label="Syncing profile"></span>
                     </div>
                     <p id="add-sync-error-text" class="text-xs text-error font-bold italic hidden mt-2"></p>
                 </form>
             </div>
         </div>
 
-        <!-- Notification Bell (auth only). Visible at all breakpoints — mobile previously
-             had its own bell in the bottom tab bar, but the bottom tab bar is now the 4
-             hub buttons, so notifications live exclusively in the navbar. -->
+        {# Notifications (notifications.js: #notification-dropdown / -badge / -list / mark-all-read). #}
         {% if user.is_authenticated %}
         <div class="dropdown dropdown-end" id="notification-dropdown">
-            <button
-                tabindex="0"
-                class="btn btn-ghost btn-sm btn-circle relative"
-                aria-label="Notifications"
-                aria-haspopup="true"
-                aria-expanded="false">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <title>Notifications</title>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                <span id="notification-badge" class="absolute top-0 right-0 badge badge-error badge-sm hidden" aria-live="polite">0</span>
+            <button tabindex="0" class="pp-navicon" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+                <span id="notification-badge" class="pp-navicon__badge hidden" aria-live="polite">0</span>
             </button>
-
-            {# Mobile (max-md): pin to the viewport with `fixed` + side insets. daisyUI v5  #}
-            {# positions dropdowns via CSS anchor positioning (position-area), which Safari #}
-            {# doesn't support, so the panel falls back to plain absolute positioning off    #}
-            {# the (non-flush-right) bell and spills off-screen. Fixed insets keep it on     #}
-            {# screen in every browser. Desktop (md:) keeps daisyUI's default placement.     #}
             <div tabindex="0" class="dropdown-content z-[100] card card-compact w-80 md:w-96 p-4 shadow-2xl bg-base-200 mt-3 border-2 border-base-300 max-md:fixed max-md:top-16 max-md:left-2 max-md:right-2 max-md:w-auto">
                 <div class="flex items-center justify-between mb-3">
                     <h3 class="font-bold text-lg">Notifications</h3>
                     <button id="mark-all-read-btn" class="btn btn-xs btn-ghost" aria-label="Mark all as read">Mark all read</button>
                 </div>
-
                 <div id="notification-list" class="space-y-2 max-h-96 overflow-y-auto">
-                    <div id="notification-loading" class="flex justify-center p-4">
-                        <span class="loading loading-spinner loading-md"></span>
-                    </div>
-                    <div id="notification-empty" class="text-center p-4 hidden">
-                        <p class="text-base-content/60">No notifications yet</p>
-                    </div>
+                    <div id="notification-loading" class="flex justify-center p-4"><span class="loading loading-spinner loading-md"></span></div>
+                    <div id="notification-empty" class="text-center p-4 hidden"><p class="text-base-content/60">No notifications yet</p></div>
                 </div>
-
                 <a href="{% url 'notification_inbox' %}" class="btn btn-primary btn-sm mt-3 w-full">View All</a>
             </div>
         </div>
         {% endif %}
 
-        <!-- Premium CTA (non-premium authenticated users only) -->
+        {# Premium CTA (non-premium authed) #}
         {% if user.is_authenticated and not user.premium_tier %}
-            <a href="{% url 'subscribe' %}"
-               class="btn btn-sm btn-ghost text-secondary gap-1"
-               aria-label="Go Premium">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                </svg>
-                <span class="text-xs font-semibold">Premium</span>
-            </a>
+        <a href="{% url 'subscribe' %}" class="pp-navpremium" aria-label="Go Premium">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            <span>Premium</span>
+        </a>
         {% endif %}
 
-        <!-- User Avatar Dropdown -->
+        {# ── Status-aware avatar + unified panel (absorbs the hotbar) ── #}
         {% if user.is_authenticated %}
-            <div class="dropdown dropdown-end">
-                    <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar" aria-label="User menu" aria-haspopup="true" aria-expanded="false">
-                        <div class="w-15 rounded-full ring-2 ring-primary">
-                            {% if user.profile %}
-                                <img alt="Profile Picture" src="{{ user.profile.avatar_url }}" loading="lazy" decoding="async" />
-                            {% else %}
-                                <svg class="mx-auto my-1" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <title>User avatar</title>
-                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                                    <circle cx="12" cy="7" r="4"></circle>
-                                </svg>
-                            {% endif %}
-                        </div>
-                    </div>
-                <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-200 border-2 border-base-300 min-w-48 w-fit">
-                    <!-- Theme Toggle -->
-                    <li>
-                        <button id="theme-toggle-item" type="button" class="flex items-center gap-2 w-full">
-                            <svg id="dropdown-theme-icon-sun" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="5"/>
-                                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-                            </svg>
-                            <svg id="dropdown-theme-icon-moon" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                            </svg>
-                            <span id="theme-toggle-label">Dark Mode</span>
-                        </button>
-                    </li>
-                    <div class="divider my-0"></div>
-                    {% if user.profile %}
-                        <li><a href="{% url 'profile_detail' user.profile.psn_username %}">Profile</a></li>
-                        {% if user.premium_tier %}
-                            <li><a href="{% url 'subscription_management' %}">My Premium</a></li>
-                        {% endif %}
-                    {% else %}
-                        <li><a href="{% url 'link_psn' %}">Link PSN</a></li>
-                    {% endif %}
-                    <div class="divider my-0"></div>
-                    <li><a href="{% url 'settings' %}">Settings</a></li>
-                    {% if user.profile and user.profile.is_linked %}
-                        <li>
-                            <button type="button" onclick="if(window.PlatPursuit?.WelcomeTourManager?.open) PlatPursuit.WelcomeTourManager.open();">
-                                Welcome Tour
-                            </button>
-                        </li>
-                    {% endif %}
-                    {% if user.is_staff %}
-                        <li>
-                            <a href="{% url 'comment_moderation' %}" class="flex items-center">
-                                <span>Moderation</span>
-                                {% if pending_reports_count > 0 %}
-                                    <span class="text-error">({{ pending_reports_count }})</span>
-                                {% endif %}
-                            </a>
-                        </li>
-                        <li><a href="{% url 'fundraiser_admin' %}">Fundraiser</a></li>
-                        {% if user.is_superuser %}
-                            <li>
-                                <a href="{% url 'game_family_management' %}" class="flex items-center">
-                                    <span>Game Families</span>
-                                    {% if pending_proposals_count > 0 %}
-                                        <span class="text-error">({{ pending_proposals_count }})</span>
-                                    {% endif %}
-                                </a>
-                            </li>
-                        {% endif %}
-                    {% endif %}
-                    <div class="divider my-0"></div>
-                    <li>
-                        <form method="post" action="{% url 'logout' %}">
-                            {% csrf_token %}
-                            <button type="submit" class="w-full text-left">Logout</button>
-                        </form>
-                    </li>
-                </ul>
+        <div class="dropdown dropdown-end" id="nav-account">
+            <div tabindex="0" role="button" class="pp-av"{% if navsync %} data-nav-avatar data-sync="{{ navsync.sync_status }}"{% endif %} aria-label="Account{% if navsync %} and sync status{% endif %}" aria-haspopup="true" aria-expanded="false">
+                <span class="pp-av__img">
+                    {% if user.profile %}<img alt="" src="{{ user.profile.avatar_url }}" loading="lazy" decoding="async" />
+                    {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{% endif %}
+                </span>
+                {% if navsync %}<span class="pp-av__dot"></span>{% endif %}
             </div>
-        {% else %}
-            <div class="dropdown dropdown-end">
-                <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar" aria-label="Login menu" aria-haspopup="true" aria-expanded="false">
-                    <div class="w-15 rounded-full flex ring-2 ring-primary">
-                        <svg class="mx-auto my-1" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <title>Guest user</title>
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="12" cy="7" r="4"></circle>
-                        </svg>
+            <div tabindex="0" class="dropdown-content pp-avpanel mt-2 z-[100] max-md:fixed max-md:top-16 max-md:right-2" id="nav-sync"
+                 {% if navsync %}data-url-sync="{% url 'profile_sync_status' %}" data-url-trigger="{% url 'trigger_sync' %}" data-status="{{ navsync.sync_status }}" data-seconds="{{ navsync.seconds_to_next_sync|default:0 }}"{% endif %}>
+
+                {% if navsync %}
+                <div class="pp-avpanel__head">
+                    <span class="pp-av" data-sync="{{ navsync.sync_status }}" aria-hidden="true" style="cursor:default">
+                        <span class="pp-av__img">{% if navsync.profile.avatar_url %}<img alt="" src="{{ navsync.profile.avatar_url }}" loading="lazy" />{% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{% endif %}</span>
+                        <span class="pp-av__dot"></span>
+                    </span>
+                    <span class="pp-avpanel__name">
+                        <b>{{ navsync.profile.display_psn_username|default:navsync.profile.psn_username }}</b>
+                        <span class="pp-avstatus" data-nav-status data-sync="{{ navsync.sync_status }}">{% if navsync.sync_status == 'synced' %}Synced{% elif navsync.sync_status == 'syncing' %}Syncing&hellip;{% elif navsync.sync_status == 'error' %}Sync error{% else %}{{ navsync.sync_status }}{% endif %}</span>
+                    </span>
+                </div>
+
+                <div class="pp-avsync">
+                    <div class="pp-avsync__prog" data-nav-prog{% if navsync.sync_status != 'syncing' %} hidden{% endif %}>
+                        <div class="pp-horizon" style="--horizon-h: 6px;"><span class="pp-horizon__track"><span class="pp-horizon__fill" data-nav-fill style="--horizon-progress: {{ navsync.progress_percentage|floatformat:0|default:0 }}%;"></span></span></div>
+                        <div class="pp-avsync__meta"><span data-nav-pct>{{ navsync.progress_percentage|floatformat:0|default:0 }}%</span><span data-nav-queue{% if not navsync.queue_position %} hidden{% endif %}>{% if navsync.queue_position %}~{{ navsync.queue_position }} ahead{% endif %}</span></div>
+                    </div>
+                    <div class="pp-avsync__row">
+                        <span class="pp-avsync__when">{% if navsync.profile.last_synced %}Synced {{ navsync.profile.last_synced|naturaltime }}{% else %}Not synced yet{% endif %}</span>
+                        <button type="button" class="pp-avbtn" data-nav-syncnow>Sync Now</button>
+                    </div>
+                    <div class="pp-avsync__loot">
+                        <i><span class="pp-avsync__pip" style="background:var(--color-trophy-platinum)"></span>{{ navsync.profile.total_plats|intcomma }}</i>
+                        <i><span class="pp-avsync__pip" style="background:var(--color-trophy-gold)"></span>{{ navsync.profile.total_golds|intcomma }}</i>
+                        <i><span class="pp-avsync__pip" style="background:var(--color-trophy-silver)"></span>{{ navsync.profile.total_silvers|intcomma }}</i>
+                        <i><span class="pp-avsync__pip" style="background:var(--color-trophy-bronze)"></span>{{ navsync.profile.total_bronzes|intcomma }}</i>
                     </div>
                 </div>
-                <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-200 border-2 border-base-300 w-fit">
-                    <li><a href="{% url 'account_login' %}">Login</a></li>
-                    <li><a href="{% url 'account_signup' %}">Register</a></li>
-                </ul>
+                <div class="sr-only" data-nav-live aria-live="polite" aria-atomic="true"></div>
+                {% endif %}
+
+                <div class="pp-avmenu">
+                    <button id="theme-toggle-item" type="button">
+                        <svg id="dropdown-theme-icon-sun" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                        <svg id="dropdown-theme-icon-moon" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                        <span id="theme-toggle-label">Dark Mode</span>
+                    </button>
+                    {% if user.profile %}
+                        <a href="{% url 'profile_detail' user.profile.psn_username %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile</a>
+                        {% if user.premium_tier %}<a href="{% url 'subscription_management' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 2 3 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.9 21l1.2-6.8-5-4.9 6.9-1z"/></svg>My Premium</a>{% endif %}
+                    {% else %}
+                        <a href="{% url 'link_psn' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Link PSN</a>
+                    {% endif %}
+                    <a href="{% url 'settings' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17 2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9V15z"/></svg>Settings</a>
+                    {% if user.profile and user.profile.is_linked %}
+                        <button type="button" onclick="if(window.PlatPursuit?.WelcomeTourManager?.open) PlatPursuit.WelcomeTourManager.open();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>Welcome Tour</button>
+                    {% endif %}
+                    {% if user.is_staff %}
+                        <a href="{% url 'comment_moderation' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Moderation{% if pending_reports_count > 0 %}<span class="pp-avmenu__count">{{ pending_reports_count }}</span>{% endif %}</a>
+                        <a href="{% url 'fundraiser_admin' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>Fundraiser</a>
+                        {% if user.is_superuser %}<a href="{% url 'game_family_management' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Game Families{% if pending_proposals_count > 0 %}<span class="pp-avmenu__count">{{ pending_proposals_count }}</span>{% endif %}</a>{% endif %}
+                    {% endif %}
+                    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="pp-avmenu__danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button></form>
+                </div>
             </div>
+        </div>
+        {% else %}
+        {# Anon: plain account avatar -> login / register #}
+        <div class="dropdown dropdown-end" id="nav-account">
+            <div tabindex="0" role="button" class="pp-av" aria-label="Account menu" aria-haspopup="true" aria-expanded="false">
+                <span class="pp-av__img"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+            </div>
+            <div tabindex="0" class="dropdown-content pp-avpanel mt-2 z-[100] max-md:fixed max-md:top-16 max-md:right-2">
+                <div class="pp-avmenu">
+                    <a href="{% url 'account_login' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>Log in</a>
+                    <a href="{% url 'account_signup' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Register</a>
+                </div>
+            </div>
+        </div>
         {% endif %}
     </div>
 </nav>

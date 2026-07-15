@@ -106,11 +106,9 @@
       </aside>
 
       <main id="main-content" class="container mx-auto px-4 py-2 flex-grow" role="main">
-        {% if hotbar.active %}
-          {% include 'partials/hotbar.html' %}
-        {% endif %}
-        {# #page-recede is the step-back target for the modal/ceremony recede: the hotbar above stays a #}
-        {# sibling of it, so it holds still with the rest of the chrome. See elements.css .pp-receded.   #}
+        {# The hotbar was retired: sync now lives in the navbar's status-aware avatar + panel (navsync.js). #}
+        {# #page-recede is the step-back target for the modal/ceremony recede; the chrome above stays a      #}
+        {# sibling of it, so it holds still. See elements.css .pp-receded.                                   #}
         <div id="page-recede">{% block content %}{% endblock %}</div>
       </main>
 
@@ -220,6 +218,7 @@
     <script src="{% static 'js/medallion.js' %}"></script>
     <script src="{% static 'js/celebrations.js' %}"></script>
     <script src="{% static 'js/notifications.js' %}"></script>
+    <script src="{% static 'js/navsync.js' %}"></script>
     <script src="{% static 'js/main.js' %}"></script>
     <script src="{% static 'js/pursuer-card.js' %}"></script>
     <script src="{% static 'js/pursuer-card-forge.js' %}"></script>

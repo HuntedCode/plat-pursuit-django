@@ -95,6 +95,8 @@
 .pp-avstatus[data-sync="error"] { color: var(--pp-error); }
 
 .pp-avsync { padding: 13px 14px; }
+.pp-avsync__prog { margin-bottom: 10px; }
+.pp-avsync__meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.66rem; color: var(--pp-text-mute); margin-top: 5px; }
 .pp-avsync__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .pp-avsync__when { font-size: 0.72rem; color: var(--pp-text-mute); }
 .pp-avsync__loot { display: flex; align-items: center; gap: 12px; margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--pp-divider); }

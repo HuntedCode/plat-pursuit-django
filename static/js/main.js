@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // them. The Tailwind classes remain as the pre-JS fallback (avoids FOUC on
     // slow loads) and the JS overrides them once the layout is known.
     function alignStickyChrome() {
-        const navbar = document.querySelector('nav.navbar');
+        const navbar = document.querySelector('.pp-nav');
         if (!navbar) return;
         const navH = Math.round(navbar.getBoundingClientRect().height);
 
@@ -41,24 +41,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const chromeH = navChromeH + bannerH;
         document.documentElement.style.setProperty('--chrome-height', chromeH + 'px');
 
-        // --sticky-top: the full pinned-chrome stack including the hotbar
-        // (when present). Elements inside main that need to clear the entire
-        // stack use this property for their sticky `top` offset.
-        let stickyTop = chromeH;
-        const hotbar = document.getElementById('hotbar-wrapper');
-        if (hotbar) {
-            // When the hotbar is expanded, leave 8px breathing room between it
-            // and whatever pins above. When collapsed, drop the gap to 0 so the
-            // toggle "tab" attaches flush against the bottom of the sub-nav (or
-            // navbar on non-hub pages), reading as a tab handle of the chrome
-            // above rather than a floating element.
-            const isCollapsed = localStorage.getItem('hotbar_hidden') === 'true';
-            const gap = isCollapsed ? 0 : 8;
-            const hotbarTop = chromeH + gap;
-            hotbar.style.top = hotbarTop + 'px';
-            stickyTop = hotbarTop + Math.round(hotbar.getBoundingClientRect().height);
-        }
-        document.documentElement.style.setProperty('--sticky-top', stickyTop + 'px');
+        // --sticky-top: the full pinned-chrome stack. The hotbar is retired (sync
+        // moved into the navbar avatar/panel), so this equals the nav-chrome +
+        // reveal-banner height. Elements inside main that pin below the chrome use it.
+        document.documentElement.style.setProperty('--sticky-top', chromeH + 'px');
     }
 
     alignStickyChrome();
@@ -70,26 +56,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(alignStickyChrome);
     }
-    // Re-measure when the hotbar is toggled. A rAF loop runs during the
-    // collapse/expand transition so --sticky-top tracks the hotbar's
-    // changing height in real-time, keeping dependent sticky elements
-    // smooth. The loop stops on transitionend (or a 500ms safety timeout).
-    document.addEventListener('hotbar:toggle', function() {
-        const container = document.getElementById('hotbar-container');
-        if (!container) { alignStickyChrome(); return; }
-        let frame;
-        function tick() {
-            alignStickyChrome();
-            frame = requestAnimationFrame(tick);
-        }
-        tick();
-        container.addEventListener('transitionend', function handler() {
-            cancelAnimationFrame(frame);
-            alignStickyChrome();
-            container.removeEventListener('transitionend', handler);
-        });
-        setTimeout(function() { cancelAnimationFrame(frame); alignStickyChrome(); }, 500);
-    });
 
     // ===== Personal-hub mobile sub-nav (collapse-to-grid) =====
     // The panel is absolute (drops over content), so opening it doesn't reflow the sticky chrome.
