@@ -454,6 +454,34 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(igniteActiveTier, 250);   // the initial tier "comes alive" a beat after load
     if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }   // sticky mini-header
 
+    // ── Mini-header stage jumper: delegated open/close (survives the tier-view swaps) ──
+    // The menu items themselves jump via the shared data-stage-link handler (bound in initStages); this
+    // just toggles the dropdown and closes it on any outside click / item click / Escape.
+    function closeMinijump() {
+        var menu = document.querySelector('[data-minijump-menu]');
+        if (!menu || menu.hidden) { return; }
+        menu.hidden = true;
+        var btn = document.querySelector('[data-minijump-btn]');
+        if (btn) { btn.setAttribute('aria-expanded', 'false'); }
+    }
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('[data-minijump-btn]');
+        var menu = document.querySelector('[data-minijump-menu]');
+        if (!menu) { return; }
+        if (btn) {
+            var willOpen = menu.hidden;
+            menu.hidden = !willOpen;
+            btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+            return;
+        }
+        closeMinijump();   // outside click, or a stage item (which jumps via its own handler)
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') { return; }
+        var menu = document.querySelector('[data-minijump-menu]');
+        if (menu && !menu.hidden) { var btn = document.querySelector('[data-minijump-btn]'); closeMinijump(); if (btn) { btn.focus(); } }
+    });
+
     // ── Tier swap: re-init stages + hold the scroll position steady ──
     // #badge-tier-view is most of the page; replacing its innerHTML wholesale makes the browser lose its
     // scroll anchor and jump (typically to the bottom) unless you were already at the top. Snapshot scrollY

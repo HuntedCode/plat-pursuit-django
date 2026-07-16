@@ -101,6 +101,9 @@ def test_sticky_mini_header_renders_with_hooks(client, stub_leaderboards):
     assert 'data-sticky-sentinel="#bd-minihead-sentinel"' in html
     assert 'id="bd-minihead-sentinel"' in html                    # the sentinel at the header's bottom
     assert 'bd-minitier' in html                                  # the condensed tier chips
+    # The stage jumper: a "Stages" dropdown whose items reuse the page's data-stage-link jump.
+    assert 'data-minijump-btn' in html
+    assert 'bd-minijump__item' in html                            # the jumper lists the journey's stages
 
 
 def test_sticky_mini_header_rides_the_tier_swap(client, stub_leaderboards):

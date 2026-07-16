@@ -38,6 +38,28 @@ resolves it whether included or rendered standalone for the swap.
                    aria-label="{{ tb.tier|badge_tier }} tier">{{ tb.tier|badge_tier|slice:':1' }}</a>
                 {% endfor %}
             </nav>
+
+            {% comment %} Stage jumper: the mini-header's reason for being -- when you're deep in the journey,
+            jump straight to any stage. The items reuse the page's data-stage-link handler (expand + smooth
+            scroll + landing flash); the dropdown toggle is delegated in badge_detail.html so it survives swaps. {% endcomment %}
+            {% if stage_data %}
+            <div class="bd-minijump" data-minijump>
+                <button type="button" class="bd-minijump__btn" data-minijump-btn aria-haspopup="true" aria-expanded="false" aria-controls="bd-minijump-menu">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    <span class="bd-minijump__lbl">Stages</span>
+                    <svg class="bd-minijump__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="bd-minijump__menu" id="bd-minijump-menu" data-minijump-menu role="menu" aria-label="Jump to stage" hidden>
+                    {% for data in stage_data %}
+                    <a href="#stage-{{ data.stage.stage_number }}" data-stage-link="{{ data.stage.stage_number }}" role="menuitem"
+                       class="bd-minijump__item{% if data.stage_completion_state == 'complete' %} is-done{% elif data.is_next %} is-next{% endif %}">
+                        <span class="bd-minijump__num" aria-hidden="true">{% if data.stage_completion_state == 'complete' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{% elif data.stage.stage_number == 0 %}&#9733;{% else %}{{ data.stage.stage_number }}{% endif %}</span>
+                        <span class="bd-minijump__name">{% if data.stage.stage_number == 0 %}Bonus &middot; {% else %}Stage {{ data.stage.stage_number }} &middot; {% endif %}{{ data.stage.title }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 
