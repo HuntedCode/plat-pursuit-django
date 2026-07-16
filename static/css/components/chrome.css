@@ -28,7 +28,10 @@
 .pp-nav__logo { width: 30px; height: 30px; border-radius: var(--pp-radius-md); object-fit: cover; }
 .pp-nav__word { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.02rem; color: var(--pp-text); letter-spacing: -0.01em; white-space: nowrap; }
 
-.pp-nav__hubs { display: flex; align-items: center; gap: 4px; margin-left: 6px; }
+/* No `display` here: the template toggles the hub nav with `hidden lg:flex` (desktop-only; the bottom
+   tab bar owns hub nav on mobile). An unlayered `display:flex` would beat the .hidden utility and show
+   the hubs on every size -- overflowing the mobile navbar. */
+.pp-nav__hubs { align-items: center; gap: 4px; margin-left: 6px; }
 .pp-navhub {
     position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px;
     border-radius: var(--pp-radius-md); font-size: 0.82rem; font-weight: 600; color: var(--pp-text-dim);
