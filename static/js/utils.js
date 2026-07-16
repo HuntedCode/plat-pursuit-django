@@ -1302,6 +1302,16 @@ const StickyReveal = {
             obs.observe(sentinel);
             target._stickyReveal = obs;
             push(target, obs);
+            // Adopt the correct state immediately, WITHOUT animating, so a target inserted while already
+            // scrolled past (e.g. re-rendered by an HTMX swap) appears in place instead of replaying the
+            // reveal slide. The observer's async first callback then agrees, so there's no flicker.
+            if (sentinel.getBoundingClientRect().top < chromeH) {
+                const prevTransition = target.style.transition;
+                target.style.transition = 'none';
+                target.classList.add('is-pinned');
+                void target.offsetWidth;            // flush the un-animated state
+                target.style.transition = prevTransition;
+            }
         });
     }
 };
