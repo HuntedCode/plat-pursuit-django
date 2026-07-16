@@ -66,6 +66,29 @@
     {% include 'partials/ad_unit.html' with ad_slot="4650777169" %}
 
     {% if binder_sets %}
+    {% comment %} Sticky mini-bar: "Collection" + the Case/Gallery switch + a Filters reach, re-surfaced when
+    the header + view toggle scroll away. The chips duplicate the real .pp-collection__view-chip set --
+    collection.js captures every chip within .pp-collection at init and syncs .is-active across all of them,
+    so tapping one here switches view in place. Sentinel sits after the real toggle below. {% endcomment %}
+    <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#collection-minibar-sentinel">
+        <div class="pp-minibar__inner container mx-auto">
+            <span class="pp-minibar__id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                <span class="pp-minibar__title">Collection</span>
+            </span>
+            <div class="pp-minibar__controls">
+                <div class="pp-collection__views" role="tablist" aria-label="Collection view">
+                    <button type="button" class="pp-collection__view-chip is-active" data-collection-view="case" role="tab" aria-selected="true" aria-controls="collection-view-case"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Case</button>
+                    <button type="button" class="pp-collection__view-chip" data-collection-view="gallery" role="tab" aria-selected="false" aria-controls="collection-view-gallery"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>Gallery</button>
+                </div>
+                <button type="button" class="pp-minibar__filters" data-minibar-coll-filters aria-label="Filter the Gallery">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    <span class="pp-minibar__flbl">Filters</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     {# View toggle: the Case (display piece) + the Gallery (filter / sort / search hunting tool). #}
     <div class="flex items-center justify-end mb-4">
         <div class="pp-collection__views" role="tablist" aria-label="Collection view">
@@ -79,6 +102,8 @@
             </button>
         </div>
     </div>
+    {# Sentinel: once the real view toggle scrolls under the chrome, StickyReveal pins the mini-bar. #}
+    <span id="collection-minibar-sentinel" aria-hidden="true"></span>
 
     {# The Case (medallion collection) -- the display piece #}
     <div class="pp-collection__view" data-collection-view="case" id="collection-view-case" role="tabpanel" aria-labelledby="collection-tab-case" tabindex="0">
@@ -127,4 +152,25 @@
 
 {% block js_scripts %}
 <script src="{% static 'js/collection.js' %}"></script>
+<script>
+// Sticky mini-bar wiring (its view chips are driven by collection.js, which captured them at init).
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }
+
+    // "Filters" reach: filters live only in the Gallery, so switch to it (if needed), then bring its
+    // toolbar into view. Clicking the real gallery chip triggers collection.js's setView('gallery').
+    var root = document.querySelector('.pp-collection');
+    var mbFilters = root && root.querySelector('[data-minibar-coll-filters]');
+    if (mbFilters) {
+        mbFilters.addEventListener('click', function () {
+            var galleryChip = root.querySelector('.pp-collection__view-chip[data-collection-view="gallery"]');
+            if (galleryChip && !galleryChip.classList.contains('is-active')) { galleryChip.click(); }
+            setTimeout(function () {
+                var tb = root.querySelector('.pp-gallery__toolbar');
+                if (tb) { tb.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+            }, 60);
+        });
+    }
+});
+</script>
 {% endblock %}
