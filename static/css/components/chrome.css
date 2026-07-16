@@ -254,8 +254,8 @@
    below the navbar; alignStickyChrome() in main.js re-measures the exact `top` flush under the nav. */
 .pp-sub {
     position: sticky; top: 58px; z-index: 40;   /* top re-measured by main.js */
-    background: color-mix(in oklab, var(--pp-bg-1) 82%, transparent);
-    backdrop-filter: blur(10px);   /* standard only; lightningcss autoprefixes (see .pp-nav note) */
+    background: color-mix(in oklab, var(--pp-bg-1) 90%, transparent);
+    backdrop-filter: blur(12px);   /* matches .pp-nav / .pp-minibar -- one continuous glass across the sticky stack */
     border-bottom: 1px solid var(--pp-border);
 }
 /* No `display` here: the template toggles the row with Tailwind `hidden lg:flex`, and an unlayered
@@ -322,8 +322,8 @@
  * StickyReveal (utils.js) via the --sticky-top offset; it adopts its state un-animated on HTMX re-insert. */
 .pp-minibar {
     position: fixed; top: var(--sticky-top, 3.625rem); left: 0; right: 0; z-index: 30;
-    background: color-mix(in oklab, var(--pp-bg-1) 92%, transparent);
-    backdrop-filter: blur(12px);   /* standard only -- lightningcss autoprefixes */
+    background: color-mix(in oklab, var(--pp-bg-1) 90%, transparent);
+    backdrop-filter: blur(12px);   /* matches .pp-nav / .pp-sub -- one continuous glass across the sticky stack */
     border-bottom: 1px solid var(--pp-border);
     visibility: hidden; opacity: 0; transform: translateY(-100%);
     transition: opacity 0.28s var(--pp-ease), transform 0.28s var(--pp-ease), visibility 0s linear 0.28s;
