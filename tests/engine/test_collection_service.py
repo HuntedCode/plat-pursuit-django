@@ -12,6 +12,7 @@ from datetime import timedelta
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
 from django.utils import timezone
 
 from trophies.models import Badge, Profile, ProfileGamification, UserBadge
@@ -40,6 +41,16 @@ def _series(slug, badge_type='series', tiers=(1, 2, 3, 4), live=True, profile=No
 
 def _all_frames(ctx):
     return [f for s in ctx['binder_sets'] for page in s['pages'] for f in page['frames']]
+
+
+def test_collection_renders_sticky_mini_bar(client):
+    profile = ProfileFactory(is_linked=True)
+    _series('rs-minibar', profile=profile)   # engage a series so binder_sets (and the mini-bar) render
+    client.force_login(profile.user)
+    html = client.get(reverse('badge_collection')).content.decode()
+    assert 'class="pp-minibar"' in html
+    assert 'id="collection-minibar-sentinel"' in html
+    assert 'data-minibar-coll-filters' in html       # the Filters reach
 
 
 def test_full_set_shown_with_earned_and_unearned():

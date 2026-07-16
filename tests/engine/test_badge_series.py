@@ -26,6 +26,16 @@ def _series(slug, badge_type='series', tiers=(1, 2, 3, 4)):
     ]
 
 
+def test_browse_renders_sticky_mini_bar(client):
+    """The badges page carries the reusable mini-bar (identity + Series/Gallery switch + a Filters reach),
+    persistent outside #badge-view."""
+    _series('rs-minibar')
+    html = client.get(SERIES).content.decode()
+    assert 'class="pp-minibar"' in html
+    assert 'id="badges-minibar-sentinel"' in html
+    assert 'data-minibar-badge-filters' in html       # the Filters reach button
+
+
 def test_series_renders_tile_with_tier_ladder(client):
     """The default view renders the tile grid: each tile is a .pp-scard with a four-node tier ladder and a
     detail link."""

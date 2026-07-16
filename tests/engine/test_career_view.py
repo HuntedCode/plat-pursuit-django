@@ -35,6 +35,15 @@ def test_career_renders_jobs_and_contracts_on_one_surface(client):
     assert b'is-active" data-view="jobs"' in resp.content
 
 
+def test_career_renders_sticky_mini_bar(client):
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    html = client.get('/career/').content.decode()
+    assert 'class="pp-minibar"' in html               # the reusable condensed page header
+    assert 'data-sticky-reveal' in html               # StickyReveal target
+    assert 'id="career-minibar-sentinel"' in html     # sentinel after the real tab strip
+
+
 def test_career_page_embeds_all_facet_dimensions(client):
     # Regression: the view helper once forwarded only status/platform, dropping the popover
     # discipline/job counts, so the dropdown counts never reached the page.
