@@ -33,7 +33,7 @@ The four-state model exists because the dashboard is heavy: it queries dashboard
 | `templates/home/link_psn.html` | Logged-in but no PSN linked (welcome, 3-step preview, "what you'll unlock") |
 | `templates/home/syncing.html` | Sync in progress / error (status card, Did You Know, what's coming) |
 | `templates/trophies/dashboard.html` | Fully-synced state, rendered directly by `HomeView` |
-| `static/js/hotbar.js` | Dispatches `platpursuit:sync-status-changed` on transitions and `platpursuit:sync-progress` on every poll |
+| `static/js/navsync.js` | Dispatches `platpursuit:sync-status-changed` on transitions and `platpursuit:sync-progress` on every poll |
 | `templates/trophies/partials/dashboard/built_for_hunters.html` | Site heartbeat ribbon, included by all three home shells |
 
 ## Auto-Refresh on Sync Status Change
@@ -60,16 +60,16 @@ document.addEventListener('platpursuit:sync-status-changed', function(e) {
 });
 ```
 
-`hotbar.js` polls `/api/profile-sync-status/` every 2 seconds while a sync is in progress (extended to 10 seconds after a minute). When it detects a real transition, it dispatches the CustomEvent on `document` exactly once. This means:
+`navsync.js` polls `/api/profile-sync-status/` every 2 seconds while a sync is in progress (extended to 10 seconds after a minute). When it detects a real transition, it dispatches the CustomEvent on `document` exactly once. This means:
 
 - A user on `home/syncing.html` automatically advances to the dashboard the moment the background sync finishes.
 - A user on the dashboard who clicks the hotbar's "Sync Now!" button is automatically dropped into `home/syncing.html` as soon as the first poll confirms `'syncing'` (~2 seconds). Same for any other transition away from `'synced'` (e.g. an error state).
 
-`lastSyncStatus` is a closure variable in `hotbar.js` initialized from the hotbar's `data-sync-status` attribute and updated only on real transitions, so the event fires once per change rather than once per poll. The polling itself only runs when there is something to watch (initial syncing state on page load, or after the user clicks Sync), so a synced user sitting on the dashboard does not poll until they ask for a sync.
+`lastSyncStatus` is a closure variable in `navsync.js` initialized from the hotbar's `data-sync-status` attribute and updated only on real transitions, so the event fires once per change rather than once per poll. The polling itself only runs when there is something to watch (initial syncing state on page load, or after the user clicks Sync), so a synced user sitting on the dashboard does not poll until they ask for a sync.
 
 ## Live Progress Mirroring (`platpursuit:sync-progress`)
 
-The syncing shell renders its own larger progress card for prominence, but it does not poll. Instead, `hotbar.js` dispatches a second CustomEvent, `platpursuit:sync-progress`, after every successful poll, carrying the full sync status payload (`sync_status`, `sync_progress`, `sync_target`, `sync_percentage`, `queue_position`, `is_finalizing`, etc.). The syncing shell registers a listener that mirrors `sync_percentage` into `#home-sync-progress-bar` and the count text into `#home-sync-progress-text`, so the larger card stays in lockstep with the hotbar without doing any extra network work.
+The syncing shell renders its own larger progress card for prominence, but it does not poll. Instead, `navsync.js` dispatches a second CustomEvent, `platpursuit:sync-progress`, after every successful poll, carrying the full sync status payload (`sync_status`, `sync_progress`, `sync_target`, `sync_percentage`, `queue_position`, `is_finalizing`, etc.). The syncing shell registers a listener that mirrors `sync_percentage` into `#home-sync-progress-bar` and the count text into `#home-sync-progress-text`, so the larger card stays in lockstep with the hotbar without doing any extra network work.
 
 This split keeps the hotbar as the single polling source of truth while letting other parts of the page subscribe to live updates declaratively. New consumers should listen to `platpursuit:sync-progress` rather than starting their own polling loop.
 

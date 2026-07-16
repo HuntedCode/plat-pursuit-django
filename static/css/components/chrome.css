@@ -331,6 +331,9 @@
 .pp-minibar.is-pinned { visibility: visible; opacity: 1; transform: none;
     transition: opacity 0.28s var(--pp-ease), transform 0.28s var(--pp-ease); }
 .pp-minibar__inner { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 16px; }
+/* StickyReveal sentinel: a block box (empty inline spans can report top:0 in some engines, tripping the
+   sync-pin at scroll-top). Zero-height, so it doesn't affect layout. */
+.pp-sentinel { display: block; height: 0; }
 .pp-minibar__id { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
 .pp-minibar__id > svg { width: 17px; height: 17px; color: var(--pp-primary); flex-shrink: 0; }
 .pp-minibar__ava { width: 26px; height: 26px; border-radius: 50%; overflow: hidden; flex-shrink: 0; display: grid; place-items: center;
@@ -375,7 +378,7 @@
 .mobile-tabbar {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
     background: color-mix(in oklab, var(--pp-bg-1) 92%, transparent);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);   /* standard only -- lightningcss autoprefixes (hand-writing -webkit- drops the standard) */
     border-top: 1px solid var(--pp-border);
     padding-bottom: env(safe-area-inset-bottom, 0);
 }

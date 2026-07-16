@@ -7,7 +7,7 @@
  *
  * Choreography lives in pursuer-card-forge.css; this file adds the state class, inserts the
  * scan-beam + hot arcing sparks (drawn from the Frame's fabrication vocabulary, NOT confetti),
- * and ticks the platinum + family numbers up. Depends on hotbar.js's
+ * and ticks the platinum + family numbers up. Depends on navsync.js's
  * `platpursuit:sync-status-changed`. Reduced-motion: the whole forge is skipped.
  */
 (function () {

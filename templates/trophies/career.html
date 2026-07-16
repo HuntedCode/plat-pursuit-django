@@ -9,17 +9,20 @@
     scroll away. The tabs are duplicates of the real .lab-view-tab set -- the view-toggle JS captures every
     .lab-view-tab at init and syncs .is-active across all of them, so tapping one here switches the panel in
     place. Sentinel sits just after the real tab strip below. {% endcomment %}
-    {% if hero %}
+    {% if career and hero %}
     <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#career-minibar-sentinel">
         <div class="pp-minibar__inner container mx-auto">
             <span class="pp-minibar__id">
                 <span class="pp-minibar__ava">{% if hero.avatar_url %}<img src="{{ hero.avatar_url }}" alt="" loading="lazy">{% else %}{{ hero.pursuer_name|default:'?'|first|upper }}{% endif %}</span>
                 <span class="pp-minibar__title">{{ hero.pursuer_name }}</span>
             </span>
-            <div class="pp-minibar__controls" role="tablist" aria-label="Career view">
-                <button type="button" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-controls="career-panel-jobs" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span>Jobs</span></button>
-                <button type="button" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-controls="career-panel-radar" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Radar</span></button>
-                <button type="button" class="lab-view-tab {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-controls="career-panel-contracts" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg><span>Contracts</span>{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
+            {# Plain buttons, NOT a second role=tablist -- the view-toggle JS still drives them via the shared
+               .lab-view-tab class, and a duplicate tablist landmark (alongside the real strip below) would
+               confuse a screen reader once the bar is pinned. #}
+            <div class="pp-minibar__controls">
+                <button type="button" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" aria-label="Jobs view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span>Jobs</span></button>
+                <button type="button" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" aria-label="Radar view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Radar</span></button>
+                <button type="button" class="lab-view-tab {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" aria-label="Contracts view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg><span>Contracts</span>{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
             </div>
         </div>
     </div>
@@ -192,7 +195,7 @@
         </div>
     </div>
     {# Sentinel: once the real tab strip scrolls under the chrome, StickyReveal pins the mini-bar. #}
-    <span id="career-minibar-sentinel" aria-hidden="true"></span>
+    <span id="career-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
 
     {# Jobs: two layouts -- Dossier (rich discipline chapters) + Character sheet (compact, shareable) #}
     <div class="lab-view" id="career-panel-jobs" role="tabpanel" aria-labelledby="career-tab-jobs" data-view="jobs" {% if active_view != 'jobs' %}hidden{% endif %}>

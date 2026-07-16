@@ -1538,7 +1538,7 @@ class HomeView(TemplateView):
 
     The hotbar polls /api/profile-sync-status/ every 2s while syncing; the
     syncing page listens for a 'platpursuit:sync-status-changed' CustomEvent
-    dispatched by hotbar.js and reloads the page when sync transitions to
+    dispatched by navsync.js and reloads the page when sync transitions to
     'synced', so users automatically advance to the home.
     """
     # template_name is set per-state in get_template_names below.

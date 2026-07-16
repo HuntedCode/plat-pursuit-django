@@ -57,11 +57,7 @@ The template system uses Django's template inheritance with a single `base.html`
 
 ## Responsive System
 
-Pages are being incrementally migrated from the legacy ZoomScaler (transform-scale) system to proper mobile-first responsive styles. Both approaches coexist safely since the zoom wrapper divs in `base.html` are inert without `.zoom-active`.
-
-**Migrated pages** (e.g., dashboard): Use mobile-first Tailwind classes with `md:`/`lg:` breakpoints. No `ZoomScaler.init()` call. See [Design System Reference](design-system.md) for all styling tokens and patterns.
-
-**Non-migrated pages**: Still call `PlatPursuit.ZoomScaler.init()` which adds `.zoom-active` to `#zoom-container`, activating CSS transform rules in `input.css` that scale the 768px layout down for smaller screens.
+Every page now uses mobile-first Tailwind classes with `md:`/`lg:` breakpoints. The legacy ZoomScaler (transform-scale) system was removed (no callers remained). See [Design System Reference](design-system.md) for all styling tokens and patterns. The `#zoom-container` / `#zoom-wrapper` divs in `base.html` remain only as the host for the modal/ceremony recede (`.pp-receded` -> `#page-recede`).
 
 Fixed-position elements (toasts, modals, tabbar) live **outside** the wrapper divs so they are unaffected by either system.
 

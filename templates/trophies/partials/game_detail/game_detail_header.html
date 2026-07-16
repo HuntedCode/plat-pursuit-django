@@ -144,17 +144,6 @@
                 </div>
                 {% if user.is_authenticated and user.profile %}
                 <div class="flex items-center gap-1.5 border-t border-base-content/10 pt-2 mt-1">
-                    {% if user.profile.is_linked %}
-                    <button type="button"
-                            class="btn btn-xs md:btn-sm gap-1 btn-ghost border border-base-300 opacity-60 hover:opacity-100 transition-opacity"
-                            aria-label="Page Guide"
-                            onclick="if(window.PlatPursuit?.GameDetailTourManager) PlatPursuit.GameDetailTourManager.open();">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                        </svg>
-                        <span class="hidden md:inline">Page Guide</span>
-                    </button>
-                    {% endif %}
                     <div class="flex-1"></div>
                     {% if earned_trophy_id %}
                     <button id="share-card-btn"

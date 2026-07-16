@@ -1281,38 +1281,65 @@ if (document.readyState === 'loading') {
  * left the DOM (e.g. replaced by an HTMX swap), so callers can re-init after a partial-page swap.
  */
 const StickyReveal = {
-    _observers: [],
+    _entries: [],
+    _bound: false,
+    _chromeH() {
+        return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sticky-top'), 10) || 0;
+    },
+    // (Re)create an entry's observer with the CURRENT chrome height and adopt the correct state now. Called
+    // on init AND on refresh (resize / font swap), because main.js rewrites --sticky-top after our init --
+    // a baked-in height would pin the bar a few px early/late once the navbar height changes.
+    _observe(entry) {
+        if (entry.obs) entry.obs.disconnect();
+        const chromeH = this._chromeH();
+        const target = entry.target, sentinel = entry.sentinel;
+        entry.obs = new IntersectionObserver((es) => {
+            target.classList.toggle('is-pinned', es[0].boundingClientRect.top < chromeH);
+        }, { rootMargin: `-${chromeH}px 0px 0px 0px`, threshold: [0, 1] });
+        entry.obs.observe(sentinel);
+        // Adopt the correct state immediately, WITHOUT animating, so a target inserted while already scrolled
+        // past (e.g. re-rendered by an HTMX swap) appears in place instead of replaying the reveal slide. Only
+        // touch the class when it actually changes, so a resize/refresh doesn't flash an already-correct bar.
+        const pin = sentinel.getBoundingClientRect().top < chromeH;
+        if (pin !== target.classList.contains('is-pinned')) {
+            const prev = target.style.transition;
+            target.style.transition = 'none';
+            target.classList.toggle('is-pinned', pin);
+            void target.offsetWidth;            // flush the un-animated state
+            target.style.transition = prev;
+        }
+    },
     init(root) {
         root = root || document;
-        this._observers = this._observers.filter((o) => {
-            if (!document.contains(o.target)) { o.obs.disconnect(); return false; }
+        // Drop entries whose target left the DOM (e.g. an HTMX swap replaced it).
+        this._entries = this._entries.filter((e) => {
+            if (!document.contains(e.target)) { if (e.obs) e.obs.disconnect(); return false; }
             return true;
         });
-        const push = (target, obs) => this._observers.push({ target, obs });
         root.querySelectorAll('[data-sticky-reveal]').forEach((target) => {
             if (target._stickyReveal) return;   // already wired
             const sel = target.getAttribute('data-sticky-sentinel');
             const sentinel = sel ? document.querySelector(sel) : target.previousElementSibling;
             if (!sentinel) return;
-            const chromeH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sticky-top'), 10) || 0;
-            const obs = new IntersectionObserver((entries) => {
-                // Pinned once the sentinel has scrolled up past the chrome bottom.
-                target.classList.toggle('is-pinned', entries[0].boundingClientRect.top < chromeH);
-            }, { rootMargin: `-${chromeH}px 0px 0px 0px`, threshold: [0, 1] });
-            obs.observe(sentinel);
-            target._stickyReveal = obs;
-            push(target, obs);
-            // Adopt the correct state immediately, WITHOUT animating, so a target inserted while already
-            // scrolled past (e.g. re-rendered by an HTMX swap) appears in place instead of replaying the
-            // reveal slide. The observer's async first callback then agrees, so there's no flicker.
-            if (sentinel.getBoundingClientRect().top < chromeH) {
-                const prevTransition = target.style.transition;
-                target.style.transition = 'none';
-                target.classList.add('is-pinned');
-                void target.offsetWidth;            // flush the un-animated state
-                target.style.transition = prevTransition;
-            }
+            target._stickyReveal = true;
+            const entry = { target, sentinel, obs: null };
+            this._entries.push(entry);
+            this._observe(entry);
         });
+        // Re-measure when the chrome height can change (main.js updates --sticky-top on resize + fonts.ready).
+        if (!this._bound) {
+            this._bound = true;
+            let raf = null;
+            const refresh = () => {
+                if (raf) return;
+                raf = requestAnimationFrame(() => {
+                    raf = null;
+                    this._entries.forEach((e) => { if (document.contains(e.target)) this._observe(e); });
+                });
+            };
+            window.addEventListener('resize', refresh);
+            if (document.fonts && document.fonts.ready) { document.fonts.ready.then(refresh); }
+        }
     }
 };
 

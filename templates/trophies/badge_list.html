@@ -57,12 +57,14 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
                 <span class="pp-minibar__title">Browse Badges</span>
             </span>
+            {# Plain links, NOT a second role=tablist (would duplicate the real toggle's landmark when pinned);
+               HTMX drives the swap and updateToggleActive syncs .is-active across all .pp-vtoggle__chip. #}
             <div class="pp-minibar__controls">
-                <div class="pp-vtoggle" role="tablist" aria-label="Badge view">
+                <div class="pp-vtoggle">
                     <a href="{% url 'badges_list' %}" hx-get="{% url 'badges_list' %}" hx-target="#badge-view" hx-swap="innerHTML" hx-push-url="true"
-                       class="pp-vtoggle__chip{% if view != 'gallery' %} is-active{% endif %}" data-view="series" role="tab" aria-controls="badge-view" aria-selected="{% if view != 'gallery' %}true{% else %}false{% endif %}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg><span class="pp-vtoggle__chip__lbl">Series</span></a>
+                       class="pp-vtoggle__chip{% if view != 'gallery' %} is-active{% endif %}" data-view="series" aria-label="Series view"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg><span class="pp-vtoggle__chip__lbl">Series</span></a>
                     <a href="{% url 'badges_list' %}?view=gallery" hx-get="{% url 'badges_list' %}?view=gallery" hx-target="#badge-view" hx-swap="innerHTML" hx-push-url="true"
-                       class="pp-vtoggle__chip{% if view == 'gallery' %} is-active{% endif %}" data-view="gallery" role="tab" aria-controls="badge-view" aria-selected="{% if view == 'gallery' %}true{% else %}false{% endif %}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg><span class="pp-vtoggle__chip__lbl">Gallery</span></a>
+                       class="pp-vtoggle__chip{% if view == 'gallery' %} is-active{% endif %}" data-view="gallery" aria-label="Gallery view"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg><span class="pp-vtoggle__chip__lbl">Gallery</span></a>
                 </div>
                 <button type="button" class="pp-minibar__filters" data-minibar-badge-filters aria-label="Open filters">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
@@ -94,7 +96,7 @@
         </div>
     </div>
     {# Sentinel: once the real toggle scrolls under the chrome, StickyReveal pins the mini-bar. #}
-    <span id="badges-minibar-sentinel" aria-hidden="true"></span>
+    <span id="badges-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
 
     {% comment %} View island -- HTMX-swapped by the toggle. The view returns JUST this partial for
     htmx.target=='badge-view'; the full page otherwise. {% endcomment %}

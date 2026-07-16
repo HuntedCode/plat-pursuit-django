@@ -267,7 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Sync in the hotbar, sync errors out, etc.) reload so HomeView re-resolves
     // and renders home/syncing.html instead of leaving the user on a stale
     // dashboard. Symmetric to the home/syncing.html listener that reloads on
-    // the reverse transition. The CustomEvent is dispatched by hotbar.js only
+    // the reverse transition. The CustomEvent is dispatched by navsync.js only
     // on real status transitions, not on every poll.
     document.addEventListener('platpursuit:sync-status-changed', function(e) {
         if (e.detail && e.detail.status !== 'synced') {
