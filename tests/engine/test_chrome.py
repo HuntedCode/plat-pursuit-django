@@ -5,9 +5,12 @@ would otherwise miss: the footer's 4-hub restructure (the pre-unify My Pursuit +
 merged into one hub sitemap, a Support column added), and its auth-gated visibility.
 """
 import pytest
+from django.contrib.auth.models import AnonymousUser
 from django.template.loader import render_to_string
+from django.test import RequestFactory
 from django.urls import reverse
 
+from plat_pursuit.context_processors import navsync
 from tests.factories import ProfileFactory
 
 pytestmark = pytest.mark.django_db
@@ -163,3 +166,54 @@ def test_subnav_mobile_sheet_present(client):
 def test_subnav_hidden_on_itemless_hub(client):
     # Support has items=() -> the {% if hub_section and hub_subnav_items %} guard renders nothing.
     assert b'class="pp-sub"' not in client.get('/support/').content
+
+
+# --- navsync: global sync state for the navbar's status-aware avatar + panel ---
+
+def _req_with(user):
+    req = RequestFactory().get('/')
+    req.user = user
+    return req
+
+
+def test_navsync_empty_for_anonymous():
+    # Anon / profile-less viewers get nothing -> the navbar renders a plain avatar, no sync ring.
+    assert navsync(_req_with(AnonymousUser())) == {}
+
+
+def test_navsync_returns_sync_state_for_linked_profile():
+    profile = ProfileFactory(is_linked=True, total_plats=7)
+    data = navsync(_req_with(profile.user)).get('navsync')
+    assert data is not None
+    assert data['profile'] == profile
+    assert data['sync_status'] == profile.sync_status
+    assert 'progress_percentage' in data
+    assert 'seconds_to_next_sync' in data
+
+
+def test_navsync_syncing_adds_queue_position():
+    # Mid-sync the panel shows queue position; the lookup fails soft to None without a live queue.
+    profile = ProfileFactory(is_linked=True, sync_status='syncing')
+    data = navsync(_req_with(profile.user))['navsync']
+    assert data['sync_status'] == 'syncing'
+    assert 'queue_position' in data
+
+
+# --- Sync-status endpoint feeds the panel's live loot + last-synced ---
+
+def test_sync_status_endpoint_returns_live_stats(client, monkeypatch):
+    import fakeredis
+    monkeypatch.setattr('trophies.views.sync_views.redis_client', fakeredis.FakeStrictRedis())
+    profile = ProfileFactory(is_linked=True, total_plats=12, total_golds=30, total_silvers=100, total_bronzes=400)
+    client.force_login(profile.user)
+
+    data = client.get(reverse('profile_sync_status')).json()
+    assert data['sync_status'] == profile.sync_status
+    assert data['stats'] == {'plats': 12, 'golds': 30, 'silvers': 100, 'bronzes': 400}
+    assert data['last_synced']                 # naturaltime string for the "Synced ..." row
+    assert 'seconds_to_next_sync' in data
+
+
+def test_sync_status_endpoint_requires_login(client):
+    resp = client.get(reverse('profile_sync_status'))
+    assert resp.status_code in (302, 403)      # LoginRequiredMixin gate
