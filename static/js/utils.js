@@ -1269,6 +1269,43 @@ if (document.readyState === 'loading') {
     Lightbox.init();
 }
 
+/**
+ * StickyReveal - reveal/pin a condensed proxy element when its sentinel scrolls under the sticky chrome.
+ *
+ * Markup: a target [data-sticky-reveal] (fixed-positioned, hidden until pinned via the .is-pinned class)
+ * plus a sentinel [data-sticky-sentinel="#selector"] placed where pinning should begin (e.g. at the bottom
+ * of the full page header). When the sentinel scrolls above the chrome bottom (the --sticky-top offset the
+ * navbar/sub-nav publish), the target gets .is-pinned; scrolling back up removes it.
+ *
+ * init() is idempotent + re-runnable: it skips already-wired targets and drops observers whose target has
+ * left the DOM (e.g. replaced by an HTMX swap), so callers can re-init after a partial-page swap.
+ */
+const StickyReveal = {
+    _observers: [],
+    init(root) {
+        root = root || document;
+        this._observers = this._observers.filter((o) => {
+            if (!document.contains(o.target)) { o.obs.disconnect(); return false; }
+            return true;
+        });
+        const push = (target, obs) => this._observers.push({ target, obs });
+        root.querySelectorAll('[data-sticky-reveal]').forEach((target) => {
+            if (target._stickyReveal) return;   // already wired
+            const sel = target.getAttribute('data-sticky-sentinel');
+            const sentinel = sel ? document.querySelector(sel) : target.previousElementSibling;
+            if (!sentinel) return;
+            const chromeH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sticky-top'), 10) || 0;
+            const obs = new IntersectionObserver((entries) => {
+                // Pinned once the sentinel has scrolled up past the chrome bottom.
+                target.classList.toggle('is-pinned', entries[0].boundingClientRect.top < chromeH);
+            }, { rootMargin: `-${chromeH}px 0px 0px 0px`, threshold: [0, 1] });
+            obs.observe(sentinel);
+            target._stickyReveal = obs;
+            push(target, obs);
+        });
+    }
+};
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -1287,3 +1324,4 @@ window.PlatPursuit.ReviewProgressTiers = ReviewProgressTiers;
 window.PlatPursuit.TrophyListRenderer = TrophyListRenderer;
 window.PlatPursuit.SpoilerToggle = SpoilerToggle;
 window.PlatPursuit.Lightbox = Lightbox;
+window.PlatPursuit.StickyReveal = StickyReveal;

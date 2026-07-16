@@ -10,8 +10,41 @@ resolves it whether included or rendered standalone for the swap.
 {% endcomment %}
 {% load static custom_filters humanize %}
 {% with target_profile as profile %}
+    {% comment %} Sticky mini-header: a condensed proxy of the badge header that pins when the full header
+    scrolls under the chrome (StickyReveal in utils.js; sentinel = #bd-minihead-sentinel below). It lives
+    inside the tier island so it re-renders on every HTMX tier swap -- always the current tier's medallion /
+    progress / active chip. Its tier chips carry the SAME hx-get as the ladder, so tapping one swaps the
+    island (and re-renders this bar). Hidden (visibility) until pinned, so it's out of the tab order at rest. {% endcomment %}
+    <div class="bd-minihead" data-sticky-reveal data-sticky-sentinel="#bd-minihead-sentinel">
+        <div class="bd-minihead__inner container mx-auto">
+            <span class="bd-minihead__med" aria-hidden="true">{% include 'components/badge_medallion.html' with frame=hero_frame no_id=True %}</span>
+            <span class="bd-minihead__id">
+                <span class="bd-minihead__title">{{ badge.effective_display_title|default:badge.name }}</span>
+                {% if target_profile and badge_series_stats %}
+                <span class="pp-horizon bd-minihead__prog" data-tier="{{ hero_frame.tier }}" style="--horizon-h: 5px;"
+                      role="progressbar" aria-label="Tier progress" aria-valuemin="0" aria-valuemax="100"
+                      aria-valuenow="{% if hero_frame.state == 'earned' %}100{% else %}{{ hero_frame.progress_pct|default:0 }}{% endif %}">
+                    <span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-progress: {% if hero_frame.state == 'earned' %}100{% else %}{{ hero_frame.progress_pct|default:0 }}{% endif %}%;"></span></span>
+                </span>
+                {% endif %}
+            </span>
+            <nav class="bd-minihead__tiers" aria-label="Badge tier">
+                {% for tb in all_tier_badges %}
+                <a href="{{ request.path }}?tier={{ tb.tier }}"
+                   hx-get="{{ request.path }}?tier={{ tb.tier }}" hx-target="#badge-tier-view" hx-swap="innerHTML"
+                   hx-push-url="true" data-tier="{{ tb.tier }}"
+                   class="bd-minitier bd-minitier--{{ tb.tier|badge_tier|lower }}{% if tb.tier == selected_tier %} is-active{% endif %}{% if tb.tier in earned_tiers %} is-earned{% endif %}"
+                   {% if tb.tier == selected_tier %}aria-current="true"{% endif %}
+                   aria-label="{{ tb.tier|badge_tier }} tier">{{ tb.tier|badge_tier|slice:':1' }}</a>
+                {% endfor %}
+            </nav>
+        </div>
+    </div>
+
     {# Rebuilt header: Medallion hero + identity/progress + a lean at-a-glance readout (see _header.html). #}
     {% include 'trophies/partials/badge_detail/_header.html' %}
+    {# Sentinel at the header's bottom: once IT scrolls under the chrome, StickyReveal pins the mini-header. #}
+    <span id="bd-minihead-sentinel" aria-hidden="true"></span>
 
     {% comment %} Context band (series-wide): rarity bar + your ranks + Leaderboards CTA + My Stats button.
     Rides the swap; the My Stats button opens the deep-breakdown modal that lives outside the island. {% endcomment %}

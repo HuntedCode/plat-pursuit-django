@@ -452,6 +452,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initStages();
     armStageReveal();
     setTimeout(igniteActiveTier, 250);   // the initial tier "comes alive" a beat after load
+    if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }   // sticky mini-header
 
     // ── Tier swap: re-init stages + hold the scroll position steady ──
     // #badge-tier-view is most of the page; replacing its innerHTML wholesale makes the browser lose its
@@ -475,6 +476,7 @@ document.addEventListener('DOMContentLoaded', function() {
             armStageReveal();   // the fresh stack re-reveals when in view (e.g. swapping tiers while scrolled to it)
             igniteActiveTier(); // the newly-active step blooms
             fillHeaderHorizon(); // the new tier's progress fills from 0
+            if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }   // re-wire the fresh mini-header
             restoreTierScroll();
             // The activated tier step was replaced by the swap; keyboard focus fell to <body>. Move it to
             // the now-active step (preventScroll so it doesn't fight the scroll restore above).

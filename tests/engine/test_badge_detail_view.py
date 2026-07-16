@@ -89,6 +89,33 @@ def test_tier_switch_returns_island_partial_for_htmx(client, stub_leaderboards):
     assert 'id="badge-tier-view"' not in html   # the partial is the ISLAND INNER, not the wrapper
 
 
+def test_sticky_mini_header_renders_with_hooks(client, stub_leaderboards):
+    series = "rebuild-minihead"
+    BadgeFactory(series_slug=series, tier=1, is_live=True)
+    BadgeFactory(series_slug=series, tier=2, is_live=True)
+    _series_with_stage(series, 1)
+
+    html = client.get(reverse('badge_detail', kwargs={'series_slug': series})).content.decode()
+    assert 'class="bd-minihead"' in html                          # the condensed proxy bar
+    assert 'data-sticky-reveal' in html                           # StickyReveal target
+    assert 'data-sticky-sentinel="#bd-minihead-sentinel"' in html
+    assert 'id="bd-minihead-sentinel"' in html                    # the sentinel at the header's bottom
+    assert 'bd-minitier' in html                                  # the condensed tier chips
+
+
+def test_sticky_mini_header_rides_the_tier_swap(client, stub_leaderboards):
+    # It lives inside #badge-tier-view, so an HTMX tier swap re-renders it -> always the current tier.
+    series = "rebuild-minihead-swap"
+    BadgeFactory(series_slug=series, tier=1, is_live=True)
+    BadgeFactory(series_slug=series, tier=2, is_live=True)
+    _series_with_stage(series, 1)
+
+    url = reverse('badge_detail', kwargs={'series_slug': series}) + '?tier=2'
+    html = client.get(url, HTTP_HX_REQUEST='true', HTTP_HX_TARGET='badge-tier-view').content.decode()
+    assert 'bd-minihead' in html        # the mini-header is re-rendered in the swap partial
+    assert 'bd-minitier' in html        # with its tier chips (carrying the same hx-get swap)
+
+
 def test_tier_switch_full_page_without_htmx(client, stub_leaderboards):
     """Without HTMX the same URL returns the full page: base.html + the #badge-tier-view island wrapper."""
     series = "rebuild-tier-full"
