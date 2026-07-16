@@ -57,8 +57,8 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
                 <span class="pp-minibar__title">Browse Badges</span>
             </span>
-            {# Plain links, NOT a second role=tablist (would duplicate the real toggle's landmark when pinned);
-               HTMX drives the swap and updateToggleActive syncs .is-active across all .pp-vtoggle__chip. #}
+            {% comment %} Plain links, NOT a second role=tablist (would duplicate the real toggle's landmark when pinned);
+               HTMX drives the swap and updateToggleActive syncs .is-active across all .pp-vtoggle__chip. {% endcomment %}
             <div class="pp-minibar__controls">
                 <div class="pp-vtoggle">
                     <a href="{% url 'badges_list' %}" hx-get="{% url 'badges_list' %}" hx-target="#badge-view" hx-swap="innerHTML" hx-push-url="true"

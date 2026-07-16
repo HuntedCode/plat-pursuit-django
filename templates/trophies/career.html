@@ -16,9 +16,9 @@
                 <span class="pp-minibar__ava">{% if hero.avatar_url %}<img src="{{ hero.avatar_url }}" alt="" loading="lazy">{% else %}{{ hero.pursuer_name|default:'?'|first|upper }}{% endif %}</span>
                 <span class="pp-minibar__title">{{ hero.pursuer_name }}</span>
             </span>
-            {# Plain buttons, NOT a second role=tablist -- the view-toggle JS still drives them via the shared
+            {% comment %} Plain buttons, NOT a second role=tablist -- the view-toggle JS still drives them via the shared
                .lab-view-tab class, and a duplicate tablist landmark (alongside the real strip below) would
-               confuse a screen reader once the bar is pinned. #}
+               confuse a screen reader once the bar is pinned. {% endcomment %}
             <div class="pp-minibar__controls">
                 <button type="button" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" aria-label="Jobs view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span>Jobs</span></button>
                 <button type="button" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" aria-label="Radar view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Radar</span></button>
