@@ -307,3 +307,57 @@
 .pp-sub__sheetgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .pp-sub__sheet .pp-subpill { display: block; text-align: center; padding: 9px 11px; border-radius: var(--pp-radius-md); }
 @media (prefers-reduced-motion: reduce) { .pp-sub__sheet { transition: none; } .pp-sub__mchev, .pp-sub__morebtn svg { transition: none; } }
+
+/* ── Mini-bar: a reusable condensed page header that pins when the full header scrolls under the chrome ──
+ * Frame only: each page fills __id with its identity and drops its OWN view switcher into __controls (the
+ * switcher reuses the page's existing chip classes so the page's switch JS drives both copies). Reveal is
+ * StickyReveal (utils.js) via the --sticky-top offset; it adopts its state un-animated on HTMX re-insert. */
+.pp-minibar {
+    position: fixed; top: var(--sticky-top, 3.625rem); left: 0; right: 0; z-index: 30;
+    background: color-mix(in oklab, var(--pp-bg-1) 92%, transparent);
+    backdrop-filter: blur(12px);   /* standard only -- lightningcss autoprefixes */
+    border-bottom: 1px solid var(--pp-border);
+    visibility: hidden; opacity: 0; transform: translateY(-100%);
+    transition: opacity 0.28s var(--pp-ease), transform 0.28s var(--pp-ease), visibility 0s linear 0.28s;
+}
+.pp-minibar.is-pinned { visibility: visible; opacity: 1; transform: none;
+    transition: opacity 0.28s var(--pp-ease), transform 0.28s var(--pp-ease); }
+.pp-minibar__inner { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 16px; }
+.pp-minibar__id { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.pp-minibar__id > svg { width: 17px; height: 17px; color: var(--pp-primary); flex-shrink: 0; }
+.pp-minibar__ava { width: 26px; height: 26px; border-radius: 50%; overflow: hidden; flex-shrink: 0; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--pp-bg-3), var(--pp-bg-2)); color: var(--pp-text-dim); font-weight: 800; font-size: 0.75rem; }
+.pp-minibar__ava img { width: 100%; height: 100%; object-fit: cover; }
+.pp-minibar__title { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.92rem; color: var(--pp-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
+.pp-minibar__controls { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Filters reach: a compact button that scrolls the page's toolbar into view + opens its filter panel. */
+.pp-minibar__filters {
+    display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: var(--pp-radius-md);
+    font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute); background: oklch(1 0 0 / 0.05);
+    border: 1px solid var(--pp-border); cursor: pointer;
+    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) { .pp-minibar__filters:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.09); } }
+.pp-minibar__filters:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-minibar__filters svg { width: 13px; height: 13px; }
+@media (max-width: 767px) { .pp-minibar__filters .pp-minibar__flbl { display: none; } }
+
+/* The page switcher, condensed for the bar: shrink whatever chip/tab set the page dropped in. */
+.pp-minibar__controls .lab-view-tab,
+.pp-minibar__controls .pp-collection__view-chip,
+.pp-minibar__controls .pp-vtoggle__chip { padding: 5px 10px; font-size: 0.74rem; }
+.pp-minibar__controls .lab-view-tab svg,
+.pp-minibar__controls .pp-collection__view-chip svg,
+.pp-minibar__controls .pp-vtoggle__chip svg { width: 14px; height: 14px; }
+@media (max-width: 767px) {
+    /* Icon-only switcher on mobile so the bar never overflows. */
+    .pp-minibar__controls .lab-view-tab span:not([class]),
+    .pp-minibar__controls .pp-vtoggle__chip__lbl { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pp-minibar { transition: opacity 0.2s linear, visibility 0s linear 0.2s; transform: none; }
+    .pp-minibar.is-pinned { transition: opacity 0.2s linear; transform: none; }
+}
