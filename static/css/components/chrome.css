@@ -71,6 +71,11 @@
 }
 @media (hover: hover) { .pp-navpremium:hover { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); } }
 .pp-navpremium svg { width: 14px; height: 14px; }
+/* Declutter the mobile top bar: Premium collapses to its star icon (the label is desktop-only). */
+@media (max-width: 767px) {
+    .pp-navpremium { padding: 8px; }
+    .pp-navpremium span { display: none; }
+}
 
 /* ── PSN profile search: persistent typeahead bar (md+), icon-collapse (<md) ── */
 /* Chrome stays calm: matte field at rest, cyan focus ring only when engaged (the one active accent). */
@@ -360,4 +365,31 @@
 @media (prefers-reduced-motion: reduce) {
     .pp-minibar { transition: opacity 0.2s linear, visibility 0s linear 0.2s; transform: none; }
     .pp-minibar.is-pinned { transition: opacity 0.2s linear; transform: none; }
+}
+
+/* ── Mobile bottom tab bar: hub navigation for <lg (frosted, matches the navbar frame) ── */
+/* The template keeps `lg:hidden`; no `display` here so that utility wins on desktop. */
+.mobile-tabbar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
+    background: color-mix(in oklab, var(--pp-bg-1) 92%, transparent);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--pp-border);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.mobile-tabbar-inner { display: flex; align-items: stretch; justify-content: space-around; height: 56px; }
+.mobile-tabbar-item {
+    position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-width: 0; padding: 4px 2px; text-decoration: none; background: none; border: none; cursor: pointer;
+    font-size: 0.62rem; font-weight: 600; letter-spacing: 0.01em; color: var(--pp-text-mute);
+    transition: color var(--pp-dur) var(--pp-ease);
+}
+.mobile-tabbar-item svg { width: 20px; height: 20px; }
+@media (hover: hover) { .mobile-tabbar-item:hover { color: var(--pp-text); } }
+.mobile-tabbar-item:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -3px; border-radius: var(--pp-radius-md); }
+/* Active = cyan (the one brand accent) + a short top indicator bar (glow earned by state, like the navbar). */
+.mobile-tabbar-item.active { color: var(--pp-primary); }
+.mobile-tabbar-item.active::before {
+    content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 26px; height: 2px; border-radius: 0 0 2px 2px; background: var(--pp-primary);
+    box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 55%, transparent);
 }

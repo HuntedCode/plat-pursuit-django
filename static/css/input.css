@@ -340,29 +340,8 @@
     40%, 60% { transform: translate3d(4px, 0, 0); }
   }
 
-  /* ===== Mobile Bottom Tab Bar ===== */
-  .mobile-tabbar {
-    @apply fixed bottom-0 left-0 right-0 z-40 bg-base-200 border-t-2 border-base-300 shadow-lg;
-    padding-bottom: env(safe-area-inset-bottom, 0);
-  }
-  .mobile-tabbar-inner {
-    @apply flex items-center justify-around h-14;
-  }
-  .mobile-tabbar-item {
-    @apply flex flex-col items-center justify-center gap-0.5 text-xs text-base-content/60 bg-transparent border-none cursor-pointer transition-colors duration-200 px-2 py-1 min-w-0;
-  }
-  .mobile-tabbar-item:hover,
-  .mobile-tabbar-item.active {
-    @apply text-primary;
-  }
-  .mobile-tabbar-item:focus-visible {
-    @apply outline-none text-primary ring-2 ring-primary ring-inset rounded-md;
-  }
-  .mobile-tabbar-item svg {
-    @apply w-5 h-5;
-  }
-
-  /* (The hub sub-nav's mobile collapse moved to the rebuilt .pp-sub__sheet in components/chrome.css.) */
+  /* (The mobile bottom tab bar was rebuilt to the --pp-* house style in components/chrome.css.)
+     (The hub sub-nav's mobile collapse moved to the rebuilt .pp-sub__sheet in components/chrome.css.) */
 
   /* ===== Toast Container (clear mobile tabbar) ===== */
   #toast-container {
