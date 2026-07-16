@@ -1,0 +1,17 @@
+/* ============================================================
+ * MOTION -- shared cross-page entrance primitives. Kept in one home so every rebuilt page opens with
+ * the same beat instead of each page hand-rolling its own (or hard-cutting in). Reduced-motion users
+ * always get the final resting state with no movement.
+ * ============================================================ */
+
+/* Page header / hero entrance: the opening beat of a rebuilt page. Put .pp-head-in on the top header
+ * (or hero) card so it fades + rises in on load. --2 adds a small cascade delay and .pp-head-fade is a
+ * fade-only follow (used by the Badges list header's stats + tier explainer for an internal stagger).
+ * `backwards` fill holds the hidden "from" state through any delay, so nothing flashes before it plays. */
+@keyframes ppHeadIn { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+@keyframes ppHeadFade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-head-in { animation: ppHeadIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+    .pp-head-in--2 { animation-delay: 0.07s; }
+    .pp-head-fade { animation: ppHeadFade 0.5s ease 0.14s backwards; }
+}

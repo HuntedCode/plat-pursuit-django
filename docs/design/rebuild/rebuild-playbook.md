@@ -139,6 +139,14 @@ animations don't restart). Every animation gates on `prefers-reduced-motion` —
 `@media (prefers-reduced-motion: no-preference)`, JS via `PlatPursuit.Medallion.prefersReducedMotion()` /
 `countUp()` (which jumps to target). → career-reference-standard.md §3, motion-patterns.md.
 
+**Opening beat — every page's header/hero enters the same way.** Put **`.pp-head-in`**
+(`components/motion.css`) on the top header (or, on Career, the **hero**) card: it fades + rises in on
+load, the first beat before any content reveal. `.pp-head-in--2` / `.pp-head-fade` add an optional
+internal cascade (Badges list header's stats + tier explainer). Reduced-motion gated. **If the header
+lives inside an HTMX swap island** (badge detail's header rides `#badge-tier-view`), gate the class so it
+plays on first load only — `{% if not is_tier_swap %} pp-head-in{% endif %}` — or it re-fades on every
+swap. Live on Career (hero), Collection, Badges list, Badge detail.
+
 ### 7. Dynamic view swaps (HTMX innerHTML)
 View toggles swap an island via `hx-get` + `hx-target="#..." hx-swap="innerHTML" hx-push-url`, not a full
 reload. Re-init reveals/scrollers in an `htmx:afterSwap` handler keyed on `e.detail.target.id`. (Badges
@@ -209,7 +217,7 @@ DaisyUI theme colours mirror the brand/semantic tokens and are applied via Tailw
   `TILE_SEGMENT_CAP=8` (tile horizons, `badge_views`); `frame.segments` (booleans) is prebuilt for a
   medallion's tier. Reduced-motion gated. Used on the Series-tile tiers, the milestone ladder, the medallion
   meter, and the badge-detail header. **Tally** (`.pp-tally`) — display numbers (+ `PlatPursuit.countUp`).
-- **Accented header card** — `card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral`.
+- **Accented header card** — `card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral`. Give it **`.pp-head-in`** (`components/motion.css`) for the shared opening-beat entrance (see Premium motion §6).
 - **Stat tiles** — `.scard` (a few headline summary stats, Career/Home) · `.pp-bdetail__stat` k/v (compact, dense badge stats).
 - **Segmented switcher** (tab groups) · **`.pp-toolbar-card`** (toolbars) · depth-pass card shadows (see Depth in Shared Elements).
 

@@ -893,6 +893,11 @@ class BadgeDetailView(DetailView):
         context = super().get_context_data(**kwargs)
         series_badges = context['object']
 
+        # A tier switch re-renders the #badge-tier-view island (which contains the header). The header's
+        # entrance animation (.pp-head-in) should play on the FIRST load only, not replay on every tier
+        # chip tap -- flag the swap so the header partial can skip the class on an HTMX re-render.
+        context['is_tier_swap'] = getattr(self.request, 'htmx', False) and self.request.htmx.target == 'badge-tier-view'
+
         if not series_badges.exists():
             raise Http404("Series not found")
 

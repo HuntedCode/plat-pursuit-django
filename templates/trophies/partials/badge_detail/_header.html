@@ -14,7 +14,7 @@ selected_tier. Keeps id="badge-header-card".
 {% endcomment %}
 {% load static custom_filters humanize %}
 {% with stats=badge_series_stats %}
-<section id="badge-header-card" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
+<section id="badge-header-card" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral{% if not is_tier_swap %} pp-head-in{% endif %}">
     <div class="card-body p-4 md:p-5 lg:p-6">
 
         {% if viewing_other_profile %}

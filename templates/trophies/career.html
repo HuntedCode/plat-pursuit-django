@@ -30,7 +30,7 @@
 
     {% if hero %}
     {# ── Pursuer hero: identity + the disciplines composition ring (ambient glow tinted by your strongest discipline) ── #}
-    <section class="card career-hero bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3 relative overflow-hidden"{% if hero.dominant_disc %} style="--dominant: var(--disc-{{ hero.dominant_disc }});"{% endif %}>
+    <section class="card career-hero bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3 relative overflow-hidden pp-head-in"{% if hero.dominant_disc %} style="--dominant: var(--disc-{{ hero.dominant_disc }});"{% endif %}>
         <div class="card-body p-4 md:p-6 lg:p-7">
             <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
                 {# Identity #}
