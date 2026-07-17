@@ -32,7 +32,10 @@ membership is shown: lightweight indicator vs mini medallions. {% endcomment %}
 
     .gcw-card__body { display: flex; flex-direction: column; gap: 6px; padding: 8px 9px 9px; }
     .gcw-card__title { font-size: 12.5px; font-weight: 700; color: var(--pp-text); line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.5em; }
-    .gcw-card__facts { display: flex; align-items: center; gap: 9px; font-size: 11px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+    .gcw-card__facts { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; font-size: 11px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+    .gcw-plat { font-weight: 700; color: var(--pp-text-dim); }
+    .gcw-plat.is-earned { color: var(--color-trophy-platinum); }
+    .gcw-plat--no { color: var(--pp-text-mute); }
     .gcw-fact { display: inline-flex; align-items: center; gap: 3px; }
     .gcw-fact .star { width: 12px; height: 12px; color: var(--pp-warning); }
     .gcw-fact--none { color: var(--pp-text-mute); }

@@ -17,8 +17,8 @@ link. {% endcomment %}
     <div class="gcw-card__body">
         <h3 class="gcw-card__title">{{ c.game.title_name }}</h3>
 
-        {# Simplified facts: community rating + the trophy breakdown as colored B/S/G/P counts (same footprint
-        as "N trophies", more information; the 4-cell grid is retired to the detail page). #}
+        {% comment %} Simplified facts: rating + the trophy breakdown as colored B/S/G/P counts (same footprint
+        as "N trophies", more info) + the plat availability tag. The 4-cell grid is retired to the detail page. {% endcomment %}
         <div class="gcw-card__facts">
             {% if c.rating %}
             <span class="gcw-fact"><svg class="star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>{{ c.rating }}</span>
@@ -28,10 +28,15 @@ link. {% endcomment %}
             {% with dt=c.game.defined_trophies %}
             <span class="gcw-tro" title="Bronze / Silver / Gold / Platinum"><span style="color: var(--color-trophy-bronze)">{{ dt.bronze|default:0 }}</span><span class="gcw-tro__d">/</span><span style="color: var(--color-trophy-silver)">{{ dt.silver|default:0 }}</span><span class="gcw-tro__d">/</span><span style="color: var(--color-trophy-gold)">{{ dt.gold|default:0 }}</span><span class="gcw-tro__d">/</span><span style="color: var(--color-trophy-platinum)">{{ dt.platinum|default:0 }}</span></span>
             {% endwith %}
+            {% if c.plat_available %}
+            <span class="gcw-fact gcw-plat{% if c.has_plat %} is-earned{% endif %}" title="{% if c.has_plat %}Platinum earned{% else %}Has a platinum{% endif %}">Plat</span>
+            {% else %}
+            <span class="gcw-fact gcw-plat--no" title="No platinum">No Plat</span>
+            {% endif %}
         </div>
 
-        {# ── Badge band (the new hook) -- always rendered; a muted placeholder when the game is in none, so
-        the card keeps a consistent height instead of looking barren. ── #}
+        {% comment %} Badge band (the new hook) -- always rendered; a muted placeholder when the game is in
+        none, so the card keeps a consistent height instead of looking barren. {% endcomment %}
         {% if c.badges %}
             {% if badge_style == 'med' %}
             <div class="gcw-badges gcw-badges--med" title="In {{ c.badge_total }} badge series">
