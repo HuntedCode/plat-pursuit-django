@@ -1,84 +1,62 @@
 {% comment %}
-    Shared community-flag filter split-controls.
+    Shared community-flag filter split-controls (house style, --pp-*).
 
-    Each flag is one daisyUI `join` group of three segments:
-      [ + ]  Label  [ − ]
-       │      │       └─ Click to "Hide": games WITHOUT this flag.
-       │      └─ Inert label, struck through when Hide is active.
-       └─ Click to "Show only": games WITH this flag.
+    Each flag is a [ + Label - ] segmented control:
+      +  -> "Show only": games WITH this flag.
+      -  -> "Hide": games WITHOUT this flag (label struck through).
 
-    Single-click semantics:
-      - Click + when neither active → activates Show.
-      - Click + when Show active    → clears (back to Any).
-      - Click + when Hide active    → swaps to Show.
-      - Same for − inversely.
+    Single-click semantics (browse-filters.js, [data-flag-group] hook):
+      - Click + when neither active -> Show; when Show active -> clears; when Hide active -> swaps to Show.
+      - - is the inverse.
 
-    Form wiring:
-      Two hidden checkboxes per flag (show_X, hide_X). The +/− buttons
-      flip these on click; the form submits via HTMX. On conflict the
-      backend treats `hide` as the winner
-      (browse_helpers.apply_game_browse_filters).
+    Form wiring: two hidden checkboxes per flag (show_X, hide_X). The +/- buttons flip these; the form
+    submits via HTMX. On conflict the backend treats `hide` as the winner (apply_game_browse_filters).
+    The active visual is pure CSS (.pp-flag :has(input:checked)) -- the JS only toggles the checkboxes.
 
-    JS:
-      Click handling lives in static/js/browse-filters.js via the
-      [data-flag-group] hook.
-
-    Required context: request (used to read GET params on initial render).
+    Required context: request (to read GET params on initial render).
 {% endcomment %}
-<div class="flex flex-wrap gap-1.5" data-flag-pills>
+<div class="pp-gbrowse__fchips" data-flag-pills>
     {# ── Delisted ── #}
     {% with show_active=request.GET.show_delisted hide_active=request.GET.hide_delisted %}
-    <div class="join" data-flag-group="delisted" data-flag-color="error">
-        <input type="checkbox" name="show_delisted" value="on" class="hidden" {% if show_active and not hide_active %}checked{% endif %} />
-        <input type="checkbox" name="hide_delisted" value="on" class="hidden" {% if hide_active %}checked{% endif %} />
-        <button type="button" data-flag-action="show" title="Show only delisted games"
-                class="join-item btn btn-xs px-2 no-animation transition-colors {% if show_active and not hide_active %}btn-error{% else %}btn-ghost border border-base-300 text-base-content/40 hover:text-base-content{% endif %}">+</button>
-        <span data-flag-label
-              class="join-item border border-base-300 bg-base-200/60 px-2 h-6 inline-flex items-center text-xs whitespace-nowrap {% if hide_active %}line-through text-base-content/60{% endif %}">Delisted</span>
-        <button type="button" data-flag-action="hide" title="Hide delisted games"
-                class="join-item btn btn-xs px-2 no-animation transition-colors {% if hide_active %}btn-error btn-outline{% else %}btn-ghost border border-base-300 text-base-content/40 hover:text-base-content{% endif %}">&minus;</button>
+    <div class="pp-flag" data-flag-group="delisted" data-flag-color="error">
+        <input type="checkbox" name="show_delisted" value="on" hidden {% if show_active and not hide_active %}checked{% endif %} />
+        <input type="checkbox" name="hide_delisted" value="on" hidden {% if hide_active %}checked{% endif %} />
+        <button type="button" class="pp-flag__btn pp-flag__btn--show" data-flag-action="show" aria-label="Show only delisted games" title="Show only delisted games">+</button>
+        <span class="pp-flag__lbl" data-flag-label>Delisted</span>
+        <button type="button" class="pp-flag__btn pp-flag__btn--hide" data-flag-action="hide" aria-label="Hide delisted games" title="Hide delisted games">&minus;</button>
     </div>
     {% endwith %}
 
     {# ── Unobtainable ── #}
     {% with show_active=request.GET.show_unobtainable hide_active=request.GET.hide_unobtainable %}
-    <div class="join" data-flag-group="unobtainable" data-flag-color="error">
-        <input type="checkbox" name="show_unobtainable" value="on" class="hidden" {% if show_active and not hide_active %}checked{% endif %} />
-        <input type="checkbox" name="hide_unobtainable" value="on" class="hidden" {% if hide_active %}checked{% endif %} />
-        <button type="button" data-flag-action="show" title="Show only games with unobtainable trophies"
-                class="join-item btn btn-xs px-2 no-animation transition-colors {% if show_active and not hide_active %}btn-error{% else %}btn-ghost border border-base-300 text-base-content/40 hover:text-base-content{% endif %}">+</button>
-        <span data-flag-label
-              class="join-item border border-base-300 bg-base-200/60 px-2 h-6 inline-flex items-center text-xs whitespace-nowrap {% if hide_active %}line-through text-base-content/60{% endif %}">Unobtainable</span>
-        <button type="button" data-flag-action="hide" title="Hide games with unobtainable trophies"
-                class="join-item btn btn-xs px-2 no-animation transition-colors {% if hide_active %}btn-error btn-outline{% else %}btn-ghost border border-base-300 text-base-content/40 hover:text-base-content{% endif %}">&minus;</button>
+    <div class="pp-flag" data-flag-group="unobtainable" data-flag-color="error">
+        <input type="checkbox" name="show_unobtainable" value="on" hidden {% if show_active and not hide_active %}checked{% endif %} />
+        <input type="checkbox" name="hide_unobtainable" value="on" hidden {% if hide_active %}checked{% endif %} />
+        <button type="button" class="pp-flag__btn pp-flag__btn--show" data-flag-action="show" aria-label="Show only games with unobtainable trophies" title="Show only games with unobtainable trophies">+</button>
+        <span class="pp-flag__lbl" data-flag-label>Unobtainable</span>
+        <button type="button" class="pp-flag__btn pp-flag__btn--hide" data-flag-action="hide" aria-label="Hide games with unobtainable trophies" title="Hide games with unobtainable trophies">&minus;</button>
     </div>
     {% endwith %}
 
     {# ── Online Trophies ── #}
     {% with show_active=request.GET.show_online hide_active=request.GET.hide_online %}
-    <div class="join" data-flag-group="online" data-flag-color="warning">
-        <input type="checkbox" name="show_online" value="on" class="hidden" {% if show_active and not hide_active %}checked{% endif %} />
-        <input type="checkbox" name="hide_online" value="on" class="hidden" {% if hide_active %}checked{% endif %} />
-        <button type="button" data-flag-action="show" title="Show only games with online trophies"
-                class="join-item btn btn-xs px-2 no-animation transition-colors {% if show_active and not hide_active %}btn-warning{% else %}btn-ghost border border-base-300 text-base-content/40 hover:text-base-content{% endif %}">+</button>
-        <span data-flag-label
-              class="join-item border border-base-300 bg-base-200/60 px-2 h-6 inline-flex items-center text-xs whitespace-nowrap {% if hide_active %}line-through text-base-content/60{% endif %}">Online Trophies</span>
-        <button type="button" data-flag-action="hide" title="Hide games with online trophies"
-                class="join-item btn btn-xs px-2 no-animation transition-colors {% if hide_active %}btn-warning btn-outline{% else %}btn-ghost border border-base-300 text-base-content/40 hover:text-base-content{% endif %}">&minus;</button>
+    <div class="pp-flag" data-flag-group="online" data-flag-color="warning">
+        <input type="checkbox" name="show_online" value="on" hidden {% if show_active and not hide_active %}checked{% endif %} />
+        <input type="checkbox" name="hide_online" value="on" hidden {% if hide_active %}checked{% endif %} />
+        <button type="button" class="pp-flag__btn pp-flag__btn--show" data-flag-action="show" aria-label="Show only games with online trophies" title="Show only games with online trophies">+</button>
+        <span class="pp-flag__lbl" data-flag-label>Online Trophies</span>
+        <button type="button" class="pp-flag__btn pp-flag__btn--hide" data-flag-action="hide" aria-label="Hide games with online trophies" title="Hide games with online trophies">&minus;</button>
     </div>
     {% endwith %}
 
     {# ── Buggy Trophies ── #}
     {% with show_active=request.GET.show_buggy hide_active=request.GET.hide_buggy %}
-    <div class="join" data-flag-group="buggy" data-flag-color="warning">
-        <input type="checkbox" name="show_buggy" value="on" class="hidden" {% if show_active and not hide_active %}checked{% endif %} />
-        <input type="checkbox" name="hide_buggy" value="on" class="hidden" {% if hide_active %}checked{% endif %} />
-        <button type="button" data-flag-action="show" title="Show only games with buggy trophies"
-                class="join-item btn btn-xs px-2 no-animation transition-colors {% if show_active and not hide_active %}btn-warning{% else %}btn-ghost border border-base-300 text-base-content/40 hover:text-base-content{% endif %}">+</button>
-        <span data-flag-label
-              class="join-item border border-base-300 bg-base-200/60 px-2 h-6 inline-flex items-center text-xs whitespace-nowrap {% if hide_active %}line-through text-base-content/60{% endif %}">Buggy Trophies</span>
-        <button type="button" data-flag-action="hide" title="Hide games with buggy trophies"
-                class="join-item btn btn-xs px-2 no-animation transition-colors {% if hide_active %}btn-warning btn-outline{% else %}btn-ghost border border-base-300 text-base-content/40 hover:text-base-content{% endif %}">&minus;</button>
+    <div class="pp-flag" data-flag-group="buggy" data-flag-color="warning">
+        <input type="checkbox" name="show_buggy" value="on" hidden {% if show_active and not hide_active %}checked{% endif %} />
+        <input type="checkbox" name="hide_buggy" value="on" hidden {% if hide_active %}checked{% endif %} />
+        <button type="button" class="pp-flag__btn pp-flag__btn--show" data-flag-action="show" aria-label="Show only games with buggy trophies" title="Show only games with buggy trophies">+</button>
+        <span class="pp-flag__lbl" data-flag-label>Buggy Trophies</span>
+        <button type="button" class="pp-flag__btn pp-flag__btn--hide" data-flag-action="hide" aria-label="Hide games with buggy trophies" title="Hide games with buggy trophies">&minus;</button>
     </div>
     {% endwith %}
 </div>

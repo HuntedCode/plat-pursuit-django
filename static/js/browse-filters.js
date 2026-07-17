@@ -146,42 +146,12 @@
       group.dataset.flagSplitBound = 'true';
 
       var flag = group.dataset.flagGroup;
-      var color = group.dataset.flagColor || 'error';
       var showInput = group.querySelector('input[name="show_' + flag + '"]');
       var hideInput = group.querySelector('input[name="hide_' + flag + '"]');
       var showBtn = group.querySelector('[data-flag-action="show"]');
       var hideBtn = group.querySelector('[data-flag-action="hide"]');
       var label = group.querySelector('[data-flag-label]');
       if (!showInput || !hideInput || !showBtn || !hideBtn || !label) return;
-
-      function applyVisual() {
-        // Indicate state via background color and line-through only.
-        // Never toggle font-weight: bold text is wider than regular and
-        // would shift neighboring pills on every click.
-        var resetBtn = [
-          'btn-ghost', 'border', 'border-base-300',
-          'text-base-content/40', 'hover:text-base-content',
-          'btn-error', 'btn-warning', 'btn-info', 'btn-primary', 'btn-secondary',
-          'btn-outline',
-        ];
-        resetBtn.forEach(function (c) {
-          showBtn.classList.remove(c);
-          hideBtn.classList.remove(c);
-        });
-        label.classList.remove('line-through', 'text-base-content/60');
-
-        if (showInput.checked) {
-          showBtn.classList.add('btn-' + color);
-          hideBtn.classList.add('btn-ghost', 'border', 'border-base-300', 'text-base-content/40', 'hover:text-base-content');
-        } else if (hideInput.checked) {
-          hideBtn.classList.add('btn-' + color, 'btn-outline');
-          showBtn.classList.add('btn-ghost', 'border', 'border-base-300', 'text-base-content/40', 'hover:text-base-content');
-          label.classList.add('line-through', 'text-base-content/60');
-        } else {
-          showBtn.classList.add('btn-ghost', 'border', 'border-base-300', 'text-base-content/40', 'hover:text-base-content');
-          hideBtn.classList.add('btn-ghost', 'border', 'border-base-300', 'text-base-content/40', 'hover:text-base-content');
-        }
-      }
 
       function submit() {
         var pageInput = form.querySelector('input[name="page"]');
@@ -190,6 +160,7 @@
         htmx.trigger(form, 'submit');
       }
 
+      // The active visual is pure CSS (.pp-flag :has(input:checked)); the JS only flips the checkboxes.
       showBtn.addEventListener('click', function (e) {
         e.preventDefault();
         if (showInput.checked) {
@@ -198,7 +169,6 @@
           showInput.checked = true;
           hideInput.checked = false;
         }
-        applyVisual();
         submit();
       });
 
@@ -210,7 +180,6 @@
           hideInput.checked = true;
           showInput.checked = false;
         }
-        applyVisual();
         submit();
       });
     });
@@ -363,10 +332,7 @@
       // Update trigger button
       var trigger = document.getElementById('badge-picker-trigger');
       var label = document.getElementById('badge-picker-label');
-      if (trigger) {
-        trigger.classList.remove('btn-ghost', 'border', 'border-dashed', 'border-base-300');
-        trigger.classList.add('btn-secondary', 'font-bold');
-      }
+      if (trigger) { trigger.classList.add('is-selected'); }
       if (label) label.textContent = name;
 
       // Ensure clear button exists (create if needed after HTMX restore)
@@ -454,9 +420,10 @@
       var clearBtn = document.createElement('button');
       clearBtn.type = 'button';
       clearBtn.id = 'badge-picker-clear';
-      clearBtn.className = 'btn btn-xs btn-ghost border border-base-300 text-error/70 hover:text-error hover:border-error/30 transition-all';
+      clearBtn.className = 'pp-badgepick__clear';
       clearBtn.title = 'Clear badge filter';
-      clearBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+      clearBtn.setAttribute('aria-label', 'Clear badge filter');
+      clearBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
       trigger.parentNode.insertBefore(clearBtn, trigger.nextSibling);
       bindClearButton(form);
     }
@@ -476,10 +443,7 @@
         // Reset trigger button
         var trigger = document.getElementById('badge-picker-trigger');
         var label = document.getElementById('badge-picker-label');
-        if (trigger) {
-          trigger.classList.remove('btn-secondary', 'font-bold');
-          trigger.classList.add('btn-ghost', 'border', 'border-base-300', 'border-dashed');
-        }
+        if (trigger) { trigger.classList.remove('is-selected'); }
         if (label) label.textContent = 'Pick a Badge';
 
         // Remove clear button

@@ -80,7 +80,7 @@
                 </label>
 
                 {# I'm Feeling Lucky: opens a random game matching the current filters (data-lucky-btn). #}
-                <button type="button" class="pp-gbrowse__lucky" data-lucky-btn title="Open a random game matching your filters">
+                <button type="button" class="pp-gbrowse__lucky" data-lucky-btn aria-label="Open a random game matching your filters" title="Open a random game matching your filters">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/><circle cx="9" cy="15" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
                     <span class="pp-gbrowse__lucky__lbl">Lucky</span>
                 </button>
@@ -88,7 +88,7 @@
                 <button type="button" class="pp-bgal__advbtn" id="gbrowse-filters-toggle" aria-expanded="false" aria-controls="gbrowse-advanced">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                     <span>Filters</span>
-                    <span class="pp-bgal__advbtn__n" id="gbrowse-filter-count" hidden>0</span>
+                    <span class="pp-bgal__advbtn__n" id="gbrowse-filter-count" aria-live="polite" aria-label="active filters" hidden>0</span>
                 </button>
             </div>
 
@@ -306,10 +306,11 @@
             toggle.classList.toggle('is-open', open);
             toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
         }
-        // Active advanced-filter count for the toggle badge: every set value except display/sort/search state,
-        // skipping range sliders parked at their default min/max and the letter "All" option. Multi-value keys
-        // (e.g. two platforms) count each, which is honest -- they ARE active filters.
-        var SKIP = { page: 1, view: 1, sort: 1, query: 1 };
+        // Active CONTENT-filter count for the toggle badge: every set value except display/sort/search state
+        // and the platform/regions SCOPE selectors (platform always carries the PS5/PS4 default from the
+        // dispatch redirect, so counting it would show a permanent "2" + auto-open the drawer on every
+        // landing). Range sliders parked at default and the letter "All" option are skipped too.
+        var SKIP = { page: 1, view: 1, sort: 1, query: 1, platform: 1, regions: 1 };
         function activeCount() {
             var n = 0;
             new FormData(form).forEach(function (value, key) {

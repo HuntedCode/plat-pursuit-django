@@ -83,6 +83,58 @@
 .pp-gbrowse__note a { color: var(--pp-primary); text-decoration: none; }
 .pp-gbrowse__note a:hover { text-decoration: underline; }
 
+/* ---- Shared browse-filter CONTROLS (also used by the tag / profile / flagged browse drawers) ----
+   Rebuilt to the house style; kept here (globally bundled) since these partials are cross-page. */
+
+/* Community-flag split control [ + Label - ]. Fully CSS-:has-driven off the two hidden checkboxes, so
+   browse-filters.js only flips the checkboxes + submits -- no class juggling. Colour per data-flag-color. */
+.pp-flag {
+    display: inline-flex; align-items: stretch; border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--pp-border); --flag-c: var(--pp-error);
+}
+.pp-flag[data-flag-color="warning"] { --flag-c: var(--pp-warning); }
+.pp-flag__btn {
+    padding: 3px 9px; font-size: 13px; font-weight: 800; line-height: 1.5;
+    color: var(--pp-text-mute); background: var(--pp-bg-2); border: none; cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+}
+.pp-flag__btn:hover { color: var(--pp-text); background: color-mix(in oklab, var(--pp-text) 6%, var(--pp-bg-2)); }
+.pp-flag__btn:focus-visible { outline: 2px solid var(--flag-c); outline-offset: -2px; }
+.pp-flag__lbl {
+    display: inline-flex; align-items: center; padding: 3px 10px; font-size: 12px; white-space: nowrap;
+    color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent);
+    border-left: 1px solid var(--pp-border); border-right: 1px solid var(--pp-border);
+}
+.pp-flag:has(input[name^="show_"]:checked) .pp-flag__btn--show { background: var(--flag-c); color: #08111c; }
+.pp-flag:has(input[name^="hide_"]:checked) .pp-flag__btn--hide {
+    color: var(--flag-c);
+    background: color-mix(in oklab, var(--flag-c) 20%, transparent);
+    box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--flag-c) 55%, transparent);
+}
+.pp-flag:has(input[name^="hide_"]:checked) .pp-flag__lbl { text-decoration: line-through; color: var(--pp-text-mute); }
+
+/* Badge-picker trigger + clear (opens the shared badge modal). Dashed when empty, solid violet-tint once a
+   badge is chosen (.is-selected, toggled by browse-filters.js). */
+.pp-badgepick {
+    display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; cursor: pointer; user-select: none;
+    border: 1px dashed var(--pp-border); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent);
+    color: var(--pp-text-mute); transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.pp-badgepick:hover { border-color: color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border)); color: var(--pp-text); }
+.pp-badgepick svg { width: 13px; height: 13px; flex-shrink: 0; }
+.pp-badgepick.is-selected {
+    border-style: solid; border-color: color-mix(in oklab, var(--pp-secondary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-secondary) 18%, transparent); color: var(--pp-text);
+}
+.pp-badgepick__clear {
+    display: inline-flex; align-items: center; justify-content: center; padding: 5px; border-radius: 999px;
+    border: 1px solid var(--pp-border); background: var(--pp-bg-2); color: var(--pp-text-mute); cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+.pp-badgepick__clear:hover { border-color: color-mix(in oklab, var(--pp-error) 45%, var(--pp-border)); color: var(--pp-error); }
+.pp-badgepick__clear svg { width: 13px; height: 13px; }
+
 /* Results grid: 3:4 cover cards. Auto-responsive columns (denser than the badge wall since cards are taller). */
 .pp-gbrowse__grid {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
