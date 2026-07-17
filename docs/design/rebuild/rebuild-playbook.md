@@ -100,9 +100,12 @@ Career/Collection/Badges headers). Widely adopted already.
 
 ### 3. Tab groups = segmented switcher (ONE treatment site-wide)
 Bordered container + transparent chips, tinted-flat active state, an icon per chip, **right-aligned** in a
-`flex items-center justify-end` row. Implementations: `.pp-vtoggle` (Badges), `.pp-collection__views`
-(Collection), `.lab-views` (Career) — *visually* one treatment, three class systems (unifying them is a
-deferred lane). Old pill tabs are retired. → design-system.md (Tab Group / View Switcher).
+`flex items-center justify-end` row. **One component: `.pp-switch` / `.pp-switch__chip`**
+(`components/switcher.css`) — used by Career, Collection, and Badges (unified 2026-07; the old
+`.lab-view-tab` / `.pp-collection__view-chip` / `.pp-vtoggle` are gone). Mini-bar copies wrap each chip's
+label in `.pp-switch__lbl` so it collapses to icon-only on mobile. Secondary segmented controls with their
+own look stay separate: Career's `.jlayout__btn` (rounded pill), the Case's `.pp-case__set-tab`
+(completion-ring filter chips). Old pill tabs retired. → design-system.md (Tab Group / View Switcher).
 
 **Shared behavior (use the helpers, don't re-hand-roll):** wire every switcher with
 `PlatPursuit.wireTablist(tabs, {onSelect})` for the WAI-ARIA keyboard model (roving `tabindex` +

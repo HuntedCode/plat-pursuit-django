@@ -201,24 +201,27 @@ Every rebuilt page should have a header card that establishes context and houses
 
 ### Tab Group / View Switcher (site-wide standard, 2026-07)
 
-**The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Case/Gallery, Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses this SEGMENTED style: one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end mt-5` row -- `mt-5` is the standard top gap above the switcher (it sits below the page-header card / whatever chrome precedes it). Applied site-wide: Career, badges (Series/Gallery), Collection. Retires the old free-standing per-pill style. Live examples: `.pp-collection__views` (Collection), `.pp-vtoggle` (Browse), `.lab-views`/`.lab-view-tab` (Career -- the reference, `static/css/components/elements.css`).
+**The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Case/Gallery, Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses the shared **`.pp-switch`** component (`static/css/components/switcher.css`): one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end mt-5` row -- `mt-5` is the standard top gap above the switcher (it sits below the page-header card / whatever chrome precedes it). Used site-wide: Career, Badges (Series/Gallery), Collection. Unified 2026-07 from three near-identical class systems (`.lab-view-tab` / `.pp-collection__view-chip` / `.pp-vtoggle`, all retired).
 
 ```html
 <div class="flex items-center justify-end mt-5">
-  <div class="lab-views" role="tablist" aria-label="...">   <!-- segmented container -->
-    <button class="lab-view-tab is-active" role="tab" aria-selected="true">
+  <div class="pp-switch" role="tablist" aria-label="...">    <!-- segmented container -->
+    <button class="pp-switch__chip is-active" role="tab" aria-selected="true">
       <svg>...</svg>Tab A                                    <!-- ~15px Lucide icon + label -->
     </button>
-    <button class="lab-view-tab" role="tab" aria-selected="false"><svg>...</svg>Tab B</button>
+    <button class="pp-switch__chip" role="tab" aria-selected="false"><svg>...</svg>Tab B</button>
   </div>
 </div>
 ```
 
-- **Container**: `display:inline-flex; gap:6px; padding:4px; border-radius:8px; border:1px solid var(--pp-border); background:color-mix(in oklab, var(--pp-bg-1) 60%, transparent)`.
-- **Chip**: transparent at rest (`color:var(--pp-text-mute); background:transparent; border:1px solid transparent; border-radius:5px; padding:6px 14px`, `7px 18px` at `md:`); hover -> `color:var(--pp-text)`.
-- **Active chip**: `color:var(--pp-text); font-weight:700; background:color-mix(in oklab, var(--pp-primary) 16%, transparent); border-color:color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border))`. Settles FLAT -- no resting glow. An optional one-time activation bloom (Career's `lab-view--ignite`) is fine; it must fade to flat.
-- **Icon**: a ~15px Lucide stroke glyph before the label (`.lab-view-tab svg { width:15px; height:15px; flex:none }`). A trailing count badge (e.g. claimable count) sits after the label.
+- **Container `.pp-switch`**: `inline-flex; flex-wrap:wrap; gap:6px; padding:4px; border-radius:8px; border:1px solid var(--pp-border); background:color-mix(in oklab, var(--pp-bg-1) 60%, transparent)`.
+- **Chip `.pp-switch__chip`**: transparent at rest (`color:var(--pp-text-mute); border:1px solid transparent; border-radius:5px; padding:6px 14px`, `7px 18px` at `md:`); `text-decoration:none` (works for `<a>` chips); hover -> `color:var(--pp-text)`; `:active` presses `translateY(1px)`.
+- **Active chip `.is-active`**: `color:var(--pp-text); font-weight:700; background:color-mix(in oklab, var(--pp-primary) 16%, transparent); border-color:color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border))`. Settles FLAT -- no resting glow. The one-time activation bloom (`.pp-tab-ignite` via `PlatPursuit.igniteTab`) fades to flat.
+- **Icon**: a ~15px Lucide stroke glyph before the label. A trailing count badge (e.g. Career's claimable count) sits after the label.
+- **Mini-bar copies**: wrap each chip's label in `<span class="pp-switch__lbl">` so it collapses to icon-only on mobile (`.pp-minibar__controls .pp-switch__lbl { display:none }`).
+- **Behavior**: wire with `PlatPursuit.wireTablist(chips, {onSelect})` (roving tabindex + Arrow/Home/End; `{manual:true}` for HTMX `<a>` chips). Directional panel slide via `PlatPursuit.slideViewIn`. → [js-utilities](js-utilities.md), [motion-patterns](motion-patterns.md).
 - **A11y**: `role="tablist"` on the container, `role="tab"` + `aria-selected` on chips, `aria-controls` -> the panel; `:focus-visible` ring in `--pp-primary`.
+- **Distinct siblings (NOT `.pp-switch`)**: Career's `.jlayout__btn` (rounded-pill Dossier/Sheet toggle) and the Case's `.pp-case__set-tab` (completion-ring set filters) are their own components.
 
 ### Filter/Search Toolbar Card
 

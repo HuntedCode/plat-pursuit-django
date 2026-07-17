@@ -6,8 +6,8 @@
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
     {% comment %} Sticky mini-bar: pursuer identity + the view tabs, re-surfaced when the header + tab strip
-    scroll away. The tabs are duplicates of the real .lab-view-tab set -- the view-toggle JS captures every
-    .lab-view-tab at init and syncs .is-active across all of them, so tapping one here switches the panel in
+    scroll away. The tabs are duplicates of the real .pp-switch__chip set -- the view-toggle JS captures every
+    .pp-switch__chip at init and syncs .is-active across all of them, so tapping one here switches the panel in
     place. Sentinel sits just after the real tab strip below. {% endcomment %}
     {% if career and hero %}
     <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#career-minibar-sentinel">
@@ -17,12 +17,12 @@
                 <span class="pp-minibar__title">{{ hero.pursuer_name }}</span>
             </span>
             {% comment %} Plain buttons, NOT a second role=tablist -- the view-toggle JS still drives them via the shared
-               .lab-view-tab class, and a duplicate tablist landmark (alongside the real strip below) would
+               .pp-switch__chip class, and a duplicate tablist landmark (alongside the real strip below) would
                confuse a screen reader once the bar is pinned. {% endcomment %}
             <div class="pp-minibar__controls">
-                <button type="button" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" aria-label="Jobs view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span>Jobs</span></button>
-                <button type="button" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" aria-label="Radar view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Radar</span></button>
-                <button type="button" class="lab-view-tab {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" aria-label="Contracts view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg><span>Contracts</span>{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
+                <button type="button" class="pp-switch__chip {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" aria-label="Jobs view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span class="pp-switch__lbl">Jobs</span></button>
+                <button type="button" class="pp-switch__chip {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" aria-label="Radar view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span class="pp-switch__lbl">Radar</span></button>
+                <button type="button" class="pp-switch__chip {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" aria-label="Contracts view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg><span class="pp-switch__lbl">Contracts</span>{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
             </div>
         </div>
     </div>
@@ -182,14 +182,14 @@
     per the site-wide page-structure rule -- mirroring the Collection's free toggle + views. {% endcomment %}
     {# View toggle: Jobs / Radar / Contracts (the merged Contracts board). Right-aligned segmented tabs, like the Collection's. #}
     <div class="flex items-center justify-end mt-5 mb-4">
-        <div class="lab-views" role="tablist" aria-label="Career view">
-            <button type="button" id="career-tab-jobs" aria-controls="career-panel-jobs" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}">
+        <div class="pp-switch" role="tablist" aria-label="Career view">
+            <button type="button" id="career-tab-jobs" aria-controls="career-panel-jobs" class="pp-switch__chip {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Jobs
             </button>
-            <button type="button" id="career-tab-radar" aria-controls="career-panel-radar" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}">
+            <button type="button" id="career-tab-radar" aria-controls="career-panel-radar" class="pp-switch__chip {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Radar
             </button>
-            <button type="button" id="career-tab-contracts" aria-controls="career-panel-contracts" class="lab-view-tab {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}">
+            <button type="button" id="career-tab-contracts" aria-controls="career-panel-contracts" class="pp-switch__chip {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>Contracts{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}
             </button>
         </div>
@@ -568,7 +568,7 @@ function ppCountUp(el, dur) {
     }
 
     // Career view toggle: Jobs (default) / Radar / Contracts.
-    var viewTabs = document.querySelectorAll('.lab-view-tab');
+    var viewTabs = document.querySelectorAll('.pp-switch__chip');
     var views = document.querySelectorAll('.lab-view');
     var VIEW_ORDER = ['jobs', 'radar', 'contracts'];
     function currentView() {
@@ -609,7 +609,7 @@ function ppCountUp(el, dur) {
     // Click + Arrow/Home/End keyboard nav + roving tabindex, all via the shared tablist helper.
     tablist = PlatPursuit.wireTablist(viewTabs, { onSelect: function (t) { showView(t.dataset.view); } });
     // A one-shot ignite on load so the active pill "comes alive".
-    var initTab = document.querySelector('.lab-view-tab.is-active');
+    var initTab = document.querySelector('.pp-switch__chip.is-active');
     if (initTab) { setTimeout(function () { if (initTab.classList.contains('is-active')) { PlatPursuit.igniteTab(initTab); } }, 260); }
 
     // Rail / deep-link jumps to a specific Career view without a reload.
@@ -622,7 +622,7 @@ function ppCountUp(el, dur) {
             // Scroll the Career view up under the sticky chrome (scroll-padding-top handles the offset)
             // so the toolbar + the now-filtered board come into view -- 'nearest' barely moved since the
             // banner sits right above the tabs.
-            var tabs = document.querySelector('.lab-views');
+            var tabs = document.querySelector('.pp-switch');
             if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     });
@@ -1594,7 +1594,7 @@ function ppCountUp(el, dur) {
 })();
 
 // Sticky mini-bar: init on DOMContentLoaded so main.js has already published --sticky-top (chrome height).
-// The bar's tab duplicates are wired by the view-toggle above (it captured every .lab-view-tab at init).
+// The bar's tab duplicates are wired by the view-toggle above (it captured every .pp-switch__chip at init).
 document.addEventListener('DOMContentLoaded', function () {
     if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }
 });

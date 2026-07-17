@@ -54,7 +54,7 @@ def test_series_renders_tile_with_tier_ladder(client):
     assert html.count('pp-med__stage') == 1         # ONE medallion per tile (retinted on swap), not one per tier
     assert 'earned' in html                         # type . N earned line
     assert '/badges/rs-series/' in html
-    assert 'pp-vtoggle' in html                     # shared Series|Gallery toggle present
+    assert 'pp-switch' in html                      # shared Series|Gallery toggle present (unified switcher)
 
 
 def test_series_tile_emits_tier_name_for_css_accent(client):
@@ -186,7 +186,7 @@ def test_series_xhr_returns_bare_tiles_partial(client):
     html = resp.content.decode()
 
     assert 'pp-scard' in html
-    assert 'pp-vtoggle' not in html                 # bare partial, no shared chrome
+    assert 'pp-switch' not in html                  # bare partial, no shared chrome (unified switcher)
     assert 'id="filter-form"' not in html           # ... and no toolbar form
 
 

@@ -355,17 +355,12 @@
 .pp-minibar__filters svg { width: 13px; height: 13px; }
 @media (max-width: 767px) { .pp-minibar__filters .pp-minibar__flbl { display: none; } }
 
-/* The page switcher, condensed for the bar: shrink whatever chip/tab set the page dropped in. */
-.pp-minibar__controls .lab-view-tab,
-.pp-minibar__controls .pp-collection__view-chip,
-.pp-minibar__controls .pp-vtoggle__chip { padding: 5px 10px; font-size: 0.74rem; }
-.pp-minibar__controls .lab-view-tab svg,
-.pp-minibar__controls .pp-collection__view-chip svg,
-.pp-minibar__controls .pp-vtoggle__chip svg { width: 14px; height: 14px; }
+/* The page switcher (the shared .pp-switch), condensed for the bar: shrink the chips it dropped in. */
+.pp-minibar__controls .pp-switch__chip { padding: 5px 10px; font-size: 0.74rem; }
+.pp-minibar__controls .pp-switch__chip svg { width: 14px; height: 14px; }
 @media (max-width: 767px) {
     /* Icon-only switcher on mobile so the bar never overflows. */
-    .pp-minibar__controls .lab-view-tab span:not([class]),
-    .pp-minibar__controls .pp-vtoggle__chip__lbl { display: none; }
+    .pp-minibar__controls .pp-switch__lbl { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

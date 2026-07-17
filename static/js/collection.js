@@ -14,7 +14,7 @@
 
     function initViewToggle(root) {
         var views = Array.prototype.slice.call(root.querySelectorAll('.pp-collection__view'));
-        var chips = Array.prototype.slice.call(root.querySelectorAll('.pp-collection__view-chip'));
+        var chips = Array.prototype.slice.call(root.querySelectorAll('.pp-switch__chip'));
         if (!views.length || !chips.length) return;
 
         // The Gallery's URL params -- mirrored in the URL only while the Gallery is active, and stripped
@@ -651,7 +651,7 @@
         root.querySelectorAll('[data-tier-jump]').forEach(function (el) {
             el.addEventListener('click', function () {
                 var tier = el.getAttribute('data-tier-jump');
-                var galleryChip = root.querySelector('.pp-collection__view-chip[data-collection-view="gallery"]');
+                var galleryChip = root.querySelector('.pp-switch__chip[data-collection-view="gallery"]');
                 if (galleryChip) galleryChip.click();
                 var filterChip = root.querySelector('.pp-gallery [data-filter-tier="' + tier + '"]');
                 if (filterChip) filterChip.click();

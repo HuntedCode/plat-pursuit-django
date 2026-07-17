@@ -69,45 +69,8 @@
 }
 @keyframes pp-coll-fill { from { width: 0; } }
 
-/* ── View toggle (Binder vs List) -- the Surface-level switch ──────── */
-.pp-collection__views {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(14, 16, 22, 0.6);
-}
-.pp-collection__view-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 14px;
-    border-radius: 5px;
-    border: 1px solid transparent;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    cursor: pointer;
-    transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
-}
-.pp-collection__view-chip:hover { color: rgba(255, 255, 255, 0.9); }
-.pp-collection__view-chip.is-active {
-    background: rgba(63, 205, 220, 0.14);
-    border-color: rgba(63, 205, 220, 0.5);
-    color: rgba(180, 230, 245, 1);
-}
-
+/* View toggle (Case / Gallery) is now the shared .pp-switch component (components/switcher.css). */
 .pp-collection__view[hidden] { display: none; }
 /* Leave room for the sticky site chrome when the header's tier stats scroll-jump into the Gallery. */
 .pp-collection__view { scroll-margin-top: calc(var(--sticky-top, 0px) + 14px); }
 
-/* Keyboard focus: a visible cyan ring on the view toggle (the dark substrate swallows the browser
- * default). The Gallery's own toolbar controls carry their focus rings in collection-gallery.css. */
-.pp-collection__view-chip:focus-visible {
-    outline: 2px solid var(--pp-list-accent);
-    outline-offset: 2px;
-}

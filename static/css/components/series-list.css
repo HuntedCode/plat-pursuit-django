@@ -4,26 +4,7 @@
  * Filters toggle + advanced panel) verbatim; adds the per-series tier-ladder TILE (.pp-scard).
  * ============================================================ */
 
-/* View toggle (Series | Gallery): a segmented pill, mirroring the Collection's Case/Gallery toggle. */
-.pp-vtoggle {
-    display: inline-flex; align-items: center; gap: 6px; padding: 4px; border-radius: 8px;
-    border: 1px solid var(--pp-border); background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent);
-}
-.pp-vtoggle__chip {
-    display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 5px;
-    border: 1px solid transparent; background: transparent; color: var(--pp-text-mute);
-    font-size: 12px; font-weight: 600; letter-spacing: 0.03em; text-decoration: none;
-    transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
-}
-.pp-vtoggle__chip:hover { color: var(--pp-text); }
-.pp-vtoggle__chip.is-active {
-    background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
-    border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
-    color: var(--pp-text);
-}
-.pp-vtoggle__chip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-.pp-vtoggle__chip svg { width: 15px; height: 15px; flex: none; }
-@media (min-width: 768px) { .pp-vtoggle__chip { padding: 7px 18px; } }
+/* View toggle (Series | Gallery) is now the shared .pp-switch component (components/switcher.css). */
 
 /* ── "How badges work": shown by default in the page header (new-user teaching). A short intro over a
  * four-rung tier ladder; each rung carries its requirement (platinum vs 100%) and platform scope. ── */

@@ -3,6 +3,7 @@
 @import "./components/buttons.css";
 @import "./components/chrome.css";
 @import "./components/motion.css";
+@import "./components/switcher.css";
 @import "./components/frame.css";
 @import "./components/badge-medallion.css";
 @import "./components/tally.css";

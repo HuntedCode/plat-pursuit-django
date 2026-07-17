@@ -30,19 +30,8 @@
     --rank-ascendant:  #e8f1ff;
 }
 
-/* ---- Lab view toggle (Table / Radar) ---- */
-/* Primary view switcher (Jobs / Radar / Contracts) -- the SEGMENTED style shared with the Collection's
-   Case/Gallery toggle + the Browse view toggle: one bordered container, transparent chips, tinted active. */
-.lab-views { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 4px; border-radius: 8px; border: 1px solid var(--pp-border); background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent); }
-.lab-view-tab { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.03em; cursor: pointer; color: var(--pp-text-mute); background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 6px 14px; transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.15s ease, transform 0.12s ease; }
-.lab-view-tab:hover { color: var(--pp-text); }
-.lab-view-tab:active { transform: translateY(1px); }
-.lab-view-tab.is-active { color: var(--pp-text); font-weight: 700; background: color-mix(in oklab, var(--pp-primary) 16%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
-.lab-view-tab:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-.lab-view-tab svg { width: 15px; height: 15px; flex: none; }
-/* Tab "ignite" (the active-pill glow bloom) is now the shared .pp-tab-ignite in components/motion.css,
-   applied by PlatPursuit.igniteTab() across every rebuilt switcher. */
-
+/* The Career view switcher is now the shared .pp-switch component (components/switcher.css); its keyboard
+   model + ignite + directional slide are the shared PlatPursuit helpers (js-utilities / motion.css). */
 .lab-view[hidden] { display: none; }
 /* Panel cross-fade (the incoming view's directional slide) is now the shared .pp-view-in-* primitive
    in components/motion.css, driven by PlatPursuit.slideViewIn(). */
@@ -546,7 +535,6 @@
 .rp-adv__label { flex: 0 0 100%; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
 /* Desktop restores the inline toolbar layout. */
 @media (min-width: 768px) {
-    .lab-view-tab { padding: 7px 18px; }
     .rp-bar .rp-search { flex: 1 1 240px; }
     .rp-bar__end { flex: 0 0 auto; margin-left: auto; }
     .rp-bar__end .rp-sort, .rp-bar__end .rp-sort__field { flex: 0 0 auto; }
