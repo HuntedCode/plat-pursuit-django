@@ -615,6 +615,8 @@
 
     /* Stack the dots over the pill, right-aligned, so the title reclaims the horizontal band. */
     .bd-stage__meta { flex-direction: column; align-items: flex-end; gap: 5px; }
+    /* Dial the X/Y pill down a notch -- stacked on its own it reads large at phone sizes. */
+    .bd-stage__pill { font-size: 0.64rem; padding: 2px 8px; }
 }
 
 /* Bulk "collapse/expand all" toggle (a quiet text button). */
