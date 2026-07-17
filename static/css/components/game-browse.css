@@ -1,0 +1,103 @@
+/* ============================================================
+ * BROWSE GAMES (/games/) -- from-scratch rebuild of the site's busiest browse page.
+ * Reuses the shared browse-toolbar primitives (.pp-bgal__bar / __search / __advbtn / __advanced / __chip,
+ * globally bundled from browse-gallery.css) and the .pp-gallery__select sort control; adds the games-only
+ * bits here: the page wrapper, the toolbar-quieting scope, the (large) grouped filter panel, and the
+ * "I'm Feeling Lucky" control. The cover CARD lives in game-card.css (it's shared with other browse pages).
+ * ============================================================ */
+.pp-gbrowse { display: flex; flex-direction: column; }
+
+/* Toolbar is chrome -> it sits BACK: keep the shared .pp-toolbar-card fill but soften the lift so the card
+   grid below owns the pop (mirrors the badge/Contracts toolbars). Scoped to .pp-gbrowse so only this
+   toolbar quiets; wins the cascade because component CSS is unlayered and .pp-toolbar-card is @layer base. */
+.pp-gbrowse .pp-gbrowse__toolbar { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22); }
+.pp-gbrowse__toolbar { padding: 12px 14px; margin-bottom: 14px; }
+
+/* Primary bar: search (grows) + sort + Lucky + a Filters toggle. Wraps on very narrow phones instead of
+   overflowing. .pp-bgal__bar itself is nowrap, so we set our own wrapping row here. */
+.pp-gbrowse__bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pp-gbrowse__bar > .pp-bgal__search { flex: 1 1 200px; }
+.pp-gbrowse__sort { flex: 0 1 auto; }
+
+/* "I'm Feeling Lucky" -- a small accent-tinted icon button (charm feature: random game matching filters).
+   Shares the .pp-bgal__advbtn footprint but leans amber so it reads as a distinct, playful action. */
+.pp-gbrowse__lucky {
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: 9px; flex: 0 0 auto;
+    background: color-mix(in oklab, var(--pp-accent) 12%, var(--pp-bg-2));
+    border: 1px solid color-mix(in oklab, var(--pp-accent) 30%, var(--pp-border));
+    color: var(--pp-accent); font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.pp-gbrowse__lucky:hover { border-color: color-mix(in oklab, var(--pp-accent) 55%, var(--pp-border)); background: color-mix(in oklab, var(--pp-accent) 18%, var(--pp-bg-2)); }
+.pp-gbrowse__lucky > svg { width: 16px; height: 16px; }
+.pp-gbrowse__lucky__lbl { white-space: nowrap; }
+@media (max-width: 640px) { .pp-gbrowse__lucky__lbl { display: none; } }   /* icon-only on phones */
+
+/* ---- Advanced filter panel (the heaviest on the site: 8+ groups + sliders + flag controls) ----
+   Grouped sections stacked in the collapsible .pp-bgal__advanced; each section = an uppercase icon label
+   over its controls, divided by a hairline from the one above. */
+.pp-gbrowse__fsec { padding-top: 13px; margin-top: 13px; border-top: 1px solid var(--pp-divider); }
+.pp-gbrowse__fsec:first-child { padding-top: 0; margin-top: 0; border-top: none; }
+.pp-gbrowse__flabel {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 9px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute);
+}
+.pp-gbrowse__flabel svg { width: 13px; height: 13px; flex-shrink: 0; }
+.pp-gbrowse__fchips { display: flex; flex-wrap: wrap; gap: 7px; }
+/* Genre/Theme lists can be long -- cap the height and let them scroll inside the section. */
+.pp-gbrowse__fchips--scroll { max-height: 128px; overflow-y: auto; padding: 2px; margin: -2px; }
+/* Letter row: horizontal scroll on phones (A-Z is a lot of chips), wraps on tablet+. */
+.pp-gbrowse__fchips--letters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+@media (min-width: 768px) { .pp-gbrowse__fchips--letters { flex-wrap: wrap; overflow-x: visible; } }
+/* Two range-slider groups (Ratings + Time) side by side on wider screens. */
+.pp-gbrowse__ftwo { display: grid; grid-template-columns: 1fr; gap: 13px 26px; }
+@media (min-width: 768px) { .pp-gbrowse__ftwo { grid-template-columns: 1fr 1fr; align-items: start; } }
+
+/* Chip accent variants (base chip = .pp-bgal__chip, cyan-checked). Genres/themes lean secondary (violet),
+   the shovelware exclude leans warning -- semantic meaning, not decoration (playbook colour restraint). */
+.pp-bgal__chip--sec:has(input:checked) {
+    border-color: color-mix(in oklab, var(--pp-secondary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-secondary) 18%, transparent);
+}
+.pp-bgal__chip--warn:has(input:checked) {
+    border-color: color-mix(in oklab, var(--pp-warning) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-warning) 18%, transparent);
+}
+/* Chip with a leading glyph (Platinum Only, Hide Shovelware, In a Badge). */
+.pp-bgal__chip svg { width: 13px; height: 13px; margin-right: 5px; flex-shrink: 0; }
+
+/* Panel footer: reset / save-defaults / clear-defaults, then the IGDB attribution note. */
+.pp-gbrowse__acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pp-gbrowse__act {
+    display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px;
+    border: 1px solid var(--pp-border); background: var(--pp-bg-2); color: var(--pp-text-mute);
+    font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.pp-gbrowse__act:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); color: var(--pp-text); }
+.pp-gbrowse__act svg { width: 13px; height: 13px; }
+.pp-gbrowse__act--save { color: var(--pp-accent); border-color: color-mix(in oklab, var(--pp-accent) 32%, var(--pp-border)); background: none; }
+.pp-gbrowse__act--save:hover { border-color: color-mix(in oklab, var(--pp-accent) 55%, var(--pp-border)); color: var(--pp-accent); }
+.pp-gbrowse__act--danger:hover { border-color: color-mix(in oklab, var(--pp-error) 55%, var(--pp-border)); color: var(--pp-error); }
+.pp-gbrowse__note { margin-top: 12px; font-size: 10.5px; line-height: 1.5; color: var(--pp-text-dim); font-style: italic; padding-right: 4px; }
+.pp-gbrowse__note a { color: var(--pp-primary); text-decoration: none; }
+.pp-gbrowse__note a:hover { text-decoration: underline; }
+
+/* Results grid: 3:4 cover cards. Auto-responsive columns (denser than the badge wall since cards are taller). */
+.pp-gbrowse__grid {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+}
+@media (min-width: 640px)  { .pp-gbrowse__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .pp-gbrowse__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; } }
+@media (min-width: 1280px) { .pp-gbrowse__grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (min-width: 1536px) { .pp-gbrowse__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+
+/* Infinite-scroll sentinel + loading spinner (shared markup with the badge wall). */
+.pp-gbrowse__loading { display: none; justify-content: center; padding: 18px 0; }
+.pp-gbrowse__loading.is-active { display: flex; }
+.pp-gbrowse__spinner {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 3px solid var(--pp-border); border-top-color: var(--pp-primary);
+}
+@media (prefers-reduced-motion: no-preference) { .pp-gbrowse__spinner { animation: ppGbrowseSpin 0.7s linear infinite; } }
+@keyframes ppGbrowseSpin { to { transform: rotate(360deg); } }
