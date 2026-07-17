@@ -755,6 +755,101 @@ class StageCardsWorkshopView(TemplateView):
         return ctx
 
 
+class GameCardWorkshopView(TemplateView):
+    """Design workshop (/design/game-card/): the from-scratch BROWSE game card. The old card ported six
+    dense sections; this simplifies the stat block (a single plat + total-trophy signal + rating/diff,
+    dropping the 4-cell BRZ/SLV/GLD/PLT grid) to make room for the new Pursuer hooks -- the BADGES a game
+    belongs to (capped, since a game can be in many) + its home CONTRACT (jobs/XP). Renders REAL games in
+    two BADGE treatments to compare: A = lightweight indicator (count + series-name chips), B = mini
+    medallions. Real live contracts; per-game states fabricated so every look renders. Not a product surface.
+    """
+    template_name = 'design/game_card_workshop.html'
+    BADGE_CAP = 3
+
+    def get_context_data(self, **kwargs):
+        from django.db.models import Count
+        from trophies.models import Game, Badge, Stage
+        from trophies.services.frame_service import build_badge_frame
+        from trophies.util_modules.constants import CONTRACT_XP_TOTAL
+        ctx = super().get_context_data(**kwargs)
+
+        # Fabricated per-game states + community ratings (no user here) so every card look renders.
+        _states = [
+            {'progress': 100, 'has_plat': True},
+            {'progress': 72, 'has_plat': False},
+            {'progress': 0, 'has_plat': False},
+            {'progress': 45, 'has_plat': False},
+            {'progress': 100, 'has_plat': False},
+        ]
+        _ratings = [(4.6, 3.2), (3.9, 6.1), (None, None), (4.2, 4.8), (4.8, 8.5)]
+
+        # Representative games: the ones in the MOST badge series first (to exercise the cap + "+N"),
+        # preferring those that also carry a contract, plus one plain game (no badges, no contract).
+        candidates = list(
+            Game.objects.select_related(
+                'concept', 'concept__igdb_match', 'concept__contract_membership__contract',
+            )
+            .annotate(n_series=Count('concept__stages__series_slug', distinct=True))
+            .filter(n_series__gte=1)
+            .order_by('-n_series')[:5]
+        )
+        plain = (
+            Game.objects.select_related('concept', 'concept__igdb_match')
+            .filter(concept__stages__isnull=True, concept__contract_membership__isnull=True)
+            .exclude(id__in=[g.id for g in candidates]).first()
+        )
+        if plain:
+            candidates.append(plain)
+
+        cards = []
+        for i, g in enumerate(candidates):
+            series_slugs = list(
+                Stage.objects.filter(concepts=g.concept)
+                .exclude(series_slug__isnull=True).exclude(series_slug='')
+                .values_list('series_slug', flat=True).distinct()
+            )
+            badges = list(
+                Badge.objects.filter(series_slug__in=series_slugs, tier=1, is_live=True)
+                .select_related(
+                    'franchise', 'developer', 'funded_by',
+                    'base_badge', 'base_badge__franchise', 'base_badge__developer', 'base_badge__funded_by',
+                )
+                .order_by('name')
+            )
+            frames = []
+            for b in badges[:self.BADGE_CAP]:
+                try:
+                    frames.append(build_badge_frame(b, showcase=True))
+                except Exception:
+                    pass  # workshop: a badge that can't build a frame is skipped, not fatal
+
+            cm = getattr(g.concept, 'contract_membership', None)
+            ct = cm.contract if (cm and cm.contract.is_live) else None
+            dt = g.defined_trophies or {}
+            total_tr = sum(int(dt.get(k, 0) or 0) for k in ('bronze', 'silver', 'gold', 'platinum'))
+            st = _states[i % len(_states)]
+            rt = _ratings[i % len(_ratings)]
+            cards.append({
+                'game': g,
+                'progress': st['progress'],
+                'has_plat': st['has_plat'],
+                'plat_available': bool(dt.get('platinum')),
+                'total_trophies': total_tr,
+                'rating': rt[0],
+                'diff': rt[1],
+                'badges': badges[:self.BADGE_CAP],
+                'frames': frames,
+                'badge_total': len(badges),
+                'badge_more': max(0, len(badges) - self.BADGE_CAP),
+                'contract': ct,
+                'contract_xp': (ct.xp_total_override or CONTRACT_XP_TOTAL) if ct else 0,
+                'jobs': list(ct.jobs.all()) if ct else [],
+            })
+        ctx['cards'] = cards
+        ctx['badge_cap'] = self.BADGE_CAP
+        return ctx
+
+
 class BadgeJourneyWorkshopView(TemplateView):
     """Design workshop (/design/badge-journey/): how should the LADDER -- the connective spine that threads
     the badge-detail stages into a climb -- look? The production spine is a barely-there grey rule with a

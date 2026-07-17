@@ -1,0 +1,57 @@
+{% load static %}
+{% comment %} Workshop browse-game card (from scratch). Simplified stat block + the two NEW Pursuer hooks:
+badge membership + home contract. `badge_style` = 'light' (count + series-name chips) or 'med' (mini
+medallions). The card is a container; cover/body link to the game in production, contract band is its own
+link. {% endcomment %}
+<div class="gcw-card">
+    <div class="gcw-card__cover{% if c.progress == 0 %} is-dim{% endif %}">
+        <img src="{{ c.game.display_image_url }}" alt="{{ c.game.title_name }}" loading="lazy">
+        {% if c.progress == 100 and c.has_plat %}
+        <span class="gcw-flag gcw-flag--plat" title="Platinum">{% include 'partials/icons/trophy_cup.html' with color='#06140d' size='w-3.5 h-3.5' %}</span>
+        {% elif c.progress == 100 %}
+        <span class="gcw-flag gcw-flag--done" title="100%"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+        {% endif %}
+        {% if c.progress > 0 %}<span class="gcw-card__bar"><span style="width: {{ c.progress }}%"></span></span>{% endif %}
+    </div>
+
+    <div class="gcw-card__body">
+        <h3 class="gcw-card__title">{{ c.game.title_name }}</h3>
+
+        {# Simplified facts: community rating + a single trophy-total signal + plat availability. #}
+        <div class="gcw-card__facts">
+            {% if c.rating %}
+            <span class="gcw-fact"><svg class="star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>{{ c.rating }}</span>
+            {% else %}
+            <span class="gcw-fact gcw-fact--none"><svg class="star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>&mdash;</span>
+            {% endif %}
+            <span class="gcw-fact">{{ c.total_trophies }} trophies</span>
+            {% if c.plat_available %}<span class="gcw-fact{% if c.has_plat %} is-earned{% endif %}">Plat</span>{% endif %}
+        </div>
+
+        {# ── Badge band (the new hook) ── #}
+        {% if c.badges %}
+            {% if badge_style == 'med' %}
+            <div class="gcw-badges gcw-badges--med" title="In {{ c.badge_total }} badge{{ c.badge_total|pluralize }}">
+                {% for f in c.frames %}{% include 'components/badge_medallion.html' with frame=f no_id=True %}{% endfor %}
+                {% if c.badge_more %}<span class="gcw-more">+{{ c.badge_more }}</span>{% endif %}
+            </div>
+            {% else %}
+            <div class="gcw-badges gcw-badges--light" title="In {{ c.badge_total }} badge{{ c.badge_total|pluralize }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+                <span class="gcw-badges__n">{{ c.badge_total }}</span>
+                <span class="gcw-badges__names">{% for b in c.badges %}{{ b.name }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}{% if c.badge_more %} +{{ c.badge_more }}{% endif %}</span>
+            </div>
+            {% endif %}
+        {% endif %}
+
+        {# ── Contract chip (reuses the stage-cards-workshop treatment) ── #}
+        {% if c.contract %}
+        <a class="gcw-ctr" href="{% url 'contract_modal' c.contract.slug %}" title="Contract: {{ c.contract.name }} &middot; {{ c.contract_xp }} XP">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+            <span class="gcw-ctr__pips">{% for job in c.jobs|slice:":4" %}<span class="gcw-ctr__pip" style="background: {{ job.color|default:'var(--pp-secondary)' }}"></span>{% endfor %}</span>
+            <span class="gcw-ctr__label">{{ c.contract.name }}</span>
+            <span class="gcw-ctr__xp">{{ c.contract_xp }} XP</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
