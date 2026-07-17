@@ -51,6 +51,15 @@ We build **three layouts** per page: mobile, tablet, and desktop. Tailwind class
 - `lg:` values are the desktop experience
 - `sm:` (640px) is available but rarely needed; most layouts jump from mobile to `md:`
 
+**Phone-only refinements (`@media (max-width: 640px)`):** Component CSS (`static/css/components/*.css`)
+occasionally needs a tweak that should apply on phones **but not** tablets/desktop, where the mobile-first
+`min-width` ladder can't express it (a `min-width` rule adds complexity going up; this removes it going
+down). For those, a hand-written `@media (max-width: 640px)` block is the sanctioned escape hatch. It is
+desktop-first by nature (overrides the base rule below the phone cutoff), so keep it to genuinely
+phone-scoped polish: swipe-to-close modal chrome, the mobile peek scroll cap, collapsing toolbars, and the
+badge-detail stage ladder (slimmer gutter/node + stacked meta). Prefer the mobile-first `md:`/`lg:` ladder
+for layout; reach for `max-width: 640px` only for these phone-only overrides.
+
 ### Legacy Migration Pattern
 
 When converting a page from ZoomScaler to proper responsive:
