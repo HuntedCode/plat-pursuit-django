@@ -188,6 +188,11 @@ class HtmxListMixin:
     partial_template_name = None  # e.g. 'trophies/partials/game_list/browse_results.html'
 
     def get_template_names(self):
-        if self.request.htmx and self.partial_template_name:
+        # Return the rows-only partial for BOTH django-htmx filter swaps (HX-Request) and plain XHR page
+        # fetches (X-Requested-With) -- the latter is how InfiniteScroller pulls the next ?page. Without the
+        # XHR branch the scroller would receive the full page and never append. Harmless to the pager-based
+        # grids (they only ever send HX-Request today).
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if (self.request.htmx or is_xhr) and self.partial_template_name:
             return [self.partial_template_name]
         return super().get_template_names()

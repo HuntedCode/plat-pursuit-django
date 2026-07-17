@@ -100,3 +100,13 @@
 .pp-gcard-empty svg { width: 40px; height: 40px; margin: 0 auto 8px; opacity: 0.55; }
 .pp-gcard-empty__title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
 .pp-gcard-empty__hint { font-size: 12.5px; margin-top: 2px; }
+
+/* Scroll-reveal: PlatPursuit.staggerReveal drives the per-card WAAPI motion; these rules only hold the
+   hidden/shown states. The .pp-reveal class is added by JS ONLY when it will observe, so cards never stick
+   hidden (and it's motion-gated -- reduced-motion viewers never hide anything). Empty panel fades in on swap
+   via the shared ppResultsEmptyIn keyframe (browse-gallery.css). */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-gcard { opacity: 0; }
+    .pp-reveal .pp-gcard.is-revealed { opacity: 1; }
+    .pp-gcard-empty { animation: ppResultsEmptyIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+}

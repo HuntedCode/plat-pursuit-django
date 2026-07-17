@@ -278,10 +278,15 @@
     {# Badge picker modal (outside the form to avoid interfering with it). #}
     {% include 'partials/browse/badge_picker_modal.html' %}
 
-    {# ── Browse results (HTMX swap target) ── #}
+    {# ── Browse results (HTMX filter-swap target = just the grid) ── #}
     <div id="browse-results">
         {% include 'trophies/partials/game_list/browse_results.html' %}
     </div>
+
+    {# Infinite scroll: the sentinel (observed) + loading spinner sit OUTSIDE #browse-results so they persist
+       across filter swaps; InfiniteScroller re-binds to the fresh #items-grid in htmx:afterSwap. #}
+    <div id="gbrowse-sentinel" class="h-4" aria-hidden="true"></div>
+    <div id="gbrowse-loading" class="pp-gbrowse__loading hidden"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
 </div>
 {% endblock %}
 
@@ -334,13 +339,54 @@
         toggle.addEventListener('click', function () { setPanel(panel.hasAttribute('hidden')); });
         form.addEventListener('change', refreshBadge);
         form.addEventListener('input', refreshBadge);
+
+        // ── Infinite scroll + staggered card reveal (mirrors the Badges gallery). browse-filters.js owns the
+        // filtering; this owns the scroll append, the card reveal, and the filter/sort settle dim. ──
+        var scroller = null, revealHandle = null;
+        function initReveal() {
+            if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
+            var grid = document.getElementById('items-grid');
+            if (!grid || !window.PlatPursuit || !PlatPursuit.staggerReveal) { return; }
+            var ease = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+            revealHandle = PlatPursuit.staggerReveal({
+                grid: grid, cardSelector: '.pp-gcard', step: 22,
+                reveal: function (el, delayMs) {
+                    if (!el.animate) { return; }
+                    el.animate([{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }],
+                               { duration: 460, delay: delayMs, easing: ease, fill: 'backwards' });
+                },
+            });
+        }
+        function initScroller() {
+            if (scroller && scroller.destroy) { scroller.destroy(); scroller = null; }
+            if (!(window.PlatPursuit && PlatPursuit.InfiniteScroller)) { return; }
+            scroller = PlatPursuit.InfiniteScroller.create({
+                gridId: 'items-grid', sentinelId: 'gbrowse-sentinel', loadingId: 'gbrowse-loading',
+                paginateBy: 30, cardSelector: '.pp-gcard',   // matches GamesListView.paginate_by
+                onAppend: function (nodes) { if (revealHandle) { revealHandle.observe(nodes); } },
+            });
+        }
+        // Settle the results the instant a filter/sort changes (spans the slider hx-trigger debounce),
+        // cleared when the fresh grid swaps in. Motion-gated via the shared #browse-results.is-swapping rule.
+        form.addEventListener('change', function () {
+            var r = document.getElementById('browse-results');
+            if (r) { r.classList.add('is-swapping'); }
+        });
         document.body.addEventListener('htmx:afterSwap', function (e) {
             var t = (e.detail && e.detail.target) || e.target;
-            if (t && t.id === 'browse-results') { refreshBadge(); }
+            if (t && t.id === 'browse-results') {
+                t.classList.remove('is-swapping');
+                refreshBadge();
+                initReveal();   // before initScroller so revealHandle exists for its onAppend hook
+                initScroller();
+            }
         });
+
         refreshBadge();
         // Collapse on load (renders open for no-JS); stay open if filters are already applied.
         setPanel(activeCount() > 0);
+        initReveal();
+        initScroller();
     });
     </script>
     {% if user.is_authenticated and user.profile %}

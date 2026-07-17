@@ -144,11 +144,12 @@
 @media (min-width: 1280px) { .pp-gbrowse__grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 @media (min-width: 1536px) { .pp-gbrowse__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 
-/* Infinite-scroll sentinel + loading spinner (shared markup with the badge wall). */
-.pp-gbrowse__loading { display: none; justify-content: center; padding: 18px 0; }
-.pp-gbrowse__loading.is-active { display: flex; }
+/* Infinite-scroll loading spinner. NB: InfiniteScroller toggles the Tailwind `hidden` class on this element,
+   so we must NOT set `display` here (unlayered component CSS beats the layered `.hidden` utility -> it would
+   never hide). Centre via text-align + an inline-block spinner instead of flex. */
+.pp-gbrowse__loading { padding: 18px 0; text-align: center; }
 .pp-gbrowse__spinner {
-    width: 26px; height: 26px; border-radius: 50%;
+    display: inline-block; vertical-align: middle; width: 26px; height: 26px; border-radius: 50%;
     border: 3px solid var(--pp-border); border-top-color: var(--pp-primary);
 }
 @media (prefers-reduced-motion: no-preference) { .pp-gbrowse__spinner { animation: ppGbrowseSpin 0.7s linear infinite; } }
