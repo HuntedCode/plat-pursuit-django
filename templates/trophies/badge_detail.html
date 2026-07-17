@@ -449,6 +449,21 @@ document.addEventListener('DOMContentLoaded', function() {
         active.classList.remove('is-igniting'); void active.offsetWidth; active.classList.add('is-igniting');
     }
 
+    // ── Directional tier-content slide ──
+    // Switching tiers HTMX-swaps the island; slide the tier REQUIREMENTS card in from the side you moved on
+    // the ladder (a higher tier enters from the right), so the swap reads as motion, not a static repaint.
+    // Scoped to .bd-req -- NOT the whole island: the island holds the position:fixed sticky mini-header, and
+    // a transform on it would break that during the slide. The stages keep their own scroll-reveal.
+    var TIER_ORDER = Array.prototype.map.call(document.querySelectorAll('.bd-tierstep'), function (s) { return s.getAttribute('data-tier'); });
+    function activeTier() { var a = document.querySelector('#badge-tier-view .bd-tierstep.is-active'); return a ? a.getAttribute('data-tier') : null; }
+    var lastTier = activeTier();
+    function slideTierContent() {
+        var to = activeTier();
+        var req = document.querySelector('#badge-tier-view .bd-req');
+        if (req && window.PlatPursuit && PlatPursuit.slideViewIn) { PlatPursuit.slideViewIn(req, lastTier, to, TIER_ORDER); }
+        lastTier = to;
+    }
+
     initStages();
     armStageReveal();
     setTimeout(igniteActiveTier, 250);   // the initial tier "comes alive" a beat after load
@@ -503,6 +518,7 @@ document.addEventListener('DOMContentLoaded', function() {
             initStages();
             armStageReveal();   // the fresh stack re-reveals when in view (e.g. swapping tiers while scrolled to it)
             igniteActiveTier(); // the newly-active step blooms
+            slideTierContent(); // the tier's requirements slide in from the direction you moved
             fillHeaderHorizon(); // the new tier's progress fills from 0
             restoreTierScroll();
             // Re-wire the fresh mini-header AFTER the scroll is restored, so it reads the right position and
