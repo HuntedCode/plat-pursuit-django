@@ -643,6 +643,19 @@ lets `currentColor`/token colours flow). The Lucide signature to match:
 
 ---
 
+## Badge type display priority
+
+Wherever the **badges a game belongs to** are listed (browse cards, game detail, etc.), order them by the
+site-wide badge-type priority and **count distinct series** (one per `series_slug`), never tiers (a
+four-tier series is **one** badge, not four):
+
+> **Franchise › Collection › Developer › Series** (then the special types Megamix › Event › User)
+
+Codified as `BADGE_TYPE_DISPLAY_PRIORITY` in `trophies/constants.py` — sort by it, then by name; unknown/new
+types sort last. Don't re-hardcode the order per surface.
+
+---
+
 ## Image Styling
 
 These conventions apply site-wide and are not affected by the redesign:

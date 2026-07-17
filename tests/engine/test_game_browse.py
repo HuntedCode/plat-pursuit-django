@@ -138,16 +138,16 @@ def test_bare_games_redirects_to_defaults(client):
 
 
 def test_game_card_workshop_renders(client):
-    """The /design/game-card/ workshop renders both card variants without crashing (even with an empty
-    DB -> empty grids). Guards the view query + both template includes against render errors."""
+    """The /design/game-card/ workshop renders without crashing (even with an empty DB -> empty grid).
+    Guards the view query + the card include against render errors."""
     from django.urls import reverse
 
     resp = client.get(reverse('design_game_card'))
     content = resp.content.decode()
 
     assert resp.status_code == 200
-    assert 'Lightweight indicator' in content
-    assert 'Mini medallions' in content
+    assert 'Game card' in content
+    assert 'B/S/G/P' in content
 
 
 def test_query_count_is_whale_safe(client, django_assert_max_num_queries):

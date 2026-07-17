@@ -38,6 +38,9 @@ membership is shown: lightweight indicator vs mini medallions. {% endcomment %}
     .gcw-fact--none { color: var(--pp-text-mute); }
     .gcw-fact--none .star { color: var(--pp-text-mute); }
     .gcw-fact.is-earned { color: var(--color-trophy-platinum); font-weight: 700; }
+    /* Trophy breakdown: colored B/S/G/P counts (same footprint as "N trophies", more info). */
+    .gcw-tro { display: inline-flex; align-items: center; font-weight: 800; letter-spacing: -0.01em; }
+    .gcw-tro__d { color: var(--pp-text-mute); margin: 0 1.5px; font-weight: 400; }
 
     /* ── Badge band: lightweight ── */
     .gcw-badges--light { display: flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 7px; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }
@@ -58,32 +61,28 @@ membership is shown: lightweight indicator vs mini medallions. {% endcomment %}
     .gcw-ctr__pip { width: 6px; height: 6px; border-radius: 50%; }
     .gcw-ctr__label { font-size: 10.5px; font-weight: 600; color: var(--pp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
     .gcw-ctr__xp { font-size: 10px; font-weight: 800; color: var(--pp-secondary); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+    /* ── Empty-slot placeholders (same footprint so cards never look barren) ── */
+    .gcw-badges--empty { display: flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 7px; background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px dashed var(--pp-border); }
+    .gcw-badges--empty > svg { width: 13px; height: 13px; color: var(--pp-text-mute); flex-shrink: 0; }
+    .gcw-badges--empty .gcw-badges__names { font-size: 10px; color: var(--pp-text-mute); }
+    .gcw-ctr--empty { background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px dashed var(--pp-border); cursor: default; }
+    .gcw-ctr--empty > svg { color: var(--pp-text-mute); }
+    .gcw-ctr--empty .gcw-ctr__label { color: var(--pp-text-mute); font-weight: 500; flex: 0 1 auto; }
 </style>
 
 <div class="gcw">
     <h1>Game card &mdash; from scratch</h1>
-    <p class="gcw__sub">The stat block is simplified to a single trophy-total + rating signal (the 4-cell
-    breakdown moves to the detail page) so the card has room for the two new Pursuer hooks: the <b>badges</b>
-    a game belongs to and its home <b>contract</b>. Both sections below render the same real games and the
-    same simplified base &mdash; they differ ONLY in how badge membership is shown. Cards sit at the real
-    browse-grid width (178px). The last card is the common case: no badges, no contract.</p>
+    <p class="gcw__sub">Chosen direction: the <b>lightweight</b> badge indicator (count + series names), now
+    refined. The trophy signal is the colored <b>B/S/G/P</b> breakdown (same footprint as "N trophies", more
+    information); badge membership counts distinct <b>series</b> (not tiers) and orders them Franchise &rsaquo;
+    Collection &rsaquo; Developer &rsaquo; Series; and the badge + contract slots always render &mdash; a muted
+    dashed placeholder when a game has none &mdash; so cards keep a consistent height. Cards sit at the real
+    browse-grid width (178px). The last card is the common empty case (no badges, no contract).</p>
 
     <div class="gcw__block">
-        <div class="gcw__tag">Variant A &mdash; <b>Lightweight indicator</b></div>
-        <p class="gcw__blurb">Badge membership as a count + series names. Cheap (no medallion rendering),
-        scannable, whale-safe. The full medallion set lives on the game detail page.</p>
         <div class="gcw__grid">
             {% for c in cards %}{% include 'design/_gcw_card.html' with c=c badge_style='light' %}{% endfor %}
-        </div>
-    </div>
-
-    <div class="gcw__block">
-        <div class="gcw__tag">Variant B &mdash; <b>Mini medallions</b></div>
-        <p class="gcw__blurb">Badge membership as up to {{ badge_cap }} real medallion objects + "+N". Richest
-        and ties to the Collection's visual language, but heavier to render (builds Frame data per badge) and
-        smaller/noisier at this size.</p>
-        <div class="gcw__grid">
-            {% for c in cards %}{% include 'design/_gcw_card.html' with c=c badge_style='med' %}{% endfor %}
         </div>
     </div>
 </div>
