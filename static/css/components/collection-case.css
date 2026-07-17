@@ -389,9 +389,17 @@
 
 @media (max-width: 640px) {
     .pp-bdetail { grid-template-columns: 1fr; gap: 18px; justify-items: center; text-align: center; }
-    .pp-bdetail__stage .pp-med { --sz: 200px; }
+    .pp-bdetail__stage .pp-med { --sz: min(200px, 42vh); }   /* shrink the hero on short/landscape viewports too */
     .pp-bdetail__stats { text-align: left; }
     .pp-detail-modal__dialog { padding: 22px 18px; }
+}
+/* Fit a tall (earned) peek on a phone WITHOUT flattening the 3D medallion: its ancestors must stay
+   overflow:visible, so the dialog itself can't scroll. Instead cap the INFO column -- a SIBLING of the
+   object, not a 3D ancestor, so its own scroll is safe -- and let it scroll, keeping the medallion fixed
+   above (a product-page feel). Reserve ~medallion + gap + padding. (Reduced motion drops the 3D + the
+   is-growing overflow override, so the dialog scrolls itself there -- no cap needed.) */
+@media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
+    .pp-bdetail__info { max-height: calc(88vh - 270px); overflow-y: auto; overscroll-behavior: contain; }
 }
 @media (prefers-reduced-motion: reduce) {
     .pp-detail-modal:not([hidden]) .pp-detail-modal__scrim,

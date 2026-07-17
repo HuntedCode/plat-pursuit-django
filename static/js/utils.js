@@ -1494,7 +1494,8 @@ function staggerReveal(o) {
  * iOS-sheet "swipe down to close" for a modal/sheet on touch: flick the dialog downward to dismiss it.
  * The PAGE owns closing -- pass `onClose` (the same thing the close button runs); the helper only handles
  * the drag, the follow transform, the scrim fade, and the snap-back. Drag only starts from the top of the
- * dialog's scroll, so mid-content scrolling isn't hijacked. The helper adds `.pp-dismissable` to the
+ * scroll (the dialog OR any inner scroll container, e.g. the peek's capped info column), so scrolling isn't
+ * hijacked. The helper adds `.pp-dismissable` to the
  * dialog, which surfaces the shared touch-only grabber handle (`.pp-dismissable::before`, "pull to close").
  *
  * @param {HTMLElement} dialog     the scrollable dialog/sheet element
@@ -1516,7 +1517,13 @@ function dismissableSheet(dialog, opts) {
         if (scrim) { scrim.style.transition = ''; scrim.style.opacity = ''; }
     }
     dialog.addEventListener('touchstart', function (e) {
-        if (dialog.scrollTop > 0) { startY = null; return; }   // let mid-content scroll happen
+        // Only a drag from the very TOP of the scroll dismisses. Walk from the touched element up to the
+        // dialog: if anything along the way is scrolled (the dialog itself, or an INNER scroll container like
+        // the peek's capped info column), let it scroll instead of hijacking the gesture.
+        for (var el = e.target; el; el = el.parentNode) {
+            if (el.scrollTop > 0) { startY = null; return; }
+            if (el === dialog) { break; }
+        }
         startY = e.touches[0].clientY; dragging = false;
     }, { passive: true });
     dialog.addEventListener('touchmove', function (e) {
