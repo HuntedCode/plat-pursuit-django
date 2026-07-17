@@ -615,6 +615,34 @@ When a chart (e.g., radar) stacks to full width on mobile, constrain and center 
 
 ---
 
+## Iconography
+
+**The rebuild uses [Lucide](https://lucide.dev) (MIT) as its single icon set.** Every UI glyph is a Lucide
+stroke icon, hand-inlined as an `<svg>` (never a runtime icon font/library — inline keeps it CSP-safe and
+lets `currentColor`/token colours flow). The Lucide signature to match:
+
+```html
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"> … </svg>
+```
+
+**Rules:**
+- **New glyphs**: copy the SVG inner markup from lucide.dev verbatim (names match, so a glyph can be
+  re-copied/updated later). Size with Tailwind `w-*`/`h-*`; colour via `stroke` (a token, not a hex).
+- **Shared includes** live in `templates/partials/icons/` (`check`, `percent`, `user`, `octagon-alert`
+  via `privacy_warning.html`, `globe`, etc.) — reuse these rather than re-inlining. Each takes `color` +
+  `size` params. Job icons are the Lucide sprite behind the `{% job_icon %}` templatetag.
+- **Brand-mark exceptions** (NOT Lucide, deliberately): `partials/icons/ps_logo.html` (the PlayStation
+  wordmark) and `partials/icons/pp_logo.html` (the PlatPursuit logo image). Use these for their brands;
+  Lucide has no equivalent and shouldn't.
+- **Filled rating star** is an accepted exception: the site-wide `<polygon>` star rendered `fill`ed (the
+  Lucide star geometry, filled) for community ratings — a rating convention, not drift. Everywhere else,
+  icons are stroke.
+- **Do NOT** introduce FontAwesome / Heroicons / Feather / Bootstrap glyphs. Tells: a `viewBox` other than
+  `0 0 24 24` (FontAwesome is `0 0 512 512`), or a filled UI glyph that Lucide would stroke.
+
+---
+
 ## Image Styling
 
 These conventions apply site-wide and are not affected by the redesign:
