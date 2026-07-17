@@ -362,6 +362,26 @@
             modalDisc.addEventListener('transitionend', fin);
             settleTimer = setTimeout(fin, 520);   // safety
         }
+        // Swipe-dismiss (touch): the sheet already slid off (PlatPursuit.dismissableSheet owns the exit), so we
+        // do NOT FLIP the disc back to source -- the FLIP measures the disc's live on-screen box, which is wrong
+        // once it's been dragged off the bottom. Instead the object "returns home": the tapped disc reappears in
+        // the grid/header with a subtle materialize settle (the gallery-medallion vocabulary). Consistent
+        // physicality (it goes back to its slot), no bad measurement. Reduced motion / no source -> instant.
+        function settleHome() {
+            var gs = growingSrc && growingSrc.querySelector('.pp-med__stage');
+            if (gs && gs.animate && !prefersReducedMotion()) {
+                gs.style.visibility = '';
+                gs.animate([{ opacity: 0, transform: 'translateY(14px) scale(0.9)' }, { opacity: 1, transform: 'none' }],
+                           { duration: 460, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)' });
+            }
+        }
+        function dismissClose() {
+            if (closing) { return; }
+            closing = true;
+            clearSettle(); cancelHint();
+            settleHome();    // start the source's rise-home BEFORE finishClose nulls growingSrc
+            finishClose();   // hide + wipe + restore focus (the visibility restore inside is idempotent)
+        }
         modal.querySelectorAll(config.closeSel || '[data-detail-close]').forEach(function (b) { b.addEventListener('click', close); });
         document.addEventListener('keydown', function (e) {
             if (modal.hidden) return;
@@ -375,6 +395,16 @@
                 else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
             }
         });
+        // Swipe down to close on touch -- every peek gets it here (collection, badge list, badge detail all
+        // share detailModal). The helper slides the sheet off; dismissClose returns the object home. It adds
+        // .pp-dismissable to the dialog, surfacing the grabber handle -- so the peek is now swipeable AND shows
+        // the handle, keeping the "handle = swipeable" contract honest.
+        if (dialog && window.PlatPursuit && PlatPursuit.dismissableSheet) {
+            PlatPursuit.dismissableSheet(dialog, {
+                scrim: modal.querySelector(config.scrimSel || '.pp-detail-modal__scrim'),
+                onClose: dismissClose
+            });
+        }
         return { open: open, close: close };
     }
 

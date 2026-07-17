@@ -240,8 +240,9 @@ the substrate) they need **no** depth-pass lift — the deeper substrate only he
 **Swipe to close on mobile (common practice):** wire every modal's dialog with
 `PlatPursuit.dismissableSheet(dialog, {onClose, scrim})` — a downward flick slides it off; `onClose` hides
 instantly + runs the close-button cleanup. It adds `.pp-dismissable`, which shows the touch-only grabber
-handle (`.pp-dismissable::before`). → js-utilities.md. (Exception: the medallion peek keeps its own
-grow/shrink dismiss and stays un-wired.)
+handle (`.pp-dismissable::before`). → js-utilities.md. The medallion peek is wired too (via
+`Medallion.detailModal`): it can't FLIP its disc back from a dragged position, so a swipe **returns the
+object home** (source medallion re-materializes in its slot); tap/close keeps the grow/shrink put-down.
 
 ### 11. Image conventions
 Covers use `object-cover object-top` + `aspect-[3/4]`; trophy icons `object-cover` square; badges

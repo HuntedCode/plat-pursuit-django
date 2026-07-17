@@ -235,9 +235,11 @@ for rebuilt browse grids** (Badges; the pending Challenges/Franchise/Company/Gam
 **hide instantly** (the helper already did the exit) and run the same cleanup the close button does. Drag
 only starts from the top of the dialog's scroll (mid-content scroll isn't hijacked). The helper adds
 `.pp-dismissable` to the dialog, surfacing the shared touch-only grabber handle (`.pp-dismissable::before`).
-Live on the badge-detail stats + contract modals and the Career job/contract modal. **Exception:** the
-medallion **peek** (pick-up/put-down) keeps its own grow/shrink dismiss gesture and is intentionally not
-wired (so it shows no handle).
+Live on the badge-detail stats + contract modals, the Career job/contract modal, and (via
+`Medallion.detailModal`) every medallion **peek** across collection / badge list / badge detail. The peek
+can't FLIP its disc back from a dragged-off position, so on swipe it instead **returns the object home** --
+the source medallion reappears in the grid with a subtle materialize settle -- while the tap/close button
+keeps the grow/shrink "put-down". Both routes send the object back to its slot.
 
 ## Namespace Pattern
 
