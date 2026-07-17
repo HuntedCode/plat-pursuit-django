@@ -8,53 +8,67 @@ suppressed (no_id) since the shelf in the Case owns the canonical #card-<id> anc
 collection-gallery.css, wired by collection.js (initGallery).
 {% endcomment %}
 <div class="pp-gallery">
+    {% comment %} Compact toolbar (mirrors the Badges browse gallery): a PRIMARY bar -- search + sort + a
+    Filters toggle (with an active-count badge) -- with the tier/state/set filters tucked into a collapsible
+    panel, so the default height stays small (the mini-bar's Filters button opens it). Filters apply instantly
+    (collection.js, client-side); no Apply button. {% endcomment %}
     <div class="pp-gallery__toolbar pp-toolbar-card">
-        <div class="pp-gallery__fgroup">
-            <span>Tier</span>
-            <button type="button" class="pp-gallery__chip is-active" data-filter-tier="all">All</button>
-            <button type="button" class="pp-gallery__chip" data-filter-tier="bronze">Bronze</button>
-            <button type="button" class="pp-gallery__chip" data-filter-tier="silver">Silver</button>
-            <button type="button" class="pp-gallery__chip" data-filter-tier="gold">Gold</button>
-            <button type="button" class="pp-gallery__chip" data-filter-tier="platinum">Platinum</button>
+        <div class="pp-gallery__bar">
+            <span class="pp-gallery__search-wrap">
+                <input type="text" class="pp-gallery__search" placeholder="Search series, badge, or #set number&hellip;  ( / )" data-search aria-label="Search collection by series, badge, or set number" />
+                <button type="button" class="pp-gallery__search-clear" data-search-clear hidden aria-label="Clear search">&times;</button>
+            </span>
+            <label class="pp-gallery__sort-label">
+                <span class="sr-only">Sort badges</span>
+                <select class="pp-gallery__select" data-gallery-sort>
+                    <option value="series:asc">Series (A&ndash;Z)</option>
+                    <option value="rarity:asc">Rarest first</option>
+                    <option value="tier:desc">Tier (Platinum first)</option>
+                    <option value="progress:desc">Closest to complete</option>
+                    <option value="earned:desc">Recently earned</option>
+                    <option value="set_number:asc">Set order</option>
+                </select>
+            </label>
+            <button type="button" class="pp-gallery__advbtn" data-gallery-filters-toggle aria-expanded="false" aria-controls="gallery-advanced">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                <span>Filters</span>
+                <span class="pp-gallery__advbtn__n" data-gallery-filter-count hidden>0</span>
+            </button>
         </div>
-        {% comment %} No "Unearned" chip: the Collection is scoped to ENGAGED series, and every tier of an
-        engaged series carries progress (the badge engine writes a UserBadgeProgress row per tier, and shared
-        stages give the higher rungs non-zero progress), so nothing here is unearned -- only Earned / In Progress.
-        The JS still handles a stray unearned data-state under "All". {% endcomment %}
-        <div class="pp-gallery__fgroup">
-            <span>State</span>
-            <button type="button" class="pp-gallery__chip is-active" data-filter-state="all">All</button>
-            <button type="button" class="pp-gallery__chip" data-filter-state="earned">Earned</button>
-            <button type="button" class="pp-gallery__chip" data-filter-state="in_progress">In Progress</button>
+
+        <div class="pp-gallery__advanced" id="gallery-advanced" hidden>
+            <div class="pp-gallery__fgroup">
+                <span>Tier</span>
+                <button type="button" class="pp-gallery__chip is-active" data-filter-tier="all">All</button>
+                <button type="button" class="pp-gallery__chip" data-filter-tier="bronze">Bronze</button>
+                <button type="button" class="pp-gallery__chip" data-filter-tier="silver">Silver</button>
+                <button type="button" class="pp-gallery__chip" data-filter-tier="gold">Gold</button>
+                <button type="button" class="pp-gallery__chip" data-filter-tier="platinum">Platinum</button>
+            </div>
+            {% comment %} No "Unearned" chip: the Collection is scoped to ENGAGED series, and every tier of an
+            engaged series carries progress (the badge engine writes a UserBadgeProgress row per tier, and shared
+            stages give the higher rungs non-zero progress), so nothing here is unearned -- only Earned / In Progress.
+            The JS still handles a stray unearned data-state under "All". {% endcomment %}
+            <div class="pp-gallery__fgroup">
+                <span>State</span>
+                <button type="button" class="pp-gallery__chip is-active" data-filter-state="all">All</button>
+                <button type="button" class="pp-gallery__chip" data-filter-state="earned">Earned</button>
+                <button type="button" class="pp-gallery__chip" data-filter-state="in_progress">In Progress</button>
+            </div>
+            {% if themes|length > 1 %}
+            {% comment %} Set filter is a dropdown (not chips): the set types keep growing -- series, franchise,
+            developer, publisher, event, collection... -- so a row of chips would overflow. {% endcomment %}
+            <div class="pp-gallery__fgroup">
+                <span>Set</span>
+                <select class="pp-gallery__select" data-filter-theme-select aria-label="Filter by set">
+                    <option value="all">All sets</option>
+                    {% for theme in themes %}
+                    <option value="{{ theme.name|slugify }}">{{ theme.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
         </div>
-        {% if themes|length > 1 %}
-        {% comment %} Set filter is a dropdown (not chips): the set types keep growing -- series, franchise,
-        developer, publisher, event, collection... -- so a row of chips would overflow the toolbar. {% endcomment %}
-        <div class="pp-gallery__fgroup">
-            <span>Set</span>
-            <select class="pp-gallery__select" data-filter-theme-select aria-label="Filter by set">
-                <option value="all">All sets</option>
-                {% for theme in themes %}
-                <option value="{{ theme.name|slugify }}">{{ theme.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        {% endif %}
-        <span class="pp-gallery__search-wrap">
-            <input type="text" class="pp-gallery__search" placeholder="Search series, badge, or #set number&hellip;  ( / )" data-search aria-label="Search collection by series, badge, or set number" />
-            <button type="button" class="pp-gallery__search-clear" data-search-clear hidden aria-label="Clear search">&times;</button>
-        </span>
-        <label class="pp-gallery__sort-label">
-            <span class="sr-only">Sort badges</span>
-            <select class="pp-gallery__select" data-gallery-sort>
-                <option value="series:asc">Series (A&ndash;Z)</option>
-                <option value="rarity:asc">Rarest first</option>
-                <option value="tier:desc">Tier (Platinum first)</option>
-                <option value="progress:desc">Closest to complete</option>
-                <option value="earned:desc">Recently earned</option>
-                <option value="set_number:asc">Set order</option>
-            </select>
-        </label>
     </div>
 
     {% comment %} Meta row: result count + applied-filter pills + clear. Keeping the count/clear here (not

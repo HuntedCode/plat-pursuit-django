@@ -301,11 +301,32 @@
             if (emptyMsg) emptyMsg.hidden = visible !== 0;
             updateSuggest(visible);
             syncClear();
+            syncFilterCount();
             renderPills();
             syncURL();
         }
 
         wireFilterChips(gal, filters, applyFilters);   // tier + state chips (theme is a <select>, below)
+
+        // Filters toggle: the tier/state/set groups live in a collapsible panel (compact default). The button
+        // shows/hides it + carries an active-count badge (how many filter DIMENSIONS are narrowed -- search is
+        // separate, in the bar). Mirrors the Badges browse gallery's Filters toggle.
+        var advToggle = gal.querySelector('[data-gallery-filters-toggle]');
+        var advPanel = gal.querySelector('#gallery-advanced') || gal.querySelector('.pp-gallery__advanced');
+        var advCount = gal.querySelector('[data-gallery-filter-count]');
+        function setAdvPanel(open) {
+            if (!advPanel || !advToggle) { return; }
+            if (open) { advPanel.removeAttribute('hidden'); } else { advPanel.setAttribute('hidden', ''); }
+            advToggle.classList.toggle('is-open', open);
+            advToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+        if (advToggle && advPanel) {
+            advToggle.addEventListener('click', function () { setAdvPanel(advPanel.hasAttribute('hidden')); });
+        }
+        function syncFilterCount() {
+            var n = (filters.tier !== 'all' ? 1 : 0) + (filters.state !== 'all' ? 1 : 0) + (filters.theme !== 'all' ? 1 : 0);
+            if (advCount) { advCount.textContent = String(n); advCount.hidden = (n === 0); }
+        }
 
         var search = gal.querySelector('[data-search]');
         var searchClear = gal.querySelector('[data-search-clear]');

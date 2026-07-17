@@ -172,6 +172,9 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(function () {
                 var tb = root.querySelector('.pp-gallery__toolbar');
                 if (tb) { tb.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+                // Pop the collapsible Filters panel open (if it isn't already).
+                var toggle = root.querySelector('[data-gallery-filters-toggle]');
+                if (toggle && toggle.getAttribute('aria-expanded') !== 'true') { toggle.click(); }
             }, 60);
         });
     }
