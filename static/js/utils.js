@@ -1490,6 +1490,64 @@ function staggerReveal(o) {
     };
 }
 
+/**
+ * iOS-sheet "swipe down to close" for a modal/sheet on touch: flick the dialog downward to dismiss it.
+ * The PAGE owns closing -- pass `onClose` (the same thing the close button runs); the helper only handles
+ * the drag, the follow transform, the scrim fade, and the snap-back. Drag only starts from the top of the
+ * dialog's scroll, so mid-content scrolling isn't hijacked. The helper adds `.pp-dismissable` to the
+ * dialog, which surfaces the shared touch-only grabber handle (`.pp-dismissable::before`, "pull to close").
+ *
+ * @param {HTMLElement} dialog     the scrollable dialog/sheet element
+ * @param {Object} opts
+ * @param {Function} opts.onClose  called when the drag passes the threshold (do the real close here)
+ * @param {HTMLElement} [opts.scrim]     backdrop element to fade while dragging
+ * @param {number} [opts.threshold=90]   px of downward drag past which it dismisses
+ */
+function dismissableSheet(dialog, opts) {
+    if (!dialog) { return; }
+    opts = opts || {};
+    var onClose = opts.onClose || function () {};
+    var scrim = opts.scrim || null;
+    var threshold = opts.threshold || 90;
+    var startY = null, dragging = false;
+    dialog.classList.add('pp-dismissable');   // surfaces the touch-only grabber handle (.pp-dismissable::before)
+    function resetStyles() {
+        dialog.style.transition = ''; dialog.style.transform = ''; dialog.style.opacity = ''; dialog.style.animation = '';
+        if (scrim) { scrim.style.transition = ''; scrim.style.opacity = ''; }
+    }
+    dialog.addEventListener('touchstart', function (e) {
+        if (dialog.scrollTop > 0) { startY = null; return; }   // let mid-content scroll happen
+        startY = e.touches[0].clientY; dragging = false;
+    }, { passive: true });
+    dialog.addEventListener('touchmove', function (e) {
+        if (startY === null) { return; }
+        var dy = e.touches[0].clientY - startY;
+        if (dy > 0) {   // downward only -- follow the finger
+            dragging = true;
+            e.preventDefault();
+            dialog.style.animation = 'none'; dialog.style.transition = 'none';
+            dialog.style.transform = 'translateY(' + dy + 'px)';
+            if (scrim) { scrim.style.opacity = String(Math.max(0.15, 1 - dy / 450)); }
+        }
+    }, { passive: false });
+    dialog.addEventListener('touchend', function () {
+        if (startY === null) { return; }
+        var m = /translateY\(([0-9.]+)px\)/.exec(dialog.style.transform);
+        var dy = m ? parseFloat(m[1]) : 0;
+        startY = null;
+        if (dragging && dy > threshold) {   // past the threshold -> slide off + close
+            dialog.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+            dialog.style.transform = 'translateY(100vh)'; dialog.style.opacity = '0';
+            if (scrim) { scrim.style.transition = 'opacity 0.2s ease'; scrim.style.opacity = '0'; }
+            setTimeout(function () { resetStyles(); onClose(); }, 200);   // reset first so the next open is clean
+        } else if (dragging) {   // snap back
+            dialog.style.transition = 'transform 0.25s ease';
+            dialog.style.transform = 'none';
+            if (scrim) { scrim.style.transition = 'opacity 0.25s ease'; scrim.style.opacity = ''; }
+        }
+    });
+}
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -1514,3 +1572,4 @@ window.PlatPursuit.igniteTab = igniteTab;
 window.PlatPursuit.wireTablist = wireTablist;
 window.PlatPursuit.syncViewParam = syncViewParam;
 window.PlatPursuit.staggerReveal = staggerReveal;
+window.PlatPursuit.dismissableSheet = dismissableSheet;

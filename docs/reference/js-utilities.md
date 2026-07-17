@@ -224,6 +224,21 @@ nodes); the engine owns the reduced-motion gate + batch stagger + observer, and 
 for rebuilt browse grids** (Badges; the pending Challenges/Franchise/Company/Game-Lists/Browse rebuilds).
 **Not** for every reveal — see the note in [motion-patterns.md](../reference/motion-patterns.md) (Staggered grid reveal).
 
+### PlatPursuit.dismissableSheet
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `dismissableSheet(dialog, opts)` | HTMLElement, `{onClose, scrim?, threshold?}` | iOS-style "swipe down to close" for a modal on touch |
+
+**The common practice for every mobile modal.** Wire it on the modal's dialog: on a downward flick past
+`threshold` (default 90px) it slides the sheet off (fading `scrim`) and calls `onClose` — which should
+**hide instantly** (the helper already did the exit) and run the same cleanup the close button does. Drag
+only starts from the top of the dialog's scroll (mid-content scroll isn't hijacked). The helper adds
+`.pp-dismissable` to the dialog, surfacing the shared touch-only grabber handle (`.pp-dismissable::before`).
+Live on the badge-detail stats + contract modals and the Career job/contract modal. **Exception:** the
+medallion **peek** (pick-up/put-down) keeps its own grow/shrink dismiss gesture and is intentionally not
+wired (so it shows no handle).
+
 ## Namespace Pattern
 
 All utilities are declared as `const` or `class` at module scope, then exported at the bottom:

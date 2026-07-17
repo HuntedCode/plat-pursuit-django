@@ -68,6 +68,7 @@ Staggered grid reveal is the JS helper `staggerReveal` below (each grid supplies
 | `igniteTab(chip)` | Fire the `.pp-tab-ignite` bloom |
 | `syncViewParam(view, {default, params})` | Reflect the active view in `?view=` |
 | `staggerReveal({grid, cardSelector, reveal})` | WAAPI grid-reveal engine (batch + observer) |
+| `dismissableSheet(dialog, {onClose, scrim})` | Swipe-down-to-close for a modal on touch (+ grabber handle) |
 | also: `countUp`, `InfiniteScroller`, `StickyReveal`, `debounce`, `ToastManager`, `API`, … | see js-utilities.md for the full set |
 
 ### Design decisions on record (don't re-litigate)
@@ -236,6 +237,11 @@ Scrim `rgba(2,4,8,~0.6)` + `backdrop-filter: blur(3–4px)`; dialog on `--pp-bg-
 `0 30px 90px rgba(0,0,0,0.55)`; internal stats step up to `--pp-bg-2`. Because they float on a scrim (not
 the substrate) they need **no** depth-pass lift — the deeper substrate only helps them. Shared factory:
 `PlatPursuit.Medallion.detailModal(config)` (pick-up / put-down). (`.pp-detail-modal`, `.emodal`.)
+**Swipe to close on mobile (common practice):** wire every modal's dialog with
+`PlatPursuit.dismissableSheet(dialog, {onClose, scrim})` — a downward flick slides it off; `onClose` hides
+instantly + runs the close-button cleanup. It adds `.pp-dismissable`, which shows the touch-only grabber
+handle (`.pp-dismissable::before`). → js-utilities.md. (Exception: the medallion peek keeps its own
+grow/shrink dismiss and stays un-wired.)
 
 ### 11. Image conventions
 Covers use `object-cover object-top` + `aspect-[3/4]`; trophy icons `object-cover` square; badges

@@ -182,6 +182,17 @@
 .pp-detail-modal__close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: var(--pp-text-mute); font-size: 28px; line-height: 1; cursor: pointer; z-index: 2; }
 .pp-detail-modal__close:hover { color: var(--pp-text); }
 .pp-detail-modal__close:focus-visible { color: var(--pp-text); outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: var(--pp-radius-sm); }
+/* iOS-style drag handle -- shown on touch on ANY dialog wired for swipe-to-close (PlatPursuit.dismissableSheet
+   adds .pp-dismissable). A ::before pill so no markup is needed; floats in the dialog's top padding (or over
+   a headered modal). Tied to .pp-dismissable, not the modal class, so a modal WITHOUT swipe (e.g. the peek's
+   pick-up/put-down) never shows a handle it doesn't honour. Global (used by pp-detail-modal + the emodal). */
+@media (hover: none) and (pointer: coarse) {
+    .pp-dismissable { position: relative; }
+    .pp-dismissable::before {
+        content: ""; position: absolute; top: 9px; left: 50%; transform: translateX(-50%);
+        width: 40px; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.5); z-index: 3; pointer-events: none;
+    }
+}
 .pp-detail-modal:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrim 0.2s ease; }
 .pp-detail-modal:not([hidden]) .pp-detail-modal__dialog { animation: ppDetailIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes ppDetailScrim { from { opacity: 0; } }

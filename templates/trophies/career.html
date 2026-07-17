@@ -371,7 +371,6 @@
     <div class="emodal" id="emodal" hidden>
         <div class="emodal__backdrop" data-close></div>
         <div class="emodal__dialog" role="dialog" aria-modal="true" aria-label="Job detail" tabindex="-1">
-            <span class="emodal__grab" aria-hidden="true"></span>
             <button class="emodal__close" data-close aria-label="Close">&times;</button>
             <div id="emodal-panel"></div>
         </div>
@@ -837,42 +836,14 @@ function ppCountUp(el, dur) {
         }
     });
 
-    // Drag-to-dismiss (touch): flick the dialog down to close it (iOS-sheet style).
-    var dragY = null, dragged = false;
-    dialog.addEventListener('touchstart', function (e) {
-        if (modal.hidden || dialog.scrollTop > 0) { dragY = null; return; }
-        dragY = e.touches[0].clientY; dragged = false;
-    }, { passive: true });
-    dialog.addEventListener('touchmove', function (e) {
-        if (dragY === null) return;
-        var dy = e.touches[0].clientY - dragY;
-        if (dy > 0) {   // only downward
-            dragged = true;
-            e.preventDefault();
-            dialog.style.animation = 'none';
-            dialog.style.transition = 'none';
-            dialog.style.transform = 'translateY(' + dy + 'px)';
-            if (backdrop) backdrop.style.opacity = String(Math.max(0.15, 1 - dy / 450));
-        }
-    }, { passive: false });
-    dialog.addEventListener('touchend', function () {
-        if (dragY === null) return;
-        var m = /translateY\(([0-9.]+)px\)/.exec(dialog.style.transform);
-        var dy = m ? parseFloat(m[1]) : 0;
-        dragY = null;
-        if (dragged && dy > 90) {   // past the threshold -> slide off + close
-            dialog.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-            dialog.style.transform = 'translateY(100vh)';
-            dialog.style.opacity = '0';
-            if (backdrop) { backdrop.style.transition = 'opacity 0.2s ease'; backdrop.style.opacity = '0'; }
-            if (zoom) zoom.classList.remove('pp-receded');
-            setTimeout(hideNow, 200);
-        } else if (dragged) {   // snap back
-            dialog.style.transition = 'transform 0.25s ease';
-            dialog.style.transform = 'none';
-            if (backdrop) { backdrop.style.transition = 'opacity 0.25s ease'; backdrop.style.opacity = ''; }
-        }
-    });
+    // Drag-to-dismiss (touch): flick the dialog down to close -- the shared PlatPursuit.dismissableSheet
+    // (adds the grabber handle + owns the slide-off); onClose steps the page back forward + hides.
+    if (window.PlatPursuit && PlatPursuit.dismissableSheet) {
+        PlatPursuit.dismissableSheet(dialog, {
+            scrim: backdrop,
+            onClose: function () { if (zoom) { zoom.classList.remove('pp-receded'); } hideNow(); }
+        });
+    }
 })();
 
 // Premium: count numbers up (Career Level, discipline totals, stat cards) as they scroll into view.

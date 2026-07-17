@@ -205,6 +205,15 @@ document.addEventListener('DOMContentLoaded', function() {
     if (statsModal) {
         var statsA11y = modalA11y(statsModal, '.pp-detail-modal__dialog');
         var closeStats = function () { closeModalAnimated(statsModal, function () { statsA11y.closed(); }); };
+        // Swipe down to close (touch). The helper slides the sheet off, so onClose hides instantly (no re-run
+        // of the choreographed exit) + does the same cleanup the close button does.
+        var statsDlg = statsModal.querySelector('.pp-detail-modal__dialog');
+        if (statsDlg && window.PlatPursuit && PlatPursuit.dismissableSheet) {
+            PlatPursuit.dismissableSheet(statsDlg, {
+                scrim: statsModal.querySelector('.pp-detail-modal__scrim'),
+                onClose: function () { pageRecede(false); statsModal.hidden = true; statsModal.classList.remove('is-closing'); document.body.style.overflow = ''; statsA11y.closed(); }
+            });
+        }
         document.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
             var opener = e.target.closest('[data-stats-open]');
@@ -240,6 +249,14 @@ document.addEventListener('DOMContentLoaded', function() {
         var contractBody = contractModal.querySelector('[data-contract-body]');
         var contractA11y = modalA11y(contractModal, '.pp-detail-modal__dialog');
         var closeContract = function () { closeModalAnimated(contractModal, function () { contractBody.innerHTML = ''; contractA11y.closed(); }); };
+        // Swipe down to close (touch) -- slide off, then hide instantly + clear the fetched body.
+        var contractDlg = contractModal.querySelector('.pp-detail-modal__dialog');
+        if (contractDlg && window.PlatPursuit && PlatPursuit.dismissableSheet) {
+            PlatPursuit.dismissableSheet(contractDlg, {
+                scrim: contractModal.querySelector('.pp-detail-modal__scrim'),
+                onClose: function () { pageRecede(false); contractModal.hidden = true; contractModal.classList.remove('is-closing'); document.body.style.overflow = ''; contractBody.innerHTML = ''; contractA11y.closed(); }
+            });
+        }
         document.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
             var link = e.target.closest('[data-contract-url]');
