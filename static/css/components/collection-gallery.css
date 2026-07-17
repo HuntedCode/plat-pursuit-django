@@ -157,6 +157,25 @@
 /* The option popup is OS-drawn (white by default) -- pin it to the dark theme so the text is readable. */
 .pp-gallery__select option { background-color: var(--pp-bg-2); color: var(--pp-text); }
 
+/* ── Mobile toolbar: the wrap-flex jumble (8 chips + 2 selects + search + broken vertical dividers) doesn't
+   fit a phone. Stack it: search on top, each filter group its OWN horizontal-scroll row (one line, no wrap,
+   no stray dividers), selects full-width. Mirrors the Career .rp-filters "one swipeable row" pattern. ── */
+@media (max-width: 640px) {
+    .pp-gallery__toolbar { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; }
+    /* search first + full width (reset the flex-grow, which would grow it vertically in a column) */
+    .pp-gallery__search-wrap { order: -1; flex: 0 0 auto; min-width: 0; }
+    /* chip groups: one scrollable row each; drop the between-group vertical dividers (they only made sense in a row) */
+    .pp-gallery__fgroup { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 3px 0; }
+    .pp-gallery__fgroup::-webkit-scrollbar { display: none; }
+    .pp-gallery__fgroup > span { flex: 0 0 auto; }
+    .pp-gallery__chip { flex: 0 0 auto; }
+    .pp-gallery__fgroup + .pp-gallery__fgroup { border-left: 0; padding-left: 0; }
+    /* the Set select fills its group's row; the Sort select fills the toolbar width */
+    .pp-gallery__fgroup .pp-gallery__select { flex: 1 1 0; min-width: 0; }
+    .pp-gallery__sort-label { width: 100%; }
+    .pp-gallery__sort-label .pp-gallery__select { width: 100%; }
+}
+
 /* ── The wall: the full Case medallion inside a clean card ──
    Each card frames the real medallion (backdrop, subject, plate, glint, state fills, hover physicality),
    identical to the Case -- the card just gives it padding + a defined edge on the flat wall. */
