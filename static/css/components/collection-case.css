@@ -197,8 +197,13 @@
    whether the modal's chrome enters instantly (peek) or with the dialog (stats/contract). Replays on each
    open because the modals toggle display via [hidden]. Reduced motion -> the handle is simply present. */
 @keyframes ppGrabIn { from { opacity: 0; } }
+@keyframes ppGrabOut { to { opacity: 0; } }
 @media (hover: none) and (pointer: coarse) and (prefers-reduced-motion: no-preference) {
     .pp-dismissable::before { animation: ppGrabIn 0.32s ease 0.15s both; }
+    /* Fade OUT on a non-drag close (close button / tap / Escape / put-down) -- the modal's .is-closing state.
+       The peek's put-down keeps the dialog opaque (only the disc morphs), so the handle wouldn't fade on its
+       own. On a DRAG close no .is-closing is set, so the handle correctly rides the sheet off instead. */
+    .pp-detail-modal.is-closing .pp-dismissable::before { animation: ppGrabOut 0.18s ease forwards; }
 }
 .pp-detail-modal:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrim 0.2s ease; }
 .pp-detail-modal:not([hidden]) .pp-detail-modal__dialog { animation: ppDetailIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
