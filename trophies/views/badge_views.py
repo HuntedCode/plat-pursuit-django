@@ -880,7 +880,7 @@ class BadgeDetailView(DetailView):
             'franchise', 'base_badge__franchise', 'developer', 'base_badge__developer',
             # cover_url on most_recent_concept reads igdb_match; prefetch to avoid N+1.
             'most_recent_concept', 'most_recent_concept__igdb_match',
-        )
+        ).defer('most_recent_concept__igdb_match__raw_response')   # never drag the ~30KB IGDB blob
 
     def get_template_names(self):
         # A tier switch HTMX-swaps the #badge-tier-view island: return just that partial (no base.html), so
@@ -894,8 +894,8 @@ class BadgeDetailView(DetailView):
         series_badges = context['object']
 
         # A tier switch re-renders the #badge-tier-view island (which contains the header). The header's
-        # entrance animation (.pp-head-in) should play on the FIRST load only, not replay on every tier
-        # chip tap -- flag the swap so the header partial can skip the class on an HTMX re-render.
+        # entrance animation (.pp-head-cascade) should play on the FIRST load only, not replay on every
+        # tier chip tap -- flag the swap so the header partial can skip the class on an HTMX re-render.
         context['is_tier_swap'] = getattr(self.request, 'htmx', False) and self.request.htmx.target == 'badge-tier-view'
 
         if not series_badges.exists():
@@ -906,7 +906,6 @@ class BadgeDetailView(DetailView):
         if first_badge and not first_badge.is_live:
             if not self.request.user.is_staff:
                 raise Http404("Series not found")
-            context['is_staff_preview'] = True
 
         psn_username = self.kwargs.get('psn_username')
         if psn_username:
@@ -957,7 +956,6 @@ class BadgeDetailView(DetailView):
                 is_earned = True
             else:
                 badge = series_badges.order_by('tier').first()
-            context['is_maxed'] = highest_tier_earned > 0 and highest_tier_earned == max_tier
 
             context['badge'] = badge
 
@@ -1568,17 +1566,6 @@ class BadgeDetailView(DetailView):
         tier1_badge = series_badges.filter(tier=1).first()
         context['view_count'] = tier1_badge.view_count if tier1_badge else 0
 
-        # Fundraiser CTA: show when tier1 badge has no custom artwork and no pending claim
-        show_fundraiser_cta = False
-        if tier1_badge:
-            layers = tier1_badge.get_badge_layers()
-            if not layers.get('has_custom_image'):
-                from fundraiser.models import DonationBadgeClaim
-                has_claim = DonationBadgeClaim.objects.filter(badge=tier1_badge).exists()
-                if not has_claim:
-                    show_fundraiser_cta = True
-        context['show_fundraiser_cta'] = show_fundraiser_cta
-
         return context
 
 
@@ -1604,7 +1591,7 @@ class BadgeLeaderboardsView(DetailView):
         badge = get_object_or_404(
             Badge.objects.select_related(
                 'most_recent_concept', 'most_recent_concept__igdb_match',
-            ),
+            ).defer('most_recent_concept__igdb_match__raw_response'),
             series_slug=series_slug, tier=1,
         )
         if not badge.is_live and not self.request.user.is_staff:

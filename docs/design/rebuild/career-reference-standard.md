@@ -47,7 +47,7 @@ almost always a specific detail that question surfaces:
   container of transparent chips, active chip tinted, an icon per chip, right-aligned in a
   `flex justify-end` row. 2-way toggles and multi-tab nav both use it; the old free-standing pills are
   retired. Full spec + tokens in [design-system.md](../../reference/design-system.md) (Tab Group / View
-  Switcher); reference impl is Career's `.lab-views`/`.lab-view-tab`.
+  Switcher); the shared component is `.pp-switch` / `.pp-switch__chip` (`static/css/components/switcher.css`).
 - Every surface reads like it belongs to the same app as the rest of the rebuild.
 
 ### 2. Responsive: three layouts, mobile-first, actually verified
