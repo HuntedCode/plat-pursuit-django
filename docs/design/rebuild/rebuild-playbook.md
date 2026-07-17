@@ -101,8 +101,15 @@ Career/Collection/Badges headers). Widely adopted already.
 ### 3. Tab groups = segmented switcher (ONE treatment site-wide)
 Bordered container + transparent chips, tinted-flat active state, an icon per chip, **right-aligned** in a
 `flex items-center justify-end` row. Implementations: `.pp-vtoggle` (Badges), `.pp-collection__views`
-(Collection), `.lab-views` (Career). Old pill tabs are retired. → design-system.md (Tab Group / View
-Switcher).
+(Collection), `.lab-views` (Career) — *visually* one treatment, three class systems (unifying them is a
+deferred lane). Old pill tabs are retired. → design-system.md (Tab Group / View Switcher).
+
+**Shared behavior (use the helpers, don't re-hand-roll):** wire every switcher with
+`PlatPursuit.wireTablist(tabs, {onSelect})` for the WAI-ARIA keyboard model (roving `tabindex` +
+Arrow/Home/End) — `{manual: true}` for HTMX `<a>` chips (Badges) so arrows move focus and Enter/click does
+the swap. Bloom the newly-active chip with `PlatPursuit.igniteTab(chip)`, and sync the URL with
+`PlatPursuit.syncViewParam(view, {default, paramView, params})`. → [js-utilities.md](../reference/js-utilities.md),
+motion-patterns.md (tab ignite). The directional panel slide (`slideViewIn`) is §7.
 
 ### 4. Depth — the surface ladder (the "depth pass")
 Deepened 2026-07 so cards separate from the substrate by the **gap**, not by lightening anything.

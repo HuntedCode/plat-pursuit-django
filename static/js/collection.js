@@ -27,8 +27,10 @@
             views.forEach(function (v) { if (!v.hidden) { cur = v.getAttribute('data-collection-view'); } });
             return cur;
         }
-        function setView(name) {
+        var tablist;
+        function setView(name, userAction) {
             var from = currentView();
+            var changed = from !== name;
             var shown = null;
             views.forEach(function (v) {
                 var on = v.getAttribute('data-collection-view') === name;
@@ -36,43 +38,23 @@
                 if (on) { shown = v; }
             });
             // Directional cross-fade: the incoming view slides in from the side it lives on (shared with Career).
-            if (from !== name) { PlatPursuit.slideViewIn(shown, from, name, VIEW_ORDER); }
+            if (changed) { PlatPursuit.slideViewIn(shown, from, name, VIEW_ORDER); }
+            var activeChip = null;
             chips.forEach(function (c) {
                 var on = c.getAttribute('data-collection-view') === name;
                 c.classList.toggle('is-active', on);
                 c.setAttribute('aria-selected', on ? 'true' : 'false');
-                c.tabIndex = on ? 0 : -1;   // roving tabindex: only the active view chip is in the tab order
+                if (on) { activeChip = c; }
             });
+            if (tablist) { tablist.syncTabindex(); }                       // roving tabindex
+            if (userAction && changed) { PlatPursuit.igniteTab(activeChip); }  // the newly-active chip blooms once
             try { localStorage.setItem(STORAGE_KEY, name); } catch (e) { /* private mode */ }
-            // Reflect the active view in the URL (shareable + reload-safe), matching the Career tabs. Case
-            // is the default so its URL stays clean. Leaving the Gallery strips its filter params; returning
-            // re-adds them from the Gallery's live state (initGallery re-syncs on view-show).
-            if (window.history && history.replaceState) {
-                var qp = new URLSearchParams(location.search);
-                if (name === 'case') qp.delete('view'); else qp.set('view', name);
-                if (name !== 'gallery') GALLERY_PARAMS.forEach(function (k) { qp.delete(k); });
-                var qps = qp.toString();
-                history.replaceState(null, '', location.pathname + (qps ? '?' + qps : '') + location.hash);
-            }
+            // Reflect the active view in the URL (shareable + reload-safe); Case is the default so its URL
+            // stays clean, and leaving the Gallery strips its filter params (a shared Case link stays clean).
+            PlatPursuit.syncViewParam(name, { default: 'case', paramView: 'gallery', params: GALLERY_PARAMS });
         }
-
-        chips.forEach(function (c, i) {
-            c.addEventListener('click', function () {
-                setView(c.getAttribute('data-collection-view'));
-            });
-            // WAI-ARIA tabs keyboard model: arrows/Home/End move focus AND switch the view.
-            c.addEventListener('keydown', function (e) {
-                var next = -1;
-                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % chips.length;
-                else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + chips.length) % chips.length;
-                else if (e.key === 'Home') next = 0;
-                else if (e.key === 'End') next = chips.length - 1;
-                else return;
-                e.preventDefault();
-                setView(chips[next].getAttribute('data-collection-view'));
-                chips[next].focus();
-            });
-        });
+        // Click + Arrow/Home/End keyboard nav + roving tabindex via the shared tablist helper.
+        tablist = PlatPursuit.wireTablist(chips, { onSelect: function (c) { setView(c.getAttribute('data-collection-view'), true); } });
 
         // Initial view: a #card-<id> deep-link lands in the Case; else an explicit ?view= wins (shared /
         // reloaded link); else the stored preference; else the Case. (legacy 'binder'->case, 'list'->gallery)
@@ -114,35 +96,27 @@
         // set you're already on.
         var currentKey = tabs.length ? tabs[0].getAttribute('data-set-tab') : null;
 
+        var setTablist;
         function activateSet(key, userAction) {
             if (key === currentKey) return;
             currentKey = key;
             shelves.forEach(function (s) { s.hidden = s.getAttribute('data-set') !== key; });
+            var activeTab = null;
             tabs.forEach(function (t) {
                 var on = t.getAttribute('data-set-tab') === key;
                 t.classList.toggle('is-active', on);
                 t.setAttribute('aria-selected', on ? 'true' : 'false');
-                t.tabIndex = on ? 0 : -1;   // roving tabindex: only the active tab is in the tab order
+                if (on) { activeTab = t; }
             });
-            // A light tick confirms the switch on touch devices (desktop has no vibrate -- a no-op there).
-            if (userAction && navigator.vibrate) { try { navigator.vibrate(5); } catch (e) {} }
+            if (setTablist) { setTablist.syncTabindex(); }   // roving tabindex
+            if (userAction) {
+                PlatPursuit.igniteTab(activeTab);            // the newly-active set tab blooms once
+                // A light tick confirms the switch on touch devices (desktop has no vibrate -- a no-op there).
+                if (navigator.vibrate) { try { navigator.vibrate(5); } catch (e) {} }
+            }
         }
-        tabs.forEach(function (tab, i) {
-            tab.addEventListener('click', function () { activateSet(tab.getAttribute('data-set-tab'), true); });
-            // WAI-ARIA tabs keyboard model: arrows/Home/End move focus AND activate the tab.
-            tab.addEventListener('keydown', function (e) {
-                var next = -1;
-                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % tabs.length;
-                else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + tabs.length) % tabs.length;
-                else if (e.key === 'Home') next = 0;
-                else if (e.key === 'End') next = tabs.length - 1;
-                else return;
-                e.preventDefault();
-                activateSet(tabs[next].getAttribute('data-set-tab'), true);
-                tabs[next].focus();
-            });
-        });
-        tabs.forEach(function (t) { t.tabIndex = t.classList.contains('is-active') ? 0 : -1; });
+        // Click + Arrow/Home/End keyboard nav + roving tabindex via the shared tablist helper.
+        setTablist = PlatPursuit.wireTablist(tabs, { onSelect: function (t) { activateSet(t.getAttribute('data-set-tab'), true); } });
 
         function jumpToCard() {
             if (window.location.hash.indexOf('#card-') !== 0) return;

@@ -576,6 +576,7 @@ function ppCountUp(el, dur) {
         views.forEach(function (v) { if (!v.hidden) cur = v.dataset.view; });
         return cur;
     }
+    var tablist;
     function showView(name) {
         var from = currentView();
         var changed = from !== name;
@@ -587,56 +588,29 @@ function ppCountUp(el, dur) {
         });
         // (A) Directional cross-fade: the incoming panel slides + fades in from the side it lives on.
         if (changed) { PlatPursuit.slideViewIn(shown, from, name, VIEW_ORDER); }
+        var activeTab = null;
         viewTabs.forEach(function (t) {
             var on = t.dataset.view === name;
             t.classList.toggle('is-active', on);
             t.setAttribute('aria-selected', on ? 'true' : 'false');
-            t.tabIndex = on ? 0 : -1;   // (D) roving tabindex -- only the active tab is Tab-reachable
-            t.classList.remove('lab-view--ignite');   // clear any stale one-shot from a prior activation
-            // (B) Ignite the pill that just became active.
-            if (on && changed && !reduce) { void t.offsetWidth; t.classList.add('lab-view--ignite'); }
+            if (on) { activeTab = t; }
         });
-        // Reflect the active tab in the URL so it's shareable + reload-safe, and SCOPE the contract filters
-        // to the Contracts tab: strip them when leaving (a shared Jobs/Radar link stays clean); returning
-        // to Contracts re-adds them from the still-set filter UI via pp:contracts-shown -> syncURL().
-        if (window.history && history.replaceState) {
-            var qp = new URLSearchParams(location.search);
-            if (name === 'jobs') qp.delete('view'); else qp.set('view', name);   // jobs is the default -> keep its URL clean
-            if (name !== 'contracts') ['status', 'q', 'sort', 'discipline', 'job', 'platform', 'page'].forEach(function (k) { qp.delete(k); });
-            var qps = qp.toString();
-            history.replaceState(null, '', location.pathname + (qps ? '?' + qps : '') + location.hash);
-        }
+        if (tablist) { tablist.syncTabindex(); }            // (D) roving tabindex -- only the active tab is Tab-reachable
+        if (changed) { PlatPursuit.igniteTab(activeTab); }  // (B) the newly-active pill blooms its glow once
+        // Reflect the active tab in the URL (shareable + reload-safe) and SCOPE the contract filters to the
+        // Contracts tab -- strip them when leaving (a shared Jobs/Radar link stays clean); returning re-adds
+        // them from the still-set filter UI via pp:contracts-shown -> syncURL().
+        PlatPursuit.syncViewParam(name, { default: 'jobs', paramView: 'contracts', params: ['status', 'q', 'sort', 'discipline', 'job', 'platform', 'page'] });
         // Animate the radar in the first time it's shown (and keep it correctly sized after).
         if (name === 'radar') revealRadar();
         // Stagger the contract cards in on reveal (mirrors the Jobs tab's content animation).
         if (name === 'contracts' && changed) document.dispatchEvent(new CustomEvent('pp:contracts-shown'));
     }
-    viewTabs.forEach(function (tab) { tab.addEventListener('click', function () { showView(tab.dataset.view); }); });
-
-    // (D) ARIA tablist keyboard nav: Left/Right (and Up/Down) move selection, Home/End jump.
-    var viewTabList = document.querySelector('.lab-views');
-    if (viewTabList) {
-        var STEP = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
-        viewTabList.addEventListener('keydown', function (e) {
-            var list = [].slice.call(viewTabs);
-            var i = list.indexOf(document.activeElement);
-            if (i < 0) return;
-            var next;
-            if (e.key in STEP) next = list[(i + STEP[e.key] + list.length) % list.length];
-            else if (e.key === 'Home') next = list[0];
-            else if (e.key === 'End') next = list[list.length - 1];
-            else return;
-            e.preventDefault();
-            next.focus();
-            showView(next.dataset.view);
-        });
-    }
-    // Initial roving-tabindex state + a one-shot ignite so the active pill "comes alive" on load.
-    viewTabs.forEach(function (t) { t.tabIndex = t.classList.contains('is-active') ? 0 : -1; });
-    if (!reduce) {
-        var initTab = document.querySelector('.lab-view-tab.is-active');
-        if (initTab) setTimeout(function () { if (initTab.classList.contains('is-active')) initTab.classList.add('lab-view--ignite'); }, 260);
-    }
+    // Click + Arrow/Home/End keyboard nav + roving tabindex, all via the shared tablist helper.
+    tablist = PlatPursuit.wireTablist(viewTabs, { onSelect: function (t) { showView(t.dataset.view); } });
+    // A one-shot ignite on load so the active pill "comes alive".
+    var initTab = document.querySelector('.lab-view-tab.is-active');
+    if (initTab) { setTimeout(function () { if (initTab.classList.contains('is-active')) { PlatPursuit.igniteTab(initTab); } }, 260); }
 
     // Rail / deep-link jumps to a specific Career view without a reload.
     document.querySelectorAll('[data-lab-goto]').forEach(function (el) {

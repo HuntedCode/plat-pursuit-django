@@ -404,7 +404,9 @@
                 var on = chip.getAttribute('data-view') === v;
                 chip.classList.toggle('is-active', on);
                 chip.setAttribute('aria-selected', on ? 'true' : 'false');
+                if (on) { PlatPursuit.igniteTab(chip); }   // the chip that just became active blooms once (shared with Career/Collection)
             });
+            vtoggles.forEach(function (tl) { tl.syncTabindex(); });   // keep each toggle's roving tabindex in sync after the swap
         }
         // (Re)wire everything that belongs to the current view island.
         function initView() {
@@ -440,6 +442,12 @@
         document.body.addEventListener('htmx:beforeRequest', function (e) {
             var el = e.detail && e.detail.elt;
             if (el && el.classList && el.classList.contains('pp-vtoggle__chip') && el.classList.contains('is-active')) { e.preventDefault(); }
+        });
+        // Keyboard-enable the Series/Gallery toggle(s): roving tabindex + Arrow/Home/End move focus. MANUAL
+        // activation -- the chips are HTMX <a> links, so Enter/click does the swap natively; auto-activating
+        // on each arrow keypress would fire a request per keystroke. Both the toolbar and mini-bar copies wire.
+        var vtoggles = Array.prototype.slice.call(document.querySelectorAll('.pp-vtoggle')).map(function (grp) {
+            return PlatPursuit.wireTablist(grp.querySelectorAll('.pp-vtoggle__chip'), { manual: true });
         });
         initView();
 

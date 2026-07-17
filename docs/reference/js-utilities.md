@@ -192,6 +192,23 @@ the left). No-ops when `fromName === toName` or under `prefers-reduced-motion`. 
 on the now-shown panel) and HTMX island swaps (call on the swapped-in root in `htmx:afterSwap`). Used by
 Career tabs, Collection Case/Gallery/List, and the Badges Series/Gallery swap. → [motion-patterns.md](../reference/motion-patterns.md) (Directional view switch).
 
+### PlatPursuit.wireTablist / igniteTab / syncViewParam
+
+The shared behavior behind every rebuilt **segmented switcher** (view/tab toggle). Markup/class-agnostic —
+each page keeps its own switch logic and just hands the tabs to these.
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `wireTablist(tabs, opts)` | NodeList/Array, `{onSelect, isActive, manual, ignite}` | WAI-ARIA tablist: roving `tabindex` + Arrow/Home/End nav. Returns `{ syncTabindex }` |
+| `igniteTab(tab)` | HTMLElement | One-shot `.pp-tab-ignite` glow bloom on the just-activated chip (restart-safe, reduced-motion gated) |
+| `syncViewParam(view, opts)` | string, `{default, paramView, params}` | Reflect the active view in `?view=` (default view stays clean) + strip view-scoped params on leave |
+
+`wireTablist` **automatic** activation (default) activates on click OR arrow — for cheap client-side
+switches (Career tabs, Collection Case/Gallery/List + set shelves). **Manual** (`opts.manual`) moves focus
+only, letting the tab's own click/Enter activate — for expensive swaps (the Badges Series/Gallery HTMX
+`<a>` chips, where auto-activating per arrow would fire a request each keypress). Call the returned
+`syncTabindex()` after the active tab changes elsewhere (e.g. an HTMX `afterSwap`). → [motion-patterns.md](../reference/motion-patterns.md) (tab ignite).
+
 ## Namespace Pattern
 
 All utilities are declared as `const` or `class` at module scope, then exported at the bottom:

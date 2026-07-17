@@ -95,6 +95,16 @@ class). Two host patterns:
   the helper on the swapped-in root with `lastView → new`, then update `lastView`.
 Reference: the claim ceremony's shared-axis paging (`claim-ceremony.js`).
 
+### Tab "ignite" — the active chip comes alive
+When a segmented-switcher chip becomes active, bloom its glow once and settle flat back into its resting
+`.is-active` state (a small "this is live now" acknowledgment, not a persistent glow — neon is a transient
+state). Class **`.pp-tab-ignite`** (`components/motion.css`, a box-shadow bloom, **no** fill-mode so it
+hands back to the chip's own styles) applied one-shot by **`PlatPursuit.igniteTab(chip)`** (restart-safe
+remove→reflow→add; reduced-motion no-ops). Fire it on every activation (click, keyboard, and once on load
+so the active pill greets you). The keyframe uses `rgba`, never `color-mix` — lightningcss strips
+`color-mix` from `@keyframes`. Pairs with `wireTablist` (see [js-utilities](js-utilities.md)); live on the
+Career, Collection, and Badges switchers.
+
 ### Don't let clip containers cut hover states
 `overflow: hidden`, `overflow-x: auto` (which forces `overflow-y: auto`), and `clip-path` all clip a
 child's hover scale/glow. Fixes:

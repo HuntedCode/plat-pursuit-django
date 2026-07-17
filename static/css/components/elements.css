@@ -40,15 +40,8 @@
 .lab-view-tab.is-active { color: var(--pp-text); font-weight: 700; background: color-mix(in oklab, var(--pp-primary) 16%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
 .lab-view-tab:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .lab-view-tab svg { width: 15px; height: 15px; flex: none; }
-/* (B) Ignite: the pill that just became active blooms its glow once, then settles into .is-active.
-   No fill-mode -- when the animation ends it hands back to the .is-active box-shadow above.
-   Keyframes use rgba, never color-mix (lightningcss strips color-mix from @keyframes). */
-.lab-view-tab.lab-view--ignite { animation: labTabIgnite 0.5s ease-out; }
-@keyframes labTabIgnite {
-    0%   { box-shadow: 0 0 4px 0 rgba(103, 209, 248, 0.3); }
-    40%  { box-shadow: 0 0 20px 3px rgba(103, 209, 248, 0.55); }
-    100% { box-shadow: 0 0 0 0 rgba(103, 209, 248, 0); }   /* settle FLAT into the segmented is-active (no resting glow) */
-}
+/* Tab "ignite" (the active-pill glow bloom) is now the shared .pp-tab-ignite in components/motion.css,
+   applied by PlatPursuit.igniteTab() across every rebuilt switcher. */
 
 .lab-view[hidden] { display: none; }
 /* Panel cross-fade (the incoming view's directional slide) is now the shared .pp-view-in-* primitive
@@ -844,8 +837,7 @@
 }
 
 /* Reduced-motion: the Career-chrome premium touches collapse to their static states. (The view-panel
-   slide is gated at its source in motion.css.) */
+   slide + tab ignite are gated at their source in motion.css.) */
 @media (prefers-reduced-motion: reduce) {
-    .lab-view-tab.lab-view--ignite,
     .lab-tab-count { animation: none; }
 }

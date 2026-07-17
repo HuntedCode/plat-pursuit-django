@@ -1363,6 +1363,82 @@ function slideViewIn(panel, fromName, toName, order) {
     panel.classList.add(forward ? 'pp-view-in-right' : 'pp-view-in-left');
 }
 
+/**
+ * One-shot "ignite" glow bloom on the chip that just became active (the shared .pp-tab-ignite in
+ * components/motion.css). Restart-safe (removes + reflows before re-adding); reduced-motion = no-op.
+ * @param {HTMLElement} tab
+ */
+function igniteTab(tab) {
+    if (!tab) { return; }
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+    tab.classList.remove('pp-tab-ignite');
+    void tab.offsetWidth;   // restart the animation on a re-activation
+    tab.classList.add('pp-tab-ignite');
+}
+
+/**
+ * Wire a WAI-ARIA tablist: roving tabindex (only the active tab is Tab-reachable) + Arrow/Home/End
+ * keyboard nav. Markup/class-agnostic -- pass the tab elements and a select callback; the page owns what
+ * "select" does (show a panel, HTMX swap, etc). Two activation models:
+ *   - automatic (default): clicking OR arrowing to a tab activates it -- for cheap client-side switches.
+ *   - manual (`opts.manual`): arrows move focus only; the tab's own click/Enter activates -- for
+ *     expensive swaps (HTMX links) where auto-activating on every arrow keypress would fire a request.
+ *
+ * @param {NodeList|Array} tabs  the tab elements, in visual order
+ * @param {Object} opts
+ * @param {Function} [opts.onSelect]  (tabEl) -> void, called on activation (auto model only)
+ * @param {Function} [opts.isActive]  (tabEl) -> bool; default checks .is-active
+ * @param {boolean} [opts.manual]     manual activation (arrows move focus only)
+ * @param {boolean} [opts.ignite]     bloom .pp-tab-ignite on the activated tab (auto model)
+ * @returns {{ syncTabindex: Function }}  call syncTabindex() after the active tab changes elsewhere
+ */
+function wireTablist(tabs, opts) {
+    tabs = Array.prototype.slice.call(tabs || []);
+    var noop = function () {};
+    if (!tabs.length) { return { syncTabindex: noop }; }
+    opts = opts || {};
+    var onSelect = opts.onSelect || noop;
+    var isActive = opts.isActive || function (t) { return t.classList.contains('is-active'); };
+    function syncTabindex() { tabs.forEach(function (t) { t.tabIndex = isActive(t) ? 0 : -1; }); }
+    function select(tab) { if (opts.ignite) { igniteTab(tab); } onSelect(tab); }
+    var STEP = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+    tabs.forEach(function (tab) {
+        if (!opts.manual) { tab.addEventListener('click', function () { select(tab); }); }
+        tab.addEventListener('keydown', function (e) {
+            var i = tabs.indexOf(tab), next;
+            if (Object.prototype.hasOwnProperty.call(STEP, e.key)) { next = tabs[(i + STEP[e.key] + tabs.length) % tabs.length]; }
+            else if (e.key === 'Home') { next = tabs[0]; }
+            else if (e.key === 'End') { next = tabs[tabs.length - 1]; }
+            else { return; }
+            e.preventDefault();
+            next.focus();
+            if (!opts.manual) { select(next); }   // automatic activation
+        });
+    });
+    syncTabindex();
+    return { syncTabindex: syncTabindex };
+}
+
+/**
+ * Reflect the active view in the URL (`?view=`), keeping the default view's URL clean, and strip a set of
+ * view-scoped params when you leave the view that owns them (so a shared link stays clean). Shareable +
+ * reload-safe; no-op without History. Shared by the Career tabs and Collection view toggle.
+ * @param {string} view       the now-active view name
+ * @param {Object} opts
+ * @param {string} opts.default        the default view -- its URL drops `?view=`
+ * @param {string} [opts.paramView]    the view that owns `opts.params`
+ * @param {string[]} [opts.params]     params stripped unless `view === opts.paramView`
+ */
+function syncViewParam(view, opts) {
+    if (!window.history || !history.replaceState) { return; }
+    opts = opts || {};
+    var qp = new URLSearchParams(location.search);
+    if (view === opts.default) { qp.delete('view'); } else { qp.set('view', view); }
+    if (opts.params && view !== opts.paramView) { opts.params.forEach(function (k) { qp.delete(k); }); }
+    var qs = qp.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+}
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -1383,3 +1459,6 @@ window.PlatPursuit.SpoilerToggle = SpoilerToggle;
 window.PlatPursuit.Lightbox = Lightbox;
 window.PlatPursuit.StickyReveal = StickyReveal;
 window.PlatPursuit.slideViewIn = slideViewIn;
+window.PlatPursuit.igniteTab = igniteTab;
+window.PlatPursuit.wireTablist = wireTablist;
+window.PlatPursuit.syncViewParam = syncViewParam;
