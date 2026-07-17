@@ -90,8 +90,6 @@ class GamesListView(HtmxListMixin, ListView):
             # that is never used by the card render. See CLAUDE.md "IGDB cover-art
             # querysets" and the May 2026 OOM postmortem.
             'concept__igdb_match__raw_response',
-        ).prefetch_related(
-            Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
         )
         return qs.order_by(*order)
 
