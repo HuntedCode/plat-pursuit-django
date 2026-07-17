@@ -401,10 +401,12 @@
 @media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
     .pp-bdetail__info {
         max-height: calc(88vh - 286px); overflow-y: auto; overscroll-behavior: contain;
-        /* Tie the scroll region to the modal: soft-fade its top + bottom edges so the content reads as
-           sliding UNDER the fixed medallion (top) and hints there's more below (bottom) -- not a hard-cut
-           box. Standard mask-image only (lightningcss autoprefixes -webkit-). */
-        mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 18px), transparent);
+        /* Breathing room INSIDE the scroll: content clears the medallion at the top and the "View full
+           series" link renders fully at the bottom. The fade is aligned to this padding, so it lands on the
+           empty padding (crisp content edges) while still fading content AS IT SCROLLS under the medallion /
+           hinting there's more below. Standard mask-image only (lightningcss autoprefixes -webkit-). */
+        padding-block: 14px 20px;
+        mask-image: linear-gradient(to bottom, transparent, #000 14px, #000 calc(100% - 20px), transparent);
     }
 }
 @media (prefers-reduced-motion: reduce) {
