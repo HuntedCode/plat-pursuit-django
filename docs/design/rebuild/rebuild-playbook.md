@@ -10,6 +10,7 @@ Related: **[career-reference-standard.md](career-reference-standard.md)** (the q
 means"), **[../../reference/design-system.md](../../reference/design-system.md)** (tokens, patterns,
 component blueprints), **[../visual-identity.md](../visual-identity.md)** (the constitution),
 **[../../reference/motion-patterns.md](../../reference/motion-patterns.md)** (motion),
+**[../../reference/js-utilities.md](../../reference/js-utilities.md)** (`PlatPursuit.*` JS helpers),
 **[chrome-audit.md](chrome-audit.md)** (nav/tabbar/footer), **[ia-map.md](ia-map.md)** (IA),
 **[system-inventory.md](system-inventory.md)** (engine/system map).
 
@@ -22,6 +23,59 @@ checklist below and the [Career reference standard](career-reference-standard.md
 patterns; do not re-derive them.
 
 **After finishing (or advancing) a page:** update its row in [Page Status](#page-status).
+
+---
+
+## Shared Primitives Index
+
+**One lookup for every reusable primitive — reach for these, don't re-roll them.** Each row points to its
+authoritative doc for the full spec. The four docs by role: **this playbook** (page status + the
+[Shared Elements](#shared-elements-every-rebuilt-page-inherits-these) rules + tokens) ·
+**[design-system.md](../../reference/design-system.md)** (component blueprints: markup + tokens) ·
+**[motion-patterns.md](../../reference/motion-patterns.md)** (motion recipes) ·
+**[js-utilities.md](../../reference/js-utilities.md)** (`window.PlatPursuit.*` JS helpers).
+
+### Components (CSS)
+
+| Primitive | What | Code | Full spec |
+|---|---|---|---|
+| `.pp-switch` / `__chip` / `__lbl` | Segmented view/tab switcher — the ONE treatment | `components/switcher.css` | design-system (Tab Group) |
+| `.pgl` (+ `.pgl--static`) | Progression ladder (tier/rank stepper); `--pgl-accent` / per-rung `--rung-c` | `components/elements.css` | design-system (Progression ladder) |
+| Medallion `.pp-med` | The badge object (size via `--sz`) | `components/badge_medallion.html` | playbook (Shared components) |
+| Horizon `.pp-horizon` (+ `--segmented`) | Progress bar / discrete meter | `components/horizon.css` | playbook (Shared components) |
+| Tally `.pp-tally` | Display numbers (pair with `countUp`) | `components/tally.css` | playbook (Shared components) |
+| Accented header card | The page-header card shell | (Tailwind classes) | playbook §2 |
+| `.pp-toolbar-card` | Filter/search toolbar | — | design-system (Toolbar) |
+| Stat tiles `.scard` / `.pp-bdetail__stat` | Headline / dense stat cells | — | playbook (Shared components) |
+
+### Motion (CSS — all reduced-motion gated, live in `components/motion.css`)
+
+| Primitive | What | Recipe |
+|---|---|---|
+| `.pp-head-cascade` | Header content opening-beat cascade | motion-patterns (Header content cascade) |
+| `.pp-view-in-right` / `-left` | Directional view-switch slide (shared axis) | motion-patterns (Directional view switch) |
+| `.pp-tab-ignite` | Active-chip glow bloom | motion-patterns (Tab ignite) |
+| `.pp-draw-in` / `ppDrawIn` | Draw an SVG stroke in (needs `pathLength="1"`) | motion-patterns (Draw an SVG stroke in) |
+
+Staggered grid reveal is the JS helper `staggerReveal` below (each grid supplies its own `.pp-reveal` hide CSS + per-card animation). → motion-patterns (Staggered grid reveal).
+
+### JS helpers (`window.PlatPursuit.*`, in `static/js/utils.js`)
+
+| Helper | What |
+|---|---|
+| `slideViewIn(panel, from, to, order)` | Directional panel slide on a view switch |
+| `wireTablist(tabs, {onSelect, manual, …})` | WAI-ARIA tablist: roving tabindex + Arrow/Home/End |
+| `igniteTab(chip)` | Fire the `.pp-tab-ignite` bloom |
+| `syncViewParam(view, {default, params})` | Reflect the active view in `?view=` |
+| `staggerReveal({grid, cardSelector, reveal})` | WAAPI grid-reveal engine (batch + observer) |
+| also: `countUp`, `InfiniteScroller`, `StickyReveal`, `debounce`, `ToastManager`, `API`, … | see js-utilities.md for the full set |
+
+### Design decisions on record (don't re-litigate)
+
+- **Segmented switcher = ONE component** (`.pp-switch`, unified 2026-07 from three class systems). Career's `.jlayout__btn` (pill) + the Case's `.pp-case__set-tab` (ring filters) are deliberately distinct.
+- **Reveal-stagger is THREE tools, not one** — `staggerReveal` (WAAPI, for HTMX/infinite grids) · a CSS `nth-child` stagger (bounded client grids that replay) · bespoke per-card choreography (Career). Don't force-merge them. → motion-patterns.
+- **The badge stage spine deliberately doesn't encode linear progress** (stages complete in any order); the "living" tint is per-stage, order-safe.
+- **`.pgl` stays in `elements.css`** (coupled to the claim ceremony) though it's a shared primitive — a relocation is needless regression risk.
 
 ---
 
