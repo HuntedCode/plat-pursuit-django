@@ -49,9 +49,9 @@
 
     {% include 'partials/ad_unit.html' with ad_slot="5270350613" %}
 
-    {# ── Toolbar: quiet chrome. Primary bar (search + sort + Lucky + Filters toggle) with the big filter
-       panel tucked into a collapsible drawer. Filters auto-apply via browse-filters.js (HTMX swap); no
-       Apply button. The bare-/games/ dispatch redirect (saved defaults) is preserved by the view. ── #}
+    {% comment %} Toolbar: quiet chrome. Primary bar (search + sort + Lucky + Filters toggle) with the big
+    filter panel tucked into a collapsible drawer. Filters auto-apply via browse-filters.js (HTMX swap); no
+    Apply button. The bare-/games/ dispatch redirect (saved defaults) is preserved by the view. {% endcomment %}
     <form data-browse-form id="gbrowse-form"
           hx-get="{% url 'games_list' %}"
           hx-target="#browse-results"
@@ -283,8 +283,8 @@
         {% include 'trophies/partials/game_list/browse_results.html' %}
     </div>
 
-    {# Infinite scroll: the sentinel (observed) + loading spinner sit OUTSIDE #browse-results so they persist
-       across filter swaps; InfiniteScroller re-binds to the fresh #items-grid in htmx:afterSwap. #}
+    {% comment %} Infinite scroll: the sentinel (observed) + loading spinner sit OUTSIDE #browse-results so
+    they persist across filter swaps; InfiniteScroller re-binds to the fresh #items-grid in htmx:afterSwap. {% endcomment %}
     <div id="gbrowse-sentinel" class="h-4" aria-hidden="true"></div>
     <div id="gbrowse-loading" class="pp-gbrowse__loading hidden"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
 </div>
@@ -380,6 +380,15 @@
                 initReveal();   // before initScroller so revealHandle exists for its onAppend hook
                 initScroller();
             }
+        });
+        // Safety net: clear the settle dim (+ browse-filters.js's opacity-50/pointer-events-none) when the
+        // FILTER request completes, incl. non-2xx / aborted requests where afterSwap never fires -- otherwise
+        // the results stay dimmed AND unclickable. Scoped to this form's request via e.detail.elt.
+        document.body.addEventListener('htmx:afterRequest', function (e) {
+            var elt = e.detail && e.detail.elt;
+            if (!elt || elt.id !== 'gbrowse-form') { return; }
+            var r = document.getElementById('browse-results');
+            if (r) { r.classList.remove('is-swapping', 'opacity-50', 'pointer-events-none'); }
         });
 
         refreshBadge();

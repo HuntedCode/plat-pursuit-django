@@ -46,6 +46,9 @@ def test_grid_renders_card_contract(client):
     for label in ('BRZ', 'SLV', 'GLD', 'PLT'):
         assert label in content
     assert 'gbrowse-sentinel' in content
+    # No raw Django comment markers leak (multi-line {# #} is NOT a comment in Django and ships as text).
+    assert '{#' not in content
+    assert 'browse results partial' not in content
 
 
 def test_platform_filter_narrows(client):

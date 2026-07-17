@@ -1,7 +1,7 @@
-{# Games browse results partial (grid-only, infinite scroll). Returned on HTMX filter swaps AND on the
-   InfiniteScroller's ?page fetches (X-Requested-With, via the HtmxListMixin XHR guard) -- the scroller
-   extracts the .pp-gcard nodes from this and appends them. The sentinel + loading live in game_list.html
-   (outside #browse-results) so only the grid swaps on a filter change. #}
+{% comment %} Games browse results partial (grid-only, infinite scroll). Returned on HTMX filter swaps AND on
+the InfiniteScroller's ?page fetches (X-Requested-With, via the HtmxListMixin XHR guard) -- the scroller
+extracts the .pp-gcard nodes from this and appends them. The sentinel + loading live in game_list.html
+(outside #browse-results) so only the grid swaps on a filter change. {% endcomment %}
 <div id="items-grid" class="pp-gbrowse__grid">
     {% include 'trophies/partials/game_list/game_cards.html' %}
 </div>
