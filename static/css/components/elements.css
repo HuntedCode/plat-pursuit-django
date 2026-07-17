@@ -51,12 +51,8 @@
 }
 
 .lab-view[hidden] { display: none; }
-/* (A) Panel cross-fade: the incoming Career view slides + fades in from the side it lives on
-   (Material "shared axis" -- direction follows tab order). Transform/opacity only, no color-mix. */
-.lab-view--in-right { animation: labViewInRight 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-.lab-view--in-left { animation: labViewInLeft 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-@keyframes labViewInRight { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes labViewInLeft { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+/* Panel cross-fade (the incoming view's directional slide) is now the shared .pp-view-in-* primitive
+   in components/motion.css, driven by PlatPursuit.slideViewIn(). */
 
 /* ---- Summary stat cards ---- */
 /* Stat cell (Home hero + Lab). Mobile-first: a whale's 6-7 digit count overflows the full
@@ -847,9 +843,9 @@
     50%      { box-shadow: 0 0 9px 1px rgba(103, 209, 248, 0.55); }
 }
 
-/* Reduced-motion: the four Career-chrome premium touches all collapse to their static states. */
+/* Reduced-motion: the Career-chrome premium touches collapse to their static states. (The view-panel
+   slide is gated at its source in motion.css.) */
 @media (prefers-reduced-motion: reduce) {
-    .lab-view--in-right, .lab-view--in-left,
     .lab-view-tab.lab-view--ignite,
     .lab-tab-count { animation: none; }
 }

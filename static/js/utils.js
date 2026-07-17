@@ -1343,6 +1343,26 @@ const StickyReveal = {
     }
 };
 
+/**
+ * Directional view switch (Material "shared axis"): slide the incoming panel in from the side it lives
+ * on -- forward in the tab order enters from the right, backward from the left. Applies the shared
+ * .pp-view-in-* class (components/motion.css) to `panel`, picking the direction from `order`.
+ *
+ * @param {HTMLElement} panel   the element now being shown (a toggled panel, or an HTMX-swapped root)
+ * @param {string} fromName     the view we're leaving (falsy on first paint -> treated as forward)
+ * @param {string} toName       the view we're entering
+ * @param {string[]} order      the view names in tab order, e.g. ['jobs','radar','contracts']
+ */
+function slideViewIn(panel, fromName, toName, order) {
+    if (!panel || fromName === toName) { return; }
+    // Reduced motion is also gated in CSS; short-circuit here to skip the forced reflow below.
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+    var forward = !fromName || order.indexOf(toName) >= order.indexOf(fromName);
+    panel.classList.remove('pp-view-in-right', 'pp-view-in-left');
+    void panel.offsetWidth;   // restart the animation from scratch on a re-toggle
+    panel.classList.add(forward ? 'pp-view-in-right' : 'pp-view-in-left');
+}
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -1362,3 +1382,4 @@ window.PlatPursuit.TrophyListRenderer = TrophyListRenderer;
 window.PlatPursuit.SpoilerToggle = SpoilerToggle;
 window.PlatPursuit.Lightbox = Lightbox;
 window.PlatPursuit.StickyReveal = StickyReveal;
+window.PlatPursuit.slideViewIn = slideViewIn;

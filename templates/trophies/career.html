@@ -579,17 +579,14 @@ function ppCountUp(el, dur) {
     function showView(name) {
         var from = currentView();
         var changed = from !== name;
-        // (A) Directional cross-fade: incoming panel slides+fades in from the side it lives on.
-        var forward = !from || VIEW_ORDER.indexOf(name) >= VIEW_ORDER.indexOf(from);
+        var shown = null;
         views.forEach(function (v) {
             var on = v.dataset.view === name;
             v.hidden = !on;
-            v.classList.remove('lab-view--in-right', 'lab-view--in-left');
-            if (on && changed && !reduce) {
-                void v.offsetWidth;   // restart the animation from scratch
-                v.classList.add(forward ? 'lab-view--in-right' : 'lab-view--in-left');
-            }
+            if (on) { shown = v; }
         });
+        // (A) Directional cross-fade: the incoming panel slides + fades in from the side it lives on.
+        if (changed) { PlatPursuit.slideViewIn(shown, from, name, VIEW_ORDER); }
         viewTabs.forEach(function (t) {
             var on = t.dataset.view === name;
             t.classList.toggle('is-active', on);

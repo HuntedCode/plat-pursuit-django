@@ -20,10 +20,23 @@
         // The Gallery's URL params -- mirrored in the URL only while the Gallery is active, and stripped
         // when you leave it (so a shared Case link stays clean). Kept in sync with initGallery.
         var GALLERY_PARAMS = ['tier', 'state', 'set', 'q', 'sort'];
+        // View order (Case / Gallery / List) taken from the chip order, for the directional slide.
+        var VIEW_ORDER = chips.map(function (c) { return c.getAttribute('data-collection-view'); });
+        function currentView() {
+            var cur = null;
+            views.forEach(function (v) { if (!v.hidden) { cur = v.getAttribute('data-collection-view'); } });
+            return cur;
+        }
         function setView(name) {
+            var from = currentView();
+            var shown = null;
             views.forEach(function (v) {
-                v.hidden = v.getAttribute('data-collection-view') !== name;
+                var on = v.getAttribute('data-collection-view') === name;
+                v.hidden = !on;
+                if (on) { shown = v; }
             });
+            // Directional cross-fade: the incoming view slides in from the side it lives on (shared with Career).
+            if (from !== name) { PlatPursuit.slideViewIn(shown, from, name, VIEW_ORDER); }
             chips.forEach(function (c) {
                 var on = c.getAttribute('data-collection-view') === name;
                 c.classList.toggle('is-active', on);

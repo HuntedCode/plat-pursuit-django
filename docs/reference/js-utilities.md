@@ -180,6 +180,18 @@ Wraps SortableJS with `forceFallback: true` for consistent cross-browser behavio
 
 Validates page number against min/max before navigation.
 
+### PlatPursuit.slideViewIn
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `slideViewIn(panel, fromName, toName, order)` | HTMLElement, string, string, string[] | Directional "shared axis" view-switch slide |
+
+Applies the shared `.pp-view-in-right` / `.pp-view-in-left` class (`components/motion.css`) to the incoming
+`panel`, picking the direction from `order` (forward in the list slides in from the right, backward from
+the left). No-ops when `fromName === toName` or under `prefers-reduced-motion`. Works for JS toggles (call
+on the now-shown panel) and HTMX island swaps (call on the swapped-in root in `htmx:afterSwap`). Used by
+Career tabs, Collection Case/Gallery/List, and the Badges Series/Gallery swap. → [motion-patterns.md](../reference/motion-patterns.md) (Directional view switch).
+
 ## Namespace Pattern
 
 All utilities are declared as `const` or `class` at module scope, then exported at the bottom:

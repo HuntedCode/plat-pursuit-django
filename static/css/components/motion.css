@@ -16,3 +16,17 @@
     .pp-head-cascade > *:nth-child(3) { animation-delay: 0.14s; }
     .pp-head-cascade > *:nth-child(n+4) { animation-delay: 0.2s; }
 }
+
+/* Directional view switch (Material "shared axis"): when a view/tab toggle swaps content, the incoming
+ * panel slides + fades in FROM THE SIDE IT LIVES ON -- forward in the tab order enters from the right,
+ * backward from the left -- so the switch has a sense of place. Driven by PlatPursuit.slideViewIn(), which
+ * picks the class from the tab order. Transform/opacity only. Reduced-motion users get an instant swap. */
+@keyframes ppViewInRight { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes ppViewInLeft { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+@media (prefers-reduced-motion: no-preference) {
+    /* `backwards` (not `both`): the end state == the panel's natural position, so we DON'T hold a transform
+     * after the slide -- a persistent translateX() would make the panel a containing block and break any
+     * sticky/fixed descendant. Returns cleanly to transform:none when the 0.28s slide finishes. */
+    .pp-view-in-right { animation: ppViewInRight 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+    .pp-view-in-left { animation: ppViewInLeft 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+}

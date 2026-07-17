@@ -72,6 +72,29 @@ Two safe options — never leave content at `opacity: 0` with no fallback:
 - **JS-gated** (for IntersectionObserver scroll-reveals): add a `.js-motion` class to the root
   *before paint*, and gate the hidden state on it, so content is visible when JS is off.
 
+### Header content cascade (the opening beat)
+Every rebuilt page's header/hero opens the same way, and the shared way is a **cascade of the content**,
+not a move of the whole card — the staggered rise reads livelier and more deliberate. Put
+**`.pp-head-cascade`** (`components/motion.css`) on the header's **card-body**; its direct children fade +
+rise (9px) in sequence (title, then stats, then the rest — three beats, then the rest share the last).
+`backwards` fill = no flash; reduced-motion gated. Career runs it on **both** its stacked cards (hero +
+summary). If the header lives inside an HTMX swap island (badge detail rides `#badge-tier-view`), gate the
+class to first load only — `{% if not is_tier_swap %} pp-head-cascade{% endif %}` — or it replays on every
+swap. Live on Career, Collection, Badges list, Badge detail.
+
+### Directional view switch (shared axis)
+When a view/tab toggle swaps content, slide the incoming panel in **from the side it lives on** — forward
+in the tab order enters from the right, backward from the left (Material's "shared axis"), so the switch
+has a sense of place. Classes **`.pp-view-in-right` / `.pp-view-in-left`** (`components/motion.css`,
+translateX ±16px + fade, 0.28s, reduced-motion gated) applied by the helper **`PlatPursuit.slideViewIn(
+panel, fromName, toName, order)`** (picks the direction from `order`, restarts the animation, adds the
+class). Two host patterns:
+- **JS toggle** (Career tabs, Collection Case/Gallery/List — panels pre-rendered, toggled via `hidden`):
+  capture the outgoing view, flip `hidden`, call the helper on the now-shown panel.
+- **HTMX island swap** (Badges Series/Gallery): keep a `lastView`; in `htmx:afterSwap` on the island, call
+  the helper on the swapped-in root with `lastView → new`, then update `lastView`.
+Reference: the claim ceremony's shared-axis paging (`claim-ceremony.js`).
+
 ### Don't let clip containers cut hover states
 `overflow: hidden`, `overflow-x: auto` (which forces `overflow-y: auto`), and `clip-path` all clip a
 child's hover scale/glow. Fixes:

@@ -151,7 +151,11 @@ summary header). **If the header lives inside an HTMX swap island** (badge detai
 ### 7. Dynamic view swaps (HTMX innerHTML)
 View toggles swap an island via `hx-get` + `hx-target="#..." hx-swap="innerHTML" hx-push-url`, not a full
 reload. Re-init reveals/scrollers in an `htmx:afterSwap` handler keyed on `e.detail.target.id`. (Badges
-`#badge-view`, Collection, Career.)
+`#badge-view`, Collection, Career.) **Slide the incoming view in directionally** — forward in the tab
+order from the right, backward from the left (Material shared axis) — via `PlatPursuit.slideViewIn(panel,
+from, to, order)` + the `.pp-view-in-*` classes (`components/motion.css`). Works for JS toggles (Career
+tabs, Collection Case/Gallery/List — call it on the shown panel) and HTMX swaps (Badges — track `lastView`
+and call it on the swapped-in root in `afterSwap`). → motion-patterns.md (Directional view switch).
 
 ### 8. Filter/sort settle (no blank-flash)
 On a filter/sort swap, dim the results container while in flight so it never freezes/blank-flashes. Add

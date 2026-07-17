@@ -144,6 +144,8 @@
             if (s) { return { view: 'series', card: '.pp-scard', page: parseInt(s.getAttribute('data-page-size'), 10) || 30 }; }
             return null;
         }
+        // The view showing before the next swap, for the directional slide (Series -> Gallery = forward).
+        var lastView = (viewConfig() || {}).view || 'series';
         // Cards reveal (staggered) as they scroll into view -- Series TILES rise + fill their bars, Gallery
         // MEDALLIONS materialize onto the wall. Skipped under reduced motion / no IO. The .pp-reveal class is
         // added ONLY when we're going to observe, so cards never stick hidden. Uses the Web Animations API
@@ -418,7 +420,12 @@
             var t = (e.detail && e.detail.target) || e.target;
             if (!t || !t.id) { return; }
             if (t.id === 'browse-results') { t.classList.remove('is-swapping'); initReveal(); initScroller(viewConfig()); }  // filter swap: just the grid
-            else if (t.id === 'badge-view') { initView(); }   // view swap: whole island (leave scroll put, like Collection/Career)
+            else if (t.id === 'badge-view') {   // view swap: whole island (leave scroll put, like Collection/Career)
+                initView();
+                var nv = (viewConfig() || {}).view || 'series';
+                PlatPursuit.slideViewIn(t, lastView, nv, ['series', 'gallery']);   // directional slide, shared with Career/Collection
+                lastView = nv;
+            }
         });
         // Safety net: clear the settle dim when the FILTER request itself completes, incl. errors where
         // afterSwap never fires. Scoped to the filter form's own request (via e.detail.elt) so an unrelated
