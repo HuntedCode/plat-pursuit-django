@@ -1439,6 +1439,57 @@ function syncViewParam(view, opts) {
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
 }
 
+/**
+ * Staggered grid reveal for HTMX-swapped / infinite-scroll card grids (the Badges browse pattern; the
+ * standard for any rebuilt browse grid). Hides the grid's cards, reveals those already present in ONE
+ * DOM-order batch, and returns an observer that reveals infinite-scroll-APPENDED cards as they scroll in.
+ * The page supplies the per-card animation via `reveal(el, delayMs)` (use WAAPI `el.animate` so arrivals
+ * restart reliably on freshly HTMX-swapped nodes); the engine owns the reduced-motion gate, the batch
+ * stagger, and the observer. Reveals each card ONCE (marks `.is-revealed`).
+ *
+ * NOTE: this is for grids that swap/append (WAAPI + observer). A BOUNDED, all-client grid that just wants
+ * a replay-on-show stagger is simpler as a CSS container class (see the Collection gallery's
+ * `.is-revealing` nth-child); and content-specific per-card reveals (Career's contract rows) stay bespoke.
+ * Don't force those onto this engine -- different tools for different contexts.
+ *
+ * @param {Object} o
+ * @param {HTMLElement} o.grid          the grid container
+ * @param {string} o.cardSelector       selects the cards within the grid
+ * @param {function(HTMLElement, number)} o.reveal   plays one card's arrival, given (el, delayMs)
+ * @param {number} [o.step=24]          per-card stagger step (ms)
+ * @param {number} [o.batchCap=560]     max delay for the initial in-grid batch
+ * @param {number} [o.appendCap=200]    max delay within a scroll-appended batch
+ * @param {string} [o.hideClass='pp-reveal']   class added to the grid to hide un-revealed cards
+ * @returns {{ observe: function, disconnect: function } | null}  null if motion is off / no cards / no IO
+ */
+function staggerReveal(o) {
+    if (!o || !o.grid || typeof o.reveal !== 'function' || !o.cardSelector) { return null; }
+    if (!window.IntersectionObserver) { return null; }
+    var rm = (PlatPursuit.Medallion && PlatPursuit.Medallion.prefersReducedMotion && PlatPursuit.Medallion.prefersReducedMotion())
+        || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    if (rm) { return null; }
+    var grid = o.grid, sel = o.cardSelector;
+    if (!grid.querySelector(sel)) { return null; }
+    var step = o.step || 24;
+    var batchCap = o.batchCap != null ? o.batchCap : 560;
+    var appendCap = o.appendCap != null ? o.appendCap : 200;
+    grid.classList.add(o.hideClass || 'pp-reveal');   // hides the cards until each is revealed
+    function play(el, delay) { el.classList.add('is-revealed'); o.reveal(el, delay); }
+    // Reveal cards already present in ONE synchronous DOM-order batch. DOM order == visual reading order for
+    // a row-major grid, independent of the (possibly transitional) column count during a view swap.
+    grid.querySelectorAll(sel + ':not(.is-revealed)').forEach(function (el, i) { play(el, Math.min(i * step, batchCap)); });
+    // The observer ONLY scroll-reveals infinite-scroll-appended cards (call observe() on newly-added nodes).
+    var io = new IntersectionObserver(function (entries) {
+        var shown = entries.filter(function (e) { return e.isIntersecting; }).map(function (e) { return e.target; });
+        shown.sort(function (a, b) { return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1; });
+        shown.forEach(function (el, j) { play(el, Math.min(j * step, appendCap)); io.unobserve(el); });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    return {
+        observe: function (nodes) { Array.prototype.forEach.call(nodes, function (nd) { if (nd.matches && nd.matches(sel)) { io.observe(nd); } }); },
+        disconnect: function () { io.disconnect(); }
+    };
+}
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -1462,3 +1513,4 @@ window.PlatPursuit.slideViewIn = slideViewIn;
 window.PlatPursuit.igniteTab = igniteTab;
 window.PlatPursuit.wireTablist = wireTablist;
 window.PlatPursuit.syncViewParam = syncViewParam;
+window.PlatPursuit.staggerReveal = staggerReveal;

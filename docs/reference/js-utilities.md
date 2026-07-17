@@ -209,6 +209,21 @@ only, letting the tab's own click/Enter activate — for expensive swaps (the Ba
 `<a>` chips, where auto-activating per arrow would fire a request each keypress). Call the returned
 `syncTabindex()` after the active tab changes elsewhere (e.g. an HTMX `afterSwap`). → [motion-patterns.md](../reference/motion-patterns.md) (tab ignite).
 
+### PlatPursuit.staggerReveal
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `staggerReveal(opts)` | `{grid, cardSelector, reveal, step?, batchCap?, appendCap?, hideClass?}` | Staggered WAAPI grid reveal for HTMX-swapped / infinite-scroll grids |
+
+Hides the grid's cards (`hideClass`, default `.pp-reveal`), reveals those already present in ONE DOM-order
+batch, and returns `{ observe(nodes), disconnect() }` — call `observe()` on infinite-scroll-appended cards
+(from `InfiniteScroller`'s `onAppend`) so they reveal as they scroll in. The page supplies the per-card
+animation via `reveal(el, delayMs)` (use WAAPI `el.animate` so arrivals restart on freshly HTMX-swapped
+nodes); the engine owns the reduced-motion gate + batch stagger + observer, and marks each card
+`.is-revealed` once. Returns `null` when motion is off / no cards / no IntersectionObserver. **The standard
+for rebuilt browse grids** (Badges; the pending Challenges/Franchise/Company/Game-Lists/Browse rebuilds).
+**Not** for every reveal — see the note in [motion-patterns.md](../reference/motion-patterns.md) (Staggered grid reveal).
+
 ## Namespace Pattern
 
 All utilities are declared as `const` or `class` at module scope, then exported at the bottom:

@@ -134,7 +134,7 @@
         var catalogCount = document.querySelector('[data-badge-count]');
         if (catalogCount && window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(catalogCount, 900); }
 
-        var scroller = null, revealIO = null;
+        var scroller = null, revealHandle = null;
         // Read the active view from the swapped-in island (the toggle HTMX-swaps #badge-view, no full
         // reload): the Gallery root is .pp-bgal, the Series root .pp-slist; each carries its own page size.
         function viewConfig() {
@@ -150,46 +150,36 @@
         // MEDALLIONS materialize onto the wall. Skipped under reduced motion / no IO. The .pp-reveal class is
         // added ONLY when we're going to observe, so cards never stick hidden. Uses the Web Animations API
         // (not a CSS-class animation) so the arrival restarts RELIABLY on freshly HTMX-swapped nodes.
+        // Cards reveal (staggered) via the shared PlatPursuit.staggerReveal engine (batch + observer +
+        // reduced-motion gate); we supply just the per-card WAAPI animation: Series TILES rise + fill their
+        // bars, Gallery MEDALLIONS materialize onto the wall. revealHandle.observe() is called for
+        // infinite-scroll-appended cards (see initScroller's onAppend).
         function initReveal() {
-            if (!(window.PlatPursuit && PlatPursuit.Medallion) || PlatPursuit.Medallion.prefersReducedMotion() || !window.IntersectionObserver) { return; }
-            if (revealIO) { revealIO.disconnect(); revealIO = null; }   // tear down the prior grid's observer on re-init
+            if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }   // tear down the prior grid's observer
             var cfg = viewConfig();
             var grid = document.getElementById('items-grid');
-            if (!cfg || !grid || !grid.querySelector(cfg.card)) { return; }
-            grid.classList.add('pp-reveal');   // hides the cards; reveal() plays each card's arrival
+            if (!cfg || !grid) { return; }
             var ease = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
             var gallery = cfg.view === 'gallery';
-            function reveal(el, delayMs) {
-                el.classList.add('is-revealed');   // holds the final visible state
-                if (!el.animate) { return; }
-                if (gallery) {
-                    // Medallion materializes: fade + rise + a subtle scale-up settle (soft spring).
-                    el.animate([{ opacity: 0, transform: 'translateY(10px) scale(0.92)' }, { opacity: 1, transform: 'none' }],
-                               { duration: 480, delay: delayMs, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)', fill: 'backwards' });
-                    return;
-                }
-                el.animate([{ opacity: 0, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none' }],
-                           { duration: 500, delay: delayMs, easing: ease, fill: 'backwards' });
-                var fill = el.querySelector('.pp-horizon__fill');   // linear horizon: fill grows from the left
-                if (fill) { fill.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: 700, delay: delayMs + 250, easing: ease, fill: 'backwards' }); }
-                el.querySelectorAll('.pp-horizon__seg[data-state]').forEach(function (seg) {   // segmented: filled segs pop in
-                    seg.animate([{ opacity: 0, transform: 'scale(0.55)' }, { opacity: 1, transform: 'none' }], { duration: 380, delay: delayMs + 250, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'backwards' });
-                });
-            }
-            var step = gallery ? 16 : 28;   // denser wall -> tighter stagger
-            // Reveal the cards ALREADY in the grid NOW, in ONE synchronous DOM-order batch. DOM order == the
-            // visual reading order for a row-major grid (top-to-bottom, left-to-right) INDEPENDENT of column
-            // count or layout state -- so it stays correct even though a view swap briefly lays the grid out
-            // in the wrong (transitional) column count. One batch, no position measurement, and no observer
-            // race, so nothing can interleave. (A few below-fold initial cards animate off-screen -- harmless.)
-            grid.querySelectorAll(cfg.card + ':not(.is-revealed)').forEach(function (el, i) { reveal(el, Math.min(i * step, 560)); });
-            // The observer ONLY scroll-reveals infinite-scroll-APPENDED cards (which arrive well after any
-            // swap layout has settled), staggered in DOM order per batch.
-            revealIO = new IntersectionObserver(function (entries) {
-                var shown = entries.filter(function (en) { return en.isIntersecting; }).map(function (en) { return en.target; });
-                shown.sort(function (a, b) { return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1; });
-                shown.forEach(function (el, j) { reveal(el, Math.min(j * step, 200)); revealIO.unobserve(el); });
-            }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+            revealHandle = PlatPursuit.staggerReveal({
+                grid: grid, cardSelector: cfg.card, step: gallery ? 16 : 28,   // denser wall -> tighter stagger
+                reveal: function (el, delayMs) {
+                    if (!el.animate) { return; }
+                    if (gallery) {
+                        // Medallion materializes: fade + rise + a subtle scale-up settle (soft spring).
+                        el.animate([{ opacity: 0, transform: 'translateY(10px) scale(0.92)' }, { opacity: 1, transform: 'none' }],
+                                   { duration: 480, delay: delayMs, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)', fill: 'backwards' });
+                        return;
+                    }
+                    el.animate([{ opacity: 0, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none' }],
+                               { duration: 500, delay: delayMs, easing: ease, fill: 'backwards' });
+                    var fill = el.querySelector('.pp-horizon__fill');   // linear horizon: fill grows from the left
+                    if (fill) { fill.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: 700, delay: delayMs + 250, easing: ease, fill: 'backwards' }); }
+                    el.querySelectorAll('.pp-horizon__seg[data-state]').forEach(function (seg) {   // segmented: filled segs pop in
+                        seg.animate([{ opacity: 0, transform: 'scale(0.55)' }, { opacity: 1, transform: 'none' }], { duration: 380, delay: delayMs + 250, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'backwards' });
+                    });
+                },
+            });
         }
         function initScroller(cfg) {
             if (scroller && scroller.destroy) { scroller.destroy(); scroller = null; }
@@ -198,8 +188,7 @@
                 gridId: 'items-grid', sentinelId: 'bgal-sentinel', loadingId: 'bgal-loading',
                 paginateBy: cfg.page, cardSelector: cfg.card,
                 onAppend: function (nodes) {   // observe infinite-scroll-appended cards so they reveal too
-                    if (!revealIO) { return; }
-                    nodes.forEach(function (nd) { if (nd.classList && (nd.classList.contains('pp-scard') || nd.classList.contains('pp-bgal__card'))) { revealIO.observe(nd); } });
+                    if (revealHandle) { revealHandle.observe(nodes); }
                 },
             });
         }
@@ -411,7 +400,7 @@
         // (Re)wire everything that belongs to the current view island.
         function initView() {
             var cfg = viewConfig();
-            initReveal();   // before initScroller so revealIO exists for its onAppend hook
+            initReveal();   // before initScroller so revealHandle exists for its onAppend hook
             initScroller(cfg);
             wireFilters();
             updateToggleActive(cfg);

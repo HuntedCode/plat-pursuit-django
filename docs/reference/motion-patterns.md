@@ -105,6 +105,24 @@ so the active pill greets you). The keyframe uses `rgba`, never `color-mix` — 
 `color-mix` from `@keyframes`. Pairs with `wireTablist` (see [js-utilities](js-utilities.md)); live on the
 Career, Collection, and Badges switchers.
 
+### Staggered grid reveal (and why it's not one-size-fits-all)
+Cards in a grid arrive in a **DOM-order stagger** (top-to-bottom, left-to-right — DOM order is the reading
+order for a row-major grid regardless of the transitional column count during a swap), not all at once.
+There are **three legitimately different tools** here; pick by the grid's context, don't force one:
+- **`PlatPursuit.staggerReveal`** (WAAPI + IntersectionObserver) for **HTMX-swapped / infinite-scroll**
+  grids — WAAPI restarts reliably on swapped nodes, the observer reveals appended cards, each card reveals
+  once. The standard for rebuilt browse grids (Badges; the pending browse-page rebuilds). → [js-utilities](js-utilities.md).
+- **A CSS container class + `nth-child` stagger** for a **bounded, all-client** grid that wants to
+  *replay* its stagger on every show — e.g. the Collection gallery's `.is-revealing` → `ppRevealIn`
+  (toggled on each view-switch). Simpler and lighter than WAAPI; no per-card JS. (Same idea as
+  `.pp-head-cascade` for headers.)
+- **Bespoke per-card choreography** when the reveal *is* content, not a generic rise — e.g. Career's
+  contract rows count up XP + fill horizon bars + draw ring segments + ignite job cells on
+  IntersectionObserver. Keep these page-local; they're not a shared stagger.
+
+Do NOT "unify" the latter two onto `staggerReveal` — it would make the simpler cases heavier and regress
+the replay-on-switch behavior. Different requirements, different tools (a deliberate 2026-07 call).
+
 ### Don't let clip containers cut hover states
 `overflow: hidden`, `overflow-x: auto` (which forces `overflow-y: auto`), and `clip-path` all clip a
 child's hover scale/glow. Fixes:
