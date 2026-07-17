@@ -397,7 +397,9 @@
 .pgl { --pgl-accent: var(--disc, var(--pp-primary)); display: flex; flex-direction: column; gap: 6px; margin-top: 16px; }
 .pgl--rank { --pgl-accent: var(--pp-primary); }
 /* Static rail: the resting fill only (earned rungs filled, current widened+glowing), no entrance animation.
-   For consumers that re-render often (e.g. inside an HTMX swap island) or just want the meter, not the show. */
+   For consumers that re-render often (e.g. inside an HTMX swap island) or just want the meter, not the show.
+   NOTE: covers the shared choreography only -- the rank-ONLY resting pulse (.pgl--rank .is-current, higher
+   specificity) is NOT disabled here. No consumer combines .pgl--rank + .pgl--static today; add a guard if one ever does. */
 .pgl--static .pgl__rung::after, .pgl--static .pgl__rung.is-current,
 .pgl--static .pgl__rung.is-current::after, .pgl--static .pgl__divs { animation: none; }
 .pgl__track { display: flex; gap: 4px; align-items: stretch; }

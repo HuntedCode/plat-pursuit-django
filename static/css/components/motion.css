@@ -33,14 +33,12 @@
 
 /* Tab "ignite": the segmented-switcher chip that JUST became active blooms its glow once, then settles
  * flat back into its resting .is-active state (no fill-mode -- it hands off to the chip's own styles).
- * Applied one-shot by PlatPursuit.igniteTab(). rgba, never color-mix (lightningcss strips color-mix from
- * @keyframes) -- the hue is driven by --ignite-c (three comma R,G,B channels) so callers can tint it
- * (default = the brand primary cyan; the badge tier ladder passes the tier colour). Reduced-motion = no bloom. */
-.pp-tab-ignite { --ignite-c: 103, 209, 248; }
+ * Applied one-shot by PlatPursuit.igniteTab(). rgba (the brand primary cyan), never color-mix (lightningcss
+ * strips color-mix from @keyframes). Reduced-motion = no bloom. */
 @keyframes ppTabIgnite {
-    0%   { box-shadow: 0 0 4px 0 rgba(var(--ignite-c), 0.3); }
-    40%  { box-shadow: 0 0 20px 3px rgba(var(--ignite-c), 0.55); }
-    100% { box-shadow: 0 0 0 0 rgba(var(--ignite-c), 0); }
+    0%   { box-shadow: 0 0 4px 0 rgba(103, 209, 248, 0.3); }
+    40%  { box-shadow: 0 0 20px 3px rgba(103, 209, 248, 0.55); }
+    100% { box-shadow: 0 0 0 0 rgba(103, 209, 248, 0); }
 }
 @media (prefers-reduced-motion: no-preference) {
     .pp-tab-ignite { animation: ppTabIgnite 0.5s ease-out; }
