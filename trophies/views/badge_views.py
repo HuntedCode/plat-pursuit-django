@@ -1463,6 +1463,13 @@ class BadgeDetailView(DetailView):
             'community_total_xp': community_total_xp,
         }
 
+        # Standing insight for the My Stats modal: the viewer's earner percentile ("Top N%"). Integer
+        # ceil-division, floored at 1 (rank 1 of a huge field shouldn't read "Top 0%"). Reuses the already-
+        # computed rank + earner count -- no extra query.
+        _earners = context['badge_series_stats']['total_earners_count']
+        if user_lb_rank and _earners:
+            context['user_percentile'] = max(1, (user_lb_rank * 100 + _earners - 1) // _earners)
+
         # Rarity bar for the context band: ONE stacked bar segmented by how many earned EACH tier. Tiers are
         # INDEPENDENT (a higher tier doesn't require the lower ones), so we count every tier earned -- NOT a
         # "peak tier" partition, which would falsely assume nesting. Each segment's width is that tier's share

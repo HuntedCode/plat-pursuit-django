@@ -385,11 +385,21 @@
 .edetail__total { font-size: 11px; color: var(--pp-text-mute); margin-top: 8px; font-variant-numeric: tabular-nums; }
 .edetail__flavor { margin-top: 20px; font-style: italic; color: var(--pp-text-dim); font-size: 14px; line-height: 1.5; padding-right: 1px; }
 
-/* Progression ladder (.pgl): the segmented tier/rank stepper. Reached rungs fill in the accent, the
-   current rung fills partway + glows, upcoming rungs stay dim. Used for the Pursuer rank ladder (hero,
-   platinum accent) and each job's prestige tier ladder (detail modal, discipline accent). */
+/* ============================================================
+ * SHARED PRIMITIVE: Progression ladder (.pgl) -- the segmented tier/rank stepper. Reached rungs fill in the
+ * accent, the current rung fills partway + glows, upcoming rungs stay dim. Class-based + accent-parameterized
+ * (--pgl-accent; per-rung --rung-c), so ANY progression reuses it -- don't re-roll a ladder. Consumers:
+ * Pursuer rank ladder (Career hero, .pgl--rank), each job's prestige tier ladder (job detail), the claim
+ * ceremony rank-up (.is-charging), and the badge tier ladder (.pgl--static rail). Lives here (Career-seeded
+ * file) but is a cross-feature primitive -- documented in design-system.md (Progression ladder).
+ * Add .pgl--static for a resting filled rail with NO mount choreography (draw/bloom/ticks disabled).
+ * ============================================================ */
 .pgl { --pgl-accent: var(--disc, var(--pp-primary)); display: flex; flex-direction: column; gap: 6px; margin-top: 16px; }
 .pgl--rank { --pgl-accent: var(--pp-primary); }
+/* Static rail: the resting fill only (earned rungs filled, current widened+glowing), no entrance animation.
+   For consumers that re-render often (e.g. inside an HTMX swap island) or just want the meter, not the show. */
+.pgl--static .pgl__rung::after, .pgl--static .pgl__rung.is-current,
+.pgl--static .pgl__rung.is-current::after, .pgl--static .pgl__divs { animation: none; }
 .pgl__track { display: flex; gap: 4px; align-items: stretch; }
 /* --rung-c is the per-rung fill colour: defaults to the ladder accent (job-tier ladders stay one
  * discipline colour), but the RANK ladder sets it per rung to that rank's spectrum colour. */

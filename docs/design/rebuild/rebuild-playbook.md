@@ -234,6 +234,8 @@ DaisyUI theme colours mirror the brand/semantic tokens and are applied via Tailw
   meter, and the badge-detail header. **Tally** (`.pp-tally`) — display numbers (+ `PlatPursuit.countUp`).
 - **Accented header card** — `card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral`. Give its card-body **`.pp-head-cascade`** (`components/motion.css`) for the shared opening-beat entrance — its content rises in staggered (see Premium motion §6).
 - **Stat tiles** — `.scard` (a few headline summary stats, Career/Home) · `.pp-bdetail__stat` k/v (compact, dense badge stats).
+- **Progression ladder** (`.pgl`, `static/css/components/elements.css`) — the segmented tier/rank stepper: reached rungs fill the accent (`--pgl-accent`; per-rung `--rung-c`), the current widens + glows. Reuse for ANY progression, don't re-roll a ladder. Consumers: Pursuer rank ladder (Career hero), job prestige ladder, claim ceremony, badge tier ascent rail (`.pgl--static` = resting fill, no mount choreography).
+- **`.pp-draw-in`** (`components/motion.css`) — draw an SVG stroke in (checkmarks, glyphs); shapes need `pathLength="1"`. Reuse the `ppDrawIn` keyframe directly for scroll/state-gated draws. → motion-patterns.md.
 - **Segmented switcher** (tab groups) · **`.pp-toolbar-card`** (toolbars) · depth-pass card shadows (see Depth in Shared Elements).
 
 ### Colour restraint (how the rebuild actually uses colour)

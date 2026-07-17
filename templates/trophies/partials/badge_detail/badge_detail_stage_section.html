@@ -4,7 +4,7 @@
     {% comment %} Journey-spine node: a numbered milestone in the left gutter. Stages complete in any order,
     so each node is independent (done check / bonus star / "up next" cyan pulse / plain to-do number). {% endcomment %}
     <span class="bd-node bd-node--{% if data.stage_completion_state == 'complete' %}done{% elif stage.stage_number == 0 %}bonus{% elif data.is_next %}next{% else %}todo{% endif %}" aria-hidden="true">
-        {% if data.stage_completion_state == 'complete' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>{% elif stage.stage_number == 0 %}&#9733;{% else %}{{ stage.stage_number }}{% endif %}
+        {% if data.stage_completion_state == 'complete' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" pathLength="1"></polyline></svg>{% elif stage.stage_number == 0 %}&#9733;{% else %}{{ stage.stage_number }}{% endif %}
     </span>
     {% include 'trophies/partials/badge_detail/badge_detail_stages.html' %}
 

@@ -107,6 +107,15 @@
 }
 
 /* The ladder: four equal tier steps, read left-to-right as the progression. */
+/* Tier ascent rail: a slim shared .pgl (progression ladder, --static so no mount choreography inside the
+   swap island) above the tier steps -- filled through the tiers you've EARNED, each rung in its tier
+   colour. An at-a-glance "how high have I climbed" that the four big steps below don't give on their own. */
+.bd-tierrail { margin: 0 0 10px; }
+.bd-tierrail .pgl__rung { height: 6px; }
+.bd-tierrail .pgl__rung--bronze   { --rung-c: #cf9160; }
+.bd-tierrail .pgl__rung--silver   { --rung-c: #b9c6d6; }
+.bd-tierrail .pgl__rung--gold     { --rung-c: #e7c25c; }
+.bd-tierrail .pgl__rung--platinum { --rung-c: #8fd2ea; }
 .bd-tierlad { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
 .bd-tierstep {
     --tier-c: var(--pp-text-mute);
@@ -207,6 +216,16 @@
 .bd-mystats__big-v--xp { color: var(--pp-primary); }
 .bd-mystats__big-u { font-size: 0.85rem; font-weight: 700; color: var(--pp-text-mute); margin-left: 1px; }
 .bd-mystats__big-k { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-dim); }
+/* Standing chip: one earned insight (earner percentile). The ONE accent in the modal's readout -- brand
+   primary, quiet, a single line that turns the raw numbers into "where you stand". */
+.bd-mystats__standing {
+    display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; padding: 6px 12px;
+    border-radius: 999px; font-size: 0.8rem; color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 28%, transparent);
+}
+.bd-mystats__standing svg { width: 15px; height: 15px; flex: none; color: var(--pp-primary); }
+.bd-mystats__standing b { color: var(--pp-primary); font-weight: 800; }
 /* Progress + haul rows. */
 .bd-mystats__row { display: flex; flex-direction: column; gap: 7px; }
 .bd-mystats__row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
@@ -536,6 +555,10 @@
     width: 2px; z-index: 0; background: var(--pp-border);
 }
 .bd-stages > .bd-stage:last-child::after { display: none; }
+/* Living rail (any-order safe): the connector segment BELOW a completed stage tints toward success. Each
+   segment reflects ONLY its own stage's state, so it never implies a linear order (stages complete in any
+   order -- the rail deliberately doesn't encode cumulative progress). */
+.bd-stages > .bd-stage--done::after { background: color-mix(in oklab, var(--pp-success) 42%, var(--pp-border)); }
 .bd-node {
     position: absolute; left: -52px; top: 16px; z-index: 2;
     width: 34px; height: 34px; border-radius: 50%;
@@ -546,6 +569,14 @@
 }
 .bd-node svg { width: 16px; height: 16px; }
 .bd-node--done { background: var(--pp-success); border-color: var(--pp-success); color: #06140d; }
+/* The done node's check DRAWS itself as its stage scrolls in -- reuses the shared ppDrawIn keyframe
+   (components/motion.css); pathLength="1" on the polyline normalizes the dash. Gated on the stage reveal
+   (.is-inview) and delayed a beat so the stage rises first, THEN the check ticks. Reduced-motion / pre-
+   reveal / no-JS: the check is drawn solid (dashoffset 0). */
+.bd-node--done svg * { stroke-dasharray: 1; }
+@media (prefers-reduced-motion: no-preference) {
+    .bd-stages--armed.is-inview .bd-stage--done .bd-node--done svg * { animation: ppDrawIn 0.5s var(--pp-ease, ease) 0.28s both; }
+}
 .bd-node--next {
     border-color: var(--pp-primary); color: var(--pp-primary);
     background: color-mix(in oklch, var(--pp-primary) 12%, var(--pp-bg-2));

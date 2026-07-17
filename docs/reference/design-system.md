@@ -223,6 +223,23 @@ Every rebuilt page should have a header card that establishes context and houses
 - **A11y**: `role="tablist"` on the container, `role="tab"` + `aria-selected` on chips, `aria-controls` -> the panel; `:focus-visible` ring in `--pp-primary`.
 - **Distinct siblings (NOT `.pp-switch`)**: Career's `.jlayout__btn` (rounded-pill Dossier/Sheet toggle) and the Case's `.pp-case__set-tab` (completion-ring set filters) are their own components.
 
+### Progression ladder (.pgl)
+
+Shared primitive for ANY tier/rank progression (`static/css/components/elements.css`). A row of rungs: reached rungs fill the accent, the current rung fills partway + widens + glows, upcoming rungs stay dim. Accent-parameterized — set `--pgl-accent` on the ladder (or per-rung `--rung-c`) so it takes on the feature's colour. Rung fill is driven by `--f` (0–100%), state by `.is-on` (reached) / `.is-current`.
+
+```html
+<div class="pgl pgl--static">           <!-- --static = resting fill only, no mount choreography -->
+  <div class="pgl__track">
+    <span class="pgl__rung is-on" style="--rung-c: #cf9160; --f: 100%;"></span>
+    <span class="pgl__rung" style="--rung-c: #b9c6d6; --f: 0%;"></span>
+  </div>
+</div>
+```
+
+- **Consumers**: Pursuer rank ladder (Career hero, `.pgl--rank`), job prestige ladder (job detail), claim ceremony rank-up (`.is-charging`), badge tier ascent rail (`.pgl--static`). Reuse it — don't re-roll a ladder.
+- **`.pgl--static`**: disables the entrance choreography (rung draw cascade, current-rung bloom, division ticks) for a resting filled rail — use inside HTMX swap islands or wherever you just want the meter.
+- **Reduced motion**: the mount animations are gated; the resting filled state is the reduced-motion fallback.
+
 ### Filter/Search Toolbar Card
 
 Compact card for search, sort, and filter controls. Collapsible drawer for secondary filters.

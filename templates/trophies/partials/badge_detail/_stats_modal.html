@@ -5,7 +5,7 @@ first-played/last-trophy timeline -> a quiet series-context footer. Composes the
 (.pp-tally, pp-horizon); no reused stat-grid. All values come from the already-computed badge_series_stats.
 Rendered only when a profile is on display (see badge_detail.html). {% endcomment %}
 {% with stats=badge_series_stats %}
-<div class="bd-mystats">
+<div class="bd-mystats pp-head-cascade">
     <h2 class="bd-mystats__title">{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s{% else %}Your{% endif %} {{ badge.effective_display_series|default:badge.name }} journey</h2>
 
     {# Hero: the investment -- three big numbers, XP in the one accent. #}
@@ -24,6 +24,14 @@ Rendered only when a profile is on display (see badge_detail.html). {% endcommen
             <span class="bd-mystats__big-k">Trophies</span>
         </div>
     </div>
+
+    {# Standing: one earned insight -- where the viewer ranks among everyone who's earned this series. #}
+    {% if user_percentile %}
+    <div class="bd-mystats__standing">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+        <span>Top <b>{{ user_percentile }}%</b> of {{ stats.total_earners_count|intcomma }} earners</span>
+    </div>
+    {% endif %}
 
     {% comment %} Progress: stages platted (plat tiers) + stages 100%'d (100% tiers), each a segmented
     Horizon (smooth bar above the segment cap). Two metrics because the badge's plat tiers need every stage

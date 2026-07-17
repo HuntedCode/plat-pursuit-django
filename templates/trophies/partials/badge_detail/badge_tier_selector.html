@@ -14,6 +14,17 @@ badge_tier_xp_bonus, tier_req_stages, badge.badge_type.
 {% load static custom_filters humanize %}
 <div id="tier-selector" class="bd-tiers">
 
+    {% comment %} Tier ascent rail: the shared .pgl progression ladder (static), filled through the tiers
+    you've earned so the climb reads at a glance. Decorative (the steps below carry the real state + nav). {% endcomment %}
+    <div class="pgl pgl--static bd-tierrail" aria-hidden="true">
+        <div class="pgl__track">
+            {% for tb in all_tier_badges %}
+            <span class="pgl__rung pgl__rung--{{ tb.tier|badge_tier|lower }}{% if tb.tier in earned_tiers %} is-on{% endif %}"
+                  style="--f: {% if tb.tier in earned_tiers %}100{% else %}0{% endif %}%;"></span>
+            {% endfor %}
+        </div>
+    </div>
+
     {% comment %} Tier ladder: the progression, colour-forward. Each step is a real link that HTMX-swaps the
     tier island + pushes the URL, so this is NAVIGATION, not an ARIA tablist (no tabpanels / roving focus). {% endcomment %}
     <nav class="bd-tierlad" aria-label="Badge tier">

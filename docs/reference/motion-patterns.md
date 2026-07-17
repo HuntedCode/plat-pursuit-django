@@ -123,6 +123,16 @@ There are **three legitimately different tools** here; pick by the grid's contex
 Do NOT "unify" the latter two onto `staggerReveal` — it would make the simpler cases heavier and regress
 the replay-on-switch behavior. Different requirements, different tools (a deliberate 2026-07 call).
 
+### Draw an SVG stroke in (checkmarks, glyphs)
+A line that *draws itself* reads as craft (Reminders/Things checkboxes live on this). Class
+**`.pp-draw-in`** (`components/motion.css`) on the `<svg>` traces its shapes via `stroke-dashoffset`; the
+shapes need **`pathLength="1"`** so the dash math is uniform regardless of real path length, and multi-shape
+icons trace in order via an nth-child stagger. `.pp-draw-in` triggers on render — for a **scroll- or
+state-gated** draw, reuse the shared **`ppDrawIn`** keyframe under your own trigger instead (e.g. the badge
+stage check draws under `.bd-stages--armed.is-inview .bd-node--done svg *`, a beat after the stage rises).
+At rest / reduced-motion the stroke is simply drawn solid (dasharray 1 + offset 0). Generalized from the
+Career job-glyph draw; reuse for any "line drawing itself" beat.
+
 ### Don't let clip containers cut hover states
 `overflow: hidden`, `overflow-x: auto` (which forces `overflow-y: auto`), and `clip-path` all clip a
 child's hover scale/glow. Fixes:
