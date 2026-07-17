@@ -429,6 +429,9 @@
 .bd-stage__eyebrow--next { color: var(--pp-primary); }
 .bd-stage__title { font-size: 0.92rem; font-weight: 700; color: var(--pp-text); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Dots + pill share a wrapper (a row on desktop -- looks as before; a right-aligned column on mobile). */
+.bd-stage__meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
 /* Tiers this stage feeds -- small tier-colour dots, filled when done for that tier. */
 .bd-stage__tiers { display: flex; gap: 4px; flex-shrink: 0; }
 .bd-stage__tier { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--tier-c); }
@@ -595,6 +598,24 @@
     50% { box-shadow: 0 0 0 6px transparent; }
 }
 @media (prefers-reduced-motion: reduce) { .bd-node { animation: none !important; } }
+
+/* Mobile stage journey: the ladder gutter + node shrink to reclaim horizontal space, the head tightens,
+   and the tier dots + games pill stack into a right-aligned column -- all so the title gets more room. */
+@media (max-width: 640px) {
+    /* Slimmer ladder gutter (52 -> 34) + node (34 -> 28); connector re-centres on the smaller node. */
+    .bd-stages { padding-left: 34px; }
+    .bd-node { left: -34px; width: 28px; height: 28px; top: 16px; font-size: 0.78rem; }
+    .bd-node svg { width: 13px; height: 13px; }
+    /* Node centre now sits at x -20px (left -34 + half of 28); rail starts at the node's bottom (16+28). */
+    .bd-stages > .bd-stage::after { left: -20px; top: 44px; }
+
+    /* Uncramp the header: tighter gap/padding + a smaller stage icon. */
+    .bd-stage__head { gap: 10px; padding: 10px 12px; }
+    .bd-stage__ico { width: 38px; height: 38px; }
+
+    /* Stack the dots over the pill, right-aligned, so the title reclaims the horizontal band. */
+    .bd-stage__meta { flex-direction: column; align-items: flex-end; gap: 5px; }
+}
 
 /* Bulk "collapse/expand all" toggle (a quiet text button). */
 .bd-collapse-all {

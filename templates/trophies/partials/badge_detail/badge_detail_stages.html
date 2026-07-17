@@ -18,27 +18,31 @@ journey node. {% endcomment %}
         {% include 'trophies/partials/badge_detail/badge_stage_stats.html' %}
     </div>
 
-    {% if stage.stage_number != 0 %}
-    {% comment %} Which tiers this stage counts toward -- a compact row of tier-colour dots, filled when the
-    stage is complete for that tier (completion[tier][stage_number]). Demoted vs the old tier-art strip. {% endcomment %}
-    <span class="bd-stage__tiers" aria-hidden="true" title="Tiers this stage counts toward">
-        {% for i in stage.required_tiers|default:'1234' %}
-            {% with completion|dict_get:i as comp %}
-            <span class="bd-stage__tier bd-stage__tier--{{ i|badge_tier|lower }}{% if comp|dict_get:stage.stage_number %} is-done{% endif %}"></span>
-            {% endwith %}
-        {% endfor %}
-    </span>
-    {% endif %}
+    {% comment %} Tier dots + the X/Y (or game-count) pill share one wrapper so they can stack vertically on
+    mobile (a row on desktop, a right-aligned column at <=640px) -- freeing horizontal width for the title. {% endcomment %}
+    <div class="bd-stage__meta">
+        {% if stage.stage_number != 0 %}
+        {% comment %} Which tiers this stage counts toward -- a compact row of tier-colour dots, filled when the
+        stage is complete for that tier (completion[tier][stage_number]). Demoted vs the old tier-art strip. {% endcomment %}
+        <span class="bd-stage__tiers" aria-hidden="true" title="Tiers this stage counts toward">
+            {% for i in stage.required_tiers|default:'1234' %}
+                {% with completion|dict_get:i as comp %}
+                <span class="bd-stage__tier bd-stage__tier--{{ i|badge_tier|lower }}{% if comp|dict_get:stage.stage_number %} is-done{% endif %}"></span>
+                {% endwith %}
+            {% endfor %}
+        </span>
+        {% endif %}
 
-    {% comment %} One always-present pill slot (no collapse toggle -> no layout shift): your X/Y progress when
-    signed in, else a static game count. The X/Y denominator already carries the total. {% endcomment %}
-    {% if target_profile and stage.stage_number != 0 and data.stage_progress %}
-    {% with sp=data.stage_progress %}
-    <span class="bd-stage__pill bd-stage__pill--{% if sp.completed == sp.total %}done{% elif sp.completed > 0 %}partial{% else %}todo{% endif %}"><span class="sr-only">{% if sp.completed == sp.total %}Stage complete, {% elif sp.completed > 0 %}Stage in progress, {% else %}Stage incomplete, {% endif %}</span>{{ sp.completed }}/{{ sp.total }}</span>
-    {% endwith %}
-    {% else %}
-    <span class="bd-stage__count">{{ data.games|length }} game{{ data.games|length|pluralize }}</span>
-    {% endif %}
+        {% comment %} One always-present pill slot (no collapse toggle -> no layout shift): your X/Y progress when
+        signed in, else a static game count. The X/Y denominator already carries the total. {% endcomment %}
+        {% if target_profile and stage.stage_number != 0 and data.stage_progress %}
+        {% with sp=data.stage_progress %}
+        <span class="bd-stage__pill bd-stage__pill--{% if sp.completed == sp.total %}done{% elif sp.completed > 0 %}partial{% else %}todo{% endif %}"><span class="sr-only">{% if sp.completed == sp.total %}Stage complete, {% elif sp.completed > 0 %}Stage in progress, {% else %}Stage incomplete, {% endif %}</span>{{ sp.completed }}/{{ sp.total }}</span>
+        {% endwith %}
+        {% else %}
+        <span class="bd-stage__count">{{ data.games|length }} game{{ data.games|length|pluralize }}</span>
+        {% endif %}
+    </div>
 
     <svg class="bd-stage__chevron" data-stage-chevron="{{ stage.stage_number }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
 </div>
