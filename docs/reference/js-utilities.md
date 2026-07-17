@@ -234,7 +234,9 @@ for rebuilt browse grids** (Badges; the pending Challenges/Franchise/Company/Gam
 `threshold` (default 90px) it slides the sheet off (fading `scrim`) and calls `onClose` — which should
 **hide instantly** (the helper already did the exit) and run the same cleanup the close button does. Drag
 only starts from the top of the dialog's scroll (mid-content scroll isn't hijacked). The helper adds
-`.pp-dismissable` to the dialog, surfacing the shared touch-only grabber handle (`.pp-dismissable::before`).
+`.pp-dismissable` to the dialog, surfacing the shared touch-only grabber handle (`.pp-dismissable::before`):
+it fades in a beat after the sheet opens (`ppGrabIn`), rides the sheet off on a swipe, and fades out on a
+non-drag close (`ppGrabOut`, keyed on the modal's `.is-closing`) — all in `collection-case.css`, reduced-motion gated.
 Live on the badge-detail stats + contract modals, the Career job/contract modal, and (via
 `Medallion.detailModal`) every medallion **peek** across collection / badge list / badge detail. The peek
 can't FLIP its disc back from a dragged-off position, so on swipe it instead **returns the object home** --
