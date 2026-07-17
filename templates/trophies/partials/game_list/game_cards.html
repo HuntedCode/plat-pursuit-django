@@ -1,127 +1,108 @@
 {% load custom_filters %}
 {% for game in object_list %}
-{% with game.platinum_trophy|first as plat %}
 {% with user_game_map|dict_get:game.id as user_pg %}
 {% with rating_map|dict_get:game.concept_id as ratings %}
-    <a href="{% url 'game_detail' game.np_communication_id %}"
-       class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral cursor-pointer
-              transition-all duration-300 hover:shadow-lg hover:shadow-{{ game|platform_color }}/30
-              hover:border-{{ game|platform_color }} hover:z-10 group h-full">
+    <a href="{% url 'game_detail' game.np_communication_id %}" class="pp-gcard" data-gcard>
+        {# ── Cover (IGDB-first via display_image_url; helper owns the fallback chain) ── #}
+        <div class="pp-gcard__cover">
+            <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}" loading="lazy"
+                 class="pp-gcard__art{% if not game.has_cover_art %} pp-gcard__art--placeholder{% endif %}" />
 
-        {# ── Image ── #}
-        <figure class="relative aspect-[3/4] bg-base-300/20 rounded-t-lg overflow-hidden">
-            <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}"
-                 class="w-full h-full {% if game.has_cover_art %}object-cover object-top transition-transform duration-300 group-hover:scale-105{% else %}object-contain p-3{% endif %}" loading="lazy" />
-
-            {# Flag badges (top-left stack, icon-only) #}
+            {# Community flag icons, top-left #}
             {% include 'trophies/partials/_game_flags.html' with game=game variant='overlay' %}
 
             {% if user.is_authenticated and user.profile %}
-            <button class="quick-add-trigger absolute top-1 right-1 z-20 btn btn-xs btn-circle btn-info opacity-0 group-hover:opacity-100 transition-opacity"
-                    data-game-id="{{ game.id }}"
+            <button type="button" class="pp-gcard__add quick-add-trigger" data-game-id="{{ game.id }}"
                     onclick="event.preventDefault(); event.stopPropagation();"
                     aria-label="Add {{ game.title_name }} to a list">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             </button>
             {% endif %}
+        </div>
 
-        </figure>
+        {# ── Body ── #}
+        <div class="pp-gcard__body">
+            <h3 class="pp-gcard__title">{{ game.title_name }}</h3>
 
-        {# ── Content ── #}
-        <div class="p-1.5 md:p-2 space-y-1 flex flex-col flex-1">
-            <h3 class="text-xs font-bold line-clamp-2 h-8 mt-auto group-hover:text-{{ game|platform_color }} transition-colors">{{ game.title_name }}</h3>
-
-            <div class="flex flex-wrap gap-0.5 items-center">
+            <div class="pp-gcard__tags">
                 {% for platform in game.title_platform reversed %}
-                    <div class="badge badge-xs badge-ghost font-bold border border-{{ platform|platform_color_str }} rounded-box">{{ platform }}</div>
+                <span class="pp-gcard__plat">{{ platform }}</span>
                 {% endfor %}
                 {% include 'partials/region_badges.html' with game=game badge_size='badge-xs' %}
             </div>
 
-            {# ── Stats panel (dashboard inner panel) ── #}
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 space-y-1">
-                {# Trophy counts: labeled stat cells #}
-                <div class="grid grid-cols-4 gap-0.5 text-center">
-                    <div class="rounded p-0.5">
-                        <div class="text-xs font-black" style="color: var(--color-trophy-bronze)">{{ game.defined_trophies.bronze }}</div>
-                        <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">BRZ</div>
+            {# Stat panel (nested -> bg-2) #}
+            <div class="pp-gcard__stats">
+                <div class="pp-gcard__trophies">
+                    <div>
+                        <div class="pp-gcard__tcount pp-gcard__tcount--bronze">{{ game.defined_trophies.bronze }}</div>
+                        <div class="pp-gcard__tlabel">BRZ</div>
                     </div>
-                    <div class="rounded p-0.5">
-                        <div class="text-xs font-black" style="color: var(--color-trophy-silver)">{{ game.defined_trophies.silver }}</div>
-                        <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">SLV</div>
+                    <div>
+                        <div class="pp-gcard__tcount pp-gcard__tcount--silver">{{ game.defined_trophies.silver }}</div>
+                        <div class="pp-gcard__tlabel">SLV</div>
                     </div>
-                    <div class="rounded p-0.5">
-                        <div class="text-xs font-black" style="color: var(--color-trophy-gold)">{{ game.defined_trophies.gold }}</div>
-                        <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">GLD</div>
+                    <div>
+                        <div class="pp-gcard__tcount pp-gcard__tcount--gold">{{ game.defined_trophies.gold }}</div>
+                        <div class="pp-gcard__tlabel">GLD</div>
                     </div>
-                    <div class="rounded p-0.5">
-                        <div class="text-xs font-black" style="color: var(--color-trophy-platinum)">{{ game.defined_trophies.platinum|default:"—" }}</div>
-                        <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">PLT</div>
+                    <div>
+                        <div class="pp-gcard__tcount pp-gcard__tcount--platinum">{{ game.defined_trophies.platinum|default:"&mdash;" }}</div>
+                        <div class="pp-gcard__tlabel">PLT</div>
                     </div>
                 </div>
 
-                <div class="border-t border-base-content/10"></div>
+                <div class="pp-gcard__divider"></div>
 
-                {# Community + player data #}
-                <div class="flex items-center justify-between text-xs">
+                <div class="pp-gcard__meta">
                     {% if ratings %}
-                        <div class="flex items-center gap-0.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-warning" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <span class="font-bold">{{ ratings.avg_rating|floatformat:1 }}</span>
-                        </div>
-                        <span class="text-base-content/50 hidden md:inline">D:{{ ratings.avg_difficulty|floatformat:0 }}</span>
+                    <span class="pp-gcard__rating" title="Community rating">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        {{ ratings.avg_rating|floatformat:1 }}
+                    </span>
+                    <span class="pp-gcard__diff" title="Community difficulty">D:{{ ratings.avg_difficulty|floatformat:0 }}</span>
                     {% else %}
-                        <div class="flex items-center gap-0.5 text-base-content/30">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <span>—</span>
-                        </div>
-                        <span class="text-base-content/30 hidden md:inline">D:—</span>
+                    <span class="pp-gcard__rating pp-gcard__rating--none">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        &mdash;
+                    </span>
                     {% endif %}
-                    <div class="flex items-center gap-0.5 text-base-content/40">
+                    <span class="pp-gcard__players" title="Players tracked">
                         {% include 'partials/icons/user.html' with size='w-3 h-3' %}
-                        <span>{{ game.played_count }}</span>
-                    </div>
+                        {{ game.played_count }}
+                    </span>
                 </div>
 
-                {# User progress (always present for authenticated users) #}
                 {% if user.is_authenticated and user.profile %}
-                    <div class="border-t border-base-content/10 pt-1">
-                        <div class="flex items-center justify-between mb-0.5">
-                            <span class="text-[0.55rem] text-base-content/40 font-medium uppercase">Progress</span>
-                            {% if user_pg.has_plat %}
-                                <span class="text-[0.6rem] font-bold" style="color: var(--color-trophy-platinum)">Platinum</span>
-                            {% elif user_pg and user_pg.progress > 0 %}
-                                <span class="text-[0.6rem] font-bold text-{{ game|platform_color }}">{{ user_pg.progress }}%</span>
-                            {% else %}
-                                <span class="text-[0.6rem] text-base-content/30">Not started</span>
-                            {% endif %}
-                        </div>
-                        <div class="bg-base-300/50 rounded-full h-1">
-                            {% if user_pg.has_plat %}
-                                <div class="h-full rounded-full transition-all" style="width: 100%; background-color: var(--color-trophy-platinum)"></div>
-                            {% elif user_pg and user_pg.progress > 0 %}
-                                <div class="h-full rounded-full bg-{{ game|platform_color }} transition-all" style="width: {{ user_pg.progress }}%"></div>
-                            {% endif %}
-                        </div>
+                <div class="pp-gcard__prog">
+                    <div class="pp-gcard__proghead">
+                        <span class="pp-gcard__proglbl">Progress</span>
+                        {% if user_pg.has_plat %}
+                        <span class="pp-gcard__progval pp-gcard__progval--plat">Platinum</span>
+                        {% elif user_pg and user_pg.progress > 0 %}
+                        <span class="pp-gcard__progval pp-gcard__progval--prog">{{ user_pg.progress }}%</span>
+                        {% else %}
+                        <span class="pp-gcard__progval pp-gcard__progval--none">Not started</span>
+                        {% endif %}
                     </div>
+                    <div class="pp-gcard__progbar">
+                        {% if user_pg.has_plat %}
+                        <div class="pp-gcard__progfill pp-gcard__progfill--plat" style="width: 100%"></div>
+                        {% elif user_pg and user_pg.progress > 0 %}
+                        <div class="pp-gcard__progfill pp-gcard__progfill--prog" style="width: {{ user_pg.progress }}%"></div>
+                        {% endif %}
+                    </div>
+                </div>
                 {% endif %}
             </div>
         </div>
     </a>
 {% endwith %}
 {% endwith %}
-{% endwith %}
 {% empty %}
-    <div class="col-span-full">
-        <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral">
-            <div class="card-body items-center text-center py-12 md:py-16">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 md:h-16 md:w-16 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
-                <p class="text-base-content/60 mt-3 mb-1 text-base md:text-lg font-semibold">No games found</p>
-                <p class="text-base-content/40 text-xs md:text-sm">Try expanding your search or adjusting your filters</p>
-            </div>
-        </div>
+    <div class="pp-gcard-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
+        <p class="pp-gcard-empty__title">No games found</p>
+        <p class="pp-gcard-empty__hint">Try expanding your search or adjusting your filters.</p>
     </div>
 {% endfor %}

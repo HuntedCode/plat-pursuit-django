@@ -1,0 +1,102 @@
+/* ============================================================
+ * GAME COVER CARD (.pp-gcard) -- the from-scratch rebuild of the browse game cell. A 3:4 cover with a
+ * nested stat panel (trophy counts, community rating, player count, and -- signed in -- your progress).
+ * Neutral surface with a single cyan hover warm (colour restraint); the trophy row + a platinum-complete
+ * bar carry the only strong colour. Shared by Browse Games and (via game_cards.html) the Flagged / Recently
+ * Added / Tag browse grids. Depth-pass card per playbook section 4.
+ * ============================================================ */
+.pp-gcard {
+    display: flex; flex-direction: column; height: 100%;
+    border-radius: 13px; overflow: hidden;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 6px 20px rgba(0, 0, 0, 0.30);
+    text-decoration: none; color: inherit;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+@media (hover: hover) {
+    .pp-gcard:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                    0 0 0 1px color-mix(in oklab, var(--pp-primary) 22%, transparent),
+                    0 14px 34px -16px color-mix(in oklab, var(--pp-primary) 42%, #000);
+    }
+    .pp-gcard:hover .pp-gcard__art { transform: scale(1.05); }
+}
+.pp-gcard:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* Cover: IGDB-first via display_image_url; real art crops from the top, the generic placeholder is contained. */
+.pp-gcard__cover { position: relative; aspect-ratio: 3 / 4; overflow: hidden; background: color-mix(in oklab, var(--pp-text) 3%, var(--pp-bg-2)); }
+.pp-gcard__cover img { width: 100%; height: 100%; }
+.pp-gcard__art { object-fit: cover; object-position: top; transition: transform 0.3s ease; }
+.pp-gcard__art--placeholder { object-fit: contain; padding: 14px; opacity: 0.85; }
+@media (prefers-reduced-motion: reduce) { .pp-gcard__art { transition: none; } }
+
+/* Quick-add to a list (signed in): a small info-tinted circle, revealed on hover (always visible on touch). */
+.pp-gcard__add {
+    position: absolute; top: 6px; right: 6px; z-index: 3;
+    display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px;
+    border-radius: 50%; border: none; cursor: pointer;
+    background: color-mix(in oklab, var(--pp-info) 88%, #000); color: #fff;
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+    opacity: 0; transform: scale(0.82); transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.pp-gcard__add svg { width: 13px; height: 13px; }
+@media (hover: hover) { .pp-gcard:hover .pp-gcard__add { opacity: 1; transform: none; } }
+@media (hover: none) { .pp-gcard__add { opacity: 0.92; transform: none; } }
+.pp-gcard__add:focus-visible { opacity: 1; transform: none; outline: 2px solid #fff; outline-offset: 1px; }
+
+/* Body: title + tag pills, then the stat panel pinned to the bottom (so uneven titles still align). */
+.pp-gcard__body { display: flex; flex-direction: column; gap: 6px; padding: 8px 9px 9px; flex: 1; }
+.pp-gcard__title {
+    font-size: 12.5px; font-weight: 700; color: var(--pp-text); line-height: 1.25; padding-right: 1px;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; min-height: 2.5em;
+}
+@media (hover: hover) { .pp-gcard:hover .pp-gcard__title { color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-text)); } }
+.pp-gcard__tags { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; }
+.pp-gcard__plat {
+    font-size: 9px; font-weight: 800; letter-spacing: 0.02em; padding: 1px 5px; border-radius: 5px;
+    border: 1px solid var(--pp-border); color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent);
+}
+
+/* Stat panel: a nested card -> steps up to bg-2 (depth pass). */
+.pp-gcard__stats {
+    margin-top: auto; display: flex; flex-direction: column; gap: 5px;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 9px; padding: 6px 7px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.pp-gcard__trophies { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; text-align: center; }
+.pp-gcard__tcount { font-size: 12px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.pp-gcard__tcount--bronze   { color: var(--color-trophy-bronze); }
+.pp-gcard__tcount--silver   { color: var(--color-trophy-silver); }
+.pp-gcard__tcount--gold     { color: var(--color-trophy-gold); }
+.pp-gcard__tcount--platinum { color: var(--color-trophy-platinum); }
+.pp-gcard__tlabel { font-size: 8px; font-weight: 700; letter-spacing: 0.03em; color: var(--pp-text-mute); }
+.pp-gcard__divider { height: 1px; background: var(--pp-divider); }
+.pp-gcard__meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11px; }
+.pp-gcard__rating { display: inline-flex; align-items: center; gap: 3px; color: var(--pp-text); font-weight: 700; }
+.pp-gcard__rating svg { width: 12px; height: 12px; color: var(--pp-warning); }
+.pp-gcard__rating--none { color: var(--pp-text-mute); font-weight: 400; }
+.pp-gcard__rating--none svg { color: var(--pp-text-mute); }
+.pp-gcard__diff { color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.pp-gcard__players { display: inline-flex; align-items: center; gap: 3px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.pp-gcard__players svg { width: 12px; height: 12px; }
+
+/* Your progress (signed in): a label/value row + a thin bar. In-progress = cyan, platinum-complete = platinum. */
+.pp-gcard__prog { display: flex; flex-direction: column; gap: 3px; }
+.pp-gcard__proghead { display: flex; align-items: center; justify-content: space-between; }
+.pp-gcard__proglbl { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+.pp-gcard__progval { font-size: 10px; font-weight: 800; }
+.pp-gcard__progval--none { color: var(--pp-text-mute); font-weight: 400; }
+.pp-gcard__progval--plat { color: var(--color-trophy-platinum); }
+.pp-gcard__progval--prog { color: var(--pp-primary); }
+.pp-gcard__progbar { height: 4px; border-radius: 999px; background: color-mix(in oklab, var(--pp-text) 8%, transparent); overflow: hidden; }
+.pp-gcard__progfill { height: 100%; border-radius: 999px; }
+.pp-gcard__progfill--plat { background: var(--color-trophy-platinum); }
+.pp-gcard__progfill--prog { background: var(--pp-primary); }
+
+/* Empty state (spans the grid). Reuses the shared ppResultsEmptyIn fade (browse-gallery.css). */
+.pp-gcard-empty { grid-column: 1 / -1; text-align: center; color: var(--pp-text-mute); padding: 48px 16px; }
+.pp-gcard-empty svg { width: 40px; height: 40px; margin: 0 auto 8px; opacity: 0.55; }
+.pp-gcard-empty__title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
+.pp-gcard-empty__hint { font-size: 12.5px; margin-top: 2px; }
