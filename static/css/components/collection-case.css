@@ -193,6 +193,13 @@
         width: 40px; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.5); z-index: 3; pointer-events: none;
     }
 }
+/* The handle fades in a beat after the sheet opens (a calm "here's how to dismiss" cue) -- consistent
+   whether the modal's chrome enters instantly (peek) or with the dialog (stats/contract). Replays on each
+   open because the modals toggle display via [hidden]. Reduced motion -> the handle is simply present. */
+@keyframes ppGrabIn { from { opacity: 0; } }
+@media (hover: none) and (pointer: coarse) and (prefers-reduced-motion: no-preference) {
+    .pp-dismissable::before { animation: ppGrabIn 0.32s ease 0.15s both; }
+}
 .pp-detail-modal:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrim 0.2s ease; }
 .pp-detail-modal:not([hidden]) .pp-detail-modal__dialog { animation: ppDetailIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes ppDetailScrim { from { opacity: 0; } }
