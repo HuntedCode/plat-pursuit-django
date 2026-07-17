@@ -90,8 +90,8 @@ def test_tier_switch_returns_island_partial_for_htmx(client, stub_leaderboards):
 
 
 def test_header_entrance_animation_is_gated_to_first_load(client, stub_leaderboards):
-    """The header's .pp-head-in entrance plays on the full page load, but is SKIPPED on an HTMX tier swap
-    (the header rides the #badge-tier-view island, so an un-gated class would re-fade on every tier tap)."""
+    """The header's .pp-head-cascade entrance plays on the full page load, but is SKIPPED on an HTMX tier
+    swap (the header rides the #badge-tier-view island, so an un-gated class would replay on every tap)."""
     series = "rebuild-headin-gate"
     BadgeFactory(series_slug=series, tier=1, is_live=True)
     BadgeFactory(series_slug=series, tier=2, is_live=True)
@@ -99,11 +99,11 @@ def test_header_entrance_animation_is_gated_to_first_load(client, stub_leaderboa
     url = reverse('badge_detail', kwargs={'series_slug': series}) + '?tier=2'
 
     full = client.get(url).content.decode()
-    assert 'pp-head-in' in full                  # first load: the entrance beat plays
+    assert 'pp-head-cascade' in full             # first load: the entrance cascade plays
 
     swap = client.get(url, HTTP_HX_REQUEST='true', HTTP_HX_TARGET='badge-tier-view').content.decode()
     assert 'badge-header-card' in swap           # header still re-renders in the island...
-    assert 'pp-head-in' not in swap              # ...but WITHOUT the entrance class (no re-fade on swap)
+    assert 'pp-head-cascade' not in swap         # ...but WITHOUT the entrance class (no replay on swap)
 
 
 def test_sticky_mini_header_renders_with_hooks(client, stub_leaderboards):

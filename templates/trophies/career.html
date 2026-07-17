@@ -30,8 +30,8 @@
 
     {% if hero %}
     {# ── Pursuer hero: identity + the disciplines composition ring (ambient glow tinted by your strongest discipline) ── #}
-    <section class="card career-hero bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3 relative overflow-hidden pp-head-in"{% if hero.dominant_disc %} style="--dominant: var(--disc-{{ hero.dominant_disc }});"{% endif %}>
-        <div class="card-body p-4 md:p-6 lg:p-7">
+    <section class="card career-hero bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3 relative overflow-hidden"{% if hero.dominant_disc %} style="--dominant: var(--disc-{{ hero.dominant_disc }});"{% endif %}>
+        <div class="card-body p-4 md:p-6 lg:p-7 pp-head-cascade">
             <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
                 {# Identity #}
                 <div class="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
@@ -136,8 +136,8 @@
     {% if career %}
     {% comment %} Career summary card (the "Career" heading + aggregate stats) -- the accented header for
     this section. Stacked chrome per the site-wide rule; the tabs + panels below flow FREE (not carded). {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3 pp-head-in pp-head-in--2">
-        <div class="card-body p-3 md:p-5 lg:p-7">
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-5 lg:p-7 pp-head-cascade">
             <div class="flex items-center gap-2 flex-wrap">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>

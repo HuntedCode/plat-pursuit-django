@@ -4,14 +4,15 @@
  * always get the final resting state with no movement.
  * ============================================================ */
 
-/* Page header / hero entrance: the opening beat of a rebuilt page. Put .pp-head-in on the top header
- * (or hero) card so it fades + rises in on load. --2 adds a small cascade delay and .pp-head-fade is a
- * fade-only follow (used by the Badges list header's stats + tier explainer for an internal stagger).
- * `backwards` fill holds the hidden "from" state through any delay, so nothing flashes before it plays. */
+/* Page header / hero entrance: the opening beat of a rebuilt page. Put .pp-head-cascade on a header's
+ * card-body -- its DIRECT CHILDREN fade + rise (9px) in a staggered cascade (title, then stats, then the
+ * rest) for a livelier, layered entrance than moving the whole card as one block. A card-body with a
+ * single child just rises on its own. `backwards` fill holds the hidden "from" state through the delay so
+ * nothing flashes first; children past the third share the last beat so a long header never trickles in. */
 @keyframes ppHeadIn { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
-@keyframes ppHeadFade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: no-preference) {
-    .pp-head-in { animation: ppHeadIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
-    .pp-head-in--2 { animation-delay: 0.07s; }
-    .pp-head-fade { animation: ppHeadFade 0.5s ease 0.14s backwards; }
+    .pp-head-cascade > * { animation: ppHeadIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+    .pp-head-cascade > *:nth-child(2) { animation-delay: 0.07s; }
+    .pp-head-cascade > *:nth-child(3) { animation-delay: 0.14s; }
+    .pp-head-cascade > *:nth-child(n+4) { animation-delay: 0.2s; }
 }
