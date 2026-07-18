@@ -176,7 +176,9 @@ class GamesListView(HtmxListMixin, ListView):
             for cid, slug in (
                 Stage.objects.filter(concepts__in=concept_ids)
                 .exclude(series_slug__isnull=True).exclude(series_slug='')
-                .values_list('concepts', 'series_slug').distinct()
+                # .order_by() strips Stage.Meta.ordering (stage_number), which would otherwise ride the
+                # SELECT + defeat .distinct() (a concept in two same-series stages -> duplicate rows).
+                .values_list('concepts', 'series_slug').order_by().distinct()
             ):
                 if cid in concept_id_set:
                     concept_series[cid].add(slug)
