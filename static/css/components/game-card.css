@@ -48,12 +48,12 @@
 .pp-gcard__barfill--chase   { background: var(--pp-accent); }
 .pp-gcard__barfill--prog    { background: color-mix(in oklab, var(--pp-info) 52%, var(--pp-text-mute)); }
 
-/* Community stats footer: a quiet bottom row of game-community facts (players / plats earned / 100%
-   completions / avg completion) on the solid card body -- no scrim/shadow needed. Neutral for now; a thin
-   divider sets it apart from the pursuer-hook chips above. Tabular numerals match the facts row. */
+/* Community stats footer: a bottom row of game-community facts (players / plats earned / 100% completions /
+   avg completion). Same bordered-box footprint as the badge/contract chips above so it's bounded to the
+   same horizontal area, not spread edge-to-edge. Tabular numerals match the facts row. */
 .pp-gcard__cstats {
     display: flex; align-items: center; justify-content: space-between; gap: 6px;
-    padding-top: 6px; border-top: 1px solid var(--pp-divider);
+    padding: 4px 8px; border-radius: 7px; background: var(--pp-bg-2); border: 1px solid var(--pp-border);
     font-size: 10.5px; font-weight: 700; color: var(--pp-text-dim); font-variant-numeric: tabular-nums;
 }
 .pp-gcard__cstat { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
