@@ -6,7 +6,8 @@ from django.test import RequestFactory
 
 from trophies.admin import StageAdmin, ContractAdmin
 from trophies.models import (
-    Concept, ConceptGenre, ConceptTheme, Contract, ContractMembership, Genre, Job, Stage, Theme,
+    Concept, ConceptGenre, ConceptTheme, Contract, ContractBundle, ContractMembership,
+    Genre, Job, Stage, Theme,
 )
 from tests.factories import ConceptBundleFactory, ConceptFactory, StageFactory
 
@@ -71,3 +72,98 @@ def test_suggest_jobs_replaces_existing():
     ContractAdmin(Contract, AdminSite()).suggest_jobs(_request(), Contract.objects.filter(pk=contract.pk))
 
     assert set(contract.jobs.values_list('slug', flat=True)) == {'mage'}   # replaced, not added
+
+
+# --- contract_satisfier_only: multi-game lists become bundles, never members ---
+
+def test_convert_flagged_concept_becomes_bundle_not_member():
+    member = ConceptFactory(unified_title='Uncharted 4')
+    coll = ConceptFactory(unified_title='Legacy of Thieves Collection', contract_satisfier_only=True)
+    stage = StageFactory(series_slug='u4', stage_number=1, title='Uncharted 4')
+    stage.concepts.add(member, coll)
+
+    StageAdmin(Stage, AdminSite()).convert_to_contract(_request(), Stage.objects.filter(pk=stage.pk))
+
+    contract = Contract.objects.get(name='Uncharted 4')
+    assert set(contract.memberships.values_list('concept_id', flat=True)) == {member.id}   # coll NOT homed
+    bundle_concept_ids = set(
+        ContractBundle.objects.filter(contract=contract).values_list('concepts__id', flat=True)
+    )
+    assert coll.id in bundle_concept_ids   # coll rides along as a satisfier bundle
+
+
+def test_convert_skips_stage_with_no_new_member():
+    # All concepts already homed (or satisfier-only) -> no empty draft is created.
+    homed = ConceptFactory(unified_title='Homed')
+    ContractMembership.objects.create(
+        contract=Contract.objects.create(name='Existing', slug='existing-empty'), concept=homed,
+    )
+    coll = ConceptFactory(unified_title='Coll Only', contract_satisfier_only=True)
+    stage = StageFactory(series_slug='empty', stage_number=1, title='Empty Stage')
+    stage.concepts.add(homed, coll)
+
+    StageAdmin(Stage, AdminSite()).convert_to_contract(_request(), Stage.objects.filter(pk=stage.pk))
+
+    assert not Contract.objects.filter(name='Empty Stage').exists()
+
+
+def test_convert_rerun_creates_no_duplicate():
+    fresh = ConceptFactory(unified_title='Fresh Game')
+    stage = StageFactory(series_slug='dup', stage_number=1, title='Dup Stage')
+    stage.concepts.add(fresh)
+    admin = StageAdmin(Stage, AdminSite())
+
+    admin.convert_to_contract(_request(), Stage.objects.filter(pk=stage.pk))
+    admin.convert_to_contract(_request(), Stage.objects.filter(pk=stage.pk))   # re-run
+
+    assert Contract.objects.filter(name='Dup Stage').count() == 1   # member already homed -> no dup
+
+
+def test_membership_form_rejects_flagged_concept():
+    from trophies.admin import ContractMembershipForm
+    contract = Contract.objects.create(name='C', slug='c-form')
+    coll = ConceptFactory(unified_title='Coll', contract_satisfier_only=True)
+    form = ContractMembershipForm(data={'contract': contract.id, 'concept': coll.id})
+    assert not form.is_valid()
+    assert 'concept' in form.errors
+
+
+# --- Contract admin: live-toggle actions + Concept flag actions ---
+
+def test_contract_live_toggle_actions():
+    live = Contract.objects.create(name='L', slug='l', is_live=True)
+    dark = Contract.objects.create(name='D', slug='d', is_live=False)
+    admin = ContractAdmin(Contract, AdminSite())
+
+    admin.make_not_live(_request(), Contract.objects.filter(pk=live.pk))
+    admin.make_live(_request(), Contract.objects.filter(pk=dark.pk))
+
+    live.refresh_from_db(); dark.refresh_from_db()
+    assert live.is_live is False and dark.is_live is True
+
+
+def test_concept_satisfier_flag_actions():
+    from trophies.admin import ConceptAdmin
+    c = ConceptFactory(unified_title='X')
+    admin = ConceptAdmin(Concept, AdminSite())
+
+    admin.mark_contract_satisfier(_request(), Concept.objects.filter(pk=c.pk))
+    assert Concept.objects.get(pk=c.pk).contract_satisfier_only is True
+    admin.unmark_contract_satisfier(_request(), Concept.objects.filter(pk=c.pk))
+    assert Concept.objects.get(pk=c.pk).contract_satisfier_only is False
+
+
+def test_list_multi_stage_concepts_command():
+    from io import StringIO
+    from django.core.management import call_command
+    multi = ConceptFactory(unified_title='Multi Stage Concept')
+    single = ConceptFactory(unified_title='Single Stage Concept')
+    StageFactory(series_slug='a', stage_number=1).concepts.add(multi)
+    StageFactory(series_slug='b', stage_number=1).concepts.add(multi)   # 2 stages
+    StageFactory(series_slug='c', stage_number=1).concepts.add(single)  # 1 stage
+
+    out = StringIO()
+    call_command('list_multi_stage_concepts', stdout=out)
+    output = out.getvalue()
+    assert 'Multi Stage Concept' in output
+    assert 'Single Stage Concept' not in output   # only 2+ stage concepts are listed

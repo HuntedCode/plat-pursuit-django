@@ -53,13 +53,22 @@ def _active_multiplier():
     return Decimal('1.00')
 
 
-def _has_platinum(member_ids):
-    """Do this Contract's member concept(s) define a platinum at all? Drives the tier
-    fractions: games without a platinum pay the FULL T at 100% rather than the bonus
-    fraction. Takes the member concept ids (loaded once by the caller)."""
-    if not member_ids:
+def _has_platinum(contract, member_ids):
+    """Does this Contract define a platinum at all -- across its member concepts OR its
+    satisfier bundles? Drives the tier fractions: contracts with no platinum anywhere pay
+    the FULL T at 100% rather than the bonus fraction.
+
+    Bundle concepts MUST count here: _detect_tiers can set platinum_reached purely via a
+    fully-platted satisfier bundle (a multi-game collection), so freezing has_platinum
+    from members alone would strand such a contract as permanently claimable -- the accept
+    gate only banks the platinum tier when has_platinum is True, so a reached-but-not-
+    has_platinum contract shows claimable forever and re-accepting grants nothing."""
+    concept_ids = set(member_ids)
+    concept_ids.update(contract.bundles.values_list('concepts__id', flat=True))
+    concept_ids.discard(None)
+    if not concept_ids:
         return False
-    return Trophy.objects.filter(game__concept_id__in=member_ids, trophy_type='platinum').exists()
+    return Trophy.objects.filter(game__concept_id__in=concept_ids, trophy_type='platinum').exists()
 
 
 def grant_job_xp(profile, job, amount, *, source='contract', source_id=None,
@@ -100,10 +109,13 @@ def home_contract_for_concept(concept):
 def _detect_tiers(profile, contract, member_ids):
     """(platinum_reached, full_reached) for this profile on this Contract.
 
-    Platinum = the user earned the platinum on any member concept. 100% = any member
-    concept (or a fully-cleared bundle) at progress 100. Completing any one version
-    variant counts. Collapsed to two bounded `.exists()` queries over the member set
-    (+ one per bundle) so the sync hot path doesn't fan out a query per concept.
+    Platinum = the user earned the platinum on any member concept, OR fully platinum'd
+    a satisfier bundle (every concept in the bundle platted -- e.g. a multi-game
+    collection whose one platinum stands in for the games it covers). 100% = any member
+    concept, OR a fully-cleared bundle, at progress 100. Completing any one version
+    variant counts. Bounded to two `.exists()` queries over the member set plus up to
+    two set-membership queries per bundle, short-circuiting once both tiers are reached,
+    so the sync hot path doesn't fan out a query per concept.
     """
     platinum_reached = full_reached = False
     if member_ids:
@@ -114,19 +126,30 @@ def _detect_tiers(profile, contract, member_ids):
         full_reached = ProfileGame.objects.filter(
             profile=profile, game__concept_id__in=member_ids, progress=100,
         ).exists()
-    if not full_reached:
+    if not (platinum_reached and full_reached):
         for bundle in contract.bundles.all():
+            if platinum_reached and full_reached:
+                break
             bundle_ids = set(bundle.concepts.values_list('id', flat=True))
             if not bundle_ids:
                 continue
-            completed = set(
-                ProfileGame.objects
-                .filter(profile=profile, game__concept_id__in=bundle_ids, progress=100)
-                .values_list('game__concept_id', flat=True)
-            )
-            if bundle_ids <= completed:
-                full_reached = True
-                break
+            if not full_reached:
+                completed = set(
+                    ProfileGame.objects
+                    .filter(profile=profile, game__concept_id__in=bundle_ids, progress=100)
+                    .values_list('game__concept_id', flat=True)
+                )
+                if bundle_ids <= completed:
+                    full_reached = True
+            if not platinum_reached:
+                platted = set(
+                    EarnedTrophy.objects
+                    .filter(profile=profile, earned=True, trophy__trophy_type='platinum',
+                            trophy__game__concept_id__in=bundle_ids)
+                    .values_list('trophy__game__concept_id', flat=True)
+                )
+                if bundle_ids <= platted:
+                    platinum_reached = True
     return platinum_reached, full_reached
 
 
@@ -142,7 +165,7 @@ def mark_contract_reached(profile, contract):
 
     ec, _created = EarnedContract.objects.get_or_create(
         profile=profile, contract=contract,
-        defaults={'has_platinum': _has_platinum(member_ids)},
+        defaults={'has_platinum': _has_platinum(contract, member_ids)},
     )
     changed = []
     now = timezone.now()
