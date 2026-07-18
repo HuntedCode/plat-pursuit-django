@@ -99,6 +99,33 @@ def test_card_dlc_tag_shows_pack_count(client):
     assert content.count('pp-gcard__dlc-n') == 1  # only the DLC game carries a count (no-groups game omits it)
 
 
+def test_card_shows_community_stats_badge(client):
+    """A game with players renders the community-stats badge (.pp-gcard__cstats) with compact counts + a
+    rounded avg completion. Reads plain denormed Game columns -> no extra queries."""
+    from trophies.models import Game
+
+    game = GameFactory(title_name='Stats Badge Game', title_platform=['PS5'])
+    Game.objects.filter(pk=game.pk).update(
+        played_count=128400, plats_earned_count=41000, full_completion_count=39000, avg_completion=63.0,
+    )
+    url, params = _url()
+    content = client.get(url, params).content.decode()
+
+    assert 'pp-gcard__cstats' in content
+    assert '128.4k' in content   # compact_number(128400)
+    assert '63%' in content       # avg_completion floatformat:0
+
+
+def test_card_hides_stats_badge_when_no_players(client):
+    """A game nobody has played (played_count=0) omits the stats badge (would just read zeros)."""
+    GameFactory(title_name='Unplayed Game', title_platform=['PS5'])  # played_count defaults to 0
+    url, params = _url()
+    content = client.get(url, params).content.decode()
+
+    assert 'Unplayed Game' in content
+    assert 'pp-gcard__cstats' not in content
+
+
 def test_platform_filter_narrows(client):
     """?platform=PS5 shows only PS5 games; ?platform=PS3 shows only PS3 games."""
     GameFactory(title_name='Current Gen', title_platform=['PS5'])
