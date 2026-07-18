@@ -365,3 +365,29 @@ def test_bundle_at_100_but_not_platinum_grants_only_full_tier():
     assert ec is not None
     assert ec.full_reached_at is not None
     assert ec.platinum_reached_at is None
+
+
+def test_platted_bundle_on_noplat_member_banks_platinum_not_stuck():
+    """Regression (audit Finding 1): a contract whose HOME MEMBER defines no platinum but
+    whose satisfier bundle is fully platted must freeze has_platinum=True (from the bundle),
+    so the reached platinum tier actually BANKS on accept instead of stranding the contract
+    as permanently claimable (reached-but-never-accepted, re-accept grants 0)."""
+    profile = ProfileFactory()
+    contract = _contract('c-bundle-plat', ['mage'])
+    _noplat_member(contract)   # home member defines NO platinum
+    coll = ConceptFactory(unified_title='Collection', contract_satisfier_only=True)
+    coll_game = GameFactory(concept=coll)
+    coll_plat = TrophyFactory(game=coll_game, trophy_type='platinum')
+    ContractBundle.objects.create(contract=contract, label='covers').concepts.set([coll])
+    _earn_platinum(profile, coll_game, coll_plat)   # bundle fully platted + at 100%
+
+    ec = contract_service.mark_contract_reached(profile, contract)
+    assert ec.has_platinum is True             # frozen from the bundle, not members alone
+    assert ec.platinum_reached_at is not None
+
+    granted = contract_service.accept_contract(profile, contract)
+
+    assert granted == CONTRACT_XP_TOTAL         # both tiers bank in one accept
+    ec.refresh_from_db()
+    assert ec.platinum_accepted_at is not None and ec.full_accepted_at is not None
+    assert not list(contract_service.claimable_contracts(profile))   # NOT stuck claimable

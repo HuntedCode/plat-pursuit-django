@@ -53,13 +53,22 @@ def _active_multiplier():
     return Decimal('1.00')
 
 
-def _has_platinum(member_ids):
-    """Do this Contract's member concept(s) define a platinum at all? Drives the tier
-    fractions: games without a platinum pay the FULL T at 100% rather than the bonus
-    fraction. Takes the member concept ids (loaded once by the caller)."""
-    if not member_ids:
+def _has_platinum(contract, member_ids):
+    """Does this Contract define a platinum at all -- across its member concepts OR its
+    satisfier bundles? Drives the tier fractions: contracts with no platinum anywhere pay
+    the FULL T at 100% rather than the bonus fraction.
+
+    Bundle concepts MUST count here: _detect_tiers can set platinum_reached purely via a
+    fully-platted satisfier bundle (a multi-game collection), so freezing has_platinum
+    from members alone would strand such a contract as permanently claimable -- the accept
+    gate only banks the platinum tier when has_platinum is True, so a reached-but-not-
+    has_platinum contract shows claimable forever and re-accepting grants nothing."""
+    concept_ids = set(member_ids)
+    concept_ids.update(contract.bundles.values_list('concepts__id', flat=True))
+    concept_ids.discard(None)
+    if not concept_ids:
         return False
-    return Trophy.objects.filter(game__concept_id__in=member_ids, trophy_type='platinum').exists()
+    return Trophy.objects.filter(game__concept_id__in=concept_ids, trophy_type='platinum').exists()
 
 
 def grant_job_xp(profile, job, amount, *, source='contract', source_id=None,
@@ -156,7 +165,7 @@ def mark_contract_reached(profile, contract):
 
     ec, _created = EarnedContract.objects.get_or_create(
         profile=profile, contract=contract,
-        defaults={'has_platinum': _has_platinum(member_ids)},
+        defaults={'has_platinum': _has_platinum(contract, member_ids)},
     )
     changed = []
     now = timezone.now()
