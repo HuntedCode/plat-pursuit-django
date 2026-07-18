@@ -133,6 +133,16 @@ class GamesListView(HtmxListMixin, ListView):
                 for slug, label in Job.DISCIPLINES
             ]
 
+            # Header discovery stats from the hourly-cached site heartbeat (zero DB cost on the request path):
+            # catalogue scale + how many games are part of a badge series / a contract.
+            from core.services.site_heartbeat import get_cached_heartbeat
+            _hb = get_cached_heartbeat() or {}
+            _always = _hb.get('always') or {}
+            _expanded = _hb.get('expanded') or {}
+            context['catalog_games_total'] = (_always.get('games_total') or {}).get('value')
+            context['catalog_games_in_badges'] = (_expanded.get('games_in_badges') or {}).get('value')
+            context['catalog_games_in_contracts'] = (_expanded.get('games_in_contracts') or {}).get('value')
+
         # Check if any filters are active (for badge + auto-expanding the drawer)
         context['has_advanced_filters'] = any(
             v for k, v in self.request.GET.lists()

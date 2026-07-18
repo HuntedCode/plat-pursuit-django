@@ -125,6 +125,30 @@ def compute_site_heartbeat() -> dict:
     badges_total = _community_value('badge_series', 'total')
     badge_xp_total = _community_value('badge_xp', 'total')
 
+    # Catalogue coverage: distinct games that are part of a live badge series / a live contract. Surfaced on
+    # Browse Games' header as discovery hooks. Catalogue-wide aggregates -> hourly cron, never the request path.
+    try:
+        from trophies.models import Game, Badge
+        _live_series = (
+            Badge.objects.filter(is_live=True)
+            .exclude(series_slug__isnull=True).exclude(series_slug='')
+            .values_list('series_slug', flat=True)
+        )
+        games_in_badges = Game.objects.filter(concept__stages__series_slug__in=_live_series).distinct().count()
+    except Exception:
+        logger.exception("games_in_badges query failed")
+        games_in_badges = None
+        is_partial = True
+    try:
+        from trophies.models import Game
+        games_in_contracts = (
+            Game.objects.filter(concept__contract_membership__contract__is_live=True).distinct().count()
+        )
+    except Exception:
+        logger.exception("games_in_contracts query failed")
+        games_in_contracts = None
+        is_partial = True
+
     # Flavor line: pre-formatted in service so template stays dumb
     flavor_numbers = (
         f"{_humanize_compact(badge_xp_total)} XP earned · "
@@ -181,6 +205,16 @@ def compute_site_heartbeat() -> dict:
                 'value': hours_hunted,
                 'label': 'Hours hunted',
                 'sublabel': 'real PSN playtime',
+            },
+            'games_in_badges': {
+                'value': games_in_badges,
+                'label': 'Games in badge series',
+                'sublabel': 'catalogue',
+            },
+            'games_in_contracts': {
+                'value': games_in_contracts,
+                'label': 'Games in contracts',
+                'sublabel': 'catalogue',
             },
         },
         'flavor': {

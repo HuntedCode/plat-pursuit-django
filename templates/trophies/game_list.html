@@ -11,8 +11,8 @@
 
     {# ── Page header: accented card + --pp-* substance, opening-beat cascade (rebuild standard). ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-4 md:p-5 lg:p-6">
-            <div class="flex items-start justify-between gap-3 flex-wrap pp-head-cascade">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
                 <div class="min-w-0">
                     <div class="flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -42,9 +42,22 @@
                 {# Catalog size as a Tally stat (mirrors the Collection/Badges headline number). #}
                 <div class="shrink-0 text-right">
                     <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-games-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</div>
-                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">game{{ paginator.count|pluralize }}</div>
+                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">{% if catalog_games_total %}of {{ catalog_games_total|intcomma }} games{% else %}game{{ paginator.count|pluralize }}{% endif %}</div>
                 </div>
             </div>
+
+            {% comment %} Discovery hooks: how much of the catalogue is part of the gamification systems
+            (badge series / contracts). Cached hourly on the site heartbeat -> zero DB cost here. {% endcomment %}
+            {% if catalog_games_in_badges or catalog_games_in_contracts %}
+            <div class="pp-gbrowse__hooks">
+                {% if catalog_games_in_badges %}
+                <span class="pp-gbrowse__hook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg><b>{{ catalog_games_in_badges|intcomma }}</b> in badge series</span>
+                {% endif %}
+                {% if catalog_games_in_contracts %}
+                <span class="pp-gbrowse__hook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg><b>{{ catalog_games_in_contracts|intcomma }}</b> in contracts</span>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
     </section>
 

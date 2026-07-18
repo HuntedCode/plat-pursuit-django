@@ -203,6 +203,17 @@ def test_bare_games_redirects_to_defaults(client):
     assert 'platform=' in resp['Location']
 
 
+def test_site_heartbeat_has_catalog_coverage():
+    """compute_site_heartbeat runs the new catalogue-coverage queries (games in badge series / contracts,
+    which feed the Browse Games header) and exposes them under `expanded`. Empty DB -> 0, no crash."""
+    from core.services.site_heartbeat import compute_site_heartbeat
+
+    expanded = compute_site_heartbeat().get('expanded', {})
+
+    assert expanded.get('games_in_badges', {}).get('value') == 0
+    assert expanded.get('games_in_contracts', {}).get('value') == 0
+
+
 def test_game_card_workshop_renders(client):
     """The /design/game-card/ workshop renders a card without crashing. A bare game (no badges/contract)
     hits the 'plain' branch, so this exercises the card partial + its empty-slot placeholders -- and guards

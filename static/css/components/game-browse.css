@@ -7,6 +7,13 @@
  * ============================================================ */
 .pp-gbrowse { display: flex; flex-direction: column; }
 
+/* Header discovery-hooks strip: how much of the catalogue is in a badge series / a contract (hourly-cached,
+   zero request cost). Neutral chrome -- muted icons, bold numbers -- so it informs without adding a hue. */
+.pp-gbrowse__hooks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-divider); font-size: 12px; color: var(--pp-text-dim); }
+.pp-gbrowse__hook { display: inline-flex; align-items: center; gap: 6px; }
+.pp-gbrowse__hook svg { width: 14px; height: 14px; color: var(--pp-text-mute); flex-shrink: 0; }
+.pp-gbrowse__hook b { color: var(--pp-text); font-weight: 800; font-variant-numeric: tabular-nums; }
+
 /* Toolbar is chrome -> it sits BACK: keep the shared .pp-toolbar-card fill but soften the lift so the card
    grid below owns the pop (mirrors the badge/Contracts toolbars). Scoped to .pp-gbrowse so only this
    toolbar quiets; wins the cascade because component CSS is unlayered and .pp-toolbar-card is @layer base. */
