@@ -79,6 +79,10 @@
    See docs/reference/design-system.md "Search toolbar". */
 [data-search-wrap] { position: relative; }
 [data-search-wrap]:has([data-search-clear]) input { padding-right: 30px; }
+/* We render our own .pp-search-clear button, so hide the browser's native type="search" clear
+   glyph (would show as a duplicate, unstyled "x"). */
+[data-search-wrap] input[type="search"]::-webkit-search-cancel-button,
+[data-search-wrap] input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
 .pp-search-kbd, .pp-search-clear, .pp-search-spin { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
 .pp-search-kbd {
     display: inline-flex; align-items: center; justify-content: center; min-width: 15px; height: 15px; padding: 0 3px;
