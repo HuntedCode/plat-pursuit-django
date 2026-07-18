@@ -188,10 +188,13 @@ class GamesListView(HtmxListMixin, ListView):
             all_slugs = {s for slugs in concept_series.values() for s in slugs}
             series_badge = {}
             if all_slugs:
+                # display_series is the clean SERIES name ("God of War"); fall back to name only if unset --
+                # the same series_name derivation frame_service uses, so we never show the per-tier badge
+                # name ("God of War Bronze") on the card.
                 series_badge = {
-                    b['series_slug']: b
+                    b['series_slug']: {**b, 'label': b['display_series'] or b['name']}
                     for b in Badge.objects.filter(series_slug__in=all_slugs, tier=1, is_live=True)
-                    .values('series_slug', 'name', 'badge_type')
+                    .values('series_slug', 'name', 'display_series', 'badge_type')
                 }
 
             badge_map = {}
@@ -199,10 +202,10 @@ class GamesListView(HtmxListMixin, ListView):
                 items = [series_badge[s] for s in slugs if s in series_badge]
                 if not items:
                     continue
-                items.sort(key=lambda b: (prio.get(b['badge_type'], 99), (b['name'] or '').lower()))
+                items.sort(key=lambda b: (prio.get(b['badge_type'], 99), b['label'].lower()))
                 badge_map[cid] = {
                     'total': len(items),
-                    'names': [b['name'] for b in items[:badge_cap]],
+                    'names': [b['label'] for b in items[:badge_cap]],
                     'more': max(0, len(items) - badge_cap),
                 }
             context['badge_map'] = badge_map
