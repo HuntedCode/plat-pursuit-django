@@ -11,6 +11,22 @@ link. {% endcomment %}
         {% elif c.progress == 100 %}
         <span class="gcw-flag gcw-flag--done" title="100%"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
         {% endif %}
+        {% comment %} Community stats badge (MOCK -- sample numbers; real values will be denormed onto Game).
+        Bottom-left, above the progress bar; dark scrim keeps it legible over light AND dark cover art. {% endcomment %}
+        <div class="gcw-cstats">
+            <span class="gcw-cstat gcw-cstat--players" title="Total players">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>{{ c.stats.players }}
+            </span>
+            <span class="gcw-cstat gcw-cstat--plat" title="Platinums earned">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>{{ c.stats.plats }}
+            </span>
+            <span class="gcw-cstat gcw-cstat--full" title="100% completions">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>{{ c.stats.hundreds }}
+            </span>
+            <span class="gcw-cstat gcw-cstat--avg" title="Average completion">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>{{ c.stats.avg }}%
+            </span>
+        </div>
         {% if c.progress > 0 %}<span class="gcw-card__bar"><span style="width: {{ c.progress }}%"></span></span>{% endif %}
     </div>
 

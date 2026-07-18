@@ -784,6 +784,15 @@ class GameCardWorkshopView(TemplateView):
             {'progress': 100, 'has_plat': False},
         ]
         _ratings = [(4.6, 3.2), (3.9, 6.1), (None, None), (4.2, 4.8), (4.8, 8.5)]
+        # Fabricated community stats (mock for the cover stats badge -- these will be denormed onto Game).
+        # players / plats earned / 100% completions / avg completion %. Compact display strings.
+        _community = [
+            {'players': '128K', 'plats': '41K', 'hundreds': '39K', 'avg': 63},
+            {'players': '7.8K', 'plats': '940', 'hundreds': '1.2K', 'avg': 41},
+            {'players': '512', 'plats': '12', 'hundreds': '18', 'avg': 22},
+            {'players': '34K', 'plats': '8.6K', 'hundreds': '9.1K', 'avg': 55},
+            {'players': '2.1K', 'plats': '610', 'hundreds': '780', 'avg': 48},
+        ]
 
         # Representative games: the ones in the MOST badge series first (to exercise the cap + "+N"),
         # preferring those that also carry a contract, plus one plain game (no badges, no contract).
@@ -847,6 +856,7 @@ class GameCardWorkshopView(TemplateView):
                 'contract': ct,
                 'contract_xp': (ct.xp_total_override or CONTRACT_XP_TOTAL) if ct else 0,
                 'jobs': list(ct.jobs.all()) if ct else [],
+                'stats': _community[i % len(_community)],
             })
         ctx['cards'] = cards
         ctx['badge_cap'] = self.BADGE_CAP
