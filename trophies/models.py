@@ -970,6 +970,9 @@ class Concept(models.Model):
             models.Index(fields=['publisher_name'], name='content_publisher_idx'),
             models.Index(fields=['release_date'], name='concept_release_date_idx'),
             models.Index(fields=['slug'], name='concept_slug_idx'),
+            # Trigram GIN: serves substring (ILIKE '%q%') title search from the
+            # universal nav-search typeahead, which a btree can't (leading wildcard).
+            GinIndex(fields=['unified_title'], name='concept_title_trgm', opclasses=['gin_trgm_ops']),
         ]
 
     def save(self, *args, **kwargs):
@@ -1838,6 +1841,8 @@ class Badge(models.Model):
             models.Index(fields=['most_recent_concept'], name='badge_recent_concept_idx'),
             models.Index(fields=['tier'], name='badge_tier_idx'),
             models.Index(fields=['is_live'], name='badge_is_live_idx'),
+            # Trigram GIN: substring name search for the universal nav-search typeahead.
+            GinIndex(fields=['name'], name='badge_name_trgm', opclasses=['gin_trgm_ops']),
         ]
 
     @property
@@ -6018,6 +6023,10 @@ class Franchise(models.Model):
                 fields=['igdb_id', 'source_type'],
                 name='franchise_igdb_id_source_type_unique',
             ),
+        ]
+        indexes = [
+            # Trigram GIN: substring name search for the universal nav-search typeahead.
+            GinIndex(fields=['name'], name='franchise_name_trgm', opclasses=['gin_trgm_ops']),
         ]
 
     def __str__(self):
