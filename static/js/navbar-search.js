@@ -1,16 +1,18 @@
 /**
- * Navbar PSN search.
+ * Navbar universal search.
  *
  * A persistent typeahead bar (md+) that collapses to an icon trigger below md.
  * Two behaviours share one #navbar-sync-form:
- *   1. Typeahead over EXISTING tracked profiles (GET profile_suggest, debounced)
- *      -> a dropdown of matching hunters, each linking to their profile page.
- *   2. Add-and-sync fallback for a name that isn't tracked yet: the form posts
- *      to search_sync_profile, then polls add_sync_status until the new profile
- *      finishes basic ingestion (-> Visit link) or errors.
+ *   1. Typeahead over the catalog (GET site_suggest, debounced) -> a dropdown of
+ *      matches GROUPED by type (Games / Badges / Franchises / Hunters), each row
+ *      an anchor to its detail page.
+ *   2. Add-and-sync fallback for an Online ID that isn't tracked yet: the form
+ *      posts to search_sync_profile, then polls add_sync_status until the new
+ *      profile finishes basic ingestion (-> Visit link) or errors. Gated purely
+ *      on the query matching PSN_RE, so it coexists with entity matches.
  *
- * Rows are built with DOM APIs (not innerHTML interpolation) so PSN-sourced
- * display names and avatar URLs can never inject markup.
+ * Rows are built with DOM APIs (not innerHTML interpolation) so catalog- and
+ * PSN-sourced labels and image URLs can never inject markup.
  */
 document.addEventListener('DOMContentLoaded', () => {
     const root = document.getElementById('navbar-search');
@@ -83,70 +85,104 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ---- Typeahead rendering ----
-    function personPlaceholder() {
+    // Per-type fallback glyph, shown when a row has no image (badges/franchises always;
+    // games/profiles when their art/avatar is missing).
+    const GLYPHS = {
+        profile: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+        game: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4"/><circle cx="16" cy="11" r="1"/><circle cx="18" cy="14" r="1"/>',
+        badge: '<circle cx="12" cy="8" r="6"/><path d="M8.2 13.5 7 22l5-3 5 3-1.2-8.5"/>',
+        franchise: '<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
+    };
+    function glyphPlaceholder(type) {
         const span = document.createElement('span');
         span.className = 'pp-navsearch__ph';
-        span.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+        span.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+            + (GLYPHS[type] || GLYPHS.profile) + '</svg>';
         return span;
     }
-    function buildRow(p, i) {
+    function thumb(url) {
+        const img = document.createElement('img');
+        img.src = url;                 // property assignment: no markup injection
+        img.alt = '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        return img;
+    }
+    // One row per suggestion, `i` a running index unique across ALL groups so
+    // aria-activedescendant ids stay unique. Every row is an <a> (Enter navigates).
+    function buildRow(item, type, i) {
         const a = document.createElement('a');
-        a.className = 'pp-navsearch__opt';
-        a.href = p.url;
+        a.className = 'pp-navsearch__opt pp-navsearch__opt--' + type;
+        a.href = item.url;
         a.id = 'navsearch-opt-' + i;
         a.setAttribute('role', 'option');
 
-        if (p.avatar_url) {
-            const img = document.createElement('img');
-            img.src = p.avatar_url;            // property assignment: no markup injection
-            img.alt = '';
-            img.loading = 'lazy';
-            img.decoding = 'async';
-            a.appendChild(img);
-        } else {
-            a.appendChild(personPlaceholder());
-        }
+        // Leading media: avatar (profile) or cover (game) when present, else a type glyph.
+        if (type === 'profile' && item.avatar_url) { a.appendChild(thumb(item.avatar_url)); }
+        else if (type === 'game' && item.image) { a.appendChild(thumb(item.image)); }
+        else { a.appendChild(glyphPlaceholder(type)); }
 
         const name = document.createElement('b');
-        name.textContent = p.display;          // textContent: safe
+        name.textContent = item.label;          // textContent: safe
         a.appendChild(name);
 
-        const plats = document.createElement('span');
-        plats.className = 'pp-navsearch__plats';
-        plats.textContent = Number(p.plats || 0).toLocaleString();
-        plats.title = 'Platinums';
-        a.appendChild(plats);
+        // Trailing metadata: platinum count for hunters, a type tag for franchises.
+        if (type === 'profile') {
+            const plats = document.createElement('span');
+            plats.className = 'pp-navsearch__plats';
+            plats.textContent = Number(item.plats || 0).toLocaleString();
+            plats.title = 'Platinums';
+            a.appendChild(plats);
+        } else if (item.sublabel) {
+            const sub = document.createElement('span');
+            sub.className = 'pp-navsearch__sub';
+            sub.textContent = item.sublabel;
+            a.appendChild(sub);
+        }
         return a;
     }
-    function renderSuggestions(results, q) {
+    function renderSuggestions(data, q) {
         resetAddSync();
         list.textContent = '';
-        results.forEach((p, i) => list.appendChild(buildRow(p, i)));
+        let i = 0;
+        (data.groups || []).forEach((group) => {
+            if (!group.items || !group.items.length) return;
+            const header = document.createElement('div');
+            header.className = 'pp-navsearch__group';
+            header.setAttribute('role', 'presentation');   // not a navigable option
+            header.textContent = group.label;
+            list.appendChild(header);
+            group.items.forEach((item) => list.appendChild(buildRow(item, group.type, i++)));
+        });
 
         if (addTerm) addTerm.textContent = q;
         addBtn.hidden = !PSN_RE.test(q);
 
         refreshItems();
         // Only open when there's something to show (a suggestion or the add row); a 2-char
-        // non-PSN query with no matches would otherwise flash an empty bordered panel.
+        // query with no matches and no PSN fallback would otherwise flash an empty panel.
         if (items.length) { openPanel(); setActive(0); }
         else { closePanel(); }
     }
 
+    let suggestAbort = null;   // cancels the superseded request when a new keystroke lands
     const fetchSuggest = PlatPursuit.debounce((q) => {
         if (!suggestUrl) return;
-        PlatPursuit.API.get(`${suggestUrl}?q=${encodeURIComponent(q)}`)
+        if (suggestAbort) suggestAbort.abort();
+        suggestAbort = new AbortController();
+        PlatPursuit.API.get(`${suggestUrl}?q=${encodeURIComponent(q)}`, { signal: suggestAbort.signal })
             .then((data) => {
                 if (input.value.trim() !== q) return;   // stale: input moved on
-                renderSuggestions(data.results || [], q);
+                renderSuggestions(data, q);
             })
-            .catch(() => {
+            .catch((err) => {
+                if (err && err.name === 'AbortError') return;   // superseded: ignore
                 // Network hiccup / throttle: keep the field usable. If the name is
                 // a valid PSN id, still offer the add-and-sync fallback.
                 if (input.value.trim() !== q) return;
-                renderSuggestions([], q);
+                renderSuggestions({ groups: [] }, q);
             });
-    }, 180);
+    }, 200);
 
     function onInput() {
         const q = input.value.trim();

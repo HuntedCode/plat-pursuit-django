@@ -11,7 +11,8 @@ from django.test import RequestFactory
 from django.urls import reverse
 
 from plat_pursuit.context_processors import navsync
-from tests.factories import ProfileFactory
+from tests.factories import BadgeFactory, ConceptFactory, GameFactory, ProfileFactory
+from trophies.models import Franchise
 
 pytestmark = pytest.mark.django_db
 
@@ -133,6 +134,128 @@ def test_profile_suggest_open_to_anonymous(client):
     resp = client.get(reverse('profile_suggest'), {'q': 'public'})
     assert resp.status_code == 200
     assert [r['psn_username'] for r in resp.json()['results']] == ['public_one']
+
+
+# --- Universal nav search: grouped site_suggest endpoint (games/badges/franchises/hunters) ---
+
+@pytest.fixture(autouse=True)
+def _clear_suggest_cache():
+    # site_suggest caches assembled payloads by query; clear between tests so per-test
+    # data (and rate-limit buckets) can't bleed across cases.
+    from django.core.cache import cache
+    cache.clear()
+    yield
+    cache.clear()
+
+
+def _groups(resp):
+    return {g['type']: g for g in resp.json()['groups']}
+
+
+def test_site_suggest_groups_all_entity_types(client):
+    concept = ConceptFactory(unified_title='Elden Ring')
+    GameFactory(concept=concept, played_count=100, np_communication_id='NPWR_ELDEN_00')
+    BadgeFactory(name='Elden Lord', series_slug='elden-lord', tier=1, is_live=True)
+    Franchise.objects.create(igdb_id=9001, name='Elden Ring', slug='elden-ring-fr', source_type='franchise')
+    ProfileFactory(psn_username='eldenlord', total_plats=42)
+
+    resp = client.get(reverse('site_suggest'), {'q': 'elden'})
+    assert resp.status_code == 200
+    groups = _groups(resp)
+    assert set(groups) == {'game', 'badge', 'franchise', 'profile'}
+    assert groups['game']['items'][0]['label'] == 'Elden Ring'
+    assert groups['game']['items'][0]['url'] == reverse('game_detail', kwargs={'np_communication_id': 'NPWR_ELDEN_00'})
+    assert groups['badge']['items'][0]['url'] == reverse('badge_detail', kwargs={'series_slug': 'elden-lord'})
+    assert groups['franchise']['items'][0]['url'] == reverse('franchise_detail', kwargs={'slug': 'elden-ring-fr'})
+    assert groups['profile']['items'][0]['label'] == 'eldenlord'
+    assert groups['profile']['items'][0]['plats'] == 42
+
+
+def test_site_suggest_game_dedups_concept_to_most_played(client):
+    # A concept with several Game versions collapses to ONE row linking the most-played version.
+    concept = ConceptFactory(unified_title='God of War')
+    GameFactory(concept=concept, played_count=5, np_communication_id='NPWR_LOW_00')
+    GameFactory(concept=concept, played_count=500, np_communication_id='NPWR_HIGH_00')
+
+    games = _groups(client.get(reverse('site_suggest'), {'q': 'god of war'}))['game']['items']
+    assert len(games) == 1
+    assert games[0]['url'] == reverse('game_detail', kwargs={'np_communication_id': 'NPWR_HIGH_00'})
+
+
+def test_site_suggest_substring_not_prefix(client):
+    # The whole point of the trigram indexes: mid-title substring, not just prefix.
+    concept = ConceptFactory(unified_title='Dark Souls')
+    GameFactory(concept=concept, played_count=10, np_communication_id='NPWR_DS_00')
+    labels = [i['label'] for i in _groups(client.get(reverse('site_suggest'), {'q': 'souls'}))['game']['items']]
+    assert 'Dark Souls' in labels
+
+
+def test_site_suggest_badge_suggests_one_row_per_series(client):
+    # Only the tier-1 badge represents a series (badge_detail is keyed on series_slug).
+    BadgeFactory(name='Trophy Titan', series_slug='trophy-titan', tier=1, is_live=True)
+    BadgeFactory(name='Trophy Titan', series_slug='trophy-titan', tier=2, is_live=True)  # higher tier: not its own row
+    items = _groups(client.get(reverse('site_suggest'), {'q': 'trophy titan'}))['badge']['items']
+    assert len(items) == 1
+    assert items[0]['url'] == reverse('badge_detail', kwargs={'series_slug': 'trophy-titan'})
+
+
+def test_site_suggest_hides_unreleased_badges(client):
+    BadgeFactory(name='Secret Badge', series_slug='secret', tier=1, is_live=False)
+    resp = client.get(reverse('site_suggest'), {'q': 'secret'})
+    assert 'badge' not in _groups(resp)   # .live() gate keeps hidden badges out
+
+
+def test_site_suggest_franchise_sublabel_distinguishes_series(client):
+    Franchise.objects.create(igdb_id=1, name='Spider-Verse', slug='sv-coll', source_type='collection')
+    Franchise.objects.create(igdb_id=2, name='Spider-Verse', slug='sv-fran', source_type='franchise')
+    subs = {i['sublabel'] for i in _groups(client.get(reverse('site_suggest'), {'q': 'spider'}))['franchise']['items']}
+    assert subs == {'Series', 'Franchise'}
+
+
+def test_site_suggest_empty_groups_omitted(client):
+    concept = ConceptFactory(unified_title='Bloodborne')
+    GameFactory(concept=concept, played_count=1, np_communication_id='NPWR_BB_00')
+    groups = _groups(client.get(reverse('site_suggest'), {'q': 'bloodborne'}))
+    assert set(groups) == {'game'}   # no empty badge/franchise/hunter sections
+
+
+def test_site_suggest_short_query_returns_empty(client):
+    resp = client.get(reverse('site_suggest'), {'q': 'a'})
+    assert resp.status_code == 200
+    assert resp.json()['groups'] == []
+
+
+def test_site_suggest_rejects_overlong_query(client):
+    assert client.get(reverse('site_suggest'), {'q': 'a' * 65}).status_code == 400
+
+
+def test_site_suggest_open_to_anonymous(client):
+    concept = ConceptFactory(unified_title='Public Game')
+    GameFactory(concept=concept, played_count=1, np_communication_id='NPWR_PUB_00')
+    resp = client.get(reverse('site_suggest'), {'q': 'public game'})
+    assert resp.status_code == 200
+    assert _groups(resp)['game']['items'][0]['label'] == 'Public Game'
+
+
+def test_site_suggest_caches_payload(client):
+    concept = ConceptFactory(unified_title='Cache Test')
+    GameFactory(concept=concept, played_count=1, np_communication_id='NPWR_CACHE_00')
+    first = client.get(reverse('site_suggest'), {'q': 'cache test'}).json()
+    assert len(first['groups'][0]['items']) == 1
+    # A second matching game added AFTER the first call must not surface: the response is
+    # served from the Redis cache, not recomputed.
+    c2 = ConceptFactory(unified_title='Cache Test Two')
+    GameFactory(concept=c2, played_count=1, np_communication_id='NPWR_CACHE2_00')
+    second = client.get(reverse('site_suggest'), {'q': 'cache test'}).json()
+    assert second == first
+
+
+def test_navbar_search_wired_to_site_suggest(client):
+    resp = client.get('/support/')
+    assert reverse('site_suggest').encode() in resp.content       # widened suggest endpoint
+    assert b'Search games, badges, hunters' in resp.content       # widened placeholder
+    # Guard the multi-line template comment (must be {% comment %}, not a leaking {# #}).
+    assert b'JS owns submit' not in resp.content
 
 
 # --- Sub-nav: grouped rail rebuild (--pp-* house style, workshop direction) ---

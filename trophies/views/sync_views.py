@@ -1,7 +1,11 @@
+import hashlib
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.cache import cache
+from django.db.models import OuterRef, Subquery
 from django.http import JsonResponse
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic import View
 from django_ratelimit.core import is_ratelimited
@@ -10,7 +14,7 @@ from django_ratelimit.decorators import ratelimit
 from core.services.tracking import track_site_event
 from trophies.psn_manager import PSNManager
 from trophies.util_modules.cache import redis_client
-from ..models import Profile
+from ..models import Badge, Concept, Franchise, Game, Profile
 
 logger = logging.getLogger("psn_api")
 
@@ -182,6 +186,144 @@ class ProfileSuggestView(View):
             for m in matches
         ]
         return JsonResponse({'results': results})
+
+
+class SiteSuggestView(View):
+    """
+    Universal navbar typeahead. Suggests Games, Badges, Franchises, and tracked
+    Hunters matching the query, grouped by type, each linking to its detail page.
+    Widens the profile-only ProfileSuggestView; the client keeps the add-and-sync
+    fallback (SearchSyncProfileView) for Online IDs that aren't tracked yet.
+
+    Whale-safe by construction: this is global reference data, not per-user
+    aggregation. Every group query is DB-side, bounded to PER_GROUP rows, and
+    the whole response is identical for every viewer -> cached in Redis by
+    normalized query for a short TTL, so hot prefixes never touch Postgres.
+
+    Title matching is substring (icontains), served sub-ms by the pg_trgm GIN
+    indexes on Concept.unified_title / Badge.name / Franchise.name (migration
+    0257). Hunters stay prefix (istartswith), like ProfileSuggestView.
+    """
+    PER_GROUP = 5
+    CACHE_TTL = 60  # seconds; global catalog, a short lag on freshly-synced profiles is fine.
+
+    def get(self, request):
+        # Rate-limit BEFORE the cache lookup so a throttled caller still gets 429.
+        if request.user.is_authenticated:
+            limited = is_ratelimited(
+                request, group='site_suggest:user', key='user',
+                rate='30/m', method='GET', increment=True,
+            )
+        else:
+            limited = is_ratelimited(
+                request, group='site_suggest:ip', key='ip',
+                rate='20/m', method='GET', increment=True,
+            )
+        if limited:
+            return JsonResponse({'groups': [], 'throttled': True}, status=429)
+
+        q = request.GET.get('q', '').strip()
+        if len(q) < 2:
+            return JsonResponse({'groups': []})
+        if len(q) > 64:
+            return JsonResponse({'error': 'Query too long'}, status=400)
+
+        # Hash the normalized query so spaces/unicode/length can't produce an invalid
+        # or oversized cache key (the response is identical for every viewer).
+        cache_key = f'sitesuggest:v1:{hashlib.md5(q.lower().encode()).hexdigest()}'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return JsonResponse(cached)
+
+        groups = [g for g in (
+            self._games(q), self._badges(q), self._franchises(q), self._hunters(q),
+        ) if g['items']]
+        payload = {'groups': groups}
+        cache.set(cache_key, payload, self.CACHE_TTL)
+        return JsonResponse(payload)
+
+    def _games(self, q):
+        # Search at the CONCEPT level (dedups a game's PS4/PS5/regional Game rows to
+        # one entry) and link to the concept's most-played Game -- see the click-target
+        # rationale in the plan. One correlated subquery yields the link target's
+        # np_communication_id, a second its played_count for popularity ordering.
+        rep = Game.objects.filter(concept=OuterRef('pk')).order_by('-played_count')
+        rows = (
+            Concept.objects
+            .filter(unified_title__icontains=q)
+            .annotate(
+                npc=Subquery(rep.values('np_communication_id')[:1]),
+                pop=Subquery(rep.values('played_count')[:1]),
+            )
+            .filter(npc__isnull=False)  # only concepts with a linkable Game
+            .order_by('-pop', 'unified_title')
+            .values('unified_title', 'concept_icon_url', 'npc')[:self.PER_GROUP]
+        )
+        items = [
+            {
+                'label': r['unified_title'],
+                'image': r['concept_icon_url'] or '',
+                'url': reverse('game_detail', kwargs={'np_communication_id': r['npc']}),
+            }
+            for r in rows
+        ]
+        return {'type': 'game', 'label': 'Games', 'items': items}
+
+    def _badges(self, q):
+        # One row per series: the tier-1 badge is the series' canonical entry, and
+        # badge_detail is keyed on series_slug (all tiers collapse to one page).
+        rows = (
+            Badge.objects.live()
+            .filter(name__icontains=q, tier=1)
+            .order_by('name')
+            .values('name', 'series_slug')[:self.PER_GROUP]
+        )
+        items = [
+            {
+                'label': r['name'],
+                'url': reverse('badge_detail', kwargs={'series_slug': r['series_slug']}),
+            }
+            for r in rows
+        ]
+        return {'type': 'badge', 'label': 'Badges', 'items': items}
+
+    def _franchises(self, q):
+        # source_type disambiguates same-named franchise vs collection ("Series").
+        rows = (
+            Franchise.objects
+            .filter(name__icontains=q)
+            .order_by('name')
+            .values('name', 'slug', 'source_type')[:self.PER_GROUP]
+        )
+        items = [
+            {
+                'label': r['name'],
+                'sublabel': 'Series' if r['source_type'] == 'collection' else 'Franchise',
+                'url': reverse('franchise_detail', kwargs={'slug': r['slug']}),
+            }
+            for r in rows
+        ]
+        return {'type': 'franchise', 'label': 'Franchises', 'items': items}
+
+    def _hunters(self, q):
+        # Same query/shape as ProfileSuggestView (prefix, ranked by trophy weight).
+        rows = (
+            Profile.objects
+            .filter(psn_username__istartswith=q)
+            .order_by('-total_plats', 'psn_username')
+            .values('psn_username', 'display_psn_username', 'avatar_url', 'total_plats')
+            [:self.PER_GROUP]
+        )
+        items = [
+            {
+                'label': r['display_psn_username'] or r['psn_username'],
+                'avatar_url': r['avatar_url'] or '',
+                'plats': r['total_plats'],
+                'url': reverse('profile_detail', kwargs={'psn_username': r['psn_username']}),
+            }
+            for r in rows
+        ]
+        return {'type': 'profile', 'label': 'Hunters', 'items': items}
 
 
 class TriggerSyncView(LoginRequiredMixin, View):

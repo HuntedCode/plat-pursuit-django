@@ -38,14 +38,18 @@ JS hooks (navbar-search.js / notifications.js); only their trigger buttons are r
         </button>
 
         <form id="navbar-sync-form" class="pp-navsearch__form" method="post" action="{% url 'search_sync_profile' %}" role="search"
-              data-form-type="other" data-url-add-sync="{% url 'add_sync_status' %}" data-url-suggest="{% url 'profile_suggest' %}">
+              data-form-type="other" data-url-add-sync="{% url 'add_sync_status' %}" data-url-suggest="{% url 'site_suggest' %}">
             {% csrf_token %}
             <div class="pp-navsearch__field">
                 <svg class="pp-navsearch__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <input type="search" name="psn_username" class="add-sync-input pp-navsearch__input" placeholder="Search hunters&hellip;"
-                       aria-label="Search PSN profiles" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="navbar-search-results"
-                       autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="16"
-                       data-form-type="other" data-lpignore="true" required />
+                {% comment %} name stays `psn_username`: the sync POST field. The value is only treated as an
+                   Online ID when it passes the client PSN_RE gate, so a longer game/franchise title
+                   simply won't offer sync. maxlength widened past the 16-char PSN ceiling and `required`
+                   dropped now that this is a general search box (JS owns submit). {% endcomment %}
+                <input type="search" name="psn_username" class="add-sync-input pp-navsearch__input" placeholder="Search games, badges, hunters&hellip;"
+                       aria-label="Search games, badges, and hunters" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="navbar-search-results"
+                       autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="64"
+                       data-form-type="other" data-lpignore="true" />
                 <span class="add-sync-load pp-navsearch__spin hidden" role="status" aria-label="Searching"></span>
                 <button type="button" class="pp-navsearch__clear hidden" data-search-clear aria-label="Clear search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -53,7 +57,7 @@ JS hooks (navbar-search.js / notifications.js); only their trigger buttons are r
             </div>
 
             {# Typeahead results + the add-and-sync fallback. #}
-            <div class="pp-navsearch__panel" id="navbar-search-results" role="listbox" aria-label="Profile suggestions" hidden>
+            <div class="pp-navsearch__panel" id="navbar-search-results" role="listbox" aria-label="Search suggestions" hidden>
                 <div class="pp-navsearch__list" data-search-list></div>
                 <button type="submit" id="navsearch-add" class="pp-navsearch__add add-sync-btn" data-search-add hidden>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M11 8v6M8 11h6"/></svg>
