@@ -35,7 +35,7 @@ def _url(**params):
 def test_grid_renders_card_contract(client):
     """The grid renders .pp-gcard cells with the game title, the colored B/S/G/P trophy counts, the pursuer-
     hook placeholders (Browse Games sets show_game_hooks), and the infinite-scroll sentinel."""
-    GameFactory(title_name='Render Check Game', title_platform=['PS5'])
+    GameFactory(title_name='Render Check Game', title_platform=['PS5'], has_trophy_groups=True)
     url, params = _url()
 
     resp = client.get(url, params)
@@ -45,6 +45,7 @@ def test_grid_renders_card_contract(client):
     assert 'pp-gcard' in content
     assert 'Render Check Game' in content
     assert 'pp-gcard__tro' in content        # colored B/S/G/P trophy counts
+    assert 'pp-gcard__dlc' in content         # DLC tag (game has trophy groups)
     assert 'No badges' in content            # badge-band placeholder (show_game_hooks on, game in none)
     assert 'No contract' in content          # contract placeholder
     assert 'gbrowse-sentinel' in content

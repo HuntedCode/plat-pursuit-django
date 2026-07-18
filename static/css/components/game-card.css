@@ -81,6 +81,10 @@
 .pp-gcard__plat { font-weight: 700; color: var(--pp-text-dim); }
 .pp-gcard__plat.is-earned { color: var(--color-trophy-platinum); }
 .pp-gcard__plat--no { font-weight: 500; color: var(--pp-text-mute); }
+/* Center cell = trophy counts + an optional DLC tag (only when the game has DLC trophy groups; the total
+   counts already include DLC, so this is a neutral "there's extra DLC" scope flag, not an added number). */
+.pp-gcard__mid { display: inline-flex; align-items: center; gap: 5px; }
+.pp-gcard__dlc { flex-shrink: 0; font-size: 8px; font-weight: 800; letter-spacing: 0.04em; padding: 1px 4px; border-radius: 4px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-text) 7%, transparent); border: 1px solid var(--pp-border); }
 
 /* ── Pursuer hook: badge band (count + series names). Muted dashed placeholder when the game is in none. ── */
 .pp-gcard__badges { display: flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 7px; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }

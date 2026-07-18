@@ -39,7 +39,10 @@
                 <span class="pp-gcard__fact pp-gcard__fact--none"><svg class="pp-gcard__star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>&mdash;</span>
                 {% endif %}
                 {% with dt=game.defined_trophies %}
-                <span class="pp-gcard__tro" title="Bronze / Silver / Gold / Platinum"><span style="color: var(--color-trophy-bronze)">{{ dt.bronze|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-silver)">{{ dt.silver|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-gold)">{{ dt.gold|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-platinum)">{{ dt.platinum|default:0 }}</span></span>
+                <span class="pp-gcard__mid">
+                    <span class="pp-gcard__tro" title="Bronze / Silver / Gold / Platinum"><span style="color: var(--color-trophy-bronze)">{{ dt.bronze|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-silver)">{{ dt.silver|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-gold)">{{ dt.gold|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-platinum)">{{ dt.platinum|default:0 }}</span></span>
+                    {% if game.has_trophy_groups %}<span class="pp-gcard__dlc" title="Has DLC trophies">DLC</span>{% endif %}
+                </span>
                 {% if dt.platinum %}
                 <span class="pp-gcard__plat{% if user_pg.has_plat %} is-earned{% endif %}" title="{% if user_pg.has_plat %}Platinum earned{% else %}Has a platinum{% endif %}">Plat</span>
                 {% else %}
