@@ -62,7 +62,7 @@ PlatPursuit has **71 custom management commands** spread across 5 Django apps: `
 | Command | Purpose | Key Flags | Typical Usage |
 |---------|---------|-----------|---------------|
 | `refresh_profiles` | Queue profiles for PSN sync based on tier and last update time. Premium every 6h, basic every 12h, Discord-verified every 12h, unregistered every 7d. | `--premium-hours` (default: 6), `--basic-hours` (default: 12), `--discord-hours` (default: 12), `--unreg-days` (default: 7) | `python manage.py refresh_profiles` |
-| `recalc_earn_rates` | Recalculate `played_count` on Games and `earned_count`/`earn_rate` on Trophies from source data. | `--dry-run`, `--batch-size` (default: 1000) | `python manage.py recalc_earn_rates --dry-run` |
+| `recalc_earn_rates` | Recalculate `played_count` + community completion stats (`plats_earned_count`, `full_completion_count`, `avg_completion`) on Games and `earned_count`/`earn_rate` on Trophies from source data. | `--dry-run`, `--chunk-size` (default: 200), `--max-minutes` (default: 30), `--game-ids` | `python manage.py recalc_earn_rates --dry-run` |
 | `recalculate_profile_counts` | Recalculate trophy counts for all profiles using `update_profile_trophy_counts()`. | (none) | `python manage.py recalculate_profile_counts` |
 | `process_scheduled_notifications` | Process pending scheduled notifications that are due for delivery. | `--dry-run` | `python manage.py process_scheduled_notifications` |
 | `generate_monthly_recaps` | Generate monthly recap data for active profiles. Defaults to previous month. | `--dry-run`, `--finalize`, `--profile-id`, `--year`, `--month`, `--current-month` | `python manage.py generate_monthly_recaps --finalize` |
@@ -193,7 +193,7 @@ Commands that were run once (or a few times) for data migration. They remain in 
 | `populate_milestones` | Create/update milestone definitions (idempotent, re-runnable) |
 | `recalculate_profile_counts` | Full profile trophy count recalculation |
 | `recalculate_gamification` | Full gamification XP recalculation |
-| `recalc_earn_rates` | Recalculate played_count, earned_count, earn_rate |
+| `recalc_earn_rates` | Recalculate played_count + community completion stats, earned_count, earn_rate |
 | `populate_user_milestones` | Backfill milestones for existing users |
 | `update_badge_requirements` | Refresh badge requirements and most_recent_concept |
 

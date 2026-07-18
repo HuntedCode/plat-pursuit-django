@@ -510,6 +510,11 @@ class Game(models.Model):
     title_ids = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     played_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have played the game (PP-specific).")
+    # Denormalized community completion stats, recomputed nightly by recalc_earn_rates (same population as
+    # played_count -- ALL ProfileGame rows -- so the four share one denominator). Surfaced on the game card.
+    plats_earned_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have earned this game's platinum.")
+    full_completion_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles at 100% completion (progress=100).")
+    avg_completion = models.FloatField(default=0.0, help_text="Denormalized average of profiles' completion progress (0-100).")
     view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
     is_regional = models.BooleanField(default=False)
     region_lock = models.BooleanField(default=False, help_text="Admin region override lock - won't be automatically updated.")

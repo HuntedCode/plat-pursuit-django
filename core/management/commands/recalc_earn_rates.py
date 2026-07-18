@@ -1,4 +1,5 @@
-"""Site-wide recompute of Trophy.earned_count / Trophy.earn_rate / Game.played_count.
+"""Site-wide recompute of Trophy.earned_count / Trophy.earn_rate / Game.played_count and the game's
+denormalized community completion stats (plats_earned_count / full_completion_count / avg_completion).
 
 Runs as a daily cron (see docs/guides/cron-jobs.md). Replaces the per-profile
 inline recompute that used to live in `psn_api_service.update_profilegame_stats`
@@ -16,15 +17,16 @@ import time
 from collections import defaultdict
 
 from django.core.management.base import BaseCommand
-from django.db.models import Count
+from django.db.models import Count, Q, Avg
 
 from trophies.models import Game, Trophy, ProfileGame, EarnedTrophy
 
 
 class Command(BaseCommand):
     help = (
-        'Recompute played_count on Games, and earned_count + earn_rate on '
-        'Trophies, using bulk GROUP BY aggregates. Designed for daily cron use.'
+        'Recompute played_count + community completion stats (plats_earned_count, '
+        'full_completion_count, avg_completion) on Games, and earned_count + earn_rate '
+        'on Trophies, using bulk GROUP BY aggregates. Designed for daily cron use.'
     )
 
     def add_arguments(self, parser):
@@ -102,12 +104,22 @@ class Command(BaseCommand):
 
     def _process_chunk(self, game_ids, dry_run):
         """Recompute one chunk of games. Three bulk queries, two bulk updates."""
-        # 1. Played counts per game (one GROUP BY across ProfileGame).
-        played_counts = dict(
-            ProfileGame.objects.filter(game_id__in=game_ids)
-            .values('game_id').annotate(cnt=Count('id'))
-            .values_list('game_id', 'cnt')
-        )
+        # 1. Community stats per game (one GROUP BY across ProfileGame): played_count PLUS the three denormed
+        #    completion stats (plats earned / 100% completions / avg completion). All four share this single
+        #    aggregate + population (ALL ProfileGame rows, incl. user_hidden) so the denominator is consistent.
+        game_stats = {
+            row['game_id']: row
+            for row in (
+                ProfileGame.objects.filter(game_id__in=game_ids)
+                .values('game_id')
+                .annotate(
+                    cnt=Count('id'),
+                    plats=Count('id', filter=Q(has_plat=True)),
+                    completions=Count('id', filter=Q(progress=100)),
+                    avg=Avg('progress'),
+                )
+            )
+        }
 
         # 2. Earned counts per trophy (one GROUP BY across EarnedTrophy).
         earned_counts = dict(
@@ -132,8 +144,15 @@ class Command(BaseCommand):
         game_updates = []
 
         for game_id in game_ids:
-            new_played = played_counts.get(game_id, 0)
-            game_updates.append(Game(id=game_id, played_count=new_played))
+            s = game_stats.get(game_id)
+            new_played = s['cnt'] if s else 0
+            game_updates.append(Game(
+                id=game_id,
+                played_count=new_played,
+                plats_earned_count=s['plats'] if s else 0,
+                full_completion_count=s['completions'] if s else 0,
+                avg_completion=round(s['avg'], 1) if (s and s['avg'] is not None) else 0.0,
+            ))
 
             for trophy in trophies_by_game.get(game_id, []):
                 new_earned = earned_counts.get(trophy.id, 0)
@@ -145,7 +164,9 @@ class Command(BaseCommand):
 
         if not dry_run:
             if game_updates:
-                Game.objects.bulk_update(game_updates, ['played_count'])
+                Game.objects.bulk_update(game_updates, [
+                    'played_count', 'plats_earned_count', 'full_completion_count', 'avg_completion',
+                ])
             if trophy_updates:
                 Trophy.objects.bulk_update(trophy_updates, ['earned_count', 'earn_rate'])
 
