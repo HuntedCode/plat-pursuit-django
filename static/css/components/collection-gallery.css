@@ -176,8 +176,11 @@
 }
 .pp-gallery__select:hover { border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); }
 .pp-gallery__select:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-/* The option popup is OS-drawn (white by default) -- pin it to the dark theme so the text is readable. */
+/* The option popup is OS-drawn (white by default) -- pin BOTH options and the optgroup label rows to the
+   dark theme. Styling options but not optgroups leaves the group-label rows rendering OS-white (the "empty
+   white sections" between groups on the sort dropdown). */
 .pp-gallery__select option { background-color: var(--pp-bg-2); color: var(--pp-text); }
+.pp-gallery__select optgroup { background-color: var(--pp-bg-2); color: var(--pp-text-mute); font-weight: 700; }
 
 
 /* ── The wall: the full Case medallion inside a clean card ──
