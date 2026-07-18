@@ -251,6 +251,8 @@ def test_sticky_minibar_and_sentinel_render(client):
     assert 'data-sticky-reveal' in content
     assert 'data-minibar-count' in content            # live result count in the bar
     assert 'data-minibar-filters' in content          # the Filters reach button
+    assert 'data-minibar-search' in content           # proxied quick-search
+    assert 'data-minibar-sort' in content             # proxied quick-sort (desktop)
     assert 'id="gbrowse-minibar-sentinel"' in content # the StickyReveal sentinel
 
 

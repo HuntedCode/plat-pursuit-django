@@ -92,6 +92,14 @@
                 <span class="pp-minibar__count" data-minibar-count title="games shown">{{ paginator.count|intcomma }}</span>
             </span>
             <div class="pp-minibar__controls">
+                {% comment %} Quick search + sort, proxied to the real toolbar controls in JS (these sit OUTSIDE
+                the form, so they can't be real fields -- two name="query"/"sort" inputs would double-submit).
+                Sort is desktop-only; on phones the bar keeps the icon + search + Filters. {% endcomment %}
+                <span class="pp-minibar__search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" data-minibar-search value="{{ request.GET.query }}" placeholder="Search&hellip;" aria-label="Search games by title" />
+                </span>
+                <select data-minibar-sort class="pp-gallery__select pp-minibar__sort" aria-label="Sort games"></select>
                 <button type="button" class="pp-minibar__filters" data-minibar-filters aria-label="Scroll to the filters and open the panel">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                     <span class="pp-minibar__flbl">Filters</span>
@@ -660,6 +668,40 @@
                 if (toggle && toggle.getAttribute('aria-expanded') !== 'true') { setPanel(true, true); }
                 if (form) { form.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
             });
+        }
+
+        // Mini-bar quick search + sort: proxied into the real (out-of-form-invisible) toolbar controls so
+        // there's a single source of truth + no duplicate form fields. We mirror the value and re-dispatch
+        // the native event, so browse-filters.js's own live-search debounce / auto-submit drives the fetch.
+        var realSearch = form.querySelector('input[name="query"]');
+        var realSort = form.querySelector('select[name="sort"]');
+        var mbSearch = document.querySelector('[data-minibar-search]');
+        var mbSort = document.querySelector('[data-minibar-sort]');
+        if (mbSearch && realSearch) {
+            mbSearch.addEventListener('input', function () {
+                realSearch.value = mbSearch.value;
+                realSearch.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+            mbSearch.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    realSearch.value = mbSearch.value;
+                    realSearch.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+                }
+            });
+            // Keep the mini-bar in sync when the user types in the toolbar search instead.
+            realSearch.addEventListener('input', function () {
+                if (document.activeElement !== mbSearch) { mbSearch.value = realSearch.value; }
+            });
+        }
+        if (mbSort && realSort) {
+            mbSort.innerHTML = realSort.innerHTML;   // one source of truth for the 22 options/optgroups
+            mbSort.value = realSort.value;
+            mbSort.addEventListener('change', function () {
+                realSort.value = mbSort.value;
+                realSort.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            realSort.addEventListener('change', function () { mbSort.value = realSort.value; });
         }
     });
     </script>

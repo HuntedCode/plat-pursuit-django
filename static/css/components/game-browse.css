@@ -11,7 +11,21 @@
    the toolbar has scrolled away. Hidden on the tightest phones to keep the title + Filters reach intact. */
 .pp-minibar__count { flex-shrink: 0; font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute);
     padding: 1px 7px; border-radius: 999px; background: oklch(1 0 0 / 0.05); border: 1px solid var(--pp-border); }
+
+/* Mini-bar quick search + sort (proxied to the toolbar controls in JS). */
+.pp-minibar__search { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px;
+    border-radius: var(--pp-radius-md); background: oklch(1 0 0 / 0.05); border: 1px solid var(--pp-border);
+    transition: border-color var(--pp-dur) var(--pp-ease); }
+.pp-minibar__search:focus-within { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+.pp-minibar__search svg { width: 14px; height: 14px; color: var(--pp-text-mute); flex-shrink: 0; }
+.pp-minibar__search input { width: 130px; max-width: 42vw; background: transparent; border: none; outline: none;
+    color: var(--pp-text); font-size: 0.8rem; }
+.pp-minibar__search input::placeholder { color: var(--pp-text-mute); }
+.pp-minibar__sort { height: 30px; font-size: 0.75rem; }
+/* Phone budget: hide the count first, then the sort + title, so the icon + search + Filters always fit. */
 @media (max-width: 400px) { .pp-minibar__count { display: none; } }
+@media (max-width: 767px) { .pp-minibar__sort { display: none; } }
+@media (max-width: 520px) { .pp-minibar .pp-minibar__title { display: none; } .pp-minibar__search input { width: 100%; } }
 
 /* Animated filter-panel expand/collapse (JS tweens height + opacity between 0 and scrollHeight). overflow
    clips the content mid-tween; the JS releases height back to auto on transitionend so nested reflows work. */
