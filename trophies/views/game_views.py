@@ -156,6 +156,70 @@ class GamesListView(HtmxListMixin, ListView):
             )
             context['rating_map'] = {r['concept_id']: r for r in ratings}
 
+        # ── Pursuer hooks: the badge SERIES a game belongs to + its home CONTRACT. Both concept-keyed and
+        #    batched over the page's <=30 concepts (whale-safe -- 3 bounded queries, never per-card). Only
+        #    set on Browse Games; the shared card renders the band only when show_game_hooks is truthy, so
+        #    the other browse pages (which don't build these maps) are unaffected. ──
+        context['show_game_hooks'] = True
+        if concept_ids:
+            from collections import defaultdict
+            from trophies.constants import BADGE_TYPE_DISPLAY_PRIORITY
+            from trophies.models import Stage, Badge, ContractMembership
+            from trophies.util_modules.constants import CONTRACT_XP_TOTAL
+
+            badge_cap = 3
+            prio = {t: i for i, t in enumerate(BADGE_TYPE_DISPLAY_PRIORITY)}
+            concept_id_set = set(concept_ids)
+
+            # concept -> distinct badge series_slugs it appears in (1 query over the M2M).
+            concept_series = defaultdict(set)
+            for cid, slug in (
+                Stage.objects.filter(concepts__in=concept_ids)
+                .exclude(series_slug__isnull=True).exclude(series_slug='')
+                .values_list('concepts', 'series_slug').distinct()
+            ):
+                if cid in concept_id_set:
+                    concept_series[cid].add(slug)
+
+            # series_slug -> {name, badge_type} for its live tier-1 badge (1 query). Counting distinct
+            # series (one tier-1 badge each), NEVER tiers.
+            all_slugs = {s for slugs in concept_series.values() for s in slugs}
+            series_badge = {}
+            if all_slugs:
+                series_badge = {
+                    b['series_slug']: b
+                    for b in Badge.objects.filter(series_slug__in=all_slugs, tier=1, is_live=True)
+                    .values('series_slug', 'name', 'badge_type')
+                }
+
+            badge_map = {}
+            for cid, slugs in concept_series.items():
+                items = [series_badge[s] for s in slugs if s in series_badge]
+                if not items:
+                    continue
+                items.sort(key=lambda b: (prio.get(b['badge_type'], 99), (b['name'] or '').lower()))
+                badge_map[cid] = {
+                    'total': len(items),
+                    'names': [b['name'] for b in items[:badge_cap]],
+                    'more': max(0, len(items) - badge_cap),
+                }
+            context['badge_map'] = badge_map
+
+            # concept -> home contract (live only) + its jobs (1 query + jobs prefetch).
+            contract_map = {}
+            for cm in (
+                ContractMembership.objects.filter(concept_id__in=concept_ids, contract__is_live=True)
+                .select_related('contract').prefetch_related('contract__jobs')
+            ):
+                ct = cm.contract
+                contract_map[cm.concept_id] = {
+                    'name': ct.name,
+                    'slug': ct.slug,
+                    'xp': ct.xp_total_override or CONTRACT_XP_TOTAL,
+                    'jobs': [{'name': j.name, 'color': j.color} for j in ct.jobs.all()],
+                }
+            context['contract_map'] = contract_map
+
         track_page_view('games_list', 'list', self.request)
         return context
 

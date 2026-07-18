@@ -11,9 +11,11 @@ import pytest
 from django.urls import reverse
 
 from tests.factories import (
+    BadgeFactory,
     GameFactory,
     ProfileFactory,
     ProfileGameFactory,
+    StageFactory,
     TrophyFactory,
 )
 
@@ -31,9 +33,9 @@ def _url(**params):
 
 
 def test_grid_renders_card_contract(client):
-    """The grid renders .pp-gcard cells with the game title + trophy-count labels,
-    and the infinite-scroll sentinel is present."""
-    GameFactory(title_name='Contract Quest', title_platform=['PS5'])
+    """The grid renders .pp-gcard cells with the game title, the colored B/S/G/P trophy counts, the pursuer-
+    hook placeholders (Browse Games sets show_game_hooks), and the infinite-scroll sentinel."""
+    GameFactory(title_name='Render Check Game', title_platform=['PS5'])
     url, params = _url()
 
     resp = client.get(url, params)
@@ -41,14 +43,38 @@ def test_grid_renders_card_contract(client):
 
     assert resp.status_code == 200
     assert 'pp-gcard' in content
-    assert 'Contract Quest' in content
-    # Trophy-count labels (the 4-cell row) + the sentinel that drives infinite scroll.
-    for label in ('BRZ', 'SLV', 'GLD', 'PLT'):
-        assert label in content
+    assert 'Render Check Game' in content
+    assert 'pp-gcard__tro' in content        # colored B/S/G/P trophy counts
+    assert 'No badges' in content            # badge-band placeholder (show_game_hooks on, game in none)
+    assert 'No contract' in content          # contract placeholder
     assert 'gbrowse-sentinel' in content
     # No raw Django comment markers leak (multi-line {# #} is NOT a comment in Django and ships as text).
     assert '{#' not in content
     assert 'browse results partial' not in content
+
+
+def test_card_shows_badges_and_contract(client):
+    """A game in a badge series + a live contract shows the badge count/name + the contract on its card
+    (the batched pursuer hooks)."""
+    from trophies.models import Contract, ContractMembership, Job
+
+    game = GameFactory(title_name='Hooked Game', title_platform=['PS5'])
+    stage = StageFactory(series_slug='hooked-series')
+    stage.concepts.add(game.concept)
+    BadgeFactory(name='Hooked Franchise', series_slug='hooked-series', tier=1,
+                 is_live=True, badge_type='franchise')
+    job = Job.objects.first() or Job.objects.create(slug='test-job', name='Test Job', discipline='combat')
+    contract = Contract.objects.create(name='Hooked Contract', slug='hooked-contract', is_live=True)
+    contract.jobs.add(job)
+    ContractMembership.objects.create(concept=game.concept, contract=contract)
+
+    url, params = _url()
+    content = client.get(url, params).content.decode()
+
+    assert 'Hooked Franchise' in content     # the badge series name
+    assert 'pp-gcard__badges-n' in content   # the count element (not the placeholder)
+    assert 'Hooked Contract' in content      # the contract chip
+    assert 'No contract' not in content      # placeholder replaced by the real chip
 
 
 def test_platform_filter_narrows(client):
@@ -156,12 +182,18 @@ def test_game_card_workshop_renders(client):
 
 
 def test_query_count_is_whale_safe(client, django_assert_max_num_queries):
-    """Render cost stays bounded regardless of catalogue size (no per-card N+1):
-    one page of 30 cards costs the same whether there are 10 or 60 games."""
-    GameFactory.create_batch(60, title_platform=['PS5'])
+    """Render cost stays bounded regardless of catalogue size (no per-card N+1): one page of 30 cards costs
+    the same whether there are 10 or 60 games, INCLUDING the batched badge + contract pursuer-hook maps
+    (a fixed handful of queries over the page's concepts, never per-card)."""
+    games = GameFactory.create_batch(60, title_platform=['PS5'])
+    # Put a few games in badge series so the badge-map queries actually run (still bounded).
+    stage = StageFactory(series_slug='whale-series')
+    BadgeFactory(name='Whale Badge', series_slug='whale-series', tier=1, is_live=True)
+    for g in games[:5]:
+        stage.concepts.add(g.concept)
     url, params = _url()
 
-    # Page (count + 30 rows) + the two post-pagination maps + session/misc.
-    with django_assert_max_num_queries(14):
+    # Page (count + 30 rows) + rating/user maps + the badge (2) + contract (1) batched maps + session/misc.
+    with django_assert_max_num_queries(18):
         resp = client.get(url, params)
     assert resp.status_code == 200

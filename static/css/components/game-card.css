@@ -1,9 +1,11 @@
 /* ============================================================
- * GAME COVER CARD (.pp-gcard) -- the from-scratch rebuild of the browse game cell. A 3:4 cover with a
- * nested stat panel (trophy counts, community rating, player count, and -- signed in -- your progress).
- * Neutral surface with a single cyan hover warm (colour restraint); the trophy row + a platinum-complete
- * bar carry the only strong colour. Shared by Browse Games and (via game_cards.html) the Flagged / Recently
- * Added / Tag browse grids. Depth-pass card per playbook section 4.
+ * GAME COVER CARD (.pp-gcard) -- the from-scratch browse game cell. A 3:4 cover (community flags + quick-add
+ * + the viewer's progress on the bottom edge) over a compact body: title, a facts line (rating + colored
+ * B/S/G/P counts + plat tag), then the two Pursuer hooks -- the badge SERIES the game belongs to + its home
+ * CONTRACT (Browse Games only, gated on show_game_hooks; empty-slot placeholders keep a consistent height).
+ * Neutral surface, single cyan hover-warm (colour restraint). Shared by Browse Games and (via game_cards.html)
+ * the Flagged / Recently Added / Tag grids -- those don't set show_game_hooks, so they get the card sans band.
+ * Depth-pass card per playbook section 4.
  * ============================================================ */
 .pp-gcard {
     display: flex; flex-direction: column; height: 100%;
@@ -31,6 +33,11 @@
 .pp-gcard__art--placeholder { object-fit: contain; padding: 14px; opacity: 0.85; }
 @media (prefers-reduced-motion: reduce) { .pp-gcard__art { transition: none; } }
 
+/* Viewer's progress along the cover's bottom edge; platinum-tinted once earned (the "Plat" fact echoes it). */
+.pp-gcard__bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0, 0, 0, 0.45); z-index: 2; }
+.pp-gcard__barfill { display: block; height: 100%; background: var(--pp-primary); }
+.pp-gcard__barfill.is-plat { background: var(--color-trophy-platinum); }
+
 /* Quick-add to a list (signed in): a small info-tinted circle, revealed on hover (always visible on touch). */
 .pp-gcard__add {
     position: absolute; top: 6px; right: 6px; z-index: 3;
@@ -45,7 +52,7 @@
 @media (hover: none) { .pp-gcard__add { opacity: 0.92; transform: none; } }
 .pp-gcard__add:focus-visible { opacity: 1; transform: none; outline: 2px solid #fff; outline-offset: 1px; }
 
-/* Body: title + tag pills, then the stat panel pinned to the bottom (so uneven titles still align). */
+/* Body */
 .pp-gcard__body { display: flex; flex-direction: column; gap: 6px; padding: 8px 9px 9px; flex: 1; }
 .pp-gcard__title {
     font-size: 12.5px; font-weight: 700; color: var(--pp-text); line-height: 1.25; padding-right: 1px;
@@ -53,47 +60,38 @@
     overflow: hidden; min-height: 2.5em;
 }
 @media (hover: hover) { .pp-gcard:hover .pp-gcard__title { color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-text)); } }
-.pp-gcard__tags { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; }
-.pp-gcard__plat {
-    font-size: 9px; font-weight: 800; letter-spacing: 0.02em; padding: 1px 5px; border-radius: 5px;
-    border: 1px solid var(--pp-border); color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent);
-}
 
-/* Stat panel: a nested card -> steps up to bg-2 (depth pass). */
-.pp-gcard__stats {
-    margin-top: auto; display: flex; flex-direction: column; gap: 5px;
-    background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 9px; padding: 6px 7px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-.pp-gcard__trophies { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; text-align: center; }
-.pp-gcard__tcount { font-size: 12px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.pp-gcard__tcount--bronze   { color: var(--color-trophy-bronze); }
-.pp-gcard__tcount--silver   { color: var(--color-trophy-silver); }
-.pp-gcard__tcount--gold     { color: var(--color-trophy-gold); }
-.pp-gcard__tcount--platinum { color: var(--color-trophy-platinum); }
-.pp-gcard__tlabel { font-size: 8px; font-weight: 700; letter-spacing: 0.03em; color: var(--pp-text-mute); }
-.pp-gcard__divider { height: 1px; background: var(--pp-divider); }
-.pp-gcard__meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11px; }
-.pp-gcard__rating { display: inline-flex; align-items: center; gap: 3px; color: var(--pp-text); font-weight: 700; }
-.pp-gcard__rating svg { width: 12px; height: 12px; color: var(--pp-warning); }
-.pp-gcard__rating--none { color: var(--pp-text-mute); font-weight: 400; }
-.pp-gcard__rating--none svg { color: var(--pp-text-mute); }
-.pp-gcard__diff { color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
-.pp-gcard__players { display: inline-flex; align-items: center; gap: 3px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-.pp-gcard__players svg { width: 12px; height: 12px; }
+/* Facts line: rating + colored B/S/G/P trophy counts + plat availability. Wraps at narrow widths. */
+.pp-gcard__facts { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; font-size: 11px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.pp-gcard__fact { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; color: var(--pp-text); }
+.pp-gcard__star { width: 12px; height: 12px; color: var(--pp-warning); }
+.pp-gcard__fact--none { color: var(--pp-text-mute); font-weight: 400; }
+.pp-gcard__fact--none .pp-gcard__star { color: var(--pp-text-mute); }
+.pp-gcard__tro { display: inline-flex; align-items: center; font-weight: 800; letter-spacing: -0.01em; }
+.pp-gcard__tro-d { color: var(--pp-text-mute); margin: 0 1.5px; font-weight: 400; }
+.pp-gcard__plat { font-weight: 700; color: var(--pp-text-dim); }
+.pp-gcard__plat.is-earned { color: var(--color-trophy-platinum); }
+.pp-gcard__plat--no { font-weight: 500; color: var(--pp-text-mute); }
 
-/* Your progress (signed in): a label/value row + a thin bar. In-progress = cyan, platinum-complete = platinum. */
-.pp-gcard__prog { display: flex; flex-direction: column; gap: 3px; }
-.pp-gcard__proghead { display: flex; align-items: center; justify-content: space-between; }
-.pp-gcard__proglbl { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
-.pp-gcard__progval { font-size: 10px; font-weight: 800; }
-.pp-gcard__progval--none { color: var(--pp-text-mute); font-weight: 400; }
-.pp-gcard__progval--plat { color: var(--color-trophy-platinum); }
-.pp-gcard__progval--prog { color: var(--pp-primary); }
-.pp-gcard__progbar { height: 4px; border-radius: 999px; background: color-mix(in oklab, var(--pp-text) 8%, transparent); overflow: hidden; }
-.pp-gcard__progfill { height: 100%; border-radius: 999px; }
-.pp-gcard__progfill--plat { background: var(--color-trophy-platinum); }
-.pp-gcard__progfill--prog { background: var(--pp-primary); }
+/* ── Pursuer hook: badge band (count + series names). Muted dashed placeholder when the game is in none. ── */
+.pp-gcard__badges { display: flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 7px; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }
+.pp-gcard__badges > svg { width: 13px; height: 13px; color: var(--pp-secondary); flex-shrink: 0; }
+.pp-gcard__badges-n { font-size: 11px; font-weight: 800; color: var(--pp-text); flex-shrink: 0; }
+.pp-gcard__badges-names { font-size: 10px; color: var(--pp-text-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-gcard__badges--empty { background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border-style: dashed; }
+.pp-gcard__badges--empty > svg { color: var(--pp-text-mute); }
+
+/* ── Pursuer hook: contract chip (job pips + name + XP). Display-only here (the card is the link); the
+   contract is actionable on the game detail page. Muted dashed placeholder when there's no contract. ── */
+.pp-gcard__ctr { display: flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: 7px; background: color-mix(in oklab, var(--pp-secondary) 12%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--pp-secondary) 30%, var(--pp-border)); }
+.pp-gcard__ctr > svg { width: 13px; height: 13px; color: var(--pp-secondary); flex-shrink: 0; }
+.pp-gcard__ctr-pips { display: inline-flex; gap: 2px; flex-shrink: 0; }
+.pp-gcard__ctr-pip { width: 6px; height: 6px; border-radius: 50%; }
+.pp-gcard__ctr-label { font-size: 10.5px; font-weight: 600; color: var(--pp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.pp-gcard__ctr-xp { font-size: 10px; font-weight: 800; color: var(--pp-secondary); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.pp-gcard__ctr--empty { background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px dashed var(--pp-border); }
+.pp-gcard__ctr--empty > svg { color: var(--pp-text-mute); }
+.pp-gcard__ctr--empty .pp-gcard__ctr-label { color: var(--pp-text-mute); font-weight: 500; flex: 0 1 auto; }
 
 /* Empty state (spans the grid). Reuses the shared ppResultsEmptyIn fade (browse-gallery.css). */
 .pp-gcard-empty { grid-column: 1 / -1; text-align: center; color: var(--pp-text-mute); padding: 48px 16px; }
