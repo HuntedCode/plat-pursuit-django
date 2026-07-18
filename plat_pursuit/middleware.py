@@ -2,7 +2,13 @@ import logging
 import re
 import time
 
-from django.http import HttpResponseRedirect, HttpResponsePermanentRedirect
+from django.contrib.auth.views import redirect_to_login
+from django.http import (
+    HttpResponse,
+    HttpResponseForbidden,
+    HttpResponsePermanentRedirect,
+    HttpResponseRedirect,
+)
 from django.utils import timezone
 from django.conf import settings
 import pytz
@@ -176,8 +182,10 @@ class CloudflareOriginGuardMiddleware:
     def __call__(self, request):
         # Dev-local requests never transit Cloudflare, so the CF-Ray check
         # would always fail and bounce localhost traffic to production. Skip
-        # the guard entirely when DEBUG is on.
-        if settings.DEBUG:
+        # the guard entirely when DEBUG is on. Beta is likewise not behind
+        # Cloudflare and is staff-gated already, so skip there too -- otherwise
+        # every game/badge detail page on beta would 302 to prod (platpursuit.com).
+        if settings.DEBUG or getattr(settings, 'IS_BETA', False):
             return self.get_response(request)
         if (
             _CLOUDFLARE_GUARDED_PATH_RE.match(request.path)
@@ -249,3 +257,50 @@ class TimezoneMiddleware:
             del _thread_locals.request
 
         return response
+
+# ──────────────────────────────────────────────────────────────────────
+# Beta / staging staff gate.
+#
+# The beta deployment (beta.platpursuit.com) runs the `rebuild` branch against a
+# snapshot of prod data so staff can click through the redesign before release.
+# When settings.IS_BETA is True this locks the whole site to logged-in STAFF:
+#   - anonymous visitors are redirected to the login page,
+#   - logged-in non-staff get a 403,
+#   - the auth flow (/accounts/), static assets and a /healthz/ probe stay open
+#     so staff can actually sign in and Render's health check passes,
+#   - every served response is stamped noindex so beta never gets crawled.
+#
+# Entirely inert when IS_BETA is False, so it's a no-op on production.
+# ──────────────────────────────────────────────────────────────────────
+class BetaStaffGateMiddleware:
+    # Reachable WITHOUT being staff: the login/signup flow + logout + assets.
+    # (WhiteNoise already short-circuits /static/ before this runs; listed for safety.)
+    EXEMPT_PREFIXES = ('/accounts/', '/logout/', '/static/', '/media/')
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if not getattr(settings, 'IS_BETA', False):
+            return self.get_response(request)
+
+        # Answer the health probe directly so Render's check never trips the gate.
+        if request.path == '/healthz/':
+            return HttpResponse('ok')
+
+        if not self._is_allowed(request):
+            if not request.user.is_authenticated:
+                return redirect_to_login(request.get_full_path())
+            return HttpResponseForbidden(
+                'PlatPursuit staff beta — your account is signed in but is not '
+                'staff, so access is restricted.'
+            )
+
+        response = self.get_response(request)
+        response['X-Robots-Tag'] = 'noindex, nofollow'
+        return response
+
+    def _is_allowed(self, request):
+        if request.user.is_staff:
+            return True
+        return request.path.startswith(self.EXEMPT_PREFIXES)

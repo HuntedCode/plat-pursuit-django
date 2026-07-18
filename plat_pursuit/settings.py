@@ -99,6 +99,12 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG') == 'True'
 
+# Beta / staging deployment flag (beta.platpursuit.com runs the rebuild branch
+# against a snapshot of prod data for staff review). Turns on the staff-only gate
+# + noindex (BetaStaffGateMiddleware) and the dummy email backend below. Unset on
+# production, so all of that is inert there.
+IS_BETA = os.getenv('BETA') == '1'
+
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS if host.strip()]
 CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', 'http://localhost:8000,http://127.0.0.1:8000').split(',')
@@ -267,6 +273,10 @@ MIDDLEWARE = [
     "django_htmx.middleware.HtmxMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Staff-only gate for the beta deployment (no-op unless IS_BETA). Runs right
+    # after auth so request.user is populated, and before analytics so blocked
+    # non-staff traffic isn't tracked.
+    "plat_pursuit.middleware.BetaStaffGateMiddleware",
     "core.middleware.AnalyticsSessionMiddleware",  # Analytics session tracking (after auth)
     'allauth.account.middleware.AccountMiddleware',
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -305,6 +315,11 @@ else:
     SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
     SENDGRID_SANDBOX_MODE_IN_DEBUG = False
     EMAIL_HOST_USER = 'apikey'
+
+# Beta runs with DEBUG=False (to mirror prod) but must NEVER send real mail via
+# SendGrid. Force the dummy backend so any accidental send is silently discarded.
+if IS_BETA:
+    EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
 
 LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = 'home'

@@ -89,6 +89,7 @@ How-to and operational documentation.
 | [Mobile App](guides/mobile-app.md) | Mobile backend API, implementation status |
 | [Social Media Strategy](guides/social-media-strategy.md) | Platform strategy, content pillars, calendar, growth tactics |
 | [Security](guides/security.md) | Security headers, CSP, rate limiting, CORS, admin log privacy |
+| [Staging / Beta](guides/staging.md) | Staff-only `beta.platpursuit.com`: Render + DNS + env setup, the `BETA` gate |
 
 ## Reference
 
