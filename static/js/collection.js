@@ -558,17 +558,8 @@
             }).observe(galleryView, { attributes: true, attributeFilter: ['hidden'] });
         }
 
-        // "/" jump-focuses the search when the Gallery is showing and you're not already typing.
-        if (search) {
-            document.addEventListener('keydown', function (e) {
-                if (e.key !== '/' || e.defaultPrevented) return;
-                if (galleryView && galleryView.hasAttribute('hidden')) return;
-                var ae = document.activeElement, tag = ae && ae.tagName;
-                if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (ae && ae.isContentEditable)) return;
-                e.preventDefault();
-                search.focus();
-            });
-        }
+        // ("/" + Cmd/Ctrl+K focus is the shared global shortcut in utils.js, which targets the visible
+        //  [data-page-search] -- the gallery search input carries it, so it only fires while Gallery shows.)
 
         // Arrow-key grid navigation: when a card is focused, move focus across the visible cards (Left/Right
         // step one, Up/Down step a full row). Enter opens it (native <a> activation). Columns are read live

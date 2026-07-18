@@ -72,36 +72,38 @@
     background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font-size: 13px;
 }
 .pp-bgal__search input:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
-/* Shared search-field affordances (opt-in markup, wired by browse-filters.js): a `/` keyboard hint when
-   empty, a clear (x) button when there's text, an in-flight spinner while a search request runs. Only one
-   shows at a time, driven by `.has-value` / `.is-searching` on the wrapper. Extra right padding only when
-   the field opts in (has a clear button). See docs/reference/design-system.md "Search toolbar". */
-.pp-bgal__search:has([data-search-clear]) input { padding-right: 30px; }
-.pp-bgal__search-kbd, .pp-bgal__search-clear, .pp-bgal__search-spin { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
-.pp-bgal__search-kbd {
+/* Shared search-field affordances (opt-in markup, wired by PlatPursuit.wireSearchField): a `/` keyboard hint
+   when empty, a clear (x) button when there's text, an in-flight spinner while a search request runs. Only one
+   shows at a time, driven by `.has-value` / `.is-searching` on the [data-search-wrap] wrapper. Works on ANY
+   positioned search wrapper (browse `.pp-bgal__search`, Collection gallery, Career contracts, Badge list...).
+   See docs/reference/design-system.md "Search toolbar". */
+[data-search-wrap] { position: relative; }
+[data-search-wrap]:has([data-search-clear]) input { padding-right: 30px; }
+.pp-search-kbd, .pp-search-clear, .pp-search-spin { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+.pp-search-kbd {
     display: inline-flex; align-items: center; justify-content: center; min-width: 15px; height: 15px; padding: 0 3px;
     font-size: 9px; font-weight: 700; line-height: 1; color: var(--pp-text-mute); pointer-events: none;
     background: color-mix(in oklab, var(--pp-text) 8%, transparent); border: 1px solid var(--pp-border); border-radius: 4px;
 }
-.pp-bgal__search-clear {
+.pp-search-clear {
     display: none; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; cursor: pointer;
     color: var(--pp-text-mute); background: none; border: none; border-radius: 50%;
     transition: color 0.14s ease, background 0.14s ease;
 }
-.pp-bgal__search-clear svg { width: 12px; height: 12px; }
-.pp-bgal__search-clear:hover { color: var(--pp-text); background: color-mix(in oklab, var(--pp-text) 9%, transparent); }
-.pp-bgal__search-clear:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
-.pp-bgal__search-spin {
+.pp-search-clear svg { width: 12px; height: 12px; }
+.pp-search-clear:hover { color: var(--pp-text); background: color-mix(in oklab, var(--pp-text) 9%, transparent); }
+.pp-search-clear:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
+.pp-search-spin {
     display: none; width: 13px; height: 13px; border-radius: 50%;
-    border: 2px solid var(--pp-border); border-top-color: var(--pp-primary); animation: bgalSearchSpin 0.6s linear infinite;
+    border: 2px solid var(--pp-border); border-top-color: var(--pp-primary); animation: ppSearchSpin 0.6s linear infinite;
 }
-.pp-bgal__search.has-value .pp-bgal__search-kbd { display: none; }
-.pp-bgal__search.has-value .pp-bgal__search-clear { display: inline-flex; }
-.pp-bgal__search.is-searching .pp-bgal__search-kbd,
-.pp-bgal__search.is-searching .pp-bgal__search-clear { display: none; }
-.pp-bgal__search.is-searching .pp-bgal__search-spin { display: block; }
-@keyframes bgalSearchSpin { to { transform: translateY(-50%) rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .pp-bgal__search-spin { animation: none; } }
+[data-search-wrap].has-value .pp-search-kbd { display: none; }
+[data-search-wrap].has-value .pp-search-clear { display: inline-flex; }
+[data-search-wrap].is-searching .pp-search-kbd,
+[data-search-wrap].is-searching .pp-search-clear { display: none; }
+[data-search-wrap].is-searching .pp-search-spin { display: block; }
+@keyframes ppSearchSpin { to { transform: translateY(-50%) rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pp-search-spin { animation: none; } }
 .pp-bgal__advbtn {
     display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 9px; flex: 0 0 auto;
     background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text-mute);

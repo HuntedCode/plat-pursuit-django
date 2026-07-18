@@ -283,18 +283,15 @@ Compact card for search, sort, and filter controls. Collapsible drawer for secon
 
 ### Search toolbar — shared premium features (2026-07)
 
-`static/js/browse-filters.js` (the shared `[data-browse-form]` controller, ~18 pages) gives **every** browse search toolbar these for free. Behaviour is shared; each page opts into the **visuals** with a little markup + the shared CSS in `components/browse-gallery.css`.
+Two shared helpers (in `static/js/utils.js`) give **any** search toolbar — browse or bespoke — the same premium behavior. The `.pp-search-*` visuals live in shared CSS (`components/browse-gallery.css`) keyed on `[data-search-wrap]` + `.has-value`/`.is-searching`, so they work on any positioned wrapper. **Live on: Browse Games, Badge list (Series + Gallery), Collection Gallery, Career Contracts.** (`browse-filters.js` calls the same helper internally; bespoke controllers call it directly.)
 
-**Automatic (no markup needed):**
-- **`/` and ⌘K / Ctrl+K focus** the first search field (skipped while typing in another input). Add a faint `<kbd class="pp-bgal__search-kbd">/</kbd>` hint to advertise it.
-- **Escape clears** the focused search field and re-applies.
+**Automatic — `/` + ⌘K/Ctrl+K focus:**
+- A single global handler (utils.js) focuses the first *visible* `[data-page-search]` input (hidden inactive-tab inputs are skipped), falling back to a `[data-browse-form]` text/search input — so all ~18 `browse-filters.js` pages get it for free. On bespoke/tabbed pages, add `data-page-search` to the primary search input. `/` is skipped while typing in an input/textarea/select/contenteditable; ⌘K always fires.
 
-**Opt-in (add the markup; CSS is shared):**
-- Wrap the field so JS can find it: `<span class="pp-bgal__search" data-search-wrap>` (or any `[data-search-wrap]`; falls back to the input's parent).
-- **Clear (✕) button** — `<button data-search-clear tabindex="-1" aria-label="Clear search">`; shown only when there's text.
-- **In-flight spinner** — `<span class="pp-bgal__search-spin">`; shown while a search request runs.
-- **`/` hint** — `<kbd class="pp-bgal__search-kbd">/`; shown only when the field is empty.
-- Visibility is driven by `.has-value` / `.is-searching` classes the controller toggles on the wrapper — only one of {hint, clear, spinner} shows at a time. (Live search itself stays opt-in via `data-live-search` on the form.)
+**Opt-in affordances — `PlatPursuit.wireSearchField(input, {onClear})`:**
+- Call it once per search input. It wires the `.has-value` toggle, the `[data-search-clear]` clear button, and Escape-to-clear (both call `onClear`), and returns `{ setBusy(bool) }` for the in-flight spinner. `onClear` should re-run/re-submit your filter.
+- Markup (inside a `[data-search-wrap]` wrapper): `<span class="pp-search-spin">`, `<button class="pp-search-clear" data-search-clear tabindex="-1">`, `<kbd class="pp-search-kbd">/`. Visibility is state-driven — only one of {hint, clear, spinner} shows at a time.
+- Call `setBusy(true/false)` around your request for the spinner (skip it for client-side/instant filters — Collection Gallery does). Browse forms keep `data-live-search` for live filtering.
 
 **Active-filter chips** (per-page, not auto — each page's filters + labels differ). Dismissable pills of the applied *panel* filters (search + platform/regions/sort are excluded), each with a remove-URL, plus a **Clear all**. Reference impl on Browse Games:
 - View builds them with `browse_helpers.get_active_filter_chips(request, form)` → `{filter_chips: [{label, remove_url}], filter_clear_url}` (urlencoded querystrings, page reset).

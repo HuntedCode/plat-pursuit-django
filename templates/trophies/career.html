@@ -272,9 +272,14 @@
         <div class="rp-toolbar mb-3 pp-toolbar-card">
             {% comment %} Primary bar: search + sort + the advanced-filters toggle. {% endcomment %}
             <div class="rp-bar">
-                <div class="rp-search">
+                <div class="rp-search" data-search-wrap>
                     <svg class="rp-search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                    <input type="search" id="rp-search" class="rp-search__input" placeholder="Search games or contracts..." aria-label="Search contracts">
+                    <input type="search" id="rp-search" class="rp-search__input" placeholder="Search games or contracts..." aria-label="Search contracts" data-page-search>
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
                 </div>
                 <div class="rp-bar__end">
                     <div class="rp-sort">
@@ -1194,6 +1199,7 @@ function ppCountUp(el, dur) {
     var noMatch = document.getElementById('rp-no-match');
     var empty = document.getElementById('rp-empty');
     var searchInput = document.getElementById('rp-search');
+    var searchField = null;   // PlatPursuit.wireSearchField handle (clear/Escape/has-value + spinner setBusy)
     var statusBar = document.querySelector('.rp-filters');
     var sortSel = document.getElementById('rp-sort-select');
     var countEl = document.getElementById('rp-count');
@@ -1324,6 +1330,7 @@ function ppCountUp(el, dur) {
         var myReq = ++reqSeq;                                // any later fetchPage supersedes this response
         controller = ('AbortController' in window) ? new AbortController() : null;
         busy = true; if (loading) loading.hidden = false;
+        if (!append && searchField) searchField.setBusy(true);   // search-field spinner on filter/search fetches
         fetch(RESULTS_URL + '?' + buildParams(n), {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin',
             signal: controller ? controller.signal : undefined,
@@ -1337,6 +1344,7 @@ function ppCountUp(el, dur) {
             .then(function (d) {
                 if (myReq !== reqSeq) return;                // superseded: a newer request now owns busy + the grid
                 busy = false; if (loading) loading.hidden = true;
+                if (searchField) searchField.setBusy(false);
                 hasNext = d.hasNext; setCount(d.total);
                 var tmp = document.createElement('div'); tmp.innerHTML = d.html;
                 var cards = Array.prototype.slice.call(tmp.querySelectorAll('.rp-row'));
@@ -1351,6 +1359,7 @@ function ppCountUp(el, dur) {
             .catch(function (e) {
                 if ((e && e.name === 'AbortError') || myReq !== reqSeq) return;   // superseded -> the newer request owns state
                 busy = false; if (loading) loading.hidden = true;
+                if (searchField) searchField.setBusy(false);
                 if (Toast) Toast.error('Could not load Contracts. Please try again.');
             });
     }
@@ -1485,6 +1494,11 @@ function ppCountUp(el, dur) {
     if (searchInput) {
         var onSearch = function () { state.q = searchInput.value.trim(); fetchPage(1, false); };
         searchInput.addEventListener('input', debounce ? debounce(onSearch, 250) : onSearch);
+        // Shared search-field affordances (clear x / Escape-to-clear / has-value + the `/` hint). Clearing
+        // re-runs the search; the in-flight spinner is driven by setBusy() in fetchPage. (`/`+Cmd/K is global.)
+        if (window.PlatPursuit && PlatPursuit.wireSearchField) {
+            searchField = PlatPursuit.wireSearchField(searchInput, { onClear: onSearch });
+        }
     }
 
     // Reset every control back to the default board.

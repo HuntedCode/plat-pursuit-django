@@ -10,9 +10,14 @@ appends tiles on scroll. Reuses the Gallery's .pp-bgal__ toolbar classes so the 
         <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Search</button>
         <div class="pp-bgal__toolbar pp-toolbar-card">
             <div class="pp-bgal__bar">
-                <span class="pp-bgal__search">
+                <span class="pp-bgal__search" data-search-wrap>
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                    <input type="search" name="series_slug" value="{{ series_q }}" placeholder="Search a series&hellip;" aria-label="Search series" />
+                    <input type="search" name="series_slug" value="{{ series_q }}" placeholder="Search a series&hellip;" aria-label="Search series" data-page-search />
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
                 </span>
                 <select class="pp-gallery__select" name="sort" aria-label="Sort series">
                     {% for value, display in form.sort.field.choices %}

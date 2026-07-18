@@ -109,45 +109,28 @@
     const searchInputs = form.querySelectorAll('input[type="text"], input[type="search"]');
     const liveSearch = form.hasAttribute('data-live-search');
     let searchTimer = null;
-    function searchWrap(input) { return input.closest('[data-search-wrap]') || input.parentElement; }
-    function markSearching(on) {
-      searchInputs.forEach(function (i) { const w = searchWrap(i); if (w) w.classList.toggle('is-searching', on); });
-    }
+    const searchFields = [];
     function submitSearch() {
       const pageInput = form.querySelector('input[name="page"]');
       if (pageInput) pageInput.value = '1';
-      markSearching(true);
+      searchFields.forEach(function (sf) { sf.setBusy(true); });
       htmx.trigger(form, 'submit');
     }
     searchInputs.forEach(function (input) {
-      const wrap = searchWrap(input);
-      function syncValue() { if (wrap) wrap.classList.toggle('has-value', !!input.value); }
-      syncValue();
+      // Shared affordances (has-value / clear button / Escape-to-clear); clearing re-applies the filter.
+      const sf = (window.PlatPursuit && PlatPursuit.wireSearchField)
+        ? PlatPursuit.wireSearchField(input, { onClear: function () { clearTimeout(searchTimer); submitSearch(); } })
+        : { setBusy: function () {} };
+      searchFields.push(sf);
       input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') {
-          e.preventDefault(); clearTimeout(searchTimer); submitSearch();
-        } else if (e.key === 'Escape' && input.value) {
-          e.preventDefault(); input.value = ''; syncValue(); clearTimeout(searchTimer); submitSearch();
-        }
+        if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchTimer); submitSearch(); }
       });
       input.addEventListener('input', function () {
-        syncValue();
         if (liveSearch) { clearTimeout(searchTimer); searchTimer = setTimeout(submitSearch, 400); }
       });
-      // Clear (x) button -- opt-in markup inside the field.
-      const clearBtn = wrap && wrap.querySelector('[data-search-clear]');
-      if (clearBtn) {
-        clearBtn.addEventListener('click', function (e) {
-          e.preventDefault();
-          input.value = ''; syncValue(); input.focus();
-          clearTimeout(searchTimer); submitSearch();
-        });
-      }
     });
-    // Clear the in-flight search spinner once the form's request settles.
-    form.addEventListener('htmx:afterRequest', function () { markSearching(false); });
-    // (`/` + Cmd/Ctrl+K focus is bound ONCE at module scope -- see below -- to avoid leaking a listener
-    //  every time init() re-runs on htmx:historyRestore / afterSwap.)
+    // Clear the in-flight search spinner once the form's request settles. (`/`+Cmd/K focus is global, utils.js.)
+    form.addEventListener('htmx:afterRequest', function () { searchFields.forEach(function (sf) { sf.setBusy(false); }); });
 
     // ── Submit button (for users who click instead of pressing Enter) ──
     const submitBtn = form.querySelector('[data-submit-btn]');
@@ -571,21 +554,5 @@
       bindPageJumpForms();
       bindLuckyButton();
     }
-  });
-
-  // `/` or Cmd/Ctrl+K focuses the browse search field. Bound ONCE here (not in init()) and resolves the
-  // input at event time, so re-inits never leak listeners or capture a detached input.
-  document.addEventListener('keydown', function (e) {
-    var cmdK = (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K');
-    var slash = e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey;
-    if (!cmdK && !slash) return;
-    var t = e.target;
-    var typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
-    if (slash && typing) return;   // don't hijack "/" while the user is typing elsewhere
-    var input = document.querySelector('[data-browse-form] input[type="text"], [data-browse-form] input[type="search"]');
-    if (!input) return;
-    e.preventDefault();
-    input.focus();
-    input.select();
   });
 })();

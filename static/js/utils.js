@@ -1619,3 +1619,56 @@ function discPopovers(root) {
     return { closeAll: closeAll };
 }
 window.PlatPursuit.discPopovers = discPopovers;
+
+/**
+ * wireSearchField -- shared search-field affordances for ANY search input (the browse-filters.js controller
+ * AND bespoke per-page controllers): a `.has-value` class toggle (drives the clear button + `/` hint), a
+ * [data-search-clear] clear button, and Escape-to-clear. Returns { setBusy } so the caller toggles
+ * `.is-searching` (the in-flight spinner) around its request. The wrapper is `input.closest('[data-search-wrap]')`
+ * (or the input's parent). Visuals come from the shared CSS keyed on [data-search-wrap] + .has-value/.is-searching.
+ * @param {HTMLInputElement} input
+ * @param {{onClear?: function}} [opts]  onClear runs after the field is emptied (clear button / Escape)
+ * @returns {{wrap: HTMLElement, setBusy: function(boolean), sync: function}}
+ */
+function wireSearchField(input, opts) {
+    opts = opts || {};
+    var wrap = (input.closest && input.closest('[data-search-wrap]')) || input.parentElement;
+    function sync() { if (wrap) { wrap.classList.toggle('has-value', !!input.value); } }
+    function clear() {
+        input.value = ''; sync(); input.focus();
+        if (opts.onClear) { opts.onClear(); }
+    }
+    sync();
+    input.addEventListener('input', sync);
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && input.value) { e.preventDefault(); clear(); }
+    });
+    var clearBtn = wrap && wrap.querySelector('[data-search-clear]');
+    if (clearBtn) { clearBtn.addEventListener('click', function (e) { e.preventDefault(); clear(); }); }
+    return {
+        wrap: wrap,
+        setBusy: function (on) { if (wrap) { wrap.classList.toggle('is-searching', !!on); } },
+        sync: sync,
+    };
+}
+window.PlatPursuit.wireSearchField = wireSearchField;
+
+// Global `/` + Cmd/Ctrl+K -> focus the page's primary search field ([data-page-search]). Bound ONCE here so
+// every page (browse or bespoke) gets the shortcut just by marking its search input. `/` is skipped while
+// typing in another field; Cmd/Ctrl+K always fires (a deliberate override, like GitHub/Linear).
+document.addEventListener('keydown', function (e) {
+    var cmdK = (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K');
+    var slash = e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey;
+    if (!cmdK && !slash) { return; }
+    var t = e.target;
+    if (slash && t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) { return; }
+    // Pick the first VISIBLE data-page-search (a page may have hidden ones, e.g. an inactive tab/view);
+    // fall back to a [data-browse-form] search input (the ~18 browse pages don't all carry data-page-search).
+    var input = null;
+    var candidates = document.querySelectorAll('[data-page-search], [data-browse-form] input[type="text"], [data-browse-form] input[type="search"]');
+    for (var i = 0; i < candidates.length; i++) {
+        if (candidates[i].offsetParent !== null) { input = candidates[i]; break; }
+    }
+    if (!input) { return; }
+    e.preventDefault(); input.focus(); if (input.select) { input.select(); }
+});

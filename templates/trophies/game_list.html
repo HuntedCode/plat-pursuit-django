@@ -129,12 +129,12 @@
             <div class="pp-gbrowse__bar">
                 <span class="pp-bgal__search" data-search-wrap>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    <input type="text" name="query" value="{{ request.GET.query }}" placeholder="Search for a game&hellip;" aria-label="Search games by title" />
-                    <span class="pp-bgal__search-spin" aria-hidden="true"></span>
-                    <button type="button" class="pp-bgal__search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                    <input type="text" name="query" value="{{ request.GET.query }}" placeholder="Search for a game&hellip;" aria-label="Search games by title" data-page-search />
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
-                    <kbd class="pp-bgal__search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
                 </span>
 
                 <label class="pp-gbrowse__sort">

@@ -380,6 +380,12 @@
                     form.requestSubmit();  // fires the form's submit -> HTMX reloads the (now unfiltered) results
                 });
             }
+            // Shared search-field affordances (clear x / Escape-to-clear / has-value state + the `/` hint).
+            // Clearing the field re-submits the now-unfiltered form. Re-wired per view (fresh input each swap).
+            var qi = searchInput();
+            if (qi && window.PlatPursuit && PlatPursuit.wireSearchField) {
+                PlatPursuit.wireSearchField(qi, { onClear: function () { refreshControls(); if (form) { form.requestSubmit(); } } });
+            }
             refreshControls();
             // Collapse the panel on load (it renders open for the no-JS case); keep it open if filters are
             // already applied, so what's active stays visible.
@@ -426,11 +432,19 @@
             if (!elt || elt.id !== 'filter-form') { return; }
             var results = document.getElementById('browse-results');
             if (results) { results.classList.remove('is-swapping'); }
+            var sw = elt.querySelector('[data-search-wrap]');
+            if (sw) { sw.classList.remove('is-searching'); }   // clear the search-field spinner
         });
-        // Don't re-fetch the view you're already on (a re-click on the already-active chip).
+        // Don't re-fetch the view you're already on (a re-click on the already-active chip); + search spinner.
         document.body.addEventListener('htmx:beforeRequest', function (e) {
             var el = e.detail && e.detail.elt;
-            if (el && el.classList && el.classList.contains('pp-switch__chip') && el.classList.contains('is-active')) { e.preventDefault(); }
+            if (el && el.classList && el.classList.contains('pp-switch__chip') && el.classList.contains('is-active')) { e.preventDefault(); return; }
+            if (el && el.id === 'filter-form') {
+                var sw = el.querySelector('[data-search-wrap]');
+                var si = sw && sw.querySelector('input');
+                // Only spin the search field when SEARCH triggered the fetch (input focused), not a sort/checkbox.
+                if (sw && si && document.activeElement === si) { sw.classList.add('is-searching'); }
+            }
         });
         // Keyboard-enable the Series/Gallery toggle(s): roving tabindex + Arrow/Home/End move focus. MANUAL
         // activation -- the chips are HTMX <a> links, so Enter/click does the swap natively; auto-activating
