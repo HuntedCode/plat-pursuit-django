@@ -138,6 +138,23 @@ def test_platinum_only_filter(client):
     assert 'No Platinum Here' not in content
 
 
+def test_in_badge_filter(client):
+    """?in_badge=on narrows to games whose concept is in a live badge series (the toggle that replaced the
+    removed 'Pick a Badge' modal)."""
+    from trophies.models import Badge
+
+    with_b = GameFactory(title_name='Has Badge', title_platform=['PS5'])
+    GameFactory(title_name='No Badge', title_platform=['PS5'])
+    stage = StageFactory(series_slug='in-badge-series')
+    stage.concepts.add(with_b.concept)
+    BadgeFactory(name='In Badge', series_slug='in-badge-series', tier=1, is_live=True)
+
+    content = client.get(reverse('games_list'), {'platform': 'PS5', 'in_badge': 'on'}).content.decode()
+
+    assert 'Has Badge' in content
+    assert 'No Badge' not in content
+
+
 def test_in_contract_filter(client):
     """?in_contract=on narrows to games whose concept has a live contract."""
     from trophies.models import Contract, ContractMembership

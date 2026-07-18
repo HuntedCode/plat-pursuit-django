@@ -17,7 +17,6 @@ class GameSearchForm(forms.Form):
     show_only_platinum = forms.BooleanField(required=False, label='Show only games with platinum')
     filter_shovelware = forms.BooleanField(required=False, label='Filter out shovelware')
     in_badge = forms.BooleanField(required=False, label='In a badge series')
-    badge_series = forms.ChoiceField(choices=[('', 'Any Badge')], required=False, label='Badge Series')
 
     # Community flag filters (3-state: any / show-only / hide).
     # If both show_X and hide_X are submitted for the same flag, hide wins.
@@ -121,7 +120,7 @@ class GameSearchForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from trophies.models import Genre, Theme, GameEngine, Badge, Job
+        from trophies.models import Genre, Theme, GameEngine, Job
         try:
             self.fields['contract_jobs'].choices = list(
                 Job.objects.exclude(is_fallback=True)
@@ -136,13 +135,6 @@ class GameSearchForm(forms.Form):
             self.fields['engine'].choices = [('', 'Any Engine')] + list(
                 GameEngine.objects.values_list('id', 'name').order_by('name')
             )
-            badge_qs = Badge.objects.filter(
-                is_live=True, tier=1, series_slug__isnull=False,
-            ).exclude(series_slug='').order_by('display_series', 'name')
-            self.fields['badge_series'].choices = [('', 'Any Badge')] + [
-                (b.series_slug, b.display_series or b.name)
-                for b in badge_qs
-            ]
         except Exception:
             pass
 

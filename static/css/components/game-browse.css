@@ -157,28 +157,6 @@
 }
 .pp-flag:has(input[name^="hide_"]:checked) .pp-flag__lbl { text-decoration: line-through; color: var(--pp-text-mute); }
 
-/* Badge-picker trigger + clear (opens the shared badge modal). Dashed when empty, solid violet-tint once a
-   badge is chosen (.is-selected, toggled by browse-filters.js). */
-.pp-badgepick {
-    display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px;
-    font-size: 12px; font-weight: 600; cursor: pointer; user-select: none;
-    border: 1px dashed var(--pp-border); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent);
-    color: var(--pp-text-mute); transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-}
-.pp-badgepick:hover { border-color: color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border)); color: var(--pp-text); }
-.pp-badgepick svg { width: 13px; height: 13px; flex-shrink: 0; }
-.pp-badgepick.is-selected {
-    border-style: solid; border-color: color-mix(in oklab, var(--pp-secondary) 55%, var(--pp-border));
-    background: color-mix(in oklab, var(--pp-secondary) 18%, transparent); color: var(--pp-text);
-}
-.pp-badgepick__clear {
-    display: inline-flex; align-items: center; justify-content: center; padding: 5px; border-radius: 999px;
-    border: 1px solid var(--pp-border); background: var(--pp-bg-2); color: var(--pp-text-mute); cursor: pointer;
-    transition: border-color 0.15s ease, color 0.15s ease;
-}
-.pp-badgepick__clear:hover { border-color: color-mix(in oklab, var(--pp-error) 45%, var(--pp-border)); color: var(--pp-error); }
-.pp-badgepick__clear svg { width: 13px; height: 13px; }
-
 /* Results grid: 3:4 cover cards. Auto-responsive columns (denser than the badge wall since cards are taller). */
 .pp-gbrowse__grid {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;

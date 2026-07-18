@@ -382,9 +382,6 @@
         <input type="hidden" name="page" value="{{ page_obj.number|default:'1' }}" />
     </form>
 
-    {# Badge picker modal (outside the form to avoid interfering with it). #}
-    {% include 'partials/browse/badge_picker_modal.html' %}
-
     {# Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar above. #}
     <span id="gbrowse-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
 

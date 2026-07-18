@@ -15,45 +15,6 @@ from trophies.models import (
 )
 
 
-def get_badge_picker_context(request):
-    """Build context dict for the browse badge picker modal.
-
-    Returns picker_badges (list of dicts) and selected_badge_name (str).
-    """
-    badges = Badge.objects.filter(
-        is_live=True, tier=1, series_slug__isnull=False,
-    ).exclude(
-        series_slug='',
-    ).select_related('base_badge').order_by('display_series', 'name')
-
-    picker_badges = []
-    for b in badges:
-        picker_badges.append({
-            'series_slug': b.series_slug,
-            'name': b.name,
-            'display_series': b.display_series,
-            'badge_type': b.badge_type,
-            'earned_count': b.earned_count,
-            'required_stages': b.required_stages,
-            'layers': b.get_badge_layers(),
-        })
-
-    selected_slug = request.GET.get('badge_series', '')
-    selected_name = ''
-    if selected_slug:
-        match = next(
-            (b for b in picker_badges if b['series_slug'] == selected_slug),
-            None,
-        )
-        if match:
-            selected_name = match['display_series'] or match['name']
-
-    return {
-        'picker_badges': picker_badges,
-        'selected_badge_name': selected_name,
-    }
-
-
 # ---------------------------------------------------------------------------
 # Shared Game Browse Filter / Sort Pipeline
 # ---------------------------------------------------------------------------
@@ -165,19 +126,7 @@ def apply_game_browse_filters(qs, form, sort_val=''):
     if form.cleaned_data.get('filter_shovelware'):
         qs = qs.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
 
-    badge_series = form.cleaned_data.get('badge_series')
-    if badge_series:
-        live_slugs = Badge.objects.filter(
-            is_live=True,
-        ).values_list('series_slug', flat=True)
-        qs = qs.filter(Exists(
-            Stage.objects.filter(
-                concepts=OuterRef('concept_id'),
-                series_slug=badge_series,
-                series_slug__in=live_slugs,
-            )
-        ))
-    elif form.cleaned_data.get('in_badge'):
+    if form.cleaned_data.get('in_badge'):
         live_slugs = Badge.objects.filter(
             is_live=True,
         ).values_list('series_slug', flat=True)
@@ -190,7 +139,7 @@ def apply_game_browse_filters(qs, form, sort_val=''):
 
     # --- Contract filters (the game's home Job-Board contract) ---
     # Specific jobs (a discipline selects all its jobs client-side) win over the broad "in a contract"
-    # toggle, mirroring the badge_series/in_badge pattern. Exists() keeps it whale-safe.
+    # toggle. Exists() keeps it whale-safe.
     contract_jobs = form.cleaned_data.get('contract_jobs')
     if contract_jobs:
         qs = qs.filter(Exists(

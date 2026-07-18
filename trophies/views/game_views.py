@@ -23,7 +23,7 @@ from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGro
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 from .browse_helpers import (
-    get_badge_picker_context, annotate_ascii_name, annotate_community_ratings,
+    annotate_ascii_name, annotate_community_ratings,
     apply_game_browse_filters, apply_game_browse_sort,
 )
 
@@ -149,9 +149,6 @@ class GamesListView(HtmxListMixin, ListView):
             v for k, v in self.request.GET.lists()
             if k not in ('page', 'view') and any(v)
         )
-
-        # Badge picker modal data
-        context.update(get_badge_picker_context(self.request))
 
         context['seo_description'] = (
             "Browse PlayStation games on Platinum Pursuit. "
@@ -1336,11 +1333,6 @@ class FlaggedGamesView(HtmxListMixin, ListView):
             v for k, v in self.request.GET.lists()
             if k not in ('page', 'view', 'category') and any(v)
         )
-
-        # Badge picker modal data (only when a category is active, since the modal
-        # is conditionally rendered in the template)
-        if category:
-            context.update(get_badge_picker_context(self.request))
 
         # Counts for each category (cheap queries on indexed boolean fields)
         context['category_counts'] = {

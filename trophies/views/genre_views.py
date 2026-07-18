@@ -18,7 +18,7 @@ from ..models import (
 from ..forms import GameSearchForm
 from trophies.util_modules.constants import ALL_PLATFORMS
 from .browse_helpers import (
-    get_badge_picker_context, annotate_ascii_name, apply_game_browse_filters,
+    annotate_ascii_name, apply_game_browse_filters,
     apply_game_browse_sort,
 )
 
@@ -185,9 +185,6 @@ class TagDetailBaseView(HtmxListMixin, ListView):
             v for k, v in self.request.GET.lists()
             if k not in ('page', 'view') and any(v)
         )
-
-        # Badge picker modal data
-        context.update(get_badge_picker_context(self.request))
 
         # Rating map for page games
         page_games = context['object_list']
