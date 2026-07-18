@@ -63,8 +63,12 @@
     font-variant-numeric: tabular-nums; text-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.55);
 }
 .pp-gcard__cstat { display: inline-flex; align-items: center; gap: 2.5px; white-space: nowrap; }
-.pp-gcard__cstat svg { width: 10px; height: 10px; flex-shrink: 0; color: var(--pp-text-dim); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5)); }
+.pp-gcard__cstat svg { width: 10px; height: 10px; flex-shrink: 0; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5)); }
+/* Per-stat icon tints tie to the progress-bar state colours (info / platinum / success / accent). */
+.pp-gcard__cstat--players svg { color: var(--pp-info); }
 .pp-gcard__cstat--plat svg { color: var(--color-trophy-platinum); }
+.pp-gcard__cstat--full svg { color: var(--pp-success); }
+.pp-gcard__cstat--avg svg { color: var(--pp-accent); }
 /* Narrow covers: drop the least-critical stat (avg completion) so the badge never overruns the art. */
 @container (max-width: 172px) { .pp-gcard__cstat--avg { display: none; } }
 
