@@ -564,6 +564,7 @@
 .rp-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 190px; max-width: calc(100vw - 24px); max-height: 300px; overflow-y: auto; padding: 6px; border: 1px solid var(--pp-border); border-radius: 12px; background: var(--pp-bg-1); box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.6); animation: rp-pop-in 0.16s cubic-bezier(0.22, 1, 0.36, 1); }
 .rp-pop--left { left: auto; right: 0; }   /* flipped when a left-anchored popover would overflow the viewport (JS) */
 @keyframes rp-pop-in { from { opacity: 0; transform: translateY(-5px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .rp-pop { animation: none; } }
 .rp-pop__item { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 38px; font: inherit; font-size: 13px; font-weight: 600; text-align: left; color: var(--pp-text-dim); background: transparent; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; transition: background 0.12s ease, color 0.12s ease; }
 .rp-pop__item:hover { background: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-2)); color: var(--pp-text); }
 .rp-pop__ico { flex: 0 0 auto; width: 17px; height: 17px; color: var(--disc); }

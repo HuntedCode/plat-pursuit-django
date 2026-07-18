@@ -2038,28 +2038,47 @@ details[open]::details-content {
   cursor: grab;
   -webkit-appearance: none;
   appearance: none;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 9999px;
-  background: oklch(0.75 0.15 250);
-  border: 1.5px solid oklch(0.55 0.15 250);
+  background: var(--pp-primary);
+  border: 1.5px solid color-mix(in oklab, var(--pp-primary) 55%, #000);
   position: relative;
   z-index: 2;
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
 }
 .dual-range-input::-moz-range-thumb {
   pointer-events: auto;
   cursor: grab;
   appearance: none;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 9999px;
-  background: oklch(0.75 0.15 250);
-  border: 1.5px solid oklch(0.55 0.15 250);
+  background: var(--pp-primary);
+  border: 1.5px solid color-mix(in oklab, var(--pp-primary) 55%, #000);
   position: relative;
   z-index: 2;
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
+}
+/* Hover / keyboard-focus: enlarge + a soft primary glow ring (the thumb glow is the focus indicator). */
+.dual-range-input:hover::-webkit-slider-thumb,
+.dual-range-input:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.28);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--pp-primary) 22%, transparent);
+}
+.dual-range-input:hover::-moz-range-thumb,
+.dual-range-input:focus-visible::-moz-range-thumb {
+  transform: scale(1.28);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--pp-primary) 22%, transparent);
 }
 .dual-range-input:active::-webkit-slider-thumb { cursor: grabbing; }
 .dual-range-input:active::-moz-range-thumb { cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) {
+  .dual-range-input::-webkit-slider-thumb, .dual-range-input::-moz-range-thumb { transition: none; }
+}
+/* Track + fill on house tokens (was daisyUI bg-base-300 / bg-primary in the partials). */
+.dual-range-track { background: color-mix(in oklab, var(--pp-text) 12%, transparent); }
+.dual-range-fill { background: var(--pp-primary); }
 /* Hide native track so only our custom fill/track shows */
 .dual-range-input::-webkit-slider-runnable-track { background: transparent; }
 .dual-range-input::-moz-range-track { background: transparent; }

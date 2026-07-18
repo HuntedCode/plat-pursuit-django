@@ -13,8 +13,8 @@
             </span>
         </div>
         <div class="dual-range relative h-5" data-dual-range data-dual-range-name="rating" data-range-unit=" stars">
-            <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full bg-base-300"></div>
-            <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-primary" data-dual-range-fill></div>
+            <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full"></div>
+            <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full" data-dual-range-fill></div>
             <input type="range" name="rating_min" min="0" max="5" step="0.5"
                    value="{{ request.GET.rating_min|default:'0' }}"
                    class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
@@ -37,8 +37,8 @@
             </span>
         </div>
         <div class="dual-range relative h-5" data-dual-range data-dual-range-name="difficulty">
-            <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full bg-base-300"></div>
-            <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-primary" data-dual-range-fill></div>
+            <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full"></div>
+            <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full" data-dual-range-fill></div>
             <input type="range" name="difficulty_min" min="1" max="10" step="1"
                    value="{{ request.GET.difficulty_min|default:'1' }}"
                    class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
@@ -61,8 +61,8 @@
             </span>
         </div>
         <div class="dual-range relative h-5" data-dual-range data-dual-range-name="fun">
-            <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full bg-base-300"></div>
-            <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-primary" data-dual-range-fill></div>
+            <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full"></div>
+            <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full" data-dual-range-fill></div>
             <input type="range" name="fun_min" min="1" max="10" step="1"
                    value="{{ request.GET.fun_min|default:'1' }}"
                    class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"

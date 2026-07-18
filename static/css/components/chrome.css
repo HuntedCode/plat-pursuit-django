@@ -348,9 +348,11 @@
     display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: var(--pp-radius-md);
     font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute); background: oklch(1 0 0 / 0.05);
     border: 1px solid var(--pp-border); cursor: pointer;
-    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease), transform 0.12s var(--pp-ease);
 }
 @media (hover: hover) { .pp-minibar__filters:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.09); } }
+.pp-minibar__filters:active { transform: scale(0.95); }
+@media (prefers-reduced-motion: reduce) { .pp-minibar__filters:active { transform: none; } }
 .pp-minibar__filters:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .pp-minibar__filters svg { width: 13px; height: 13px; }
 @media (max-width: 767px) { .pp-minibar__filters .pp-minibar__flbl { display: none; } }

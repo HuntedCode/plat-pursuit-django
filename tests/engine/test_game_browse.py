@@ -239,6 +239,34 @@ def test_site_heartbeat_has_catalog_coverage():
     assert expanded.get('games_in_contracts', {}).get('value') == 0
 
 
+def test_sticky_minibar_and_sentinel_render(client):
+    """The page renders the shared sticky mini-bar (identity + live count + Filters reach) and its
+    StickyReveal sentinel, so the toolbar re-surfaces once you scroll past it on this long page."""
+    GameFactory(title_name='Minibar Game', title_platform=['PS5'])
+    url, params = _url()
+
+    content = client.get(url, params).content.decode()
+
+    assert 'pp-minibar' in content
+    assert 'data-sticky-reveal' in content
+    assert 'data-minibar-count' in content            # live result count in the bar
+    assert 'data-minibar-filters' in content          # the Filters reach button
+    assert 'id="gbrowse-minibar-sentinel"' in content # the StickyReveal sentinel
+
+
+def test_empty_state_shows_reset_cta_when_filtered(client):
+    """A filtered search that returns nothing shows the 'Reset filters' recovery CTA; an unfiltered empty
+    page does not (there'd be nothing to reset)."""
+    GameFactory(title_name='Only Game', title_platform=['PS5'])
+
+    # A query that matches nothing -> empty grid WITH an active filter -> reset CTA present.
+    filtered = client.get(reverse('games_list'),
+                          {'platform': 'PS5', 'query': 'zzz-no-such-game-zzz'}).content.decode()
+    assert 'pp-gcard-empty' in filtered
+    assert 'pp-gcard-empty__reset' in filtered
+    assert 'Reset filters' in filtered
+
+
 def test_header_scard_grid_renders_when_heartbeat_warm(client):
     """When the hourly site-heartbeat cache is warm, the Browse Games header renders the catalogue .scard
     grid (Total games / In badge series / In contracts / New this week) fed from those cached values -- zero

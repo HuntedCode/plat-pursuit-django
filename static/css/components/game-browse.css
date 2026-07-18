@@ -7,6 +7,17 @@
  * ============================================================ */
 .pp-gbrowse { display: flex; flex-direction: column; }
 
+/* Mini-bar result-count pill: rides the shared .pp-minibar identity so the live count stays visible when
+   the toolbar has scrolled away. Hidden on the tightest phones to keep the title + Filters reach intact. */
+.pp-minibar__count { flex-shrink: 0; font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute);
+    padding: 1px 7px; border-radius: 999px; background: oklch(1 0 0 / 0.05); border: 1px solid var(--pp-border); }
+@media (max-width: 400px) { .pp-minibar__count { display: none; } }
+
+/* Animated filter-panel expand/collapse (JS tweens height + opacity between 0 and scrollHeight). overflow
+   clips the content mid-tween; the JS releases height back to auto on transitionend so nested reflows work. */
+#gbrowse-advanced { overflow: hidden; transition: height 0.32s var(--pp-ease), opacity 0.26s var(--pp-ease); }
+@media (prefers-reduced-motion: reduce) { #gbrowse-advanced { transition: none; } }
+
 /* Toolbar is chrome -> it sits BACK: keep the shared .pp-toolbar-card fill but soften the lift so the card
    grid below owns the pop (mirrors the badge/Contracts toolbars). Scoped to .pp-gbrowse so only this
    toolbar quiets; wins the cascade because component CSS is unlayered and .pp-toolbar-card is @layer base. */
@@ -26,9 +37,11 @@
     background: color-mix(in oklab, var(--pp-accent) 12%, var(--pp-bg-2));
     border: 1px solid color-mix(in oklab, var(--pp-accent) 30%, var(--pp-border));
     color: var(--pp-accent); font-size: 13px; font-weight: 600; cursor: pointer;
-    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.12s ease;
 }
 .pp-gbrowse__lucky:hover { border-color: color-mix(in oklab, var(--pp-accent) 55%, var(--pp-border)); background: color-mix(in oklab, var(--pp-accent) 18%, var(--pp-bg-2)); }
+.pp-gbrowse__lucky:active { transform: scale(0.94); }
+@media (prefers-reduced-motion: reduce) { .pp-gbrowse__lucky:active { transform: none; } }
 .pp-gbrowse__lucky > svg { width: 16px; height: 16px; }
 .pp-gbrowse__lucky__lbl { white-space: nowrap; }
 @media (max-width: 640px) { .pp-gbrowse__lucky__lbl { display: none; } }   /* icon-only on phones */
@@ -44,11 +57,18 @@
 }
 .pp-gbrowse__flabel svg { width: 13px; height: 13px; flex-shrink: 0; }
 .pp-gbrowse__fchips { display: flex; flex-wrap: wrap; gap: 7px; }
-/* Genre/Theme lists can be long -- cap the height and let them scroll inside the section. */
-.pp-gbrowse__fchips--scroll { max-height: 128px; overflow-y: auto; padding: 2px; margin: -2px; }
-/* Letter row: horizontal scroll on phones (A-Z is a lot of chips), wraps on tablet+. */
-.pp-gbrowse__fchips--letters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
-@media (min-width: 768px) { .pp-gbrowse__fchips--letters { flex-wrap: wrap; overflow-x: visible; } }
+/* Genre/Theme lists can be long -- cap the height and let them scroll inside the section. A soft bottom
+   mask fades the trailing edge so it reads as scrollable (there's more below). */
+.pp-gbrowse__fchips--scroll { max-height: 128px; overflow-y: auto; padding: 2px; margin: -2px;
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent 100%); }
+/* Letter row: horizontal scroll on phones (A-Z is a lot of chips), wraps on tablet+. A right-edge mask
+   hints the horizontal scroll; dropped at 768px+ where the row wraps and there's nothing to scroll. */
+.pp-gbrowse__fchips--letters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent 100%); }
+@media (min-width: 768px) { .pp-gbrowse__fchips--letters { flex-wrap: wrap; overflow-x: visible;
+    -webkit-mask-image: none; mask-image: none; } }
 /* Two range-slider groups (Ratings + Time) side by side on wider screens. */
 .pp-gbrowse__ftwo { display: grid; grid-template-columns: 1fr; gap: 13px 26px; }
 @media (min-width: 768px) { .pp-gbrowse__ftwo { grid-template-columns: 1fr 1fr; align-items: start; } }

@@ -89,6 +89,13 @@
     <div class="pp-gcard-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
         <p class="pp-gcard-empty__title">No games found</p>
-        <p class="pp-gcard-empty__hint">Try expanding your search or adjusting your filters.</p>
+        <p class="pp-gcard-empty__hint">Nothing matches your current filters. Try widening your search or clearing one.</p>
+        {% if request.GET.query or has_advanced_filters or request.GET.letter %}
+        {# Full-nav reset (not an HTMX swap) so the filter panel + toolbar controls reset too, not just the grid. #}
+        <a href="{% url 'games_list' %}?platform=PS5&amp;platform=PS4" class="pp-gcard-empty__reset">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Reset filters
+        </a>
+        {% endif %}
     </div>
 {% endfor %}

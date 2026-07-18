@@ -80,6 +80,26 @@
         </div>
     </section>
 
+    {% comment %} Sticky mini-bar: "Browse Games" + the live result count + a Filters reach, re-surfaced when
+    the toolbar scrolls away on this long, infinite-scroll page. Sits OUTSIDE #browse-results so it persists
+    across filter swaps; the sentinel sits after the toolbar form below -- once that scrolls under the chrome,
+    the shared StickyReveal pins this. {% endcomment %}
+    <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#gbrowse-minibar-sentinel">
+        <div class="pp-minibar__inner container mx-auto">
+            <span class="pp-minibar__id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><circle cx="15" cy="11" r="1" fill="currentColor"/><circle cx="18" cy="13" r="1" fill="currentColor"/></svg>
+                <span class="pp-minibar__title">Browse Games</span>
+                <span class="pp-minibar__count" data-minibar-count title="games shown">{{ paginator.count|intcomma }}</span>
+            </span>
+            <div class="pp-minibar__controls">
+                <button type="button" class="pp-minibar__filters" data-minibar-filters aria-label="Scroll to the filters and open the panel">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    <span class="pp-minibar__flbl">Filters</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     {% include 'partials/ad_unit.html' with ad_slot="5270350613" %}
 
     {% comment %} Job-icon <symbol> sprite, emitted ONCE (before the first job_icon_use -- the filter panel's
@@ -90,7 +110,7 @@
     {% comment %} Toolbar: quiet chrome. Primary bar (search + sort + Lucky + Filters toggle) with the big
     filter panel tucked into a collapsible drawer. Filters auto-apply via browse-filters.js (HTMX swap); no
     Apply button. The bare-/games/ dispatch redirect (saved defaults) is preserved by the view. {% endcomment %}
-    <form data-browse-form id="gbrowse-form"
+    <form data-browse-form data-live-search id="gbrowse-form"
           hx-get="{% url 'games_list' %}"
           hx-target="#browse-results"
           hx-push-url="true"
@@ -357,6 +377,9 @@
     {# Badge picker modal (outside the form to avoid interfering with it). #}
     {% include 'partials/browse/badge_picker_modal.html' %}
 
+    {# Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar above. #}
+    <span id="gbrowse-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
     {# ── Browse results (HTMX filter-swap target = just the grid) ── #}
     <div id="browse-results">
         {% include 'trophies/partials/game_list/browse_results.html' %}
@@ -372,9 +395,9 @@
 {% block js_scripts %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
     <script>
-    // Header count-up + the collapsible Filters panel (toggle + live active-count badge). Filtering itself
-    // is HTMX-native via browse-filters.js; this only owns the panel chrome. Infinite scroll + the staggered
-    // card reveal are wired in a later pass.
+    // Owns the page's motion + chrome: header count-up, the animated collapsible Filters panel (toggle +
+    // live active-count badge), the sticky mini-bar, the staggered card reveal, infinite scroll, and the
+    // filter-swap settle. Filtering itself is HTMX-native via browse-filters.js.
     document.addEventListener('DOMContentLoaded', function () {
         if (window.PlatPursuit && PlatPursuit.countUp) {
             var countEl = document.querySelector('[data-games-count]');
@@ -389,10 +412,46 @@
         var badge = document.getElementById('gbrowse-filter-count');
         if (!form || !toggle || !panel) { return; }
 
-        function setPanel(open) {
-            if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
+        // Animated expand/collapse of the (tall) filter panel: height + opacity tween instead of a hard
+        // display:none jump. The `hidden` attribute is still applied at the END of a collapse (and removed at
+        // the START of an expand) so collapsed controls stay out of the tab order. Reduced-motion / non-user
+        // toggles (load, minibar reach when already animating) fall back to the instant hidden toggle.
+        var panelAnimEnd = null;
+        function clearPanelAnim() {
+            if (panelAnimEnd) { panel.removeEventListener('transitionend', panelAnimEnd); panelAnimEnd = null; }
+        }
+        function setPanel(open, animate) {
             toggle.classList.toggle('is-open', open);
             toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            clearPanelAnim();
+            var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (!animate || reduce) {
+                panel.style.height = ''; panel.style.opacity = '';
+                if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
+                return;
+            }
+            if (open) {
+                panel.removeAttribute('hidden');
+                var target = panel.scrollHeight;
+                panel.style.height = '0px'; panel.style.opacity = '0';
+                void panel.offsetHeight;                       // flush the collapsed start state
+                panel.style.height = target + 'px'; panel.style.opacity = '1';
+                panelAnimEnd = function (e) {
+                    if (e.propertyName !== 'height') { return; }
+                    clearPanelAnim();
+                    panel.style.height = ''; panel.style.opacity = '';   // release to auto so content can reflow
+                };
+            } else {
+                panel.style.height = panel.scrollHeight + 'px'; panel.style.opacity = '1';
+                void panel.offsetHeight;
+                panel.style.height = '0px'; panel.style.opacity = '0';
+                panelAnimEnd = function (e) {
+                    if (e.propertyName !== 'height') { return; }
+                    clearPanelAnim();
+                    panel.setAttribute('hidden', ''); panel.style.height = ''; panel.style.opacity = '';
+                };
+            }
+            panel.addEventListener('transitionend', panelAnimEnd);
         }
         // Active CONTENT-filter count for the toggle badge: every set value except display/sort/search state
         // and the platform/regions SCOPE selectors (platform always carries the PS5/PS4 default from the
@@ -413,13 +472,19 @@
             });
             return n;
         }
+        var prevBadgeN = null;
         function refreshBadge() {
             if (!badge) { return; }
             var n = activeCount();
             badge.textContent = n;
             badge.hidden = (n === 0);
+            // Pop the count when it actually changes (not on the initial paint), so applying a filter registers.
+            if (n > 0 && prevBadgeN !== null && n !== prevBadgeN) {
+                badge.classList.remove('is-pop'); void badge.offsetWidth; badge.classList.add('is-pop');
+            }
+            prevBadgeN = n;
         }
-        toggle.addEventListener('click', function () { setPanel(panel.hasAttribute('hidden')); });
+        toggle.addEventListener('click', function () { setPanel(toggle.getAttribute('aria-expanded') !== 'true', true); });
         form.addEventListener('change', refreshBadge);
         form.addEventListener('input', refreshBadge);
 
@@ -468,13 +533,22 @@
             if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
             var grid = document.getElementById('items-grid');
             if (!grid || !window.PlatPursuit || !PlatPursuit.staggerReveal) { return; }
-            var ease = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+            // Soft-spring overshoot land-in (matches the Badges Gallery bar): cards rise + scale up past
+            // 1.0 and settle, rather than a flat decel. The gentle overshoot is what reads "premium."
+            var ease = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
             revealHandle = PlatPursuit.staggerReveal({
                 grid: grid, cardSelector: '.pp-gcard', step: 22,
                 reveal: function (el, delayMs) {
                     if (!el.animate) { return; }
-                    el.animate([{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }],
-                               { duration: 460, delay: delayMs, easing: ease, fill: 'backwards' });
+                    el.animate([{ opacity: 0, transform: 'translateY(14px) scale(0.96)' }, { opacity: 1, transform: 'none' }],
+                               { duration: 500, delay: delayMs, easing: ease, fill: 'backwards' });
+                    // The completion bar (only present for signed-in users with progress) wipes in from the
+                    // left just after the card lands, so the fill reads as a deliberate reveal, not a static bar.
+                    var bar = el.querySelector('.pp-gcard__barfill');
+                    if (bar) {
+                        bar.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }],
+                                    { duration: 540, delay: delayMs + 150, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
+                    }
                 },
             });
         }
@@ -509,6 +583,9 @@
                         countEl.dataset.countup = newVal;   // countUp reads target from here
                         PlatPursuit.countUp(countEl, 700, { from: isNaN(oldVal) ? 0 : oldVal });
                     }
+                    // Keep the mini-bar's count in sync (it may be pinned + on-screen mid-scroll).
+                    var mbCount = document.querySelector('[data-minibar-count]');
+                    if (mbCount && !isNaN(newVal)) { mbCount.textContent = newVal.toLocaleString(); }
                 }
                 initReveal();   // before initScroller so revealHandle exists for its onAppend hook
                 initScroller();
@@ -521,14 +598,25 @@
             var elt = e.detail && e.detail.elt;
             if (!elt || elt.id !== 'gbrowse-form') { return; }
             var r = document.getElementById('browse-results');
-            if (r) { r.classList.remove('is-swapping', 'opacity-50', 'pointer-events-none'); }
+            if (r) { r.classList.remove('is-swapping', 'pointer-events-none'); }
         });
 
         refreshBadge();
         // Collapse on load (renders open for no-JS); stay open if filters are already applied.
-        setPanel(activeCount() > 0);
+        setPanel(activeCount() > 0, false);
         initReveal();
         initScroller();
+
+        // Sticky mini-bar: re-surfaces the identity + count + a Filters reach once the toolbar scrolls under
+        // the chrome. The reach scrolls the toolbar back into view and opens the (animated) filter panel.
+        if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }
+        var mbFilters = document.querySelector('[data-minibar-filters]');
+        if (mbFilters) {
+            mbFilters.addEventListener('click', function () {
+                if (toggle && toggle.getAttribute('aria-expanded') !== 'true') { setPanel(true, true); }
+                if (form) { form.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+            });
+        }
     });
     </script>
     {% if user.is_authenticated and user.profile %}

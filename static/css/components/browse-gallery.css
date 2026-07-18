@@ -32,8 +32,10 @@
     display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 999px;
     border: 1px solid var(--pp-border); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent);
     font-size: 12px; font-weight: 600; color: var(--pp-text-mute); cursor: pointer; user-select: none;
-    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.12s ease;
 }
+.pp-bgal__chip:active { transform: scale(0.94); }
+@media (prefers-reduced-motion: reduce) { .pp-bgal__chip:active { transform: none; } }
 .pp-bgal__chip input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 @media (hover: hover) { .pp-bgal__chip:hover { border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); color: var(--pp-text); } }
 .pp-bgal__chip:has(input:checked) {
@@ -73,14 +75,19 @@
 .pp-bgal__advbtn {
     display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 9px; flex: 0 0 auto;
     background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text-mute);
-    font-size: 13px; font-weight: 600; cursor: pointer; transition: border-color 0.15s ease, color 0.15s ease;
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: border-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
 }
 .pp-bgal__advbtn:hover, .pp-bgal__advbtn.is-open { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); color: var(--pp-text); }
+.pp-bgal__advbtn:active { transform: scale(0.95); }
+@media (prefers-reduced-motion: reduce) { .pp-bgal__advbtn:active { transform: none; } }
 .pp-bgal__advbtn > svg { width: 16px; height: 16px; }
 .pp-bgal__advbtn__n {
     display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px;
     border-radius: 999px; background: var(--pp-primary); color: #06140d; font-size: 11px; font-weight: 800; line-height: 1;
 }
+.pp-bgal__advbtn__n.is-pop { animation: ppBadgePop 0.3s var(--pp-ease); }
+@keyframes ppBadgePop { 0% { transform: scale(1); } 40% { transform: scale(1.32); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .pp-bgal__advbtn__n.is-pop { animation: none; } }
 .pp-bgal__advanced { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-border); }
 .pp-bgal__clear {
     margin-top: 10px; align-self: flex-start; background: none; border: none; padding: 2px 0; cursor: pointer;
@@ -190,10 +197,13 @@
       be missed) -- and `.htmx-request` (via hx-indicator="#browse-results") covers the Enter/submit path.
    2) Empty-state entrance: a no-results panel fades + rises in instead of hard-cutting. Fresh DOM node per
       swap, so a plain CSS animation runs reliably on insert (no WAAPI needed here). */
+/* The in-flight dim is a STATE, not motion -- keep it for reduced-motion users too (they lost it when the
+   dim moved off the ungated opacity-50 utility onto .is-swapping). Only the fade transition + empty-state
+   entrance animation are motion, so those stay gated. */
+#browse-results.htmx-request,
+#browse-results.is-swapping { opacity: 0.4; }
 @media (prefers-reduced-motion: no-preference) {
     #browse-results { transition: opacity 0.18s ease; }
-    #browse-results.htmx-request,
-    #browse-results.is-swapping { opacity: 0.4; }
     .pp-bgal__empty, .pp-slist__empty { animation: ppResultsEmptyIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 }
 @keyframes ppResultsEmptyIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }

@@ -100,17 +100,31 @@
       });
     });
 
-    // ── Text search: submit on Enter ───────────────────────────────────
+    // ── Text search: submit on Enter. Forms that opt in with `data-live-search` ALSO live-filter as you
+    // type (debounced). Opt-in only: most browse forms carry hx-push-url, so auto-submitting per keystroke
+    // burst would spam history + multiply queries on every list endpoint. Enter stays the universal path.
     const searchInputs = form.querySelectorAll('input[type="text"], input[type="search"]');
+    const liveSearch = form.hasAttribute('data-live-search');
+    let searchTimer = null;
+    function submitSearch() {
+      const pageInput = form.querySelector('input[name="page"]');
+      if (pageInput) pageInput.value = '1';
+      htmx.trigger(form, 'submit');
+    }
     searchInputs.forEach(function (input) {
       input.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
           e.preventDefault();
-          const pageInput = form.querySelector('input[name="page"]');
-          if (pageInput) pageInput.value = '1';
-          htmx.trigger(form, 'submit');
+          clearTimeout(searchTimer);
+          submitSearch();
         }
       });
+      if (liveSearch) {
+        input.addEventListener('input', function () {
+          clearTimeout(searchTimer);
+          searchTimer = setTimeout(submitSearch, 400);
+        });
+      }
     });
 
     // ── Submit button (for users who click instead of pressing Enter) ──
@@ -499,17 +513,20 @@
   }
 
   // ── Loading indicator ──────────────────────────────────────────────────
+  // Dim via the shared `.is-swapping` settle class (CSS: #browse-results.is-swapping { opacity }) rather
+  // than a second opacity utility, so the request-time dim matches the change-time settle exactly (one value,
+  // one system). pointer-events-none blocks clicks on the stale grid mid-swap.
   document.addEventListener('htmx:beforeRequest', function (e) {
     const results = document.getElementById('browse-results');
     if (results && e.detail.target === results) {
-      results.classList.add('opacity-50', 'pointer-events-none');
+      results.classList.add('is-swapping', 'pointer-events-none');
     }
   });
 
   document.addEventListener('htmx:afterSwap', function (e) {
     const results = document.getElementById('browse-results');
     if (results) {
-      results.classList.remove('opacity-50', 'pointer-events-none');
+      results.classList.remove('is-swapping', 'pointer-events-none');
     }
 
     // Re-bind page-jump forms inside the swapped content
