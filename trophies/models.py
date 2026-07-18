@@ -924,6 +924,18 @@ class Concept(models.Model):
             "franchise/collection membership."
         ),
     )
+    contract_satisfier_only = models.BooleanField(
+        default=False,
+        help_text=(
+            "This concept's trophy list spans MULTIPLE games that each have their "
+            "own Contract (e.g. a remaster collection like Uncharted: Legacy of "
+            "Thieves). It must be a bundle SATISFIER, never a home MEMBER: the "
+            "membership admin refuses to home it, and the Stage -> Contract "
+            "converter attaches it as a ContractBundle instead. Set by "
+            "hand -- appearing in multiple Stages alone doesn't imply this (a "
+            "single game can be in many badges). See list_multi_stage_concepts."
+        ),
+    )
     family = models.ForeignKey(
         GameFamily, null=True, blank=True, on_delete=models.SET_NULL, related_name='concepts'
     )
@@ -1119,6 +1131,14 @@ class Concept(models.Model):
         """
         if other == self:
             return
+
+        # Inherit the multi-game-satisfier flag: if `other` was a multi-game trophy list,
+        # the survivor represents the same list and must keep its never-a-home protection
+        # so it can't later be wrongly homed as a Contract member. Unconditional (intrinsic
+        # to the concept), unlike franchises_locked which is gated on the match migration.
+        if other.contract_satisfier_only and not self.contract_satisfier_only:
+            self.contract_satisfier_only = True
+            self.save(update_fields=['contract_satisfier_only'])
 
         # Comments (concept-level, trophy-level, checklist-level). Comments
         # FK Concept directly (trophy_id/checklist_id are plain ints, not a

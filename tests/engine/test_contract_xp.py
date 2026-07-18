@@ -421,3 +421,69 @@ def test_grant_job_xp_zero_is_noop():
         assert contract_service.grant_job_xp(profile, job, 0) == 0
     assert not ContractXPGrant.objects.filter(profile=profile).exists()
     assert not ProfileJobXP.objects.filter(profile=profile).exists()
+
+
+def test_bundle_platinum_satisfies_platinum_and_full_tiers():
+    """A multi-game satisfier bundle the profile has fully platinum'd grants BOTH tiers
+    on the contract, even though the home member itself was never earned -- this is the
+    Uncharted: Legacy of Thieves case (one collection platinum stands in for the games
+    it covers)."""
+    profile = ProfileFactory()
+    contract = Contract.objects.create(name='Uncharted 4', slug='u4-bundle', is_live=True)
+    # Home member (defines a platinum) that the profile has NOT earned.
+    _platinum_member(contract)
+    # Satisfier bundle: a multi-game collection the profile HAS platinum'd.
+    coll = ConceptFactory(unified_title='Legacy of Thieves Collection', contract_satisfier_only=True)
+    coll_game = GameFactory(concept=coll)
+    coll_plat = TrophyFactory(game=coll_game, trophy_type='platinum')
+    ContractBundle.objects.create(contract=contract, label='Collection covers this').concepts.set([coll])
+    _earn_platinum(profile, coll_game, coll_plat)
+
+    ec = contract_service.mark_contract_reached(profile, contract)
+    assert ec is not None
+    assert ec.platinum_reached_at is not None   # granted via the fully-platinum'd bundle
+    assert ec.full_reached_at is not None        # bundle is at progress 100 too
+
+
+def test_bundle_at_100_but_not_platinum_grants_only_full_tier():
+    """A bundle cleared to 100% but without its platinum grants the 100% tier only, not
+    platinum -- the platinum-via-bundle path requires the bundle's platinum(s)."""
+    profile = ProfileFactory()
+    contract = Contract.objects.create(name='Some Game', slug='some-bundle', is_live=True)
+    _platinum_member(contract)
+    coll = ConceptFactory(unified_title='Coll No Plat', contract_satisfier_only=True)
+    coll_game = GameFactory(concept=coll)
+    TrophyFactory(game=coll_game, trophy_type='platinum')   # platinum EXISTS but is not earned
+    ContractBundle.objects.create(contract=contract, label='covers').concepts.set([coll])
+    ProfileGameFactory(profile=profile, game=coll_game, progress=100)   # 100% but no platinum earned
+
+    ec = contract_service.mark_contract_reached(profile, contract)
+    assert ec is not None
+    assert ec.full_reached_at is not None
+    assert ec.platinum_reached_at is None
+
+
+def test_platted_bundle_on_noplat_member_banks_platinum_not_stuck():
+    """Regression (audit Finding 1): a contract whose HOME MEMBER defines no platinum but
+    whose satisfier bundle is fully platted must freeze has_platinum=True (from the bundle),
+    so the reached platinum tier actually BANKS on accept instead of stranding the contract
+    as permanently claimable (reached-but-never-accepted, re-accept grants 0)."""
+    profile = ProfileFactory()
+    contract = _contract('c-bundle-plat', ['mage'])
+    _noplat_member(contract)   # home member defines NO platinum
+    coll = ConceptFactory(unified_title='Collection', contract_satisfier_only=True)
+    coll_game = GameFactory(concept=coll)
+    coll_plat = TrophyFactory(game=coll_game, trophy_type='platinum')
+    ContractBundle.objects.create(contract=contract, label='covers').concepts.set([coll])
+    _earn_platinum(profile, coll_game, coll_plat)   # bundle fully platted + at 100%
+
+    ec = contract_service.mark_contract_reached(profile, contract)
+    assert ec.has_platinum is True             # frozen from the bundle, not members alone
+    assert ec.platinum_reached_at is not None
+
+    granted = contract_service.accept_contract(profile, contract)
+
+    assert granted == CONTRACT_XP_TOTAL         # both tiers bank in one accept
+    ec.refresh_from_db()
+    assert ec.platinum_accepted_at is not None and ec.full_accepted_at is not None
+    assert not list(contract_service.claimable_contracts(profile))   # NOT stuck claimable
