@@ -172,3 +172,44 @@ def test_dry_run_does_not_recompute_completion():
 
     pg.refresh_from_db()
     assert pg.progress == 100   # untouched on a dry run
+
+
+def test_non_dlc_game_completion_not_recomputed():
+    """A game that did NOT gain DLC this window is left untouched -- NOT a blanket rewrite of everyone's
+    progress (a count-based rewrite would clobber PSN's accurate grade-weighted %). A first-sync game
+    (all groups after the watermark) is not DLC, so its owner keeps their reported value."""
+    from tests.factories import ProfileGameFactory
+
+    watermark = timezone.now()
+    game = _series_game('series-fresh')
+    game.defined_trophies = {'bronze': 10, 'silver': 5, 'gold': 4, 'platinum': 1}
+    game.save(update_fields=['defined_trophies'])
+    TrophyGroup.objects.create(game=game, trophy_group_id='default', created_at=watermark + timedelta(minutes=5))
+    TrophyGroup.objects.create(game=game, trophy_group_id='001', created_at=watermark + timedelta(minutes=6))
+    pg = ProfileGameFactory(game=game, progress=100, earned_trophies_count=5)  # PSN-reported; count-based would be 25
+
+    with mock.patch(PATCH), mock.patch('trophies.management.commands.detect_dlc_and_refresh.redis_client'):
+        call_command('detect_dlc_and_refresh', '--since', watermark.isoformat())
+
+    pg.refresh_from_db()
+    assert pg.progress == 100   # untouched -- this game didn't gain DLC
+
+
+def test_completion_recompute_caps_at_100():
+    """A stale earned_trophies_count above the defined total (e.g. a trophy was later removed) clamps to
+    100 -- never writes progress > 100."""
+    from tests.factories import ProfileGameFactory
+
+    watermark = timezone.now()
+    game = _series_game('series-cap')
+    game.defined_trophies = {'bronze': 6, 'silver': 3, 'gold': 1, 'platinum': 0}  # total 10
+    game.save(update_fields=['defined_trophies'])
+    TrophyGroup.objects.create(game=game, trophy_group_id='default', created_at=watermark - timedelta(days=1))
+    TrophyGroup.objects.create(game=game, trophy_group_id='001', created_at=watermark + timedelta(hours=1))
+    pg = ProfileGameFactory(game=game, progress=90, earned_trophies_count=12)  # 12/10*100 = 120
+
+    with mock.patch(PATCH, return_value=(1, 0, 0, 0)), mock.patch('trophies.management.commands.detect_dlc_and_refresh.redis_client'):
+        call_command('detect_dlc_and_refresh', '--since', watermark.isoformat())
+
+    pg.refresh_from_db()
+    assert pg.progress == 100   # clamped from a computed 120

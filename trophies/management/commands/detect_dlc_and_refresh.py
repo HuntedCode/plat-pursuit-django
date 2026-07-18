@@ -26,8 +26,8 @@ import logging
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
-from django.db.models import F
-from django.db.models.functions import Round
+from django.db.models import F, Value
+from django.db.models.functions import Least, Round
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -131,10 +131,14 @@ class Command(BaseCommand):
             if not total:   # no defined trophies -> nothing to divide by; skip
                 continue
             try:
+                # Clamp to 100: earned <= total for the DLC case (only the denominator grew), but a stale
+                # earned_trophies_count vs a shrunk defined set could otherwise write progress > 100.
                 total_rows += ProfileGame.objects.filter(game_id=gid).update(
-                    progress=Round(F('earned_trophies_count') * 100.0 / total)
+                    progress=Least(Value(100), Round(F('earned_trophies_count') * 100.0 / total))
                 )
             except Exception:
+                # A swallowed per-game failure is NOT retried (the watermark still advances); the owner's
+                # value self-heals on their next PSN sync, matching the badge-refresh loop's behavior.
                 logger.exception("detect_dlc_and_refresh: completion recompute failed for game %s", gid)
         return total_rows
 
