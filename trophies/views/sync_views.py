@@ -259,8 +259,12 @@ class SiteSuggestView(View):
         # one entry) and link to the concept's most-played Game -- see the click-target
         # rationale in the plan. One correlated subquery yields the link target's
         # np_communication_id, a second its played_count for popularity ordering.
+        # Fetch instances (not .values()) so Concept.get_cover_url() gives the same
+        # IGDB-first cover the game cards use; select_related the match but DEFER its
+        # ~30KB raw_response blob (the whale-OOM guard) -- get_cover_url only reads
+        # is_trusted + igdb_cover_image_id.
         rep = Game.objects.filter(concept=OuterRef('pk')).order_by('-played_count')
-        rows = (
+        concepts = (
             Concept.objects
             .filter(unified_title__icontains=q)
             .annotate(
@@ -268,16 +272,17 @@ class SiteSuggestView(View):
                 pop=Subquery(rep.values('played_count')[:1]),
             )
             .filter(npc__isnull=False)  # only concepts with a linkable Game
-            .order_by('-pop', 'unified_title')
-            .values('unified_title', 'concept_icon_url', 'npc')[:self.PER_GROUP]
+            .select_related('igdb_match')
+            .defer('igdb_match__raw_response')
+            .order_by('-pop', 'unified_title')[:self.PER_GROUP]
         )
         items = [
             {
-                'label': r['unified_title'],
-                'image': r['concept_icon_url'] or '',
-                'url': reverse('game_detail', kwargs={'np_communication_id': r['npc']}),
+                'label': c.unified_title,
+                'image': c.get_cover_url('cover_small') or '',   # IGDB-first, mirrors the game cards
+                'url': reverse('game_detail', kwargs={'np_communication_id': c.npc}),
             }
-            for r in rows
+            for c in concepts
         ]
         return {'type': 'game', 'label': 'Games', 'items': items}
 

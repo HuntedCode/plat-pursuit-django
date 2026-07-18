@@ -11,7 +11,7 @@ from django.test import RequestFactory
 from django.urls import reverse
 
 from plat_pursuit.context_processors import navsync
-from tests.factories import BadgeFactory, ConceptFactory, GameFactory, ProfileFactory
+from tests.factories import BadgeFactory, ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory
 from trophies.models import Franchise
 
 pytestmark = pytest.mark.django_db
@@ -189,6 +189,23 @@ def test_site_suggest_substring_not_prefix(client):
     GameFactory(concept=concept, played_count=10, np_communication_id='NPWR_DS_00')
     labels = [i['label'] for i in _groups(client.get(reverse('site_suggest'), {'q': 'souls'}))['game']['items']]
     assert 'Dark Souls' in labels
+
+
+def test_site_suggest_game_uses_igdb_cover_when_trusted(client):
+    # IGDB-first cover art (matches the game cards), at the small dropdown size.
+    concept = ConceptFactory(unified_title='Cover Game')
+    IGDBMatchFactory(concept=concept, igdb_cover_image_id='co1abc', status='auto_accepted')  # trusted
+    GameFactory(concept=concept, played_count=10, np_communication_id='NPWR_IGDB_00')
+    item = _groups(client.get(reverse('site_suggest'), {'q': 'cover game'}))['game']['items'][0]
+    assert item['image'] == 'https://images.igdb.com/igdb/image/upload/t_cover_small/co1abc.png'
+
+
+def test_site_suggest_game_falls_back_to_psn_icon(client):
+    # No trusted IGDB match -> the concept's PSN portrait icon, mirroring get_cover_url().
+    concept = ConceptFactory(unified_title='Psn Only Game', concept_icon_url='https://cdn.example/psn.png')
+    GameFactory(concept=concept, played_count=1, np_communication_id='NPWR_PSN_00')
+    item = _groups(client.get(reverse('site_suggest'), {'q': 'psn only game'}))['game']['items'][0]
+    assert item['image'] == 'https://cdn.example/psn.png'
 
 
 def test_site_suggest_badge_suggests_one_row_per_series(client):
