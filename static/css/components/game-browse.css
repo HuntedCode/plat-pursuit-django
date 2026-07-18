@@ -109,7 +109,7 @@
     color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent);
     border-left: 1px solid var(--pp-border); border-right: 1px solid var(--pp-border);
 }
-.pp-flag:has(input[name^="show_"]:checked) .pp-flag__btn--show { background: var(--flag-c); color: #08111c; }
+.pp-flag:has(input[name^="show_"]:checked) .pp-flag__btn--show { background: var(--flag-c); color: var(--pp-bg-0); }
 .pp-flag:has(input[name^="hide_"]:checked) .pp-flag__btn--hide {
     color: var(--flag-c);
     background: color-mix(in oklab, var(--flag-c) 20%, transparent);
