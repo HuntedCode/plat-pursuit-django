@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from trophies.models import (
     Badge, Trophy, UserConceptRating, Stage, ConceptGenre, ConceptTheme,
-    ConceptEngine,
+    ConceptEngine, ContractMembership,
 )
 
 
@@ -185,6 +185,26 @@ def apply_game_browse_filters(qs, form, sort_val=''):
             Stage.objects.filter(
                 concepts=OuterRef('concept_id'),
                 series_slug__in=live_slugs,
+            )
+        ))
+
+    # --- Contract filters (the game's home Job-Board contract) ---
+    # Specific jobs (a discipline selects all its jobs client-side) win over the broad "in a contract"
+    # toggle, mirroring the badge_series/in_badge pattern. Exists() keeps it whale-safe.
+    contract_jobs = form.cleaned_data.get('contract_jobs')
+    if contract_jobs:
+        qs = qs.filter(Exists(
+            ContractMembership.objects.filter(
+                concept_id=OuterRef('concept_id'),
+                contract__is_live=True,
+                contract__jobs__slug__in=contract_jobs,
+            )
+        ))
+    elif form.cleaned_data.get('in_contract'):
+        qs = qs.filter(Exists(
+            ContractMembership.objects.filter(
+                concept_id=OuterRef('concept_id'),
+                contract__is_live=True,
             )
         ))
 

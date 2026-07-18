@@ -66,6 +66,26 @@
 /* Chip with a leading glyph (Platinum Only, Hide Shovelware, In a Badge). */
 .pp-bgal__chip svg { width: 13px; height: 13px; margin-right: 5px; flex-shrink: 0; }
 
+/* Contract job drill-down: discipline groups, each a coloured "select all" chip over its job chips.
+   Everything resolves to contract_jobs slugs; --disc (set inline per group) colours the group + its chips. */
+.pp-gbrowse__discs { display: flex; flex-direction: column; gap: 11px; margin-top: 11px; }
+.pp-gbrowse__disc { display: flex; flex-direction: column; gap: 6px; }
+.pp-gbrowse__disc-all {
+    align-self: flex-start; padding: 3px 11px; border-radius: 999px; cursor: pointer;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--disc); background: color-mix(in oklab, var(--disc) 13%, transparent);
+    border: 1px solid color-mix(in oklab, var(--disc) 40%, var(--pp-border));
+    transition: background 0.15s ease;
+}
+.pp-gbrowse__disc-all:hover { background: color-mix(in oklab, var(--disc) 22%, transparent); }
+/* Job chips: discipline-tinted icon; discipline-coloured when checked (overrides the base cyan chip). */
+.pp-gbrowse__jobchip svg { color: var(--disc); }
+.pp-gbrowse__jobchip:has(input:checked) {
+    border-color: color-mix(in oklab, var(--disc) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--disc) 18%, transparent);
+    color: var(--pp-text);
+}
+
 /* Panel footer: reset / save-defaults / clear-defaults, then the IGDB attribution note. */
 .pp-gbrowse__acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .pp-gbrowse__act {

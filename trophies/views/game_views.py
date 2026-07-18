@@ -115,6 +115,23 @@ class GamesListView(HtmxListMixin, ListView):
         context['show_buggy'] = self.request.GET.get('show_buggy', '')
         context['selected_genres'] = self.request.GET.getlist('genres')
         context['selected_themes'] = self.request.GET.getlist('themes')
+        context['selected_contract_jobs'] = self.request.GET.getlist('contract_jobs')
+        context['in_contract'] = self.request.GET.get('in_contract', '')
+
+        # Discipline -> jobs roster for the contract filter drill-down. Full page only (the advanced panel
+        # isn't re-rendered on the HTMX filter swap / infinite-scroll XHR), so it's 1 bounded query (~24
+        # jobs) per page load, not per swap.
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if not self.request.htmx and not is_xhr:
+            from collections import defaultdict as _dd
+            from trophies.models import Job
+            _jobs_by_disc = _dd(list)
+            for _j in Job.objects.exclude(is_fallback=True).order_by('discipline', 'display_order', 'name'):
+                _jobs_by_disc[_j.discipline].append(_j)
+            context['contract_disciplines'] = [
+                {'slug': slug, 'label': label, 'jobs': _jobs_by_disc.get(slug, [])}
+                for slug, label in Job.DISCIPLINES
+            ]
 
         # Check if any filters are active (for badge + auto-expanding the drawer)
         context['has_advanced_filters'] = any(

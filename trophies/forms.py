@@ -49,6 +49,11 @@ class GameSearchForm(forms.Form):
     themes = forms.MultipleChoiceField(required=False, label='Themes')
     engine = forms.ChoiceField(choices=[('', 'Any Engine')], required=False, label='Game Engine')
 
+    # Contract filters (the game's home Job-Board contract): in a contract at all, and/or its contract
+    # levels one of the selected jobs (a discipline picks all its jobs client-side -> a set of job slugs).
+    in_contract = forms.BooleanField(required=False, label='In a contract')
+    contract_jobs = forms.MultipleChoiceField(required=False, label='Contract jobs')
+
     SORT_CHOICES = [
         ('alpha', 'Alphabetical'),
         ('played', 'Most Played'),
@@ -116,8 +121,12 @@ class GameSearchForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from trophies.models import Genre, Theme, GameEngine, Badge
+        from trophies.models import Genre, Theme, GameEngine, Badge, Job
         try:
+            self.fields['contract_jobs'].choices = list(
+                Job.objects.exclude(is_fallback=True)
+                .values_list('slug', 'name').order_by('discipline', 'display_order', 'name')
+            )
             self.fields['genres'].choices = list(
                 Genre.objects.values_list('id', 'name').order_by('name')
             )

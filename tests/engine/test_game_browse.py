@@ -117,6 +117,45 @@ def test_platinum_only_filter(client):
     assert 'No Platinum Here' not in content
 
 
+def test_in_contract_filter(client):
+    """?in_contract=on narrows to games whose concept has a live contract."""
+    from trophies.models import Contract, ContractMembership
+
+    with_c = GameFactory(title_name='Has Contract', title_platform=['PS5'])
+    GameFactory(title_name='No Contract', title_platform=['PS5'])
+    contract = Contract.objects.create(name='C1', slug='c1', is_live=True)
+    ContractMembership.objects.create(concept=with_c.concept, contract=contract)
+
+    content = client.get(reverse('games_list'), {'platform': 'PS5', 'in_contract': 'on'}).content.decode()
+
+    assert 'Has Contract' in content
+    assert 'No Contract' not in content
+
+
+def test_contract_jobs_filter(client):
+    """?contract_jobs=<slug> narrows to games whose contract levels that job."""
+    from trophies.models import Contract, ContractMembership, Job
+
+    jobs = list(Job.objects.exclude(is_fallback=True)[:2])
+    if len(jobs) < 2:
+        pytest.skip('needs >= 2 seeded non-fallback jobs')
+    job_a, job_b = jobs[0], jobs[1]
+    game_a = GameFactory(title_name='Job A Game', title_platform=['PS5'])
+    game_b = GameFactory(title_name='Job B Game', title_platform=['PS5'])
+    ca = Contract.objects.create(name='CA', slug='ca', is_live=True)
+    ca.jobs.add(job_a)
+    cb = Contract.objects.create(name='CB', slug='cb', is_live=True)
+    cb.jobs.add(job_b)
+    ContractMembership.objects.create(concept=game_a.concept, contract=ca)
+    ContractMembership.objects.create(concept=game_b.concept, contract=cb)
+
+    content = client.get(reverse('games_list'),
+                         {'platform': 'PS5', 'contract_jobs': job_a.slug}).content.decode()
+
+    assert 'Job A Game' in content
+    assert 'Job B Game' not in content
+
+
 def test_authenticated_progress_renders(client):
     """A signed-in user's per-game progress shows on the card."""
     profile = ProfileFactory()
@@ -194,7 +233,8 @@ def test_query_count_is_whale_safe(client, django_assert_max_num_queries):
         stage.concepts.add(g.concept)
     url, params = _url()
 
-    # Page (count + 30 rows) + rating/user maps + the badge (2) + contract (1) batched maps + session/misc.
-    with django_assert_max_num_queries(18):
+    # Page (count + 30 rows) + rating/user maps + badge (2) + contract (1) batched maps + the contract
+    # discipline roster (1, full page) + session/misc. Bounded, not per-card.
+    with django_assert_max_num_queries(20):
         resp = client.get(url, params)
     assert resp.status_code == 200

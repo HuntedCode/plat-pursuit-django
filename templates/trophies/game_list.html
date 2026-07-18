@@ -50,6 +50,11 @@
 
     {% include 'partials/ad_unit.html' with ad_slot="5270350613" %}
 
+    {% comment %} Job-icon <symbol> sprite, emitted ONCE (before the first job_icon_use -- the filter panel's
+    job chips + the cards' contract bands both <use> it, rather than re-inlining glyphs). Outside
+    #browse-results so it survives filter swaps + serves infinite-scroll-appended cards. {% endcomment %}
+    {% job_icon_sprite %}
+
     {% comment %} Toolbar: quiet chrome. Primary bar (search + sort + Lucky + Filters toggle) with the big
     filter panel tucked into a collapsible drawer. Filters auto-apply via browse-filters.js (HTMX swap); no
     Apply button. The bare-/games/ dispatch redirect (saved defaults) is preserved by the view. {% endcomment %}
@@ -147,6 +152,40 @@
                         {% include 'partials/browse/badge_filter.html' %}
                     </div>
                 </div>
+
+                {# ── Contract (Job-Board pursuit hook) ── #}
+                {% if contract_disciplines %}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+                        Contract
+                    </div>
+                    <div class="pp-gbrowse__fchips">
+                        <label class="pp-bgal__chip pp-bgal__chip--sec">
+                            <input type="checkbox" name="in_contract" value="on" {% if in_contract == 'on' %}checked{% endif %} />
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+                            In a contract
+                        </label>
+                    </div>
+                    {% comment %} Drill-down: a per-discipline "select all" (toggles its jobs client-side) over
+                    discipline-coloured job chips. All resolve to contract_jobs slugs; the backend ORs them. {% endcomment %}
+                    <div class="pp-gbrowse__discs">
+                        {% for d in contract_disciplines %}
+                        <div class="pp-gbrowse__disc" style="--disc: var(--disc-{{ d.slug }});">
+                            <button type="button" class="pp-gbrowse__disc-all" data-disc-all="{{ d.slug }}">{{ d.label }}</button>
+                            <div class="pp-gbrowse__fchips">
+                                {% for j in d.jobs %}
+                                <label class="pp-bgal__chip pp-gbrowse__jobchip" data-disc="{{ d.slug }}">
+                                    <input type="checkbox" name="contract_jobs" value="{{ j.slug }}" {% if j.slug in selected_contract_jobs %}checked{% endif %} />
+                                    {% job_icon_use j.icon '' %}{{ j.name }}
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
 
                 {# ── Community flags ── #}
                 <div class="pp-gbrowse__fsec">
@@ -279,11 +318,6 @@
     {# Badge picker modal (outside the form to avoid interfering with it). #}
     {% include 'partials/browse/badge_picker_modal.html' %}
 
-    {% comment %} Job-icon <symbol> sprite, emitted ONCE so each card's contract band references glyphs via
-    <use> (job_icon_use) instead of re-inlining them 30x6 times. Outside #browse-results so it survives
-    filter swaps + is available to infinite-scroll-appended cards. {% endcomment %}
-    {% job_icon_sprite %}
-
     {# ── Browse results (HTMX filter-swap target = just the grid) ── #}
     <div id="browse-results">
         {% include 'trophies/partials/game_list/browse_results.html' %}
@@ -345,6 +379,19 @@
         toggle.addEventListener('click', function () { setPanel(panel.hasAttribute('hidden')); });
         form.addEventListener('change', refreshBadge);
         form.addEventListener('input', refreshBadge);
+
+        // Contract drill-down: a discipline "select all" toggles every job chip in that discipline, then
+        // fires one bubbling change on a chip so browse-filters.js auto-applies (+ the settle + count refresh).
+        form.querySelectorAll('[data-disc-all]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var disc = btn.getAttribute('data-disc-all');
+                var boxes = form.querySelectorAll('.pp-gbrowse__jobchip[data-disc="' + disc + '"] input[type="checkbox"]');
+                if (!boxes.length) { return; }
+                var turnOn = Array.prototype.some.call(boxes, function (b) { return !b.checked; });
+                boxes.forEach(function (b) { b.checked = turnOn; });
+                boxes[0].dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        });
 
         // ── Infinite scroll + staggered card reveal (mirrors the Badges gallery). browse-filters.js owns the
         // filtering; this owns the scroll append, the card reveal, and the filter/sort settle dim. ──
