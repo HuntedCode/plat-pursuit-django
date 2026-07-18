@@ -80,7 +80,7 @@
 .pp-bgal__search-kbd, .pp-bgal__search-clear, .pp-bgal__search-spin { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
 .pp-bgal__search-kbd {
     display: inline-flex; align-items: center; justify-content: center; min-width: 15px; height: 15px; padding: 0 3px;
-    font: 700 10px/1 var(--pp-font, inherit); color: var(--pp-text-mute); pointer-events: none;
+    font-size: 9px; font-weight: 700; line-height: 1; color: var(--pp-text-mute); pointer-events: none;
     background: color-mix(in oklab, var(--pp-text) 8%, transparent); border: 1px solid var(--pp-border); border-radius: 4px;
 }
 .pp-bgal__search-clear {
