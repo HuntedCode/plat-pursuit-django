@@ -150,6 +150,13 @@
                             Hide Shovelware
                         </label>
                         {% include 'partials/browse/badge_filter.html' %}
+                        {% if contract_disciplines %}
+                        <label class="pp-bgal__chip pp-bgal__chip--sec">
+                            <input type="checkbox" name="in_contract" value="on" {% if in_contract == 'on' %}checked{% endif %} />
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+                            In a contract
+                        </label>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -159,13 +166,6 @@
                     <div class="pp-gbrowse__flabel">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
                         Contract
-                    </div>
-                    <div class="pp-gbrowse__fchips">
-                        <label class="pp-bgal__chip pp-bgal__chip--sec">
-                            <input type="checkbox" name="in_contract" value="on" {% if in_contract == 'on' %}checked{% endif %} />
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-                            In a contract
-                        </label>
                     </div>
                     {% comment %} Job drill-down: a discipline chip opens a dropdown of its jobs (the Career
                     board's rp-disc popover, reused for consistency). Each job is a checkbox; a per-discipline
