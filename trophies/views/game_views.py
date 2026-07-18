@@ -207,18 +207,36 @@ class GamesListView(HtmxListMixin, ListView):
                 }
             context['badge_map'] = badge_map
 
-            # concept -> home contract (live only) + its jobs (1 query + jobs prefetch).
+            # concept -> home contract (live only) + its jobs (1 query + jobs prefetch). Jobs carry their
+            # Lucide icon + discipline (icons are discipline-coloured on the card, mirroring the badge-detail
+            # stage card); the band gets a subtle discipline-tinted background + an accent for its border.
             contract_map = {}
             for cm in (
                 ContractMembership.objects.filter(concept_id__in=concept_ids, contract__is_live=True)
                 .select_related('contract').prefetch_related('contract__jobs')
             ):
                 ct = cm.contract
+                jobs = list(ct.jobs.all())
+                discs = []
+                for j in jobs:
+                    if j.discipline and j.discipline not in discs:
+                        discs.append(j.discipline)
+                if len(discs) >= 2:
+                    stops = ', '.join(
+                        f'color-mix(in oklab, var(--disc-{d}) 18%, var(--pp-bg-2))' for d in discs
+                    )
+                    band_bg = f'linear-gradient(120deg, {stops})'
+                elif discs:
+                    band_bg = f'color-mix(in oklab, var(--disc-{discs[0]}) 15%, var(--pp-bg-2))'
+                else:
+                    band_bg = ''
                 contract_map[cm.concept_id] = {
                     'name': ct.name,
                     'slug': ct.slug,
                     'xp': ct.xp_total_override or CONTRACT_XP_TOTAL,
-                    'jobs': [{'name': j.name, 'color': j.color} for j in ct.jobs.all()],
+                    'jobs': [{'name': j.name, 'icon': j.icon, 'discipline': j.discipline} for j in jobs[:6]],
+                    'band_bg': band_bg,
+                    'accent': f'var(--disc-{discs[0]})' if discs else 'var(--pp-secondary)',
                 }
             context['contract_map'] = contract_map
 

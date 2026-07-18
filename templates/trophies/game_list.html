@@ -2,6 +2,7 @@
 {% load static %}
 {% load query_tags %}
 {% load humanize %}
+{% load job_icons %}
 {% block title %}Browse Games{% endblock %}
 
 {% block content %}
@@ -277,6 +278,11 @@
 
     {# Badge picker modal (outside the form to avoid interfering with it). #}
     {% include 'partials/browse/badge_picker_modal.html' %}
+
+    {% comment %} Job-icon <symbol> sprite, emitted ONCE so each card's contract band references glyphs via
+    <use> (job_icon_use) instead of re-inlining them 30x6 times. Outside #browse-results so it survives
+    filter swaps + is available to infinite-scroll-appended cards. {% endcomment %}
+    {% job_icon_sprite %}
 
     {# ── Browse results (HTMX filter-swap target = just the grid) ── #}
     <div id="browse-results">

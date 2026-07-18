@@ -33,10 +33,17 @@
 .pp-gcard__art--placeholder { object-fit: contain; padding: 14px; opacity: 0.85; }
 @media (prefers-reduced-motion: reduce) { .pp-gcard__art { transition: none; } }
 
-/* Viewer's progress along the cover's bottom edge; platinum-tinted once earned (the "Plat" fact echoes it). */
-.pp-gcard__bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0, 0, 0, 0.45); z-index: 2; }
-.pp-gcard__barfill { display: block; height: 100%; background: var(--pp-primary); }
-.pp-gcard__barfill.is-plat { background: var(--color-trophy-platinum); }
+/* Viewer's progress along the cover's bottom edge. Fill colour encodes completion state (cool = you have
+   the plat, warm/muted = still hunting or none): platinum+100% -> platinum cyan; plat earned but <100%
+   (post-plat DLC) -> muted teal; 100% w/o a plat -> green; a plat available but unearned -> amber (the
+   hunt); in progress w/o a plat -> slate. */
+.pp-gcard__bar { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: rgba(0, 0, 0, 0.45); z-index: 2; }
+.pp-gcard__barfill { display: block; height: 100%; }
+.pp-gcard__barfill--plat    { background: var(--color-trophy-platinum); }
+.pp-gcard__barfill--platdlc { background: color-mix(in oklab, var(--color-trophy-platinum) 58%, #123540); }
+.pp-gcard__barfill--full    { background: var(--pp-success); }
+.pp-gcard__barfill--chase   { background: var(--pp-accent); }
+.pp-gcard__barfill--prog    { background: color-mix(in oklab, var(--pp-info) 52%, var(--pp-text-mute)); }
 
 /* Quick-add to a list (signed in): a small info-tinted circle, revealed on hover (always visible on touch). */
 .pp-gcard__add {
@@ -61,8 +68,10 @@
 }
 @media (hover: hover) { .pp-gcard:hover .pp-gcard__title { color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-text)); } }
 
-/* Facts line: rating + colored B/S/G/P trophy counts + plat availability. Wraps at narrow widths. */
-.pp-gcard__facts { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; font-size: 11px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+/* Facts line: rating (left) + colored B/S/G/P trophy counts (center) + plat availability (right). */
+.pp-gcard__facts { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; font-size: 11px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.pp-gcard__facts > :first-child { justify-self: start; }
+.pp-gcard__facts > :last-child { justify-self: end; }
 .pp-gcard__fact { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; color: var(--pp-text); }
 .pp-gcard__star { width: 12px; height: 12px; color: var(--pp-warning); }
 .pp-gcard__fact--none { color: var(--pp-text-mute); font-weight: 400; }
@@ -81,17 +90,18 @@
 .pp-gcard__badges--empty { background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border-style: dashed; }
 .pp-gcard__badges--empty > svg { color: var(--pp-text-mute); }
 
-/* ── Pursuer hook: contract chip (job pips + name + XP). Display-only here (the card is the link); the
-   contract is actionable on the game detail page. Muted dashed placeholder when there's no contract. ── */
-.pp-gcard__ctr { display: flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: 7px; background: color-mix(in oklab, var(--pp-secondary) 12%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--pp-secondary) 30%, var(--pp-border)); }
-.pp-gcard__ctr > svg { width: 13px; height: 13px; color: var(--pp-secondary); flex-shrink: 0; }
-.pp-gcard__ctr-pips { display: inline-flex; gap: 2px; flex-shrink: 0; }
-.pp-gcard__ctr-pip { width: 6px; height: 6px; border-radius: 50%; }
-.pp-gcard__ctr-label { font-size: 10.5px; font-weight: 600; color: var(--pp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
-.pp-gcard__ctr-xp { font-size: 10px; font-weight: 800; color: var(--pp-secondary); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+/* ── Pursuer hook: contract chip -- a row of the contract's job icons (each in its discipline colour,
+   mirroring the badge-detail stage card) over a subtle discipline-tinted band, + total XP. No name (the
+   icons + XP carry it; contracts cap at 6 jobs so they all fit). Display-only (the card is the link).
+   Muted dashed placeholder when there's no contract. --ctr-accent + the band background come in inline. ── */
+.pp-gcard__ctr { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 7px; background: var(--pp-bg-2); border: 1px solid color-mix(in oklab, var(--ctr-accent, var(--pp-secondary)) 34%, var(--pp-border)); }
+.pp-gcard__ctr-jobs { display: inline-flex; align-items: center; gap: 3px; flex: 1; min-width: 0; }
+.pp-gcard__ctr-job { display: inline-flex; width: 15px; height: 15px; flex-shrink: 0; }
+.pp-gcard__ctr-job svg { width: 100%; height: 100%; }
+.pp-gcard__ctr-xp { font-size: 10px; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .pp-gcard__ctr--empty { background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px dashed var(--pp-border); }
-.pp-gcard__ctr--empty > svg { color: var(--pp-text-mute); }
-.pp-gcard__ctr--empty .pp-gcard__ctr-label { color: var(--pp-text-mute); font-weight: 500; flex: 0 1 auto; }
+.pp-gcard__ctr--empty > svg { width: 13px; height: 13px; color: var(--pp-text-mute); flex-shrink: 0; }
+.pp-gcard__ctr-label { font-size: 10.5px; font-weight: 500; color: var(--pp-text-mute); }
 
 /* Empty state (spans the grid). Reuses the shared ppResultsEmptyIn fade (browse-gallery.css). */
 .pp-gcard-empty { grid-column: 1 / -1; text-align: center; color: var(--pp-text-mute); padding: 48px 16px; }

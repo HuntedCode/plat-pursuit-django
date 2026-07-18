@@ -1,4 +1,4 @@
-{% load custom_filters %}
+{% load custom_filters job_icons %}
 {% for game in object_list %}
 {% with user_pg=user_game_map|dict_get:game.id ratings=rating_map|dict_get:game.concept_id %}
     <a href="{% url 'game_detail' game.np_communication_id %}" class="pp-gcard" data-gcard>
@@ -19,8 +19,11 @@
             </button>
             {% endif %}
 
+            {% comment %} Progress fill colour encodes completion state (5 states): plat+100% = platinum;
+            plat earned but <100% (post-plat DLC) = muted teal; 100% w/o a plat = green; a plat available but
+            not yet earned = amber (the hunt); in progress w/o a plat = slate. {% endcomment %}
             {% if user_pg and user_pg.progress > 0 %}
-            <span class="pp-gcard__bar"><span class="pp-gcard__barfill{% if user_pg.has_plat %} is-plat{% endif %}" style="width: {{ user_pg.progress }}%"></span></span>
+            <span class="pp-gcard__bar"><span class="pp-gcard__barfill pp-gcard__barfill--{% if user_pg.has_plat and user_pg.progress == 100 %}plat{% elif user_pg.has_plat %}platdlc{% elif user_pg.progress == 100 %}full{% elif game.defined_trophies.platinum %}chase{% else %}prog{% endif %}" style="width: {{ user_pg.progress }}%"></span></span>
             {% endif %}
         </div>
 
@@ -64,10 +67,8 @@
             {% endif %}
 
             {% if cinfo %}
-            <span class="pp-gcard__ctr" title="Contract: {{ cinfo.name }} &middot; {{ cinfo.xp }} XP">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-                <span class="pp-gcard__ctr-pips">{% for job in cinfo.jobs|slice:":4" %}<span class="pp-gcard__ctr-pip" style="background: {{ job.color|default:'var(--pp-secondary)' }}"></span>{% endfor %}</span>
-                <span class="pp-gcard__ctr-label">{{ cinfo.name }}</span>
+            <span class="pp-gcard__ctr" style="{% if cinfo.band_bg %}background: {{ cinfo.band_bg }};{% endif %} --ctr-accent: {{ cinfo.accent }};" title="Contract: {{ cinfo.name }} &middot; {{ cinfo.xp }} XP">
+                <span class="pp-gcard__ctr-jobs">{% for job in cinfo.jobs %}<span class="pp-gcard__ctr-job" style="color: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon_use job.icon 'w-full h-full' %}</span>{% endfor %}</span>
                 <span class="pp-gcard__ctr-xp">{{ cinfo.xp }} XP</span>
             </span>
             {% else %}
