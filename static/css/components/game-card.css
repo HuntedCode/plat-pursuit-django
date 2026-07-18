@@ -54,10 +54,15 @@
 .pp-gcard__cstats {
     display: flex; align-items: center; justify-content: space-between; gap: 6px;
     padding-top: 6px; border-top: 1px solid var(--pp-divider);
-    font-size: 10px; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums;
+    font-size: 10.5px; font-weight: 700; color: var(--pp-text-dim); font-variant-numeric: tabular-nums;
 }
-.pp-gcard__cstat { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
-.pp-gcard__cstat svg { width: 11px; height: 11px; flex-shrink: 0; color: var(--pp-text-mute); }
+.pp-gcard__cstat { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.pp-gcard__cstat svg { width: 13px; height: 13px; flex-shrink: 0; }
+/* Per-stat icon tints tie to the progress-bar state palette (info / platinum / success / accent). */
+.pp-gcard__cstat--players svg { color: var(--pp-info); }
+.pp-gcard__cstat--plat svg { color: var(--color-trophy-platinum); }
+.pp-gcard__cstat--full svg { color: var(--pp-success); }
+.pp-gcard__cstat--avg svg { color: var(--pp-accent); }
 
 /* Quick-add to a list (signed in): a small info-tinted circle, revealed on hover (always visible on touch). */
 .pp-gcard__add {
