@@ -100,10 +100,13 @@ def home_contract_for_concept(concept):
 def _detect_tiers(profile, contract, member_ids):
     """(platinum_reached, full_reached) for this profile on this Contract.
 
-    Platinum = the user earned the platinum on any member concept. 100% = any member
-    concept (or a fully-cleared bundle) at progress 100. Completing any one version
-    variant counts. Collapsed to two bounded `.exists()` queries over the member set
-    (+ one per bundle) so the sync hot path doesn't fan out a query per concept.
+    Platinum = the user earned the platinum on any member concept, OR fully platinum'd
+    a satisfier bundle (every concept in the bundle platted -- e.g. a multi-game
+    collection whose one platinum stands in for the games it covers). 100% = any member
+    concept, OR a fully-cleared bundle, at progress 100. Completing any one version
+    variant counts. Bounded to two `.exists()` queries over the member set plus up to
+    two set-membership queries per bundle, short-circuiting once both tiers are reached,
+    so the sync hot path doesn't fan out a query per concept.
     """
     platinum_reached = full_reached = False
     if member_ids:
@@ -114,19 +117,30 @@ def _detect_tiers(profile, contract, member_ids):
         full_reached = ProfileGame.objects.filter(
             profile=profile, game__concept_id__in=member_ids, progress=100,
         ).exists()
-    if not full_reached:
+    if not (platinum_reached and full_reached):
         for bundle in contract.bundles.all():
+            if platinum_reached and full_reached:
+                break
             bundle_ids = set(bundle.concepts.values_list('id', flat=True))
             if not bundle_ids:
                 continue
-            completed = set(
-                ProfileGame.objects
-                .filter(profile=profile, game__concept_id__in=bundle_ids, progress=100)
-                .values_list('game__concept_id', flat=True)
-            )
-            if bundle_ids <= completed:
-                full_reached = True
-                break
+            if not full_reached:
+                completed = set(
+                    ProfileGame.objects
+                    .filter(profile=profile, game__concept_id__in=bundle_ids, progress=100)
+                    .values_list('game__concept_id', flat=True)
+                )
+                if bundle_ids <= completed:
+                    full_reached = True
+            if not platinum_reached:
+                platted = set(
+                    EarnedTrophy.objects
+                    .filter(profile=profile, earned=True, trophy__trophy_type='platinum',
+                            trophy__game__concept_id__in=bundle_ids)
+                    .values_list('trophy__game__concept_id', flat=True)
+                )
+                if bundle_ids <= platted:
+                    platinum_reached = True
     return platinum_reached, full_reached
 
 
