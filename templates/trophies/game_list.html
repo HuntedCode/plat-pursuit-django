@@ -167,17 +167,24 @@
                             In a contract
                         </label>
                     </div>
-                    {% comment %} Drill-down: a per-discipline "select all" (toggles its jobs client-side) over
-                    discipline-coloured job chips. All resolve to contract_jobs slugs; the backend ORs them. {% endcomment %}
-                    <div class="pp-gbrowse__discs">
+                    {% comment %} Job drill-down: a discipline chip opens a dropdown of its jobs (the Career
+                    board's rp-disc popover, reused for consistency). Each job is a checkbox; a per-discipline
+                    "All ... jobs" head selects the group. All resolve to contract_jobs slugs (backend ORs). {% endcomment %}
+                    <div class="rp-discs pp-gbrowse__discs">
                         {% for d in contract_disciplines %}
-                        <div class="pp-gbrowse__disc" style="--disc: var(--disc-{{ d.slug }});">
-                            <button type="button" class="pp-gbrowse__disc-all" data-disc-all="{{ d.slug }}">{{ d.label }}</button>
-                            <div class="pp-gbrowse__fchips">
+                        <div class="rp-disc" style="--disc: var(--disc-{{ d.slug }});">
+                            <button type="button" class="rp-chip rp-chip--disc rp-disc__trigger" data-disc-trigger="{{ d.slug }}" aria-haspopup="true" aria-expanded="false">
+                                <span class="rp-disc__name">{{ d.label }}</span>
+                                <span class="rp-disc__count" data-disc-count="{{ d.slug }}" hidden>0</span>
+                                <svg class="rp-disc__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                            </button>
+                            <div class="rp-pop" role="group" aria-label="{{ d.label }} jobs" data-disc-pop="{{ d.slug }}" hidden>
+                                <button type="button" class="rp-pop__item rp-pop__item--head" data-disc-all="{{ d.slug }}">All {{ d.label }} jobs</button>
                                 {% for j in d.jobs %}
-                                <label class="pp-bgal__chip pp-gbrowse__jobchip" data-disc="{{ d.slug }}">
-                                    <input type="checkbox" name="contract_jobs" value="{{ j.slug }}" {% if j.slug in selected_contract_jobs %}checked{% endif %} />
-                                    {% job_icon_use j.icon '' %}{{ j.name }}
+                                <label class="rp-pop__item" data-disc="{{ d.slug }}">
+                                    {% job_icon_use j.icon 'rp-pop__ico' %}
+                                    <span>{{ j.name }}</span>
+                                    <input type="checkbox" name="contract_jobs" value="{{ j.slug }}" class="sr-only" {% if j.slug in selected_contract_jobs %}checked{% endif %} />
                                 </label>
                                 {% endfor %}
                             </div>
@@ -380,17 +387,66 @@
         form.addEventListener('change', refreshBadge);
         form.addEventListener('input', refreshBadge);
 
-        // Contract drill-down: a discipline "select all" toggles every job chip in that discipline, then
-        // fires one bubbling change on a chip so browse-filters.js auto-applies (+ the settle + count refresh).
-        form.querySelectorAll('[data-disc-all]').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                var disc = btn.getAttribute('data-disc-all');
-                var boxes = form.querySelectorAll('.pp-gbrowse__jobchip[data-disc="' + disc + '"] input[type="checkbox"]');
+        // Contract discipline dropdowns (the Career board's rp-disc popovers, server-side checkbox model):
+        // a discipline chip opens a dropdown of its jobs (checkboxes); a count rides the chip; a per-
+        // discipline "All ... jobs" head toggles the group. Selecting a job auto-applies via browse-filters.js.
+        function jobBoxes(disc) {
+            return form.querySelectorAll('.rp-pop__item[data-disc="' + disc + '"] input[type="checkbox"]');
+        }
+        function updateDisc(disc) {
+            var boxes = jobBoxes(disc), n = 0;
+            boxes.forEach(function (b) {
+                b.closest('.rp-pop__item').classList.toggle('is-selected', b.checked);
+                if (b.checked) { n += 1; }
+            });
+            var badge = form.querySelector('[data-disc-count="' + disc + '"]');
+            if (badge) { badge.textContent = n; badge.hidden = (n === 0); }
+            var trig = form.querySelector('[data-disc-trigger="' + disc + '"]');
+            if (trig) { trig.classList.toggle('is-active', n > 0); }
+        }
+        function closePops(except) {
+            form.querySelectorAll('[data-disc-pop]').forEach(function (pop) {
+                if (pop === except || pop.hidden) { return; }
+                pop.hidden = true;
+                var t = form.querySelector('[data-disc-trigger="' + pop.getAttribute('data-disc-pop') + '"]');
+                if (t) { t.setAttribute('aria-expanded', 'false'); }
+            });
+        }
+        form.querySelectorAll('[data-disc-trigger]').forEach(function (trig) {
+            var disc = trig.getAttribute('data-disc-trigger');
+            trig.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var pop = form.querySelector('[data-disc-pop="' + disc + '"]');
+                var willOpen = pop.hidden;
+                closePops();
+                if (willOpen) {
+                    pop.hidden = false;
+                    trig.setAttribute('aria-expanded', 'true');
+                    pop.classList.remove('rp-pop--left');
+                    if (pop.getBoundingClientRect().right > window.innerWidth - 12) { pop.classList.add('rp-pop--left'); }
+                }
+            });
+            updateDisc(disc);   // reflect the server-rendered selected state
+        });
+        form.querySelectorAll('[data-disc-all]').forEach(function (head) {
+            head.addEventListener('click', function () {
+                var disc = head.getAttribute('data-disc-all');
+                var boxes = jobBoxes(disc);
                 if (!boxes.length) { return; }
                 var turnOn = Array.prototype.some.call(boxes, function (b) { return !b.checked; });
                 boxes.forEach(function (b) { b.checked = turnOn; });
-                boxes[0].dispatchEvent(new Event('change', { bubbles: true }));
+                updateDisc(disc);
+                boxes[0].dispatchEvent(new Event('change', { bubbles: true }));   // auto-apply via browse-filters.js
             });
+        });
+        form.querySelectorAll('.rp-pop__item input[type="checkbox"]').forEach(function (cb) {
+            cb.addEventListener('change', function () {
+                var item = cb.closest('.rp-pop__item');
+                if (item) { updateDisc(item.getAttribute('data-disc')); }
+            });
+        });
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest || !e.target.closest('.rp-disc')) { closePops(); }
         });
 
         // ── Infinite scroll + staggered card reveal (mirrors the Badges gallery). browse-filters.js owns the
