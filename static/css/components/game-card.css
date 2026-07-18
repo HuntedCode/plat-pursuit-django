@@ -29,10 +29,8 @@
 @media (prefers-reduced-motion: reduce) { .pp-gcard { transition: border-color 0.18s ease, box-shadow 0.18s ease; } .pp-gcard:active { transform: none; } }
 .pp-gcard:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
-/* Cover: IGDB-first via display_image_url; real art crops from the top, the generic placeholder is contained.
-   container-type lets the community-stats badge drop its least-critical stat when the cover itself is narrow
-   (cover width barely changes across the grid's 2->6 columns, so a viewport media query wouldn't help). */
-.pp-gcard__cover { position: relative; aspect-ratio: 3 / 4; overflow: hidden; container-type: inline-size; background: color-mix(in oklab, var(--pp-text) 3%, var(--pp-bg-2)); }
+/* Cover: IGDB-first via display_image_url; real art crops from the top, the generic placeholder is contained. */
+.pp-gcard__cover { position: relative; aspect-ratio: 3 / 4; overflow: hidden; background: color-mix(in oklab, var(--pp-text) 3%, var(--pp-bg-2)); }
 .pp-gcard__cover img { width: 100%; height: 100%; }
 .pp-gcard__art { object-fit: cover; object-position: top; transition: transform 0.3s ease; }
 .pp-gcard__art--placeholder { object-fit: contain; padding: 14px; opacity: 0.85; }
@@ -50,27 +48,16 @@
 .pp-gcard__barfill--chase   { background: var(--pp-accent); }
 .pp-gcard__barfill--prog    { background: color-mix(in oklab, var(--pp-info) 52%, var(--pp-text-mute)); }
 
-/* Community stats badge: bottom-left over the cover, above the progress bar. Token dark scrim + text-shadow
-   keep the numerals legible over light AND dark art; icons stay neutral (one accent per surface -- only Plats,
-   the brand signal, gets the platinum tint). Tabular numerals match .pp-gcard__ctr-xp. */
+/* Community stats footer: a quiet bottom row of game-community facts (players / plats earned / 100%
+   completions / avg completion) on the solid card body -- no scrim/shadow needed. Neutral for now; a thin
+   divider sets it apart from the pursuer-hook chips above. Tabular numerals match the facts row. */
 .pp-gcard__cstats {
-    position: absolute; left: 6px; bottom: 8px; z-index: 2;
-    display: inline-flex; align-items: center; gap: 6px; max-width: calc(100% - 12px);
-    padding: 3px 7px; border-radius: var(--pp-radius-md);
-    background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 0 0 1px color-mix(in oklab, var(--pp-text) 9%, transparent);
-    font-size: 10px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; color: var(--pp-text);
-    font-variant-numeric: tabular-nums; text-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.55);
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    padding-top: 6px; border-top: 1px solid var(--pp-divider);
+    font-size: 10px; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums;
 }
-.pp-gcard__cstat { display: inline-flex; align-items: center; gap: 2.5px; white-space: nowrap; }
-.pp-gcard__cstat svg { width: 10px; height: 10px; flex-shrink: 0; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5)); }
-/* Per-stat icon tints tie to the progress-bar state colours (info / platinum / success / accent). */
-.pp-gcard__cstat--players svg { color: var(--pp-info); }
-.pp-gcard__cstat--plat svg { color: var(--color-trophy-platinum); }
-.pp-gcard__cstat--full svg { color: var(--pp-success); }
-.pp-gcard__cstat--avg svg { color: var(--pp-accent); }
-/* Narrow covers: drop the least-critical stat (avg completion) so the badge never overruns the art. */
-@container (max-width: 172px) { .pp-gcard__cstat--avg { display: none; } }
+.pp-gcard__cstat { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.pp-gcard__cstat svg { width: 11px; height: 11px; flex-shrink: 0; color: var(--pp-text-mute); }
 
 /* Quick-add to a list (signed in): a small info-tinted circle, revealed on hover (always visible on touch). */
 .pp-gcard__add {
