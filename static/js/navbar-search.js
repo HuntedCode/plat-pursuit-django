@@ -117,9 +117,10 @@ document.addEventListener('DOMContentLoaded', () => {
         a.id = 'navsearch-opt-' + i;
         a.setAttribute('role', 'option');
 
-        // Leading media: avatar (profile) or cover (game) when present, else a type glyph.
-        if (type === 'profile' && item.avatar_url) { a.appendChild(thumb(item.avatar_url)); }
-        else if (type === 'game' && item.image) { a.appendChild(thumb(item.image)); }
+        // Leading media: real artwork when we have it (game/franchise cover, badge medallion,
+        // hunter avatar), else the per-type glyph.
+        const art = item.image || (type === 'profile' ? item.avatar_url : '');
+        if (art) { a.appendChild(thumb(art)); }
         else { a.appendChild(glyphPlaceholder(type)); }
 
         const name = document.createElement('b');

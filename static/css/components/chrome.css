@@ -169,8 +169,12 @@
 .pp-navsearch__group:not(:first-child) { margin-top: 2px; padding-top: 8px; border-top: 1px solid var(--pp-divider); }
 /* Franchise/game/badge media read as objects, not avatars: rounded square instead of a circle. */
 .pp-navsearch__opt--game img, .pp-navsearch__opt--game .pp-navsearch__ph,
-.pp-navsearch__opt--badge .pp-navsearch__ph,
-.pp-navsearch__opt--franchise .pp-navsearch__ph { border-radius: var(--pp-radius-sm); }
+.pp-navsearch__opt--badge img, .pp-navsearch__opt--badge .pp-navsearch__ph,
+.pp-navsearch__opt--franchise img, .pp-navsearch__opt--franchise .pp-navsearch__ph { border-radius: var(--pp-radius-sm); }
+/* Portrait cover art: fill the box, anchored to the top so the game logo survives the crop. */
+.pp-navsearch__opt--game img, .pp-navsearch__opt--franchise img { object-fit: cover; object-position: top; }
+/* Badge medallions are transparent custom shapes: contain within the box, don't crop. */
+.pp-navsearch__opt--badge img { object-fit: contain; padding: 2px; }
 .pp-navsearch__opt--game .pp-navsearch__ph { color: var(--pp-info); }
 .pp-navsearch__opt--badge .pp-navsearch__ph { color: var(--color-trophy-platinum); }
 .pp-navsearch__opt--franchise .pp-navsearch__ph { color: var(--pp-accent); }

@@ -13,6 +13,7 @@ from django_ratelimit.decorators import ratelimit
 
 from core.services.tracking import track_site_event
 from trophies.psn_manager import PSNManager
+from trophies.services.game_grouping_service import representative_concept_icon_subquery
 from trophies.util_modules.cache import redis_client
 from ..models import Badge, Concept, Franchise, Game, Profile
 
@@ -188,6 +189,17 @@ class ProfileSuggestView(View):
         return JsonResponse({'results': results})
 
 
+def _badge_main_image(badge):
+    """The badge medallion's main image URL: its own art, else the inherited base-badge
+    art, else '' (client falls back to the badge glyph). Mirrors Badge.get_badge_layers()
+    and the Discord notifier -- the base_badge is select_related by the caller."""
+    if badge.badge_image:
+        return badge.badge_image.url
+    if badge.base_badge and badge.base_badge.badge_image:
+        return badge.base_badge.badge_image.url
+    return ''
+
+
 class SiteSuggestView(View):
     """
     Universal navbar typeahead. Suggests Games, Badges, Franchises, and tracked
@@ -275,37 +287,45 @@ class SiteSuggestView(View):
         # series_slug is nullable/blank; a null/'' slug would raise NoReverseMatch on
         # badge_detail and 500 the whole endpoint, so exclude those (as the rest of the
         # codebase does) -- an unlinkable badge can't be a suggestion anyway.
-        rows = (
+        # Fetch instances (not .values()) so the medallion image URL resolves through the
+        # ImageField storage; select_related the base_badge for the inherited-icon fallback.
+        badges = (
             Badge.objects.live()
             .filter(name__icontains=q, tier=1)
             .exclude(series_slug__isnull=True).exclude(series_slug='')
-            .order_by('name')
-            .values('name', 'series_slug')[:self.PER_GROUP]
+            .select_related('base_badge')
+            .order_by('name')[:self.PER_GROUP]
         )
         items = [
             {
-                'label': r['name'],
-                'url': reverse('badge_detail', kwargs={'series_slug': r['series_slug']}),
+                'label': b.name,
+                'image': _badge_main_image(b),
+                'url': reverse('badge_detail', kwargs={'series_slug': b.series_slug}),
             }
-            for r in rows
+            for b in badges
         ]
         return {'type': 'badge', 'label': 'Badges', 'items': items}
 
     def _franchises(self, q):
         # source_type disambiguates same-named franchise vs collection ("Series").
         # slug is unique + non-null, but guard the empty case for parity so a stray
-        # blank slug can't NoReverseMatch the endpoint.
+        # blank slug can't NoReverseMatch the endpoint. `cover` = a member game's PSN
+        # portrait cover (the same representative-cover subquery the franchise browse
+        # cards use); misses fall back to the type glyph client-side.
         rows = (
             Franchise.objects
             .filter(name__icontains=q)
             .exclude(slug='')
+            .annotate(cover=representative_concept_icon_subquery(
+                through_path='concept__concept_franchises__franchise'))
             .order_by('name')
-            .values('name', 'slug', 'source_type')[:self.PER_GROUP]
+            .values('name', 'slug', 'source_type', 'cover')[:self.PER_GROUP]
         )
         items = [
             {
                 'label': r['name'],
                 'sublabel': 'Series' if r['source_type'] == 'collection' else 'Franchise',
+                'image': r['cover'] or '',
                 'url': reverse('franchise_detail', kwargs={'slug': r['slug']}),
             }
             for r in rows

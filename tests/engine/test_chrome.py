@@ -166,6 +166,7 @@ def test_site_suggest_groups_all_entity_types(client):
     assert groups['game']['items'][0]['label'] == 'Elden Ring'
     assert groups['game']['items'][0]['url'] == reverse('game_detail', kwargs={'np_communication_id': 'NPWR_ELDEN_00'})
     assert groups['badge']['items'][0]['url'] == reverse('badge_detail', kwargs={'series_slug': 'elden-lord'})
+    assert groups['badge']['items'][0]['image'] == ''    # no medallion art on this test badge -> glyph fallback
     assert groups['franchise']['items'][0]['url'] == reverse('franchise_detail', kwargs={'slug': 'elden-ring-fr'})
     assert groups['profile']['items'][0]['label'] == 'eldenlord'
     assert groups['profile']['items'][0]['plats'] == 42
@@ -221,6 +222,17 @@ def test_site_suggest_franchise_sublabel_distinguishes_series(client):
     Franchise.objects.create(igdb_id=2, name='Spider-Verse', slug='sv-fran', source_type='franchise')
     subs = {i['sublabel'] for i in _groups(client.get(reverse('site_suggest'), {'q': 'spider'}))['franchise']['items']}
     assert subs == {'Series', 'Franchise'}
+
+
+def test_site_suggest_franchise_uses_member_game_cover(client):
+    # Franchises have no art of their own -> a member game's PSN portrait cover.
+    from trophies.models import ConceptFranchise
+    fr = Franchise.objects.create(igdb_id=555, name='Cover Franchise', slug='cover-fr', source_type='franchise')
+    concept = ConceptFactory(unified_title='Cover Member', concept_icon_url='https://cdn.example/cover.png')
+    GameFactory(concept=concept, np_communication_id='NPWR_COVERFR_00')
+    ConceptFranchise.objects.create(concept=concept, franchise=fr)
+    item = _groups(client.get(reverse('site_suggest'), {'q': 'cover franchise'}))['franchise']['items'][0]
+    assert item['image'] == 'https://cdn.example/cover.png'
 
 
 def test_site_suggest_empty_groups_omitted(client):
