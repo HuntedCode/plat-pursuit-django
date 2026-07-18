@@ -79,21 +79,24 @@ def test_card_shows_badges_and_contract(client):
 
 
 def test_card_dlc_tag_shows_pack_count(client):
-    """A game with DLC trophy groups (beyond the base 'default' group) shows the count on the DLC tag
-    (`DLC ×N`), batched whale-safely via dlc_map. A game with no extra groups shows no tag."""
+    """A game with DLC trophy groups shows the count on the DLC tag (`DLC ×N`), counting only groups beyond
+    the base 'default' group (4 groups incl. default -> ×3), batched whale-safely via dlc_map. A game with
+    no trophy groups shows no DLC tag at all (no count element)."""
     from trophies.models import TrophyGroup
 
     game = GameFactory(title_name='DLC Count Game', title_platform=['PS5'], has_trophy_groups=True)
-    TrophyGroup.objects.create(game=game, trophy_group_id='default')  # base game -- excluded
+    TrophyGroup.objects.create(game=game, trophy_group_id='default')  # base game -- excluded from the count
     TrophyGroup.objects.create(game=game, trophy_group_id='001')
     TrophyGroup.objects.create(game=game, trophy_group_id='002')
     TrophyGroup.objects.create(game=game, trophy_group_id='003')
+    GameFactory(title_name='No DLC Game', title_platform=['PS5'], has_trophy_groups=False)
 
     url, params = _url()
     content = client.get(url, params).content.decode()
 
-    assert 'pp-gcard__dlc-n' in content       # the count element rendered
-    assert '&times;3' in content or '×3' in content  # 3 DLC packs (base 'default' excluded)
+    assert 'pp-gcard__dlc-n' in content       # the count element rendered for the DLC game
+    assert '&times;3' in content or '×3' in content  # base 'default' excluded -> 3, not 4
+    assert content.count('pp-gcard__dlc-n') == 1  # only the DLC game carries a count (no-groups game omits it)
 
 
 def test_platform_filter_narrows(client):
@@ -200,7 +203,11 @@ def test_xhr_returns_rows_partial(client):
     assert resp.status_code == 200
     assert GRID_PARTIAL in templates
     assert FULL_PAGE not in templates
-    assert 'pp-gcard' in resp.content.decode()
+    body = resp.content.decode()
+    assert 'pp-gcard' in body
+    # The OOB span that keeps the header result-count in sync on filter swaps rides the partial.
+    assert 'hx-swap-oob' in body
+    assert 'gbrowse-count' in body
 
 
 def test_xhr_past_end_page_404s(client):
@@ -261,6 +268,7 @@ def test_header_scard_grid_renders_when_heartbeat_warm(client):
     assert 'In contracts' in content
     assert 'New this week' in content
     assert '12,847' in content                # catalogue total flows through from the cache
+    assert '156' in content                   # games_total.delta -> catalog_games_new_this_week (the one non-obvious mapping)
     assert '{#' not in content                # multi-line comment leak guard (header block)
 
 

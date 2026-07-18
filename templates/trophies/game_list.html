@@ -43,7 +43,7 @@
                 catalogue scale lives in the .scard grid below, so the sublabel just names the shown results. {% endcomment %}
                 {# Mobile: a compact single line that rides the title row. md+: the tall stacked Tally. #}
                 <div class="shrink-0 text-right flex items-baseline gap-1 whitespace-nowrap md:block">
-                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-games-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
+                    <span id="gbrowse-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-games-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
                     <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">game{{ paginator.count|pluralize }} shown</span>
                 </div>
             </div>
