@@ -214,6 +214,38 @@ def test_site_heartbeat_has_catalog_coverage():
     assert expanded.get('games_in_contracts', {}).get('value') == 0
 
 
+def test_header_scard_grid_renders_when_heartbeat_warm(client):
+    """When the hourly site-heartbeat cache is warm, the Browse Games header renders the catalogue .scard
+    grid (Total games / In badge series / In contracts / New this week) fed from those cached values -- zero
+    request-path DB cost. Cold cache (no cron yet) simply omits the grid, so this pins the warm path."""
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    GameFactory(title_name='Header Grid Game', title_platform=['PS5'])
+    now = timezone.now()
+    key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
+    cache.set(key, {
+        'always': {'games_total': {'value': 12847, 'delta': 156}},
+        'expanded': {
+            'games_in_badges': {'value': 1204},
+            'games_in_contracts': {'value': 312},
+        },
+    }, 120)
+    try:
+        url, params = _url()
+        content = client.get(url, params).content.decode()
+    finally:
+        cache.delete(key)
+
+    assert 'scard' in content                 # the Career-header stat-card treatment
+    assert 'Total games' in content
+    assert 'In badge series' in content
+    assert 'In contracts' in content
+    assert 'New this week' in content
+    assert '12,847' in content                # catalogue total flows through from the cache
+    assert '{#' not in content                # multi-line comment leak guard (header block)
+
+
 def test_game_card_workshop_renders(client):
     """The /design/game-card/ workshop renders a card without crashing. A bare game (no badges/contract)
     hits the 'plain' branch, so this exercises the card partial + its empty-slot placeholders -- and guards

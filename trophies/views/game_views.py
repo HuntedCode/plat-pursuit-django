@@ -140,6 +140,7 @@ class GamesListView(HtmxListMixin, ListView):
             _always = _hb.get('always') or {}
             _expanded = _hb.get('expanded') or {}
             context['catalog_games_total'] = (_always.get('games_total') or {}).get('value')
+            context['catalog_games_new_this_week'] = (_always.get('games_total') or {}).get('delta')
             context['catalog_games_in_badges'] = (_expanded.get('games_in_badges') or {}).get('value')
             context['catalog_games_in_contracts'] = (_expanded.get('games_in_contracts') or {}).get('value')
 

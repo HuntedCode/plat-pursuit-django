@@ -39,25 +39,41 @@
                     </p>
                 </div>
 
-                {# Catalog size as a Tally stat (mirrors the Collection/Badges headline number). #}
+                {% comment %} Filtered-result count as the headline Tally (mirrors Collection/Badges). The
+                catalogue scale lives in the .scard grid below, so the sublabel just names the shown results. {% endcomment %}
                 <div class="shrink-0 text-right">
                     <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-games-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</div>
-                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">{% if catalog_games_total %}of {{ catalog_games_total|intcomma }} games{% else %}game{{ paginator.count|pluralize }}{% endif %}</div>
+                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">game{{ paginator.count|pluralize }} shown</div>
                 </div>
             </div>
 
-            {% comment %} Discovery stats: how much of the catalogue is part of the gamification systems, in
-            the shared header stat-row treatment (value over a small muted label, no per-stat card -- the
-            badge/Home snapshot pattern). Neutral (the filtered-count Tally is the one primary hero). Cached
-            hourly on the site heartbeat -> zero DB cost here. {% endcomment %}
-            {% if catalog_games_in_badges or catalog_games_in_contracts %}
-            <div class="mt-3 pt-3 border-t border-base-content/10 flex flex-wrap gap-x-7 gap-y-2">
-                {% if catalog_games_in_badges %}
-                <div><div class="text-sm md:text-base font-bold pp-tally">{{ catalog_games_in_badges|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">In badge series</div></div>
-                {% endif %}
-                {% if catalog_games_in_contracts %}
-                <div><div class="text-sm md:text-base font-bold pp-tally">{{ catalog_games_in_contracts|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">In contracts</div></div>
-                {% endif %}
+            {% comment %} Catalogue substance: a full-width .scard grid (the Career-header treatment) giving
+            the header body -- overall scale + how much of the catalogue is wired into the gamification
+            systems (discovery hooks) + fresh-sync momentum. Neutral (the filtered-count Tally is the one
+            primary hero). All four are cached hourly on the site heartbeat -> zero DB cost here, so the grid
+            only shows once the cron has warmed the cache. {% endcomment %}
+            {% if catalog_games_total %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Total games</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_games_total }}">{{ catalog_games_total|intcomma }}</div>
+                    <div class="scard__sub">in the catalogue</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">In badge series</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_games_in_badges|default:0 }}">{{ catalog_games_in_badges|default:0|intcomma }}</div>
+                    <div class="scard__sub">part of a badge</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">In contracts</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_games_in_contracts|default:0 }}">{{ catalog_games_in_contracts|default:0|intcomma }}</div>
+                    <div class="scard__sub">on the job board</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">New this week</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_games_new_this_week|default:0 }}">{{ catalog_games_new_this_week|default:0|intcomma }}</div>
+                    <div class="scard__sub">freshly synced</div>
+                </div>
             </div>
             {% endif %}
         </div>
@@ -359,8 +375,12 @@
     // is HTMX-native via browse-filters.js; this only owns the panel chrome. Infinite scroll + the staggered
     // card reveal are wired in a later pass.
     document.addEventListener('DOMContentLoaded', function () {
-        var countEl = document.querySelector('[data-games-count]');
-        if (countEl && window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(countEl, 900); }
+        if (window.PlatPursuit && PlatPursuit.countUp) {
+            var countEl = document.querySelector('[data-games-count]');
+            if (countEl) { PlatPursuit.countUp(countEl, 900); }
+            // Catalogue .scard values animate in on the same beat as the headline Tally.
+            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PlatPursuit.countUp(el, 900); });
+        }
 
         var form = document.getElementById('gbrowse-form');
         var toggle = document.getElementById('gbrowse-filters-toggle');
