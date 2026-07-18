@@ -46,15 +46,17 @@
                 </div>
             </div>
 
-            {% comment %} Discovery hooks: how much of the catalogue is part of the gamification systems
-            (badge series / contracts). Cached hourly on the site heartbeat -> zero DB cost here. {% endcomment %}
+            {% comment %} Discovery stats: how much of the catalogue is part of the gamification systems, in
+            the shared header stat-row treatment (value over a small muted label, no per-stat card -- the
+            badge/Home snapshot pattern). Neutral (the filtered-count Tally is the one primary hero). Cached
+            hourly on the site heartbeat -> zero DB cost here. {% endcomment %}
             {% if catalog_games_in_badges or catalog_games_in_contracts %}
-            <div class="pp-gbrowse__hooks">
+            <div class="mt-3 pt-3 border-t border-base-content/10 flex flex-wrap gap-x-7 gap-y-2">
                 {% if catalog_games_in_badges %}
-                <span class="pp-gbrowse__hook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg><b>{{ catalog_games_in_badges|intcomma }}</b> in badge series</span>
+                <div><div class="text-sm md:text-base font-bold pp-tally">{{ catalog_games_in_badges|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">In badge series</div></div>
                 {% endif %}
                 {% if catalog_games_in_contracts %}
-                <span class="pp-gbrowse__hook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg><b>{{ catalog_games_in_contracts|intcomma }}</b> in contracts</span>
+                <div><div class="text-sm md:text-base font-bold pp-tally">{{ catalog_games_in_contracts|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">In contracts</div></div>
                 {% endif %}
             </div>
             {% endif %}
