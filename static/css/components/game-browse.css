@@ -18,6 +18,10 @@
 #gbrowse-advanced { overflow: hidden; transition: height 0.32s var(--pp-ease), opacity 0.26s var(--pp-ease); }
 @media (prefers-reduced-motion: reduce) { #gbrowse-advanced { transition: none; } }
 
+/* Contract discipline triggers reuse .rp-chip (from the Career board), which lifts on hover. On this page
+   every other control stays put on hover, so drop the raise here to match -- only the colour/border shift. */
+#gbrowse-advanced .rp-disc__trigger:hover { transform: none; }
+
 /* Toolbar is chrome -> it sits BACK: keep the shared .pp-toolbar-card fill but soften the lift so the card
    grid below owns the pop (mirrors the badge/Contracts toolbars). Scoped to .pp-gbrowse so only this
    toolbar quiets; wins the cascade because component CSS is unlayered and .pp-toolbar-card is @layer base. */
@@ -57,18 +61,20 @@
 }
 .pp-gbrowse__flabel svg { width: 13px; height: 13px; flex-shrink: 0; }
 .pp-gbrowse__fchips { display: flex; flex-wrap: wrap; gap: 7px; }
-/* Genre/Theme lists can be long -- cap the height and let them scroll inside the section. A soft bottom
-   mask fades the trailing edge so it reads as scrollable (there's more below). */
+/* Genre/Theme lists can be long -- cap the height and let them scroll inside the section. The edge fade is
+   SCROLL-AWARE: JS sets --fade-t/--fade-b to 0 unless there's actually hidden content in that direction, so
+   a full row of pills sitting at rest is never clipped by a phantom fade. Default 0/0 == fully opaque. */
 .pp-gbrowse__fchips--scroll { max-height: 128px; overflow-y: auto; padding: 2px; margin: -2px;
-    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent 100%); }
-/* Letter row: horizontal scroll on phones (A-Z is a lot of chips), wraps on tablet+. A right-edge mask
-   hints the horizontal scroll; dropped at 768px+ where the row wraps and there's nothing to scroll. */
+    --fade-t: 0px; --fade-b: 0px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-t), #000 calc(100% - var(--fade-b)), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-t), #000 calc(100% - var(--fade-b)), transparent 100%); }
+/* Letter row: horizontal scroll on phones (A-Z is a lot of chips), wraps on tablet+. Same scroll-aware fade
+   on the left/right edges (JS-driven); at 768px+ it wraps and there's nothing to scroll. */
 .pp-gbrowse__fchips--letters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px;
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent 100%);
-    mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent 100%); }
-@media (min-width: 768px) { .pp-gbrowse__fchips--letters { flex-wrap: wrap; overflow-x: visible;
-    -webkit-mask-image: none; mask-image: none; } }
+    --fade-l: 0px; --fade-r: 0px;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%); }
+@media (min-width: 768px) { .pp-gbrowse__fchips--letters { flex-wrap: wrap; overflow-x: visible; } }
 /* Two range-slider groups (Ratings + Time) side by side on wider screens. */
 .pp-gbrowse__ftwo { display: grid; grid-template-columns: 1fr; gap: 13px 26px; }
 @media (min-width: 768px) { .pp-gbrowse__ftwo { grid-template-columns: 1fr 1fr; align-items: start; } }

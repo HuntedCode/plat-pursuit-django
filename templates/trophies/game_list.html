@@ -427,17 +427,21 @@
             var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             if (!animate || reduce) {
                 panel.style.height = ''; panel.style.opacity = '';
-                if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
+                if (open) { panel.removeAttribute('hidden'); refreshScrollFades(); } else { panel.setAttribute('hidden', ''); }
                 return;
             }
             if (open) {
+                // Collapse the box BEFORE revealing it, so removing `hidden` doesn't paint a full-height
+                // panel for a frame (the "pop"). scrollHeight still reports the true content height even at
+                // height:0 (overflow-hidden), so we can measure the target while collapsed.
+                panel.style.height = '0px'; panel.style.opacity = '0';
                 panel.removeAttribute('hidden');
                 var target = panel.scrollHeight;
-                panel.style.height = '0px'; panel.style.opacity = '0';
                 void panel.offsetHeight;                       // flush the collapsed start state
                 panel.style.height = target + 'px'; panel.style.opacity = '1';
+                refreshScrollFades();                          // scroll containers now have real dimensions
                 panelAnimEnd = function (e) {
-                    if (e.propertyName !== 'height') { return; }
+                    if (e.target !== panel || e.propertyName !== 'height') { return; }   // ignore bubbled child transitions
                     clearPanelAnim();
                     panel.style.height = ''; panel.style.opacity = '';   // release to auto so content can reflow
                 };
@@ -446,13 +450,43 @@
                 void panel.offsetHeight;
                 panel.style.height = '0px'; panel.style.opacity = '0';
                 panelAnimEnd = function (e) {
-                    if (e.propertyName !== 'height') { return; }
+                    if (e.target !== panel || e.propertyName !== 'height') { return; }
                     clearPanelAnim();
                     panel.setAttribute('hidden', ''); panel.style.height = ''; panel.style.opacity = '';
                 };
             }
             panel.addEventListener('transitionend', panelAnimEnd);
         }
+
+        // Scroll-aware edge fades on the long chip lists (genres/themes = vertical, letters = horizontal).
+        // A fade only appears on an edge that has hidden content past it, so a full row at rest is never
+        // clipped. Measured lazily (containers are 0-size while the panel is collapsed, so this runs on open).
+        function setFade(el, axis) {
+            if (axis === 'y') {
+                el.style.setProperty('--fade-t', el.scrollTop > 1 ? '16px' : '0px');
+                el.style.setProperty('--fade-b', (el.scrollTop + el.clientHeight < el.scrollHeight - 1) ? '16px' : '0px');
+            } else {
+                el.style.setProperty('--fade-l', el.scrollLeft > 1 ? '20px' : '0px');
+                el.style.setProperty('--fade-r', (el.scrollLeft + el.clientWidth < el.scrollWidth - 1) ? '20px' : '0px');
+            }
+        }
+        function refreshScrollFades() {
+            panel.querySelectorAll('.pp-gbrowse__fchips--scroll').forEach(function (el) { setFade(el, 'y'); });
+            panel.querySelectorAll('.pp-gbrowse__fchips--letters').forEach(function (el) { setFade(el, 'x'); });
+        }
+        function wireScrollFades() {
+            panel.querySelectorAll('.pp-gbrowse__fchips--scroll').forEach(function (el) {
+                if (el._fadeWired) { return; } el._fadeWired = true;
+                el.addEventListener('scroll', function () { setFade(el, 'y'); }, { passive: true });
+            });
+            panel.querySelectorAll('.pp-gbrowse__fchips--letters').forEach(function (el) {
+                if (el._fadeWired) { return; } el._fadeWired = true;
+                el.addEventListener('scroll', function () { setFade(el, 'x'); }, { passive: true });
+            });
+        }
+        wireScrollFades();
+        window.addEventListener('resize', function () { if (toggle.getAttribute('aria-expanded') === 'true') { refreshScrollFades(); } });
+
         // Active CONTENT-filter count for the toggle badge: every set value except display/sort/search state
         // and the platform/regions SCOPE selectors (platform always carries the PS5/PS4 default from the
         // dispatch redirect, so counting it would show a permanent "2" + auto-open the drawer on every
@@ -533,21 +567,26 @@
             if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
             var grid = document.getElementById('items-grid');
             if (!grid || !window.PlatPursuit || !PlatPursuit.staggerReveal) { return; }
-            // Soft-spring overshoot land-in (matches the Badges Gallery bar): cards rise + scale up past
-            // 1.0 and settle, rather than a flat decel. The gentle overshoot is what reads "premium."
-            var ease = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
+            // Land-in: OPACITY fades on a smooth decel curve, TRANSFORM springs with a soft overshoot
+            // (matches the Badges Gallery). They must be SEPARATE animations -- putting the overshoot easing
+            // on opacity too makes it spike to 1 almost instantly (the >1 control point), which reads as a
+            // hard "flash"/pop instead of a fade.
+            var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+            var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
             revealHandle = PlatPursuit.staggerReveal({
                 grid: grid, cardSelector: '.pp-gcard', step: 22,
                 reveal: function (el, delayMs) {
                     if (!el.animate) { return; }
-                    el.animate([{ opacity: 0, transform: 'translateY(14px) scale(0.96)' }, { opacity: 1, transform: 'none' }],
-                               { duration: 500, delay: delayMs, easing: ease, fill: 'backwards' });
+                    el.animate([{ opacity: 0 }, { opacity: 1 }],
+                               { duration: 420, delay: delayMs, easing: fadeEase, fill: 'backwards' });
+                    el.animate([{ transform: 'translateY(14px) scale(0.965)' }, { transform: 'none' }],
+                               { duration: 500, delay: delayMs, easing: springEase, fill: 'backwards' });
                     // The completion bar (only present for signed-in users with progress) wipes in from the
                     // left just after the card lands, so the fill reads as a deliberate reveal, not a static bar.
                     var bar = el.querySelector('.pp-gcard__barfill');
                     if (bar) {
                         bar.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }],
-                                    { duration: 540, delay: delayMs + 150, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
+                                    { duration: 540, delay: delayMs + 150, easing: fadeEase, fill: 'backwards' });
                     }
                 },
             });
@@ -563,7 +602,12 @@
         }
         // Settle the results the instant a filter/sort changes (spans the slider hx-trigger debounce),
         // cleared when the fresh grid swaps in. Motion-gated via the shared #browse-results.is-swapping rule.
-        form.addEventListener('change', function () {
+        // Skip text/search inputs: their `change` fires on blur WITHOUT auto-submitting (only the debounced
+        // live-search or Enter submits), so dimming here would leave the grid stuck faded with no request to
+        // clear it. Live search does its own dim via htmx:beforeRequest.
+        form.addEventListener('change', function (e) {
+            var t = e.target;
+            if (t && (t.type === 'text' || t.type === 'search')) { return; }
             var r = document.getElementById('browse-results');
             if (r) { r.classList.add('is-swapping'); }
         });
