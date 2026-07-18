@@ -146,6 +146,13 @@ Roll integers only — parse `\D` out, and skip percentages/formatted text (they
 as the section reveals so opacity masks the 0-reset. Reduced-motion: show the final value. Reuse the
 `tickUp` pattern in `static/js/home-motion.js`.
 
+For a **live-updating** counter (one that changes in place, e.g. a filtered result count refreshed on
+an HTMX swap), don't hard-jump to the new value and don't reset to 0. Pass the previous value to the
+shared `PlatPursuit.countUp(el, dur, {from: oldValue})` so it ticks from old → new (up OR down). Browse
+Games does this: the header count is refreshed via `hx-swap-oob` (which sets text only), then the
+`htmx:afterSwap` handler reads the old value off `data-countup`, the new off the swapped-in text, and
+tweens between them.
+
 ### Damped spring landing (Apple-style settle)
 A thing that rises into place should *settle*, not glide to a stop. Own the bounce in the keyframe
 stops — overshoot past the mark, a small undershoot, a smaller second overshoot, then rest — and use

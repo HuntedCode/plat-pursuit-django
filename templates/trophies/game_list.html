@@ -498,6 +498,18 @@
             if (t && t.id === 'browse-results') {
                 t.classList.remove('is-swapping');
                 refreshBadge();
+                // The header count is refreshed out-of-band (hx-swap-oob sets its text); tick it from the
+                // previous value to the new one instead of hard-jumping. data-countup still holds the old
+                // value at this point (OOB only swaps text), so read old from it, new from the fresh text.
+                var countEl = document.getElementById('gbrowse-count');
+                if (countEl && window.PlatPursuit && PlatPursuit.countUp) {
+                    var oldVal = parseFloat(countEl.dataset.countup);
+                    var newVal = parseFloat((countEl.textContent || '').replace(/,/g, ''));
+                    if (!isNaN(newVal) && newVal !== oldVal) {
+                        countEl.dataset.countup = newVal;   // countUp reads target from here
+                        PlatPursuit.countUp(countEl, 700, { from: isNaN(oldVal) ? 0 : oldVal });
+                    }
+                }
                 initReveal();   // before initScroller so revealHandle exists for its onAppend hook
                 initScroller();
             }

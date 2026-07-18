@@ -567,29 +567,32 @@ function debounce(fn, delay = 300) {
 }
 
 /**
- * Count a number up from 0 to a target with easeOutCubic. Reads the target from the element's
- * `data-countup` attribute (falling back to its current text), honours `data-countup-decimals`
- * for fixed-decimal values, and prefers-reduced-motion (jumps straight to the target). This is the
- * canonical shared count-up; career.html + home-motion.js still hand-roll their own -- new callers
- * (and eventually those) should use this.
+ * Count a number to a target with easeOutCubic. Reads the target from the element's `data-countup`
+ * attribute (falling back to its current text), honours `data-countup-decimals` for fixed-decimal
+ * values, and prefers-reduced-motion (jumps straight to the target). Starts from 0 by default, or
+ * from `opts.from` -- pass the previous value to tick a live-updating counter up OR down to its new
+ * value (e.g. a filtered result count) instead of resetting to 0. This is the canonical shared
+ * count-up; career.html + home-motion.js still hand-roll their own -- new callers should use this.
  * @param {HTMLElement} el
  * @param {number} [dur=750] duration in ms
+ * @param {{from?: number}} [opts] start value (default 0); pass the old value for old->new ticking
  */
-function countUp(el, dur = 750) {
+function countUp(el, dur = 750, opts = {}) {
     if (!el) return;
     const dec = parseInt(el.dataset.countupDecimals || '0', 10);
     const raw = el.dataset.countup != null ? el.dataset.countup : (el.textContent || '').replace(/,/g, '');
     const target = parseFloat(raw);
     if (isNaN(target)) return;
+    const from = (opts.from != null && !isNaN(opts.from)) ? opts.from : 0;
     const fmt = (v) => (dec ? v.toFixed(dec) : Math.round(v).toLocaleString());
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce || target === 0) { el.textContent = fmt(target); return; }
-    el.textContent = fmt(0);
+    if (reduce || target === from) { el.textContent = fmt(target); return; }
+    el.textContent = fmt(from);
     let start = null;
     function step(ts) {
         if (start === null) start = ts;
         const p = Math.min(1, (ts - start) / dur);
-        el.textContent = fmt(target * (1 - Math.pow(1 - p, 3)));
+        el.textContent = fmt(from + (target - from) * (1 - Math.pow(1 - p, 3)));
         if (p < 1) requestAnimationFrame(step);
         else el.textContent = fmt(target);
     }
