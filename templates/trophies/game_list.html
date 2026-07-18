@@ -41,9 +41,10 @@
 
                 {% comment %} Filtered-result count as the headline Tally (mirrors Collection/Badges). The
                 catalogue scale lives in the .scard grid below, so the sublabel just names the shown results. {% endcomment %}
-                <div class="shrink-0 text-right">
-                    <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-games-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</div>
-                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">game{{ paginator.count|pluralize }} shown</div>
+                {# Mobile: a compact single line that rides the title row. md+: the tall stacked Tally. #}
+                <div class="shrink-0 text-right flex items-baseline gap-1 whitespace-nowrap md:block">
+                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-games-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
+                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">game{{ paginator.count|pluralize }} shown</span>
                 </div>
             </div>
 

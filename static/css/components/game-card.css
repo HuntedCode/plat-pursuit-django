@@ -85,6 +85,7 @@
    counts already include DLC, so this is a neutral "there's extra DLC" scope flag, not an added number). */
 .pp-gcard__mid { display: inline-flex; align-items: center; gap: 5px; }
 .pp-gcard__dlc { flex-shrink: 0; font-size: 8px; font-weight: 800; letter-spacing: 0.04em; padding: 1px 4px; border-radius: 4px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-text) 7%, transparent); border: 1px solid var(--pp-border); }
+.pp-gcard__dlc-n { margin-left: 2px; color: var(--pp-text-mute); font-weight: 700; }  /* count reads a touch quieter than the DLC label */
 
 /* ── Pursuer hook: badge band (count + series names). Muted dashed placeholder when the game is in none. ── */
 .pp-gcard__badges { display: flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 7px; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }

@@ -1,6 +1,6 @@
 {% load custom_filters job_icons %}
 {% for game in object_list %}
-{% with user_pg=user_game_map|dict_get:game.id ratings=rating_map|dict_get:game.concept_id %}
+{% with user_pg=user_game_map|dict_get:game.id ratings=rating_map|dict_get:game.concept_id dlc_n=dlc_map|dict_get:game.id %}
     <a href="{% url 'game_detail' game.np_communication_id %}" class="pp-gcard" data-gcard>
         {% comment %} Cover: IGDB-first via display_image_url (helper owns the fallback chain). Community flag
         icons overlay top-left; the quick-add button top-right (signed in); the viewer's progress rides the
@@ -41,7 +41,7 @@
                 {% with dt=game.defined_trophies %}
                 <span class="pp-gcard__mid">
                     <span class="pp-gcard__tro" title="Bronze / Silver / Gold / Platinum"><span style="color: var(--color-trophy-bronze)">{{ dt.bronze|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-silver)">{{ dt.silver|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-gold)">{{ dt.gold|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-platinum)">{{ dt.platinum|default:0 }}</span></span>
-                    {% if game.has_trophy_groups %}<span class="pp-gcard__dlc" title="Has DLC trophies">DLC</span>{% endif %}
+                    {% if game.has_trophy_groups %}<span class="pp-gcard__dlc" title="{% if dlc_n %}{{ dlc_n }} DLC trophy pack{{ dlc_n|pluralize }}{% else %}Has DLC trophies{% endif %}">DLC{% if dlc_n %}<span class="pp-gcard__dlc-n">&times;{{ dlc_n }}</span>{% endif %}</span>{% endif %}
                 </span>
                 {% if dt.platinum %}
                 <span class="pp-gcard__plat{% if user_pg.has_plat %} is-earned{% endif %}" title="{% if user_pg.has_plat %}Platinum earned{% else %}Has a platinum{% endif %}">Plat</span>

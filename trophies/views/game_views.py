@@ -170,6 +170,15 @@ class GamesListView(HtmxListMixin, ListView):
             ).values('game_id', 'progress', 'has_plat', 'earned_trophies_count')
             context['user_game_map'] = {pg['game_id']: pg for pg in user_games}
 
+        # DLC pack count per game: trophy groups beyond the base game (trophy_group_id='default'), for the
+        # card's [DLC xN] tag. 1 grouped query over the page's games (whale-safe, never per-card).
+        dlc_counts = (
+            TrophyGroup.objects.filter(game_id__in=game_ids)
+            .exclude(trophy_group_id='default')
+            .values('game_id').annotate(n=Count('id'))
+        )
+        context['dlc_map'] = {d['game_id']: d['n'] for d in dlc_counts}
+
         # Community ratings (1 query)
         concept_ids = [g.concept_id for g in page_games if g.concept_id]
         if concept_ids:

@@ -78,6 +78,24 @@ def test_card_shows_badges_and_contract(client):
     assert 'No contract' not in content      # placeholder replaced by the real chip
 
 
+def test_card_dlc_tag_shows_pack_count(client):
+    """A game with DLC trophy groups (beyond the base 'default' group) shows the count on the DLC tag
+    (`DLC ×N`), batched whale-safely via dlc_map. A game with no extra groups shows no tag."""
+    from trophies.models import TrophyGroup
+
+    game = GameFactory(title_name='DLC Count Game', title_platform=['PS5'], has_trophy_groups=True)
+    TrophyGroup.objects.create(game=game, trophy_group_id='default')  # base game -- excluded
+    TrophyGroup.objects.create(game=game, trophy_group_id='001')
+    TrophyGroup.objects.create(game=game, trophy_group_id='002')
+    TrophyGroup.objects.create(game=game, trophy_group_id='003')
+
+    url, params = _url()
+    content = client.get(url, params).content.decode()
+
+    assert 'pp-gcard__dlc-n' in content       # the count element rendered
+    assert '&times;3' in content or '×3' in content  # 3 DLC packs (base 'default' excluded)
+
+
 def test_platform_filter_narrows(client):
     """?platform=PS5 shows only PS5 games; ?platform=PS3 shows only PS3 games."""
     GameFactory(title_name='Current Gen', title_platform=['PS5'])
