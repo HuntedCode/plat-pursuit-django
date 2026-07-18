@@ -27,6 +27,27 @@
 @media (max-width: 767px) { .pp-minibar__sort { display: none; } }
 @media (max-width: 520px) { .pp-minibar .pp-minibar__title { display: none; } .pp-minibar__search input { width: 100%; } }
 
+/* Active-filter chips row (dismissable pills of the applied panel filters). Between the toolbar bar and the
+   collapsible panel; a truly-:empty container collapses to nothing (no margin) when no filters are active.
+   Each chip is primary-tinted at rest and error-tinted on hover to signal removal. */
+.pp-gbrowse__achips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pp-gbrowse__achips:not(:empty) { margin-top: 11px; }
+.pp-gbrowse__achips-label { font-size: 11px; font-weight: 700; color: var(--pp-text-mute); text-transform: uppercase; letter-spacing: 0.04em; }
+.pp-gbrowse__achip {
+    display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 9px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 600; color: var(--pp-text); text-decoration: none; cursor: pointer;
+    background: color-mix(in oklab, var(--pp-primary) 13%, var(--pp-bg-2));
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border));
+    transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+@media (hover: hover) { .pp-gbrowse__achip:hover { border-color: color-mix(in oklab, var(--pp-error) 48%, var(--pp-border)); background: color-mix(in oklab, var(--pp-error) 13%, var(--pp-bg-2)); } }
+.pp-gbrowse__achip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-gbrowse__achip svg { width: 12px; height: 12px; color: var(--pp-text-mute); flex-shrink: 0; transition: color 0.14s ease; }
+@media (hover: hover) { .pp-gbrowse__achip:hover svg { color: var(--pp-error); } }
+.pp-gbrowse__achip-clear { font-size: 11px; font-weight: 700; color: var(--pp-text-mute); text-decoration: none; padding: 3px 6px; border-radius: 6px; transition: color 0.14s ease; }
+.pp-gbrowse__achip-clear:hover { color: var(--pp-text); text-decoration: underline; }
+.pp-gbrowse__achip-clear:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
 /* Animated filter-panel expand/collapse (JS tweens height + opacity between 0 and scrollHeight). overflow
    clips the content mid-tween; the JS releases height back to auto on transitionend so nested reflows work. */
 #gbrowse-advanced { overflow: hidden; transition: height 0.32s var(--pp-ease), opacity 0.26s var(--pp-ease); }

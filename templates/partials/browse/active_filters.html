@@ -1,0 +1,16 @@
+{% comment %} Active-filter chips: dismissable pills of the applied panel filters + a Clear all. Included in
+the toolbar (game_list.html) AND OOB-swapped from browse_results.html on each filter change so it stays in
+sync with panel edits. Chip removal is a full nav (plain href) so the panel form controls reset in lockstep;
+panel edits HTMX-swap the grid and OOB-refresh this row. The `>{% if %}`/`{% endif %}</div>` are TIGHT so the
+container is truly :empty (margin collapses) when no filters are active. Expects: filter_chips
+[{label, remove_url}], filter_clear_url; pass oob=True for the OOB copy. {% endcomment %}
+<div id="gbrowse-active-filters" class="pp-gbrowse__achips"{% if oob %} hx-swap-oob="true"{% endif %}>{% if filter_chips %}
+    <span class="pp-gbrowse__achips-label">Filters:</span>
+    {% for chip in filter_chips %}
+    <a class="pp-gbrowse__achip" href="{% url 'games_list' %}?{{ chip.remove_url }}" title="Remove: {{ chip.label }}" aria-label="Remove filter: {{ chip.label }}">
+        <span>{{ chip.label }}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </a>
+    {% endfor %}
+    <a class="pp-gbrowse__achip-clear" href="{% url 'games_list' %}?{{ filter_clear_url }}">Clear all</a>
+{% endif %}</div>

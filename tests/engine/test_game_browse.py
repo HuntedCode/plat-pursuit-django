@@ -126,6 +126,65 @@ def test_card_hides_stats_badge_when_no_players(client):
     assert 'pp-gcard__cstats' not in content
 
 
+def test_active_filter_chips_render(client):
+    """Applied content filters show as dismissable chips + a Clear all; a platform-only (scope) page shows
+    none (search + platform/regions/sort are excluded from chips)."""
+    GameFactory(title_name='Chip Game', title_platform=['PS5'])
+
+    filtered = client.get(reverse('games_list'),
+                          {'platform': 'PS5', 'show_only_platinum': 'on', 'in_badge': 'on'}).content.decode()
+    assert 'pp-gbrowse__achips' in filtered      # the container
+    assert 'Has platinum' in filtered
+    assert 'In a badge' in filtered
+    assert 'Clear all' in filtered
+
+    scope_only = client.get(reverse('games_list'), {'platform': 'PS5'}).content.decode()
+    assert 'Clear all' not in scope_only          # no content filters -> no chips
+    assert 'Has platinum' not in scope_only
+
+
+def test_active_filter_chip_remove_url_drops_only_that_filter():
+    """Each chip's remove_url drops its own filter (+ resets page) but keeps the others; Clear all drops all
+    content filters while keeping scope (platform)."""
+    from django.test import RequestFactory
+    from trophies.forms import GameSearchForm
+    from trophies.views.browse_helpers import get_active_filter_chips
+
+    req = RequestFactory().get('/games/', {'platform': 'PS5', 'show_only_platinum': 'on', 'in_badge': 'on'})
+    result = get_active_filter_chips(req, GameSearchForm(req.GET))
+
+    labels = {c['label']: c for c in result['filter_chips']}
+    assert 'Has platinum' in labels and 'In a badge' in labels
+    plat_remove = labels['Has platinum']['remove_url']
+    assert 'show_only_platinum' not in plat_remove   # removing the platinum chip drops that param
+    assert 'in_badge=on' in plat_remove              # but keeps the others
+    assert 'page=1' in plat_remove                   # page reset
+    assert 'show_only_platinum' not in result['filter_clear_url']   # Clear all drops content filters
+    assert 'in_badge' not in result['filter_clear_url']
+    assert 'platform=PS5' in result['filter_clear_url']             # ...but keeps scope
+
+
+def test_genre_chip_shows_name_not_id(client):
+    """A genre chip shows the genre NAME, not its numeric id (int-keyed choices vs str cleaned value)."""
+    from trophies.models import Genre
+
+    genre = Genre.objects.create(name='Roguelike', igdb_id=990001, slug='roguelike')
+    GameFactory(title_name='Genre Chip Game', title_platform=['PS5'])
+    content = client.get(reverse('games_list'), {'platform': 'PS5', 'genres': str(genre.id)}).content.decode()
+
+    assert 'Roguelike' in content            # the name, not the raw id
+    assert 'pp-gbrowse__achip"' in content   # a chip pill rendered
+
+
+def test_active_filters_container_not_duplicated_on_full_page(client):
+    """The #gbrowse-active-filters container renders exactly once on a full (non-HTMX) page load -- the OOB
+    copy is HTMX-only, so a filtered bookmark URL doesn't show a duplicated chip row."""
+    GameFactory(title_platform=['PS5'])
+    content = client.get(reverse('games_list'), {'platform': 'PS5', 'in_badge': 'on'}).content.decode()
+
+    assert content.count('id="gbrowse-active-filters"') == 1
+
+
 def test_platform_filter_narrows(client):
     """?platform=PS5 shows only PS5 games; ?platform=PS3 shows only PS3 games."""
     GameFactory(title_name='Current Gen', title_platform=['PS5'])

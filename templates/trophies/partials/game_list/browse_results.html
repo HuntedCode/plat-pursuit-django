@@ -10,3 +10,8 @@ extracts the .pp-gcard nodes from this and appends them. The sentinel + loading 
 swaps via htmx OOB. Inert on the InfiniteScroller's ?page fetches -- those use plain fetch(), not htmx, and
 only extract .pp-gcard nodes, so this sibling span is ignored there. {% endcomment %}
 <span hidden hx-swap-oob="innerHTML:#gbrowse-count">{{ paginator.count|intcomma }}</span>
+{% comment %} Refresh the active-filter chips (which live in the toolbar, outside #browse-results) on each
+filter swap via OOB so they stay in sync with panel edits. HTMX-only: this partial is ALSO included inline in
+the full page (inside #browse-results), so emitting the OOB copy there would render a second, visible
+#gbrowse-active-filters. Inert on the InfiniteScroller's plain-fetch ?page loads anyway. {% endcomment %}
+{% if request.htmx %}{% include 'partials/browse/active_filters.html' with oob=True %}{% endif %}

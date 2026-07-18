@@ -279,6 +279,28 @@ Compact card for search, sort, and filter controls. Collapsible drawer for secon
 </div>
 ```
 
+> The snippet above is the **legacy DaisyUI** shape. The rebuilt house toolbar uses `.pp-bgal__*` / `.pp-gbrowse__*` (see `game_list.html`, `components/{browse-gallery,game-browse}.css`). Follow that on rebuilt pages, plus the shared premium features below.
+
+### Search toolbar — shared premium features (2026-07)
+
+`static/js/browse-filters.js` (the shared `[data-browse-form]` controller, ~18 pages) gives **every** browse search toolbar these for free. Behaviour is shared; each page opts into the **visuals** with a little markup + the shared CSS in `components/browse-gallery.css`.
+
+**Automatic (no markup needed):**
+- **`/` and ⌘K / Ctrl+K focus** the first search field (skipped while typing in another input). Add a faint `<kbd class="pp-bgal__search-kbd">/</kbd>` hint to advertise it.
+- **Escape clears** the focused search field and re-applies.
+
+**Opt-in (add the markup; CSS is shared):**
+- Wrap the field so JS can find it: `<span class="pp-bgal__search" data-search-wrap>` (or any `[data-search-wrap]`; falls back to the input's parent).
+- **Clear (✕) button** — `<button data-search-clear tabindex="-1" aria-label="Clear search">`; shown only when there's text.
+- **In-flight spinner** — `<span class="pp-bgal__search-spin">`; shown while a search request runs.
+- **`/` hint** — `<kbd class="pp-bgal__search-kbd">/`; shown only when the field is empty.
+- Visibility is driven by `.has-value` / `.is-searching` classes the controller toggles on the wrapper — only one of {hint, clear, spinner} shows at a time. (Live search itself stays opt-in via `data-live-search` on the form.)
+
+**Active-filter chips** (per-page, not auto — each page's filters + labels differ). Dismissable pills of the applied *panel* filters (search + platform/regions/sort are excluded), each with a remove-URL, plus a **Clear all**. Reference impl on Browse Games:
+- View builds them with `browse_helpers.get_active_filter_chips(request, form)` → `{filter_chips: [{label, remove_url}], filter_clear_url}` (urlencoded querystrings, page reset).
+- Rendered by `partials/browse/active_filters.html` (a `#gbrowse-active-filters` container) included in the toolbar **and** OOB-swapped (`with oob=True`) from the results partial so it stays in sync when filters change via the panel.
+- **Chip removal is a full nav** (plain `href`), not HTMX — so the collapsed panel's form controls reset in lockstep with the chips. The container is kept truly `:empty` when no filters are active so its margin collapses.
+
 ### Toggle-Button Checkboxes
 
 For filter options (platforms, regions, categories). Replaces traditional checkboxes.

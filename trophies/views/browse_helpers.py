@@ -16,6 +16,83 @@ from trophies.models import (
 
 
 # ---------------------------------------------------------------------------
+# Active-filter chips (GameSearchForm) — dismissable pills of the applied CONTENT
+# filters (the ones hidden in the collapsed panel), each with a remove-URL. Search
+# (query) and SCOPE (platform/regions/sort/page/view) are excluded — the search
+# field owns query; scope isn't a "filter" chip.
+# ---------------------------------------------------------------------------
+
+# Boolean filter -> chip label.
+_CHIP_BOOL_LABELS = {
+    'show_only_platinum': 'Has platinum', 'filter_shovelware': 'No shovelware',
+    'in_badge': 'In a badge', 'in_contract': 'In a contract',
+    'show_delisted': 'Delisted', 'show_unobtainable': 'Unobtainable',
+    'show_online': 'Online trophies', 'show_buggy': 'Buggy trophies',
+    'hide_delisted': 'Not delisted', 'hide_unobtainable': 'Obtainable',
+    'hide_online': 'No online trophies', 'hide_buggy': 'No buggy trophies',
+}
+# Dual-range sliders: (min_key, max_key, default_min, default_max, label, unit).
+_CHIP_SLIDERS = [
+    ('rating_min', 'rating_max', 0, 5, 'Rating', ''),
+    ('difficulty_min', 'difficulty_max', 1, 10, 'Difficulty', ''),
+    ('fun_min', 'fun_max', 1, 10, 'Fun', ''),
+    ('igdb_time_min', 'igdb_time_max', 0, 1000, 'IGDB time', 'h'),
+    ('community_time_min', 'community_time_max', 0, 1000, 'Time-to-beat', 'h'),
+]
+_CHIP_MULTI = ('genres', 'themes', 'contract_jobs')
+
+
+def get_active_filter_chips(request, form):
+    """Return {'filter_chips': [{label, remove_url}], 'filter_clear_url': str} for the applied content
+    filters. remove_url / filter_clear_url are urlencoded querystrings (page reset to 1), consumed as
+    `?{{ url }}`. Each remove drops one filter (one value for multi-selects); Clear all drops them all but
+    keeps the search query + scope. Rendered as chips + OOB-updated on filter swaps."""
+    if not form.is_valid():
+        return {'filter_chips': [], 'filter_clear_url': ''}
+    cd = form.cleaned_data
+    params = request.GET
+
+    def _remove_key(*keys):
+        q = params.copy()
+        for k in keys:
+            q.pop(k, None)
+        q['page'] = '1'
+        return q.urlencode()
+
+    def _remove_value(key, value):
+        q = params.copy()
+        q.setlist(key, [v for v in q.getlist(key) if v != str(value)])
+        q['page'] = '1'
+        return q.urlencode()
+
+    chips = []
+    for key, label in _CHIP_BOOL_LABELS.items():
+        if cd.get(key):
+            chips.append({'label': label, 'remove_url': _remove_key(key)})
+    if cd.get('letter'):
+        chips.append({'label': f"Starts with {cd['letter']}", 'remove_url': _remove_key('letter')})
+    if cd.get('engine'):
+        # choices are keyed by int id (values_list('id','name')) but cleaned_data is a str -> str-key the map.
+        name = {str(k): v for k, v in form.fields['engine'].choices}.get(cd['engine'], cd['engine'])
+        chips.append({'label': str(name), 'remove_url': _remove_key('engine')})
+    for key in _CHIP_MULTI:
+        if cd.get(key):
+            choices = {str(k): v for k, v in form.fields[key].choices}
+            for val in cd[key]:
+                chips.append({'label': str(choices.get(val, val)), 'remove_url': _remove_value(key, val)})
+    for kmin, kmax, dmin, dmax, label, unit in _CHIP_SLIDERS:
+        vmin, vmax = cd.get(kmin), cd.get(kmax)
+        if (vmin is not None and vmin > dmin) or (vmax is not None and vmax < dmax):
+            lo = vmin if vmin is not None else dmin
+            hi = vmax if vmax is not None else dmax
+            chips.append({'label': f"{label} {lo}-{hi}{unit}", 'remove_url': _remove_key(kmin, kmax)})
+
+    content_keys = list(_CHIP_BOOL_LABELS) + ['letter', 'engine', *_CHIP_MULTI] \
+        + [k for s in _CHIP_SLIDERS for k in (s[0], s[1])]
+    return {'filter_chips': chips, 'filter_clear_url': _remove_key(*content_keys)}
+
+
+# ---------------------------------------------------------------------------
 # Shared Game Browse Filter / Sort Pipeline
 # ---------------------------------------------------------------------------
 

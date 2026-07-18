@@ -100,32 +100,54 @@
       });
     });
 
-    // ── Text search: submit on Enter. Forms that opt in with `data-live-search` ALSO live-filter as you
-    // type (debounced). Opt-in only: most browse forms carry hx-push-url, so auto-submitting per keystroke
-    // burst would spam history + multiply queries on every list endpoint. Enter stays the universal path.
+    // ── Text search + shared search-toolbar affordances ──────────────────
+    // Enter submits; forms with `data-live-search` also live-filter (debounced). PLUS the universal search
+    // niceties every browse toolbar gets for free: Escape clears, a clear (x) button, an in-flight spinner,
+    // and `/` or Cmd/Ctrl+K to focus. The BEHAVIOUR is shared here; pages opt into the VISUALS with markup
+    // (a [data-search-clear] button inside the field) + CSS keyed on `.has-value` / `.is-searching` on the
+    // field wrapper. See docs/reference/design-system.md "Search toolbar".
     const searchInputs = form.querySelectorAll('input[type="text"], input[type="search"]');
     const liveSearch = form.hasAttribute('data-live-search');
     let searchTimer = null;
+    function searchWrap(input) { return input.closest('[data-search-wrap]') || input.parentElement; }
+    function markSearching(on) {
+      searchInputs.forEach(function (i) { const w = searchWrap(i); if (w) w.classList.toggle('is-searching', on); });
+    }
     function submitSearch() {
       const pageInput = form.querySelector('input[name="page"]');
       if (pageInput) pageInput.value = '1';
+      markSearching(true);
       htmx.trigger(form, 'submit');
     }
     searchInputs.forEach(function (input) {
+      const wrap = searchWrap(input);
+      function syncValue() { if (wrap) wrap.classList.toggle('has-value', !!input.value); }
+      syncValue();
       input.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
-          e.preventDefault();
-          clearTimeout(searchTimer);
-          submitSearch();
+          e.preventDefault(); clearTimeout(searchTimer); submitSearch();
+        } else if (e.key === 'Escape' && input.value) {
+          e.preventDefault(); input.value = ''; syncValue(); clearTimeout(searchTimer); submitSearch();
         }
       });
-      if (liveSearch) {
-        input.addEventListener('input', function () {
-          clearTimeout(searchTimer);
-          searchTimer = setTimeout(submitSearch, 400);
+      input.addEventListener('input', function () {
+        syncValue();
+        if (liveSearch) { clearTimeout(searchTimer); searchTimer = setTimeout(submitSearch, 400); }
+      });
+      // Clear (x) button -- opt-in markup inside the field.
+      const clearBtn = wrap && wrap.querySelector('[data-search-clear]');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          input.value = ''; syncValue(); input.focus();
+          clearTimeout(searchTimer); submitSearch();
         });
       }
     });
+    // Clear the in-flight search spinner once the form's request settles.
+    form.addEventListener('htmx:afterRequest', function () { markSearching(false); });
+    // (`/` + Cmd/Ctrl+K focus is bound ONCE at module scope -- see below -- to avoid leaking a listener
+    //  every time init() re-runs on htmx:historyRestore / afterSwap.)
 
     // ── Submit button (for users who click instead of pressing Enter) ──
     const submitBtn = form.querySelector('[data-submit-btn]');
@@ -549,5 +571,21 @@
       bindPageJumpForms();
       bindLuckyButton();
     }
+  });
+
+  // `/` or Cmd/Ctrl+K focuses the browse search field. Bound ONCE here (not in init()) and resolves the
+  // input at event time, so re-inits never leak listeners or capture a detached input.
+  document.addEventListener('keydown', function (e) {
+    var cmdK = (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K');
+    var slash = e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey;
+    if (!cmdK && !slash) return;
+    var t = e.target;
+    var typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+    if (slash && typing) return;   // don't hijack "/" while the user is typing elsewhere
+    var input = document.querySelector('[data-browse-form] input[type="text"], [data-browse-form] input[type="search"]');
+    if (!input) return;
+    e.preventDefault();
+    input.focus();
+    input.select();
   });
 })();

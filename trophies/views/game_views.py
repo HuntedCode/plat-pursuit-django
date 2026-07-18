@@ -24,7 +24,7 @@ from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 from .browse_helpers import (
     annotate_ascii_name, annotate_community_ratings,
-    apply_game_browse_filters, apply_game_browse_sort,
+    apply_game_browse_filters, apply_game_browse_sort, get_active_filter_chips,
 )
 
 logger = logging.getLogger("psn_api")
@@ -102,6 +102,7 @@ class GamesListView(HtmxListMixin, ListView):
 
         form = self.get_filter_form()
         context['form'] = form
+        context.update(get_active_filter_chips(self.request, form))   # dismissable active-filter chips
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['view_type'] = self.request.GET.get('view', 'grid')
