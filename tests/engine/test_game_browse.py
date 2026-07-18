@@ -368,7 +368,10 @@ def test_query_count_is_whale_safe(client, django_assert_max_num_queries):
     """Render cost stays bounded regardless of catalogue size (no per-card N+1): one page of 30 cards costs
     the same whether there are 10 or 60 games, INCLUDING the batched badge + contract pursuer-hook maps
     (a fixed handful of queries over the page's concepts, never per-card)."""
-    games = GameFactory.create_batch(60, title_platform=['PS5'])
+    # played_count set so the community-stats footer actually RENDERS on every card (it's gated on
+    # played_count) -- otherwise the footer's four denormed Game columns are never dereferenced and its
+    # zero-extra-queries property goes unpinned.
+    games = GameFactory.create_batch(60, title_platform=['PS5'], played_count=100)
     # Put a few games in badge series so the badge-map queries actually run (still bounded).
     stage = StageFactory(series_slug='whale-series')
     BadgeFactory(name='Whale Badge', series_slug='whale-series', tier=1, is_live=True)

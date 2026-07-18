@@ -109,9 +109,10 @@ from a blank canvas. Don't open the old file for design cues.
 **Legend:** ✅ Done to the Career standard · 🟡 Partial (structurally aligned, full pass pending) ·
 ⛔ Not started · 🗑️ Sunsetting/legacy.
 
-**Only four pages are finished to the standard: Career, Collection, Badges, Badge Detail.** Everything
-else — even pages that already borrow the header card or shipped in an earlier phase — is NOT done: it
-still needs the full pass (depth, segmented switcher, premium motion, mobile three-layout verification).
+**Five pages are finished to the standard: Career, Collection, Badges, Badge Detail, Browse Games.**
+Everything else — even pages that already borrow the header card or shipped in an earlier phase — is NOT
+done: it still needs the full pass (depth, segmented switcher, premium motion, mobile three-layout
+verification).
 
 | Page | URL | Status | Notes |
 |---|---|---|---|
@@ -122,7 +123,7 @@ still needs the full pass (depth, segmented switcher, premium motion, mobile thr
 | **Home / Overview** | `/` | 🟡 | 4 gamification-first blocks shipped in an earlier phase; not finished to standard. Shares `.scard` (got the depth lift). |
 | **Community Hub** | `/community/` | 🟡 | Hub-of-hubs shipped in an earlier phase; not finished to standard. |
 | **Profile** | `/u/<user>/` | 🟡 | Ownership-aware chrome only; full surface pass pending. |
-| **Browse Games** | `/games/` | ✅ | From-scratch rebuild: accented header + count-up Tally, quiet `.pp-bgal`/`.pp-gbrowse` toolbar + collapsible filter panel (house-style; the shared flag split-controls are CSS-`:has()`-driven, `browse-filters.js` de-DaisyUI'd), the from-scratch `.pp-gcard` 3:4 cover card (depth pass), infinite scroll (`InfiniteScroller` + `staggerReveal`) enabled by a shared `HtmxListMixin` XHR guard, `.is-swapping` settle. Grid-only (list view retired). The badge filter is a simple "In a Badge" toggle -- the specific-series "Pick a Badge" picker MODAL was **removed** (it reimplemented the Badge list page inside a filter). Tested (`tests/engine/test_game_browse.py`). **Deferred:** mobile 375/768/1024 eyeball. |
+| **Browse Games** | `/games/` | ✅ | **Complete** (rebuild + premium-polish + gamification hooks + community stats). From-scratch rebuild: accented header (count-up Tally + catalogue `.scard` grid) -> quiet `.pp-bgal`/`.pp-gbrowse` toolbar + **animated** collapsible filter panel (house-style; `:has()`-driven flag/badge controls, `--pp-*` sliders, de-DaisyUI'd `browse-filters.js`, opt-in debounced live search) -> from-scratch `.pp-gcard` 3:4 cover card (depth pass, spring land-in, press feedback) -> infinite scroll (`InfiniteScroller` + `staggerReveal`, shared `HtmxListMixin` XHR guard) with `.is-swapping` settle + smart empty state. **Sticky mini-bar** (identity + live count + quick search + desktop sort + Filters reach, via shared `StickyReveal`). Grid-only (list retired); "In a Badge" toggle (specific-series "Pick a Badge" picker MODAL removed). The card carries the **pursuer hooks** (badge series + home contract) + a **community-stats footer** (players / plats earned / 100% completions / avg completion) fed by denormed `Game` columns recomputed nightly (`recalc_earn_rates`; DLC completion recompute lives in `detect_dlc_and_refresh`) -- whale-safe, zero extra queries per card. Tested (`tests/engine/test_game_browse.py`). |
 | **Challenges / Franchise / Company / Game Lists / other Browse pages** | various | 🟡 | Header card adopted, but **no** depth pass / segmented switcher / premium motion. Header-aligned only. The shared `game_cards.html` card + flag/badge filter controls they include were upgraded to `.pp-gcard`/house style by the Browse Games pass (not separately verified). |
 | **Game Detail** | `/game/<id>/` | 🟡 | Frosted-glass header (`image_urls.header_bg_url` + screenshots) retained; full pass pending. |
 | **Settings** | `/settings/` | ⛔ | Not rebuilt. Premium theme/background picker **disabled** pending rebuild (see [Gotchas](#gotchas-and-pitfalls)). |
