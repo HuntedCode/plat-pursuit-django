@@ -387,9 +387,9 @@
         form.addEventListener('change', refreshBadge);
         form.addEventListener('input', refreshBadge);
 
-        // Contract discipline dropdowns (the Career board's rp-disc popovers, server-side checkbox model):
-        // a discipline chip opens a dropdown of its jobs (checkboxes); a count rides the chip; a per-
-        // discipline "All ... jobs" head toggles the group. Selecting a job auto-applies via browse-filters.js.
+        // Contract discipline dropdowns. PlatPursuit.discPopovers owns the open/close mechanics (shared with
+        // the Career board); this owns the server-side SELECTION -- the job checkboxes, a per-discipline count
+        // on the chip, and the "All ... jobs" select-all. Selecting a job auto-applies via browse-filters.js.
         function jobBoxes(disc) {
             return form.querySelectorAll('.rp-pop__item[data-disc="' + disc + '"] input[type="checkbox"]');
         }
@@ -404,30 +404,9 @@
             var trig = form.querySelector('[data-disc-trigger="' + disc + '"]');
             if (trig) { trig.classList.toggle('is-active', n > 0); }
         }
-        function closePops(except) {
-            form.querySelectorAll('[data-disc-pop]').forEach(function (pop) {
-                if (pop === except || pop.hidden) { return; }
-                pop.hidden = true;
-                var t = form.querySelector('[data-disc-trigger="' + pop.getAttribute('data-disc-pop') + '"]');
-                if (t) { t.setAttribute('aria-expanded', 'false'); }
-            });
-        }
-        form.querySelectorAll('[data-disc-trigger]').forEach(function (trig) {
-            var disc = trig.getAttribute('data-disc-trigger');
-            trig.addEventListener('click', function (e) {
-                e.stopPropagation();
-                var pop = form.querySelector('[data-disc-pop="' + disc + '"]');
-                var willOpen = pop.hidden;
-                closePops();
-                if (willOpen) {
-                    pop.hidden = false;
-                    trig.setAttribute('aria-expanded', 'true');
-                    pop.classList.remove('rp-pop--left');
-                    if (pop.getBoundingClientRect().right > window.innerWidth - 12) { pop.classList.add('rp-pop--left'); }
-                }
-            });
-            updateDisc(disc);   // reflect the server-rendered selected state
-        });
+        var discsRoot = form.querySelector('.rp-discs');
+        if (discsRoot && window.PlatPursuit && PlatPursuit.discPopovers) { PlatPursuit.discPopovers(discsRoot); }
+        form.querySelectorAll('[data-disc-trigger]').forEach(function (trig) { updateDisc(trig.getAttribute('data-disc-trigger')); });
         form.querySelectorAll('[data-disc-all]').forEach(function (head) {
             head.addEventListener('click', function () {
                 var disc = head.getAttribute('data-disc-all');
@@ -444,9 +423,6 @@
                 var item = cb.closest('.rp-pop__item');
                 if (item) { updateDisc(item.getAttribute('data-disc')); }
             });
-        });
-        document.addEventListener('click', function (e) {
-            if (!e.target.closest || !e.target.closest('.rp-disc')) { closePops(); }
         });
 
         // ── Infinite scroll + staggered card reveal (mirrors the Badges gallery). browse-filters.js owns the

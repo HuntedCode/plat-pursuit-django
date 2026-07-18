@@ -1392,11 +1392,9 @@ function ppCountUp(el, dur) {
 
     // Discipline -> job drill-down: multi-select toggles across popovers, ANDed server-side. Selected
     // items become removable tokens; a popover stays open so several can be picked from one list.
-    function closePops() {
-        if (!discs) return;
-        discs.querySelectorAll('.rp-pop').forEach(function (p) { p.hidden = true; });
-        discs.querySelectorAll('.rp-disc__trigger').forEach(function (t) { t.setAttribute('aria-expanded', 'false'); });
-    }
+    // Popover open/close mechanics are the shared PlatPursuit.discPopovers helper (shared with Browse Games);
+    // this page owns only the SELECTION (jobs/disciplines -> tokens -> fetchPage).
+    var discPop = (window.PlatPursuit && PlatPursuit.discPopovers) ? PlatPursuit.discPopovers(discs) : { closeAll: function () {} };
     // Reflect the current selection into popover items, trigger chips (active + count), the "All"
     // chip, and the token row.
     function refreshDiscUI() {
@@ -1452,29 +1450,15 @@ function ppCountUp(el, dur) {
         state.jobs = []; state.disciplines = [];
         refreshDiscUI(); updateAdvCount(); fetchPage(1, false);
     }
+    // Selection only -- discPopovers owns the trigger open/close, click-outside, and Escape. The popover
+    // stays open on a job/head click (multi-select).
     if (discs) discs.addEventListener('click', function (e) {
-        var trigger = e.target.closest('.rp-disc__trigger');
-        if (trigger) {                                   // open/close this discipline's popover (only one open at a time)
-            var pop = trigger.parentElement.querySelector('.rp-pop');
-            var isOpen = pop && !pop.hidden;
-            closePops();
-            if (pop && !isOpen) {
-                pop.classList.remove('rp-pop--left');
-                pop.hidden = false;
-                trigger.setAttribute('aria-expanded', 'true');
-                // Flip to the chip's right edge if a left-anchored popover would overflow the viewport (mobile).
-                if (pop.getBoundingClientRect().right > document.documentElement.clientWidth - 8) pop.classList.add('rp-pop--left');
-            }
-            return;
-        }
         var head = e.target.closest('.rp-pop__item--head');
-        if (head) { toggleFrom(state.disciplines, head.dataset.disc); return; }   // popover stays open (multi-select)
+        if (head) { toggleFrom(state.disciplines, head.dataset.disc); return; }
         var jobItem = e.target.closest('.rp-pop__item[data-job]');
         if (jobItem) { toggleFrom(state.jobs, jobItem.dataset.job); return; }
-        if (e.target.closest('[data-disc="all"]')) { clearDiscJobs(); closePops(); }
+        if (e.target.closest('[data-disc="all"]')) { clearDiscJobs(); discPop.closeAll(); }
     });
-    document.addEventListener('click', function (e) { if (discs && !e.target.closest('.rp-disc')) closePops(); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePops(); });
 
     // Removing a token drops that job/discipline from the AND selection.
     if (tokensBox) tokensBox.addEventListener('click', function (e) {

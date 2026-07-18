@@ -1580,3 +1580,39 @@ window.PlatPursuit.wireTablist = wireTablist;
 window.PlatPursuit.syncViewParam = syncViewParam;
 window.PlatPursuit.staggerReveal = staggerReveal;
 window.PlatPursuit.dismissableSheet = dismissableSheet;
+
+/**
+ * discPopovers -- the OPEN/CLOSE mechanics for a `.rp-disc` discipline-dropdown group (the shared look
+ * from elements.css, used by the Career contracts board + Browse Games). Owns ONLY the popover behavior:
+ * a `.rp-disc__trigger` click toggles its sibling `.rp-pop` (one open at a time), viewport-edge flip
+ * (`.rp-pop--left`), `aria-expanded`, and click-outside / Escape to close. SELECTION is the caller's --
+ * wire your own handlers on the `.rp-pop__item`s. Delegates one click listener on `root`.
+ * @param {HTMLElement} root  the `.rp-discs` container
+ * @returns {{closeAll: function}}  call closeAll() after your own actions (e.g. a "clear" button)
+ */
+function discPopovers(root) {
+    if (!root) { return { closeAll: function () {} }; }
+    function closeAll() {
+        root.querySelectorAll('.rp-pop').forEach(function (p) { p.hidden = true; });
+        root.querySelectorAll('.rp-disc__trigger').forEach(function (t) { t.setAttribute('aria-expanded', 'false'); });
+    }
+    root.addEventListener('click', function (e) {
+        var trig = e.target.closest && e.target.closest('.rp-disc__trigger');
+        if (!trig || !root.contains(trig)) { return; }
+        var pop = trig.parentElement.querySelector('.rp-pop');
+        if (!pop) { return; }
+        var isOpen = !pop.hidden;
+        closeAll();
+        if (!isOpen) {
+            pop.classList.remove('rp-pop--left');
+            pop.hidden = false;
+            trig.setAttribute('aria-expanded', 'true');
+            // Flip to the chip's right edge if a left-anchored popover would overflow the viewport (mobile).
+            if (pop.getBoundingClientRect().right > document.documentElement.clientWidth - 8) { pop.classList.add('rp-pop--left'); }
+        }
+    });
+    document.addEventListener('click', function (e) { if (!e.target.closest || !e.target.closest('.rp-disc')) { closeAll(); } });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeAll(); } });
+    return { closeAll: closeAll };
+}
+window.PlatPursuit.discPopovers = discPopovers;
