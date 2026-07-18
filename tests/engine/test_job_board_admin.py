@@ -167,3 +167,20 @@ def test_list_multi_stage_concepts_command():
     output = out.getvalue()
     assert 'Multi Stage Concept' in output
     assert 'Single Stage Concept' not in output   # only 2+ stage concepts are listed
+
+
+def test_list_multi_stage_concepts_same_badge_flag():
+    from io import StringIO
+    from django.core.management import call_command
+    same = ConceptFactory(unified_title='Same Badge Concept')
+    cross = ConceptFactory(unified_title='Cross Badge Concept')
+    StageFactory(series_slug='unc', stage_number=1).concepts.add(same)
+    StageFactory(series_slug='unc', stage_number=2).concepts.add(same)     # 2 stages, SAME badge
+    StageFactory(series_slug='badge-a', stage_number=1).concepts.add(cross)
+    StageFactory(series_slug='badge-b', stage_number=1).concepts.add(cross)  # 2 stages, DIFFERENT badges
+
+    out = StringIO()
+    call_command('list_multi_stage_concepts', '--same-badge', stdout=out)
+    output = out.getvalue()
+    assert 'Same Badge Concept' in output
+    assert 'Cross Badge Concept' not in output   # different badges -> excluded by --same-badge
