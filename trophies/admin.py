@@ -365,6 +365,13 @@ class GameAdmin(admin.ModelAdmin):
             {"fields": ("trophy_set_version", "has_trophy_groups", "defined_trophies", "played_count")},
         ),
         (
+            "Community Stats",
+            {
+                "fields": ("plats_earned_count", "full_completion_count", "avg_completion"),
+                "description": "Denormalized community completion stats, recomputed nightly by recalc_earn_rates. Read-only.",
+            },
+        ),
+        (
             "Metadata",
             {"fields": ("title_icon_url", "force_title_icon", "title_platform", "metadata")},
         ),
@@ -373,7 +380,7 @@ class GameAdmin(admin.ModelAdmin):
             {"fields": ("shovelware_status", "shovelware_lock", "shovelware_updated_at")},
         ),
     )
-    readonly_fields = ('shovelware_updated_at',)
+    readonly_fields = ('shovelware_updated_at', 'plats_earned_count', 'full_completion_count', 'avg_completion')
     actions = ['toggle_is_regional', 'add_psvr_platform', 'add_psvr2_platform', 'mark_concepts_stale', 'copy_concept_icon', 'lock_concept', 'unlock_concept', 'mark_as_shovelware', 'clear_shovelware_flag', 'reset_shovelware_auto', 'mark_unobtainable', 'mark_obtainable', 'mark_has_online_trophies', 'mark_no_online_trophies', 'mark_has_buggy_trophies', 'mark_no_buggy_trophies']
     autocomplete_fields=['concept']
 

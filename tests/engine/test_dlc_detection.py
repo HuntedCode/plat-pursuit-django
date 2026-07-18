@@ -125,3 +125,50 @@ def test_watermark_advances_after_run_but_not_on_dry_run():
 
 def test_refresh_service_returns_zeros_for_series_without_badges():
     assert badge_refresh_service.refresh_badge_series_awards('no-such-series') == (0, 0, 0, 0)
+
+
+def test_dlc_recomputes_owner_completion():
+    """When DLC lands, the trophy total grows, so each owner's completion is recomputed from
+    earned_trophies_count / new total. A prior-100% owner drops below 100 (exact at the boundary);
+    others recompute proportionally. PSN restores the exact weighted value on next sync."""
+    from tests.factories import ProfileGameFactory
+
+    watermark = timezone.now()
+    game = _series_game('series-completion')
+    # Post-DLC total = 20 defined trophies (was 10 before the DLC pack landed).
+    game.defined_trophies = {'bronze': 10, 'silver': 5, 'gold': 4, 'platinum': 1}
+    game.save(update_fields=['defined_trophies'])
+    TrophyGroup.objects.create(game=game, trophy_group_id='default', created_at=watermark - timedelta(days=1))
+    TrophyGroup.objects.create(game=game, trophy_group_id='001', created_at=watermark + timedelta(hours=1))
+
+    # A former-100% owner (10 earned of the old 10) + a mid-range owner (5 earned).
+    pg_full = ProfileGameFactory(game=game, progress=100, earned_trophies_count=10)
+    pg_mid = ProfileGameFactory(game=game, progress=80, earned_trophies_count=5)
+
+    redis_path = 'trophies.management.commands.detect_dlc_and_refresh.redis_client'
+    with mock.patch(PATCH, return_value=(1, 0, 0, 0)), mock.patch(redis_path):
+        call_command('detect_dlc_and_refresh', '--since', watermark.isoformat())
+
+    pg_full.refresh_from_db()
+    pg_mid.refresh_from_db()
+    assert pg_full.progress == 50   # 10 / 20 * 100 -- dropped from a now-false 100
+    assert pg_mid.progress == 25    # 5 / 20 * 100
+
+
+def test_dry_run_does_not_recompute_completion():
+    """--dry-run must not write progress (nor advance the watermark)."""
+    from tests.factories import ProfileGameFactory
+
+    watermark = timezone.now()
+    game = _series_game('series-completion-dry')
+    game.defined_trophies = {'bronze': 10, 'silver': 5, 'gold': 4, 'platinum': 1}
+    game.save(update_fields=['defined_trophies'])
+    TrophyGroup.objects.create(game=game, trophy_group_id='default', created_at=watermark - timedelta(days=1))
+    TrophyGroup.objects.create(game=game, trophy_group_id='001', created_at=watermark + timedelta(hours=1))
+    pg = ProfileGameFactory(game=game, progress=100, earned_trophies_count=10)
+
+    with mock.patch(PATCH), mock.patch('trophies.management.commands.detect_dlc_and_refresh.redis_client'):
+        call_command('detect_dlc_and_refresh', '--since', watermark.isoformat(), '--dry-run')
+
+    pg.refresh_from_db()
+    assert pg.progress == 100   # untouched on a dry run
