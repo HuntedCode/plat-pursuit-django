@@ -7,7 +7,7 @@ Degrades to a plain GET (Enter) without JS. {% endcomment %}
 <div class="pp-bgal" data-view="gallery" data-page-size="{{ gallery_page_size|default:48 }}">
     <form id="filter-form" method="get" action="{% url 'badges_list' %}"
           hx-get="{% url 'badges_list' %}" hx-target="#browse-results" hx-swap="innerHTML"
-          hx-indicator="#browse-results" hx-push-url="true" hx-trigger="change delay:250ms, submit">
+          hx-indicator="#browse-results" hx-push-url="true" hx-trigger="change delay:250ms, submit, keyup changed delay:400ms from:find input[type='search']">
         <input type="hidden" name="view" value="gallery" />
         <input type="hidden" name="page" value="1" />
         {% comment %} Enables Enter-to-search (implicit submit) without a visible Apply button; filters
