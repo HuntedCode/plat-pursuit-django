@@ -272,9 +272,13 @@ class SiteSuggestView(View):
     def _badges(self, q):
         # One row per series: the tier-1 badge is the series' canonical entry, and
         # badge_detail is keyed on series_slug (all tiers collapse to one page).
+        # series_slug is nullable/blank; a null/'' slug would raise NoReverseMatch on
+        # badge_detail and 500 the whole endpoint, so exclude those (as the rest of the
+        # codebase does) -- an unlinkable badge can't be a suggestion anyway.
         rows = (
             Badge.objects.live()
             .filter(name__icontains=q, tier=1)
+            .exclude(series_slug__isnull=True).exclude(series_slug='')
             .order_by('name')
             .values('name', 'series_slug')[:self.PER_GROUP]
         )
@@ -289,9 +293,12 @@ class SiteSuggestView(View):
 
     def _franchises(self, q):
         # source_type disambiguates same-named franchise vs collection ("Series").
+        # slug is unique + non-null, but guard the empty case for parity so a stray
+        # blank slug can't NoReverseMatch the endpoint.
         rows = (
             Franchise.objects
             .filter(name__icontains=q)
+            .exclude(slug='')
             .order_by('name')
             .values('name', 'slug', 'source_type')[:self.PER_GROUP]
         )

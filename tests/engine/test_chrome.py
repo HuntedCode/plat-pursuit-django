@@ -205,6 +205,17 @@ def test_site_suggest_hides_unreleased_badges(client):
     assert 'badge' not in _groups(resp)   # .live() gate keeps hidden badges out
 
 
+def test_site_suggest_skips_badge_with_blank_series_slug(client):
+    # An unlinkable badge (blank series_slug) must be EXCLUDED, not 500 the whole endpoint
+    # via NoReverseMatch on badge_detail. Force '' past save() with .update().
+    from trophies.models import Badge
+    b = BadgeFactory(name='Orphan Badge', series_slug='orphan', tier=1, is_live=True)
+    Badge.objects.filter(pk=b.pk).update(series_slug='')
+    resp = client.get(reverse('site_suggest'), {'q': 'orphan'})
+    assert resp.status_code == 200            # no NoReverseMatch crash
+    assert 'badge' not in _groups(resp)       # the unlinkable badge is dropped
+
+
 def test_site_suggest_franchise_sublabel_distinguishes_series(client):
     Franchise.objects.create(igdb_id=1, name='Spider-Verse', slug='sv-coll', source_type='collection')
     Franchise.objects.create(igdb_id=2, name='Spider-Verse', slug='sv-fran', source_type='franchise')
