@@ -29,17 +29,19 @@ membership is shown: lightweight indicator vs mini medallions. {% endcomment %}
     .gcw-flag--plat { background: color-mix(in oklab, var(--color-trophy-platinum) 92%, #000); }
     .gcw-card__bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,0.45); }
     .gcw-card__bar span { display: block; height: 100%; background: var(--pp-primary); }
-    /* Community stats badge: dark scrim so white numerals + tinted icons stay legible over any cover art. */
+    /* Community stats badge: token-based dark scrim (--pp-bg-0) so house text + tinted icons stay legible
+       over light AND dark cover art; tabular numerals + a legibility text-shadow, matching card conventions. */
     .gcw-cstats { position: absolute; left: 6px; bottom: 8px; z-index: 3; display: inline-flex; align-items: center; gap: 6px;
-        max-width: calc(100% - 12px); padding: 3px 7px; border-radius: 7px; background: rgba(4, 8, 14, 0.62);
-        box-shadow: 0 1px 3px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.07);
-        font-size: 10px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; color: #eef2f8; overflow: hidden; }
+        max-width: calc(100% - 12px); padding: 3px 7px; border-radius: var(--pp-radius-md);
+        background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.45), inset 0 0 0 1px color-mix(in oklab, var(--pp-text) 9%, transparent);
+        font-size: 10px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; color: var(--pp-text);
+        font-variant-numeric: tabular-nums; text-shadow: 0 1px 1.5px rgba(0,0,0,0.55); }
     .gcw-cstat { display: inline-flex; align-items: center; gap: 2.5px; white-space: nowrap; }
-    .gcw-cstat svg { width: 10px; height: 10px; flex-shrink: 0; opacity: 0.95; }
-    .gcw-cstat--players svg { color: var(--pp-info); }
+    /* Restraint: icons stay NEUTRAL (the glyph + numeral carry meaning); only Plats -- the brand signal --
+       gets the single accent. A drop-shadow keeps the glyphs legible over bright art. */
+    .gcw-cstat svg { width: 10px; height: 10px; flex-shrink: 0; color: var(--pp-text-dim); filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5)); }
     .gcw-cstat--plat svg { color: var(--color-trophy-platinum); }
-    .gcw-cstat--full svg { color: var(--pp-success); }
-    .gcw-cstat--avg svg { color: var(--pp-accent); }
 
     .gcw-card__body { display: flex; flex-direction: column; gap: 6px; padding: 8px 9px 9px; }
     .gcw-card__title { font-size: 12.5px; font-weight: 700; color: var(--pp-text); line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.5em; }
