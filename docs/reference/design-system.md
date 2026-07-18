@@ -291,7 +291,12 @@ Two shared helpers (in `static/js/utils.js`) give **any** search toolbar — bro
 **Opt-in affordances — `PlatPursuit.wireSearchField(input, {onClear})`:**
 - Call it once per search input. It wires the `.has-value` toggle, the `[data-search-clear]` clear button, and Escape-to-clear (both call `onClear`), and returns `{ setBusy(bool) }` for the in-flight spinner. `onClear` should re-run/re-submit your filter.
 - Markup (inside a `[data-search-wrap]` wrapper): `<span class="pp-search-spin">`, `<button class="pp-search-clear" data-search-clear tabindex="-1">`, `<kbd class="pp-search-kbd">/`. Visibility is state-driven — only one of {hint, clear, spinner} shows at a time.
-- Call `setBusy(true/false)` around your request for the spinner (skip it for client-side/instant filters — Collection Gallery does). Browse forms keep `data-live-search` for live filtering.
+- Call `setBusy(true/false)` around your request for the spinner (skip it for client-side/instant filters — Collection Gallery does).
+
+**Live search — auto-apply as you type (opt-in):**
+- The search re-filters on a debounced keystroke instead of requiring Enter. **Opt-in, not default** — most browse forms carry `hx-push-url`, so auto-submitting per keystroke burst spams browser history *and* multiplies queries on every list endpoint. Enter stays the universal path; turn live search on only where it's wanted.
+- **Browse forms (`browse-filters.js`)**: add `data-live-search` to the `[data-browse-form]`. The controller then debounces the input (~400ms) → submit. (Live on Browse Games; off on the heavier list endpoints.)
+- **Bespoke controllers**: wrap the input handler in `PlatPursuit.debounce(fn, ms)` yourself — Collection Gallery (client-side, ~320ms, instant/no history cost) and Career Contracts (server fetch, ~250ms) both do this. Debounce ~250–400ms; longer for server round-trips, shorter for client-side.
 
 **Active-filter chips** (per-page, not auto — each page's filters + labels differ). Dismissable pills of the applied *panel* filters (search + platform/regions/sort are excluded), each with a remove-URL, plus a **Clear all**. Reference impl on Browse Games:
 - View builds them with `browse_helpers.get_active_filter_chips(request, form)` → `{filter_chips: [{label, remove_url}], filter_clear_url}` (urlencoded querystrings, page reset).
