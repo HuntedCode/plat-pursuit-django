@@ -3,7 +3,7 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Q, Subquery
 from django.http import JsonResponse
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -322,7 +322,9 @@ class SiteSuggestView(View):
             .filter(name__icontains=q)
             .exclude(slug='')
             .annotate(cover=representative_concept_icon_subquery(
-                through_path='concept__concept_franchises__franchise'))
+                through_path='concept__concept_franchises__franchise',
+                # Skip curated-out links so the thumbnail matches the browse-card cover.
+                extra_filter=Q(concept__concept_franchises__is_excluded=False)))
             .order_by('name')
             .values('name', 'slug', 'source_type', 'cover')[:self.PER_GROUP]
         )

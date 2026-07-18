@@ -252,11 +252,47 @@ def test_site_suggest_franchise_uses_member_game_cover(client):
     assert item['image'] == 'https://cdn.example/cover.png'
 
 
+def test_site_suggest_franchise_skips_excluded_link_cover(client):
+    # A curated-out (is_excluded) link must not source the thumbnail (parity with browse cards).
+    from trophies.models import ConceptFranchise
+    fr = Franchise.objects.create(igdb_id=556, name='Excluded Cover Fr', slug='excl-fr', source_type='franchise')
+    concept = ConceptFactory(unified_title='Excluded Member', concept_icon_url='https://cdn.example/excl.png')
+    GameFactory(concept=concept, np_communication_id='NPWR_EXCL_00')
+    ConceptFranchise.objects.create(concept=concept, franchise=fr, is_excluded=True)
+    item = _groups(client.get(reverse('site_suggest'), {'q': 'excluded cover fr'}))['franchise']['items'][0]
+    assert item['image'] == ''
+
+
 def test_site_suggest_empty_groups_omitted(client):
     concept = ConceptFactory(unified_title='Bloodborne')
     GameFactory(concept=concept, played_count=1, np_communication_id='NPWR_BB_00')
     groups = _groups(client.get(reverse('site_suggest'), {'q': 'bloodborne'}))
     assert set(groups) == {'game'}   # no empty badge/franchise/hunter sections
+
+
+def test_site_suggest_games_no_n_plus_one(django_assert_num_queries):
+    # _games fetches Concept instances + calls get_cover_url() per row; prove the
+    # igdb_match is served from select_related (ONE query for 5 rows, not 1+5).
+    from trophies.views.sync_views import SiteSuggestView
+    for i in range(5):
+        c = ConceptFactory(unified_title=f'Nplus Game {i}')
+        IGDBMatchFactory(concept=c, igdb_cover_image_id=f'co{i}', status='auto_accepted')
+        GameFactory(concept=c, played_count=i, np_communication_id=f'NPWR_NP{i}_00')
+    with django_assert_num_queries(1):
+        result = SiteSuggestView()._games('nplus game')
+    assert len(result['items']) == 5
+    assert all(it['image'].startswith('https://images.igdb.com') for it in result['items'])
+
+
+def test_site_suggest_badges_no_n_plus_one(django_assert_num_queries):
+    # _badges reads badge_image / base_badge.badge_image per row; base_badge is
+    # select_related, so 5 badges -> ONE query.
+    from trophies.views.sync_views import SiteSuggestView
+    for i in range(5):
+        BadgeFactory(name=f'Nplus Badge {i}', series_slug=f'np-badge-{i}', tier=1, is_live=True)
+    with django_assert_num_queries(1):
+        result = SiteSuggestView()._badges('nplus badge')
+    assert len(result['items']) == 5
 
 
 def test_site_suggest_short_query_returns_empty(client):
