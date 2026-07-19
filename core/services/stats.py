@@ -1,7 +1,7 @@
 from django.db.models import Case, Count, F, IntegerField, Q, Sum, Value, When
 from django.utils import timezone
 from datetime import timedelta
-from trophies.models import Profile, EarnedTrophy, Game, Badge, Stage, UserBadge, Concept, ProfileGamification
+from trophies.models import Profile, EarnedTrophy, Game, Trophy, Badge, Stage, UserBadge, Concept, ProfileGamification
 from trophies.util_modules.constants import (
     BADGE_TIER_XP, BRONZE_STAGE_XP, GOLD_STAGE_XP, PLAT_STAGE_XP, SILVER_STAGE_XP,
 )
@@ -14,18 +14,27 @@ def compute_community_stats():
         total=Count('id'),
         weekly=Count('id', filter=Q(created_at__gte=week_ago))
     )
-    trophy_counts = EarnedTrophy.objects.aggregate(
-        total=Count('id', filter=Q(earned=True)),
-        weekly=Count('id', filter=Q(earned=True, earned_date_time__gte=week_ago))
-    )
     game_counts = Game.objects.aggregate(
         total=Count('id'),
         weekly=Count('id', filter=Q(created_at__gte=week_ago))
     )
-    platinum_counts = EarnedTrophy.objects.aggregate(
-        total=Count('id', filter=Q(earned=True, trophy__trophy_type='platinum')),
-        weekly=Count('id', filter=Q(earned=True, trophy__trophy_type='platinum', earned_date_time__gte=week_ago))
-    )
+    # Site-wide earned-trophy + platinum TOTALS read from the nightly denorms (Trophy.earned_count /
+    # Game.plats_earned_count, kept fresh by recalc_earn_rates) rather than a full-table EarnedTrophy
+    # aggregate. The live scan -- especially the platinum variant's join to Trophy -- scales with the
+    # whale table and blew the statement timeout on the hourly heartbeat cron. These denorms are the same
+    # source the game cards use, so the numbers stay consistent; they trail live by up to a nightly cycle,
+    # which is fine for an hourly-cached community ribbon. WEEKLY counts stay live but are date-bounded, so
+    # they ride the earned_date_time index (earned_trophy_earned_time_idx) instead of a full scan.
+    trophy_counts = {
+        'total': Trophy.objects.aggregate(t=Sum('earned_count'))['t'] or 0,
+        'weekly': EarnedTrophy.objects.filter(earned=True, earned_date_time__gte=week_ago).count(),
+    }
+    platinum_counts = {
+        'total': Game.objects.aggregate(t=Sum('plats_earned_count'))['t'] or 0,
+        'weekly': EarnedTrophy.objects.filter(
+            earned=True, trophy__trophy_type='platinum', earned_date_time__gte=week_ago
+        ).count(),
+    }
 
     # Badge series count (Tier 1 badges = unique series)
     badge_series_counts = Badge.objects.live().filter(tier=1).aggregate(
