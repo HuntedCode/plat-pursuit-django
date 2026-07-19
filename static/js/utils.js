@@ -600,8 +600,9 @@ function countUp(el, dur = 750, opts = {}) {
 }
 
 /**
- * Animate a collapsible panel open/closed (height + opacity), toggling its `hidden` attribute. Shared
- * by the browse / career / collection filter panels. The panel MUST have `overflow: hidden` and a
+ * Animate a collapsible panel open/closed (height + opacity), toggling its `hidden` attribute. Used by
+ * the career / collection / badge filter panels (the games browse panel runs its own copy because it also
+ * drives chip-hide + scroll-fades off the same toggle). The panel MUST have `overflow: hidden` and a
  * `height`/`opacity` CSS transition, and it MUST be able to collapse to a true 0 -- put any
  * padding/border/gap on an INNER wrapper, since with box-sizing:border-box padding+border would clamp
  * the collapsed height and snap away when `hidden` lands. Callers own the toggle's aria/is-open state.

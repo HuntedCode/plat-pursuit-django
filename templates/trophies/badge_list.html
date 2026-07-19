@@ -340,44 +340,19 @@
             var panel = document.getElementById('bgal-advanced');
             var countEl = document.getElementById('bgal-filter-count');
             var clearBtn = document.getElementById('bgal-clear');
-            var panelAnim = null;
+            // The panel's gap/padding/divider live on .pp-bgal__advanced-in so it collapses to a true 0;
+            // the shared helper tweens height+opacity + toggles `hidden`. Caller owns aria/is-open.
             function setPanel(open, animate) {
                 if (!panel || !toggle) { return; }
                 toggle.classList.toggle('is-open', open);
                 toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-                if (panelAnim) { panel.removeEventListener('transitionend', panelAnim); panelAnim = null; }
-                var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-                if (!animate || reduce) {
-                    panel.style.height = ''; panel.style.opacity = '';
-                    if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
-                    return;
-                }
-                if (open) {
-                    // Collapse before revealing so removing `hidden` doesn't paint a full-height panel for a
-                    // frame; scrollHeight still measures the true target while collapsed (overflow-hidden). The
-                    // panel collapses to a true 0 (its padding/border/gap live on .pp-bgal__advanced-in), so
-                    // there's no box-model residual to snap when it opens/closes.
-                    panel.style.height = '0px'; panel.style.opacity = '0';
+                if (window.PlatPursuit && PlatPursuit.animatePanel) {
+                    PlatPursuit.animatePanel(panel, open, animate);
+                } else if (open) {
                     panel.removeAttribute('hidden');
-                    var target = panel.scrollHeight;
-                    void panel.offsetHeight;                       // flush the collapsed start state
-                    panel.style.height = target + 'px'; panel.style.opacity = '1';
-                    panelAnim = function (ev) {
-                        if (ev.target !== panel || ev.propertyName !== 'height') { return; }
-                        panel.removeEventListener('transitionend', panelAnim); panelAnim = null;
-                        panel.style.height = ''; panel.style.opacity = '';   // release to auto so content reflows
-                    };
                 } else {
-                    panel.style.height = panel.scrollHeight + 'px'; panel.style.opacity = '1';
-                    void panel.offsetHeight;
-                    panel.style.height = '0px'; panel.style.opacity = '0';
-                    panelAnim = function (ev) {
-                        if (ev.target !== panel || ev.propertyName !== 'height') { return; }
-                        panel.removeEventListener('transitionend', panelAnim); panelAnim = null;
-                        panel.setAttribute('hidden', ''); panel.style.height = ''; panel.style.opacity = '';
-                    };
+                    panel.setAttribute('hidden', '');
                 }
-                panel.addEventListener('transitionend', panelAnim);
             }
             function activeCount() {
                 return form ? form.querySelectorAll('input[type="checkbox"]:checked').length : 0;
