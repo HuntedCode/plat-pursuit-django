@@ -212,7 +212,9 @@
 @media (min-width: 768px) {
     .pp-navsearch { flex: 1 1 auto; min-width: 0; justify-content: center; margin: 0 14px; }
     .pp-navsearch__trigger { display: none; }
-    .pp-navsearch__form, .pp-navsearch.is-open .pp-navsearch__form { display: block; position: relative; width: 100%; max-width: 440px; }
+    /* inset: auto clears the mobile sheet's fixed offsets -- otherwise, opening the sheet on mobile and
+       then resizing/rotating up to md+ (is-open persists) would leak top/left/right onto this relative bar. */
+    .pp-navsearch__form, .pp-navsearch.is-open .pp-navsearch__form { display: block; position: relative; inset: auto; width: 100%; max-width: 440px; }
 }
 
 /* ── Status-aware avatar: the ring colour IS the sync state ───────────────── */
