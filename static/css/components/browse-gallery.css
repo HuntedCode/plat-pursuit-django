@@ -126,12 +126,13 @@
 @media (prefers-reduced-motion: reduce) { .pp-bgal__advbtn__n.is-pop { animation: none; } }
 .pp-bgal__advanced { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-border); overflow: hidden; transition: height 0.32s var(--pp-ease), opacity 0.32s var(--pp-ease); }
 @media (prefers-reduced-motion: reduce) { .pp-bgal__advanced { transition: none; } }
-/* The badge panel moves its gap/padding/divider onto an inner wrapper (which clips under overflow:hidden),
-   so the panel itself collapses to a TRUE 0. Left on the panel, padding-top(12)+border-top(1) would clamp
-   the collapsed height to 13px under box-sizing:border-box -- 13px that then snap away when `hidden` lands
-   (the end-of-close "jump"). */
-#bgal-advanced { margin-top: 0; padding-top: 0; border-top: 0; }
-#bgal-advanced > .pp-bgal__advanced-in { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-border); }
+/* Both browse filter panels move their gap/padding/divider onto an inner wrapper (which clips under
+   overflow:hidden), so the panel itself collapses to a TRUE 0. Left on the panel, padding-top(12)+
+   border-top(1) would clamp the collapsed height to 13px under box-sizing:border-box -- 13px that then
+   snap away when `hidden` lands (the end-of-close "jump"). */
+#bgal-advanced, #gbrowse-advanced { margin-top: 0; padding-top: 0; border-top: 0; }
+#bgal-advanced > .pp-bgal__advanced-in,
+#gbrowse-advanced > .pp-bgal__advanced-in { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-border); }
 .pp-bgal__clear {
     margin-top: 10px; align-self: flex-start; background: none; border: none; padding: 2px 0; cursor: pointer;
     color: var(--pp-primary); font-size: 12px; font-weight: 600;
