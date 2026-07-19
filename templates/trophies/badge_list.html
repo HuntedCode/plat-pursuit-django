@@ -134,6 +134,10 @@
         // straight to the target); the header's fade-in reveal masks the brief reset-to-zero.
         var catalogCount = document.querySelector('[data-badge-count]');
         if (catalogCount && window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(catalogCount, 900); }
+        // Catalogue .scard values animate in on the same beat as the headline Tally (browse header parity).
+        if (window.PlatPursuit && PlatPursuit.countUp) {
+            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PlatPursuit.countUp(el, 900); });
+        }
 
         var scroller = null, revealHandle = null;
         // Read the active view from the swapped-in island (the toggle HTMX-swaps #badge-view, no full
