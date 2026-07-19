@@ -41,9 +41,11 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.WARNING("DRY RUN -- no changes will be written.\n"))
 
+        # Member concepts are igdb-derived (no stored `memberships` relation to prefetch);
+        # member_concept_ids() resolves them per contract. Only the episodic bundles prefetch.
         contracts = list(
             Contract.objects.filter(is_live=True)
-            .prefetch_related('memberships', 'bundles__concepts')
+            .prefetch_related('bundles__concepts')
             .order_by('name')
         )
         if not contracts:
