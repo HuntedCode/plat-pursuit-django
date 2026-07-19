@@ -36,6 +36,13 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
         so a short title occupies the same vertical space as a long one, keeping cards equal height. {% endcomment %}
         <span class="font-bold text-sm md:text-base leading-tight line-clamp-2 min-h-[2.5em] pr-1" title="{{ p.name }}">{{ p.name }}</span>
 
+        {% comment %} Platform strip: all 6 pills shown every card, the ones this contract's games
+        span are lit (family-tinted) and the rest dimmed -- same lit/dim language as the job map, and
+        the reason the game name no longer carries a "(PS3)" suffix. {% endcomment %}
+        <div class="rp-plats" role="group" aria-label="Platforms this contract spans">
+            {% for cell in p.platform_cells %}<span class="rp-platcell{% if cell.lit %} is-lit{% endif %}">{{ cell.label }}</span>{% endfor %}
+        </div>
+
         <span class="rp-div" aria-hidden="true"></span>
 
         {% comment %}

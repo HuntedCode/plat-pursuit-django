@@ -311,6 +311,24 @@ def _member_games_by_igdb(contracts):
     return {gid: _order_member_games(gl) for gid, gl in by_igdb.items()}
 
 
+# The platform pills shown on every contract card (key, display label), lit when a member game
+# sits on that platform -- mirroring the job map's lit/dim treatment. Fixed set + order; older
+# platforms (PSP/PS2/PS1) are rare on the Job Board and intentionally omitted.
+_CARD_PLATFORMS = [
+    ('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'),
+    ('PSVITA', 'PS Vita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2'),
+]
+
+
+def _platform_cells(games):
+    """The 6 platform pills for a card: each {label, lit} where lit = a member game is on it.
+    Reads the already-loaded `title_platform` column, so it's free (no extra query)."""
+    present = set()
+    for g in games:
+        present.update(g.title_platform or [])
+    return [{'label': label, 'lit': key in present} for key, label in _CARD_PLATFORMS]
+
+
 def project_card(c, member_games=None):
     """Card display dict for one annotated+prefetched Contract. No per-game progress -- that
     lives in the lazily loaded modal. `member_games` may be pre-resolved by the batch board path;
@@ -353,6 +371,7 @@ def project_card(c, member_games=None):
         'game_count': len(games),
         'elements': elements,
         'element_slugs': [el['slug'] for el in elements],
+        'platform_cells': _platform_cells(games),
         'ring_segments': _ring_segments(elements),
         'family_gradient': family_gradient,
         'family_color': family_color,

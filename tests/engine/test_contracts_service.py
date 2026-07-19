@@ -242,6 +242,28 @@ def test_server_relevance_orders_untouched_by_weak_discipline():
     assert slugs.index('rel-heart') < slugs.index('rel-combat')
 
 
+def test_platform_cells_light_present_platforms_in_fixed_order():
+    from trophies.services.contracts_service import _platform_cells
+
+    class _G:
+        def __init__(self, plats):
+            self.title_platform = plats
+
+    cells = _platform_cells([_G(['PS3']), _G(['PSVITA', 'PS3'])])
+    # All 6 pills always present, in the fixed order (equal-height cards).
+    assert [c['label'] for c in cells] == ['PS5', 'PS4', 'PS3', 'PS Vita', 'PSVR', 'PSVR2']
+    # Only the platforms a member game sits on are lit.
+    assert {c['label'] for c in cells if c['lit']} == {'PS3', 'PS Vita'}
+
+
+def test_card_platform_cells_reflect_member_games():
+    profile = ProfileFactory()
+    _c, _con, game = _contract('plat-cells')          # GameFactory default platform = PS5
+    p = _project(contracts_page(profile), 'plat-cells')
+    assert len(p['platform_cells']) == 6
+    assert {c['label'] for c in p['platform_cells'] if c['lit']} == {'PS5'}
+
+
 def test_board_member_games_are_batched_not_per_card():
     """Member games are resolved in ONE query for the whole page, not per card. Adding more cards
     must not add queries -- a regression guard against the per-card _member_games N+1."""

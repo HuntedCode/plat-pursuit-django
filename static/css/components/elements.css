@@ -624,6 +624,13 @@
 .rp-jobcell.is-lit.is-linked { border-color: color-mix(in oklab, var(--disc) 90%, transparent); box-shadow: 0 0 14px color-mix(in oklab, var(--disc) 45%, transparent); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 32%, var(--pp-bg-1)), var(--pp-bg-1)); }
 @media (prefers-reduced-motion: reduce) { .rp-jobcell.rp-ignite { animation: none; } }
 
+/* Platform strip (below the title): all 6 pills shown, the contract's platforms lit + family-tinted,
+   the rest dimmed -- the same lit/dim language as the job map above. */
+.rp-plats { display: flex; flex-wrap: wrap; gap: 4px; }
+.rp-platcell { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.02em; padding: 2px 7px; border-radius: 999px; border: 1px solid transparent; background: var(--pp-bg-1); color: var(--pp-text-dim); opacity: 0.36; transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
+.rp-platcell.is-lit { opacity: 1; color: var(--rp-fam); background: linear-gradient(180deg, color-mix(in oklab, var(--rp-fam) 18%, var(--pp-bg-1)), var(--pp-bg-1)); border-color: color-mix(in oklab, var(--rp-fam) 42%, transparent); }
+.rp-row:hover .rp-platcell.is-lit { border-color: color-mix(in oklab, var(--rp-fam) 65%, transparent); box-shadow: 0 0 10px color-mix(in oklab, var(--rp-fam) 22%, transparent); }
+
 /* Reward stack (right column): ring, total XP, state line -- all always present. */
 .rp-side { display: flex; flex-direction: column; align-items: center; gap: 7px; }
 .rp-status { min-height: 20px; display: flex; align-items: center; justify-content: center; text-align: center; }
