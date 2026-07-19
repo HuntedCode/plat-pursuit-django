@@ -600,6 +600,51 @@ function countUp(el, dur = 750, opts = {}) {
 }
 
 /**
+ * Animate a collapsible panel open/closed (height + opacity), toggling its `hidden` attribute. Shared
+ * by the browse / career / collection filter panels. The panel MUST have `overflow: hidden` and a
+ * `height`/`opacity` CSS transition, and it MUST be able to collapse to a true 0 -- put any
+ * padding/border/gap on an INNER wrapper, since with box-sizing:border-box padding+border would clamp
+ * the collapsed height and snap away when `hidden` lands. Callers own the toggle's aria/is-open state.
+ * @param {HTMLElement} panel
+ * @param {boolean} open
+ * @param {boolean} [animate=true] pass false (or under reduced-motion) to toggle instantly
+ */
+function animatePanel(panel, open, animate) {
+    if (!panel) return;
+    if (panel._panelAnim) { panel.removeEventListener('transitionend', panel._panelAnim); panel._panelAnim = null; }
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (animate === false || reduce) {
+        panel.style.height = ''; panel.style.opacity = '';
+        if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
+        return;
+    }
+    if (open) {
+        // Collapse before revealing so removing `hidden` doesn't paint a full-height panel for a frame;
+        // scrollHeight measures the true target while collapsed (overflow-hidden).
+        panel.style.height = '0px'; panel.style.opacity = '0';
+        panel.removeAttribute('hidden');
+        var target = panel.scrollHeight;
+        void panel.offsetHeight;
+        panel.style.height = target + 'px'; panel.style.opacity = '1';
+        panel._panelAnim = function (ev) {
+            if (ev.target !== panel || ev.propertyName !== 'height') { return; }
+            panel.removeEventListener('transitionend', panel._panelAnim); panel._panelAnim = null;
+            panel.style.height = ''; panel.style.opacity = '';   // release to auto so content reflows
+        };
+    } else {
+        panel.style.height = panel.scrollHeight + 'px'; panel.style.opacity = '1';
+        void panel.offsetHeight;
+        panel.style.height = '0px'; panel.style.opacity = '0';
+        panel._panelAnim = function (ev) {
+            if (ev.target !== panel || ev.propertyName !== 'height') { return; }
+            panel.removeEventListener('transitionend', panel._panelAnim); panel._panelAnim = null;
+            panel.setAttribute('hidden', ''); panel.style.height = ''; panel.style.opacity = '';
+        };
+    }
+    panel.addEventListener('transitionend', panel._panelAnim);
+}
+
+/**
  * Drag Reorder Manager
  * Wraps SortableJS for smooth, touch-friendly drag-and-drop reordering.
  * Drop-in replacement: same constructor API, same onReorder callback signature.
@@ -1568,6 +1613,7 @@ window.PlatPursuit.UnsavedChangesManager = UnsavedChangesManager;
 window.PlatPursuit.HTMLUtils = HTMLUtils;
 window.PlatPursuit.debounce = debounce;
 window.PlatPursuit.countUp = countUp;
+window.PlatPursuit.animatePanel = animatePanel;
 window.PlatPursuit.InfiniteScroller = InfiniteScroller;
 window.PlatPursuit.DragReorderManager = DragReorderManager;
 window.PlatPursuit.ZoomAwareObserver = ZoomAwareObserver;

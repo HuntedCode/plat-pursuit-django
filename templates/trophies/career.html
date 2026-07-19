@@ -317,6 +317,7 @@
             </div>
             {% comment %} Advanced panel: discipline -> job drill-down + platform selector. {% endcomment %}
             <div id="rp-advanced" class="rp-advanced" hidden>
+              <div class="rp-advanced-in">
                 <div class="rp-adv__group">
                     <span class="rp-adv__label">Discipline</span>
                     <div class="rp-discs" role="group" aria-label="Filter by discipline or job">
@@ -346,6 +347,7 @@
                         <div class="rp-platgrp"><span class="rp-platgrp__tag">VR</span><button type="button" class="rp-chip rp-plat" data-plat="PSVR">PSVR<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat" data-plat="PSVR2">PSVR2<span class="rp-chip__n" hidden></span></button></div>
                     </div>
                 </div>
+              </div>
             </div>
         </div>
         {% comment %} Facet chip counts + smart-empty suggestion for the SSR page 1 (the results
@@ -1391,12 +1393,13 @@ function ppCountUp(el, dur) {
     // Sort control.
     if (sortSel) sortSel.addEventListener('change', function () { state.sort = sortSel.value; fetchPage(1, false); });
 
-    // Advanced panel toggle.
+    // Advanced panel toggle (animated height+opacity collapse via the shared helper).
     if (advToggle && advPanel) advToggle.addEventListener('click', function () {
-        var open = advPanel.hidden;
-        advPanel.hidden = !open;
+        var open = advPanel.hidden;   // currently hidden -> this click opens it
         advToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
         advToggle.classList.toggle('is-open', open);
+        if (window.PlatPursuit && PlatPursuit.animatePanel) { PlatPursuit.animatePanel(advPanel, open, true); }
+        else { advPanel.hidden = !open; }
     });
 
     // Discipline -> job drill-down: multi-select toggles across popovers, ANDed server-side. Selected

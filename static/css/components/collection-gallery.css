@@ -34,8 +34,12 @@
 }
 .pp-gallery__advbtn__n[hidden] { display: none; }
 /* Collapsible advanced panel: the tier/state/set filter groups, hidden until the Filters toggle opens it. */
-.pp-gallery__advanced { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-border); }
+/* Collapse container: spacing/flex live on the inner wrapper so the panel collapses to a true 0 (no
+   padding/border clamping the height, which would snap away when `hidden` lands). JS tweens height+opacity. */
+.pp-gallery__advanced { overflow: hidden; transition: height 0.32s var(--pp-ease), opacity 0.32s var(--pp-ease); }
 .pp-gallery__advanced[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .pp-gallery__advanced { transition: none; } }
+.pp-gallery__advanced-in { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-border); }
 .pp-gallery__fgroup {
     display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
     font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pp-text-mute);

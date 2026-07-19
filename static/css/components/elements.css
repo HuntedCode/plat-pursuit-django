@@ -540,8 +540,11 @@
 .rp-statusrow { display: flex; flex-direction: column; gap: 8px; }   /* mobile: chips row (scrolls) + count below (md: one row) */
 .rp-count { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; text-align: right; }
 /* Advanced panel: fades in when the Filters toggle opens it (opacity/transform only -- no color-mix in keyframes). */
-.rp-advanced { display: flex; flex-direction: column; gap: 12px; padding: 13px; border: 1px solid var(--pp-border); border-radius: 12px; background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); animation: rp-adv-in 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
-@keyframes rp-adv-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+/* Collapse container: the card styling lives on .rp-advanced-in so the panel collapses to a true 0
+   (padding+border on the panel would clamp the height and snap when `hidden` lands). JS tweens height+opacity. */
+.rp-advanced { overflow: hidden; transition: height 0.32s var(--pp-ease), opacity 0.32s var(--pp-ease); }
+@media (prefers-reduced-motion: reduce) { .rp-advanced { transition: none; } }
+.rp-advanced-in { display: flex; flex-direction: column; gap: 12px; padding: 13px; border: 1px solid var(--pp-border); border-radius: 12px; background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); }
 .rp-adv__group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 /* Mobile: the group label is a full-width header above its wrapping chips (md: a 74px inline gutter). */
 .rp-adv__label { flex: 0 0 100%; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
