@@ -352,24 +352,28 @@
                     if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
                     return;
                 }
+                // The top gap (margin-top) doesn't shrink with the animated height, so at height:0 it leaves
+                // a residual that snaps away the instant `hidden` lands -- the end-of-close jump. Animate it to
+                // 0 alongside the height, using the resting value read from CSS (transitioning to/from the
+                // empty-string form is unreliable, so we use an explicit px value).
+                var restMargin = getComputedStyle(panel).marginTop;
                 if (open) {
                     // Collapse before revealing so removing `hidden` doesn't paint a full-height panel for a
-                    // frame; scrollHeight still measures the true target while collapsed (overflow-hidden). The
-                    // top gap (margin-top) animates in with the height so it never snaps.
+                    // frame; scrollHeight still measures the true target while collapsed (overflow-hidden).
                     panel.style.height = '0px'; panel.style.opacity = '0'; panel.style.marginTop = '0px';
                     panel.removeAttribute('hidden');
                     var target = panel.scrollHeight;
                     void panel.offsetHeight;                       // flush the collapsed start state
-                    panel.style.height = target + 'px'; panel.style.opacity = '1'; panel.style.marginTop = '';  // '' -> CSS gap
+                    panel.style.height = target + 'px'; panel.style.opacity = '1'; panel.style.marginTop = restMargin;
                     panelAnim = function (ev) {
                         if (ev.target !== panel || ev.propertyName !== 'height') { return; }
                         panel.removeEventListener('transitionend', panelAnim); panelAnim = null;
-                        panel.style.height = ''; panel.style.opacity = '';   // release to auto so content reflows
+                        panel.style.height = ''; panel.style.opacity = ''; panel.style.marginTop = '';   // release to CSS/auto
                     };
                 } else {
-                    panel.style.height = panel.scrollHeight + 'px'; panel.style.opacity = '1'; panel.style.marginTop = '';
+                    panel.style.height = panel.scrollHeight + 'px'; panel.style.opacity = '1'; panel.style.marginTop = restMargin;
                     void panel.offsetHeight;
-                    panel.style.height = '0px'; panel.style.opacity = '0'; panel.style.marginTop = '0px';   // gap collapses WITH the height, so no residual to snap away
+                    panel.style.height = '0px'; panel.style.opacity = '0'; panel.style.marginTop = '0px';   // gap collapses WITH the height
                     panelAnim = function (ev) {
                         if (ev.target !== panel || ev.propertyName !== 'height') { return; }
                         panel.removeEventListener('transitionend', panelAnim); panelAnim = null;
