@@ -1,7 +1,10 @@
-from django.db.models import Count, Q, Sum
+from django.db.models import Case, Count, F, IntegerField, Q, Sum, Value, When
 from django.utils import timezone
 from datetime import timedelta
-from trophies.models import Profile, EarnedTrophy, Game, Badge, UserBadge, Concept, ProfileGamification
+from trophies.models import Profile, EarnedTrophy, Game, Badge, Stage, UserBadge, Concept, ProfileGamification
+from trophies.util_modules.constants import (
+    BADGE_TIER_XP, BRONZE_STAGE_XP, GOLD_STAGE_XP, PLAT_STAGE_XP, SILVER_STAGE_XP,
+)
 
 def compute_community_stats():
     now = timezone.now()
@@ -57,6 +60,29 @@ def compute_community_stats():
         'weekly': per_user_weekly['total'] or 0,
     }
 
+    # --- Catalog (collection) stats: what the badge collection OFFERS, independent of who earned it ---
+    # Total stages to complete across live badge series (stage 0 is the non-counting base stage).
+    live_series_slugs = Badge.objects.live().filter(tier=1).values_list('series_slug', flat=True)
+    badge_stages_total = (
+        Stage.objects.filter(series_slug__in=live_series_slugs)
+        .exclude(stage_number=0)
+        .count()
+    )
+    # Total earnable badge XP: per live badge, (required_stages * that tier's per-stage XP) + the
+    # flat completion bonus. Mirrors xp_service's formula, aggregated over the whole live catalog.
+    badge_earnable_xp = Badge.objects.live().aggregate(
+        xp=Sum(
+            Case(
+                When(tier=1, then=F('required_stages') * BRONZE_STAGE_XP),
+                When(tier=2, then=F('required_stages') * SILVER_STAGE_XP),
+                When(tier=3, then=F('required_stages') * GOLD_STAGE_XP),
+                When(tier=4, then=F('required_stages') * PLAT_STAGE_XP),
+                default=Value(0),
+                output_field=IntegerField(),
+            ) + Value(BADGE_TIER_XP)
+        )
+    )['xp'] or 0
+
     return {
         'profiles': {
             'total': profile_counts['total'],
@@ -77,6 +103,12 @@ def compute_community_stats():
         'badge_series': {
             'total': badge_series_counts['total'],
             'weekly': badge_series_counts['weekly'],
+        },
+        'badge_stages': {
+            'total': badge_stages_total,
+        },
+        'badge_earnable_xp': {
+            'total': badge_earnable_xp,
         },
         'badge_xp': {
             'total': badge_xp['total'] or 0,

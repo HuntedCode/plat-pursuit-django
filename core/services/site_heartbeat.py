@@ -110,6 +110,9 @@ def compute_site_heartbeat() -> dict:
     profiles_weekly = _community_value('profiles', 'weekly')
     platinums_total = _community_value('platinums', 'total')
     badges_total = _community_value('badge_series', 'total')
+    badges_new_this_week = _community_value('badge_series', 'weekly')
+    badge_stages_total = _community_value('badge_stages', 'total')
+    badge_earnable_xp = _community_value('badge_earnable_xp', 'total')
     badge_xp_total = _community_value('badge_xp', 'total')
 
     # Flavor line: pre-formatted in service so template stays dumb
@@ -156,8 +159,19 @@ def compute_site_heartbeat() -> dict:
             },
             'badges_total': {
                 'value': badges_total,
+                'delta': badges_new_this_week,   # new badge series added in the last 7 days
                 'label': 'Unique badges',
                 'sublabel': 'to earn',
+            },
+            'badge_stages_total': {
+                'value': badge_stages_total,
+                'label': 'Badge stages',
+                'sublabel': 'to complete',
+            },
+            'badge_earnable_xp': {
+                'value': badge_earnable_xp,
+                'label': 'Badge XP available',
+                'sublabel': 'up for grabs',
             },
             'badge_xp_total': {
                 'value': badge_xp_total,
