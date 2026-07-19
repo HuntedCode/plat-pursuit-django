@@ -96,7 +96,7 @@ Total XP: sum across all badge series.
 
 ## Contract / Job XP Engine
 
-A second, badge-independent XP system. A **Contract** groups one or more Concepts (via `ContractMembership`, a one-home invariant, or a `ContractBundle` collection satisfier) and pays the same global total **T** (`CONTRACT_XP_TOTAL = 5000`, override per Contract via `xp_total_override`), split evenly among the Contract's assigned **jobs** (Elements). Each user banks that XP per job and levels each job independently; the headline **Pursuer Level** is the sum of all per-job levels.
+A second, badge-independent XP system. A **Contract** is keyed on a raw IGDB game id (`Contract.igdb_id`): every **anchored** Concept (`anchor_migration_completed_at` set) whose `igdb_match.igdb_id` matches is a member automatically — usually one Concept, but same-entry multi-platform/regional siblings share the id. A `ContractBundle` (M2M, all-must-100%) handles the niche episodic case (individual trophy lists with different/no IGDB ids). It pays the same global total **T** (`CONTRACT_XP_TOTAL = 5000`, override per Contract via `xp_total_override`), split evenly among the Contract's assigned **jobs** (Elements). Each user banks that XP per job and levels each job independently; the headline **Pursuer Level** is the sum of all per-job levels.
 
 > **Naming skin:** the backend models are `Job` / `Contract`; everything user-facing is **Element / Project / The Lab**. No user-visible text says "job" or "contract".
 

@@ -3,11 +3,14 @@ fixed-T even split across Platinum/100% tiers, no-platinum-pays-full, acceptance
 idempotency + one-accept-banks-all-tiers, completion degradation (DLC) not re-paying,
 the ledger->cache recompute, and the leveling curve.
 """
+import itertools
+
 import pytest
 from django.db import transaction
+from django.utils import timezone
 
 from trophies.models import (
-    Contract, ContractBundle, ContractMembership, ContractXPGrant, EarnedContract, Job,
+    Contract, ContractBundle, ContractXPGrant, EarnedContract, Job,
     ProfileGame, ProfileJobXP,
 )
 from trophies.services import contract_service
@@ -16,32 +19,34 @@ from trophies.util_modules.constants import (
     CONTRACT_XP_TOTAL, CONTRACT_PLATINUM_FRAC, JOB_XP_PER_LEVEL,
 )
 from tests.factories import (
-    ConceptFactory, EarnedTrophyFactory, GameFactory, ProfileFactory, ProfileGameFactory,
-    TrophyFactory,
+    ConceptFactory, EarnedTrophyFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
+    ProfileGameFactory, TrophyFactory,
 )
 
 pytestmark = pytest.mark.django_db
 
+_igdb_seq = itertools.count(70001)   # distinct raw igdb ids per test contract
 
-def _contract(slug, job_slugs):
-    c = Contract.objects.create(name=slug, slug=slug, is_live=True)
+
+def _contract(slug, job_slugs, *, igdb_id=None):
+    c = Contract.objects.create(name=slug, slug=slug, igdb_id=igdb_id or next(_igdb_seq), is_live=True)
     c.jobs.set(Job.objects.filter(slug__in=job_slugs))
     return c
 
 
 def _platinum_member(contract):
-    """A member concept whose game has a platinum trophy."""
-    concept = ConceptFactory()
+    """An ANCHORED member concept (shares the contract's igdb_id) whose game has a platinum."""
+    concept = ConceptFactory(anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=concept, igdb_id=contract.igdb_id)   # factory default status = auto_accepted
     game = GameFactory(concept=concept)
     plat = TrophyFactory(game=game, trophy_type='platinum')
-    ContractMembership.objects.create(contract=contract, concept=concept)
     return concept, game, plat
 
 
 def _noplat_member(contract):
-    concept = ConceptFactory()
+    concept = ConceptFactory(anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=concept, igdb_id=contract.igdb_id)
     game = GameFactory(concept=concept)  # no platinum trophy
-    ContractMembership.objects.create(contract=contract, concept=concept)
     return concept, game
 
 
@@ -328,19 +333,17 @@ def test_grant_job_xp_zero_is_noop():
 
 
 def test_bundle_platinum_satisfies_platinum_and_full_tiers():
-    """A multi-game satisfier bundle the profile has fully platinum'd grants BOTH tiers
-    on the contract, even though the home member itself was never earned -- this is the
-    Uncharted: Legacy of Thieves case (one collection platinum stands in for the games
-    it covers)."""
+    """An episodic satisfier bundle the profile has fully platinum'd grants BOTH tiers on the
+    contract, even though the home member itself was never earned (the bundle stands in)."""
     profile = ProfileFactory()
-    contract = Contract.objects.create(name='Uncharted 4', slug='u4-bundle', is_live=True)
+    contract = Contract.objects.create(name='Ep Game', slug='ep-bundle', igdb_id=88801, is_live=True)
     # Home member (defines a platinum) that the profile has NOT earned.
     _platinum_member(contract)
-    # Satisfier bundle: a multi-game collection the profile HAS platinum'd.
-    coll = ConceptFactory(unified_title='Legacy of Thieves Collection', contract_satisfier_only=True)
+    # Satisfier bundle: a grouped list the profile HAS platinum'd.
+    coll = ConceptFactory(unified_title='Bundled List')
     coll_game = GameFactory(concept=coll)
     coll_plat = TrophyFactory(game=coll_game, trophy_type='platinum')
-    ContractBundle.objects.create(contract=contract, label='Collection covers this').concepts.set([coll])
+    ContractBundle.objects.create(contract=contract, label='covers this').concepts.set([coll])
     _earn_platinum(profile, coll_game, coll_plat)
 
     ec = contract_service.mark_contract_reached(profile, contract)
@@ -353,9 +356,9 @@ def test_bundle_at_100_but_not_platinum_grants_only_full_tier():
     """A bundle cleared to 100% but without its platinum grants the 100% tier only, not
     platinum -- the platinum-via-bundle path requires the bundle's platinum(s)."""
     profile = ProfileFactory()
-    contract = Contract.objects.create(name='Some Game', slug='some-bundle', is_live=True)
+    contract = Contract.objects.create(name='Some Game', slug='some-bundle', igdb_id=88802, is_live=True)
     _platinum_member(contract)
-    coll = ConceptFactory(unified_title='Coll No Plat', contract_satisfier_only=True)
+    coll = ConceptFactory(unified_title='Coll No Plat')
     coll_game = GameFactory(concept=coll)
     TrophyFactory(game=coll_game, trophy_type='platinum')   # platinum EXISTS but is not earned
     ContractBundle.objects.create(contract=contract, label='covers').concepts.set([coll])
@@ -375,7 +378,7 @@ def test_platted_bundle_on_noplat_member_banks_platinum_not_stuck():
     profile = ProfileFactory()
     contract = _contract('c-bundle-plat', ['mage'])
     _noplat_member(contract)   # home member defines NO platinum
-    coll = ConceptFactory(unified_title='Collection', contract_satisfier_only=True)
+    coll = ConceptFactory(unified_title='Bundled List')
     coll_game = GameFactory(concept=coll)
     coll_plat = TrophyFactory(game=coll_game, trophy_type='platinum')
     ContractBundle.objects.create(contract=contract, label='covers').concepts.set([coll])

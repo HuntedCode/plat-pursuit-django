@@ -1,8 +1,8 @@
 """Audit Job Board coverage: badge games not yet on the Job Board.
 
 A "badge game" is any Concept in a badge Stage (direct Stage.concepts, or via a
-ConceptBundle on a stage). It is "covered" if it has a home Contract
-(ContractMembership) OR satisfies one via a ContractBundle. This lists the badge games
+ConceptBundle on a stage). It is "covered" if it's an ANCHORED concept whose raw IGDB id
+keys a Contract, OR it satisfies one via a ContractBundle. This lists the badge games
 still MISSING a Contract, grouped by badge series, so staff know what to curate onto the
 Job Board. Read-only; catalog-bounded (not per-user), so it loads id sets in memory.
 """
@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from django.core.management.base import BaseCommand
 
-from trophies.models import Badge, Concept, ContractMembership, Stage
+from trophies.models import Badge, Concept, Contract, Stage
 
 
 class Command(BaseCommand):
@@ -50,8 +50,14 @@ class Command(BaseCommand):
             if cid:
                 stage_concepts[slug].add(cid)
 
-        # Covered = has a home Contract OR satisfies one via a bundle.
-        covered = set(ContractMembership.objects.values_list('concept_id', flat=True))
+        # Covered = an ANCHORED concept whose raw igdb_id keys a Contract, OR is in a bundle.
+        contract_igdb_ids = set(Contract.objects.exclude(igdb_id=None).values_list('igdb_id', flat=True))
+        covered = set(
+            Concept.objects.filter(
+                anchor_migration_completed_at__isnull=False,
+                igdb_match__igdb_id__in=contract_igdb_ids,
+            ).values_list('id', flat=True)
+        ) if contract_igdb_ids else set()
         covered |= set(
             Concept.objects.filter(contract_bundles__isnull=False).values_list('id', flat=True)
         )

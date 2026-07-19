@@ -89,7 +89,7 @@ def suggest_job_slugs(concept_ids):
 def suggest_jobs_for_contract(contract):
     """Suggested job slugs for a Contract, pooling its member + bundle concepts (the
     game's full genre/theme profile). Empty if the Contract has no concepts."""
-    ids = set(contract.memberships.values_list('concept_id', flat=True))
+    ids = set(contract.member_concept_ids())
     for bundle in contract.bundles.all():
         ids |= set(bundle.concepts.values_list('id', flat=True))
     return suggest_job_slugs(ids)

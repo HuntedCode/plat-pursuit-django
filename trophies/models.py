@@ -927,18 +927,6 @@ class Concept(models.Model):
             "franchise/collection membership."
         ),
     )
-    contract_satisfier_only = models.BooleanField(
-        default=False,
-        help_text=(
-            "This concept's trophy list spans MULTIPLE games that each have their "
-            "own Contract (e.g. a remaster collection like Uncharted: Legacy of "
-            "Thieves). It must be a bundle SATISFIER, never a home MEMBER: the "
-            "membership admin refuses to home it, and the Stage -> Contract "
-            "converter attaches it as a ContractBundle instead. Set by "
-            "hand -- appearing in multiple Stages alone doesn't imply this (a "
-            "single game can be in many badges). See list_multi_stage_concepts."
-        ),
-    )
     family = models.ForeignKey(
         GameFamily, null=True, blank=True, on_delete=models.SET_NULL, related_name='concepts'
     )
@@ -1093,14 +1081,6 @@ class Concept(models.Model):
         if other == self:
             return
 
-        # Inherit the multi-game-satisfier flag: if `other` was a multi-game trophy list,
-        # the survivor represents the same list and must keep its never-a-home protection
-        # so it can't later be wrongly homed as a Contract member. Unconditional (intrinsic
-        # to the concept), unlike franchises_locked which is gated on the match migration.
-        if other.contract_satisfier_only and not self.contract_satisfier_only:
-            self.contract_satisfier_only = True
-            self.save(update_fields=['contract_satisfier_only'])
-
         # Comments (concept-level, trophy-level, checklist-level). Comments
         # FK Concept directly (trophy_id/checklist_id are plain ints, not a
         # CTG FK) so a bulk concept re-point is safe.
@@ -1237,13 +1217,9 @@ class Concept(models.Model):
                 bundle.concepts.add(self)
             bundle.concepts.remove(other)
 
-        # ContractMembership (OneToOne home Contract for job XP): re-point other's
-        # membership to the survivor if the survivor has none. If the survivor already
-        # has a home Contract, other's cascade-deletes with it (a concept has ONE home).
-        other_membership = ContractMembership.objects.filter(concept=other).first()
-        if other_membership and not ContractMembership.objects.filter(concept=self).exists():
-            other_membership.concept = self
-            other_membership.save(update_fields=['concept'])
+        # Contract home membership needs NO handling now: a Contract is keyed on the raw IGDB
+        # id, so a concept's contract is DERIVED from its IGDBMatch (which migrates above, gated
+        # on inherit_match). ContractMembership was removed with the igdb-keyed rework.
 
         # ContractBundle satisfier membership (per-bundle M2M): move other's links to self.
         for cbundle in other.contract_bundles.all():
@@ -2411,11 +2387,21 @@ class Job(models.Model):
 
 
 class Contract(models.Model):
-    """A curated Job Board entry: a game (one or more grouped Concepts) that grants job
-    XP once per user. Decoupled from badges -- a Concept can be in many badges but has at
-    most ONE Contract. See docs/design/rebuild/job-board-contracts.md."""
+    """A curated Job Board entry: an IGDB game that grants job XP once per user. Keyed on the
+    raw IGDB id -- every ANCHORED Concept sharing this Contract's `igdb_id` is a member
+    automatically (usually one concept; same-entry multi-platform/regional siblings share the
+    id). Only anchored concepts (resolved to a specific IGDB version) can key/join a contract.
+    Decoupled from badges. ContractBundle handles the niche episodic case (individual trophy
+    lists with different/no igdb ids that should count as one). See
+    docs/design/rebuild/job-board-contracts.md."""
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
+    igdb_id = models.IntegerField(
+        null=True, blank=True, unique=True, db_index=True,
+        help_text=('The raw IGDB game id this Contract represents; its member concepts are all '
+                   'ANCHORED Concepts sharing this id. Leave null for an admin/episodic Contract '
+                   'whose concepts come from its bundles instead.'),
+    )
     is_live = models.BooleanField(default=False, help_text='Visible/active to users. Curate while False.')
     jobs = models.ManyToManyField(
         Job, related_name='contracts', blank=True,
@@ -2435,26 +2421,29 @@ class Contract(models.Model):
     def __str__(self):
         return self.name
 
-
-class ContractMembership(models.Model):
-    """Links a Concept to its home Contract. The OneToOne on `concept` enforces the core
-    invariant -- each Concept belongs to AT MOST ONE Contract -- which guarantees job XP is
-    earned once per game. Collection 'satisfier' concepts live in ContractBundle, not here."""
-    contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name='memberships')
-    concept = models.OneToOneField('Concept', on_delete=models.CASCADE, related_name='contract_membership')
-
-    class Meta:
-        ordering = ['contract']
-
-    def __str__(self):
-        return f"{self.concept} -> {self.contract}"
+    def member_concept_ids(self):
+        """Concept ids belonging to this Contract: every ANCHORED Concept sharing this
+        Contract's raw IGDB id. Anchoring (`anchor_migration_completed_at`) is the
+        authoritative "this concept is this specific IGDB version" signal -- only anchored
+        concepts key contracts (an anchored concept keeps its RAW igdb_id; canonical grouping
+        lives on GameFamily, not here). Empty for an admin/episodic Contract (igdb_id=None)
+        whose concepts come only from its bundles."""
+        if self.igdb_id is None:
+            return []
+        return list(
+            Concept.objects.filter(
+                anchor_migration_completed_at__isnull=False,
+                igdb_match__igdb_id=self.igdb_id,
+            ).values_list('id', flat=True)
+        )
 
 
 class ContractBundle(models.Model):
-    """A grouped set of Concepts that satisfy a Contract as one qualifier -- mirrors
-    ConceptBundle on badge Stages. For the collection-spanning case (a collection list
-    that covers games which also have their own lists). A satisfier concept may appear in
-    several bundles across Contracts, so it is EXEMPT from the membership-unique rule."""
+    """A grouped set of Concepts that satisfy a Contract as one qualifier (ALL must hit 100%).
+    Kept for the niche EPISODIC case: releases whose trophies are split across several Concepts
+    with individual trophy lists and different/no IGDB ids (e.g. Telltale seasons), which the
+    igdb_id keying can't group on its own. Also the manual escape hatch for a concept with no
+    trusted IGDB id that still needs a Contract."""
     contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name='bundles')
     label = models.CharField(max_length=120, help_text="Display label, e.g. 'Collection list covers this game'.")
     concepts = models.ManyToManyField('Concept', related_name='contract_bundles')
@@ -6016,6 +6005,9 @@ class IGDBMatch(models.Model):
         ('rejected', 'Rejected'),
         ('no_match', 'No Match Found'),
     ]
+    # The statuses a match must be in to be TRUSTED (its igdb_id is reliable/usable). Single
+    # source of truth for is_trusted + every igdb-derived query (Contract membership, etc.).
+    TRUSTED_STATUSES = ('accepted', 'auto_accepted')
 
     GAME_CATEGORY_CHOICES = [
         (0, 'Main Game'),
@@ -6189,7 +6181,7 @@ class IGDBMatch(models.Model):
     @property
     def is_trusted(self):
         """True if the match has been accepted (manually or automatically)."""
-        return self.status in ('accepted', 'auto_accepted')
+        return self.status in IGDBMatch.TRUSTED_STATUSES
 
     def cover_url(self, size='cover_big'):
         if not self.igdb_cover_image_id:
