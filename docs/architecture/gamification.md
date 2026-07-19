@@ -96,7 +96,7 @@ Total XP: sum across all badge series.
 
 ## Contract / Job XP Engine
 
-A second, badge-independent XP system. A **Contract** groups one or more Concepts (via `ContractMembership`, a one-home invariant, or a `ContractBundle` collection satisfier) and pays the same global total **T** (`CONTRACT_XP_TOTAL = 6000`, override per Contract via `xp_total_override`), split evenly among the Contract's assigned **jobs** (Elements). Each user banks that XP per job and levels each job independently; the headline **Pursuer Level** is the sum of all per-job levels.
+A second, badge-independent XP system. A **Contract** is keyed on a raw IGDB game id (`Contract.igdb_id`): every **anchored + trusted-matched** Concept (`anchor_migration_completed_at` set) whose `igdb_match.igdb_id` matches is a member automatically — usually one Concept, but same-entry multi-platform/regional siblings share the id. A `ContractBundle` (M2M, all-must-100%) handles the niche episodic case (individual trophy lists with different/no IGDB ids). It pays the same global total **T** (`CONTRACT_XP_TOTAL = 6000`, override per Contract via `xp_total_override`), split evenly among the Contract's assigned **jobs** (Elements, capped at `MAX_CONTRACT_JOBS = 6`). Each user banks that XP per job and levels each job independently; the headline **Pursuer Level** is the sum of all per-job levels.
 
 > **Naming skin:** the backend models are `Job` / `Contract`; everything user-facing is **Element / Project / The Lab**. No user-visible text says "job" or "contract".
 
@@ -148,7 +148,7 @@ In `token_keeper.py`'s `sync_complete` (phase `stats_badges`, right after `check
 - **Reached is a one-way ratchet; accept is once-per-tier**: a 100%'d game that later drops below 100% (new DLC) keeps its reached/accepted state and its banked XP. Re-detect + re-accept grants nothing more (idempotent via the accepted timestamps + the ledger `unique_together`). Surfaces that show "claimable" status must read `EarnedContract`, not live `ProfileGame.progress`.
 - **Accept is required for XP**: detection on sync only makes a reward *claimable*. No XP exists until the user accepts. The Research Panel's Accept button (`POST /api/v1/projects/accept/` with `{slug}` for one or `{all: true}` for every claimable; `api/contract_views.py:AcceptContractView`) is the only grant path. The view is the sole request path that writes grants; it just delegates to `accept_contract` / `accept_contracts`.
 - **Per-user reads must DB-aggregate**: `ProfileJobXP` is ~24 rows/user, but `recompute_profile_job_xp` and any leaderboard read must aggregate in the DB (`Sum` / `annotate`), never iterate the ledger in Python (whale-OOM rule).
-- **When adding a model FK'd to Concept, update `Concept.absorb()`**: `EarnedContract` / `ContractXPGrant` / `ProfileJobXP` FK Profile/Job/Contract (not Concept directly), so they need no absorb branch. `ContractMembership` / `ContractBundle` (which DO reference Concept) are already handled there.
+- **When adding a model FK'd to Concept, update `Concept.absorb()`**: `EarnedContract` / `ContractXPGrant` / `ProfileJobXP` FK Profile/Job/Contract (not Concept directly), so they need no absorb branch. Contract home membership is DERIVED (a Contract keys on a raw IGDB id; there is no through-table), so absorb only migrates `ContractBundle.concepts` (episodic satisfier membership) + propagates the anchor stamp when inheriting an IGDBMatch.
 
 ## Management Commands
 

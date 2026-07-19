@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractMembership, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP
 
 
 # Register your models here.
@@ -868,14 +868,14 @@ class ConceptAdmin(admin.ModelAdmin):
     list_display = (
         'id', 'concept_id', 'unified_title',
         'anchor_migration_completed_at', 'anchor_migration_last_attempt_at',
-        'title_lock', 'franchises_locked', 'contract_satisfier_only', 'title_reviewed_at',
+        'title_lock', 'franchises_locked', 'title_reviewed_at',
         'family_pk_display', 'family_display',
         'release_date_display', 'developers_display',
         'publishers_display', 'genres_display',
     )
     list_select_related = ('family', 'igdb_match')
     list_filter = (
-        'family__is_verified', 'title_lock', 'franchises_locked', 'contract_satisfier_only',
+        'family__is_verified', 'title_lock', 'franchises_locked',
         ConceptAnchorStatusFilter, ConceptShovelwareFilter,
     )
     # Searching ``concept_companies__company__name`` matches ANY linked
@@ -895,21 +895,10 @@ class ConceptAdmin(admin.ModelAdmin):
         'lock_games', 'unlock_games',
         'lock_titles', 'unlock_titles',
         'lock_franchises', 'unlock_franchises',
-        'mark_contract_satisfier', 'unmark_contract_satisfier',
         'clear_title_review',
         'clear_anchor_last_attempt',
     ]
     inlines = [ConceptGameInline, ConceptCompanyInline, ConceptFranchiseInline]
-
-    @admin.action(description="Flag as multi-game list (contract_satisfier_only)")
-    def mark_contract_satisfier(self, request, queryset):
-        n = queryset.update(contract_satisfier_only=True)
-        self.message_user(request, f"Flagged {n} concept(s) as multi-game satisfiers (bundle-only, never a home member).")
-
-    @admin.action(description="Unflag contract_satisfier_only")
-    def unmark_contract_satisfier(self, request, queryset):
-        n = queryset.update(contract_satisfier_only=False)
-        self.message_user(request, f"Unflagged {n} concept(s).")
 
     def get_queryset(self, request):
         # Prefetches keep the IGDB-derived list_display columns from N+1ing.
@@ -1524,81 +1513,83 @@ class StageAdmin(admin.ModelAdmin):
     inlines = [ConceptBundleInline]
     actions = ['convert_to_contract']
 
-    @admin.action(description="Convert to Contract (members + satisfiers + bundles, suggest jobs)")
+    @admin.action(description="Convert anchored concepts to Contracts (keyed on IGDB id, skip existing)")
     def convert_to_contract(self, request, queryset):
-        """Spin up a draft Contract per selected stage. The stage's concepts split into
-        home MEMBERS (normal games not already homed elsewhere) and bundle SATISFIERS
-        (concepts flagged contract_satisfier_only -- multi-game lists like a remaster
-        collection). A Contract is created ONLY if the stage yields at least one NEW
-        member; the flagged satisfiers ride along as ContractBundles (so a collection
-        covering two games lands as a bundle on BOTH games' contracts). Stages with no
-        new member -- all already homed, or satisfier-only -- are skipped, so no empty
-        draft (and no duplicate on a re-run) is ever left behind."""
+        """Create a draft Contract per distinct IGDB id among the selected stages' ANCHORED
+        concepts. Each anchored concept keys a Contract on its raw igdb_id (name = the concept's
+        IGDB-canonical `unified_title`); concepts sharing an igdb_id collapse to one Contract.
+        Contracts that already exist for an igdb_id are SKIPPED; UN-ANCHORED concepts (no
+        resolved IGDB identity yet) are skipped + reported. A stage's ConceptBundles (episodic)
+        carry over into a single igdb_id=None Contract, deduped by slug."""
         from django.db import transaction
         from django.utils.text import slugify
         from trophies.services.job_detection import suggest_jobs_for_contract
 
-        created = satisfiers_bundled = 0
-        skipped_homed = []
-        skipped_empty = []
+        def _igdb_id(concept):
+            try:
+                return concept.igdb_match.igdb_id
+            except IGDBMatch.DoesNotExist:
+                return None
+
+        created = bundles_made = skipped_existing = 0
+        skipped_unanchored = []
+        skipped_episodic = []
+        seen_igdb = set()   # dedup within this run
         for stage in queryset:
-            flagged, new_members = [], []
-            for concept in stage.concepts.all():
-                if concept.contract_satisfier_only:
-                    flagged.append(concept)                 # multi-game list -> bundle, never a member
-                elif ContractMembership.objects.filter(concept=concept).exists():
-                    skipped_homed.append(str(concept))      # already homed elsewhere
+            for concept in stage.concepts.select_related('igdb_match').all():
+                igdb_id = _igdb_id(concept) if concept.anchor_migration_completed_at else None
+                if igdb_id is None:
+                    skipped_unanchored.append(str(concept))
+                    continue
+                if igdb_id in seen_igdb:
+                    continue
+                seen_igdb.add(igdb_id)
+                if Contract.objects.filter(igdb_id=igdb_id).exists():
+                    skipped_existing += 1
+                    continue
+                with transaction.atomic():
+                    name = concept.unified_title or f"IGDB {igdb_id}"
+                    base = slugify(name) or f"contract-igdb-{igdb_id}"
+                    slug, k = base, 2
+                    while Contract.objects.filter(slug=slug).exists():
+                        slug, k = f"{base}-{k}", k + 1
+                    contract = Contract.objects.create(igdb_id=igdb_id, name=name, slug=slug)
+                    slugs = suggest_jobs_for_contract(contract)
+                    if slugs:
+                        contract.jobs.set(Job.objects.filter(slug__in=slugs))
+                    created += 1
+
+            # Episodic: carry the stage's ConceptBundles into one igdb_id=None Contract.
+            bundles = list(stage.concept_bundles.all())
+            if bundles:
+                ep_name = stage.title or f"{stage.series_slug} (stage {stage.stage_number})"
+                ep_slug = slugify(ep_name) or f"contract-stage-{stage.id}"
+                if Contract.objects.filter(slug=ep_slug).exists():
+                    skipped_episodic.append(str(stage))   # slug taken -> report, don't silently drop
                 else:
-                    new_members.append(concept)
-
-            # Need at least one NEW home member, else the Contract would be empty (or a
-            # standalone collection) -- skip the stage entirely.
-            if not new_members:
-                skipped_empty.append(str(stage))
-                continue
-
-            with transaction.atomic():
-                name = stage.title or f"{stage.series_slug} (stage {stage.stage_number})"
-                base = slugify(name) or f"contract-stage-{stage.id}"
-                slug, n = base, 2
-                while Contract.objects.filter(slug=slug).exists():
-                    slug, n = f"{base}-{n}", n + 1
-                contract = Contract.objects.create(name=name, slug=slug)
-
-                for concept in new_members:
-                    ContractMembership.objects.create(contract=contract, concept=concept)
-
-                # Multi-game satisfiers -> one single-concept ContractBundle each.
-                for concept in flagged:
-                    cb = ContractBundle.objects.create(
-                        contract=contract, label=f"{concept} (multi-game list)",
-                    )
-                    cb.concepts.set([concept])
-                    satisfiers_bundled += 1
-
-                # The stage's own ConceptBundles carry over as ContractBundles.
-                for bundle in stage.concept_bundles.all():
-                    cb = ContractBundle.objects.create(
-                        contract=contract, label=bundle.label, sort_order=bundle.sort_order,
-                    )
-                    cb.concepts.set(bundle.concepts.all())
-
-                slugs = suggest_jobs_for_contract(contract)
-                if slugs:
-                    contract.jobs.set(Job.objects.filter(slug__in=slugs))
-                created += 1
+                    with transaction.atomic():
+                        ep = Contract.objects.create(igdb_id=None, name=ep_name, slug=ep_slug)
+                        for b in bundles:
+                            ContractBundle.objects.create(
+                                contract=ep, label=b.label, sort_order=b.sort_order,
+                            ).concepts.set(b.concepts.all())
+                            bundles_made += 1
+                        slugs = suggest_jobs_for_contract(ep)
+                        if slugs:
+                            ep.jobs.set(Job.objects.filter(slug__in=slugs))
+                        created += 1
 
         msg = f"Created {created} Contract(s)."
-        if satisfiers_bundled:
-            msg += f" Attached {satisfiers_bundled} multi-game satisfier bundle(s)."
-        if skipped_homed:
-            shown = ', '.join(skipped_homed[:10])
-            extra = f" (+{len(skipped_homed) - 10} more)" if len(skipped_homed) > 10 else ''
-            msg += f" Skipped {len(skipped_homed)} already-homed concept(s): {shown}{extra}"
-        if skipped_empty:
-            shown = ', '.join(skipped_empty[:10])
-            extra = f" (+{len(skipped_empty) - 10} more)" if len(skipped_empty) > 10 else ''
-            msg += f" Skipped {len(skipped_empty)} stage(s) with no new member: {shown}{extra}"
+        if bundles_made:
+            msg += f" ({bundles_made} episodic bundle(s).)"
+        if skipped_existing:
+            msg += f" Skipped {skipped_existing} igdb id(s) with an existing Contract."
+        if skipped_unanchored:
+            shown = ', '.join(skipped_unanchored[:10])
+            extra = f" (+{len(skipped_unanchored) - 10} more)" if len(skipped_unanchored) > 10 else ''
+            msg += f" Skipped {len(skipped_unanchored)} un-anchored concept(s): {shown}{extra}"
+        if skipped_episodic:
+            msg += f" Skipped {len(skipped_episodic)} episodic stage(s) whose slug was taken: {', '.join(skipped_episodic[:10])}"
         self.message_user(request, msg)
 
     # Cap how many concepts we list per column on the changelist; rows
@@ -4848,68 +4839,60 @@ admin.site.get_app_list = _platpursuit_get_app_list
 
 # --- Gamification: Job Board & Contracts ---
 
-class ContractMembershipForm(forms.ModelForm):
-    """Surfaces the one-home-Contract rule as a clean admin error instead of a raw
-    IntegrityError 500 when a curator re-homes an already-homed Concept."""
-    class Meta:
-        model = ContractMembership
-        fields = '__all__'
-
-    def clean_concept(self):
-        concept = self.cleaned_data.get('concept')
-        if concept:
-            if concept.contract_satisfier_only:
-                raise forms.ValidationError(
-                    f"'{concept}' is a multi-game trophy list (contract_satisfier_only). "
-                    f"It can't be a home member -- add it as a bundle satisfier instead."
-                )
-            clash = ContractMembership.objects.filter(concept=concept)
-            if self.instance.pk:
-                clash = clash.exclude(pk=self.instance.pk)
-            other = clash.select_related('contract').first()
-            if other:
-                raise forms.ValidationError(
-                    f"'{concept}' already belongs to Contract '{other.contract}'. "
-                    f"A game can have only one home Contract."
-                )
-        return concept
-
-
-class ContractMembershipInline(admin.TabularInline):
-    """A Contract's home Concepts. Each Concept has at most one Contract (the OneToOne
-    enforces it in the DB; the form gives curators a clean error if they re-home one)."""
-    model = ContractMembership
-    form = ContractMembershipForm
-    extra = 0
-    autocomplete_fields = ('concept',)
-
-
 class ContractBundleInline(admin.TabularInline):
-    """Collection-spanning satisfier groups (mirrors ConceptBundle on Stages)."""
+    """Episodic satisfier groups: Concepts (individual trophy lists with different/no IGDB ids)
+    that together satisfy the Contract -- ALL must hit 100%. The niche case that raw-igdb_id
+    keying can't group on its own (also the manual escape hatch for an un-matched concept)."""
     model = ContractBundle
     extra = 0
     fields = ('label', 'concepts', 'sort_order')
     autocomplete_fields = ('concepts',)
 
 
+class ContractAdminForm(forms.ModelForm):
+    """Hard-caps jobs per Contract: job XP splits evenly across the assigned jobs, so more
+    than MAX_CONTRACT_JOBS would dilute each below T/MAX_CONTRACT_JOBS."""
+    class Meta:
+        model = Contract
+        fields = '__all__'
+
+    def clean_jobs(self):
+        from trophies.util_modules.constants import MAX_CONTRACT_JOBS
+        jobs = self.cleaned_data.get('jobs')
+        if jobs and len(jobs) > MAX_CONTRACT_JOBS:
+            raise forms.ValidationError(
+                f"A Contract can have at most {MAX_CONTRACT_JOBS} jobs ({len(jobs)} selected) -- "
+                f"remove {len(jobs) - MAX_CONTRACT_JOBS}."
+            )
+        return jobs
+
+
 @admin.register(Contract)
 class ContractAdmin(admin.ModelAdmin):
-    list_display = ('name', 'is_live', 'job_list', 'member_count', 'created_at')
+    form = ContractAdminForm
+    list_display = ('name', 'igdb_id', 'is_live', 'job_list', 'member_count', 'created_at')
     list_filter = ('is_live', 'jobs')
     list_editable = ('is_live',)
-    search_fields = ('name', 'slug')
+    search_fields = ('name', 'slug', 'igdb_id')
     prepopulated_fields = {'slug': ('name',)}
     filter_horizontal = ('jobs',)
     readonly_fields = ('created_at', 'updated_at')
-    inlines = [ContractMembershipInline, ContractBundleInline]
+    inlines = [ContractBundleInline]
     actions = ['suggest_jobs', 'make_live', 'make_not_live']
 
     def get_queryset(self, request):
-        # Annotate the member count so the 'Members' column is sortable (a display
-        # method alone can't be ordered).
+        # Members are DERIVED (anchored concepts sharing the contract's igdb_id), so annotate the
+        # count with a correlated subquery to keep the 'Members' column sortable + avoid N+1.
+        from django.db.models import OuterRef, Subquery
+        member_ct = (
+            Concept.objects
+            .filter(anchor_migration_completed_at__isnull=False, igdb_match__igdb_id=OuterRef('igdb_id'),
+                    igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES)
+            .order_by().values('igdb_match__igdb_id').annotate(c=Count('id')).values('c')
+        )
         return (super().get_queryset(request)
                 .prefetch_related('jobs')
-                .annotate(_member_count=Count('memberships')))
+                .annotate(_member_count=Subquery(member_ct, output_field=IntegerField())))
 
     @admin.display(description='Jobs')
     def job_list(self, obj):
@@ -4917,14 +4900,14 @@ class ContractAdmin(admin.ModelAdmin):
 
     @admin.display(description='Members', ordering='_member_count')
     def member_count(self, obj):
-        return obj._member_count
+        return obj._member_count or 0
 
     @admin.action(description="Suggest jobs from IGDB genres/themes (replaces current)")
     def suggest_jobs(self, request, queryset):
         from trophies.services.job_detection import suggest_jobs_for_contract
         updated = skipped = 0
         for contract in queryset:
-            if not contract.memberships.exists() and not contract.bundles.exists():
+            if not contract.member_concept_ids() and not contract.bundles.exists():
                 skipped += 1
                 continue
             slugs = suggest_jobs_for_contract(contract)

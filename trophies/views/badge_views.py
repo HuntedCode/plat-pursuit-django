@@ -1004,12 +1004,10 @@ class BadgeDetailView(DetailView):
         # loading raw_response inflates each game by ~30 KB for nothing —
         # multiplied across all stages + concurrent requests, it was the trigger
         # for the May 2026 web-server OOM.
-        # concept__contract_membership__contract: each game's home Contract (for the card's contract hook).
-        # Bounded (a badge has ~handful of games), so the extra join + jobs prefetch is whale-safe.
+        # concept__igdb_match: each game's IGDB id, which derives its home Contract (built into a
+        # batch concept->contract map below, since contract membership is no longer a stored relation).
         _badge_game_qs = Game.objects.select_related(
-            'concept', 'concept__igdb_match', 'concept__contract_membership__contract',
-        ).prefetch_related(
-            'concept__contract_membership__contract__jobs',
+            'concept', 'concept__igdb_match',
         ).defer(
             'concept__igdb_match__raw_response',
         )
@@ -1076,15 +1074,19 @@ class BadgeDetailView(DetailView):
             profile_games = {pg.game_id: pg for pg in profile_games_qs}
 
         from trophies.services.rating_service import RatingService
+        from trophies.services.contract_service import contract_by_concept_map
+
+        # Batch: concept_id -> live Contract (igdb-derived), one pair of queries for all the badge's
+        # games, replacing the old per-game contract_membership prefetch.
+        _contract_by_cid = contract_by_concept_map(
+            {g.concept_id for g in all_games_set if g.concept_id is not None}, live_only=True,
+        )
 
         def _game_contract(game):
-            # The game's home Contract (concept.contract_membership OneToOne), only when live. Returns a
-            # compact dict for the card's contract hook, or None (games without a live contract omit it).
-            try:
-                contract = game.concept.contract_membership.contract
-            except ObjectDoesNotExist:
-                return None
-            if not contract.is_live:
+            # The game's home Contract (igdb-derived, live only). A compact dict for the card's contract
+            # hook, or None (games without a live contract omit it).
+            contract = _contract_by_cid.get(game.concept_id)
+            if contract is None:
                 return None
             jobs = list(contract.jobs.all())
             # Family mix: the band's accent blends the distinct disciplines of the contract's jobs (their

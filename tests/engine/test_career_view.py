@@ -4,20 +4,26 @@ Pins that /career/ renders both the job views and the folded-in Contracts browse
 ?view=contracts deep-links the Contracts tab, that the old /research-panel/ 301s into it, and that
 the whole surface is linked-profile gated.
 """
-import pytest
+import itertools
 
-from trophies.models import Contract, ContractMembership, Job
-from tests.factories import ConceptFactory, GameFactory, ProfileFactory
+import pytest
+from django.utils import timezone
+
+from trophies.models import Contract, Job
+from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory
 
 pytestmark = pytest.mark.django_db
 
+_igdb_seq = itertools.count(40001)
+
 
 def _live_contract(slug, jobs=('gunslinger',)):
-    c = Contract.objects.create(name=slug, slug=slug, is_live=True)
+    igdb_id = next(_igdb_seq)
+    c = Contract.objects.create(name=slug, slug=slug, is_live=True, igdb_id=igdb_id)
     c.jobs.set(Job.objects.filter(slug__in=jobs))
-    concept = ConceptFactory()
+    concept = ConceptFactory(anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=concept, igdb_id=igdb_id)
     GameFactory(concept=concept)   # PS5 by factory default -> passes the current-gen platform default
-    ContractMembership.objects.create(contract=c, concept=concept)
     return c
 
 

@@ -199,7 +199,8 @@ class GamesListView(HtmxListMixin, ListView):
         if concept_ids:
             from collections import defaultdict
             from trophies.constants import BADGE_TYPE_DISPLAY_PRIORITY
-            from trophies.models import Stage, Badge, ContractMembership
+            from trophies.models import Stage, Badge
+            from trophies.services.contract_service import contract_by_concept_map
             from trophies.util_modules.constants import CONTRACT_XP_TOTAL
 
             badge_cap = 3
@@ -249,11 +250,7 @@ class GamesListView(HtmxListMixin, ListView):
             # Lucide icon + discipline (icons are discipline-coloured on the card, mirroring the badge-detail
             # stage card); the band gets a subtle discipline-tinted background + an accent for its border.
             contract_map = {}
-            for cm in (
-                ContractMembership.objects.filter(concept_id__in=concept_ids, contract__is_live=True)
-                .select_related('contract').prefetch_related('contract__jobs')
-            ):
-                ct = cm.contract
+            for concept_id, ct in contract_by_concept_map(concept_ids, live_only=True).items():
                 jobs = list(ct.jobs.all())
                 discs = []
                 for j in jobs:
@@ -268,7 +265,7 @@ class GamesListView(HtmxListMixin, ListView):
                     band_bg = f'color-mix(in oklab, var(--disc-{discs[0]}) 15%, var(--pp-bg-2))'
                 else:
                     band_bg = ''
-                contract_map[cm.concept_id] = {
+                contract_map[concept_id] = {
                     'name': ct.name,
                     'slug': ct.slug,
                     'xp': ct.xp_total_override or CONTRACT_XP_TOTAL,

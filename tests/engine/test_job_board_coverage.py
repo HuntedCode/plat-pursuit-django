@@ -3,21 +3,22 @@ import io
 
 import pytest
 from django.core.management import call_command
+from django.utils import timezone
 
-from trophies.models import Contract, ContractBundle, ContractMembership
-from tests.factories import BadgeFactory, ConceptFactory, StageFactory
+from trophies.models import Contract, ContractBundle
+from tests.factories import BadgeFactory, ConceptFactory, IGDBMatchFactory, StageFactory
 
 pytestmark = pytest.mark.django_db
 
 
 def test_flags_badge_game_without_a_contract():
     BadgeFactory(series_slug='re', tier=1, name='Resident Evil', is_live=True)
-    covered = ConceptFactory(unified_title='Covered Game')
-    uncovered = ConceptFactory(unified_title='Uncovered Game')
+    # Covered = an ANCHORED concept whose raw igdb_id keys a Contract.
+    covered = ConceptFactory(unified_title='Covered Game', anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=covered, igdb_id=91001)
+    uncovered = ConceptFactory(unified_title='Uncovered Game')   # no match -> no contract
     StageFactory(series_slug='re', stage_number=1).concepts.add(covered, uncovered)
-    ContractMembership.objects.create(
-        contract=Contract.objects.create(name='RE', slug='re'), concept=covered,
-    )
+    Contract.objects.create(name='RE', slug='re', igdb_id=91001)
 
     out = io.StringIO()
     call_command('audit_job_board_coverage', stdout=out)

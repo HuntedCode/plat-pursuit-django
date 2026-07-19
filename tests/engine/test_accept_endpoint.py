@@ -4,22 +4,28 @@ The HTTP layer over contract_service.accept_contract / accept_contracts (the XP-
 itself is covered in test_contract_xp.py). These pin the request contract: the linked-profile
 gate, single vs accept-all, the bad-input branches, idempotency, and the response shape.
 """
+import itertools
+
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from trophies.models import (
-    Contract, ContractMembership, ProfileJobXP, Job, Trophy,
+    Contract, ProfileJobXP, Job, Trophy,
 )
 from trophies.services import contract_service
 from trophies.util_modules.constants import CONTRACT_XP_TOTAL
 from tests.factories import (
-    ConceptFactory, EarnedTrophyFactory, GameFactory, ProfileFactory, ProfileGameFactory,
+    ConceptFactory, EarnedTrophyFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
+    ProfileGameFactory,
 )
 
 pytestmark = pytest.mark.django_db
 
 URL = reverse('api:project-accept')
+
+_igdb_seq = itertools.count(50001)
 
 
 def _linked_profile():
@@ -35,12 +41,13 @@ def _client(profile):
 def _claimable_contract(profile, slug, job_slugs=('gunslinger',)):
     """A live Contract whose platinum member is earned + already detected (reached),
     so it is claimable but not yet accepted."""
-    contract = Contract.objects.create(name=slug, slug=slug, is_live=True)
+    igdb_id = next(_igdb_seq)
+    contract = Contract.objects.create(name=slug, slug=slug, is_live=True, igdb_id=igdb_id)
     contract.jobs.set(Job.objects.filter(slug__in=job_slugs))
-    concept = ConceptFactory()
+    concept = ConceptFactory(anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=concept, igdb_id=igdb_id)
     game = GameFactory(concept=concept)
     plat = Trophy.objects.create(game=game, trophy_id=1, trophy_type='platinum', trophy_name='Plat')
-    ContractMembership.objects.create(contract=contract, concept=concept)
     EarnedTrophyFactory(profile=profile, trophy=plat, earned=True)
     ProfileGameFactory(profile=profile, game=game, progress=100, has_plat=True)
     contract_service.mark_contract_reached(profile, contract)

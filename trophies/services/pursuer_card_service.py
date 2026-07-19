@@ -15,22 +15,16 @@ logger = logging.getLogger(__name__)
 
 
 def _contract_elements_for_concepts(concept_ids):
-    """Map concept_id -> [element display dicts] for concepts whose game is a Contract member
-    (the one-home ContractMembership). Batched: one query for all showcase concepts."""
+    """Map concept_id -> [element display dicts] for concepts whose game keys a LIVE Contract
+    (igdb-derived: anchored + trusted concept sharing the Contract's igdb_id). Batched."""
     if not concept_ids:
         return {}
-    from trophies.models import ContractMembership
-    out = {}
-    memberships = (
-        ContractMembership.objects.filter(concept_id__in=concept_ids)
-        .select_related('contract').prefetch_related('contract__jobs')
-    )
-    for m in memberships:
-        out[m.concept_id] = [
-            {'icon': j.icon, 'disc_slug': j.discipline, 'name': j.name}
-            for j in m.contract.jobs.all()
-        ]
-    return out
+    from trophies.services.contract_service import contract_by_concept_map
+    cmap = contract_by_concept_map(concept_ids, live_only=True)
+    return {
+        cid: [{'icon': j.icon, 'disc_slug': j.discipline, 'name': j.name} for j in contract.jobs.all()]
+        for cid, contract in cmap.items()
+    }
 
 
 def _platinums(profile, limit, *, recent):

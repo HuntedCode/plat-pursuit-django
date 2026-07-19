@@ -7,12 +7,16 @@ and infinite scroll works (the HtmxListMixin XHR guard returns the rows partial;
 a past-end page 404s). Also pins whale-safety (bounded query count).
 """
 
+import itertools
+
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from tests.factories import (
     BadgeFactory,
     GameFactory,
+    IGDBMatchFactory,
     ProfileFactory,
     ProfileGameFactory,
     StageFactory,
@@ -23,6 +27,19 @@ pytestmark = pytest.mark.django_db
 
 GRID_PARTIAL = 'trophies/partials/game_list/browse_results.html'
 FULL_PAGE = 'trophies/game_list.html'
+
+_igdb_seq = itertools.count(10001)
+
+
+def _make_member(concept, contract):
+    """Attach `concept` to `contract` the igdb-derived way: anchor it + give it an IGDBMatch that
+    shares the contract's igdb_id (assigning the contract a fresh id if it has none)."""
+    if contract.igdb_id is None:
+        contract.igdb_id = next(_igdb_seq)
+        contract.save(update_fields=['igdb_id'])
+    concept.anchor_migration_completed_at = timezone.now()
+    concept.save(update_fields=['anchor_migration_completed_at'])
+    IGDBMatchFactory(concept=concept, igdb_id=contract.igdb_id)
 
 
 def _url(**params):
@@ -57,7 +74,7 @@ def test_grid_renders_card_contract(client):
 def test_card_shows_badges_and_contract(client):
     """A game in a badge series + a live contract shows the badge count/name + the contract on its card
     (the batched pursuer hooks)."""
-    from trophies.models import Contract, ContractMembership, Job
+    from trophies.models import Contract, Job
 
     game = GameFactory(title_name='Hooked Game', title_platform=['PS5'])
     stage = StageFactory(series_slug='hooked-series')
@@ -67,7 +84,7 @@ def test_card_shows_badges_and_contract(client):
     job = Job.objects.first() or Job.objects.create(slug='test-job', name='Test Job', discipline='combat')
     contract = Contract.objects.create(name='Hooked Contract', slug='hooked-contract', is_live=True)
     contract.jobs.add(job)
-    ContractMembership.objects.create(concept=game.concept, contract=contract)
+    _make_member(game.concept, contract)
 
     url, params = _url()
     content = client.get(url, params).content.decode()
@@ -243,12 +260,12 @@ def test_in_badge_filter(client):
 
 def test_in_contract_filter(client):
     """?in_contract=on narrows to games whose concept has a live contract."""
-    from trophies.models import Contract, ContractMembership
+    from trophies.models import Contract
 
     with_c = GameFactory(title_name='Has Contract', title_platform=['PS5'])
     GameFactory(title_name='No Contract', title_platform=['PS5'])
     contract = Contract.objects.create(name='C1', slug='c1', is_live=True)
-    ContractMembership.objects.create(concept=with_c.concept, contract=contract)
+    _make_member(with_c.concept, contract)
 
     content = client.get(reverse('games_list'), {'platform': 'PS5', 'in_contract': 'on'}).content.decode()
 
@@ -258,7 +275,7 @@ def test_in_contract_filter(client):
 
 def test_contract_jobs_filter(client):
     """?contract_jobs=<slug> narrows to games whose contract levels that job."""
-    from trophies.models import Contract, ContractMembership, Job
+    from trophies.models import Contract, Job
 
     jobs = list(Job.objects.exclude(is_fallback=True)[:2])
     if len(jobs) < 2:
@@ -270,8 +287,8 @@ def test_contract_jobs_filter(client):
     ca.jobs.add(job_a)
     cb = Contract.objects.create(name='CB', slug='cb', is_live=True)
     cb.jobs.add(job_b)
-    ContractMembership.objects.create(concept=game_a.concept, contract=ca)
-    ContractMembership.objects.create(concept=game_b.concept, contract=cb)
+    _make_member(game_a.concept, ca)
+    _make_member(game_b.concept, cb)
 
     content = client.get(reverse('games_list'),
                          {'platform': 'PS5', 'contract_jobs': job_a.slug}).content.decode()

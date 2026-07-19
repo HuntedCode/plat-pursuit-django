@@ -23,7 +23,7 @@ from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from trophies.models import (
-    Contract, ContractMembership, ContractXPGrant, EarnedContract, EarnedTrophy, Job, ProfileGame,
+    Concept, Contract, ContractXPGrant, EarnedContract, EarnedTrophy, IGDBMatch, Job, ProfileGame,
     ProfileJobXP, ProgressionMilestone, Trophy,
 )
 from trophies.util_modules.constants import CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL
@@ -138,11 +138,41 @@ def grant_job_xp(profile, job, amount, *, source='contract', source_id=None,
 
 
 def home_contract_for_concept(concept):
-    """Resolve a Concept's home Contract (membership, then bundle satisfier)."""
-    m = ContractMembership.objects.filter(concept=concept).select_related('contract').first()
-    if m:
-        return m.contract
+    """Resolve a Concept's Contract: the Contract keyed on its raw IGDB id (only for ANCHORED
+    concepts), then a bundle satisfier (episodic) as a fallback."""
+    if concept.anchor_migration_completed_at is not None:
+        try:
+            igdb_id = concept.igdb_match.igdb_id
+        except IGDBMatch.DoesNotExist:
+            igdb_id = None
+        if igdb_id is not None:
+            hit = Contract.objects.filter(igdb_id=igdb_id).first()
+            if hit:
+                return hit
     return Contract.objects.filter(bundles__concepts=concept).first()
+
+
+def contract_by_concept_map(concept_ids, *, live_only=True, prefetch_jobs=True):
+    """Batch resolve concept_id -> Contract via the igdb key (ANCHORED + TRUSTED concepts whose
+    raw igdb_id keys a Contract). Two bounded queries instead of a per-concept lookup -- the
+    replacement for the old `ContractMembership.objects.filter(concept_id__in=...)` pattern in
+    the board/views. Concepts with no matching contract are simply absent from the map."""
+    rows = (
+        Concept.objects
+        .filter(id__in=list(concept_ids), anchor_migration_completed_at__isnull=False,
+                igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES)
+        .values_list('id', 'igdb_match__igdb_id')
+    )
+    concept_igdb = {cid: gid for cid, gid in rows if gid is not None}
+    if not concept_igdb:
+        return {}
+    cq = Contract.objects.filter(igdb_id__in=set(concept_igdb.values()))
+    if live_only:
+        cq = cq.filter(is_live=True)
+    if prefetch_jobs:
+        cq = cq.prefetch_related('jobs')
+    by_igdb = {c.igdb_id: c for c in cq}
+    return {cid: by_igdb[gid] for cid, gid in concept_igdb.items() if gid in by_igdb}
 
 
 def _detect_tiers(profile, contract, member_ids):
@@ -197,7 +227,7 @@ def _detect_tiers(profile, contract, member_ids):
 def mark_contract_reached(profile, contract):
     """Detection only: stamp newly-reached tiers so the reward becomes claimable.
     Grants NO XP. Returns the EarnedContract if anything changed, else None."""
-    member_ids = list(contract.memberships.values_list('concept_id', flat=True))
+    member_ids = contract.member_concept_ids()
     platinum_reached, full_reached = _detect_tiers(profile, contract, member_ids)
     if not (platinum_reached or full_reached):
         return None
@@ -226,11 +256,19 @@ def check_profile_contracts(profile, concepts=None):
         concept_list = list(concepts)
         if not concept_list:
             return
-        contracts = set(
-            m.contract for m in
-            ContractMembership.objects.filter(concept__in=concept_list).select_related('contract')
+        # Contracts keyed on the completed ANCHORED + TRUSTED-matched concepts' raw IGDB ids,
+        # plus any episodic bundle they satisfy. Only LIVE contracts are reached on sync (a
+        # draft contract must not become claimable/accepted before curation is finished).
+        igdb_ids = list(
+            Concept.objects.filter(
+                id__in=concept_list,
+                anchor_migration_completed_at__isnull=False,
+                igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+            ).values_list('igdb_match__igdb_id', flat=True)
         )
-        contracts.update(Contract.objects.filter(bundles__concepts__in=concept_list).distinct())
+        igdb_ids = [i for i in igdb_ids if i is not None]
+        contracts = set(Contract.objects.filter(igdb_id__in=igdb_ids, is_live=True)) if igdb_ids else set()
+        contracts.update(Contract.objects.filter(bundles__concepts__in=concept_list, is_live=True).distinct())
     else:
         contracts = Contract.objects.filter(is_live=True)
     for contract in contracts:

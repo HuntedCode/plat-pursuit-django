@@ -1,9 +1,12 @@
 """Progression milestones: tier/rank crossings logged when XP is banked, plus the pure ladder
 builders that drive the Career hero + job-detail ladders."""
+import itertools
+
 import pytest
+from django.utils import timezone
 
 from trophies.models import (
-    Contract, ContractMembership, Job, ProgressionMilestone, Trophy,
+    Contract, Job, ProgressionMilestone, Trophy,
 )
 from trophies.services import contract_service
 from trophies.util_modules.constants import JOB_XP_PER_LEVEL
@@ -11,10 +14,13 @@ from trophies.util_modules.leveling import (
     frac_into_level, job_tier_ladder, pursuer_rank_ladder, ranks_crossed, tiers_crossed,
 )
 from tests.factories import (
-    ConceptFactory, EarnedTrophyFactory, GameFactory, ProfileFactory, ProfileGameFactory,
+    ConceptFactory, EarnedTrophyFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
+    ProfileGameFactory,
 )
 
 pytestmark = pytest.mark.django_db
+
+_igdb_seq = itertools.count(30001)
 
 
 # --- pure crossing / ladder helpers ---------------------------------------------
@@ -56,14 +62,16 @@ def test_pursuer_rank_ladder_has_all_rungs():
 # --- detection on accept --------------------------------------------------------
 
 def _plat_contract(profile, slug, job_slugs, *, xp_override=None):
-    concept = ConceptFactory()
+    igdb_id = next(_igdb_seq)
+    concept = ConceptFactory(anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=concept, igdb_id=igdb_id)
     game = GameFactory(concept=concept)
     plat = Trophy.objects.create(game=game, trophy_id=1, trophy_type='platinum', trophy_name='Plat')
     EarnedTrophyFactory(profile=profile, trophy=plat, earned=True)
     ProfileGameFactory(profile=profile, game=game, progress=100, has_plat=True)
-    c = Contract.objects.create(name=slug, slug=slug, is_live=True, xp_total_override=xp_override)
+    c = Contract.objects.create(name=slug, slug=slug, is_live=True, igdb_id=igdb_id,
+                                xp_total_override=xp_override)
     c.jobs.set(Job.objects.filter(slug__in=job_slugs))
-    ContractMembership.objects.create(contract=c, concept=concept)
     contract_service.mark_contract_reached(profile, c)
     return c
 

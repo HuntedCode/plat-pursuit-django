@@ -13,15 +13,26 @@ the user's whole library, so there is no whale-OOM risk.
 from django.core.paginator import Paginator
 from django.db.models import (
     Avg, Case, CharField, Count, DateTimeField, Exists, F, IntegerField, OuterRef,
-    Prefetch, Q, Subquery, Sum, Value, When,
+    Q, Subquery, Sum, Value, When,
 )
 from django.db.models.functions import Coalesce
 
 from trophies.models import (
-    Contract, ContractMembership, EarnedContract, Game, Job, ProfileGame, ProfileJobXP, Trophy,
+    Contract, EarnedContract, Game, IGDBMatch, Job, ProfileGame, ProfileJobXP, Trophy,
 )
 from trophies.services import job_render
 from trophies.services.job_render import DISCIPLINE_LABELS
+
+
+def _member_at_igdb(prefix):
+    """Filter kwargs matching a member of the contract at OuterRef('igdb_id'): an ANCHORED +
+    trusted-matched concept (reached via `prefix`, e.g. 'game__concept__' or 'concept__') whose
+    raw igdb_id equals the outer Contract's igdb_id. Replaces the old contract_membership joins."""
+    return {
+        f'{prefix}anchor_migration_completed_at__isnull': False,
+        f'{prefix}igdb_match__status__in': IGDBMatch.TRUSTED_STATUSES,
+        f'{prefix}igdb_match__igdb_id': OuterRef('igdb_id'),
+    }
 from trophies.util_modules.constants import (
     ALL_PLATFORMS, CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL, MODERN_PLATFORMS,
 )
@@ -130,7 +141,7 @@ def annotated_contracts(profile, disc_levels=None):
     if profile is not None:
         member_pg = ProfileGame.objects.filter(
             profile=profile,
-            game__concept__contract_membership__contract=OuterRef('pk'),
+            **_member_at_igdb('game__concept__'),
         )
         ec = EarnedContract.objects.filter(profile=profile, contract=OuterRef('pk'))
         max_progress = Coalesce(Subquery(member_pg.order_by('-progress').values('progress')[:1]), 0)
@@ -164,7 +175,7 @@ def annotated_contracts(profile, disc_levels=None):
             # Do the member games DEFINE a platinum? (mirrors contract_service._has_platinum) -- drives
             # the card's tier split; games with no plat pay the full T at 100% instead.
             defines_plat=Exists(Trophy.objects.filter(
-                trophy_type='platinum', game__concept__contract_membership__contract=OuterRef('pk'))),
+                trophy_type='platinum', **_member_at_igdb('game__concept__'))),
             max_progress=max_progress, any_plat=any_plat,
             plat_reached=plat_reached, plat_accepted=plat_accepted,
             full_reached=full_reached, full_accepted=full_accepted,
@@ -216,8 +227,8 @@ def _platform_exists(platforms):
     re-evaluating the JSONB filter (~170ms on the default board). EXISTS evaluates once per contract
     and hits the title_platform GIN index via `?|` (has_any_keys)."""
     return Exists(Game.objects.filter(
-        concept__contract_membership__contract=OuterRef('pk'),
         title_platform__has_any_keys=list(platforms),
+        **_member_at_igdb('concept__'),
     ))
 
 
@@ -234,29 +245,35 @@ def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platform
     if platforms:                             # any member game on a selected platform (EXISTS, not a join)
         qs = qs.filter(_platform_exists(platforms))
     if q:
-        qs = qs.filter(
+        # Member-game-title search: a member game is derived (no membership join), so match it as an
+        # annotated Exists over the igdb path rather than a relational join.
+        game_name_match = Exists(Game.objects.filter(
+            title_name__icontains=q, **_member_at_igdb('concept__')))
+        qs = qs.annotate(_game_name_match=game_name_match).filter(
             Q(name__icontains=q)
-            | Q(memberships__concept__games__title_name__icontains=q)
+            | Q(_game_name_match=True)
             | Q(jobs__name__icontains=q)
         )
     return qs.distinct()
 
 
 def _card_prefetch(qs):
-    games_qs = (Game.objects.select_related('concept', 'concept__igdb_match')
-                .defer('concept__igdb_match__raw_response'))
-    return qs.prefetch_related(
-        'jobs',
-        Prefetch('memberships', queryset=ContractMembership.objects.select_related('concept')
-                 .prefetch_related(Prefetch('concept__games', queryset=games_qs))),
-    )
+    # Member games are igdb-derived (no membership relation to prefetch); _member_games queries them
+    # per card. Jobs stay prefetched (the card's primary payload).
+    return qs.prefetch_related('jobs')
 
 
 def _member_games(contract):
-    """Member games newest-first (dated by concept release, undated trailing)."""
-    games = []
-    for m in contract.memberships.all():
-        games.extend(m.concept.games.all())
+    """Member games newest-first (dated by concept release, undated trailing). Igdb-derived: the
+    contract's member concepts (anchored + trusted at its igdb_id) resolved to their games."""
+    member_ids = contract.member_concept_ids()
+    if not member_ids:
+        return []
+    games = list(
+        Game.objects.filter(concept_id__in=member_ids)
+        .select_related('concept', 'concept__igdb_match')
+        .defer('concept__igdb_match__raw_response')
+    )
     dated = [g for g in games if g.concept.release_date]
     return (sorted(dated, key=lambda g: g.concept.release_date, reverse=True)
             + [g for g in games if not g.concept.release_date])

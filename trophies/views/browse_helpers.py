@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from trophies.models import (
     Badge, Trophy, UserConceptRating, Stage, ConceptGenre, ConceptTheme,
-    ConceptEngine, ContractMembership,
+    ConceptEngine, Contract, IGDBMatch,
 )
 
 
@@ -217,22 +217,18 @@ def apply_game_browse_filters(qs, form, sort_val=''):
     # --- Contract filters (the game's home Job-Board contract) ---
     # Specific jobs (a discipline selects all its jobs client-side) win over the broad "in a contract"
     # toggle. Exists() keeps it whale-safe.
+    # A game is "in a contract" if its concept is ANCHORED + trusted-matched and its raw igdb_id
+    # keys a live Contract. (Specific jobs win over the broad toggle.)
     contract_jobs = form.cleaned_data.get('contract_jobs')
-    if contract_jobs:
-        qs = qs.filter(Exists(
-            ContractMembership.objects.filter(
-                concept_id=OuterRef('concept_id'),
-                contract__is_live=True,
-                contract__jobs__slug__in=contract_jobs,
-            )
-        ))
-    elif form.cleaned_data.get('in_contract'):
-        qs = qs.filter(Exists(
-            ContractMembership.objects.filter(
-                concept_id=OuterRef('concept_id'),
-                contract__is_live=True,
-            )
-        ))
+    if contract_jobs or form.cleaned_data.get('in_contract'):
+        live_contracts = Contract.objects.filter(is_live=True).exclude(igdb_id=None)
+        if contract_jobs:
+            live_contracts = live_contracts.filter(jobs__slug__in=contract_jobs)
+        qs = qs.filter(
+            concept__anchor_migration_completed_at__isnull=False,
+            concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+            concept__igdb_match__igdb_id__in=live_contracts.values_list('igdb_id', flat=True).distinct(),
+        )
 
     # --- Community flag filters (hide wins on conflict) ---
     if form.cleaned_data.get('hide_delisted'):

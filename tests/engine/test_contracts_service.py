@@ -5,27 +5,36 @@ the focal point + jobs + fixed-T reward split), the per-viewer status machine
 (available / pursuing / claimable / accepted) derived from EXISTING EarnedContract rows
 (never written on this read path), jobless/non-live contracts hidden, and claimable_count.
 """
-import pytest
+import itertools
 
-from trophies.models import Contract, ContractMembership, Job, Trophy
+import pytest
+from django.utils import timezone
+
+from trophies.models import Contract, Job, Trophy
 from trophies.services import contract_service
 from trophies.services.contracts_service import (
     board_facets, build_contract_modal, claimable_count, contracts_page, suggest_relaxation,
 )
 from trophies.util_modules.constants import CONTRACT_XP_TOTAL
 from tests.factories import (
-    ConceptFactory, EarnedTrophyFactory, GameFactory, ProfileFactory, ProfileGameFactory,
+    ConceptFactory, EarnedTrophyFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
+    ProfileGameFactory,
 )
 
 pytestmark = pytest.mark.django_db
 
+_igdb_seq = itertools.count(60001)   # distinct raw igdb ids per test contract
+
 
 def _contract(slug, job_slugs=('gunslinger',), live=True, title='My Game'):
-    contract = Contract.objects.create(name=slug, slug=slug, is_live=live)
+    """A live Contract keyed on a raw igdb id + one ANCHORED, trusted-matched member concept
+    (its igdb_match shares the contract's igdb_id) whose game carries the membership."""
+    igdb_id = next(_igdb_seq)
+    contract = Contract.objects.create(name=slug, slug=slug, is_live=live, igdb_id=igdb_id)
     contract.jobs.set(Job.objects.filter(slug__in=job_slugs))
-    concept = ConceptFactory(unified_title=title)
+    concept = ConceptFactory(unified_title=title, anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=concept, igdb_id=igdb_id)   # factory default status = auto_accepted
     game = GameFactory(concept=concept)
-    ContractMembership.objects.create(contract=contract, concept=concept)
     return contract, concept, game
 
 

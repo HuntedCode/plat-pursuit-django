@@ -140,9 +140,17 @@ def compute_site_heartbeat() -> dict:
         games_in_badges = None
         is_partial = True
     try:
-        from trophies.models import Game
+        from trophies.models import Contract, Game, IGDBMatch
+        # Contract membership is igdb-derived: a game counts if its concept is anchored + trusted and
+        # shares a raw igdb_id with a live Contract.
+        _live_contract_igdb = Contract.objects.filter(
+            is_live=True, igdb_id__isnull=False).values_list('igdb_id', flat=True)
         games_in_contracts = (
-            Game.objects.filter(concept__contract_membership__contract__is_live=True).distinct().count()
+            Game.objects.filter(
+                concept__anchor_migration_completed_at__isnull=False,
+                concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+                concept__igdb_match__igdb_id__in=_live_contract_igdb,
+            ).distinct().count()
         )
     except Exception:
         logger.exception("games_in_contracts query failed")

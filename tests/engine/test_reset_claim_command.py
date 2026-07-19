@@ -1,32 +1,40 @@
 """The reset_claim management command: rewinds a dev profile's Contract claim state so the real
 claim flow can be re-tested. DEV-only (guarded on settings.DEBUG)."""
+import itertools
+
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import override_settings
+from django.utils import timezone
 
 from trophies.models import (
-    Contract, ContractMembership, ContractXPGrant, EarnedContract, Job, ProfileJobXP,
+    Contract, ContractXPGrant, EarnedContract, Job, ProfileJobXP,
     ProgressionMilestone, Trophy,
 )
 from trophies.services import contract_service
 from tests.factories import (
-    ConceptFactory, EarnedTrophyFactory, GameFactory, ProfileFactory, ProfileGameFactory,
+    ConceptFactory, EarnedTrophyFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
+    ProfileGameFactory,
 )
 
 pytestmark = pytest.mark.django_db
 
+_igdb_seq = itertools.count(20001)
+
 
 def _claimed_contract(profile, slug, job_slugs, *, xp_override=None):
     """A live Contract that's been reached AND accepted (XP banked), so there's state to rewind."""
-    concept = ConceptFactory()
+    igdb_id = next(_igdb_seq)
+    concept = ConceptFactory(anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=concept, igdb_id=igdb_id)
     game = GameFactory(concept=concept)
     plat = Trophy.objects.create(game=game, trophy_id=1, trophy_type='platinum', trophy_name='Plat')
     EarnedTrophyFactory(profile=profile, trophy=plat, earned=True)
     ProfileGameFactory(profile=profile, game=game, progress=100, has_plat=True)
-    c = Contract.objects.create(name=slug, slug=slug, is_live=True, xp_total_override=xp_override)
+    c = Contract.objects.create(name=slug, slug=slug, is_live=True, igdb_id=igdb_id,
+                                xp_total_override=xp_override)
     c.jobs.set(Job.objects.filter(slug__in=job_slugs))
-    ContractMembership.objects.create(contract=c, concept=concept)
     contract_service.mark_contract_reached(profile, c)
     contract_service.accept_contract(profile, c)
     return c

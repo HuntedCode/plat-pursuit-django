@@ -1,15 +1,15 @@
-"""Tests for the Job Board admin actions: Stage 'Convert to Contract' and Contract
-'Suggest jobs'. Both lean on the shared job_detection service."""
+"""Tests for the Job Board admin: Stage 'Convert to Contract' (igdb-keyed, anchored-gated)
+and Contract 'Suggest jobs'. Both lean on the shared job_detection service."""
 import pytest
 from django.contrib.admin.sites import AdminSite
 from django.test import RequestFactory
+from django.utils import timezone
 
 from trophies.admin import StageAdmin, ContractAdmin
 from trophies.models import (
-    Concept, ConceptGenre, ConceptTheme, Contract, ContractBundle, ContractMembership,
-    Genre, Job, Stage, Theme,
+    Concept, ConceptGenre, ConceptTheme, Contract, Genre, Job, Stage, Theme,
 )
-from tests.factories import ConceptBundleFactory, ConceptFactory, StageFactory
+from tests.factories import ConceptBundleFactory, ConceptFactory, IGDBMatchFactory, StageFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -31,42 +31,87 @@ def _rpg_fantasy(concept):
     ConceptTheme.objects.create(concept=concept, theme=Theme.objects.create(igdb_id=1, name='Fantasy', slug='fantasy'))
 
 
-def test_convert_to_contract_copies_concepts_bundles_and_suggests_jobs():
-    c1 = ConceptFactory(unified_title='RPG Game')
-    _rpg_fantasy(c1)
-    c2 = ConceptFactory(unified_title='Sidekick')
-    stage = StageFactory(series_slug='s', stage_number=1, title='My Game')
-    stage.concepts.add(c1, c2)
-    ConceptBundleFactory(stage=stage, label='coll').concepts.add(c2)
+def _anchored(title, igdb_id):
+    """An ANCHORED Concept keyed on a raw igdb_id (the contract-eligible state)."""
+    c = ConceptFactory(unified_title=title, anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=c, igdb_id=igdb_id)
+    return c
 
+
+def _convert(stage):
     StageAdmin(Stage, AdminSite()).convert_to_contract(_request(), Stage.objects.filter(pk=stage.pk))
 
-    contract = Contract.objects.get(name='My Game')
-    assert set(contract.memberships.values_list('concept_id', flat=True)) == {c1.id, c2.id}
-    assert contract.bundles.count() == 1
+
+def test_convert_keys_contract_on_igdb_with_concept_name_and_jobs():
+    c1 = _anchored('RPG Game', 5001)
+    _rpg_fantasy(c1)
+    stage = StageFactory(series_slug='s', stage_number=1, title='Badge Stage Title')
+    stage.concepts.add(c1)
+
+    _convert(stage)
+
+    contract = Contract.objects.get(igdb_id=5001)
+    assert contract.name == 'RPG Game'   # name = concept's IGDB-canonical title, NOT the stage title
     assert set(contract.jobs.values_list('slug', flat=True)) == {'mage'}   # RPG + Fantasy -> Mage
 
 
-def test_convert_skips_already_homed_concept():
-    homed = ConceptFactory(unified_title='Homed')
-    existing = Contract.objects.create(name='Existing', slug='existing')
-    ContractMembership.objects.create(contract=existing, concept=homed)
-    fresh = ConceptFactory(unified_title='Fresh')
-    stage = StageFactory(series_slug='s2', stage_number=1, title='Stage Two')
-    stage.concepts.add(homed, fresh)
+def test_convert_two_concepts_sharing_igdb_id_make_one_contract():
+    a = _anchored('Game PS4', 5002)
+    b = _anchored('Game PS5', 5002)   # same raw igdb_id
+    stage = StageFactory(series_slug='s2', stage_number=1)
+    stage.concepts.add(a, b)
 
-    StageAdmin(Stage, AdminSite()).convert_to_contract(_request(), Stage.objects.filter(pk=stage.pk))
+    _convert(stage)
 
-    new = Contract.objects.get(name='Stage Two')
-    assert set(new.memberships.values_list('concept_id', flat=True)) == {fresh.id}  # homed skipped
-    assert Concept.objects.get(pk=homed.pk).contract_membership.contract == existing  # still in its original
+    assert Contract.objects.filter(igdb_id=5002).count() == 1
+    assert set(Contract.objects.get(igdb_id=5002).member_concept_ids()) == {a.id, b.id}
+
+
+def test_convert_skips_existing_igdb_id():
+    Contract.objects.create(name='Already', slug='already', igdb_id=5003)
+    stage = StageFactory(series_slug='s3', stage_number=1)
+    stage.concepts.add(_anchored('Dup Game', 5003))
+
+    _convert(stage)
+
+    assert Contract.objects.filter(igdb_id=5003).count() == 1   # not duplicated
+
+
+def test_convert_skips_unanchored_concept():
+    stage = StageFactory(series_slug='s4', stage_number=1)
+    stage.concepts.add(ConceptFactory(unified_title='Unanchored'))   # no anchor, no match
+
+    _convert(stage)
+
+    assert Contract.objects.count() == 0   # nothing created for an un-anchored concept
+
+
+def test_convert_rerun_creates_no_duplicate():
+    stage = StageFactory(series_slug='s5', stage_number=1)
+    stage.concepts.add(_anchored('Rerun Game', 5005))
+
+    _convert(stage)
+    _convert(stage)   # re-run -> igdb id already has a contract
+
+    assert Contract.objects.filter(igdb_id=5005).count() == 1
+
+
+def test_convert_episodic_bundle_makes_null_igdb_contract():
+    ep = ConceptFactory(unified_title='Episode 1')
+    stage = StageFactory(series_slug='ep', stage_number=1, title='Episodic Season')
+    ConceptBundleFactory(stage=stage, label='season').concepts.add(ep)
+
+    _convert(stage)
+
+    contract = Contract.objects.get(name='Episodic Season')
+    assert contract.igdb_id is None
+    assert contract.bundles.count() == 1
 
 
 def test_suggest_jobs_replaces_existing():
-    c = ConceptFactory()
+    c = _anchored('Suggest Game', 5006)
     _rpg_fantasy(c)
-    contract = Contract.objects.create(name='C', slug='c')
-    ContractMembership.objects.create(contract=contract, concept=c)
+    contract = Contract.objects.create(name='C', slug='c', igdb_id=5006)
     contract.jobs.set(Job.objects.filter(slug='gunslinger'))   # pre-existing wrong job
 
     ContractAdmin(Contract, AdminSite()).suggest_jobs(_request(), Contract.objects.filter(pk=contract.pk))
@@ -74,65 +119,9 @@ def test_suggest_jobs_replaces_existing():
     assert set(contract.jobs.values_list('slug', flat=True)) == {'mage'}   # replaced, not added
 
 
-# --- contract_satisfier_only: multi-game lists become bundles, never members ---
-
-def test_convert_flagged_concept_becomes_bundle_not_member():
-    member = ConceptFactory(unified_title='Uncharted 4')
-    coll = ConceptFactory(unified_title='Legacy of Thieves Collection', contract_satisfier_only=True)
-    stage = StageFactory(series_slug='u4', stage_number=1, title='Uncharted 4')
-    stage.concepts.add(member, coll)
-
-    StageAdmin(Stage, AdminSite()).convert_to_contract(_request(), Stage.objects.filter(pk=stage.pk))
-
-    contract = Contract.objects.get(name='Uncharted 4')
-    assert set(contract.memberships.values_list('concept_id', flat=True)) == {member.id}   # coll NOT homed
-    bundle_concept_ids = set(
-        ContractBundle.objects.filter(contract=contract).values_list('concepts__id', flat=True)
-    )
-    assert coll.id in bundle_concept_ids   # coll rides along as a satisfier bundle
-
-
-def test_convert_skips_stage_with_no_new_member():
-    # All concepts already homed (or satisfier-only) -> no empty draft is created.
-    homed = ConceptFactory(unified_title='Homed')
-    ContractMembership.objects.create(
-        contract=Contract.objects.create(name='Existing', slug='existing-empty'), concept=homed,
-    )
-    coll = ConceptFactory(unified_title='Coll Only', contract_satisfier_only=True)
-    stage = StageFactory(series_slug='empty', stage_number=1, title='Empty Stage')
-    stage.concepts.add(homed, coll)
-
-    StageAdmin(Stage, AdminSite()).convert_to_contract(_request(), Stage.objects.filter(pk=stage.pk))
-
-    assert not Contract.objects.filter(name='Empty Stage').exists()
-
-
-def test_convert_rerun_creates_no_duplicate():
-    fresh = ConceptFactory(unified_title='Fresh Game')
-    stage = StageFactory(series_slug='dup', stage_number=1, title='Dup Stage')
-    stage.concepts.add(fresh)
-    admin = StageAdmin(Stage, AdminSite())
-
-    admin.convert_to_contract(_request(), Stage.objects.filter(pk=stage.pk))
-    admin.convert_to_contract(_request(), Stage.objects.filter(pk=stage.pk))   # re-run
-
-    assert Contract.objects.filter(name='Dup Stage').count() == 1   # member already homed -> no dup
-
-
-def test_membership_form_rejects_flagged_concept():
-    from trophies.admin import ContractMembershipForm
-    contract = Contract.objects.create(name='C', slug='c-form')
-    coll = ConceptFactory(unified_title='Coll', contract_satisfier_only=True)
-    form = ContractMembershipForm(data={'contract': contract.id, 'concept': coll.id})
-    assert not form.is_valid()
-    assert 'concept' in form.errors
-
-
-# --- Contract admin: live-toggle actions + Concept flag actions ---
-
 def test_contract_live_toggle_actions():
-    live = Contract.objects.create(name='L', slug='l', is_live=True)
-    dark = Contract.objects.create(name='D', slug='d', is_live=False)
+    live = Contract.objects.create(name='L', slug='l', igdb_id=5007, is_live=True)
+    dark = Contract.objects.create(name='D', slug='d', igdb_id=5008, is_live=False)
     admin = ContractAdmin(Contract, AdminSite())
 
     admin.make_not_live(_request(), Contract.objects.filter(pk=live.pk))
@@ -142,45 +131,20 @@ def test_contract_live_toggle_actions():
     assert live.is_live is False and dark.is_live is True
 
 
-def test_concept_satisfier_flag_actions():
-    from trophies.admin import ConceptAdmin
-    c = ConceptFactory(unified_title='X')
-    admin = ConceptAdmin(Concept, AdminSite())
-
-    admin.mark_contract_satisfier(_request(), Concept.objects.filter(pk=c.pk))
-    assert Concept.objects.get(pk=c.pk).contract_satisfier_only is True
-    admin.unmark_contract_satisfier(_request(), Concept.objects.filter(pk=c.pk))
-    assert Concept.objects.get(pk=c.pk).contract_satisfier_only is False
-
-
-def test_list_multi_stage_concepts_command():
-    from io import StringIO
-    from django.core.management import call_command
-    multi = ConceptFactory(unified_title='Multi Stage Concept')
-    single = ConceptFactory(unified_title='Single Stage Concept')
-    StageFactory(series_slug='a', stage_number=1).concepts.add(multi)
-    StageFactory(series_slug='b', stage_number=1).concepts.add(multi)   # 2 stages
-    StageFactory(series_slug='c', stage_number=1).concepts.add(single)  # 1 stage
-
-    out = StringIO()
-    call_command('list_multi_stage_concepts', stdout=out)
-    output = out.getvalue()
-    assert 'Multi Stage Concept' in output
-    assert 'Single Stage Concept' not in output   # only 2+ stage concepts are listed
+def test_top_jobs_caps_six_by_signal_strength():
+    """Auto-suggestion trims to MAX_CONTRACT_JOBS keeping combos > genre > theme/partition,
+    catalog order breaking ties within a tier."""
+    from trophies.services.job_detection import top_jobs
+    slugs = {'mage', 'vanguard',                         # combos (tier 0)
+             'champion', 'gunslinger', 'slayer',         # genre jobs (tier 1)
+             'infiltrator', 'exorcist', 'cartographer'}  # theme/partition (tier 2) -> trimmed
+    assert top_jobs(slugs) == ['mage', 'vanguard', 'champion', 'gunslinger', 'slayer', 'infiltrator']
 
 
-def test_list_multi_stage_concepts_same_badge_flag():
-    from io import StringIO
-    from django.core.management import call_command
-    same = ConceptFactory(unified_title='Same Badge Concept')
-    cross = ConceptFactory(unified_title='Cross Badge Concept')
-    StageFactory(series_slug='unc', stage_number=1).concepts.add(same)
-    StageFactory(series_slug='unc', stage_number=2).concepts.add(same)     # 2 stages, SAME badge
-    StageFactory(series_slug='badge-a', stage_number=1).concepts.add(cross)
-    StageFactory(series_slug='badge-b', stage_number=1).concepts.add(cross)  # 2 stages, DIFFERENT badges
-
-    out = StringIO()
-    call_command('list_multi_stage_concepts', '--same-badge', stdout=out)
-    output = out.getvalue()
-    assert 'Same Badge Concept' in output
-    assert 'Cross Badge Concept' not in output   # different badges -> excluded by --same-badge
+def test_contract_admin_form_rejects_more_than_six_jobs():
+    from trophies.admin import ContractAdminForm
+    contract = Contract.objects.create(name='Cap', slug='cap', igdb_id=90001)
+    seven = [j.pk for j in Job.objects.all()[:7]]
+    form = ContractAdminForm(data={'name': 'Cap', 'slug': 'cap', 'jobs': seven}, instance=contract)
+    assert not form.is_valid()
+    assert 'jobs' in form.errors

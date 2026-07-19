@@ -70,7 +70,7 @@ class Command(BaseCommand):
     def _process_single(self, profile, contracts, dry_run):
         tier_marks = 0
         for contract in contracts:
-            member_ids = list(contract.memberships.values_list('concept_id', flat=True))
+            member_ids = contract.member_concept_ids()
             tier_marks += len(self._apply(profile, contract, member_ids, dry_run))
         verb = "would mark" if dry_run else "marked"
         self.stdout.write(self.style.SUCCESS(
@@ -83,7 +83,7 @@ class Command(BaseCommand):
         profiles_touched = set()
         total_tier_marks = 0
         for contract in contracts:
-            member_ids = list(contract.memberships.values_list('concept_id', flat=True))
+            member_ids = contract.member_concept_ids()
             candidate_ids = self._candidate_profile_ids(contract, member_ids)
             marks = 0
             if candidate_ids:

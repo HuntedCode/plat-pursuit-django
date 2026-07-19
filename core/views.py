@@ -715,8 +715,9 @@ class StageCardsWorkshopView(TemplateView):
         from trophies.models import Stage
         from trophies.util_modules.constants import CONTRACT_XP_TOTAL
         ctx = super().get_context_data(**kwargs)
+        from trophies.services.contract_service import contract_by_concept_map
         stages = Stage.objects.filter(series_slug='crash-bandicoot').order_by('stage_number').prefetch_related(
-            'concepts__games__concept__contract_membership__contract__jobs'
+            'concepts__games__concept__igdb_match'
         )
         # Fabricated states (no user here) so every card look renders across the grid.
         _states = [
@@ -727,29 +728,32 @@ class StageCardsWorkshopView(TemplateView):
             {'progress': 0, 'has_plat': False},     # unplayed
             {'progress': 90, 'has_plat': True},     # near-max + plat
         ]
-        seen, games, i = set(), [], 0
+        seen, ordered = set(), []
         for s in stages:
             for concept in s.concepts.all():
                 for g in concept.games.all():
                     if g.id in seen:
                         continue
                     seen.add(g.id)
-                    cm = getattr(g.concept, 'contract_membership', None)
-                    ct = cm.contract if (cm and cm.contract.is_live) else None
-                    st = _states[i % len(_states)]
-                    games.append({
-                        'game': g,
-                        'stage_num': s.stage_number,
-                        'progress': st['progress'],
-                        'has_plat': st['has_plat'],
-                        'plat_available': bool((g.defined_trophies or {}).get('platinum')),
-                        'diff': round(2.5 + (i % 5) * 1.6, 1),
-                        'hours': 18 + (i % 4) * 24,
-                        'contract': ct,
-                        'contract_xp': (ct.xp_total_override or CONTRACT_XP_TOTAL) if ct else 0,
-                        'jobs': list(ct.jobs.all()) if ct else [],
-                    })
-                    i += 1
+                    ordered.append((s, g))
+        # Each game's home Contract (igdb-derived, live only), batched into one concept->contract map.
+        cmap = contract_by_concept_map({g.concept_id for _, g in ordered if g.concept_id}, live_only=True)
+        games = []
+        for i, (s, g) in enumerate(ordered):
+            ct = cmap.get(g.concept_id)
+            st = _states[i % len(_states)]
+            games.append({
+                'game': g,
+                'stage_num': s.stage_number,
+                'progress': st['progress'],
+                'has_plat': st['has_plat'],
+                'plat_available': bool((g.defined_trophies or {}).get('platinum')),
+                'diff': round(2.5 + (i % 5) * 1.6, 1),
+                'hours': 18 + (i % 4) * 24,
+                'contract': ct,
+                'contract_xp': (ct.xp_total_override or CONTRACT_XP_TOTAL) if ct else 0,
+                'jobs': list(ct.jobs.all()) if ct else [],
+            })
         ctx['games'] = games
         ctx['stage_title'] = 'Crash Bandicoot 4: It’s About Time'
         return ctx
@@ -769,7 +773,8 @@ class GameCardWorkshopView(TemplateView):
     def get_context_data(self, **kwargs):
         from django.db.models import Count
         from trophies.constants import BADGE_TYPE_DISPLAY_PRIORITY
-        from trophies.models import Game, Badge, Stage
+        from trophies.models import Game, Badge, Contract, Stage
+        from trophies.services.contract_service import contract_by_concept_map
         from trophies.services.frame_service import build_badge_frame
         from trophies.util_modules.constants import CONTRACT_XP_TOTAL
         ctx = super().get_context_data(**kwargs)
@@ -797,20 +802,24 @@ class GameCardWorkshopView(TemplateView):
         # Representative games: the ones in the MOST badge series first (to exercise the cap + "+N"),
         # preferring those that also carry a contract, plus one plain game (no badges, no contract).
         candidates = list(
-            Game.objects.select_related(
-                'concept', 'concept__igdb_match', 'concept__contract_membership__contract',
-            )
+            Game.objects.select_related('concept', 'concept__igdb_match')
             .annotate(n_series=Count('concept__stages__series_slug', distinct=True))
             .filter(n_series__gte=1)
             .order_by('-n_series')[:5]
         )
+        # Plain game (no badges, no contract): exclude concepts whose igdb_id keys a live Contract.
+        live_igdb = set(Contract.objects.filter(is_live=True, igdb_id__isnull=False)
+                        .values_list('igdb_id', flat=True))
         plain = (
             Game.objects.select_related('concept', 'concept__igdb_match')
-            .filter(concept__stages__isnull=True, concept__contract_membership__isnull=True)
+            .filter(concept__stages__isnull=True)
+            .exclude(concept__igdb_match__igdb_id__in=live_igdb)
             .exclude(id__in=[g.id for g in candidates]).first()
         )
         if plain:
             candidates.append(plain)
+        # Each candidate's home Contract (igdb-derived, live only), batched.
+        cmap = contract_by_concept_map({g.concept_id for g in candidates if g.concept_id}, live_only=True)
 
         cards = []
         for i, g in enumerate(candidates):
@@ -835,8 +844,7 @@ class GameCardWorkshopView(TemplateView):
                 except Exception:
                     pass  # workshop: a badge that can't build a frame is skipped, not fatal
 
-            cm = getattr(g.concept, 'contract_membership', None)
-            ct = cm.contract if (cm and cm.contract.is_live) else None
+            ct = cmap.get(g.concept_id)
             dt = g.defined_trophies or {}
             total_tr = sum(int(dt.get(k, 0) or 0) for k in ('bronze', 'silver', 'gold', 'platinum'))
             st = _states[i % len(_states)]
@@ -1453,7 +1461,7 @@ class ResearchPanelView(JobsWorkshopView):
         }
 
     def get_context_data(self, **kwargs):
-        from trophies.models import Contract
+        from trophies.models import Concept, Contract
         ctx = super(JobsWorkshopView, self).get_context_data(**kwargs)
         index = self._element_index()
 
@@ -1464,14 +1472,14 @@ class ResearchPanelView(JobsWorkshopView):
 
         # Real Projects from DB Contracts -- pull the game (Concept) title + cover.
         contracts = []
-        for contract in Contract.objects.prefetch_related('jobs', 'memberships__concept').order_by('name')[:24]:
+        for contract in Contract.objects.prefetch_related('jobs').order_by('name')[:24]:
             slugs = [j.slug for j in contract.jobs.all()]
             if not any(s in index for s in slugs):
                 continue
             cover, title = None, contract.name
-            memberships = list(contract.memberships.all())
-            if memberships:
-                concept = memberships[0].concept
+            # Member concepts are igdb-derived; take the first for the display title/cover.
+            concept = Concept.objects.filter(id__in=contract.member_concept_ids()).first()
+            if concept:
                 title = concept.unified_title or contract.name
                 cover = concept.concept_icon_url or None
             contracts.append(self._project(title, slugs, 'available', 0, index, cover))

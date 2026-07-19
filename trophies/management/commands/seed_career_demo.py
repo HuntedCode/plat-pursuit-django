@@ -17,8 +17,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from trophies.models import (
-    Concept, Contract, ContractMembership, ContractXPGrant, EarnedContract, EarnedTrophy,
-    Game, Job, Profile, ProfileGame, ProfileJobXP, ProgressionMilestone, Trophy,
+    Concept, Contract, ContractXPGrant, EarnedContract, EarnedTrophy,
+    Game, IGDBMatch, Job, Profile, ProfileGame, ProfileJobXP, ProgressionMilestone, Trophy,
 )
 from trophies.services import contract_service
 from trophies.util_modules.constants import JOB_XP_PER_LEVEL
@@ -65,9 +65,9 @@ class Command(BaseCommand):
         history, idempotent on re-seed (get_or_create), and can't be scoped to seed activity, so a
         profile-wide wipe would destroy real journey data."""
         EarnedContract.objects.filter(profile=profile, contract__slug__startswith=DEMO_PREFIX).delete()
-        Contract.objects.filter(slug__startswith=DEMO_PREFIX).delete()            # cascades ContractMembership
+        Contract.objects.filter(slug__startswith=DEMO_PREFIX).delete()
         Game.objects.filter(np_communication_id__startswith=DEMO_NP).delete()     # cascades Trophy/ProfileGame/EarnedTrophy
-        Concept.objects.filter(concept_id__startswith=DEMO_NP).delete()
+        Concept.objects.filter(concept_id__startswith=DEMO_NP).delete()           # cascades IGDBMatch (OneToOne)
         ContractXPGrant.objects.filter(profile=profile, source='seed').delete()
         contract_service.recompute_profile_job_xp(profile)   # rebuild the cache from the real ledger
         self.stdout.write("  reset prior demo data (real XP + milestones preserved).")
@@ -110,17 +110,24 @@ class Command(BaseCommand):
         for state, count in specs:
             for _ in range(count):
                 idx += 1
+                demo_igdb = 990000 + idx
+                # Anchored + trusted-matched concept keyed to the Contract's igdb_id, so membership
+                # derives the same way it does in prod (no ContractMembership rows anymore).
                 concept = Concept.objects.create(
-                    concept_id=f'{DEMO_NP}{idx:04d}', unified_title=f'Demo Game {idx}')
+                    concept_id=f'{DEMO_NP}{idx:04d}', unified_title=f'Demo Game {idx}',
+                    anchor_migration_completed_at=timezone.now())
+                IGDBMatch.objects.create(
+                    concept=concept, igdb_id=demo_igdb, status='auto_accepted',
+                    igdb_name=f'Demo Game {idx}')
                 game = Game.objects.create(
                     title_name=f'Demo Game {idx}', np_communication_id=f'{DEMO_NP}{idx:05d}_00',
                     concept=concept, title_platform=['PS5'])
                 plat = Trophy.objects.create(
                     game=game, trophy_id=1, trophy_type='platinum', trophy_name='Platinum')
                 contract = Contract.objects.create(
-                    name=f'Demo Contract {idx}', slug=f'{DEMO_PREFIX}{idx}', is_live=True)
+                    name=f'Demo Game {idx}', slug=f'{DEMO_PREFIX}{idx}', is_live=True,
+                    igdb_id=demo_igdb)
                 contract.jobs.set([jobs[(idx + k) % len(jobs)] for k in range(3)])
-                ContractMembership.objects.create(contract=contract, concept=concept)
                 if state in ('claimed', 'claimable'):
                     ProfileGame.objects.create(profile=profile, game=game, progress=100,
                                                has_plat=True, most_recent_trophy_date=timezone.now())
