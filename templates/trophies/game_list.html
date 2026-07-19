@@ -633,40 +633,29 @@
                 initScroller();
             }
         });
-        // Header result-count tick (old -> new) across filter/sort swaps. The count is refreshed
-        // out-of-band (hx-swap-oob replaces #gbrowse-count's TEXT only, never data-countup), and that OOB
-        // swap does NOT reliably land before htmx:afterSwap -- so reading old + new off the element mid-swap
-        // crossed them and animated the WRONG way (flash new, then tick back to old). Instead: snapshot the
-        // OLD value in beforeRequest (DOM is stable then), and on afterSettle set data-countup to the NEW
-        // text + animate from the snapshot. countUp's target is ALWAYS the fresh text, so it can never rest
-        // on the old value.
-        var browseCountFrom = null;
-        document.body.addEventListener('htmx:beforeRequest', function (e) {
-            var elt = e.detail && e.detail.elt;
-            if (!elt || !(elt.closest && elt.closest('#gbrowse-form'))) { return; }
-            var el = document.getElementById('gbrowse-count');
-            if (!el) { return; }
-            var v = parseFloat(el.dataset.countup);
-            if (isNaN(v)) { v = parseFloat((el.textContent || '').replace(/,/g, '')); }
-            browseCountFrom = isNaN(v) ? null : v;
-        });
+        // Header result-count tick (old -> new) across filter/sort swaps. The count text is refreshed
+        // out-of-band. We track the last-shown value in a JS variable (browseCountLast) rather than reading
+        // it back off the element, because data-countup does NOT reliably survive between swaps (hx-push-url
+        // history handling resets it to the load value) -- which pinned every tick's start to the load count.
+        // On afterSettle (the OOB text has landed) animate FROM the JS-tracked last value TO the fresh text,
+        // then remember the new value for the next swap.
+        var browseCountLast = null;
         document.body.addEventListener('htmx:afterSettle', function (e) {
             var t = (e.detail && e.detail.target) || e.target;
             if (!t || t.id !== 'browse-results') { return; }
             var countEl = document.getElementById('gbrowse-count');
-            if (countEl && window.PlatPursuit && PlatPursuit.countUp) {
-                var newVal = parseFloat((countEl.textContent || '').replace(/,/g, ''));
-                if (!isNaN(newVal)) {
-                    countEl.dataset.countup = newVal;   // canonical target = the fresh count
-                    if (browseCountFrom !== null && browseCountFrom !== newVal) {
-                        PlatPursuit.countUp(countEl, 700, { from: browseCountFrom });
-                    }
-                    // Keep the mini-bar's count in sync (it may be pinned + on-screen mid-scroll).
-                    var mbCount = document.querySelector('[data-minibar-count]');
-                    if (mbCount) { mbCount.textContent = newVal.toLocaleString(); }
-                }
+            if (!countEl || !(window.PlatPursuit && PlatPursuit.countUp)) { return; }
+            var newVal = parseFloat((countEl.textContent || '').replace(/,/g, ''));
+            if (isNaN(newVal)) { return; }
+            if (browseCountLast === null) { browseCountLast = parseFloat(countEl.dataset.countup); }  // seed from the load value on the first swap
+            countEl.dataset.countup = newVal;
+            if (!isNaN(browseCountLast) && browseCountLast !== newVal) {
+                PlatPursuit.countUp(countEl, 700, { from: browseCountLast });
             }
-            browseCountFrom = null;
+            browseCountLast = newVal;   // remember for the next swap (survives any DOM reset)
+            // Keep the mini-bar's count in sync (it may be pinned + on-screen mid-scroll).
+            var mbCount = document.querySelector('[data-minibar-count]');
+            if (mbCount) { mbCount.textContent = newVal.toLocaleString(); }
         });
         // Safety net: clear the settle dim (+ browse-filters.js's opacity-50/pointer-events-none) when the
         // FILTER request completes, incl. non-2xx / aborted requests where afterSwap never fires -- otherwise
