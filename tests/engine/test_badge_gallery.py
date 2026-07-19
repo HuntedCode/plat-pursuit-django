@@ -203,17 +203,26 @@ def test_gallery_view_defaults_to_series(client):
 
 
 def test_permanent_chrome_shows_on_the_gallery(client):
-    """The tier explainer + the viewer's badge stats are PERMANENT page chrome (in the header) -- they render
-    on the Gallery view, not only the Series tab."""
-    profile = ProfileFactory()
-    badges = _series('rs-chrome')
-    UserBadgeFactory(profile=profile, badge=badges[0])   # earn one -> creates the gamification row
-    client.force_login(profile.user)
+    """The tier explainer + the generalized catalog stats are PERMANENT page chrome (in the header)
+    -- they render on the Gallery view, not only the Series tab."""
+    from django.core.cache import cache
+    from django.utils import timezone
 
-    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+    _series('rs-chrome')
+    now = timezone.now()
+    key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
+    cache.set(key, {'expanded': {
+        'badges_total': {'value': 10, 'delta': 1},
+        'badge_stages_total': {'value': 40},
+        'badge_earnable_xp': {'value': 50000},
+    }}, 120)
+    try:
+        html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+    finally:
+        cache.delete(key)
 
     assert 'How badges work' in html    # the tier explainer (static, both views)
-    assert 'Total XP' in html           # the viewer's badge stats (auth)
+    assert 'XP available' in html       # the generalized catalog stats (both views)
 
 
 def test_gallery_cell_wires_badge_peek(client):

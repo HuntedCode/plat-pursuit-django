@@ -298,7 +298,7 @@ class BadgeListView(ListView):
             'gallery_q': g.get('q', ''),
             'gallery_sorts': GALLERY_SORTS,
             'gallery_page_size': GALLERY_PAGE_SIZE,          # keeps the JS paginateBy in sync (no magic 48)
-            'user_badge_stats': self._user_badge_stats(profile) if profile else None,  # permanent page chrome
+            'catalog_stats': self._catalog_header_stats(),  # generalized collection stats (hourly-cached)
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse_lazy('home')},
                 {'text': 'Badges'},
@@ -568,48 +568,23 @@ class BadgeListView(ListView):
 
         return display_data
 
-    def _user_badge_stats(self, profile):
-        """The 'Your Badge Stats' tiles -- permanent page chrome shown on BOTH the Series and Gallery views.
-        All DB-aggregated counts (whale-safe); returns the dict, or None if the profile has no gamification
-        row yet."""
-        try:
-            gamification = profile.gamification
-        except ProfileGamification.DoesNotExist:
-            return None
-        series_completed = UserBadge.objects.filter(
-            profile=profile
-        ).values('badge__series_slug').distinct().count()
-        total_series = Badge.objects.live().filter(tier=1).exclude(
-            series_slug__isnull=True
-        ).exclude(series_slug='').count()
-        # Global stage-completion stats (all badge series).
-        total_stages = Stage.objects.filter(stage_number__gt=0).count()
-        plat_eligible_stages = Stage.objects.filter(
-            stage_number__gt=0,
-            concepts__games__defined_trophies__platinum__gt=0,
-        ).distinct().count()
-        user_stages_platted = Stage.objects.filter(
-            stage_number__gt=0,
-            concepts__games__played_by__profile=profile,
-            concepts__games__played_by__has_plat=True,
-        ).distinct().count()
-        user_stages_completed = Stage.objects.filter(
-            stage_number__gt=0,
-            concepts__games__played_by__profile=profile,
-            concepts__games__played_by__progress=100,
-        ).distinct().count()
+    def _catalog_header_stats(self):
+        """The badge-COLLECTION catalog stats for the header (what the collection OFFERS, not the
+        viewer's own progress -- this is a browse page): badge series, stages to complete, total
+        earnable XP, and new-this-week. All read from the hourly-cached site heartbeat, so it's
+        zero DB cost on the request path; the grid only shows once the cron has warmed the cache
+        (the template gates on earnable_xp)."""
+        from core.services.site_heartbeat import get_cached_heartbeat
+        expanded = (get_cached_heartbeat() or {}).get('expanded') or {}
+
+        def _value(key):
+            return (expanded.get(key) or {}).get('value')
+
         return {
-            'total_xp': gamification.total_badge_xp,
-            'total_badges_earned': gamification.total_badges_earned,
-            'stages_platted': user_stages_platted,
-            'plat_eligible_stages': plat_eligible_stages,
-            'stages_completed': user_stages_completed,
-            'total_stages': total_stages,
-            'series_completed': series_completed,
-            'total_series': total_series,
-            'completion_pct': round(
-                (series_completed / total_series * 100), 1
-            ) if total_series > 0 else 0,
+            'series': _value('badges_total'),
+            'series_new': (expanded.get('badges_total') or {}).get('delta'),
+            'stages': _value('badge_stages_total'),
+            'earnable_xp': _value('badge_earnable_xp'),
         }
 
     def get_context_data(self, **kwargs):
@@ -752,10 +727,10 @@ class BadgeListView(ListView):
         context['is_paginated'] = page_obj.has_other_pages()
         context['series_page_size'] = SERIES_PAGE_SIZE
 
-        # 'Your Badge Stats' is now PERMANENT page chrome (shown on both views) -> computed via the shared
-        # helper. series_badge_xp is Series-tile-only (per-tile XP), so it stays here.
+        # Generalized badge-collection catalog stats in the header (hourly-cached, no profile needed).
+        context['catalog_stats'] = self._catalog_header_stats()
+        # series_badge_xp is Series-tile-only (per-tile XP), so it stays profile-scoped here.
         if profile:
-            context['user_badge_stats'] = self._user_badge_stats(profile)
             try:
                 context['series_badge_xp'] = profile.gamification.series_badge_xp or {}
             except ProfileGamification.DoesNotExist:

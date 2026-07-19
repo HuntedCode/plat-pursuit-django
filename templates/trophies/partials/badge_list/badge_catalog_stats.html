@@ -1,0 +1,29 @@
+{% load humanize %}
+{% comment %} Badge-collection catalogue stats: a full-width .scard grid (the browse-header treatment)
+giving generalized discovery facts -- how much there is to collect + the reward on offer -- NOT the
+viewer's own progress (this is a browse page). All four are cached hourly on the site heartbeat -> zero
+DB cost here, so the grid only shows once the cron has warmed the cache (gated on earnable_xp). {% endcomment %}
+{% if catalog_stats.earnable_xp %}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+    <div class="scard">
+        <div class="scard__label">Badge series</div>
+        <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_stats.series|default:0 }}">{{ catalog_stats.series|default:0|intcomma }}</div>
+        <div class="scard__sub">to collect</div>
+    </div>
+    <div class="scard">
+        <div class="scard__label">Stages</div>
+        <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_stats.stages|default:0 }}">{{ catalog_stats.stages|default:0|intcomma }}</div>
+        <div class="scard__sub">to complete</div>
+    </div>
+    <div class="scard">
+        <div class="scard__label">XP available</div>
+        <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_stats.earnable_xp|default:0 }}">{{ catalog_stats.earnable_xp|default:0|intcomma }}</div>
+        <div class="scard__sub">up for grabs</div>
+    </div>
+    <div class="scard">
+        <div class="scard__label">New this week</div>
+        <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_stats.series_new|default:0 }}">{{ catalog_stats.series_new|default:0|intcomma }}</div>
+        <div class="scard__sub">freshly added</div>
+    </div>
+</div>
+{% endif %}

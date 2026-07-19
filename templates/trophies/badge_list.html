@@ -40,9 +40,10 @@
                 </div>
             </div>
 
-            {% comment %} Merged into the header, mirroring the Career/Collection "substance in the header"
-            pattern: the viewer's progress stats + the collapsible tier explainer, not separate cards below. {% endcomment %}
-            {% include 'trophies/partials/badge_list/badge_user_stats.html' %}
+            {% comment %} Merged into the header, mirroring the browse-header "substance in the header"
+            pattern: generalized catalogue stats (what the collection offers) + the collapsible tier
+            explainer -- NOT the viewer's own progress, since this is a browse page. {% endcomment %}
+            {% include 'trophies/partials/badge_list/badge_catalog_stats.html' %}
             {% include 'trophies/partials/badge_list/badge_list_header.html' %}
         </div>
     </section>
