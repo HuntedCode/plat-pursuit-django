@@ -64,6 +64,11 @@
 .pp-gcard__cstat--plat svg { color: var(--color-trophy-platinum); }
 .pp-gcard__cstat--full svg { color: var(--pp-success); }
 .pp-gcard__cstat--avg svg { color: var(--pp-accent); }
+/* Mobile compaction: one stat drops out below md so the row of 4 isn't cramped on phones (the template
+   picks which -- 100%-completions when a platinum exists, else the always-zero platinum stat). Both
+   return at md+ where there's room for the full set. */
+.pp-gcard__cstat--sm-hide { display: none; }
+@media (min-width: 768px) { .pp-gcard__cstat--sm-hide { display: inline-flex; } }
 
 /* Quick-add to a list (signed in): a small info-tinted circle, revealed on hover (always visible on touch). */
 .pp-gcard__add {

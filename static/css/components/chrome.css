@@ -98,7 +98,12 @@
    The form is the positioning context for the results panel so the panel aligns to the visible bar
    (which caps at 440px and centres inside the grown container), not the full-width flex container. */
 .pp-navsearch__form { display: none; }
-.pp-navsearch.is-open .pp-navsearch__form { display: block; position: absolute; top: calc(100% + 8px); right: 0; width: min(92vw, 360px); z-index: 100; }
+/* Mobile sheet: anchor to the viewport (fixed, symmetric 12px insets), NOT `right: 0` of the narrow
+   .pp-navsearch container -- that container is pushed left of the end cluster, so a right-anchored
+   min(92vw) sheet ran off the LEFT edge. `top` clears the nav (3.625rem). md+ overrides this to the
+   inline bar below. (The frosted nav's backdrop-filter makes `fixed` resolve against the full-width
+   nav, so the insets read as viewport insets either way.) */
+.pp-navsearch.is-open .pp-navsearch__form { display: block; position: fixed; top: calc(3.625rem + 8px); left: 12px; right: 12px; width: auto; z-index: 100; }
 
 .pp-navsearch__field {
     position: relative; display: flex; align-items: center;

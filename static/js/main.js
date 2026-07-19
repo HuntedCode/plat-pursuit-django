@@ -14,37 +14,39 @@ document.addEventListener('DOMContentLoaded', function() {
     function alignStickyChrome() {
         const navbar = document.querySelector('.pp-nav');
         if (!navbar) return;
+        // Each pinned tier laps the tier above it by 1px. On fractional-DPR devices (real phones) a
+        // measured-flush boundary between two separately-composited bars can leave a sub-pixel seam where
+        // the page shows through un-blurred/un-dimmed; a 1px overlap closes it and is invisible (the upper
+        // bar has the higher z-index, so it paints over the lapped pixel). Desktop and emulated-mobile snap
+        // to integer device pixels and never gap, which is why it only showed on a physical phone.
+        const LAP = 1;
         const navH = Math.round(navbar.getBoundingClientRect().height);
+        let bottom = navH;   // running bottom edge of the pinned chrome stack
 
         const subnav = document.querySelector('.pp-sub');
-        let subnavH = 0;
         if (subnav) {
-            subnav.style.top = navH + 'px';
-            subnavH = Math.round(subnav.getBoundingClientRect().height);
+            subnav.style.top = (bottom - LAP) + 'px';
+            bottom = (bottom - LAP) + Math.round(subnav.getBoundingClientRect().height);
         }
 
-        // --chrome-nav-height: navbar + sub-nav only (excludes the reveal banner).
-        // The pinned Badge Art Reveal banner offsets its own sticky top by this.
-        const navChromeH = navH + subnavH;
-        document.documentElement.style.setProperty('--chrome-nav-height', navChromeH + 'px');
+        // --chrome-nav-height: bottom of navbar + sub-nav. The pinned Badge Art Reveal banner offsets its
+        // own sticky top by this (already lapped, so the banner overlaps the sub-nav too).
+        document.documentElement.style.setProperty('--chrome-nav-height', (bottom - LAP) + 'px');
 
-        // The reveal banner pins directly below the nav chrome and joins the
-        // pinned stack, so everything downstream must clear it too.
-        let bannerH = 0;
+        // The reveal banner pins directly below the nav chrome and joins the pinned stack, so everything
+        // downstream must clear it too.
         const revealBanner = document.getElementById('art-reveal-banner');
         if (revealBanner) {
-            bannerH = Math.round(revealBanner.getBoundingClientRect().height);
+            bottom = (bottom - LAP) + Math.round(revealBanner.getBoundingClientRect().height);
         }
 
-        // --chrome-height: navbar + sub-nav (+ reveal banner). Used by elements
-        // outside the main content column (sidebar ads) that don't overlap the hotbar.
-        const chromeH = navChromeH + bannerH;
-        document.documentElement.style.setProperty('--chrome-height', chromeH + 'px');
+        // --chrome-height: full chrome-stack bottom. Used by elements outside the main content column
+        // (sidebar ads) to clear the chrome; the 1px laps are immaterial to that layout offset.
+        document.documentElement.style.setProperty('--chrome-height', bottom + 'px');
 
-        // --sticky-top: the full pinned-chrome stack. The hotbar is retired (sync
-        // moved into the navbar avatar/panel), so this equals the nav-chrome +
-        // reveal-banner height. Elements inside main that pin below the chrome use it.
-        document.documentElement.style.setProperty('--sticky-top', chromeH + 'px');
+        // --sticky-top: where in-content bars (the page mini-bar, etc.) pin. Lap the last chrome bar by 1px
+        // so the mini-bar/sub-nav seam closes the same way.
+        document.documentElement.style.setProperty('--sticky-top', (bottom - LAP) + 'px');
     }
 
     alignStickyChrome();

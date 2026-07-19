@@ -87,20 +87,25 @@
             plats earned / 100% completions / avg completion. A quiet bottom row on the solid card body -- zero
             extra queries (plain Game columns). Shown only when the game has players. Neutral for now. {% endcomment %}
             {% if game.played_count %}
+            {% comment %} On mobile the 4-stat row is tight, so one stat drops out (returns at md+): a game
+            WITH a platinum hides the 100%-completions stat (the platinum already tells that story); a game
+            WITHOUT one hides the always-zero platinum stat and keeps 100% completions instead. {% endcomment %}
+            {% with has_plat=game.defined_trophies.platinum %}
             <div class="pp-gcard__cstats">
                 <span class="pp-gcard__cstat pp-gcard__cstat--players" title="{{ game.played_count|intcomma }} players own this game">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>{{ game.played_count|compact_number }}
                 </span>
-                <span class="pp-gcard__cstat pp-gcard__cstat--plat" title="{{ game.plats_earned_count|intcomma }} players earned the platinum">
+                <span class="pp-gcard__cstat pp-gcard__cstat--plat{% if not has_plat %} pp-gcard__cstat--sm-hide{% endif %}" title="{{ game.plats_earned_count|intcomma }} players earned the platinum">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>{{ game.plats_earned_count|compact_number }}
                 </span>
-                <span class="pp-gcard__cstat pp-gcard__cstat--full" title="{{ game.full_completion_count|intcomma }} players at 100% completion">
+                <span class="pp-gcard__cstat pp-gcard__cstat--full{% if has_plat %} pp-gcard__cstat--sm-hide{% endif %}" title="{{ game.full_completion_count|intcomma }} players at 100% completion">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>{{ game.full_completion_count|compact_number }}
                 </span>
                 <span class="pp-gcard__cstat pp-gcard__cstat--avg" title="Average completion across all players: {{ game.avg_completion|floatformat:1 }}%">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>{{ game.avg_completion|floatformat:0 }}%
                 </span>
             </div>
+            {% endwith %}
             {% endif %}
         </div>
     </a>
