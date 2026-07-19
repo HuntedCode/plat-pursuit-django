@@ -137,21 +137,6 @@ def grant_job_xp(profile, job, amount, *, source='contract', source_id=None,
     return amount
 
 
-def home_contract_for_concept(concept):
-    """Resolve a Concept's Contract: the Contract keyed on its raw IGDB id (only for ANCHORED
-    concepts), then a bundle satisfier (episodic) as a fallback."""
-    if concept.anchor_migration_completed_at is not None:
-        try:
-            igdb_id = concept.igdb_match.igdb_id
-        except IGDBMatch.DoesNotExist:
-            igdb_id = None
-        if igdb_id is not None:
-            hit = Contract.objects.filter(igdb_id=igdb_id).first()
-            if hit:
-                return hit
-    return Contract.objects.filter(bundles__concepts=concept).first()
-
-
 def contract_by_concept_map(concept_ids, *, live_only=True, prefetch_jobs=True):
     """Batch resolve concept_id -> Contract via the igdb key (ANCHORED + TRUSTED concepts whose
     raw igdb_id keys a Contract). Two bounded queries instead of a per-concept lookup -- the

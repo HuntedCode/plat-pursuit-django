@@ -242,6 +242,24 @@ def test_server_relevance_orders_untouched_by_weak_discipline():
     assert slugs.index('rel-heart') < slugs.index('rel-combat')
 
 
+def test_board_member_games_are_batched_not_per_card():
+    """Member games are resolved in ONE query for the whole page, not per card. Adding more cards
+    must not add queries -- a regression guard against the per-card _member_games N+1."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    profile = ProfileFactory()
+    for i in range(4):
+        _contract('few-%02d' % i)
+    with CaptureQueriesContext(connection) as few:
+        assert all(c['game_count'] == 1 for c in contracts_page(profile)['contracts'])
+    for i in range(12):
+        _contract('many-%02d' % i)   # 16 cards total, still one page (cap 24)
+    with CaptureQueriesContext(connection) as many:
+        assert all(c['game_count'] == 1 for c in contracts_page(profile)['contracts'])
+    assert len(many.captured_queries) == len(few.captured_queries)   # constant, not card-proportional
+
+
 def test_server_pagination():
     profile = ProfileFactory()
     for i in range(30):

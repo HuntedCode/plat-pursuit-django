@@ -24,15 +24,20 @@ from trophies.services import job_render
 from trophies.services.job_render import DISCIPLINE_LABELS
 
 
-def _member_at_igdb(prefix):
-    """Filter kwargs matching a member of the contract at OuterRef('igdb_id'): an ANCHORED +
-    trusted-matched concept (reached via `prefix`, e.g. 'game__concept__' or 'concept__') whose
-    raw igdb_id equals the outer Contract's igdb_id. Replaces the old contract_membership joins."""
+def _member_gate(prefix='concept__'):
+    """The membership GATE (no igdb_id match): an ANCHORED + trusted-matched concept, reached via
+    `prefix` (e.g. 'game__concept__' or 'concept__'). Pair with a concrete `..igdb_id` /
+    `..igdb_id__in` filter, or use _member_at_igdb for the OuterRef-correlated Exists/Subquery form."""
     return {
         f'{prefix}anchor_migration_completed_at__isnull': False,
         f'{prefix}igdb_match__status__in': IGDBMatch.TRUSTED_STATUSES,
-        f'{prefix}igdb_match__igdb_id': OuterRef('igdb_id'),
     }
+
+
+def _member_at_igdb(prefix):
+    """Filter kwargs matching a member of the contract at OuterRef('igdb_id'): the gate (above)
+    PLUS the raw igdb_id equalling the outer Contract's igdb_id. Replaces the old membership joins."""
+    return {**_member_gate(prefix), f'{prefix}igdb_match__igdb_id': OuterRef('igdb_id')}
 from trophies.util_modules.constants import (
     ALL_PLATFORMS, CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL, MODERN_PLATFORMS,
 )
@@ -263,9 +268,17 @@ def _card_prefetch(qs):
     return qs.prefetch_related('jobs')
 
 
+def _order_member_games(games):
+    """Member games newest-first: dated (by concept release, descending) then undated trailing."""
+    dated = [g for g in games if g.concept.release_date]
+    return (sorted(dated, key=lambda g: g.concept.release_date, reverse=True)
+            + [g for g in games if not g.concept.release_date])
+
+
 def _member_games(contract):
-    """Member games newest-first (dated by concept release, undated trailing). Igdb-derived: the
-    contract's member concepts (anchored + trusted at its igdb_id) resolved to their games."""
+    """One contract's member games newest-first. Igdb-derived: the contract's member concepts
+    (anchored + trusted at its igdb_id) resolved to their games. For a PAGE of contracts use
+    _member_games_by_igdb (one query) instead of this per-contract lookup."""
     member_ids = contract.member_concept_ids()
     if not member_ids:
         return []
@@ -274,18 +287,38 @@ def _member_games(contract):
         .select_related('concept', 'concept__igdb_match')
         .defer('concept__igdb_match__raw_response')
     )
-    dated = [g for g in games if g.concept.release_date]
-    return (sorted(dated, key=lambda g: g.concept.release_date, reverse=True)
-            + [g for g in games if not g.concept.release_date])
+    return _order_member_games(games)
 
 
-def project_card(c):
+def _member_games_by_igdb(contracts):
+    """Batch: {igdb_id: [member games newest-first]} for a whole page of contracts in ONE query,
+    so the board doesn't re-run _member_games (2 queries) per card. Null-igdb (episodic) contracts
+    contribute no key -- they have no igdb-derived members, same as the per-contract path."""
+    igdb_ids = {c.igdb_id for c in contracts if c.igdb_id is not None}
+    if not igdb_ids:
+        return {}
+    games = (
+        Game.objects.filter(
+            concept__igdb_match__igdb_id__in=igdb_ids,
+            **_member_gate(),   # anchored + trusted (concrete ids supplied above, no OuterRef)
+        )
+        .select_related('concept', 'concept__igdb_match')
+        .defer('concept__igdb_match__raw_response')
+    )
+    by_igdb = {}
+    for g in games:
+        by_igdb.setdefault(g.concept.igdb_match.igdb_id, []).append(g)
+    return {gid: _order_member_games(gl) for gid, gl in by_igdb.items()}
+
+
+def project_card(c, member_games=None):
     """Card display dict for one annotated+prefetched Contract. No per-game progress -- that
-    lives in the lazily loaded modal."""
+    lives in the lazily loaded modal. `member_games` may be pre-resolved by the batch board path;
+    when None (single-card callers) it falls back to the per-contract query."""
     jobs = list(c.jobs.all())
     elements = [job_render.job_atom(j) for j in jobs]
     n = len(jobs) or 1
-    games = _member_games(c)
+    games = _member_games(c) if member_games is None else member_games
     first_concept = games[0].concept if games else None
     family_gradient, family_color = _family_styles(elements)
     status = c.status
@@ -351,8 +384,10 @@ def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplin
     if page > paginator.num_pages:   # past the end -> empty, so infinite scroll stops (get_page clamps)
         return {'contracts': [], 'page': page, 'has_next': False, 'total': paginator.count}
     page_obj = paginator.get_page(page)
+    page_contracts = list(page_obj)
+    games_by_igdb = _member_games_by_igdb(page_contracts)   # one query for the whole page's members
     return {
-        'contracts': [project_card(c) for c in page_obj],
+        'contracts': [project_card(c, games_by_igdb.get(c.igdb_id, [])) for c in page_contracts],
         'page': page_obj.number,
         'has_next': page_obj.has_next(),
         'total': paginator.count,
