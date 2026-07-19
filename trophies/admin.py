@@ -1555,7 +1555,10 @@ class StageAdmin(admin.ModelAdmin):
                     # unified_title, which for a legacy (no modern platform) concept carries a
                     # " - (PS3)" platform suffix. A Contract is game-level (one per igdb_id) and
                     # the card surfaces platforms separately, so it should read as the game.
-                    name = concept.igdb_match.igdb_name or concept.unified_title or f"IGDB {igdb_id}"
+                    # Cap at 255: igdb_name is varchar(500) but Contract.name is varchar(255), so a
+                    # long IGDB name (compilations / "Complete Edition" entries) would DataError.
+                    name = (concept.igdb_match.igdb_name or concept.unified_title
+                            or f"IGDB {igdb_id}")[:255]
                     base = slugify(name) or f"contract-igdb-{igdb_id}"
                     slug, k = base, 2
                     while Contract.objects.filter(slug=slug).exists():

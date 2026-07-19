@@ -70,6 +70,20 @@ def test_convert_names_contract_from_bare_igdb_name_not_suffixed_title():
     assert contract.name == 'Call of Duty: Black Ops'   # bare, suffix dropped
 
 
+def test_convert_caps_long_igdb_name_to_contract_field_limit():
+    # igdb_name is varchar(500) but Contract.name is varchar(255): a long IGDB name (compilations /
+    # "Complete Edition" entries) must be capped, not overflow the column and DataError the action.
+    long_name = 'A' * 300
+    c = _anchored('short title', 7001, igdb_name=long_name)
+    stage = StageFactory(series_slug='long', stage_number=1, title='Stage')
+    stage.concepts.add(c)
+
+    _convert(stage)   # must not raise DataError
+
+    contract = Contract.objects.get(igdb_id=7001)
+    assert len(contract.name) == 255 and contract.name == long_name[:255]
+
+
 def test_convert_two_concepts_sharing_igdb_id_make_one_contract():
     a = _anchored('Game PS4', 5002)
     b = _anchored('Game PS5', 5002)   # same raw igdb_id
