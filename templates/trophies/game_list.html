@@ -624,38 +624,39 @@
             var r = document.getElementById('browse-results');
             if (r) { r.classList.add('is-swapping'); }
         });
+        // last-shown result count, JS-tracked -- survives DOM/attribute resets (hx-push-url history
+        // handling wipes data-countup back to the load value between swaps), so each tick starts from
+        // the number actually on screen, not the page-load count.
+        var browseCountLast = null;
         document.body.addEventListener('htmx:afterSwap', function (e) {
             var t = (e.detail && e.detail.target) || e.target;
-            if (t && t.id === 'browse-results') {
-                t.classList.remove('is-swapping');
-                refreshBadge();
-                initReveal();   // before initScroller so revealHandle exists for its onAppend hook
-                initScroller();
-            }
-        });
-        // Header result-count tick (old -> new) across filter/sort swaps. The count text is refreshed
-        // out-of-band. We track the last-shown value in a JS variable (browseCountLast) rather than reading
-        // it back off the element, because data-countup does NOT reliably survive between swaps (hx-push-url
-        // history handling resets it to the load value) -- which pinned every tick's start to the load count.
-        // On afterSettle (the OOB text has landed) animate FROM the JS-tracked last value TO the fresh text,
-        // then remember the new value for the next swap.
-        var browseCountLast = null;
-        document.body.addEventListener('htmx:afterSettle', function (e) {
-            var t = (e.detail && e.detail.target) || e.target;
             if (!t || t.id !== 'browse-results') { return; }
+            t.classList.remove('is-swapping');
+            refreshBadge();
+            // Header result-count tick (old -> new). Read the NEW total off the freshly-swapped grid
+            // (#items-grid[data-result-count]) -- that's the main swap target, so it's reliably the new
+            // content right here, unlike an OOB text swap on the header (whose timing raced the animation
+            // and made it read a stale/previous count). Start from the JS-tracked last value.
+            var grid = t.querySelector('#items-grid');
             var countEl = document.getElementById('gbrowse-count');
-            if (!countEl || !(window.PlatPursuit && PlatPursuit.countUp)) { return; }
-            var newVal = parseFloat((countEl.textContent || '').replace(/,/g, ''));
-            if (isNaN(newVal)) { return; }
-            if (browseCountLast === null) { browseCountLast = parseFloat(countEl.dataset.countup); }  // seed from the load value on the first swap
-            countEl.dataset.countup = newVal;
-            if (!isNaN(browseCountLast) && browseCountLast !== newVal) {
-                PlatPursuit.countUp(countEl, 700, { from: browseCountLast });
+            if (grid && countEl && window.PlatPursuit && PlatPursuit.countUp) {
+                var newVal = parseFloat(grid.getAttribute('data-result-count'));
+                if (!isNaN(newVal)) {
+                    if (browseCountLast === null) { browseCountLast = parseFloat(countEl.dataset.countup); }
+                    countEl.dataset.countup = newVal;
+                    if (!isNaN(browseCountLast) && browseCountLast !== newVal) {
+                        PlatPursuit.countUp(countEl, 700, { from: browseCountLast });
+                    } else {
+                        countEl.textContent = newVal.toLocaleString();
+                    }
+                    browseCountLast = newVal;
+                    // Keep the mini-bar's count in sync (it may be pinned + on-screen mid-scroll).
+                    var mbCount = document.querySelector('[data-minibar-count]');
+                    if (mbCount) { mbCount.textContent = newVal.toLocaleString(); }
+                }
             }
-            browseCountLast = newVal;   // remember for the next swap (survives any DOM reset)
-            // Keep the mini-bar's count in sync (it may be pinned + on-screen mid-scroll).
-            var mbCount = document.querySelector('[data-minibar-count]');
-            if (mbCount) { mbCount.textContent = newVal.toLocaleString(); }
+            initReveal();   // before initScroller so revealHandle exists for its onAppend hook
+            initScroller();
         });
         // Safety net: clear the settle dim (+ browse-filters.js's opacity-50/pointer-events-none) when the
         // FILTER request completes, incl. non-2xx / aborted requests where afterSwap never fires -- otherwise

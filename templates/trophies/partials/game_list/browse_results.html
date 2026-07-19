@@ -3,13 +3,12 @@
 the InfiniteScroller's ?page fetches (X-Requested-With, via the HtmxListMixin XHR guard) -- the scroller
 extracts the .pp-gcard nodes from this and appends them. The sentinel + loading live in game_list.html
 (outside #browse-results) so only the grid swaps on a filter change. {% endcomment %}
-<div id="items-grid" class="pp-gbrowse__grid">
+{% comment %} data-result-count carries the total for this filter -- read off this (the main swap target's
+grid) at htmx:afterSwap to tick the header count old->new. Reading it here (fresh main-swap content) is
+reliable, unlike an OOB text swap on the header, whose timing raced the count-up animation. {% endcomment %}
+<div id="items-grid" class="pp-gbrowse__grid" data-result-count="{{ paginator.count }}">
     {% include 'trophies/partials/game_list/game_cards.html' %}
 </div>
-{% comment %} Keep the header result-count Tally (which lives outside #browse-results) in sync on filter/sort
-swaps via htmx OOB. Inert on the InfiniteScroller's ?page fetches -- those use plain fetch(), not htmx, and
-only extract .pp-gcard nodes, so this sibling span is ignored there. {% endcomment %}
-<span hidden hx-swap-oob="innerHTML:#gbrowse-count">{{ paginator.count|intcomma }}</span>
 {% comment %} Refresh the active-filter chips (which live in the toolbar, outside #browse-results) on each
 filter swap via OOB so they stay in sync with panel edits. HTMX-only: this partial is ALSO included inline in
 the full page (inside #browse-results), so emitting the OOB copy there would render a second, visible

@@ -325,9 +325,9 @@ def test_xhr_returns_rows_partial(client):
     assert FULL_PAGE not in templates
     body = resp.content.decode()
     assert 'pp-gcard' in body
-    # The OOB span that keeps the header result-count in sync on filter swaps rides the partial.
-    assert 'hx-swap-oob' in body
-    assert 'gbrowse-count' in body
+    # The result count for this filter rides the grid (data-result-count), which the header count-up
+    # reads on afterSwap to tick old -> new.
+    assert 'data-result-count' in body
 
 
 def test_xhr_past_end_page_404s(client):
