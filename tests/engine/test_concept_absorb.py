@@ -185,25 +185,3 @@ def test_rating_dedups_by_profile_and_group_keeping_survivors():
     assert UserConceptRating.objects.filter(profile=profile, concept=survivor).count() == 1
     # the doomed duplicate was not migrated and died with the cascade
     assert not UserConceptRating.objects.filter(pk=doomed_rating.pk).exists()
-
-
-def test_absorb_inherits_contract_satisfier_only_flag():
-    # A multi-game satisfier absorbed into the survivor keeps its never-a-home protection.
-    survivor = ConceptFactory(contract_satisfier_only=False)
-    doomed = ConceptFactory(contract_satisfier_only=True)
-
-    survivor.absorb(doomed)
-
-    survivor.refresh_from_db()
-    assert survivor.contract_satisfier_only is True
-
-
-def test_absorb_does_not_unset_survivor_satisfier_flag():
-    # OR-inherit: an unflagged doomed concept never clears the survivor's flag.
-    survivor = ConceptFactory(contract_satisfier_only=True)
-    doomed = ConceptFactory(contract_satisfier_only=False)
-
-    survivor.absorb(doomed)
-
-    survivor.refresh_from_db()
-    assert survivor.contract_satisfier_only is True

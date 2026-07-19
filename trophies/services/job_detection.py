@@ -4,6 +4,7 @@ Maps a game's pooled IGDB genres/themes to job slugs (matching the seeded Job
 catalog). Used to SUGGEST jobs for a Contract (staff confirm/trim) and by the
 report_job_assignment analysis command. See docs/design/rebuild/job-board-contracts.md.
 """
+from trophies.util_modules.constants import MAX_CONTRACT_JOBS
 
 # (slug, genres, themes, override_slug). Match rules:
 #   genres only  -> the game has ANY of these genres
@@ -39,6 +40,31 @@ FALLBACK_SLUG = 'freelancer'
 
 # All 25 slugs (24 specializations + fallback), in catalog order.
 CATALOG_ORDER = [slug for slug, *_ in JOB_RULES] + ['outlaw', 'cartographer', 'mascot', 'jester', FALLBACK_SLUG]
+
+# Signal-strength tiers for trimming to MAX_CONTRACT_JOBS: combos (genre+theme, most specific)
+# > genre jobs (core gameplay) > theme/partition jobs (flavor); catalog order breaks ties.
+_COMBO_SLUGS = frozenset(slug for slug, g, t, _ in JOB_RULES if g and t)
+_GENRE_SLUGS = frozenset(slug for slug, g, t, _ in JOB_RULES if g and not t)
+_THEME_SLUGS = (frozenset(slug for slug, g, t, _ in JOB_RULES if t and not g)
+                | frozenset({'outlaw', 'cartographer', 'mascot', 'jester'}))  # open-world/comedy partitions
+_CATALOG_INDEX = {slug: i for i, slug in enumerate(CATALOG_ORDER)}
+
+
+def _job_tier(slug):
+    if slug in _COMBO_SLUGS:
+        return 0
+    if slug in _GENRE_SLUGS:
+        return 1
+    if slug in _THEME_SLUGS:
+        return 2
+    return 3   # freelancer / anything unlisted
+
+
+def top_jobs(slugs, limit=MAX_CONTRACT_JOBS):
+    """Rank job slugs by signal strength (combo > genre > theme/partition; catalog order breaks
+    ties) and keep the strongest `limit`. Returns a list, strongest first."""
+    ranked = sorted(slugs, key=lambda s: (_job_tier(s), _CATALOG_INDEX.get(s, 999)))
+    return ranked[:limit]
 
 
 def assign_job_slugs(genres, themes):
@@ -87,12 +113,13 @@ def suggest_job_slugs(concept_ids):
 
 
 def suggest_jobs_for_contract(contract):
-    """Suggested job slugs for a Contract, pooling its member + bundle concepts (the
-    game's full genre/theme profile). Empty if the Contract has no concepts."""
-    ids = set(contract.memberships.values_list('concept_id', flat=True))
+    """Suggested job slugs for a Contract, pooling its member + bundle concepts (the game's
+    full genre/theme profile), capped to MAX_CONTRACT_JOBS by signal strength. Empty if the
+    Contract has no concepts."""
+    ids = set(contract.member_concept_ids())
     for bundle in contract.bundles.all():
         ids |= set(bundle.concepts.values_list('id', flat=True))
-    return suggest_job_slugs(ids)
+    return top_jobs(suggest_job_slugs(ids))
 
 
 def simulate_stage_jobs():
