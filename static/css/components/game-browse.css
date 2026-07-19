@@ -32,6 +32,10 @@
    Each chip is primary-tinted at rest and error-tinted on hover to signal removal. */
 .pp-gbrowse__achips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pp-gbrowse__achips:not(:empty) { margin-top: 11px; }
+/* Chips belong OUTSIDE the open panel: while the filter box is open (or animating) the toolbar-card
+   carries .is-filters-open, so a chip added mid-edit doesn't shove the toolbar down. They reappear
+   only once the box has finished closing. */
+.pp-gbrowse__toolbar.is-filters-open .pp-gbrowse__achips { display: none; }
 .pp-gbrowse__achips-label { font-size: 11px; font-weight: 700; color: var(--pp-text-mute); text-transform: uppercase; letter-spacing: 0.04em; }
 .pp-gbrowse__achip {
     display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 9px; border-radius: 999px;

@@ -437,10 +437,17 @@
             toggle.classList.toggle('is-open', open);
             toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
             clearPanelAnim();
+            // The active-filter chips only belong OUTSIDE the open panel: adding one while the box is open
+            // shoves the whole toolbar down. Hide them the instant we open (via a class on the stable
+            // toolbar-card, which survives the chips' OOB swaps), and reveal them again only once the box
+            // has finished animating CLOSED.
+            var achipsHost = panel.closest('.pp-gbrowse__toolbar') || panel.parentElement;
+            if (open && achipsHost) { achipsHost.classList.add('is-filters-open'); }
             var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             if (!animate || reduce) {
                 panel.style.height = ''; panel.style.opacity = '';
-                if (open) { panel.removeAttribute('hidden'); refreshScrollFades(); } else { panel.setAttribute('hidden', ''); }
+                if (open) { panel.removeAttribute('hidden'); refreshScrollFades(); }
+                else { panel.setAttribute('hidden', ''); if (achipsHost) { achipsHost.classList.remove('is-filters-open'); } }
                 return;
             }
             if (open) {
@@ -466,6 +473,7 @@
                     if (e.target !== panel || e.propertyName !== 'height') { return; }
                     clearPanelAnim();
                     panel.setAttribute('hidden', ''); panel.style.height = ''; panel.style.opacity = '';
+                    if (achipsHost) { achipsHost.classList.remove('is-filters-open'); }   // box is closed -> chips may show
                 };
             }
             panel.addEventListener('transitionend', panelAnimEnd);
