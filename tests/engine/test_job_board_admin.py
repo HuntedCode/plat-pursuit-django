@@ -31,10 +31,12 @@ def _rpg_fantasy(concept):
     ConceptTheme.objects.create(concept=concept, theme=Theme.objects.create(igdb_id=1, name='Fantasy', slug='fantasy'))
 
 
-def _anchored(title, igdb_id):
-    """An ANCHORED Concept keyed on a raw igdb_id (the contract-eligible state)."""
+def _anchored(title, igdb_id, igdb_name=None):
+    """An ANCHORED Concept keyed on a raw igdb_id (the contract-eligible state). `igdb_name`
+    defaults to `title`; pass it explicitly to model a legacy concept whose unified_title carries
+    a platform suffix while the IGDB name stays bare."""
     c = ConceptFactory(unified_title=title, anchor_migration_completed_at=timezone.now())
-    IGDBMatchFactory(concept=c, igdb_id=igdb_id)
+    IGDBMatchFactory(concept=c, igdb_id=igdb_id, igdb_name=igdb_name or title)
     return c
 
 
@@ -51,8 +53,21 @@ def test_convert_keys_contract_on_igdb_with_concept_name_and_jobs():
     _convert(stage)
 
     contract = Contract.objects.get(igdb_id=5001)
-    assert contract.name == 'RPG Game'   # name = concept's IGDB-canonical title, NOT the stage title
+    assert contract.name == 'RPG Game'   # name = bare IGDB name, NOT the stage title
     assert set(contract.jobs.values_list('slug', flat=True)) == {'mage'}   # RPG + Fantasy -> Mage
+
+
+def test_convert_names_contract_from_bare_igdb_name_not_suffixed_title():
+    # A legacy (no modern platform) concept's unified_title carries a " - (PS3)" platform suffix,
+    # but the Contract must be named from the BARE IGDB game name (a Contract is game-level).
+    c = _anchored('Call of Duty: Black Ops - (PS3)', 6001, igdb_name='Call of Duty: Black Ops')
+    stage = StageFactory(series_slug='cod', stage_number=1, title='Stage')
+    stage.concepts.add(c)
+
+    _convert(stage)
+
+    contract = Contract.objects.get(igdb_id=6001)
+    assert contract.name == 'Call of Duty: Black Ops'   # bare, suffix dropped
 
 
 def test_convert_two_concepts_sharing_igdb_id_make_one_contract():

@@ -1519,8 +1519,8 @@ class StageAdmin(admin.ModelAdmin):
     @admin.action(description="Convert anchored concepts to Contracts (keyed on IGDB id, skip existing)")
     def convert_to_contract(self, request, queryset):
         """Create a draft Contract per distinct IGDB id among the selected stages' ANCHORED
-        concepts. Each anchored concept keys a Contract on its raw igdb_id (name = the concept's
-        IGDB-canonical `unified_title`); concepts sharing an igdb_id collapse to one Contract.
+        concepts. Each anchored concept keys a Contract on its raw igdb_id (name = the bare
+        `igdb_match.igdb_name`, no platform suffix); concepts sharing an igdb_id collapse to one.
         Contracts that already exist for an igdb_id are SKIPPED; UN-ANCHORED concepts (no
         resolved IGDB identity yet) are skipped + reported. A stage's ConceptBundles (episodic)
         carry over into a single igdb_id=None Contract, deduped by slug."""
@@ -1551,7 +1551,11 @@ class StageAdmin(admin.ModelAdmin):
                     skipped_existing += 1
                     continue
                 with transaction.atomic():
-                    name = concept.unified_title or f"IGDB {igdb_id}"
+                    # Name the Contract from the BARE IGDB game name -- never the concept's
+                    # unified_title, which for a legacy (no modern platform) concept carries a
+                    # " - (PS3)" platform suffix. A Contract is game-level (one per igdb_id) and
+                    # the card surfaces platforms separately, so it should read as the game.
+                    name = concept.igdb_match.igdb_name or concept.unified_title or f"IGDB {igdb_id}"
                     base = slugify(name) or f"contract-igdb-{igdb_id}"
                     slug, k = base, 2
                     while Contract.objects.filter(slug=slug).exists():
