@@ -39,6 +39,7 @@ Degrades to a plain GET (Enter) without JS. {% endcomment %}
             {% comment %} No `hidden` here: without JS the panel stays OPEN so the chips are usable (true
             progressive enhancement); the script below collapses it on load. {% endcomment %}
             <div class="pp-bgal__advanced" id="bgal-advanced">
+              <div class="pp-bgal__advanced-in">
                 <div class="pp-bgal__filters">
                     {% comment %} Tier + State share a row (wraps to stacked at small widths). {% endcomment %}
                     <div class="pp-bgal__crow">
@@ -69,6 +70,7 @@ Degrades to a plain GET (Enter) without JS. {% endcomment %}
                     </div>
                 </div>
                 <button type="button" class="pp-bgal__clear" id="bgal-clear" hidden>Clear filters</button>
+              </div>
             </div>
         </div>
     </form>
