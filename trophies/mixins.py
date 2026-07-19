@@ -196,3 +196,36 @@ class HtmxListMixin:
         if (self.request.htmx or is_xhr) and self.partial_template_name:
             return [self.partial_template_name]
         return super().get_template_names()
+
+
+class BackgroundContextMixin:
+    """
+    Mixin for views that display page-specific game image backgrounds.
+
+    Provides a consistent way to build the image_urls context that base.html
+    uses to display background images. Page-specific backgrounds (from this mixin)
+    take priority over user's premium theme (from context processor).
+
+    Usage:
+        class MyView(BackgroundContextMixin, TemplateView):
+            def get_context_data(self, **kwargs):
+                context = super().get_context_data(**kwargs)
+                context['image_urls'] = self.get_background_context(concept=my_concept)
+                return context
+    """
+
+    def get_background_context(self, concept=None):
+        """
+        Build image_urls dict for template context.
+
+        Args:
+            concept: A Concept model instance
+
+        Returns:
+            dict: Contains 'bg_url' with the assembled landscape image (IGDB screenshots ->
+            artworks -> PSN bg_url fallback), or empty dict when there's no landscape image.
+        """
+        landscape = concept.get_landscape_url() if concept else None
+        if landscape:
+            return {'bg_url': landscape}
+        return {}

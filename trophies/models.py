@@ -1008,8 +1008,8 @@ class Concept(models.Model):
         -> PSN MASTER icon (`concept_icon_url`, skipped for `PP_*` stubs).
         `bg_url` is deliberately excluded from this chain because it's
         landscape art (GAMEHUB_COVER_ART) and crops badly in portrait/square
-        containers; callers that need the landscape image should use
-        `concept.bg_url` directly (e.g. share-card backdrops).
+        containers; callers that need a landscape image should use
+        `landscape_url` / `get_landscape_url` (e.g. share-card backdrops).
 
         Stub concepts (PP_*) have `concept_icon_url` copied from the source
         game's `title_icon_url` at creation, so returning it would be
@@ -1037,17 +1037,14 @@ class Concept(models.Model):
     def landscape_urls(self, limit=5, artwork_size='1080p', screenshot_size='screenshot_big'):
         """Ordered, deduped landscape image URLs for a banner / hover carousel.
 
-        Priority: `bg_url` (PSN GAMEHUB art, or an IGDB artwork/screenshot the sync backfilled
-        into it) -> a trusted IGDB match's screenshots (in-game shots, preferred) -> its artworks,
-        capped at `limit`. `bg_url` is often identical to artwork[0] (the sync backfills it from
-        there), so entries dedup by URL. The live IGDB fallbacks catch concepts whose `bg_url` was
-        never populated (IGDB-anchored concepts with no PSN art that the sync backfill missed or
-        predates). Reads only the `igdb_*_image_ids` columns, never `raw_response`. Returns [] when
-        there is no landscape media at all.
+        Priority: a trusted IGDB match's screenshots (in-game shots -- the consistent, preferred
+        source) -> its artworks -> PSN `bg_url` (GAMEHUB art) as a LAST-RESORT fallback so concepts
+        with no IGDB match still render a banner instead of going blank. IGDB leads because its
+        imagery is consistent per game entry, whereas PSN art varies wildly by platform (PS3 games
+        often have none, and a concept can span PS3/PS4/PS5). Reads only the `igdb_*_image_ids`
+        columns, never `raw_response`. Returns [] when there is no landscape media at all.
         """
         urls = []
-        if self.bg_url:
-            urls.append(self.bg_url)
         try:
             match = self.igdb_match
         except IGDBMatch.DoesNotExist:
@@ -1055,6 +1052,8 @@ class Concept(models.Model):
         if match and match.is_trusted:
             urls.extend(match.screenshot_urls(size=screenshot_size))
             urls.extend(match.artwork_urls(size=artwork_size))
+        if self.bg_url:
+            urls.append(self.bg_url)   # PSN GAMEHUB art -- last-resort fallback, not preferred
         out, seen = [], set()
         for u in urls:
             if u and u not in seen:

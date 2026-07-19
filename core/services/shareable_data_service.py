@@ -250,7 +250,7 @@ class ShareableDataService:
             'trophy_rarity': trophy.trophy_rarity,
             'trophy_icon_url': trophy.trophy_icon_url or '',
             'game_image': game.display_image_url_large,
-            'concept_bg_url': (game.concept.bg_url or '') if game.concept else '',
+            'concept_bg_url': (game.concept.get_landscape_url() or '') if game.concept else '',
             'rarity_label': cls.get_rarity_label(trophy.trophy_rarity),
             'title_platform': game.title_platform,
             'region': game.region,
