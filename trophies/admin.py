@@ -4852,8 +4852,27 @@ class ContractBundleInline(admin.TabularInline):
     autocomplete_fields = ('concepts',)
 
 
+class ContractAdminForm(forms.ModelForm):
+    """Hard-caps jobs per Contract: job XP splits evenly across the assigned jobs, so more
+    than MAX_CONTRACT_JOBS would dilute each below T/MAX_CONTRACT_JOBS."""
+    class Meta:
+        model = Contract
+        fields = '__all__'
+
+    def clean_jobs(self):
+        from trophies.util_modules.constants import MAX_CONTRACT_JOBS
+        jobs = self.cleaned_data.get('jobs')
+        if jobs and len(jobs) > MAX_CONTRACT_JOBS:
+            raise forms.ValidationError(
+                f"A Contract can have at most {MAX_CONTRACT_JOBS} jobs ({len(jobs)} selected) -- "
+                f"remove {len(jobs) - MAX_CONTRACT_JOBS}."
+            )
+        return jobs
+
+
 @admin.register(Contract)
 class ContractAdmin(admin.ModelAdmin):
+    form = ContractAdminForm
     list_display = ('name', 'igdb_id', 'is_live', 'job_list', 'member_count', 'created_at')
     list_filter = ('is_live', 'jobs')
     list_editable = ('is_live',)

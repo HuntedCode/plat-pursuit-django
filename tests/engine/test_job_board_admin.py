@@ -129,3 +129,22 @@ def test_contract_live_toggle_actions():
 
     live.refresh_from_db(); dark.refresh_from_db()
     assert live.is_live is False and dark.is_live is True
+
+
+def test_top_jobs_caps_six_by_signal_strength():
+    """Auto-suggestion trims to MAX_CONTRACT_JOBS keeping combos > genre > theme/partition,
+    catalog order breaking ties within a tier."""
+    from trophies.services.job_detection import top_jobs
+    slugs = {'mage', 'vanguard',                         # combos (tier 0)
+             'champion', 'gunslinger', 'slayer',         # genre jobs (tier 1)
+             'infiltrator', 'exorcist', 'cartographer'}  # theme/partition (tier 2) -> trimmed
+    assert top_jobs(slugs) == ['mage', 'vanguard', 'champion', 'gunslinger', 'slayer', 'infiltrator']
+
+
+def test_contract_admin_form_rejects_more_than_six_jobs():
+    from trophies.admin import ContractAdminForm
+    contract = Contract.objects.create(name='Cap', slug='cap', igdb_id=90001)
+    seven = [j.pk for j in Job.objects.all()[:7]]
+    form = ContractAdminForm(data={'name': 'Cap', 'slug': 'cap', 'jobs': seven}, instance=contract)
+    assert not form.is_valid()
+    assert 'jobs' in form.errors
