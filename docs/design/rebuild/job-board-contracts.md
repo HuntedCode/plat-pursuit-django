@@ -169,6 +169,26 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
 
 ## Deferred / open
 
+- **FOLLOW-UP — bundle-only (episodic) contracts must render like any other contract everywhere**
+  (decided 2026-07-19). Today a Contract with `igdb_id=None` (episodic, members come only from
+  `ContractBundle.concepts`) has **no igdb-derived members**, so the board shows it with
+  `game_count=0`, no cover, and a possibly-wrong tier split. This carried over faithfully from the
+  old membership model (which was home-members-only too), but the desired behavior is: an
+  episodic/bundle-only contract shows its **bundle games** and its real completion/tier state
+  everywhere a normal contract does. Touch points to union the bundle concepts' games (in addition
+  to the igdb-derived members) — all in `contracts_service.py` unless noted:
+  - `_member_games` / `_member_games_by_igdb` — surface bundle games (cover + `game_count`).
+  - `annotated_contracts`: `member_pg` (drives `max_progress` / `any_plat` → board progress) and
+    `defines_plat` (the tier split) — mirror `contract_service._has_platinum`, which already unions
+    `contract.bundles`.
+  - `_platform_exists` (platform filter) and `_filter_contracts` search (member-game titles).
+  - **Reverse direction** (game → its contract): `contract_by_concept_map` (`contract_service.py`)
+    resolves only via igdb; a bundle-episode game won't find its contract, so badge/game/pursuer
+    cards omit the contract hook for episode games. Decide whether episode games should show the
+    contract, and if so add a bundle path to the map.
+  Simplest shape: a small `contract_member_games_qs(contract)` / batch variant that returns
+  `igdb-derived ∪ bundle` games, used by all the board readers; and a bundle branch in
+  `contract_by_concept_map` for the reverse lookup.
 - **XP numbers + curve + tiers**: DONE — see [xp-economy.md](xp-economy.md) (T=6,000, flat
   cap-less K=3,000, prestige tiers). Exact-number *calibration* is CLOSED (keeping current values).
 - **Pursuer rank** (profile-wide, distinct from job tiers) — built.
@@ -189,7 +209,9 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
 - **Unique `igdb_id` is what guarantees "once per game."** Two Contracts can't share an IGDB id,
   so a game's completion reaches exactly one home Contract.
 - **Episodic bundles are the documented exception** — they satisfy a Contract without sharing its
-  IGDB id (and don't need anchoring), which is why `ContractBundle` still exists.
+  IGDB id (and don't need anchoring), which is why `ContractBundle` still exists. **Known gap
+  (see Deferred):** the board readers currently derive member games/tiers from the igdb key only,
+  so a bundle-ONLY contract renders with no games — union `contract.bundles` concepts when fixing.
 - **Job count is HARD-capped at 6.** Detection may surface more; `top_jobs` trims to the 6
   strongest by signal, and the admin form rejects manual sets over 6.
 - **Tiers accrue across time.** Platinum (maybe during a 2× weekend) and 100% (a week later,
