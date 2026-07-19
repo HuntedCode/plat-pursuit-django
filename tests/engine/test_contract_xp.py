@@ -394,3 +394,26 @@ def test_platted_bundle_on_noplat_member_banks_platinum_not_stuck():
     ec.refresh_from_db()
     assert ec.platinum_accepted_at is not None and ec.full_accepted_at is not None
     assert not list(contract_service.claimable_contracts(profile))   # NOT stuck claimable
+
+
+def test_untrusted_match_concept_is_not_a_member():
+    """Audit Finding A: an anchored concept whose match drifted to pending_review must NOT
+    count toward its igdb_id's contract -- the gate is anchored AND trusted."""
+    contract = _contract('c-untrusted', ['mage'])
+    concept = ConceptFactory(anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=concept, igdb_id=contract.igdb_id, status='pending_review')
+    GameFactory(concept=concept)
+    assert contract.member_concept_ids() == []
+
+
+def test_draft_contract_not_reached_on_sync():
+    """Audit Finding B: a draft (is_live=False) contract is not reached by the sync hook, so
+    it can't be accepted for XP before curation is finished."""
+    profile = ProfileFactory()
+    contract = Contract.objects.create(name='Draft', slug='draft', igdb_id=88900, is_live=False)
+    concept, game, plat = _platinum_member(contract)
+    _earn_platinum(profile, game, plat)
+
+    contract_service.check_profile_contracts(profile, [concept.id])
+
+    assert not EarnedContract.objects.filter(profile=profile, contract=contract).exists()

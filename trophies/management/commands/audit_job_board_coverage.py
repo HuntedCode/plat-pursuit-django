@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from django.core.management.base import BaseCommand
 
-from trophies.models import Badge, Concept, Contract, Stage
+from trophies.models import Badge, Concept, Contract, IGDBMatch, Stage
 
 
 class Command(BaseCommand):
@@ -56,6 +56,7 @@ class Command(BaseCommand):
             Concept.objects.filter(
                 anchor_migration_completed_at__isnull=False,
                 igdb_match__igdb_id__in=contract_igdb_ids,
+                igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
             ).values_list('id', flat=True)
         ) if contract_igdb_ids else set()
         covered |= set(

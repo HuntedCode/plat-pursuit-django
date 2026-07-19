@@ -1536,6 +1536,7 @@ class StageAdmin(admin.ModelAdmin):
 
         created = bundles_made = skipped_existing = 0
         skipped_unanchored = []
+        skipped_episodic = []
         seen_igdb = set()   # dedup within this run
         for stage in queryset:
             for concept in stage.concepts.select_related('igdb_match').all():
@@ -1566,7 +1567,9 @@ class StageAdmin(admin.ModelAdmin):
             if bundles:
                 ep_name = stage.title or f"{stage.series_slug} (stage {stage.stage_number})"
                 ep_slug = slugify(ep_name) or f"contract-stage-{stage.id}"
-                if not Contract.objects.filter(slug=ep_slug).exists():
+                if Contract.objects.filter(slug=ep_slug).exists():
+                    skipped_episodic.append(str(stage))   # slug taken -> report, don't silently drop
+                else:
                     with transaction.atomic():
                         ep = Contract.objects.create(igdb_id=None, name=ep_name, slug=ep_slug)
                         for b in bundles:
@@ -1588,6 +1591,8 @@ class StageAdmin(admin.ModelAdmin):
             shown = ', '.join(skipped_unanchored[:10])
             extra = f" (+{len(skipped_unanchored) - 10} more)" if len(skipped_unanchored) > 10 else ''
             msg += f" Skipped {len(skipped_unanchored)} un-anchored concept(s): {shown}{extra}"
+        if skipped_episodic:
+            msg += f" Skipped {len(skipped_episodic)} episodic stage(s) whose slug was taken: {', '.join(skipped_episodic[:10])}"
         self.message_user(request, msg)
 
     # Cap how many concepts we list per column on the changelist; rows
@@ -4865,7 +4870,8 @@ class ContractAdmin(admin.ModelAdmin):
         from django.db.models import OuterRef, Subquery
         member_ct = (
             Concept.objects
-            .filter(anchor_migration_completed_at__isnull=False, igdb_match__igdb_id=OuterRef('igdb_id'))
+            .filter(anchor_migration_completed_at__isnull=False, igdb_match__igdb_id=OuterRef('igdb_id'),
+                    igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES)
             .order_by().values('igdb_match__igdb_id').annotate(c=Count('id')).values('c')
         )
         return (super().get_queryset(request)

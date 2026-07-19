@@ -194,15 +194,19 @@ def check_profile_contracts(profile, concepts=None):
         concept_list = list(concepts)
         if not concept_list:
             return
-        # Contracts keyed on the completed ANCHORED concepts' raw IGDB ids, plus any episodic
-        # bundle they satisfy.
+        # Contracts keyed on the completed ANCHORED + TRUSTED-matched concepts' raw IGDB ids,
+        # plus any episodic bundle they satisfy. Only LIVE contracts are reached on sync (a
+        # draft contract must not become claimable/accepted before curation is finished).
         igdb_ids = list(
-            Concept.objects.filter(id__in=concept_list, anchor_migration_completed_at__isnull=False)
-            .values_list('igdb_match__igdb_id', flat=True)
+            Concept.objects.filter(
+                id__in=concept_list,
+                anchor_migration_completed_at__isnull=False,
+                igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+            ).values_list('igdb_match__igdb_id', flat=True)
         )
         igdb_ids = [i for i in igdb_ids if i is not None]
-        contracts = set(Contract.objects.filter(igdb_id__in=igdb_ids)) if igdb_ids else set()
-        contracts.update(Contract.objects.filter(bundles__concepts__in=concept_list).distinct())
+        contracts = set(Contract.objects.filter(igdb_id__in=igdb_ids, is_live=True)) if igdb_ids else set()
+        contracts.update(Contract.objects.filter(bundles__concepts__in=concept_list, is_live=True).distinct())
     else:
         contracts = Contract.objects.filter(is_live=True)
     for contract in contracts:

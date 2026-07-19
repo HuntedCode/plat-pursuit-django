@@ -1360,6 +1360,13 @@ class Concept(models.Model):
             # IGDBMatch: target lacks one, so inherit source's.
             other.igdb_match.concept = self
             other.igdb_match.save(update_fields=['concept'])
+            # Propagate the anchor stamp with the match: Contract membership is DERIVED from
+            # (anchor_migration_completed_at + igdb_match), so inheriting the match without the
+            # anchor flag would silently drop the survivor from its Contract when an ANCHORED
+            # concept is absorbed into an un-anchored survivor.
+            if other.anchor_migration_completed_at and not self.anchor_migration_completed_at:
+                self.anchor_migration_completed_at = other.anchor_migration_completed_at
+                self.save(update_fields=['anchor_migration_completed_at'])
 
         # Merge title_ids
         for tid in other.title_ids:
@@ -2422,18 +2429,20 @@ class Contract(models.Model):
         return self.name
 
     def member_concept_ids(self):
-        """Concept ids belonging to this Contract: every ANCHORED Concept sharing this
-        Contract's raw IGDB id. Anchoring (`anchor_migration_completed_at`) is the
-        authoritative "this concept is this specific IGDB version" signal -- only anchored
-        concepts key contracts (an anchored concept keeps its RAW igdb_id; canonical grouping
-        lives on GameFamily, not here). Empty for an admin/episodic Contract (igdb_id=None)
-        whose concepts come only from its bundles."""
+        """Concept ids belonging to this Contract: every ANCHORED + TRUSTED-matched Concept
+        sharing this Contract's raw IGDB id. Anchoring (`anchor_migration_completed_at`) is the
+        authoritative "this concept is this specific IGDB version" signal (an anchored concept
+        keeps its RAW igdb_id; canonical grouping lives on GameFamily, not here); the trusted
+        gate guards the drift case where a later rematch leaves an anchored concept with a
+        `pending_review` match. Empty for an admin/episodic Contract (igdb_id=None) whose
+        concepts come only from its bundles."""
         if self.igdb_id is None:
             return []
         return list(
             Concept.objects.filter(
                 anchor_migration_completed_at__isnull=False,
                 igdb_match__igdb_id=self.igdb_id,
+                igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
             ).values_list('id', flat=True)
         )
 

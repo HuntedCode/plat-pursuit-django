@@ -50,3 +50,20 @@ def test_absorb_bundle_dedups_when_survivor_already_satisfier():
     survivor.absorb(absorbed)
 
     assert list(bundle.concepts.values_list('pk', flat=True)) == [survivor.pk]
+
+
+def test_absorb_propagates_anchor_when_inheriting_match():
+    """Audit Finding C: absorbing an ANCHORED concept into an un-anchored survivor must
+    inherit BOTH the igdb_match and the anchor flag, or the survivor silently drops from its
+    Contract (membership is derived from anchor + match)."""
+    from django.utils import timezone
+    from tests.factories import IGDBMatchFactory
+    survivor = ConceptFactory()   # un-anchored, no match
+    absorbed = ConceptFactory(anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=absorbed, igdb_id=77123)
+
+    survivor.absorb(absorbed)
+
+    survivor.refresh_from_db()
+    assert survivor.anchor_migration_completed_at is not None   # anchor propagated with the match
+    assert survivor.igdb_match.igdb_id == 77123
