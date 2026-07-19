@@ -2,6 +2,8 @@
 on a full page load, and returned ALONE for an InfiniteScroller ?page=N XHR fetch (see BadgeListView
 .get_template_names) -- the scroller extracts the .pp-bgal__card nodes and appends them. No page-number
 pager: infinite scroll (the sentinel + loader live in gallery.html) owns pagination. {% endcomment %}
+{# Total for this filter -- read off the swapped content to tick the header count old->new (see badge_list.html). #}
+<span hidden data-result-count="{{ paginator.count }}"></span>
 {% if gallery_frames %}
 <div class="pp-bgal__grid" id="items-grid" data-bgal-grid>
     {% for frame in gallery_frames %}

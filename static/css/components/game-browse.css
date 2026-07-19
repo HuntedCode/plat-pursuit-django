@@ -52,10 +52,8 @@
 .pp-gbrowse__achip-clear:hover { color: var(--pp-text); text-decoration: underline; }
 .pp-gbrowse__achip-clear:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
-/* Animated filter-panel expand/collapse (JS tweens height + opacity between 0 and scrollHeight). overflow
-   clips the content mid-tween; the JS releases height back to auto on transitionend so nested reflows work. */
-#gbrowse-advanced { overflow: hidden; transition: height 0.32s var(--pp-ease), opacity 0.26s var(--pp-ease); }
-@media (prefers-reduced-motion: reduce) { #gbrowse-advanced { transition: none; } }
+/* Animated filter-panel expand/collapse (JS tweens height + opacity between 0 and scrollHeight) is shared
+   across browse pages -- overflow + transition now live on .pp-bgal__advanced in browse-gallery.css. */
 
 /* Contract discipline triggers reuse .rp-chip (from the Career board), which lifts on hover. On this page
    every other control stays put on hover, so drop the raise here to match -- only the colour/border shift. */

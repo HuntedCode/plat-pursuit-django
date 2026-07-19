@@ -36,7 +36,7 @@
                 {# Catalog size as a Tally stat (mirrors the Collection header's headline number). #}
                 <div class="shrink-0 text-right">
                     <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-badge-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</div>
-                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">{% if view == 'gallery' %}badge{{ paginator.count|pluralize }}{% else %}series{% endif %}</div>
+                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1" data-badge-count-label>{% if view == 'gallery' %}badge{{ paginator.count|pluralize }}{% else %}series{% endif %}</div>
                 </div>
             </div>
 
@@ -340,11 +340,42 @@
             var panel = document.getElementById('bgal-advanced');
             var countEl = document.getElementById('bgal-filter-count');
             var clearBtn = document.getElementById('bgal-clear');
-            function setPanel(open) {
+            var panelAnim = null;
+            function setPanel(open, animate) {
                 if (!panel || !toggle) { return; }
-                if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
                 toggle.classList.toggle('is-open', open);
                 toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                if (panelAnim) { panel.removeEventListener('transitionend', panelAnim); panelAnim = null; }
+                var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                if (!animate || reduce) {
+                    panel.style.height = ''; panel.style.opacity = '';
+                    if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
+                    return;
+                }
+                if (open) {
+                    // Collapse before revealing so removing `hidden` doesn't paint a full-height panel for a
+                    // frame; scrollHeight still measures the true target while collapsed (overflow-hidden).
+                    panel.style.height = '0px'; panel.style.opacity = '0';
+                    panel.removeAttribute('hidden');
+                    var target = panel.scrollHeight;
+                    void panel.offsetHeight;                       // flush the collapsed start state
+                    panel.style.height = target + 'px'; panel.style.opacity = '1';
+                    panelAnim = function (ev) {
+                        if (ev.target !== panel || ev.propertyName !== 'height') { return; }
+                        panel.removeEventListener('transitionend', panelAnim); panelAnim = null;
+                        panel.style.height = ''; panel.style.opacity = '';   // release to auto so content reflows
+                    };
+                } else {
+                    panel.style.height = panel.scrollHeight + 'px'; panel.style.opacity = '1';
+                    void panel.offsetHeight;
+                    panel.style.height = '0px'; panel.style.opacity = '0';
+                    panelAnim = function (ev) {
+                        if (ev.target !== panel || ev.propertyName !== 'height') { return; }
+                        panel.removeEventListener('transitionend', panelAnim); panelAnim = null;
+                        panel.setAttribute('hidden', ''); panel.style.height = ''; panel.style.opacity = '';
+                    };
+                }
+                panel.addEventListener('transitionend', panelAnim);
             }
             function activeCount() {
                 return form ? form.querySelectorAll('input[type="checkbox"]:checked').length : 0;
@@ -363,7 +394,7 @@
                 if (clearBtn) { clearBtn.hidden = (n === 0 && !searchValue()); }  // shown only when something's set
             }
             if (toggle) {
-                toggle.addEventListener('click', function () { setPanel(panel.hasAttribute('hidden')); });
+                toggle.addEventListener('click', function () { setPanel(panel.hasAttribute('hidden'), true); });
             }
             if (form) {
                 form.addEventListener('change', refreshControls);
@@ -394,7 +425,7 @@
             refreshControls();
             // Collapse the panel on load (it renders open for the no-JS case); keep it open if filters are
             // already applied, so what's active stays visible.
-            setPanel(activeCount() > 0 || searchValue());
+            setPanel(activeCount() > 0 || searchValue(), false);
         }
 
         // Keep the toggle's active chip in sync after a view swap (the toggle sits outside #badge-view).
@@ -416,17 +447,44 @@
             wireFilters();
             updateToggleActive(cfg);
         }
+        // Header result-count tick (old -> new). Read the new total off the swapped content's hidden
+        // [data-result-count] marker (reliable -- it rides the main swap target), animate the header count
+        // from the JS-tracked last value (survives any data-countup reset), and on a VIEW swap refresh the
+        // series/badges label too. Mirrors the games browse header.
+        var badgeCountLast = null;
+        function syncBadgeCount(container, view) {
+            var marker = container.querySelector('[data-result-count]');
+            var countEl = document.querySelector('[data-badge-count]');
+            if (!marker || !countEl) { return; }
+            var newVal = parseFloat(marker.getAttribute('data-result-count'));
+            if (isNaN(newVal)) { return; }
+            if (badgeCountLast === null) { badgeCountLast = parseFloat(countEl.dataset.countup); }
+            countEl.dataset.countup = newVal;
+            if (window.PlatPursuit && PlatPursuit.countUp && !isNaN(badgeCountLast) && badgeCountLast !== newVal) {
+                PlatPursuit.countUp(countEl, 700, { from: badgeCountLast });
+            } else {
+                countEl.textContent = newVal.toLocaleString();
+            }
+            badgeCountLast = newVal;
+            if (view) {
+                var label = document.querySelector('[data-badge-count-label]');
+                if (label) { label.textContent = (view === 'gallery') ? ('badge' + (newVal === 1 ? '' : 's')) : 'series'; }
+            }
+        }
         document.body.addEventListener('htmx:afterSwap', function (e) {
             // Use HTMX's explicit swap target (e.detail.target). e.target can be the swapped-IN child
             // (.pp-slist, no id) rather than the target element, which made the view-swap branch never fire.
             var t = (e.detail && e.detail.target) || e.target;
             if (!t || !t.id) { return; }
-            if (t.id === 'browse-results') { t.classList.remove('is-swapping'); initReveal(); initScroller(viewConfig()); }  // filter swap: just the grid
-            else if (t.id === 'badge-view') {   // view swap: whole island (leave scroll put, like Collection/Career)
+            if (t.id === 'browse-results') {   // filter swap: just the grid
+                t.classList.remove('is-swapping'); initReveal(); initScroller(viewConfig());
+                syncBadgeCount(t);
+            } else if (t.id === 'badge-view') {   // view swap: whole island (leave scroll put, like Collection/Career)
                 initView();
                 var nv = (viewConfig() || {}).view || 'series';
                 PlatPursuit.slideViewIn(t, lastView, nv, ['series', 'gallery']);   // directional slide, shared with Career/Collection
                 lastView = nv;
+                syncBadgeCount(t, nv);
             }
         });
         // Safety net: clear the settle dim when the FILTER request itself completes, incl. errors where
