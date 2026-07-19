@@ -545,6 +545,11 @@
 .rp-advanced { overflow: hidden; transition: height 0.32s var(--pp-ease), opacity 0.32s var(--pp-ease); }
 @media (prefers-reduced-motion: reduce) { .rp-advanced { transition: none; } }
 .rp-advanced-in { display: flex; flex-direction: column; gap: 12px; padding: 13px; border: 1px solid var(--pp-border); border-radius: 12px; background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); }
+/* #rp-advanced is the last child of the flex-column .rp-toolbar (gap: 9px). That gap lingers while the
+   panel is display:block at height:0 and then snaps when `hidden` lands (the close jump). Cancel it with a
+   matching negative margin and carry the 9px separation on the inner card, so it collapses WITH the panel. */
+#rp-advanced { margin-top: -9px; }
+#rp-advanced > .rp-advanced-in { margin-top: 9px; }
 .rp-adv__group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 /* Mobile: the group label is a full-width header above its wrapping chips (md: a 74px inline gutter). */
 .rp-adv__label { flex: 0 0 100%; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
