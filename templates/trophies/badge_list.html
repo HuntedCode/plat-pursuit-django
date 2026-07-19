@@ -348,31 +348,32 @@
                 if (panelAnim) { panel.removeEventListener('transitionend', panelAnim); panelAnim = null; }
                 var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
                 if (!animate || reduce) {
-                    panel.style.height = ''; panel.style.opacity = '';
+                    panel.style.height = ''; panel.style.opacity = ''; panel.style.marginTop = '';
                     if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
                     return;
                 }
                 if (open) {
                     // Collapse before revealing so removing `hidden` doesn't paint a full-height panel for a
-                    // frame; scrollHeight still measures the true target while collapsed (overflow-hidden).
-                    panel.style.height = '0px'; panel.style.opacity = '0';
+                    // frame; scrollHeight still measures the true target while collapsed (overflow-hidden). The
+                    // top gap (margin-top) animates in with the height so it never snaps.
+                    panel.style.height = '0px'; panel.style.opacity = '0'; panel.style.marginTop = '0px';
                     panel.removeAttribute('hidden');
                     var target = panel.scrollHeight;
                     void panel.offsetHeight;                       // flush the collapsed start state
-                    panel.style.height = target + 'px'; panel.style.opacity = '1';
+                    panel.style.height = target + 'px'; panel.style.opacity = '1'; panel.style.marginTop = '';  // '' -> CSS gap
                     panelAnim = function (ev) {
                         if (ev.target !== panel || ev.propertyName !== 'height') { return; }
                         panel.removeEventListener('transitionend', panelAnim); panelAnim = null;
                         panel.style.height = ''; panel.style.opacity = '';   // release to auto so content reflows
                     };
                 } else {
-                    panel.style.height = panel.scrollHeight + 'px'; panel.style.opacity = '1';
+                    panel.style.height = panel.scrollHeight + 'px'; panel.style.opacity = '1'; panel.style.marginTop = '';
                     void panel.offsetHeight;
-                    panel.style.height = '0px'; panel.style.opacity = '0';
+                    panel.style.height = '0px'; panel.style.opacity = '0'; panel.style.marginTop = '0px';   // gap collapses WITH the height, so no residual to snap away
                     panelAnim = function (ev) {
                         if (ev.target !== panel || ev.propertyName !== 'height') { return; }
                         panel.removeEventListener('transitionend', panelAnim); panelAnim = null;
-                        panel.setAttribute('hidden', ''); panel.style.height = ''; panel.style.opacity = '';
+                        panel.setAttribute('hidden', ''); panel.style.height = ''; panel.style.opacity = ''; panel.style.marginTop = '';
                     };
                 }
                 panel.addEventListener('transitionend', panelAnim);

@@ -124,9 +124,9 @@
 .pp-bgal__advbtn__n.is-pop { animation: ppBadgePop 0.3s var(--pp-ease); }
 @keyframes ppBadgePop { 0% { transform: scale(1); } 40% { transform: scale(1.32); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .pp-bgal__advbtn__n.is-pop { animation: none; } }
-/* height + opacity share a duration so the fade and the collapse finish together -- a shorter opacity
-   left the panel invisible-but-still-collapsing for a beat at the end (a visible "hitch" on the close). */
-.pp-bgal__advanced { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-border); overflow: hidden; transition: height 0.32s var(--pp-ease), opacity 0.32s var(--pp-ease); }
+/* height + opacity share a duration so the fade and collapse finish together; margin-top animates too so
+   the panel's top gap collapses WITH the height instead of snapping away when `hidden` lands at the end. */
+.pp-bgal__advanced { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-border); overflow: hidden; transition: height 0.32s var(--pp-ease), opacity 0.32s var(--pp-ease), margin-top 0.32s var(--pp-ease); }
 @media (prefers-reduced-motion: reduce) { .pp-bgal__advanced { transition: none; } }
 .pp-bgal__clear {
     margin-top: 10px; align-self: flex-start; background: none; border: none; padding: 2px 0; cursor: pointer;
