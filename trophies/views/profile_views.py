@@ -927,9 +927,11 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                     context['profile_theme_gradient'] = get_theme_css(profile.selected_theme)
 
             # Profile banner image: prefer the exact user-picked image, fall
-            # back to the selected background concept's PSN landscape art.
+            # back to the selected background concept's landscape image (IGDB
+            # screenshots -> artworks -> PSN bg_url fallback).
             bg = profile.selected_background
-            banner_url = profile.banner_image_url or (bg.bg_url if bg else None)
+            bg_landscape = bg.get_landscape_url() if bg else None
+            banner_url = profile.banner_image_url or bg_landscape
             if banner_url:
                 context['profile_banner_url'] = banner_url
                 context['profile_banner_position'] = profile.banner_position
@@ -938,7 +940,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                     'concept_id': bg.id if bg else None,
                     'title_name': (bg.unified_title or '') if bg else '',
                     'icon_url': (bg.cover_url or '') if bg else '',
-                    'bg_url': (bg.bg_url or '') if bg else '',
+                    'bg_url': bg_landscape or '',
                     'image_url': profile.banner_image_url or '',
                 })
 

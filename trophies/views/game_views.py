@@ -819,7 +819,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
 
         if earned_trophy_id:
             result['earned_trophy_id'] = earned_trophy_id
-            result['concept_bg_url'] = game.concept.bg_url or ''
+            result['concept_bg_url'] = (game.concept.get_landscape_url() if game.concept else None) or ''
 
         return result
 

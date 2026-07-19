@@ -1000,12 +1000,12 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             context['recent_concept_name'] = ''
 
         # Header background: single hero image for blurred backdrop. Prefer
-        # the landscape bg_url (crops naturally into a wide blurred strip),
-        # falling back to the portrait cover_url if no landscape is available.
+        # the assembled landscape image (crops naturally into a wide blurred
+        # strip), falling back to the portrait cover_url if none is available.
         header_bg_image = ''
         if badge.most_recent_concept:
             header_bg_image = (
-                badge.most_recent_concept.bg_url
+                badge.most_recent_concept.get_landscape_url()
                 or badge.most_recent_concept.cover_url
                 or ''
             )
