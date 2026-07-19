@@ -239,11 +239,13 @@ class BackgroundContextMixin:
         Build image_urls dict for template context.
 
         Args:
-            concept: A Concept model instance with bg_url field
+            concept: A Concept model instance
 
         Returns:
-            dict: Contains 'bg_url' if concept has a background, empty dict otherwise
+            dict: Contains 'bg_url' with the assembled landscape image (IGDB screenshots ->
+            artworks -> PSN bg_url fallback), or empty dict when there's no landscape image.
         """
-        if concept and getattr(concept, 'bg_url', None):
-            return {'bg_url': concept.bg_url}
+        landscape = concept.get_landscape_url() if concept else None
+        if landscape:
+            return {'bg_url': landscape}
         return {}

@@ -532,8 +532,9 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         context['online_trophy_count'] = online_count
         context['unobtainable_trophy_count'] = unobtainable_count
 
-        # Header background.
-        context['header_bg_url'] = getattr(concept, 'bg_url', None) or ''
+        # Header background: the assembled landscape image (IGDB screenshots -> artworks -> PSN
+        # bg_url fallback), not raw bg_url.
+        context['header_bg_url'] = (concept.get_landscape_url() if concept else None) or ''
 
         # Breadcrumbs.
         group_name = roadmap.concept_trophy_group.display_name
