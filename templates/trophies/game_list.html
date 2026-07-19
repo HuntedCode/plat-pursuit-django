@@ -629,24 +629,44 @@
             if (t && t.id === 'browse-results') {
                 t.classList.remove('is-swapping');
                 refreshBadge();
-                // The header count is refreshed out-of-band (hx-swap-oob sets its text); tick it from the
-                // previous value to the new one instead of hard-jumping. data-countup still holds the old
-                // value at this point (OOB only swaps text), so read old from it, new from the fresh text.
-                var countEl = document.getElementById('gbrowse-count');
-                if (countEl && window.PlatPursuit && PlatPursuit.countUp) {
-                    var oldVal = parseFloat(countEl.dataset.countup);
-                    var newVal = parseFloat((countEl.textContent || '').replace(/,/g, ''));
-                    if (!isNaN(newVal) && newVal !== oldVal) {
-                        countEl.dataset.countup = newVal;   // countUp reads target from here
-                        PlatPursuit.countUp(countEl, 700, { from: isNaN(oldVal) ? 0 : oldVal });
-                    }
-                    // Keep the mini-bar's count in sync (it may be pinned + on-screen mid-scroll).
-                    var mbCount = document.querySelector('[data-minibar-count]');
-                    if (mbCount && !isNaN(newVal)) { mbCount.textContent = newVal.toLocaleString(); }
-                }
                 initReveal();   // before initScroller so revealHandle exists for its onAppend hook
                 initScroller();
             }
+        });
+        // Header result-count tick (old -> new) across filter/sort swaps. The count is refreshed
+        // out-of-band (hx-swap-oob replaces #gbrowse-count's TEXT only, never data-countup), and that OOB
+        // swap does NOT reliably land before htmx:afterSwap -- so reading old + new off the element mid-swap
+        // crossed them and animated the WRONG way (flash new, then tick back to old). Instead: snapshot the
+        // OLD value in beforeRequest (DOM is stable then), and on afterSettle set data-countup to the NEW
+        // text + animate from the snapshot. countUp's target is ALWAYS the fresh text, so it can never rest
+        // on the old value.
+        var browseCountFrom = null;
+        document.body.addEventListener('htmx:beforeRequest', function (e) {
+            var elt = e.detail && e.detail.elt;
+            if (!elt || !(elt.closest && elt.closest('#gbrowse-form'))) { return; }
+            var el = document.getElementById('gbrowse-count');
+            if (!el) { return; }
+            var v = parseFloat(el.dataset.countup);
+            if (isNaN(v)) { v = parseFloat((el.textContent || '').replace(/,/g, '')); }
+            browseCountFrom = isNaN(v) ? null : v;
+        });
+        document.body.addEventListener('htmx:afterSettle', function (e) {
+            var t = (e.detail && e.detail.target) || e.target;
+            if (!t || t.id !== 'browse-results') { return; }
+            var countEl = document.getElementById('gbrowse-count');
+            if (countEl && window.PlatPursuit && PlatPursuit.countUp) {
+                var newVal = parseFloat((countEl.textContent || '').replace(/,/g, ''));
+                if (!isNaN(newVal)) {
+                    countEl.dataset.countup = newVal;   // canonical target = the fresh count
+                    if (browseCountFrom !== null && browseCountFrom !== newVal) {
+                        PlatPursuit.countUp(countEl, 700, { from: browseCountFrom });
+                    }
+                    // Keep the mini-bar's count in sync (it may be pinned + on-screen mid-scroll).
+                    var mbCount = document.querySelector('[data-minibar-count]');
+                    if (mbCount) { mbCount.textContent = newVal.toLocaleString(); }
+                }
+            }
+            browseCountFrom = null;
         });
         // Safety net: clear the settle dim (+ browse-filters.js's opacity-50/pointer-events-none) when the
         // FILTER request completes, incl. non-2xx / aborted requests where afterSwap never fires -- otherwise
