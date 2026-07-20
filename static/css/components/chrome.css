@@ -224,10 +224,11 @@
     background: linear-gradient(135deg, var(--pp-bg-3), var(--pp-bg-2)); color: var(--pp-text-dim); }
 .pp-av__img svg { width: 20px; height: 20px; }
 /* The ring is a status LIGHT, not just a border: colour eases between states (never snaps) and carries a
-   soft state-coloured halo; it expands a hair on hover to read as interactive. */
+   soft state-coloured halo. On hover the WHOLE avatar lifts (scaling only the ::after left the corner dot
+   behind); :not(:active) lets the press-down win. */
 .pp-av::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--ring, var(--pp-border)); pointer-events: none;
-    box-shadow: 0 0 0 0 transparent; transition: border-color 0.4s var(--pp-ease), box-shadow 0.4s var(--pp-ease), transform 0.16s var(--pp-ease); }
-@media (hover: hover) { .pp-av:hover::after { transform: scale(1.07); } }
+    box-shadow: 0 0 0 0 transparent; transition: border-color 0.4s var(--pp-ease), box-shadow 0.4s var(--pp-ease); }
+@media (hover: hover) { .pp-av:hover:not(:active) { transform: scale(1.05); } }   /* ring + dot + image lift together */
 .pp-av:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 4px; border-radius: 50%; }
 /* Traffic-light status (intuitive for sync): green synced / amber syncing / red error. */
 .pp-av[data-sync="synced"] { --ring: var(--pp-success); }
@@ -244,6 +245,10 @@
 }
 @keyframes ppAvSpin { to { transform: rotate(360deg); } }
 .pp-av__dot { position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--pp-bg-1); background: var(--ring, var(--pp-border)); transition: background 0.4s var(--pp-ease); }
+/* Idle "alive" breath on the status dot when SYNCED -- a calm, slow, premium heartbeat (the syncing state
+   has its own spinning arc, so only the settled state breathes). A quiet glow pulse, not a scale. */
+.pp-av[data-sync="synced"] .pp-av__dot { --dot-breath: color-mix(in oklab, var(--pp-success) 55%, transparent); animation: ppDotBreathe 3s var(--pp-ease) infinite; }
+@keyframes ppDotBreathe { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 4px 1px var(--dot-breath); } }
 /* Sync-complete flourish: one satisfying green pulse when syncing -> synced (navsync.js adds the class,
    removes it after). Settles into the resting synced halo. */
 /* color-mix() is HOISTED to custom props (lightningcss silently drops color-mix used INSIDE @keyframes). */
@@ -262,12 +267,16 @@
     .pp-av[data-sync="syncing"]::before { animation: none; }
     .pp-av, .pp-av::after { transition: none; }
     .pp-av.is-synced-flash::after { animation: none; }
+    .pp-av[data-sync="synced"] .pp-av__dot { animation: none; }
 }
 
 /* ── The unified avatar PANEL (absorbs the hotbar) ────────────────────────── */
 .pp-avpanel { width: 300px; max-width: calc(100vw - 24px); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
     background: var(--pp-bg-2); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 44px rgba(0,0,0,0.45); overflow: hidden;
-    transform-origin: top right; }   /* emerge from the avatar's corner */
+    transform-origin: top right;   /* emerge from / collapse toward the avatar's corner */
+    /* Governs the EXIT: a quick collapse-toward-the-avatar (mirrors the spring open, faster). The open is
+       the .is-open keyframe below, which overrides this transition while it plays. */
+    transition: opacity 0.15s var(--pp-ease), transform 0.16s var(--pp-ease); }
 /* Crafted entrance: main.js adds .is-open when the DaisyUI dropdown opens -- the container springs out of
    the avatar corner, then the sections cascade in beneath it. Purely additive over DaisyUI's show/hide
    (which keeps owning the quick exit); if the JS never runs, the menu still opens normally. */
@@ -295,8 +304,18 @@
 .pp-avsync__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .pp-avsync__when { font-size: 0.72rem; color: var(--pp-text-mute); }
 .pp-avsync__loot { display: flex; align-items: center; gap: 12px; margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--pp-divider); }
-.pp-avsync__loot i { font-style: normal; display: inline-flex; align-items: center; gap: 5px; font-size: 0.76rem; font-weight: 700; color: var(--pp-text-dim); }
-.pp-avsync__pip { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.pp-avsync__loot i { font-style: normal; display: inline-flex; align-items: center; gap: 5px; font-size: 0.76rem; font-weight: 700; color: var(--pp-text-dim); transition: transform 0.2s var(--pp-ease), color 0.2s var(--pp-ease); }
+.pp-avsync__pip { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; transition: transform 0.2s var(--pp-ease); }
+/* Hovering the loot runs a subtle left-to-right wave -- the trophies lift + their pips pop in sequence, so
+   the section feels as alive as the menu rows (delight, not a fake button -- it stays non-interactive). */
+@media (hover: hover) {
+    .pp-avsync__loot:hover i { transform: translateY(-3px); color: var(--pp-text); }
+    .pp-avsync__loot:hover .pp-avsync__pip { transform: scale(1.3); }
+    .pp-avsync__loot:hover i:nth-child(2), .pp-avsync__loot:hover i:nth-child(2) .pp-avsync__pip { transition-delay: 0.05s; }
+    .pp-avsync__loot:hover i:nth-child(3), .pp-avsync__loot:hover i:nth-child(3) .pp-avsync__pip { transition-delay: 0.10s; }
+    .pp-avsync__loot:hover i:nth-child(4), .pp-avsync__loot:hover i:nth-child(4) .pp-avsync__pip { transition-delay: 0.15s; }
+}
+@media (prefers-reduced-motion: reduce) { .pp-avsync__loot i, .pp-avsync__pip { transition: none; } .pp-avsync__loot:hover i, .pp-avsync__loot:hover .pp-avsync__pip { transform: none; } }
 
 .pp-avbtn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: var(--pp-radius-md);
     font-size: 0.76rem; font-weight: 700; cursor: pointer; border: 1px solid transparent; text-decoration: none;
