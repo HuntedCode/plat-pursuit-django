@@ -218,16 +218,23 @@
 }
 
 /* ── Status-aware avatar: the ring colour IS the sync state ───────────────── */
-.pp-av { position: relative; width: 38px; height: 38px; border-radius: 50%; cursor: pointer; flex-shrink: 0; padding: 0; border: none; background: none; }
+.pp-av { position: relative; width: 38px; height: 38px; border-radius: 50%; cursor: pointer; flex-shrink: 0; padding: 0; border: none; background: none; transition: transform 0.16s var(--pp-ease); }
+.pp-av:active { transform: scale(0.93); }   /* tactile press-down (springs back via the transition) */
 .pp-av__img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: grid; place-items: center;
     background: linear-gradient(135deg, var(--pp-bg-3), var(--pp-bg-2)); color: var(--pp-text-dim); }
 .pp-av__img svg { width: 20px; height: 20px; }
-.pp-av::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--ring, var(--pp-border)); pointer-events: none; }
+/* The ring is a status LIGHT, not just a border: colour eases between states (never snaps) and carries a
+   soft state-coloured halo; it expands a hair on hover to read as interactive. */
+.pp-av::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--ring, var(--pp-border)); pointer-events: none;
+    box-shadow: 0 0 0 0 transparent; transition: border-color 0.4s var(--pp-ease), box-shadow 0.4s var(--pp-ease), transform 0.16s var(--pp-ease); }
+@media (hover: hover) { .pp-av:hover::after { transform: scale(1.07); } }
 .pp-av:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 4px; border-radius: 50%; }
 /* Traffic-light status (intuitive for sync): green synced / amber syncing / red error. */
 .pp-av[data-sync="synced"] { --ring: var(--pp-success); }
 .pp-av[data-sync="error"]  { --ring: var(--pp-error); }
 .pp-av[data-sync="syncing"] { --ring: var(--pp-warning); }
+.pp-av[data-sync="synced"]::after { box-shadow: 0 0 9px -1px color-mix(in oklab, var(--pp-success) 50%, transparent); }
+.pp-av[data-sync="error"]::after  { box-shadow: 0 0 9px -1px color-mix(in oklab, var(--pp-error) 58%, transparent); }
 .pp-av[data-sync="syncing"]::before {
     content: ""; position: absolute; inset: -4px; border-radius: 50%;
     background: conic-gradient(var(--pp-warning) 0deg 90deg, transparent 90deg 360deg);
@@ -236,12 +243,43 @@
     animation: ppAvSpin 1.1s linear infinite;
 }
 @keyframes ppAvSpin { to { transform: rotate(360deg); } }
-.pp-av__dot { position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--pp-bg-1); background: var(--ring, var(--pp-border)); }
-@media (prefers-reduced-motion: reduce) { .pp-av[data-sync="syncing"]::before { animation: none; } }
+.pp-av__dot { position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--pp-bg-1); background: var(--ring, var(--pp-border)); transition: background 0.4s var(--pp-ease); }
+/* Sync-complete flourish: one satisfying green pulse when syncing -> synced (navsync.js adds the class,
+   removes it after). Settles into the resting synced halo. */
+/* color-mix() is HOISTED to custom props (lightningcss silently drops color-mix used INSIDE @keyframes). */
+.pp-av.is-synced-flash::after {
+    --flash-a: color-mix(in oklab, var(--pp-success) 70%, transparent);
+    --flash-b: color-mix(in oklab, var(--pp-success) 60%, transparent);
+    --flash-c: color-mix(in oklab, var(--pp-success) 50%, transparent);
+    animation: ppAvComplete 0.8s var(--pp-ease);
+}
+@keyframes ppAvComplete {
+    0%   { box-shadow: 0 0 0 0 var(--flash-a); }
+    45%  { box-shadow: 0 0 15px 3px var(--flash-b); }
+    100% { box-shadow: 0 0 9px -1px var(--flash-c); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pp-av[data-sync="syncing"]::before { animation: none; }
+    .pp-av, .pp-av::after { transition: none; }
+    .pp-av.is-synced-flash::after { animation: none; }
+}
 
 /* ── The unified avatar PANEL (absorbs the hotbar) ────────────────────────── */
 .pp-avpanel { width: 300px; max-width: calc(100vw - 24px); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
-    background: var(--pp-bg-2); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 44px rgba(0,0,0,0.45); overflow: hidden; }
+    background: var(--pp-bg-2); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 44px rgba(0,0,0,0.45); overflow: hidden;
+    transform-origin: top right; }   /* emerge from the avatar's corner */
+/* Crafted entrance: main.js adds .is-open when the DaisyUI dropdown opens -- the container springs out of
+   the avatar corner, then the sections cascade in beneath it. Purely additive over DaisyUI's show/hide
+   (which keeps owning the quick exit); if the JS never runs, the menu still opens normally. */
+.pp-avpanel.is-open { animation: ppAvPanelIn 0.24s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.pp-avpanel.is-open > * { animation: ppAvSectionIn 0.34s var(--pp-ease) backwards; }
+.pp-avpanel.is-open > *:nth-child(1) { animation-delay: 0.05s; }
+.pp-avpanel.is-open > *:nth-child(2) { animation-delay: 0.10s; }
+.pp-avpanel.is-open > *:nth-child(3) { animation-delay: 0.14s; }
+.pp-avpanel.is-open > *:nth-child(n+4) { animation-delay: 0.17s; }
+@keyframes ppAvPanelIn { from { opacity: 0; transform: scale(0.95) translateY(-5px); } to { opacity: 1; transform: none; } }
+@keyframes ppAvSectionIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pp-avpanel.is-open, .pp-avpanel.is-open > * { animation: none; } }
 .pp-avpanel__head { display: flex; align-items: center; gap: 11px; padding: 14px; border-bottom: 1px solid var(--pp-divider); }
 .pp-avpanel__name { flex: 1; min-width: 0; }
 .pp-avpanel__name b { display: block; font-size: 0.9rem; font-weight: 700; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -262,8 +300,9 @@
 
 .pp-avbtn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: var(--pp-radius-md);
     font-size: 0.76rem; font-weight: 700; cursor: pointer; border: 1px solid transparent; text-decoration: none;
-    background: var(--pp-primary); color: #05101c; }
-@media (hover: hover) { .pp-avbtn:hover { filter: brightness(1.08); } }
+    background: var(--pp-primary); color: #05101c; transition: box-shadow 0.16s var(--pp-ease), filter 0.16s var(--pp-ease); }
+/* Hover = the house glow, not a raw brightness bump. */
+@media (hover: hover) { .pp-avbtn:hover { box-shadow: 0 0 14px -2px color-mix(in oklab, var(--pp-primary) 65%, transparent); filter: brightness(1.04); } }
 .pp-avbtn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .pp-avbtn:disabled { opacity: 0.5; cursor: default; }
 
@@ -271,12 +310,18 @@
 .pp-avmenu a, .pp-avmenu button {
     display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: var(--pp-radius-md);
     font-size: 0.82rem; color: var(--pp-text-dim); text-decoration: none; background: none; border: none; cursor: pointer; text-align: left;
-    transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease);
+    transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), transform var(--pp-dur-fast) var(--pp-ease);
 }
-@media (hover: hover) { .pp-avmenu a:hover, .pp-avmenu button:hover { background: oklch(1 0 0 / 0.05); color: var(--pp-text); } }
+@media (hover: hover) {
+    .pp-avmenu a:hover, .pp-avmenu button:hover { background: oklch(1 0 0 / 0.05); color: var(--pp-text); }
+    .pp-avmenu a:hover svg, .pp-avmenu button:hover svg { color: var(--pp-primary); }       /* leading icon warms to the accent */
+    .pp-avmenu a:hover { transform: translateX(2px); }                                       /* nav rows nudge in the read direction */
+    .pp-avmenu button.pp-avmenu__danger:hover svg { color: var(--pp-error); }                /* logout stays a warning, not the accent */
+}
 .pp-avmenu a:focus-visible, .pp-avmenu button:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
-.pp-avmenu svg { width: 16px; height: 16px; color: var(--pp-text-mute); flex-shrink: 0; }
+.pp-avmenu svg { width: 16px; height: 16px; color: var(--pp-text-mute); flex-shrink: 0; transition: color var(--pp-dur-fast) var(--pp-ease); }
 .pp-avmenu__danger:hover { color: var(--pp-error) !important; }
+@media (prefers-reduced-motion: reduce) { .pp-av:active, .pp-avmenu a:hover { transform: none; } }
 .pp-avmenu__count { margin-left: auto; font-size: 0.7rem; font-weight: 800; color: var(--pp-error); }
 
 /* ── Sub-nav: the hub wayfinding rail (grouped, house style) ──────────────── */

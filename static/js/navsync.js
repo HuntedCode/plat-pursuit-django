@@ -43,6 +43,15 @@ document.addEventListener('DOMContentLoaded', function () {
         if (avatar) { avatar.setAttribute('data-sync', s); }
         if (statusEl) { statusEl.setAttribute('data-sync', s); }
     }
+    // One-shot green pulse on the ring when a sync completes (the satisfying "done" beat). Remove-reflow-add
+    // retriggers it; cleared after the animation so it can fire again next sync.
+    function flashRings() {
+        for (var i = 0; i < rings.length; i++) {
+            var r = rings[i];
+            r.classList.remove('is-synced-flash'); void r.offsetWidth; r.classList.add('is-synced-flash');
+        }
+        setTimeout(function () { for (var j = 0; j < rings.length; j++) { rings[j].classList.remove('is-synced-flash'); } }, 900);
+    }
     function txt(el, t) { if (el) { el.textContent = t; } }
     function show(el) { if (el) { el.hidden = false; } }
     function hide(el) { if (el) { el.hidden = true; } }
@@ -69,7 +78,10 @@ document.addEventListener('DOMContentLoaded', function () {
         if (s === 'synced') {
             setSync('synced'); txt(statusEl, 'Synced'); hide(prog);
             txt(live, 'Profile sync complete'); stopPoll(); countdown(data.seconds_to_next_sync);
-            if (lastStatus === 'syncing' && window.PlatPursuit && PlatPursuit.ToastManager) { PlatPursuit.ToastManager.success('Profile sync complete!'); }
+            if (lastStatus === 'syncing') {
+                flashRings();   // the satisfying "done" pulse on the avatar ring
+                if (window.PlatPursuit && PlatPursuit.ToastManager) { PlatPursuit.ToastManager.success('Profile sync complete!'); }
+            }
         } else if (s === 'syncing') {
             setSync('syncing');
             var tag = data.is_finalizing ? (PHASE[data.finalize_phase] || 'Finalizing') : 'Syncing';
@@ -115,6 +127,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function trigger() {
         if (!trigUrl || !syncBtn || syncBtn.disabled) return;
+        // Move focus INTO the panel before disabling the button. Otherwise disabling the just-clicked
+        // button blurs it, and the focus-based dropdown loses focus-within and force-closes -- jarring,
+        // since the user wants to watch the sync they just started. root (#nav-sync) is tabindex=0 and
+        // inside the dropdown, so focusing it keeps the menu open.
+        if (root && root.focus) { root.focus({ preventScroll: true }); }
         setSync('syncing'); txt(statusEl, 'Syncing…'); show(prog);
         syncBtn.textContent = 'Syncing…'; syncBtn.disabled = true;
         PlatPursuit.API.post(trigUrl, {})

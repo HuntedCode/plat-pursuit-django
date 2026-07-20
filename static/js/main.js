@@ -146,6 +146,36 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize theme icons on load
     updateAllThemeIcons();
 
+    // ── Avatar account menu: crafted entrance + a little life over DaisyUI's focus dropdown ──
+    // DaisyUI shows/hides the panel on focus; we layer an .is-open class (the CSS spring + section cascade)
+    // and count the trophy loot up on open. Open/close is detected via focusin/focusout on the wrap (its own
+    // mechanism is focus-based, so these align). Purely additive -- absent this, the menu still works.
+    (function () {
+        const wrap = document.getElementById('nav-account');
+        const panel = wrap && wrap.querySelector('.pp-avpanel');
+        if (!wrap || !panel) return;
+        let menuOpen = false;
+        wrap.addEventListener('focusin', () => {
+            if (menuOpen) return;
+            menuOpen = true;
+            panel.classList.add('is-open');
+            // Count the loot up on open -- but not mid-sync, so we don't fight navsync's live number updates.
+            const av = wrap.querySelector('[data-nav-avatar]');
+            if (av && av.getAttribute('data-sync') === 'syncing') return;
+            if (window.PlatPursuit && PlatPursuit.countUp) {
+                panel.querySelectorAll('[data-nav-loot]').forEach((el) => {
+                    const n = parseInt((el.textContent || '').replace(/[^0-9]/g, ''), 10);
+                    if (!isNaN(n)) { el.dataset.countup = n; PlatPursuit.countUp(el, 620, { from: 0 }); }
+                });
+            }
+        });
+        wrap.addEventListener('focusout', (e) => {
+            if (wrap.contains(e.relatedTarget)) return;   // focus moved WITHIN the menu -> still open
+            menuOpen = false;
+            panel.classList.remove('is-open');
+        });
+    })();
+
     // Note: legacy mega-menu dropdown handlers and the path-based mobile
     // tab bar active-state setter were removed when the navbar was
     // collapsed to direct-link buttons (Community Hub initiative). The
