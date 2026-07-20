@@ -283,11 +283,15 @@
    OPEN to a springier curve + triggers the section cascade. Exit delays `visibility` until after the fade. */
 #nav-account .pp-avpanel {
     transform-origin: top right;   /* emerge from / collapse toward the avatar's corner */
-    opacity: 0; visibility: hidden; transform: scale(0.96) translateY(-6px);
+    /* display + animation override DaisyUI v5, which CLOSES with `display:none` -- that snaps the panel out
+       before any fade. Force it always-rendered and hide via visibility/opacity (both transitionable), with
+       `visibility:hidden` delayed until after the fade + pointer-events off so the closed panel is inert. */
+    display: block; animation: none;
+    opacity: 0; visibility: hidden; pointer-events: none; transform: scale(0.96) translateY(-6px);
     transition: opacity 0.15s var(--pp-ease), transform 0.17s var(--pp-ease), visibility 0s linear 0.17s;
 }
 #nav-account:focus-within .pp-avpanel {   /* OPEN (fallback: works even without the JS) */
-    opacity: 1; visibility: visible; transform: none;
+    opacity: 1; visibility: visible; pointer-events: auto; transform: none;
     transition: opacity 0.16s var(--pp-ease), transform 0.16s var(--pp-ease), visibility 0s;
 }
 #nav-account .pp-avpanel.is-open {   /* JS present -> a springier open curve; open VALUES still come from :focus-within */
