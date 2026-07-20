@@ -244,11 +244,14 @@
     animation: ppAvSpin 1.1s linear infinite;
 }
 @keyframes ppAvSpin { to { transform: rotate(360deg); } }
-.pp-av__dot { position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--pp-bg-1); background: var(--ring, var(--pp-border)); transition: background 0.4s var(--pp-ease); }
-/* Idle "alive" breath on the status dot when SYNCED -- a calm, slow, premium heartbeat (the syncing state
-   has its own spinning arc, so only the settled state breathes). A quiet glow pulse, not a scale. */
-.pp-av[data-sync="synced"] .pp-av__dot { --dot-breath: color-mix(in oklab, var(--pp-success) 55%, transparent); animation: ppDotBreathe 3s var(--pp-ease) infinite; }
-@keyframes ppDotBreathe { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 4px 1px var(--dot-breath); } }
+/* Lit status LED: a specular highlight (top-left) over the state colour + a soft state-coloured halo and a
+   hair of inner depth, so the dot reads as a real light AT REST. No perpetual motion -- an orbiting/pulsing
+   dot would falsely signal "working" (and the syncing arc already owns that); motion is reserved for the
+   completion pulse + the press. */
+.pp-av__dot { position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--pp-bg-1);
+    background: radial-gradient(circle at 34% 30%, color-mix(in oklab, var(--ring, var(--pp-border)) 45%, white), var(--ring, var(--pp-border)) 70%);
+    box-shadow: 0 0 5px -1px var(--ring, var(--pp-border)), inset 0 -1px 1.5px rgba(0, 0, 0, 0.28);
+    transition: background 0.4s var(--pp-ease), box-shadow 0.4s var(--pp-ease); }
 /* Sync-complete flourish: one satisfying green pulse when syncing -> synced (navsync.js adds the class,
    removes it after). Settles into the resting synced halo. */
 /* color-mix() is HOISTED to custom props (lightningcss silently drops color-mix used INSIDE @keyframes). */
@@ -267,7 +270,6 @@
     .pp-av[data-sync="syncing"]::before { animation: none; }
     .pp-av, .pp-av::after { transition: none; }
     .pp-av.is-synced-flash::after { animation: none; }
-    .pp-av[data-sync="synced"] .pp-av__dot { animation: none; }
 }
 
 /* ── The unified avatar PANEL (absorbs the hotbar) ────────────────────────── */
@@ -304,18 +306,12 @@
 .pp-avsync__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .pp-avsync__when { font-size: 0.72rem; color: var(--pp-text-mute); }
 .pp-avsync__loot { display: flex; align-items: center; gap: 12px; margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--pp-divider); }
-.pp-avsync__loot i { font-style: normal; display: inline-flex; align-items: center; gap: 5px; font-size: 0.76rem; font-weight: 700; color: var(--pp-text-dim); transition: transform 0.2s var(--pp-ease), color 0.2s var(--pp-ease); }
-.pp-avsync__pip { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; transition: transform 0.2s var(--pp-ease); }
-/* Hovering the loot runs a subtle left-to-right wave -- the trophies lift + their pips pop in sequence, so
-   the section feels as alive as the menu rows (delight, not a fake button -- it stays non-interactive). */
-@media (hover: hover) {
-    .pp-avsync__loot:hover i { transform: translateY(-3px); color: var(--pp-text); }
-    .pp-avsync__loot:hover .pp-avsync__pip { transform: scale(1.3); }
-    .pp-avsync__loot:hover i:nth-child(2), .pp-avsync__loot:hover i:nth-child(2) .pp-avsync__pip { transition-delay: 0.05s; }
-    .pp-avsync__loot:hover i:nth-child(3), .pp-avsync__loot:hover i:nth-child(3) .pp-avsync__pip { transition-delay: 0.10s; }
-    .pp-avsync__loot:hover i:nth-child(4), .pp-avsync__loot:hover i:nth-child(4) .pp-avsync__pip { transition-delay: 0.15s; }
-}
-@media (prefers-reduced-motion: reduce) { .pp-avsync__loot i, .pp-avsync__pip { transition: none; } .pp-avsync__loot:hover i, .pp-avsync__loot:hover .pp-avsync__pip { transform: none; } }
+.pp-avsync__loot i { font-style: normal; display: inline-flex; align-items: center; gap: 5px; font-size: 0.76rem; font-weight: 700; color: var(--pp-text-dim); }
+/* Finished readout, not a control: the pips get a lit-gem look (inset specular highlight + a hair of inner
+   shadow) so the section reads as intentional AT REST -- no hover choreography (that felt cheap, and the
+   loot isn't interactive; the explicit "Profile" menu row is the way to your trophies). The inset shadows
+   layer over the inline trophy colour without overriding it. */
+.pp-avsync__pip { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: inset 0 1px 1.5px rgba(255, 255, 255, 0.55), inset 0 -1.5px 1.5px rgba(0, 0, 0, 0.3); }
 
 .pp-avbtn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: var(--pp-radius-md);
     font-size: 0.76rem; font-weight: 700; cursor: pointer; border: 1px solid transparent; text-decoration: none;
