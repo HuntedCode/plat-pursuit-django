@@ -84,6 +84,17 @@ def test_view_query_activates_contracts_tab(client):
     assert b'is-active" data-view="contracts"' in resp.content
 
 
+def test_career_renders_board_history_sub_toggle(client):
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+
+    resp = client.get('/career/')
+
+    assert resp.status_code == 200
+    assert b'data-contract-view="board"' in resp.content       # the Board | History segmented sub-toggle
+    assert b'data-contract-view="history"' in resp.content
+
+
 def test_research_panel_url_redirects_into_career_contracts(client):
     resp = client.get('/research-panel/')
     assert resp.status_code == 301

@@ -14,7 +14,9 @@ import json
 import math
 import random
 
-from trophies.models import Job, ProfileJobXP
+from django.db.models import Count, Sum
+
+from trophies.models import ContractXPGrant, Job, ProfileJobXP
 from trophies.util_modules.leveling import xp_for_level, tier_for_level
 
 # The 5 disciplines (families), in canonical radar/seed order.
@@ -101,7 +103,7 @@ CRITERIA = {
 }
 
 
-def job_dict(job, level, total_xp, *, atomic, slot_index):
+def job_dict(job, level, total_xp, *, atomic, slot_index, sources_count=0, sources_xp=0):
     """Build one job tile from a job + the viewer's real level/XP for it.
 
     `slot_index` is the job's slot within its discipline (`atomic` is a legacy running index the
@@ -138,6 +140,10 @@ def job_dict(job, level, total_xp, *, atomic, slot_index):
         'levels_to_next_tier': (next_at - level) if next_at else 0,
         'description': job.description or DESCRIPTIONS.get(job.slug, ''),
         'criteria': CRITERIA.get(job.slug, ''),
+        # How many completed contracts fed this job's level + the XP they banked (the modal's
+        # "N contracts -> View in History" line). Zero -> the empty-state nudge to the board.
+        'sources_count': sources_count,
+        'sources_xp': sources_xp,
     }
 
 
@@ -151,6 +157,17 @@ def build_profile_jobs(profile):
     rows = {
         r['job_id']: (r['level'], r['total_xp'])
         for r in ProfileJobXP.objects.filter(profile=profile).values('job_id', 'level', 'total_xp')
+    }
+    # Per-job contributing-contract count + banked XP for the modal's "N contracts -> View in History"
+    # line. One DB-aggregated ledger query (contract-sourced grants only; distinct contracts). Bounded
+    # output (~25 jobs), never a Python loop over grants.
+    sources = {
+        r['job__slug']: (r['n'], r['xp'])
+        for r in (
+            ContractXPGrant.objects.filter(profile=profile, earned_contract__isnull=False)
+            .values('job__slug')
+            .annotate(n=Count('earned_contract__contract', distinct=True), xp=Sum('amount'))
+        )
     }
     by_disc = {slug: [] for slug in DISCIPLINE_LABELS}
     for job in Job.objects.all():
@@ -166,7 +183,8 @@ def build_profile_jobs(profile):
         for i, job in enumerate(by_disc.get(slug, [])):
             atomic += 1
             level, txp = rows.get(job.slug, (0, 0))
-            tile = job_dict(job, level, txp, atomic=atomic, slot_index=i)
+            sn, sx = sources.get(job.slug, (0, 0))
+            tile = job_dict(job, level, txp, atomic=atomic, slot_index=i, sources_count=sn, sources_xp=sx)
             tiles.append(tile)
             total_level += tile['level']  # floored (>= 1), so Pursuer Level counts every job
             total_xp += txp

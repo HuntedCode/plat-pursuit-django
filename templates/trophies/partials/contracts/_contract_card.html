@@ -24,7 +24,8 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
             {% endwith %}
         {% endif %}
         <span class="rp-tile__art-fade" aria-hidden="true"></span>
-        {% if p.status == 'claimable' %}<span class="rp-badge badge badge-sm badge-primary font-bold rp-tile__badge">Ready to Claim</span>
+        {% if p.is_history %}<span class="rp-badge badge badge-sm badge-success font-bold rp-tile__badge">Banked</span>
+        {% elif p.status == 'claimable' %}<span class="rp-badge badge badge-sm badge-primary font-bold rp-tile__badge">Ready to Claim</span>
         {% elif p.status == 'accepted' %}<span class="rp-badge badge badge-sm badge-success font-bold rp-tile__badge">Claimed</span>
         {% elif p.status == 'pursuing' %}<span class="rp-badge badge badge-sm badge-ghost text-primary rp-tile__badge">In Progress</span>
         {% else %}<span class="rp-badge badge badge-sm badge-ghost rp-tile__badge">Not Started</span>{% endif %}
@@ -77,6 +78,16 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
                         <span class="rp-ring__xp-cap">job{{ p.elements|length|pluralize }}</span>
                     </div>
                 </div>
+                {% if p.is_history %}
+                {% comment %} History: the XP you ACTUALLY banked (ledger, incl. any multiplier) + when. {% endcomment %}
+                <div class="rp-reward-xp" title="You banked {{ p.banked_xp|intcomma }} XP from this contract">
+                    <span class="rp-reward-xp__val pp-tally">+<span data-countup="{{ p.banked_xp }}">{{ p.banked_xp|intcomma }}</span></span>
+                    <span class="rp-reward-xp__cap">XP banked{% if p.boosted %} <span class="rp-boost" title="A multiplier boosted this grant">2&times;</span>{% endif %}</span>
+                </div>
+                <div class="rp-status">
+                    <span class="rp-status__banked">{% if p.banked_at %}Banked {{ p.banked_at|naturaltime }}{% else %}Banked{% endif %}</span>
+                </div>
+                {% else %}
                 <div class="rp-reward-xp" title="Total reward: {{ p.xp_total|intcomma }} XP">
                     <span class="rp-reward-xp__val pp-tally">+<span data-countup="{{ p.xp_total }}">{{ p.xp_total|intcomma }}</span></span>
                     <span class="rp-reward-xp__cap">total XP</span>
@@ -93,9 +104,17 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
                         <span class="rp-status__idle">Not started</span>
                     {% endif %}
                 </div>
+                {% endif %}
             </div>
         </div>
 
+        {% if p.is_history %}
+        {% comment %} History: the per-job XP split this contract banked (biggest first) -- in place of the
+        tier-progress bars, which would both read 100% here. {% endcomment %}
+        <div class="rp-contribs" role="group" aria-label="XP this contract added to each job">
+            {% for jc in p.job_contribs %}<span class="rp-contrib" title="{{ jc.name }}: +{{ jc.xp|intcomma }} XP"><span class="rp-contrib__job">{{ jc.name }}</span><span class="rp-contrib__xp">+{{ jc.xp|intcomma }}</span></span>{% endfor %}
+        </div>
+        {% else %}
         {% comment %} Reward tiers: two progress bars (drawn like the circle's) for the platinum then
         100% tiers, each with its XP beneath. The plat bar fills toward the platinum, the 100% bar
         toward full completion. Contracts whose games have no plat show a single 100% bar. Always one
@@ -113,6 +132,7 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
                 <span class="rp-tier__lbl"><b>+{{ p.bonus_xp|intcomma }}</b> at 100%</span>
             </div>
         </div>
+        {% endif %}
 
         {% comment %} Tier 2: opens the shared contract modal (grows from the card). The server path
         supplies data-modal-url and the modal HTML is fetched on open; the legacy in-page path renders

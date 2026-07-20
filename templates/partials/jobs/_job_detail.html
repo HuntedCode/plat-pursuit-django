@@ -3,7 +3,7 @@ Job detail (opens from a tile in Career). Level + XP are the focal point.
 Expects `card`: a tile dict (name, disc_slug, icon, level, progress, xp_current, xp_next,
 xp_total, tier, tier_key, description).
 {% endcomment %}
-{% load job_icons %}
+{% load job_icons humanize %}
 <div class="edetail" style="--disc: var(--disc-{{ card.disc_slug }});">
     <div class="edetail__head">
         <span class="edetail__glyph">{% job_icon card.icon '' %}</span>
@@ -44,5 +44,18 @@ xp_total, tier, tier_key, description).
     <div class="edetail__sources">
         <div class="edetail__sources-title">Where the XP comes from</div>
         <p class="edetail__sources-note">{{ card.criteria }}</p>
+        {% comment %} Concrete attribution: link into Contracts -> History filtered to this job (the roomy,
+        sortable home for "which contracts leveled this"). No contracts yet -> nudge to the open Board. {% endcomment %}
+        {% if card.sources_count %}
+        <a class="edetail__sources-link" href="{% url 'career' %}?view=contracts&amp;scope=history&amp;job={{ card.slug }}">
+            <span><b>{{ card.sources_count }}</b> contract{{ card.sources_count|pluralize }} &middot; <b>{{ card.sources_xp|intcomma }}</b> XP banked</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        {% else %}
+        <a class="edetail__sources-link edetail__sources-link--find" href="{% url 'career' %}?view=contracts&amp;job={{ card.slug }}">
+            <span>No contracts have leveled this yet &mdash; find {{ card.name }} contracts</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        {% endif %}
     </div>
 </div>

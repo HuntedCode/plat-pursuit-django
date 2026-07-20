@@ -261,11 +261,24 @@
 
     {# Contracts: the merged board -- games you can pursue + accept to level jobs #}
     <div class="lab-view" id="career-panel-contracts" role="tabpanel" aria-labelledby="career-tab-contracts" data-view="contracts" {% if active_view != 'contracts' %}hidden{% endif %}>
-        {% if claimable_count %}
-        <div class="flex justify-end mb-3">
+        {% comment %} Board | History scope sub-toggle (shared .pp-switch treatment) on the left; the
+        "Claim all" CTA (Board-only) on the right. Board = still-actionable contracts; History = the ones
+        you've fully banked, with your actual earned XP + per-job split. {% endcomment %}
+        <div class="flex items-center justify-between gap-3 mb-3">
+            <div class="pp-switch" id="rp-scope-switch" role="tablist" aria-label="Contracts scope">
+                <button type="button" class="pp-switch__chip is-active" data-contract-view="board" role="tab" aria-selected="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
+                    <span class="pp-switch__lbl">Board</span>
+                </button>
+                <button type="button" class="pp-switch__chip" data-contract-view="history" role="tab" aria-selected="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+                    <span class="pp-switch__lbl">History</span>
+                </button>
+            </div>
+            {% if claimable_count %}
             <button type="button" id="rp-accept-all" class="btn btn-sm btn-primary shrink-0">Claim all ({{ claimable_count }})</button>
+            {% endif %}
         </div>
-        {% endif %}
         {% comment %} Icon sprite: define all job glyphs once, BEFORE the toolbar's discipline
         popovers and the cards both reference them via <use>. {% endcomment %}
         {% job_icon_sprite %}
@@ -285,14 +298,19 @@
                     <div class="rp-sort">
                         <label class="rp-sort__label hidden md:inline" for="rp-sort-select">Sort</label>
                         <div class="rp-sort__field">
+                            {% comment %} Sort options are scoped: Board sorts vs History sorts (Recently
+                            banked / Most XP). JS (syncSortOptions) hides the ones that don't apply to the
+                            active scope and falls back to the scope's default sort. {% endcomment %}
                             <select id="rp-sort-select" class="rp-sort__select" aria-label="Sort contracts">
-                                <option value="relevance">Relevant to you</option>
-                                <option value="pushing">Keep pushing</option>
-                                <option value="jobs">Most jobs</option>
-                                <option value="fewest">Fewest jobs</option>
-                                <option value="progress">Closest to done</option>
-                                <option value="newest">Newest</option>
-                                <option value="name">A to Z</option>
+                                <option value="relevance" data-scope="board">Relevant to you</option>
+                                <option value="pushing" data-scope="board">Keep pushing</option>
+                                <option value="jobs" data-scope="board">Most jobs</option>
+                                <option value="fewest" data-scope="board">Fewest jobs</option>
+                                <option value="progress" data-scope="board">Closest to done</option>
+                                <option value="newest" data-scope="board">Newest</option>
+                                <option value="banked" data-scope="history">Recently banked</option>
+                                <option value="xp" data-scope="history">Most XP</option>
+                                <option value="name" data-scope="board history">A to Z</option>
                             </select>
                             <svg class="rp-sort__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                         </div>
@@ -311,7 +329,7 @@
                     <button type="button" class="rp-chip" data-filter="available">Not Started<span class="rp-chip__n" hidden></span></button>
                     <button type="button" class="rp-chip" data-filter="pursuing">In Progress<span class="rp-chip__n" hidden></span></button>
                     <button type="button" class="rp-chip" data-filter="claimable">Ready to Claim<span class="rp-chip__n" hidden></span></button>
-                    <button type="button" class="rp-chip" data-filter="accepted">Claimed<span class="rp-chip__n" hidden></span></button>
+                    {# "Claimed" lives in the History sub-view now; the whole status row hides in History. #}
                 </div>
                 <span id="rp-count" class="rp-count" aria-live="polite">{{ contracts_total }} contract{{ contracts_total|pluralize }}</span>
             </div>
@@ -573,8 +591,10 @@ function ppCountUp(el, dur) {
         window.addEventListener('resize', function () { moveSlider(activeTab()); });
     }
 
-    // Career view toggle: Jobs (default) / Radar / Contracts.
-    var viewTabs = document.querySelectorAll('.pp-switch__chip');
+    // Career view toggle: Jobs (default) / Radar / Contracts. Scope the query to [data-view] so the
+    // nested Board|History sub-toggle (.pp-switch__chip[data-contract-view], inside the Contracts panel)
+    // isn't swept into this top-level tablist.
+    var viewTabs = document.querySelectorAll('.pp-switch__chip[data-view]');
     var views = document.querySelectorAll('.lab-view');
     var VIEW_ORDER = ['jobs', 'radar', 'contracts'];
     function currentView() {
@@ -606,7 +626,7 @@ function ppCountUp(el, dur) {
         // Reflect the active tab in the URL (shareable + reload-safe) and SCOPE the contract filters to the
         // Contracts tab -- strip them when leaving (a shared Jobs/Radar link stays clean); returning re-adds
         // them from the still-set filter UI via pp:contracts-shown -> syncURL().
-        PlatPursuit.syncViewParam(name, { default: 'jobs', paramView: 'contracts', params: ['status', 'q', 'sort', 'discipline', 'job', 'platform', 'page'] });
+        PlatPursuit.syncViewParam(name, { default: 'jobs', paramView: 'contracts', params: ['status', 'q', 'sort', 'discipline', 'job', 'platform', 'page', 'scope'] });
         // Animate the radar in the first time it's shown (and keep it correctly sized after).
         if (name === 'radar') revealRadar();
         // Stagger the contract cards in on reveal (mirrors the Jobs tab's content animation).
@@ -615,7 +635,7 @@ function ppCountUp(el, dur) {
     // Click + Arrow/Home/End keyboard nav + roving tabindex, all via the shared tablist helper.
     tablist = PlatPursuit.wireTablist(viewTabs, { onSelect: function (t) { showView(t.dataset.view); } });
     // A one-shot ignite on load so the active pill "comes alive".
-    var initTab = document.querySelector('.pp-switch__chip.is-active');
+    var initTab = document.querySelector('.pp-switch__chip[data-view].is-active');
     if (initTab) { setTimeout(function () { if (initTab.classList.contains('is-active')) { PlatPursuit.igniteTab(initTab); } }, 260); }
 
     // Rail / deep-link jumps to a specific Career view without a reload.
@@ -1162,7 +1182,12 @@ function ppCountUp(el, dur) {
             var card = list.querySelector('.rp-row[data-slug="' + sel + '"]');
             if (!card) return;
             markAccepted(card);
-            if (state.status === 'claimable') card.remove();   // it no longer matches the active filter
+            // Drop the card if it no longer belongs in the current view: the claimable filter (it's now
+            // accepted), or the Board scope once it's fully banked (it graduates to History). We can't know
+            // "fully banked" client-side, so on the Board we remove it and let the post-ceremony reload
+            // reconcile -- a fully-banked one won't come back; a partially-banked one (100% still to earn)
+            // reappears from the server. That reload happens right after, so the flicker is imperceptible.
+            if (state.status === 'claimable' || state.scope === 'board') card.remove();
         });
         refreshAcceptAll(res.claimable_count || 0);
         // The claim ceremony IS the feedback (the award flows into the jobs it leveled). Toast only
@@ -1216,8 +1241,9 @@ function ppCountUp(el, dur) {
     var DEFAULT_PLATS = ['PS5', 'PS4'];
     var VALID_PLATS = plats ? Array.prototype.slice.call(plats.querySelectorAll('.rp-plat')).map(function (c) { return c.dataset.plat; }) : [];
     var prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // jobs + disciplines are multi-select, ANDed server-side (e.g. "driver + slayer game").
-    var state = { status: '', jobs: [], disciplines: [], q: '', sort: 'relevance', platforms: null };
+    // jobs + disciplines are multi-select, ANDed server-side (e.g. "driver + slayer game"). `scope` is the
+    // Board|History sub-view (Board = actionable, History = fully-banked).
+    var state = { status: '', jobs: [], disciplines: [], q: '', sort: 'relevance', platforms: null, scope: 'board' };
     var pageNo = 1, hasNext = list.dataset.hasNext === '1', busy = false;
 
     function buildParams(n) {
@@ -1226,8 +1252,9 @@ function ppCountUp(el, dur) {
         state.jobs.forEach(function (j) { p.append('job', j); });               // ANDed server-side
         state.disciplines.forEach(function (d) { p.append('discipline', d); });
         if (state.q) p.set('q', state.q);
-        if (state.sort && state.sort !== 'relevance') p.set('sort', state.sort);
+        if (state.sort && state.sort !== scopeDefaultSort(state.scope)) p.set('sort', state.sort);   // omit the scope's default (clean URL)
         if (state.platforms) state.platforms.forEach(function (pl) { p.append('platform', pl); });  // null -> server default (current-gen)
+        if (state.scope === 'history') p.set('scope', 'history');   // board is the default -> omitted (clean URL)
         p.set('page', String(n));
         return p.toString();
     }
@@ -1304,7 +1331,7 @@ function ppCountUp(el, dur) {
     function syncURL() {
         if (!window.history || !history.replaceState) return;
         var params = new URLSearchParams(location.search);
-        ['status', 'q', 'sort', 'discipline', 'job', 'platform'].forEach(function (k) { params.delete(k); });
+        ['status', 'q', 'sort', 'discipline', 'job', 'platform', 'scope'].forEach(function (k) { params.delete(k); });
         var bp = new URLSearchParams(buildParams(1)); bp.delete('page');
         bp.forEach(function (v, k) { params.append(k, v); });          // keep any non-board params (e.g. view=contracts)
         var qs = params.toString();
@@ -1392,6 +1419,61 @@ function ppCountUp(el, dur) {
 
     // Sort control.
     if (sortSel) sortSel.addEventListener('change', function () { state.sort = sortSel.value; fetchPage(1, false); });
+
+    // ---- Board | History scope sub-toggle (segmented switcher; re-fetches the grid like a filter) ----
+    var toolbar = document.querySelector('.rp-toolbar');
+    var scopeSwitch = document.getElementById('rp-scope-switch');
+    var scopeChips = scopeSwitch ? Array.prototype.slice.call(scopeSwitch.querySelectorAll('[data-contract-view]')) : [];
+    var SCOPE_DEFAULT_SORT = { board: 'relevance', history: 'banked' };
+    function scopeDefaultSort(sc) { return SCOPE_DEFAULT_SORT[sc] || 'relevance'; }
+    // Show only the sort options valid for the active scope; if the current pick isn't one of them, fall
+    // back to the scope default. `option[hidden]` is honored by modern browsers; `disabled` is belt-and-braces.
+    function syncSortOptions(sc) {
+        if (!sortSel) return;
+        Array.prototype.forEach.call(sortSel.options, function (o) {
+            var show = (o.dataset.scope || 'board').split(' ').indexOf(sc) !== -1;
+            o.hidden = !show; o.disabled = !show;
+        });
+        var cur = sortSel.querySelector('option[value="' + state.sort + '"]');
+        if (!cur || cur.hidden) { state.sort = scopeDefaultSort(sc); }
+        sortSel.value = state.sort;
+    }
+    function applyScopeUI(sc) {
+        if (toolbar) toolbar.dataset.scope = sc;   // CSS hides the status chip row in History
+        scopeChips.forEach(function (c) {
+            var on = c.dataset.contractView === sc;
+            c.classList.toggle('is-active', on);
+            c.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        syncSortOptions(sc);
+        if (empty) {
+            empty.textContent = (sc === 'history')
+                ? 'No completed Contracts yet. Bank a Contract on the Board and it lands here.'
+                : 'No Contracts on the board yet. Contracts are curated games that level your jobs, check back soon.';
+        }
+        var allB = document.getElementById('rp-accept-all');   // nothing to claim in History
+        if (allB) allB.style.display = (sc === 'history') ? 'none' : '';
+    }
+    function setScope(sc, userAction) {
+        sc = (sc === 'history') ? 'history' : 'board';
+        if (userAction && state.scope === sc) return;
+        state.scope = sc;
+        state.sort = scopeDefaultSort(sc);   // each scope lands on its own default sort
+        // status (available/pursuing/claimable) is a Board-only filter and its row is hidden in History,
+        // so clear it on a scope switch -- otherwise a stale status could zero out History with no visible
+        // chip to undo it. jobs/disciplines/search/platforms are scope-agnostic and carry over.
+        state.status = '';
+        if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c, i) { c.classList.toggle('is-active', i === 0); });
+        applyScopeUI(sc);
+        if (userAction) {
+            var active = scopeChips.filter(function (c) { return c.dataset.contractView === sc; })[0];
+            if (active && PlatPursuit.igniteTab) PlatPursuit.igniteTab(active);
+            fetchPage(1, false);
+        }
+    }
+    if (scopeChips.length && PlatPursuit.wireTablist) {
+        PlatPursuit.wireTablist(scopeChips, { onSelect: function (c) { setScope(c.dataset.contractView, true); } });
+    }
 
     // Advanced panel toggle (animated height+opacity collapse via the shared helper).
     if (advToggle && advPanel) advToggle.addEventListener('click', function () {
@@ -1504,13 +1586,14 @@ function ppCountUp(el, dur) {
         }
     }
 
-    // Reset every control back to the default board.
+    // Reset the filters, staying in the current sub-view (Board/History) with its default sort.
     function resetAll() {
-        state = { status: '', jobs: [], disciplines: [], q: '', sort: 'relevance', platforms: null };
+        var sc = state.scope;
+        state = { status: '', jobs: [], disciplines: [], q: '', sort: scopeDefaultSort(sc), platforms: null, scope: sc };
         if (searchInput) searchInput.value = '';
-        if (sortSel) sortSel.value = 'relevance';
         if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c, i) { c.classList.toggle('is-active', i === 0); });
         if (plats) plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.toggle('is-active', DEFAULT_PLATS.indexOf(c.dataset.plat) !== -1); });
+        applyScopeUI(sc);   // keeps the sort options + sortSel.value in sync with the scope
         refreshDiscUI(); updateAdvCount(); fetchPage(1, false);
     }
     var clearBtn = document.getElementById('rp-clear-filters');
@@ -1531,21 +1614,21 @@ function ppCountUp(el, dur) {
     // cards are already server-rendered for these params, so this only syncs the UI -- no fetch.
     function seedFromURL() {
         var p = new URLSearchParams(location.search);
-        state.status = p.get('status') || '';
+        state.scope = (p.get('scope') === 'history') ? 'history' : 'board';
+        state.status = (state.scope === 'history') ? '' : (p.get('status') || '');   // status is Board-only
         state.q = p.get('q') || '';
-        var srt = p.get('sort') || 'relevance';
-        state.sort = (sortSel && !Array.prototype.some.call(sortSel.options, function (o) { return o.value === srt; })) ? 'relevance' : srt;
+        state.sort = p.get('sort') || scopeDefaultSort(state.scope);   // scope-validated by applyScopeUI below
         state.jobs = p.getAll('job');
         state.disciplines = p.getAll('discipline');
         var pl = p.getAll('platform').filter(function (x) { return VALID_PLATS.indexOf(x) !== -1; });
         state.platforms = pl.length ? pl : null;
         if (searchInput) searchInput.value = state.q;
-        if (sortSel) sortSel.value = state.sort;
         if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c) {
             c.classList.toggle('is-active', (state.status || 'all') === c.dataset.filter);
         });
         if (plats) { var act = state.platforms || DEFAULT_PLATS; plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.toggle('is-active', act.indexOf(c.dataset.plat) !== -1); }); }
         refreshDiscUI();
+        applyScopeUI(state.scope);   // sub-chip active + toolbar data-scope + scope-valid sort options (sets sortSel.value)
     }
 
     // Initial: seed from the URL + apply the SSR facet counts, then start infinite scroll. No fetch --

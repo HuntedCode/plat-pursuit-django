@@ -485,6 +485,21 @@
 .edetail__sources { margin-top: 22px; border-top: 1px solid var(--pp-divider); padding-top: 16px; }
 .edetail__sources-title { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 8px; }
 .edetail__sources-note { font-size: 12.5px; color: var(--pp-text-dim); line-height: 1.5; margin: 0; }
+/* Concrete attribution link: into Contracts -> History filtered to this job (or a find-on-the-board nudge). */
+.edetail__sources-link {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px;
+    padding: 9px 12px; border-radius: 10px; text-decoration: none;
+    font-size: 12.5px; font-weight: 600; color: var(--pp-text);
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 12%, transparent);
+    border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 34%, var(--pp-border));
+    transition: background 0.16s var(--pp-ease), border-color 0.16s var(--pp-ease);
+}
+.edetail__sources-link b { font-weight: 800; color: var(--disc, var(--pp-primary)); }
+.edetail__sources-link svg { width: 15px; height: 15px; flex: none; color: var(--disc, var(--pp-primary)); transition: transform 0.16s var(--pp-ease); }
+@media (hover: hover) { .edetail__sources-link:hover { background: color-mix(in oklab, var(--disc, var(--pp-primary)) 20%, transparent); border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 55%, var(--pp-border)); } .edetail__sources-link:hover svg { transform: translateX(3px); } }
+.edetail__sources-link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* Empty nudge (no contracts yet): quieter, muted text. */
+.edetail__sources-link--find { color: var(--pp-text-dim); font-weight: 600; background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border-color: var(--pp-border); }
 
 /* ---- Compound (a Project's molecule): light atoms, glowing neon edges, gradient bonds ---- */
 .compound { display: block; width: 100%; height: auto; overflow: visible; }
@@ -644,6 +659,9 @@
 .rp-status { min-height: 20px; display: flex; align-items: center; justify-content: center; text-align: center; }
 .rp-status__pct { font-size: 0.7rem; font-weight: 600; color: var(--rp-fam, var(--pp-primary)); }
 .rp-status__idle { font-size: 0.7rem; font-weight: 600; color: var(--pp-text-mute); }
+/* History card read-outs: the banked date + a "2x" chip when a multiplier boosted the grant. */
+.rp-status__banked { font-size: 0.68rem; font-weight: 600; color: var(--pp-text-mute); }
+.rp-boost { display: inline-flex; align-items: center; padding: 0 4px; margin-left: 3px; border-radius: 4px; font-size: 8px; font-weight: 800; letter-spacing: 0.03em; color: var(--pp-warning); background: color-mix(in oklab, var(--pp-warning) 18%, transparent); vertical-align: middle; }
 
 /* Family identity woven into the card frame: premium dark substrate, family seasoning.
    --rp-fam (dominant family color) is set per-card inline; the accent bar carries the
@@ -743,6 +761,15 @@
 /* Reward-tier strip: two progress bars (plat, then 100%) that fill like the circle's progress, XP
    beneath each, split by a dot. A single centered bar shows when the games have no platinum. Always
    one row (equal card heights). */
+/* History: the per-job XP-contribution chips (replace the tier bars on a banked card). Same compact
+   footprint as .rp-tiers so History + Board cards keep equal heights in their shared grid. */
+.rp-contribs { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 5px; margin-top: 2px; padding: 6px 10px; border-radius: 8px; min-height: 34px; background: color-mix(in oklab, var(--rp-fam, var(--pp-primary)) 6%, transparent); border: 1px solid color-mix(in oklab, var(--rp-fam, var(--pp-primary)) 16%, var(--pp-border)); }
+.rp-contrib { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border); }
+.rp-contrib__job { font-size: 9.5px; font-weight: 700; color: var(--pp-text-dim); max-width: 9ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-contrib__xp { font-size: 9.5px; font-weight: 800; color: var(--rp-fam, var(--pp-primary)); font-variant-numeric: tabular-nums; }
+/* Scope-adaptive toolbar: History has only banked (accepted) contracts, so the status quick-filter row
+   is meaningless there -- hide it (the sort options swap to History's set via JS). */
+.rp-toolbar[data-scope="history"] .rp-filters { display: none; }
 .rp-tiers { display: flex; align-items: flex-start; justify-content: center; gap: 8px; margin-top: 2px; padding: 6px 10px; border-radius: 8px; background: color-mix(in oklab, var(--rp-fam, var(--pp-primary)) 6%, transparent); border: 1px solid color-mix(in oklab, var(--rp-fam, var(--pp-primary)) 16%, var(--pp-border)); }
 .rp-tier { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .rp-tiers--single { justify-content: center; }

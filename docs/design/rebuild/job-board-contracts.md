@@ -143,6 +143,27 @@ by (profile, job) — **DB aggregation, never Python iteration**. Mirrors the ex
 - Each (profile, Contract, tier) granted **at most once**.
 - Every Contract is worth the same total `T` (split among its ≤6 jobs) unless overridden.
 
+## Board vs History (Career display)
+
+The Career Contracts view splits into a **Board | History** segmented sub-toggle — a `scope` filter on
+the same `contracts_service` pipeline (`contracts_page`/`board_facets`/`contracts_results`), **no new
+endpoint or schema**:
+
+- **Board** (`scope='board'`, default) = still-actionable contracts: `available` / `pursuing` /
+  `claimable` + partially-accepted. Excludes fully-banked ones.
+- **History** (`scope='history'`) = **fully banked** contracts, gated on the `fully_banked` annotation:
+  `full_accepted` set AND — when this user's FROZEN `EarnedContract.has_platinum` is true — `plat_accepted`
+  set too. Gate on `ec_has_platinum` (a subquery of the frozen flag, bundle-aware, matching the accept
+  engine), **not** the member-only `defines_plat` (always false for episodic/bundle contracts). A
+  partially-banked contract (platinum claimed, 100% still to earn) stays on the Board — it has XP left.
+
+History cards read the user's **actual banked XP from the ledger** (`_attach_banked`: one grouped
+`ContractXPGrant` query per page → `banked_xp` + per-job `job_contribs` + a `boosted` flag + `banked_at`),
+so multipliers show honestly. Two History-only sorts: `banked` (recently banked) and `xp` (most XP — by
+the per-job contribution when a single job filter is active, the "biggest contributors to job X" answer).
+Claiming a Board contract graduates it to History. The job-detail modal's "Where the XP comes from" links
+into Contracts → History filtered to that job (per-job count/xp from `job_render.build_profile_jobs`).
+
 ## Creating Contracts (admin)
 
 - **`StageAdmin.convert_to_contract`** — for each **anchored** concept in the selected stages,

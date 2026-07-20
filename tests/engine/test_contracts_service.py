@@ -156,10 +156,10 @@ def test_status_accepted_after_accept():
     contract_service.mark_contract_reached(profile, contract)
     contract_service.accept_contract(profile, contract)
 
-    ctx = contracts_page(profile)
-    p = _project(ctx, 'p-accepted')
-
-    assert p['status'] == 'accepted'
+    # Fully banked -> the accepted contract graduates to the History scope; the default board excludes it.
+    assert _find(contracts_page(profile), 'p-accepted') is None
+    p = _find(contracts_page(profile, scope='history'), 'p-accepted')
+    assert p is not None and p['status'] == 'accepted'
     assert claimable_count(profile) == 0
 
 
@@ -199,11 +199,13 @@ def test_server_status_derived_in_sql_matches_all_states():
     contract_service.mark_contract_reached(profile, c_ac)
     contract_service.accept_contract(profile, c_ac)
 
+    # Board scope (default) carries the three actionable states; accepted (fully banked) moves to History.
     page = contracts_page(profile)
     assert _find(page, 's-avail')['status'] == 'available'
     assert _find(page, 's-pursue')['status'] == 'pursuing' and _find(page, 's-pursue')['progress'] == 60
     assert _find(page, 's-claim')['status'] == 'claimable'
-    assert _find(page, 's-acc')['status'] == 'accepted'
+    assert _find(page, 's-acc') is None
+    assert _find(contracts_page(profile, scope='history'), 's-acc')['status'] == 'accepted'
     assert claimable_count(profile) == 1
 
 

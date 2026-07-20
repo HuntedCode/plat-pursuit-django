@@ -45,13 +45,14 @@ def _board_params(request):
         'jobs': g.getlist('job'),                  # multi, ANDed
         'platforms': [p for p in g.getlist('platform') if p in _VALID_PLATFORMS] or None,  # absent -> current-gen
         'sort': g.get('sort', 'relevance'),
+        'scope': 'history' if g.get('scope') == 'history' else 'board',   # Board (default) | History split
     }
 
 
 def _board_facets(profile, disc_levels, params, total):
     """Facet chip counts + (when the board is empty) a 'drop <label> to see N' suggestion, as one dict
     for `json_script`. `params` is `_board_params` output; `total` is the current result count."""
-    facet_args = {k: params[k] for k in ('q', 'status', 'disciplines', 'jobs', 'platforms')}
+    facet_args = {k: params[k] for k in ('q', 'status', 'disciplines', 'jobs', 'platforms', 'scope')}
     f = contracts_service.board_facets(profile, disc_levels=disc_levels, **facet_args)   # status/platform/discipline/job
     suggest = contracts_service.suggest_relaxation(profile, disc_levels=disc_levels, **facet_args) if total == 0 else None
     return {**f, 'suggest': suggest}
