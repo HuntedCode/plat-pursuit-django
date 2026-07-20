@@ -1592,6 +1592,7 @@ function ppCountUp(el, dur) {
         var sc = state.scope;
         state = { status: '', jobs: [], disciplines: [], q: '', sort: scopeDefaultSort(sc), platforms: null, scope: sc };
         if (searchInput) searchInput.value = '';
+        if (searchField) searchField.sync();   // clearing the field -> drop .has-value so the clear-x hides
         if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c, i) { c.classList.toggle('is-active', i === 0); });
         if (plats) plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.toggle('is-active', DEFAULT_PLATS.indexOf(c.dataset.plat) !== -1); });
         applyScopeUI(sc);   // keeps the sort options + sortSel.value in sync with the scope
@@ -1624,6 +1625,7 @@ function ppCountUp(el, dur) {
         var pl = p.getAll('platform').filter(function (x) { return VALID_PLATS.indexOf(x) !== -1; });
         state.platforms = pl.length ? pl : null;
         if (searchInput) searchInput.value = state.q;
+        if (searchField) searchField.sync();   // programmatic value set fires no 'input' event -> sync .has-value (clear-x)
         if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c) {
             c.classList.toggle('is-active', (state.status || 'all') === c.dataset.filter);
         });
