@@ -448,6 +448,28 @@ function ppCountUp(el, dur) {
         var DATA = { overview: { labels: {{ career.radar_labels_json|safe }}, values: {{ career.radar_data_json|safe }} } };
         {% for d in career.disciplines %}DATA['{{ d.slug }}'] = { labels: {{ d.radar_labels_json|safe }}, values: {{ d.radar_data_json|safe }} };
         {% endfor %}
+        // Slug per radar index, for the click-to-filter jump: overview mode -> discipline slugs (== `slugs`);
+        // a per-discipline mode -> that discipline's job slugs in radar order (matches d.jobs / radar labels).
+        var JOB_SLUGS = {};
+        {% for d in career.disciplines %}JOB_SLUGS['{{ d.slug }}'] = [{% for job in d.jobs %}'{{ job.slug }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
+        {% endfor %}
+        // Map a clicked radar index -> a board filter ({discipline} in overview, {job} in a discipline mode).
+        function filterForIndex(i) {
+            if (i < 0) { return null; }
+            if (currentMode === 'overview') { return slugs[i] ? { discipline: slugs[i] } : null; }
+            var js = JOB_SLUGS[currentMode];
+            return (js && js[i]) ? { job: js[i] } : null;
+        }
+        // Open the Contracts -> Board scoped to that filter: hand the filter to the contracts IIFE, switch
+        // to the Contracts tab, and bring the board into view (mirrors the claim-banner jump).
+        function jumpToBoard(filter) {
+            if (!filter) { return; }
+            document.dispatchEvent(new CustomEvent('pp:board-filter', { detail: filter }));
+            var tab = document.getElementById('career-tab-contracts');
+            if (tab) { tab.click(); }   // -> showView('contracts') via the view-toggle tablist
+            var strip = document.querySelector('.pp-switch');
+            if (strip) { strip.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }); }
+        }
 
         // #3 Soft glow around the radar line/fill (Chart.js has no native glow). In Overview each
         // point then re-glows in its own discipline color (the line stays the aggregate cyan).
@@ -474,10 +496,14 @@ function ppCountUp(el, dur) {
                 responsive: true, maintainAspectRatio: true,
                 animation: reduce ? false : { duration: 550, easing: 'easeOutQuart' },   // #3 smoother morph
                 plugins: { legend: { display: false } },
-                onHover: function (e, els) {   // #2 hovering a radar point highlights its detail row
+                onHover: function (e, els) {   // #2 hovering a radar point highlights its detail row (+ clickable cursor)
+                    if (e && e.native && e.native.target) { e.native.target.style.cursor = els.length ? 'pointer' : ''; }
                     if (!detail) return;
                     var idx = els.length ? els[0].index : -1;
                     detail.querySelectorAll('.rd-row').forEach(function (r) { r.classList.toggle('is-active', (+r.dataset.i) === idx); });
+                },
+                onClick: function (e, els) {   // clicking a radar point jumps to the Board filtered to it
+                    if (els && els.length) { jumpToBoard(filterForIndex(els[0].index)); }
                 },
                 scales: { r: { beginAtZero: true, suggestedMax: RMAX, grid: { color: 'rgba(255,255,255,0.08)' }, angleLines: { color: 'rgba(255,255,255,0.08)' }, pointLabels: { color: '#cdd2da', font: { size: 13, weight: '600' } }, ticks: { display: false } } },
             },
@@ -501,7 +527,7 @@ function ppCountUp(el, dur) {
             var rows = labels.map(function (label, i) {
                 var pct = Math.max(0, Math.min(100, (values[i] / RMAX) * 100));
                 var c = colorOf(i);
-                return '<li class="rd-row" data-i="' + i + '" style="--rd: ' + c + ';">'
+                return '<li class="rd-row" data-i="' + i + '" role="button" tabindex="0" title="Filter the Board by ' + label + '" style="--rd: ' + c + ';">'
                     + '<span class="rd-row__label">' + label + '</span>'
                     + '<span class="pp-horizon pp-horizon__track rd-row__bar" data-fill="' + pct + '%" style="--horizon-accent: ' + c + '; --horizon-h: 8px; --horizon-progress: ' + (reduce ? pct : 0) + '%;"><span class="pp-horizon__fill"></span></span>'
                     + '<span class="rd-row__val">Lv <b data-countup="' + values[i] + '">' + (reduce ? values[i] : 0) + '</b></span></li>';
@@ -530,6 +556,12 @@ function ppCountUp(el, dur) {
             detail.addEventListener('mouseleave', function () {
                 hoveredI = -1; highlightPoint(-1, false);
                 detail.querySelectorAll('.rd-row').forEach(function (x) { x.classList.remove('is-active'); });
+            });
+            // Click / Enter / Space a row -> jump to the Board filtered to that discipline (overview) or job.
+            function activateRow(r) { if (r) { jumpToBoard(filterForIndex(+r.dataset.i)); } }
+            detail.addEventListener('click', function (e) { activateRow(e.target.closest('.rd-row')); });
+            detail.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') { var r = e.target.closest('.rd-row'); if (r) { e.preventDefault(); activateRow(r); } }
             });
         }
 
@@ -1648,6 +1680,27 @@ function ppCountUp(el, dur) {
     document.addEventListener('pp:contracts-shown', function () {
         syncURL();   // returning to Contracts: re-add its (still-set) filters to the URL that showView scoped away
         staggerCards(Array.prototype.slice.call(list.querySelectorAll('.rp-row')));
+    });
+
+    // Radar -> Board jump: a radar point / detail bar (radar IIFE) dispatches pp:board-filter to open the
+    // BOARD scoped to a single discipline or job, REPLACING any current filters. The view switch itself is
+    // the tab click on the radar side; this just sets the board state + refetches.
+    document.addEventListener('pp:board-filter', function (e) {
+        var f = (e && e.detail) || {};
+        state.scope = 'board';
+        state.status = ''; state.q = '';
+        state.jobs = f.job ? [f.job] : [];
+        state.disciplines = f.discipline ? [f.discipline] : [];
+        state.platforms = null;
+        state.sort = scopeDefaultSort('board');
+        if (searchInput) searchInput.value = '';
+        if (searchField) searchField.sync();
+        if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c, i) { c.classList.toggle('is-active', i === 0); });
+        if (plats) plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.toggle('is-active', DEFAULT_PLATS.indexOf(c.dataset.plat) !== -1); });
+        applyScopeUI('board');   // sub-toggle + sort options + status row
+        refreshDiscUI();         // render the disc/job token so the active filter is visible when Filters opens
+        updateAdvCount();
+        fetchPage(1, false);
     });
 
     // Deep-linked to a FILTERED contracts board (e.g. the job modal's "View in History" jump): the page
