@@ -1711,7 +1711,7 @@ function ppCountUp(el, dur) {
     function scrollToFilteredBoard() {
         var qp = new URLSearchParams(location.search);
         if (qp.get('view') !== 'contracts') return;
-        if (!(qp.has('scope') || qp.has('job') || qp.has('discipline') || qp.has('status') || qp.has('q') || qp.has('platform'))) return;
+        if (!(qp.get('scope') === 'history' || qp.has('job') || qp.has('discipline') || qp.has('status') || qp.has('q') || qp.has('platform'))) return;
         var strip = document.querySelector('.pp-switch');
         if (strip) { strip.scrollIntoView({ behavior: prefersReduced ? 'auto' : 'smooth', block: 'start' }); }
     }
