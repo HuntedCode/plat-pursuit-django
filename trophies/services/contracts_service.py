@@ -419,6 +419,14 @@ def _history_order(sort, jobs):
         if jobs and len(jobs) == 1:
             return ('-banked_job', '-banked_total', 'name')
         return ('-banked_total', 'name')
+    if sort == 'oldest':
+        return ('full_accepted', 'name')                       # earliest banked first (inverse of default)
+    if sort == 'jobs':
+        return ('-job_count', '-full_accepted', 'name')        # most jobs (job_count is always annotated)
+    if sort == 'fewest':
+        return ('job_count', '-full_accepted', 'name')
+    if sort == 'name':
+        return ('name',)
     return ('-full_accepted', 'name')   # 'banked' (default): most recently banked first
 
 
@@ -456,8 +464,11 @@ def _attach_banked(cards, page_contracts, profile):
             d['boosted'] = True
     for card, c in zip(cards, page_contracts):
         d = agg.get(c.id, {'total': 0, 'jobs': [], 'boosted': False})
+        njobs = len(d['jobs'])
         card['is_history'] = True   # the template's History branch (banked read-outs vs the Board CTA)
         card['banked_xp'] = d['total']
+        card['job_count'] = njobs
+        card['xp_per_job'] = d['total'] // njobs if njobs else 0   # even split -> one representative figure
         card['job_contribs'] = sorted(d['jobs'], key=lambda j: j['xp'], reverse=True)
         card['boosted'] = d['boosted']
         card['banked_at'] = getattr(c, 'full_accepted', None)   # the 100%-accept moment (already annotated)

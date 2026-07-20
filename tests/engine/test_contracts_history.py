@@ -89,11 +89,27 @@ def test_history_card_carries_banked_xp_and_per_job_split():
     banked = sum(ContractXPGrant.objects.filter(profile=profile, earned_contract__contract=c)
                  .values_list('amount', flat=True))
     assert p['banked_xp'] == banked == CONTRACT_XP_TOTAL          # no multiplier -> banked == the contract T
+    assert p['job_count'] == 2
+    assert p['xp_per_job'] == CONTRACT_XP_TOTAL // 2                # even split -> one representative figure
     assert len(p['job_contribs']) == 2
     assert sum(jc['xp'] for jc in p['job_contribs']) == banked    # the split sums back to the total
     assert p['job_contribs'][0]['xp'] >= p['job_contribs'][1]['xp']   # sorted biggest-first
     assert p['boosted'] is False
     assert p['banked_at'] is not None
+
+
+def test_history_job_count_sorts():
+    profile = ProfileFactory()
+    c_many, g1 = _contract('h-many', ('gunslinger', 'mage', 'slayer'))
+    c_few, g2 = _contract('h-few', ('gunslinger',))
+    _bank(profile, c_many, g1)
+    _bank(profile, c_few, g2)
+
+    most = [p['slug'] for p in contracts_page(profile, scope='history', sort='jobs')['contracts']]
+    fewest = [p['slug'] for p in contracts_page(profile, scope='history', sort='fewest')['contracts']]
+
+    assert most.index('h-many') < most.index('h-few')     # most jobs first
+    assert fewest.index('h-few') < fewest.index('h-many')  # fewest jobs first
 
 
 def test_history_card_flags_a_boosted_grant():

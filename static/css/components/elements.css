@@ -761,12 +761,13 @@
 /* Reward-tier strip: two progress bars (plat, then 100%) that fill like the circle's progress, XP
    beneath each, split by a dot. A single centered bar shows when the games have no platinum. Always
    one row (equal card heights). */
-/* History: the per-job XP-contribution chips (replace the tier bars on a banked card). Same compact
-   footprint as .rp-tiers so History + Board cards keep equal heights in their shared grid. */
-.rp-contribs { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 5px; margin-top: 2px; padding: 6px 10px; border-radius: 8px; min-height: 34px; background: color-mix(in oklab, var(--rp-fam, var(--pp-primary)) 6%, transparent); border: 1px solid color-mix(in oklab, var(--rp-fam, var(--pp-primary)) 16%, var(--pp-border)); }
-.rp-contrib { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border); }
-.rp-contrib__job { font-size: 9.5px; font-weight: 700; color: var(--pp-text-dim); max-width: 9ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rp-contrib__xp { font-size: 9.5px; font-weight: 800; color: var(--rp-fam, var(--pp-primary)); font-variant-numeric: tabular-nums; }
+/* History: a compact banked summary (jobs + even XP-per-job) in place of the tier bars on a banked card.
+   Same footprint as .rp-tiers so History + Board cards keep equal heights in their shared grid. */
+.rp-contribs { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; margin-top: 2px; padding: 6px 10px; border-radius: 8px; min-height: 34px; background: color-mix(in oklab, var(--rp-fam, var(--pp-primary)) 6%, transparent); border: 1px solid color-mix(in oklab, var(--rp-fam, var(--pp-primary)) 16%, var(--pp-border)); }
+.rp-contrib-stat { display: inline-flex; align-items: baseline; gap: 4px; }
+.rp-contrib-stat b { font-size: 14px; font-weight: 800; color: var(--rp-fam, var(--pp-primary)); font-variant-numeric: tabular-nums; }
+.rp-contrib-stat__cap { font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+.rp-contrib-sep { color: var(--pp-text-mute); opacity: 0.5; }
 /* Scope-adaptive toolbar: History has only banked (accepted) contracts, so the status quick-filter row
    is meaningless there -- hide it (the sort options swap to History's set via JS). */
 .rp-toolbar[data-scope="history"] .rp-filters { display: none; }

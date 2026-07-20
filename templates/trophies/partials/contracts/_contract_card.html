@@ -109,10 +109,12 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
         </div>
 
         {% if p.is_history %}
-        {% comment %} History: the per-job XP split this contract banked (biggest first) -- in place of the
-        tier-progress bars, which would both read 100% here. {% endcomment %}
-        <div class="rp-contribs" role="group" aria-label="XP this contract added to each job">
-            {% for jc in p.job_contribs %}<span class="rp-contrib" title="{{ jc.name }}: +{{ jc.xp|intcomma }} XP"><span class="rp-contrib__job">{{ jc.name }}</span><span class="rp-contrib__xp">+{{ jc.xp|intcomma }}</span></span>{% endfor %}
+        {% comment %} History: a compact banked summary (jobs + even XP-per-job split) in place of the
+        tier-progress bars, which would both read 100% here. XP is always split evenly, so one figure says it. {% endcomment %}
+        <div class="rp-contribs" title="{{ p.banked_xp|intcomma }} XP banked, split evenly across {{ p.job_count }} job{{ p.job_count|pluralize }}">
+            <span class="rp-contrib-stat"><b class="pp-tally">{{ p.job_count }}</b><span class="rp-contrib-stat__cap">job{{ p.job_count|pluralize }}</span></span>
+            <span class="rp-contrib-sep" aria-hidden="true">&middot;</span>
+            <span class="rp-contrib-stat"><b class="pp-tally">{{ p.xp_per_job|intcomma }}</b><span class="rp-contrib-stat__cap">XP per job</span></span>
         </div>
         {% else %}
         {% comment %} Reward tiers: two progress bars (drawn like the circle's) for the platinum then

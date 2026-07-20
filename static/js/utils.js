@@ -616,9 +616,11 @@ function animatePanel(panel, open, animate) {
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (animate === false || reduce) {
         panel.style.height = ''; panel.style.opacity = '';
+        panel.style.overflow = open ? 'visible' : '';   // open -> let inner popovers/dropdowns escape the panel
         if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
         return;
     }
+    panel.style.overflow = '';   // clip during the height tween (reverts to the CSS overflow:hidden)
     if (open) {
         // Collapse before revealing so removing `hidden` doesn't paint a full-height panel for a frame;
         // scrollHeight measures the true target while collapsed (overflow-hidden).
@@ -631,6 +633,7 @@ function animatePanel(panel, open, animate) {
             if (ev.target !== panel || ev.propertyName !== 'height') { return; }
             panel.removeEventListener('transitionend', panel._panelAnim); panel._panelAnim = null;
             panel.style.height = ''; panel.style.opacity = '';   // release to auto so content reflows
+            panel.style.overflow = 'visible';                    // fully open -> popovers may overflow the panel
         };
     } else {
         panel.style.height = panel.scrollHeight + 'px'; panel.style.opacity = '1';
