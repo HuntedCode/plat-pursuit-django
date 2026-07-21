@@ -227,7 +227,9 @@
 .gd-jobmini--ph svg { opacity: 0.5; }
 
 /* Spine detail modals (badges list / contract summary). */
-.gd-modal { border: none; padding: 0; width: min(92vw, 440px); max-width: 440px; margin: auto; border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); color: var(--pp-text); box-shadow: 0 30px 90px rgba(0,0,0,0.55); overflow: hidden; }
+/* position: fixed + inset:0 + margin:auto == viewport-centred. Without this the native <dialog> falls
+   back to position:absolute anchored at the document top, so mobile scrolls to y=0 to reveal it. */
+.gd-modal { position: fixed; inset: 0; border: none; padding: 0; width: min(92vw, 440px); max-width: 440px; margin: auto; border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); color: var(--pp-text); box-shadow: 0 30px 90px rgba(0,0,0,0.55); overflow: hidden; }
 .gd-modal:not([open]) { display: none; }
 .gd-modal[open] { animation: gdModalIn 0.2s var(--pp-ease) both; }
 @keyframes gdModalIn { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
@@ -419,7 +421,14 @@
 .gd-mystats__title { font-family: var(--pp-font-display); font-size: 1.15rem; font-weight: 800; line-height: 1.15; margin-top: -8px; }
 
 /* Hero trio */
-.gd-mystats__hero { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+/* Mobile drops the Complete card (the you-vs-community bar below already shows it) for room -> Trophies
+   + Playtime, 2-up; the full 3-up trio returns at md. */
+.gd-mystats__hero { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.gd-mystats__big--completion { display: none; }
+@media (min-width: 768px) {
+    .gd-mystats__hero { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .gd-mystats__big--completion { display: flex; }
+}
 .gd-mystats__big { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 13px 6px; border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border); text-align: center; }
 .gd-mystats__big-v { font-size: 1.55rem; font-weight: 800; line-height: 1; color: var(--pp-text); white-space: nowrap; }
 .gd-mystats__big-v--accent { color: var(--pp-primary); }
