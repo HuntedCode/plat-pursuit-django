@@ -160,7 +160,9 @@
 .gd-groupbar__dot--dlc { background: var(--pp-secondary); }
 
 /* Actions */
-.gd-hero__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Centred on mobile (wrapped, left-aligned buttons read as accidental); left-aligned from md up. */
+.gd-hero__actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+@media (min-width: 768px) { .gd-hero__actions { justify-content: flex-start; } }
 .gd-btn {
     display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
     padding: 7px 14px; border-radius: var(--pp-radius-sm); color: var(--pp-text);
@@ -236,7 +238,9 @@
 .gd-modal.is-closing::backdrop { animation: gdModalScrimOut 0.18s ease both; }
 @keyframes gdModalScrimOut { from { opacity: 1; } to { opacity: 0; } }
 .gd-modal::backdrop { background: rgba(2, 4, 8, 0.6); backdrop-filter: blur(3px); }
-.gd-modal.pp-dismissable::before { display: none; }   /* swipe enabled, but no grabber over the header */
+/* Swipe-to-close grabber shows on touch (dismissableSheet adds .pp-dismissable + the shared
+   .pp-dismissable::before pill). Nudge the header down so the pill sits clear above the title. */
+@media (hover: none) and (pointer: coarse) { .gd-modal.pp-dismissable .gd-modal__head { padding-top: 18px; } }
 .gd-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--pp-divider); }
 .gd-modal__head h3 { font-size: 0.95rem; font-weight: 700; }
 .gd-modal__close { background: none; border: none; cursor: pointer; color: var(--pp-text-mute); font-size: 1.4rem; line-height: 1; padding: 0 4px; }
@@ -499,8 +503,6 @@
 .gd-shotmodal.is-closing::backdrop { animation: gdScrimOut 0.22s ease both; }
 @keyframes gdScrimIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes gdScrimOut { from { opacity: 1; } to { opacity: 0; } }
-/* The image is the focus — suppress the swipe-sheet's grabber handle on this modal. */
-.gd-shotmodal.pp-dismissable::before { display: none; }
 .gd-shotmodal__stage { position: relative; line-height: 0; border-radius: var(--pp-radius-md); }
 /* Clip the stage only while paging, so the sliding image can't overflow the viewport (scrollbar
    flash). NOT clipped during the open/close FLIP — that image must fly outside, to/from the thumb. */

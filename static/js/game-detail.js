@@ -385,10 +385,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (PlatPursuit.dismissableSheet) { PlatPursuit.dismissableSheet(m, { onClose: function () { pageRecede(false); if (m.close && m.open) m.close(); } }); }
         }
         wire(badgesModal); wire(statsModal);
+        // Native <dialog>.showModal() scrolls the page to the dialog on mobile; keep the scroll put.
+        function openKeepScroll(m) {
+            const y = window.scrollY;
+            m.showModal();
+            if (window.scrollY !== y) window.scrollTo(0, y);
+        }
         document.querySelectorAll('[data-spine-open="badges"]').forEach((op) => {
             op.addEventListener('click', () => {
                 if (!badgesModal || !badgesModal.showModal || badgesModal.open) return;
-                badgesModal.showModal();
+                openKeepScroll(badgesModal);
                 pageRecede(true);
                 const grid = badgesModal.querySelector('[data-gd-badgegrid]');   // re-arm the staggered card reveal
                 if (grid && !reduce) { grid.classList.remove('is-revealing'); void grid.offsetWidth; grid.classList.add('is-revealing'); }
@@ -419,7 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             document.querySelectorAll('[data-stats-open]').forEach((op) => {
                 op.addEventListener('click', () => {
-                    if (statsModal.showModal && !statsModal.open) { statsModal.showModal(); pageRecede(true); revealStats(); }
+                    if (statsModal.showModal && !statsModal.open) { openKeepScroll(statsModal); pageRecede(true); revealStats(); }
                 });
             });
         }

@@ -30,7 +30,10 @@ const GameFlag = (() => {
             if (!modal.showModal || modal.open) return;
             form.reset();
             resetDetails();
+            // Native <dialog>.showModal() scrolls the page to the dialog on mobile; keep the scroll put.
+            const y = window.scrollY;
             modal.showModal();
+            if (window.scrollY !== y) window.scrollTo(0, y);
         });
 
         // ── Field behaviour ──
