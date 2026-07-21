@@ -830,11 +830,17 @@
 
 /* Tier-2 job pills (the full pill deferred until now: icon + name + per-job XP). */
 .rpm__jobs { display: flex; flex-wrap: wrap; gap: 8px; }
-.rpm-job { display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px 6px 7px; border-radius: 999px; background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 16%, var(--pp-bg-1)), var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 42%, transparent); }
-.rpm-job__icon { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 8px; background: color-mix(in oklab, var(--disc) 20%, var(--pp-bg-2)); color: var(--disc); }
-.rpm-job__icon svg { width: 16px; height: 16px; }
-.rpm-job__name { font-size: 0.85rem; font-weight: 700; color: var(--pp-text); }
-.rpm-job__xp { font-size: 0.8rem; color: var(--disc); }
+
+/* ---- Shared job chip (.pp-jobchip): the rebuilt "jobs this X levels" cross-link pill --
+   discipline-tinted, icon + name (+ optional XP). Reused by the Contract modal (which adds
+   .rpm-job for its staggered entrance) and the Game-detail hero's Pursuit band. Resting =
+   visible; --disc carries the family colour (falls back to primary if unset). Partial:
+   templates/partials/jobs/_job_chip.html. ---- */
+.pp-jobchip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px 6px 7px; border-radius: 999px; text-decoration: none; background: linear-gradient(180deg, color-mix(in oklab, var(--disc, var(--pp-primary)) 16%, var(--pp-bg-1)), var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 42%, transparent); }
+.pp-jobchip__icon { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 8px; background: color-mix(in oklab, var(--disc, var(--pp-primary)) 20%, var(--pp-bg-2)); color: var(--disc, var(--pp-primary)); }
+.pp-jobchip__icon svg { width: 16px; height: 16px; }
+.pp-jobchip__name { font-size: 0.85rem; font-weight: 700; color: var(--pp-text); }
+.pp-jobchip__xp { font-size: 0.8rem; color: var(--disc, var(--pp-primary)); }
 
 /* Member-games grid + the from-scratch game card. */
 .rpm__games { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
@@ -861,6 +867,17 @@
 .rpg__plat--earned { color: var(--color-trophy-platinum, var(--pp-primary)); }
 .rpg__plat--has { color: var(--pp-text-dim); }
 .rpg__plat--none { color: var(--pp-text-mute); }
+/* Anon preview: the game's trophy make-up in place of the viewer's progress bar (profile-less card). */
+.rpg__trophies { display: flex; align-items: center; gap: 10px; margin-top: auto; }
+.rpg__tro { display: inline-flex; align-items: center; gap: 4px; font-size: 0.7rem; font-weight: 700; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.rpg__tro::before { content: ''; width: 7px; height: 7px; border-radius: 999px; background: var(--tro, var(--pp-text-mute)); }
+.rpg__tro--bronze { --tro: var(--color-trophy-bronze); }
+.rpg__tro--silver { --tro: var(--color-trophy-silver); }
+.rpg__tro--gold { --tro: var(--color-trophy-gold); }
+
+/* Reduced header for the anonymized preview modal -- a shorter banner leaves room for the CTA footer. */
+.rpm--preview .rpm__head-art { aspect-ratio: 16 / 4; }
+.rpm--preview .rpm__head-info { padding: 9px 22px 5px; }
 
 /* Reveal: job pills + game cards cascade in once the dialog has grown (JS adds .rpm-in after 340ms). */
 .rpm-job, .rpg { opacity: 0; }

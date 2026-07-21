@@ -306,6 +306,25 @@ def test_modal_builder_has_per_game_progress():
     assert build_contract_modal(profile, 'nope') is None
 
 
+def test_modal_builder_anonymous_has_no_per_game_progress():
+    """Preview path (profile=None): member games come back with profile_game None -- no per-user work,
+    so the game-detail / badge-detail anonymised preview can render trophy composition instead of progress."""
+    _c, _con, _game = _contract('m-anon', ('gunslinger',), title='Anon Modal')
+    modal = build_contract_modal(None, 'm-anon')
+    assert modal is not None and modal['game_count'] == 1
+    assert modal['games'][0]['profile_game'] is None
+
+
+def test_contract_modal_preview_endpoint_is_public(client):
+    """The anonymised preview endpoint (ContractModalPreviewView) renders the shared .rpm card for
+    logged-out visitors (no login wall); an unknown slug 404s so the fetch JS falls back to the href."""
+    _contract('m-preview', ('gunslinger',), title='Preview Modal')
+    ok = client.get('/career/contracts/m-preview/preview/')
+    assert ok.status_code == 200
+    assert b'rpm' in ok.content
+    assert client.get('/career/contracts/does-not-exist/preview/').status_code == 404
+
+
 def test_project_card_tier_split_gates_on_platinum():
     profile = ProfileFactory()
     _contract('tier-noplat')                                   # no platinum trophy on the member game

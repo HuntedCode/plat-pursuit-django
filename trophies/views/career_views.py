@@ -145,3 +145,20 @@ class ContractModalView(LoginRequiredMixin, View):
             return HttpResponseNotFound()   # explicit 404 so the fetch JS doesn't inject the 404 page
         return render(request, 'trophies/partials/contracts/_contract_modal.html',
                       {'p': p, 'profile': profile})
+
+
+class ContractModalPreviewView(View):
+    """Public, ANONYMIZED contract modal -- the sign-up hook shown to logged-out / unlinked
+    visitors (e.g. the game-detail contract row) instead of the linked-only board.
+
+    Same contract card built with profile=None, so member games show their trophy composition
+    rather than the viewer's progress; the shell footer carries the sign-up / link-PSN CTA. No
+    auth by design: this is the pitch shown BEFORE a user has (or links) an account. Cheap --
+    build_contract_modal(None, ...) does no per-user work; fetched lazily on click."""
+
+    def get(self, request, slug):
+        p = contracts_service.build_contract_modal(None, slug)
+        if p is None:
+            return HttpResponseNotFound()
+        return render(request, 'trophies/partials/contracts/_contract_modal_preview.html',
+                      {'p': p, 'profile': None, 'is_preview': True})

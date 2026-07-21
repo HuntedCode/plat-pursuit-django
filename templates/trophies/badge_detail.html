@@ -46,24 +46,36 @@ outside the #badge-tier-view swap island, so they persist across tier switches. 
     </div>
     {% endif %}
 
-    {% comment %} Contract modal: a game card's contract band opens THAT contract in place (fetched lazily
-    from ContractModalView, reusing the career modal partial). Rendered when a profile is on display; anon /
-    non-linked fall back to the career board via the band's href. {% endcomment %}
-    {% if target_profile %}
+    {% comment %} Contract modal: a game card's contract band opens THAT contract in place. Linked viewers
+    fetch the real card (ContractModalView); anon / unlinked fetch the anonymized preview
+    (ContractModalPreviewView) -- same modal, trophies instead of progress, CTA footer. Rendered for all
+    viewers so nobody hits the linked-only login wall. {% endcomment %}
     <div class="pp-detail-modal pp-detail-modal--contract" id="badge-contract-modal" hidden>
         <div class="pp-detail-modal__scrim" data-contract-close></div>
         <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Contract" tabindex="-1">
             <button type="button" class="pp-detail-modal__close" data-contract-close aria-label="Close contract">&times;</button>
             <div class="pp-detail-modal__body" data-contract-body></div>
-            {% comment %} Onward hook: from one game's Contract into the whole board. The fragment lands on
-            the contracts panel (scroll-padding-top offsets the sticky chrome). {% endcomment %}
-            <a class="bd-ctrmodal__more" href="{% url 'career' %}?view=contracts#career-panel-contracts">
-                Browse all Contracts
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-            </a>
+            {% if user.is_authenticated and user.profile.is_linked %}
+                {% comment %} Onward hook: from one game's Contract into the whole board. {% endcomment %}
+                <a class="bd-ctrmodal__more" href="{% url 'career' %}?view=contracts#career-panel-contracts">
+                    Browse all Contracts
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                </a>
+            {% else %}
+                {# Sign-up hook: the Job Board sells itself here. #}
+                <div class="bd-ctrmodal__cta">
+                    {% if user.is_authenticated %}
+                        <p>Link your PSN to pursue this Contract, level its Jobs, and bank XP as you play.</p>
+                        <a href="{% url 'link_psn' %}" class="gd-btn gd-btn--primary">Link your PSN</a>
+                    {% else %}
+                        <p>The Job Board turns trophy hunting into a career. Pursue Contracts, level Jobs, and bank XP.</p>
+                        <a href="{% url 'account_signup' %}" class="gd-btn gd-btn--primary">Start your Job Board</a>
+                        <span class="bd-ctrmodal__alt">Already a member? <a href="{% url 'account_login' %}">Sign in</a></span>
+                    {% endif %}
+                </div>
+            {% endif %}
         </div>
     </div>
-    {% endif %}
 {% endblock %}
 
 {% block js_scripts %}
@@ -106,7 +118,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // .pp-receded on #zoom-container; CSS owns the transition + reduced-motion gate). NOT used for the peek
     // modal (its pick-up/put-down grow reads as the depth already).
     var zoomEl = document.getElementById('zoom-container');
-    function pageRecede(on) { if (zoomEl) { zoomEl.classList.toggle('pp-receded', on); } }
+    function pageRecede(on) {
+        // Pivot the recede scale on the CURRENT viewport centre (not the tall #page-recede's own centre),
+        // so it's a gentle scale-in-place regardless of scroll position / page height. Measure first.
+        var pr = document.getElementById('page-recede');
+        if (on && pr) { pr.style.transformOrigin = '50% ' + (window.innerHeight / 2 - pr.getBoundingClientRect().top) + 'px'; }
+        if (zoomEl) { zoomEl.classList.toggle('pp-receded', on); }
+    }
 
     // Choreographed modal EXIT: add .is-closing to reverse the entrance (CSS bdModalOut + scrim fade),
     // then hide + run cleanup on animationend (with a timeout fallback). Reduced motion -> hide instantly.
@@ -481,10 +499,25 @@ document.addEventListener('DOMContentLoaded', function() {
         lastTier = to;
     }
 
+    // The sticky mini-header is position:fixed but is re-rendered per tier INSIDE the #badge-tier-view
+    // swap island (which lives in #page-recede). A modal's recede transforms #page-recede, and a transform
+    // makes it the containing block for its fixed descendants -- so the mini-header would scale/clip away
+    // with the receding content. It's chrome, so hoist it out to #zoom-wrapper (sibling of the nav, which
+    // the recede never touches). Re-run after each tier swap; drop the previously-hoisted copy first so a
+    // swap can't leave two behind.
+    function hoistMinihead() {
+        var host = document.getElementById('zoom-wrapper');
+        if (!host) return;
+        var fresh = document.querySelector('#badge-tier-view .bd-minihead');
+        host.querySelectorAll(':scope > .bd-minihead').forEach(function (old) { if (old !== fresh) { old.remove(); } });
+        if (fresh) { host.appendChild(fresh); }
+    }
+
     initStages();
     armStageReveal();
     setTimeout(igniteActiveTier, 250);   // the initial tier "comes alive" a beat after load
     if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }   // sticky mini-header
+    hoistMinihead();
 
     // ── Mini-header stage jumper: delegated open/close (survives the tier-view swaps) ──
     // The menu items themselves jump via the shared data-stage-link handler (bound in initStages); this
@@ -541,6 +574,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Re-wire the fresh mini-header AFTER the scroll is restored, so it reads the right position and
             // adopts its pinned state instantly (no reveal-slide replay on tier switch).
             if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }
+            hoistMinihead();   // re-hoist the freshly-swapped mini-header out of the recede wrapper
             // The activated tier step was replaced by the swap; keyboard focus fell to <body>. Move it to
             // the now-active step (preventScroll so it doesn't fight the scroll restore above).
             var active = document.querySelector('#badge-tier-view .bd-tierstep.is-active');

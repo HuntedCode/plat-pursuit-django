@@ -1,92 +1,526 @@
 /**
- * Game Detail Page JavaScript
- * Handles carousel navigation and form filtering with scroll position preservation
+ * Game Detail Page controller (rebuild).
+ *
+ * Owns: the Trophies/Roadmap/Community/About view switcher (shared .pp-switch +
+ * PlatPursuit.wireTablist/slideViewIn/igniteTab/syncViewParam), the hero screenshot
+ * lightbox, the trophy-filter settle + scroll restore, hero count-ups, and deep-link
+ * jumps ([data-gd-goto]). The quick-rate modal block is carried over from the legacy
+ * ratings panel until that panel is rebuilt.
  */
-
 document.addEventListener('DOMContentLoaded', () => {
-    // Get container with data attributes
     const container = document.getElementById('game-detail-container');
     if (!container) return;
 
-    const baseUrl = container.dataset.baseUrl;
     const scrollKey = container.dataset.scrollKey;
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // Parse initial query params from URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const queryParams = new URLSearchParams();
-    let page = 1;
-    let nextPageUrl = '';
-
-    // Copy URL params to queryParams
-    for (const [key, value] of urlParams) {
-        if (key !== 'page') {
-            queryParams.append(key, value);
-        } else {
-            page = parseInt(value) || 1;
-        }
+    // Shared "page steps back" recede (used by the contract modal AND the hero's stats/badges modals).
+    // Pivots the scale on the current viewport centre so it's a gentle scale-in-place at any scroll depth.
+    const zoomContainer = document.getElementById('zoom-container');
+    function pageRecede(on) {
+        const pr = document.getElementById('page-recede');
+        if (on && pr) { pr.style.transformOrigin = '50% ' + (window.innerHeight / 2 - pr.getBoundingClientRect().top) + 'px'; }
+        if (zoomContainer) zoomContainer.classList.toggle('pp-receded', on);
     }
 
-    // Update nextPageUrl
-    nextPageUrl = `${baseUrl}?page=${page + 1}&${queryParams.toString()}`;
+    // ============================================================
+    // View switcher: Trophies (default) / Roadmap / Community / About
+    // ============================================================
+    (function () {
+        const viewTabs = document.querySelectorAll('#gd-switch .pp-switch__chip[data-view]');
+        const views = document.querySelectorAll('.gd-view');
+        if (!viewTabs.length || !views.length) return;
+        const VIEW_ORDER = ['trophies', 'roadmap', 'community', 'about'];
 
-    // ====================
-    // Carousel Navigation
-    // ====================
-    const carouselNavLinks = document.querySelectorAll('[data-slide-to]');
-    const carousel = document.getElementById('screenshot-carousel');
+        function currentView() {
+            let cur = null;
+            views.forEach((v) => { if (!v.hidden) cur = v.dataset.view; });
+            return cur;
+        }
 
-    if (carousel && carouselNavLinks.length > 0) {
-        carouselNavLinks.forEach(link => {
-            link.addEventListener('click', (e) => {
+        let tablist;
+        function showView(name) {
+            const from = currentView();
+            const changed = from !== name;
+            let shown = null;
+            views.forEach((v) => {
+                const on = v.dataset.view === name;
+                v.hidden = !on;
+                if (on) shown = v;
+            });
+            if (changed && shown && PlatPursuit.slideViewIn) {
+                PlatPursuit.slideViewIn(shown, from, name, VIEW_ORDER);
+            }
+            let activeTab = null;
+            viewTabs.forEach((t) => {
+                const on = t.dataset.view === name;
+                t.classList.toggle('is-active', on);
+                t.setAttribute('aria-selected', on ? 'true' : 'false');
+                if (on) activeTab = t;
+            });
+            if (tablist) tablist.syncTabindex();
+            if (changed && activeTab && PlatPursuit.igniteTab) PlatPursuit.igniteTab(activeTab);
+            if (PlatPursuit.syncViewParam) {
+                PlatPursuit.syncViewParam(name, { default: 'trophies' });
+            }
+        }
+
+        tablist = PlatPursuit.wireTablist(viewTabs, { onSelect: (t) => showView(t.dataset.view) });
+
+        // One-shot ignite on the active pill so it "comes alive" on load.
+        const initTab = document.querySelector('#gd-switch .pp-switch__chip[data-view].is-active');
+        if (initTab && PlatPursuit.igniteTab) {
+            setTimeout(() => { if (initTab.classList.contains('is-active')) PlatPursuit.igniteTab(initTab); }, 260);
+        }
+
+        // Deep-link jumps (e.g. the hero roadmap teaser -> Roadmap tab).
+        document.querySelectorAll('[data-gd-goto]').forEach((el) => {
+            el.addEventListener('click', (e) => {
                 e.preventDefault();
-                const targetId = e.currentTarget.dataset.slideTo;
-                const targetSlide = document.getElementById(targetId);
-                if (targetSlide) {
-                    carousel.scrollTo({
-                        left: targetSlide.offsetLeft,
-                        behavior: 'smooth'
-                    });
-                }
+                showView(el.dataset.gdGoto);
+                const strip = document.getElementById('gd-switch');
+                if (strip) strip.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
             });
         });
-    }
 
-    // ====================
-    // Form Filtering with Scroll Position Preservation
-    // ====================
-    const form = document.getElementById('filter-form');
-    const unearnedToggle = document.getElementById('unearned-toggle');
+        // Honor an initial ?view= (a shared/reloaded deep link).
+        const initialView = new URLSearchParams(window.location.search).get('view');
+        if (initialView && VIEW_ORDER.includes(initialView) && initialView !== 'trophies') {
+            showView(initialView);
+        }
+    })();
 
-    // Save scroll position before form submit
-    if (form) {
-        form.addEventListener('submit', () => {
-            localStorage.setItem(scrollKey, window.scrollY);
-            page = 2;
-            nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
+    // ============================================================
+    // Hero count-ups (completion %, glance stats) — reduced-motion safe (countUp jumps).
+    // ============================================================
+    if (PlatPursuit.countUp) {
+        document.querySelectorAll('[data-gd-countup]').forEach((el) => {
+            const n = parseInt(el.dataset.gdCountup, 10);
+            if (!isNaN(n)) { el.dataset.countup = n; PlatPursuit.countUp(el, 700, { from: 0 }); }
         });
     }
 
-    if (unearnedToggle) {
-        unearnedToggle.addEventListener('submit', () => {
-            localStorage.setItem(scrollKey, window.scrollY);
-            page = 2;
-            nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
-        });
-    }
+    // Fill the hero progress Horizon from 0 -> target, in step with the count-up. The
+    // width transition is CSS-gated under reduced motion (horizon.css), so this just jumps.
+    document.querySelectorAll('[data-gd-fill]').forEach((bar) => {
+        const fill = bar.querySelector('.pp-horizon__fill');
+        if (!fill) return;
+        const target = (bar.dataset.gdFill || '0') + '%';
+        requestAnimationFrame(() => requestAnimationFrame(() => bar.style.setProperty('--horizon-progress', target)));
+    });
+    // Composite group-bar segments fill from 0 -> each group's completion %.
+    document.querySelectorAll('.gd-groupbar__fill[data-gd-fill]').forEach((f) => {
+        const target = (f.dataset.gdFill || '0') + '%';
+        requestAnimationFrame(() => requestAnimationFrame(() => { f.style.width = target; }));
+    });
 
-    // Restore scroll position after page load
+    // ============================================================
+    // Hero About fit: on desktop, clamp + fade the IGDB blurb so the main column
+    // never pushes the hero taller than the cover + extras (the "header boundary").
+    // The blurb is the one elastic element; it yields, the rest holds.
+    // ============================================================
+    (function () {
+        const grid = container.querySelector('.gd-hero__grid');
+        const main = container.querySelector('.gd-hero__main');
+        const cover = container.querySelector('.gd-cover');
+        const extras = container.querySelector('.gd-hero__extras');
+        const about = container.querySelector('.gd-hero__about');
+        const blurb = about ? about.querySelector('.gd-about-blurb') : null;
+        if (!grid || !main || !cover || !about || !blurb) return;
+
+        const ROW_GAP = 16;   // desktop grid row-gap (1rem), between cover and extras
+        function lineHeight() {
+            const lh = parseFloat(getComputedStyle(blurb).lineHeight);
+            return isNaN(lh) ? 20 : lh;
+        }
+        function fit() {
+            // Reset first so measurements reflect the natural (statically-clamped) height.
+            blurb.style.maxHeight = '';
+            about.classList.remove('is-clamped');
+            if (window.innerWidth < 1024) return;   // only when cover + main sit side by side
+
+            const leftH = cover.offsetHeight + (extras ? ROW_GAP + extras.offsetHeight : 0);
+            const gap = parseFloat(getComputedStyle(main).rowGap) || 8;
+            const kids = Array.from(main.children);
+            const mainH = kids.reduce((h, c) => h + c.offsetHeight, 0) + gap * Math.max(0, kids.length - 1);
+
+            const overflow = mainH - leftH;
+            if (overflow <= 4) return;               // fits within the boundary; leave the static clamp
+            const target = Math.max(lineHeight() * 2, blurb.offsetHeight - overflow);   // never crush below ~2 lines
+            if (target < blurb.scrollHeight) {
+                blurb.style.maxHeight = Math.round(target) + 'px';
+                about.classList.add('is-clamped');
+            }
+        }
+
+        fit();
+        // Recompute when the OUTER drivers change (never observe main -> the clamp mutates it = loop).
+        if (window.ResizeObserver) {
+            const ro = new ResizeObserver(() => window.requestAnimationFrame(fit));
+            ro.observe(cover);
+            if (extras) ro.observe(extras);
+        }
+        window.addEventListener('resize', () => window.requestAnimationFrame(fit));
+    })();
+
+    // ============================================================
+    // Hero screenshot lightbox
+    // ============================================================
+    (function () {
+        const modal = document.getElementById('gd-shot-modal');
+        const dataEl = document.getElementById('gd-shot-data');
+        if (!modal || !dataEl) return;
+        let shots = [];
+        try { shots = JSON.parse(dataEl.textContent) || []; } catch (_) { shots = []; }
+        if (!shots.length) return;
+
+        const img = document.getElementById('gd-shot-img');
+        const countEl = document.getElementById('gd-shot-count');
+        const strip = document.getElementById('gd-shot-strip');
+        const thumbs = strip ? Array.from(strip.querySelectorAll('[data-shot-to]')) : [];
+        let idx = 0;
+        let source = null;   // element the current view "belongs to" (for the grow/shrink FLIP)
+        let pageToken = 0;   // latest paging slide, so overlapping navs clear .is-paging correctly
+        let ghost = null;    // the outgoing image's clone, slid out during a push swap
+        let openToken = 0;   // open generation: invalidates a deferred (img-load) FLIP if superseded by a later open/close
+
+        function rectOf(el) { return el ? el.getBoundingClientRect() : null; }
+        function clearGhost() {
+            if (!ghost) return;
+            if (ghost.getAnimations) ghost.getAnimations().forEach((a) => a.cancel());
+            if (ghost.parentNode) ghost.remove();
+            ghost = null;
+        }
+
+        // FLIP: animate the big image between its full box and a source thumbnail's box, so it
+        // appears to grow out of (open) / shrink back into (close) the thumbnail it came from.
+        function flip(srcRect, opening, done) {
+            const last = img.getBoundingClientRect();
+            if (!srcRect || !srcRect.width || !last.width) { if (done) done(); return; }
+            const scale = srcRect.width / last.width;
+            const dx = (srcRect.left + srcRect.width / 2) - (last.left + last.width / 2);
+            const dy = (srcRect.top + srcRect.height / 2) - (last.top + last.height / 2);
+            const thumbT = `translate(${dx}px, ${dy}px) scale(${scale})`;
+            const frames = opening
+                ? [{ transform: thumbT, opacity: 0.4 }, { transform: 'none', opacity: 1 }]
+                : [{ transform: 'none', opacity: 1 }, { transform: thumbT, opacity: 0.4 }];
+            const a = img.animate(frames, { duration: opening ? 340 : 260, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: opening ? 'none' : 'forwards' });
+            if (done) {
+                a.onfinish = done;
+                // Opening: if a later action cancels this, still clear is-animating (don't strand the chrome/image).
+                // Closing: a cancel means we're REOPENING -> must NOT run finalize (it would close the fresh modal).
+                if (opening) a.oncancel = done;
+            }
+        }
+
+        // Warm the neighbours so a push swap never flashes an undecoded image (invisible-until-missing polish).
+        function preloadAround() {
+            if (shots.length < 2) return;
+            [(idx + 1) % shots.length, (idx - 1 + shots.length) % shots.length].forEach((i) => {
+                const im = new Image(); im.decoding = 'async'; im.src = shots[i];
+            });
+        }
+        function paint() {
+            idx = (idx + shots.length) % shots.length;
+            if (img) img.src = shots[idx];
+            if (countEl) countEl.textContent = (idx + 1) + ' / ' + shots.length;
+            thumbs.forEach((t, i) => {
+                const on = i === idx;
+                t.classList.toggle('is-active', on);
+                if (on) t.scrollIntoView({ block: 'nearest', inline: 'center', behavior: reduce ? 'auto' : 'smooth' });
+            });
+            preloadAround();
+        }
+        // Directional PUSH swap (arrows / filmstrip / keyboard): the outgoing image is pushed out
+        // one way while the incoming one slides in from the other, edge-to-edge (a carousel push).
+        function go(delta) {
+            // Ignore switches while the modal's OPEN or CLOSE FLIP is running (is-animating spans the whole
+            // open window, incl. the img-load wait). A push mid-open collides with the deferred FLIP-open and
+            // corrupts the carousel -- the exact "switch as the modal is opening" bug.
+            if (modal.classList.contains('is-closing') || modal.classList.contains('is-animating') || !delta) return;
+            const dir = delta > 0 ? 1 : -1;         // +1 next (new from right), -1 prev (new from left)
+            const oldSrc = shots[idx];              // capture the outgoing image BEFORE paint swaps it
+            idx += delta; paint();                  // paint swaps img.src to the new shot + updates chrome
+            if (reduce) return;
+            // Stop + clean any in-flight swap first: overlapping WAAPI animations on the same <img>
+            // composite and fight each other, wedging the stage (the "frozen carousel" bug).
+            if (img.getAnimations) img.getAnimations().forEach((a) => a.cancel());
+            clearGhost();
+            // The ghost (outgoing image) sits directly above the real <img> but below the nav chrome.
+            ghost = document.createElement('img');
+            ghost.src = oldSrc;
+            ghost.className = img.className + ' gd-shotmodal__ghost';
+            ghost.setAttribute('aria-hidden', 'true');
+            img.insertAdjacentElement('afterend', ghost);
+
+            modal.classList.add('is-paging');       // clip the stage so the sliding pair can't overflow
+            const my = ++pageToken;
+            const local = ghost;
+            const opts = { duration: 300, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' };
+            img.animate([{ transform: `translateX(${dir * 100}%)` }, { transform: 'none' }], opts);
+            const g = local.animate([{ transform: 'none' }, { transform: `translateX(${dir * -100}%)` }],
+                Object.assign({ fill: 'forwards' }, opts));   // hold the exit frame until removed (no snap-back flash)
+            const done = () => {
+                if (local.parentNode) local.remove();
+                if (ghost === local) ghost = null;
+                if (my === pageToken) modal.classList.remove('is-paging');
+            };
+            g.onfinish = done; g.oncancel = done;
+        }
+
+        // The filmstrip scales + fades in/out concurrently with the main image's grow/shrink.
+        // Scale-only (no translate) so it can't briefly overflow the viewport and flash a scrollbar.
+        function stripAnim(opening) {
+            if (!strip || reduce) return;
+            const small = { opacity: 0, transform: 'scale(0.94)' };
+            const full = { opacity: 1, transform: 'none' };
+            strip.animate(opening ? [small, full] : [full, small],
+                { duration: opening ? 320 : 240, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: opening ? 'none' : 'forwards' });
+        }
+
+        function openAt(i, sourceEl) {
+            source = sourceEl || null;
+            const srcRect = rectOf(sourceEl);
+            // Clear any stale animation state from a prior (possibly interrupted) open/close cycle,
+            // and drop held (fill:forwards) transforms so the fresh FLIP starts clean.
+            modal.classList.remove('is-closing', 'is-paging');
+            if (img.getAnimations) img.getAnimations().forEach((a) => a.cancel());
+            if (strip && strip.getAnimations) strip.getAnimations().forEach((a) => a.cancel());
+            clearGhost();
+            idx = i; paint();
+            modal.classList.add('is-animating');   // chrome hidden until the image lands
+            if (modal.showModal && !modal.open) modal.showModal();
+            if (reduce) { modal.classList.remove('is-animating'); return; }
+            // A slow image defers the FLIP-open until load; stamp this open so a later open/close can
+            // invalidate the pending run (else it fires a FLIP-open onto a swapped/closed modal).
+            const myOpen = ++openToken;
+            const run = () => { if (myOpen !== openToken) return; flip(srcRect, true, () => modal.classList.remove('is-animating')); stripAnim(true); };
+            if (img.complete && img.naturalWidth) { run(); } else { img.addEventListener('load', run, { once: true }); }
+        }
+        function finalize() { clearGhost(); modal.classList.remove('is-closing', 'is-animating', 'is-paging'); if (modal.close && modal.open) modal.close(); }
+        function close() {
+            if (!modal.open) return;
+            ++openToken;   // supersede any pending deferred FLIP-open so it can't fire during/after the close
+            // Stop any in-flight slide before the shrink so it can't composite into a corrupt transform.
+            if (img.getAnimations) img.getAnimations().forEach((a) => a.cancel());
+            if (strip && strip.getAnimations) strip.getAnimations().forEach((a) => a.cancel());
+            clearGhost();
+            modal.classList.add('is-closing', 'is-animating');   // chrome + filmstrip leave with the image
+            if (reduce) { finalize(); return; }
+            stripAnim(false);
+            // Shrink back to the matching hero thumbnail if one is shown, else the opener.
+            const home = document.querySelector('#gd-shots [data-shot="' + idx + '"]') || source;
+            const homeRect = rectOf(home);
+            if (homeRect && homeRect.width) { flip(homeRect, false, finalize); }
+            else { img.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.94)' }], { duration: 200, easing: 'ease', fill: 'forwards' }).onfinish = finalize; }
+        }
+
+        document.querySelectorAll('#gd-shots [data-shot]').forEach((btn) => {
+            btn.addEventListener('click', () => openAt(parseInt(btn.dataset.shot, 10) || 0, btn));
+        });
+        thumbs.forEach((t) => t.addEventListener('click', () => go((parseInt(t.dataset.shotTo, 10) || 0) - idx)));
+        modal.querySelector('[data-shot-close]')?.addEventListener('click', close);
+        modal.querySelector('[data-shot-prev]')?.addEventListener('click', () => go(-1));
+        modal.querySelector('[data-shot-next]')?.addEventListener('click', () => go(1));
+        modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+        // Esc: run our choreographed close (shrink home) instead of the instant native close.
+        modal.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
+        document.addEventListener('keydown', (e) => {
+            if (!modal.open) return;
+            if (e.key === 'ArrowLeft') go(-1);
+            else if (e.key === 'ArrowRight') go(1);
+        });
+        // Swipe-down-to-close on touch (shared sheet gesture). The swipe animates the dialog off,
+        // so onClose just finalizes (clears state + closes the dialog).
+        if (PlatPursuit.dismissableSheet) { PlatPursuit.dismissableSheet(modal, { onClose: finalize }); }
+    })();
+
+    // ============================================================
+    // Spine cross-link modals (badges native <dialog>; stats). The CONTRACT row uses the
+    // SHARED contract modal instead (data-contract-url -> pp-detail-modal, wired below).
+    // ============================================================
+    (function () {
+        const badgesModal = document.getElementById('gd-badges-modal');
+        const statsModal = document.getElementById('gd-stats-modal');
+        function wire(m) {
+            if (!m) return;
+            // Choreographed exit: fade/scale out (.is-closing) then .close(), so the modal leaves as
+            // deliberately as it entered instead of popping shut.
+            function closeGd() {
+                if (!m.open) return;
+                pageRecede(false);   // page steps forward as the modal leaves
+                if (reduce) { m.close(); return; }
+                m.classList.add('is-closing');
+                let done = false;
+                function finish() {
+                    if (done) return; done = true;
+                    m.removeEventListener('animationend', onEnd);
+                    m.classList.remove('is-closing');
+                    if (m.open) m.close();
+                }
+                function onEnd(e) { if (e.target === m) finish(); }
+                m.addEventListener('animationend', onEnd);
+                window.setTimeout(finish, 240);   // fallback if animationend doesn't fire
+            }
+            m.querySelectorAll('[data-gd-modal-close]').forEach((b) => b.addEventListener('click', closeGd));
+            m.addEventListener('click', (e) => { if (e.target === m) closeGd(); });
+            m.addEventListener('cancel', (e) => { e.preventDefault(); closeGd(); });   // Esc -> animated close
+            // Swipe-down-to-close on touch (shared sheet gesture) animates the dialog off itself, so just close.
+            if (PlatPursuit.dismissableSheet) { PlatPursuit.dismissableSheet(m, { onClose: function () { pageRecede(false); if (m.close && m.open) m.close(); } }); }
+        }
+        wire(badgesModal); wire(statsModal);
+        document.querySelectorAll('[data-spine-open="badges"]').forEach((op) => {
+            op.addEventListener('click', () => {
+                if (!badgesModal || !badgesModal.showModal || badgesModal.open) return;
+                badgesModal.showModal();
+                pageRecede(true);
+                const grid = badgesModal.querySelector('[data-gd-badgegrid]');   // re-arm the staggered card reveal
+                if (grid && !reduce) { grid.classList.remove('is-revealing'); void grid.offsetWidth; grid.classList.add('is-revealing'); }
+            });
+        });
+
+        // My Stats: open + reveal choreography (count-ups, horizon fills, timeline stagger).
+        if (statsModal) {
+            const revealStats = () => {
+                const root = statsModal.querySelector('[data-gd-mystats]');
+                if (!root) return;
+                root.classList.remove('is-revealing');
+                void root.offsetWidth;            // re-arm the reveal animation on each open
+                root.classList.add('is-revealing');
+                if (PlatPursuit.countUp && !reduce) {
+                    statsModal.querySelectorAll('[data-countup]').forEach((el, i) => {
+                        const n = parseInt(el.dataset.countup, 10);
+                        if (isNaN(n)) return;
+                        window.setTimeout(() => PlatPursuit.countUp(el, 650, { from: 0 }), 60 + i * 45);
+                    });
+                }
+                // Fill each Horizon bar from 0 -> its authored target (CSS-gated under reduced motion).
+                statsModal.querySelectorAll('.pp-horizon__track').forEach((bar) => {
+                    const target = bar.style.getPropertyValue('--horizon-progress') || '0%';
+                    bar.style.setProperty('--horizon-progress', '0%');
+                    requestAnimationFrame(() => requestAnimationFrame(() => bar.style.setProperty('--horizon-progress', target)));
+                });
+            };
+            document.querySelectorAll('[data-stats-open]').forEach((op) => {
+                op.addEventListener('click', () => {
+                    if (statsModal.showModal && !statsModal.open) { statsModal.showModal(); pageRecede(true); revealStats(); }
+                });
+            });
+        }
+    })();
+
+    // ============================================================
+    // Shared contract modal: a [data-contract-url] trigger lazily fetches the rich contract card
+    // (contract_modal endpoint) into the .pp-detail-modal shell -- identical to badge-detail / career,
+    // so the game page stays in lockstep. Non-linked / anon fetches 404 -> fall back to the career href.
+    // (Refactor candidate: hoist this + badge-detail's copy into a shared PlatPursuit util.)
+    // ============================================================
+    (function () {
+        const contractModal = document.getElementById('gd-contract-modal');
+        if (!contractModal) return;
+        const contractBody = contractModal.querySelector('[data-contract-body]');
+        const dialogSel = '.pp-detail-modal__dialog';
+
+        // Focus trap + opener restore (matches badge-detail's hand-rolled modalA11y).
+        let opener = null;
+        function focusables() {
+            const dlg = contractModal.querySelector(dialogSel);
+            if (!dlg) return [];
+            return Array.prototype.slice.call(dlg.querySelectorAll(
+                'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            )).filter((el) => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement);
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Tab' || contractModal.hidden) return;
+            const dlg = contractModal.querySelector(dialogSel);
+            const f = focusables();
+            if (!f.length) { if (dlg) { e.preventDefault(); dlg.focus(); } return; }
+            const first = f[0], last = f[f.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }, true);
+
+        function restoreFocus() { if (opener && opener.focus) { try { opener.focus(); } catch (_) { /* gone */ } } opener = null; }
+        function closeAnimated() {
+            pageRecede(false);
+            const dlg = contractModal.querySelector(dialogSel);
+            const finish = () => {
+                contractModal.hidden = true; contractModal.classList.remove('is-closing');
+                document.body.style.overflow = ''; contractBody.innerHTML = ''; restoreFocus();
+            };
+            if (reduce || !dlg) { finish(); return; }
+            contractModal.classList.add('is-closing');
+            let done = false;
+            const onEnd = (e) => { if (e.target !== dlg) return; done = true; dlg.removeEventListener('animationend', onEnd); finish(); };
+            dlg.addEventListener('animationend', onEnd);
+            window.setTimeout(() => { if (!done) { dlg.removeEventListener('animationend', onEnd); finish(); } }, 320);
+        }
+
+        const dlg0 = contractModal.querySelector(dialogSel);
+        if (dlg0 && PlatPursuit.dismissableSheet) {
+            PlatPursuit.dismissableSheet(dlg0, {
+                scrim: contractModal.querySelector('.pp-detail-modal__scrim'),
+                onClose: () => { pageRecede(false); contractModal.hidden = true; contractModal.classList.remove('is-closing'); document.body.style.overflow = ''; contractBody.innerHTML = ''; restoreFocus(); }
+            });
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest) return;
+            const link = e.target.closest('[data-contract-url]');
+            if (link) {
+                if (e.metaKey || e.ctrlKey || e.shiftKey) return;   // let modified clicks open the href
+                e.preventDefault();
+                opener = link;
+                const loadTimer = window.setTimeout(() => link.classList.add('is-loading'), 150);
+                const clearLoading = () => { window.clearTimeout(loadTimer); link.classList.remove('is-loading'); };
+                fetch(link.getAttribute('data-contract-url'), { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+                    .then((r) => (r.ok ? r.text() : null))
+                    .then((html) => {
+                        if (html == null) { clearLoading(); window.location.href = link.getAttribute('href'); return; }
+                        contractBody.innerHTML = html;
+                        let i = 0;
+                        contractBody.querySelectorAll('.rpm-job, .rpg').forEach((el) => { el.style.animationDelay = (i++ * 45) + 'ms'; el.classList.add('rpm-in'); });
+                        contractBody.querySelectorAll('.rpg__prog-fill').forEach((f) => { if (f.dataset.fill) f.style.width = f.dataset.fill; });
+                        contractModal.hidden = false;
+                        pageRecede(true);
+                        document.body.style.overflow = 'hidden';
+                        clearLoading();
+                        const d = contractModal.querySelector(dialogSel); if (d) d.focus();
+                    })
+                    .catch(() => { clearLoading(); window.location.href = link.getAttribute('href'); });
+                return;
+            }
+            if (e.target.closest('[data-contract-close]')) closeAnimated();
+        });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !contractModal.hidden) closeAnimated(); });
+    })();
+
+    // ============================================================
+    // Trophy filter: dim-while-swapping settle + scroll restore
+    // ============================================================
+    document.body.addEventListener('htmx:beforeRequest', (e) => {
+        if (e.target && e.target.id === 'gd-filter-form') {
+            const results = document.getElementById('browse-results');
+            if (results) results.classList.add('is-swapping');
+            try { localStorage.setItem(scrollKey, window.scrollY); } catch (_) { /* ignore */ }
+        }
+    });
+    document.body.addEventListener('htmx:afterSwap', (e) => {
+        if (e.detail && e.detail.target && e.detail.target.id === 'browse-results') {
+            e.detail.target.classList.remove('is-swapping');
+        }
+    });
+
+    // Restore scroll after a full navigation that carried filter params.
     const savedScroll = localStorage.getItem(scrollKey);
     if (savedScroll) {
-        window.scrollTo({
-            top: parseInt(savedScroll),
-            behavior: 'smooth'
-        });
+        window.scrollTo({ top: parseInt(savedScroll, 10) || 0, behavior: reduce ? 'auto' : 'smooth' });
         localStorage.removeItem(scrollKey);
     }
 
-    // ====================
-    // Quick Rate Modal
-    // ====================
+    // ============================================================
+    // Quick Rate Modal (carried over from the legacy ratings panel; rebuilt in Phase 4)
+    // ============================================================
     const quickRateModal = document.getElementById('quick-rate-modal');
     const quickRateForm = document.getElementById('quick-rate-form');
 
@@ -95,7 +529,6 @@ document.addEventListener('DOMContentLoaded', () => {
         var _qrGroupId = null;
         var _qrSourceBtn = null;
 
-        // Map slider names to display element IDs
         var sliderDisplayMap = {
             difficulty: 'qr-difficulty-val',
             grindiness: 'qr-grindiness-val',
@@ -107,7 +540,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return name === 'overall_rating' ? parseFloat(value).toFixed(1) : value;
         }
 
-        // Live value display for sliders
         quickRateForm.querySelectorAll('input[type="range"]').forEach(function(slider) {
             var valEl = document.getElementById(sliderDisplayMap[slider.name]);
             if (valEl) {
@@ -118,7 +550,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Open modal from Quick Rate button
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.quick-rate-btn');
             if (!btn) return;
@@ -127,11 +558,9 @@ document.addEventListener('DOMContentLoaded', () => {
             _qrGroupId = btn.dataset.groupId;
             _qrSourceBtn = btn;
 
-            // Set hours label
             var hoursLabel = document.getElementById('qr-hours-label');
             if (hoursLabel) hoursLabel.textContent = btn.dataset.hoursLabel || 'Hours to Platinum';
 
-            // Pre-fill from existing rating or reset to defaults
             var existing = btn.dataset.existing ? JSON.parse(btn.dataset.existing) : null;
             var form = quickRateForm;
 
@@ -141,24 +570,20 @@ document.addEventListener('DOMContentLoaded', () => {
             form.querySelector('[name="fun_ranking"]').value = existing ? existing.fun_ranking : 5;
             form.querySelector('[name="overall_rating"]').value = existing ? existing.overall_rating : 3;
 
-            // Update display values
             for (var field in sliderDisplayMap) {
                 var el = document.getElementById(sliderDisplayMap[field]);
                 if (el) el.textContent = formatSliderValue(field, form.querySelector('[name="' + field + '"]').value);
             }
 
-            // Update submit button text
             var submitBtn = document.getElementById('quick-rate-submit');
             if (submitBtn) submitBtn.textContent = existing ? 'Update Rating' : 'Submit Rating';
 
-            // Update title
             var title = document.getElementById('quick-rate-title');
             if (title) title.textContent = existing ? 'Update Your Rating' : 'Rate This Game';
 
             quickRateModal.showModal();
         });
 
-        // Submit rating
         quickRateForm.addEventListener('submit', async function(e) {
             e.preventDefault();
 
@@ -185,7 +610,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 PlatPursuit.ToastManager.show(data.message || 'Rating saved!', 'success');
 
-                // Update the ratings grid live
                 if (data.community_averages) {
                     var panel = _qrSourceBtn.closest('.community-tab-panel') || document.getElementById('community-tabs-section');
                     if (panel) {
@@ -215,7 +639,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                                 var color = getColor(s.val, s.thresholds, s.colors);
 
-                                // Update value text + color
                                 var valEl = cell.querySelector('[data-stat-value]');
                                 if (valEl) {
                                     var suffix = stat === 'hours' ? '<span class="text-[0.6rem] text-base-content/40 font-normal">h</span>' :
@@ -227,7 +650,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                     valEl.classList.remove('text-base-content/20');
                                 }
 
-                                // Update progress bar value + color
                                 var progress = cell.querySelector('progress');
                                 if (progress) {
                                     progress.value = s.val;
@@ -244,7 +666,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                // Update button text and data
                 if (_qrSourceBtn) {
                     _qrSourceBtn.dataset.existing = JSON.stringify({
                         difficulty: parseInt(quickRateForm.querySelector('[name="difficulty"]').value, 10),

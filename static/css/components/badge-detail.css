@@ -397,6 +397,14 @@
 .bd-ctrmodal__more { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 11px; background: var(--pp-bg-1); border-top: 1px solid var(--pp-border); color: var(--pp-primary); font-size: 0.8rem; font-weight: 700; text-decoration: none; transition: background var(--pp-dur) var(--pp-ease); }
 .bd-ctrmodal__more svg { width: 14px; height: 14px; }
 @media (hover: hover) { .bd-ctrmodal__more:hover { background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-1)); } }
+/* Sign-up / link-PSN CTA footer (anon/unlinked): replaces "Browse all Contracts" at the moment the Job
+   Board sells itself. Shared by the contract modal on game detail + badge detail (sticky, like __more). */
+.bd-ctrmodal__cta { position: sticky; bottom: 0; z-index: 2; display: flex; flex-direction: column; gap: 9px; padding: 14px 18px 16px; background: var(--pp-bg-1); border-top: 1px solid var(--pp-border); }
+.bd-ctrmodal__cta p { font-size: 0.84rem; color: var(--pp-text-dim); }
+.bd-ctrmodal__cta .gd-btn { align-self: flex-start; }
+.bd-ctrmodal__alt { font-size: 0.74rem; color: var(--pp-text-mute); }
+.bd-ctrmodal__alt a { color: var(--pp-primary); font-weight: 600; text-decoration: none; }
+.bd-ctrmodal__alt a:hover { text-decoration: underline; }
 
 /* ── Stage section ──────────────────────────────────────────────────────────
    A stage is a .bd-card holding a clickable header (collapse toggle), an

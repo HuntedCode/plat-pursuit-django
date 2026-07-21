@@ -1,0 +1,44 @@
+{% comment %}
+4-across trophy tier cards, reusing the shared .scard component (2x2 on mobile, 4-across on md+).
+  authed: include with `earned=profile_trophy_totals` -> "earned / of defined" + count-up + a tier-
+          coloured progress bar (pp-horizon, --horizon-accent per tier) showing that tier's ratio.
+  anon:   include with no `earned` -> game composition (defined counts, "to earn"), no bar.
+Platinum is common-absent; when a tier's defined count is 0 the card renders a muted em-dash (no bar).
+Tier color lives on the card surface only (--scard-accent + the bar), per the project color rule.
+{% endcomment %}
+<div class="gd-tro grid grid-cols-4 gap-1.5 md:gap-2">
+    {% with defs=game.defined_trophies %}
+        <div class="scard scard--tro{% if not defs.platinum %} scard--tro-none{% endif %}" style="--scard-accent: var(--color-trophy-platinum);">
+            {% if earned and defs.platinum %}<span class="pp-horizon pp-horizon__track gd-tro__bar" data-gd-fill="{% widthratio earned.platinum defs.platinum 100 %}" style="--horizon-h: 4px; --horizon-progress: 0%; --horizon-accent: var(--color-trophy-platinum);"><span class="pp-horizon__fill"></span></span>{% endif %}
+            <div class="scard__label">Platinum</div>
+            {% if defs.platinum %}
+                {% if earned %}<div class="scard__value pp-tally" data-gd-countup="{{ earned.platinum|default:0 }}">{{ earned.platinum|default:0 }}</div><div class="scard__sub">of {{ defs.platinum }}</div>
+                {% else %}<div class="scard__value pp-tally">{{ defs.platinum }}</div><div class="scard__sub">to earn</div>{% endif %}
+            {% else %}<div class="scard__value scard__value--none">&ndash;</div><div class="scard__sub">none</div>{% endif %}
+        </div>
+        <div class="scard scard--tro{% if not defs.gold %} scard--tro-none{% endif %}" style="--scard-accent: var(--color-trophy-gold);">
+            {% if earned and defs.gold %}<span class="pp-horizon pp-horizon__track gd-tro__bar" data-gd-fill="{% widthratio earned.gold defs.gold 100 %}" style="--horizon-h: 4px; --horizon-progress: 0%; --horizon-accent: var(--color-trophy-gold);"><span class="pp-horizon__fill"></span></span>{% endif %}
+            <div class="scard__label">Gold</div>
+            {% if defs.gold %}
+                {% if earned %}<div class="scard__value pp-tally" data-gd-countup="{{ earned.gold|default:0 }}">{{ earned.gold|default:0 }}</div><div class="scard__sub">of {{ defs.gold }}</div>
+                {% else %}<div class="scard__value pp-tally">{{ defs.gold }}</div><div class="scard__sub">to earn</div>{% endif %}
+            {% else %}<div class="scard__value scard__value--none">&ndash;</div><div class="scard__sub">none</div>{% endif %}
+        </div>
+        <div class="scard scard--tro{% if not defs.silver %} scard--tro-none{% endif %}" style="--scard-accent: var(--color-trophy-silver);">
+            {% if earned and defs.silver %}<span class="pp-horizon pp-horizon__track gd-tro__bar" data-gd-fill="{% widthratio earned.silver defs.silver 100 %}" style="--horizon-h: 4px; --horizon-progress: 0%; --horizon-accent: var(--color-trophy-silver);"><span class="pp-horizon__fill"></span></span>{% endif %}
+            <div class="scard__label">Silver</div>
+            {% if defs.silver %}
+                {% if earned %}<div class="scard__value pp-tally" data-gd-countup="{{ earned.silver|default:0 }}">{{ earned.silver|default:0 }}</div><div class="scard__sub">of {{ defs.silver }}</div>
+                {% else %}<div class="scard__value pp-tally">{{ defs.silver }}</div><div class="scard__sub">to earn</div>{% endif %}
+            {% else %}<div class="scard__value scard__value--none">&ndash;</div><div class="scard__sub">none</div>{% endif %}
+        </div>
+        <div class="scard scard--tro{% if not defs.bronze %} scard--tro-none{% endif %}" style="--scard-accent: var(--color-trophy-bronze);">
+            {% if earned and defs.bronze %}<span class="pp-horizon pp-horizon__track gd-tro__bar" data-gd-fill="{% widthratio earned.bronze defs.bronze 100 %}" style="--horizon-h: 4px; --horizon-progress: 0%; --horizon-accent: var(--color-trophy-bronze);"><span class="pp-horizon__fill"></span></span>{% endif %}
+            <div class="scard__label">Bronze</div>
+            {% if defs.bronze %}
+                {% if earned %}<div class="scard__value pp-tally" data-gd-countup="{{ earned.bronze|default:0 }}">{{ earned.bronze|default:0 }}</div><div class="scard__sub">of {{ defs.bronze }}</div>
+                {% else %}<div class="scard__value pp-tally">{{ defs.bronze }}</div><div class="scard__sub">to earn</div>{% endif %}
+            {% else %}<div class="scard__value scard__value--none">&ndash;</div><div class="scard__sub">none</div>{% endif %}
+        </div>
+    {% endwith %}
+</div>

@@ -1,0 +1,65 @@
+{% comment %}
+Report-an-issue modal (rebuilt from the old DaisyUI JS-injected one). SSR here, gated on a linked
+viewer; game-flag.js wires open / counter / "other"-required / submit. Behaviour contract unchanged:
+POST /api/v1/games/<id>/flag/ with {flag_type, details}. flag_type option VALUES must stay as-is.
+{% endcomment %}
+<dialog id="game-flag-modal" class="gd-modal gd-modal--report pp-dismissable" data-game-id="{{ game.id }}" aria-label="Report an issue with this game">
+    <div class="gd-modal__head">
+        <h3>Report an issue</h3>
+        <button type="button" class="gd-modal__close" data-gd-modal-close aria-label="Close">&times;</button>
+    </div>
+    <form id="game-flag-form" class="gd-modal__body gd-report">
+        <div class="gd-report__field">
+            <label class="gd-report__label" for="flag-type">What&rsquo;s wrong?</label>
+            <select id="flag-type" name="flag_type" class="gd-report__select" required>
+                <option value="" disabled selected>Select an issue&hellip;</option>
+                <optgroup label="Store status">
+                    <option value="delisted">Game has been delisted</option>
+                    <option value="not_delisted">Game is NOT delisted (incorrect flag)</option>
+                </optgroup>
+                <optgroup label="Trophy obtainability">
+                    <option value="unobtainable">Trophies are unobtainable</option>
+                    <option value="obtainable">Trophies ARE obtainable (incorrect flag)</option>
+                </optgroup>
+                <optgroup label="Shovelware">
+                    <option value="is_shovelware">Game is shovelware</option>
+                    <option value="not_shovelware">Game is NOT shovelware (incorrect flag)</option>
+                </optgroup>
+                <optgroup label="VR support">
+                    <option value="missing_vr">Supports VR but isn&rsquo;t tagged</option>
+                </optgroup>
+                <optgroup label="Online trophies">
+                    <option value="has_online_trophies">Has online-required trophies</option>
+                    <option value="no_online_trophies">Does NOT have online trophies (incorrect flag)</option>
+                </optgroup>
+                <optgroup label="Buggy trophies">
+                    <option value="has_buggy_trophies">Has buggy / broken trophies</option>
+                    <option value="buggy_trophies_resolved">Buggy trophies have been fixed</option>
+                </optgroup>
+                <optgroup label="Regional info">
+                    <option value="region_incorrect">Regional info is incorrect</option>
+                </optgroup>
+                <optgroup label="Other">
+                    <option value="other">Other (please describe below)</option>
+                </optgroup>
+            </select>
+        </div>
+
+        <div class="gd-report__field">
+            <label class="gd-report__label" for="flag-details" data-flag-details-label>Additional details (optional)</label>
+            <textarea id="flag-details" name="details" class="gd-report__textarea" maxlength="500"
+                      placeholder="Anything that helps us review this faster&hellip;"></textarea>
+            <span class="gd-report__count"><b data-flag-count>0</b> / 500</span>
+        </div>
+
+        <p class="gd-report__note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            Reports are reviewed by our team and help keep game data accurate. Thanks for contributing.
+        </p>
+
+        <div class="gd-report__actions">
+            <button type="button" class="gd-btn gd-btn--ghost" data-gd-modal-close>Cancel</button>
+            <button type="submit" class="gd-btn gd-btn--primary" data-flag-submit>Submit report</button>
+        </div>
+    </form>
+</dialog>

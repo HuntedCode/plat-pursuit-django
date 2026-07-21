@@ -1,0 +1,246 @@
+{% load custom_filters humanize static job_icons %}
+<section class="gd-hero card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
+    <div class="card-body gd-hero__body p-3 md:p-5 lg:p-6">
+
+        {# Headline "X Players" -- absolutely positioned in the top-right corner so it never reflows the card. Jumps to the Community view. #}
+        {% if game.played_count %}
+            <a href="?view=community" data-gd-goto="community" class="gd-hero__players" title="See who's played {{ game.title_name }}">
+                <span class="pp-tally pp-tally--lg gd-hero__players-n" data-gd-countup="{{ game.played_count }}">{{ game.played_count|intcomma }}</span>
+                <span class="gd-hero__players-lbl">Player{{ game.played_count|pluralize }} &rsaquo;</span>
+            </a>
+        {% endif %}
+
+        {% if viewing_other_profile %}
+            {# Ownership-aware banner (badge-detail pattern): this is someone else's progress. #}
+            <div class="gd-viewing">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span>Viewing <strong>{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}</strong>'s progress</span>
+                <a href="{% url 'game_detail' np_communication_id=game.np_communication_id %}" class="gd-viewing__mine">View mine &rsaquo;</a>
+            </div>
+        {% endif %}
+
+        {# ── Hero row: cover (star) · identity · one community headline ── #}
+        <div class="gd-hero__grid">
+
+            <figure class="gd-cover">
+                <img src="{{ game.display_image_url }}" alt="{{ game.title_name }} {% if game.has_cover_art %}cover{% else %}icon{% endif %}"
+                     loading="eager" decoding="async"
+                     class="w-full h-full {% if game.has_cover_art %}object-cover object-top{% else %}object-contain p-4{% endif %}" />
+            </figure>
+
+            <div class="gd-hero__main pp-head-cascade">
+                <div class="gd-hero__chips">
+                    {% for platform in game.title_platform %}
+                        <span class="gd-plat">{{ platform }}</span>
+                    {% endfor %}
+                    {% if game.is_regional %}
+                        {% for region in game.region %}<span class="gd-plat gd-plat--region">{{ region }}</span>{% endfor %}
+                    {% else %}
+                        <span class="gd-plat gd-plat--ww" title="Worldwide release">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>WW
+                        </span>
+                    {% endif %}
+                    {% if game.is_shovelware %}
+                        <span class="gd-plat gd-plat--warn" title="Flagged as shovelware">Shovelware</span>
+                    {% endif %}
+                </div>
+
+                <h1 class="gd-hero__title">{{ game.title_name }}</h1>
+
+                <div class="gd-hero__facts">
+                    {% for cc in game.concept.concept_companies.all %}{% if cc.is_developer %}
+                        <span class="gd-fact"><span class="gd-fact__k">Developer</span><a href="{% url 'company_detail' slug=cc.company.slug %}" class="gd-fact__v gd-fact__v--link">{{ cc.company.name }}</a></span>
+                    {% endif %}{% endfor %}
+                    {% for cc in game.concept.concept_companies.all %}{% if cc.is_publisher %}
+                        <span class="gd-fact"><span class="gd-fact__k">Publisher</span><a href="{% url 'company_detail' slug=cc.company.slug %}" class="gd-fact__v gd-fact__v--link">{{ cc.company.name }}</a></span>
+                    {% endif %}{% endfor %}
+                    {% with release_date=game.platform_release_date %}{% if release_date %}
+                        <span class="gd-fact"><span class="gd-fact__k">Released</span><time datetime="{{ release_date|date:'Y-m-d' }}" class="gd-fact__v">{{ release_date|date }}</time></span>
+                    {% endif %}{% endwith %}
+                    {% with igdb=game.concept.igdb_match %}{% if igdb.is_trusted and igdb.completion_time_display %}
+                        <span class="gd-fact"><span class="gd-fact__k">Est. Completion</span><span class="gd-fact__v">{{ igdb.completion_time_display }}</span></span>
+                    {% endif %}{% endwith %}
+                </div>
+
+                {% include 'trophies/partials/_game_flags.html' with game=game variant='full' hide_shovelware=True %}
+
+                {# Condensed "About" — fills the space beside the tall cover; the full version is the About tab. #}
+                {% with igdb=game.concept.igdb_match %}
+                {% if igdb.is_trusted and igdb.igdb_summary %}
+                    <div class="gd-hero__about">
+                        <p class="gd-about-blurb">{{ igdb.igdb_summary }}</p>
+                        {% if game.concept.concept_genres.all or game.concept.concept_themes.all %}
+                            <div class="gd-about-tags">
+                                {% for cg in game.concept.concept_genres.all|slice:":3" %}<span class="gd-tag">{{ cg.genre.name }}</span>{% endfor %}
+                                {% for ct in game.concept.concept_themes.all|slice:":2" %}<span class="gd-tag gd-tag--theme">{{ ct.theme.name }}</span>{% endfor %}
+                            </div>
+                        {% endif %}
+                        <button type="button" class="gd-about-more" data-gd-goto="about">More about this game
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                        </button>
+                    </div>
+                {% endif %}
+                {% endwith %}
+
+                {# Your progress on this game — lean + ownership-aware, tucked below About and pinned to the column bottom. #}
+                <div class="gd-substance">
+                    {% if target_profile %}
+                        {% with pct=profile_progress.progress|floatformat:0|default:0 %}
+                        <div class="gd-prog">
+                            <div class="gd-prog__top">
+                                <span class="gd-prog__state">
+                                    {% if profile_progress and profile_progress.progress >= 100 %}
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Completed
+                                    {% elif profile_progress and profile_progress.progress > 0 %}In progress
+                                    {% else %}Not started{% endif %}
+                                </span>
+                                <a href="{% url 'profile_detail' profile.psn_username %}" class="gd-prog__avenue">{% if viewing_other_profile %}{{ profile.display_psn_username }}'s profile{% else %}Your profile{% endif %} &rsaquo;</a>
+                            </div>
+                            <div class="gd-prog__meter">
+                                <span class="pp-tally pp-tally--lg gd-prog__pct{% if profile_progress and profile_progress.progress >= 100 %} is-complete{% endif %}" data-gd-countup="{{ pct }}">{{ pct }}</span><span class="gd-prog__pctsign">%</span>
+                                {% if group_bars %}
+                                    <div class="gd-groupbar gd-prog__bar" role="img" aria-label="Completion by trophy group">
+                                        <div class="gd-groupbar__seg gd-groupbar__seg--main" style="flex: {{ group_bars.dlcs|length|add:1 }} 1 0;" title="{{ group_bars.main.name }} &middot; {{ group_bars.main.pct }}% ({{ group_bars.main.earned }}/{{ group_bars.main.total }})"><span class="gd-groupbar__fill" data-gd-fill="{{ group_bars.main.pct }}"></span></div>
+                                        {% for dlc in group_bars.dlcs %}<div class="gd-groupbar__seg gd-groupbar__seg--dlc" style="flex: 1 1 0;" title="{{ dlc.name }} &middot; {{ dlc.pct }}% ({{ dlc.earned }}/{{ dlc.total }})"><span class="gd-groupbar__fill" data-gd-fill="{{ dlc.pct }}"></span></div>{% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div class="pp-horizon pp-horizon__track gd-prog__bar" data-gd-fill="{{ pct }}" style="--horizon-h: 9px; --horizon-progress: 0%;"><span class="pp-horizon__fill"></span></div>
+                                {% endif %}
+                            </div>
+                            {% if group_bars.dlcs %}
+                                <div class="gd-groupbar__legend">
+                                    <span><i class="gd-groupbar__dot gd-groupbar__dot--main"></i>Base game</span>
+                                    <span><i class="gd-groupbar__dot gd-groupbar__dot--dlc"></i>{{ group_bars.dlc_total }} DLC{{ group_bars.dlc_total|pluralize }}{% if group_bars.combined_dlc %} (combined){% endif %}</span>
+                                </div>
+                            {% endif %}
+                            {# Trophy haul, promoted to 4-across cards. Deeper personal stats live in the My Stats modal below. #}
+                            {% include 'trophies/partials/game_detail/_trophy_cards.html' with earned=profile_trophy_totals %}
+                        </div>
+                        {% endwith %}
+                    {% else %}
+                        {# Logged-out (or authed-unlinked): Platinum Outlook (PSN-global difficulty + the wall), set composition, then a join CTA. The SEO funnel's first impression. #}
+                        {% if outlook %}{% include 'trophies/partials/game_detail/_outlook.html' %}{% endif %}
+                        {% include 'trophies/partials/game_detail/_trophy_cards.html' %}
+                        <div class="gd-cta">
+                            <p class="gd-cta__proof">
+                                {% if outlook.played_count and outlook.played_count >= 25 %}<b>{{ outlook.played_count|intcomma }}</b> hunters here are chasing this platinum.
+                                {% elif outlook.site_hunters %}Join <b>{{ outlook.site_hunters|intcomma }}</b> hunters tracking their platinums on Platinum Pursuit.
+                                {% else %}Track your platinum journey on Platinum Pursuit.{% endif %}
+                            </p>
+                            <div class="gd-cta__actions">
+                                {% if user.is_authenticated %}
+                                    <a href="{% url 'link_psn' %}" class="gd-btn gd-btn--primary">Link your PSN</a>
+                                    <span class="gd-cta__alt">to track your progress on this game</span>
+                                {% else %}
+                                    <a href="{% url 'account_signup' %}" class="gd-btn gd-btn--primary">Start tracking free</a>
+                                    <span class="gd-cta__alt">Already a member? <a href="{% url 'account_login' %}">Sign in</a></span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+
+                {% if target_profile or user.is_authenticated and user.profile %}
+                    <div class="gd-hero__actions">
+                        {# Lead action: deep-dive stats modal. target_profile-gated so a shared /games/<np>/<username>/ link shows it to anon viewers too (account actions stay auth-only). #}
+                        {% if target_profile %}
+                            <button type="button" class="gd-btn gd-btn--primary" data-stats-open aria-haspopup="dialog" aria-controls="gd-stats-modal">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s Stats{% else %}My Stats{% endif %}
+                            </button>
+                        {% endif %}
+                        {% if user.is_authenticated and user.profile %}
+                        {% if earned_trophy_id %}
+                            <button id="share-card-btn" class="gd-btn" aria-label="Create share card"
+                                    data-earned-trophy-id="{{ earned_trophy_id }}" data-game-name="{{ game.title_name }}"
+                                    data-game-image="{{ game.display_image_url }}" data-concept-bg-url="{{ concept_bg_url }}"
+                                    data-concept-id="{{ game.concept.id|default:'' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>Share Card
+                            </button>
+                        {% endif %}
+                        <div id="quick-add-container" data-game-id="{{ game.id }}">
+                            <button class="gd-btn quick-add-trigger" aria-label="Add to list">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Add to List
+                            </button>
+                        </div>
+                        {% if user.profile.is_linked %}
+                            <button id="game-flag-btn" class="gd-btn gd-btn--ghost" aria-label="Report a data issue" data-game-id="{{ game.id }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>Report
+                            </button>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+
+            {# Screenshots + spine cross-links — left column beneath the cover on desktop; below the fold on mobile. #}
+            <div class="gd-hero__extras pp-head-cascade">
+                {% if game.concept and image_urls.screenshot_urls %}
+                    <div class="gd-shots" id="gd-shots">
+                        {% for url in image_urls.screenshot_urls|slice:":3" %}
+                            <button type="button" class="gd-shots__thumb" data-shot="{{ forloop.counter0 }}" aria-label="View screenshot {{ forloop.counter }}">
+                                <img src="{{ url }}" alt="{{ game.title_name }} screenshot {{ forloop.counter }}" loading="lazy" decoding="async" class="w-full h-full object-cover" />
+                                {% if forloop.last and image_urls.screenshot_urls|length > 3 %}
+                                    <span class="gd-shots__more">+{{ image_urls.screenshot_urls|length|add:"-3" }}</span>
+                                {% endif %}
+                            </button>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="gd-shots gd-shots--empty" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/></svg>
+                        No screenshots
+                    </div>
+                {% endif %}
+
+                {% comment %} Spine: the Badge series + Job Board contract this game belongs to (each opens a
+                detail modal). Objects (medallions / job icons) are the focal point; a caption sits beneath. {% endcomment %}
+                <div class="gd-spine">
+                    {% if badges %}
+                        <button type="button" class="gd-spine__row gd-spine__row--badges" data-spine-open="badges" aria-haspopup="dialog">
+                            <span class="gd-spine__disc" aria-hidden="true"></span>
+                            <div class="gd-spine__main">
+                                <div class="gd-spine__peek">
+                                    {% for badge in badges|slice:":3" %}<span class="gd-spine__obj gd-spine__obj--badge" title="{{ badge.display_series|default:badge.name }}">{% include 'components/badge_medallion.html' with frame=badge.frame no_id=True %}</span>{% endfor %}
+                                    {% if badges|length > 3 %}<span class="gd-spine__more">+{{ badges|length|add:"-3" }} more</span>{% endif %}
+                                </div>
+                                <span class="gd-spine__cap">{{ badges|length }} Badge Series</span>
+                            </div>
+                            <svg class="gd-spine__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                    {% else %}
+                        <div class="gd-spine__row gd-spine__row--empty">
+                            <div class="gd-spine__main">
+                                <div class="gd-spine__peek"><span class="gd-spine__obj gd-spine__obj--ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg></span></div>
+                                <span class="gd-spine__cap">Not in a badge series</span>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    {% if pursuit_jobs %}
+                        {# Same shared modal for all: linked -> contract_modal (real progress); anon/unlinked -> contract_modal_preview (anonymized, trophies + CTA footer). The career href is the no-JS fallback. #}
+                        <a class="gd-spine__row gd-spine__row--contract" aria-haspopup="dialog"
+                           data-contract-url="{% if user.is_authenticated and user.profile.is_linked %}{% url 'contract_modal' pursuit_contract.slug %}{% else %}{% url 'contract_modal_preview' pursuit_contract.slug %}{% endif %}"
+                           href="{% url 'career' %}?view=contracts#career-panel-contracts"
+                           style="{{ pursuit_disc_style|safe }}">
+                            <span class="gd-spine__disc" aria-hidden="true"></span>
+                            <div class="gd-spine__main">
+                                <div class="gd-spine__peek">
+                                    {% for job in pursuit_jobs %}<span class="gd-jobmini" style="--disc: var(--disc-{{ job.disc_slug }}, var(--pp-primary));" title="{{ job.name }}">{% job_icon job.icon '' %}</span>{% endfor %}
+                                </div>
+                                <span class="gd-spine__cap">{{ pursuit_jobs|length }} Job{{ pursuit_jobs|length|pluralize }}{% if pursuit_xp_per_job %} &middot; {{ pursuit_xp_per_job|intcomma }} XP per Job{% endif %}{% if pursuit_contract_state.status == 'banked' %} <span class="gd-spine__state gd-spine__state--done">Banked</span>{% elif pursuit_contract_state.status == 'claimable' %} <span class="gd-spine__state gd-spine__state--claim">Claimable</span>{% endif %}</span>
+                            </div>
+                            <svg class="gd-spine__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                        </a>
+                    {% else %}
+                        <div class="gd-spine__row gd-spine__row--empty">
+                            <div class="gd-spine__main">
+                                <div class="gd-spine__peek"><span class="gd-jobmini gd-jobmini--ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span></div>
+                                <span class="gd-spine__cap">Not on the Job Board</span>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

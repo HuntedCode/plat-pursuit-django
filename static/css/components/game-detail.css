@@ -1,0 +1,642 @@
+/* ============================================================
+   Game Detail (rebuild) — hero + view switcher panels + trophies.
+   Tokens only (--pp-* / --disc-* / --color-trophy-*). Artwork-overlay
+   page: the hero carries a restrained blurred backdrop of the game art;
+   everything else sits on the deepened substrate.
+   ============================================================ */
+
+/* ---- View panels ---- */
+.gd-view[hidden] { display: none; }
+#browse-results { transition: opacity var(--pp-dur) var(--pp-ease); }
+#browse-results.is-swapping { opacity: 0.45; pointer-events: none; }
+
+/* ============================================================
+   Hero
+   ============================================================ */
+/* Clean substrate hero — no art backdrop (deliberate: cleaner, more premium). */
+/* Mobile: cover -> main (identity + progress) -> extras (screenshots + spine), in source order so the
+   title/progress follow the cover immediately. Desktop: cover + extras stack in the left column; main
+   spans the right. */
+.gd-hero__grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+@media (min-width: 1024px) {
+    .gd-hero__grid {
+        grid-template-columns: minmax(180px, 250px) 1fr;
+        grid-template-areas: "cover main" "extras main";
+        grid-template-rows: auto auto;
+        column-gap: 1.5rem; row-gap: 1rem;
+        align-items: stretch;
+    }
+    .gd-cover { grid-area: cover; align-self: start; }   /* don't stretch the aspect-ratio cover */
+    .gd-hero__main { grid-area: main; }
+    .gd-hero__extras { grid-area: extras; align-self: start; }
+}
+
+/* Ownership banner — "viewing X's progress" (badge-detail pattern). */
+.gd-viewing { display: flex; align-items: center; gap: 8px; padding: 7px 12px; margin-bottom: 2px; border-radius: var(--pp-radius-sm); font-size: 0.8rem; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-secondary) 12%, transparent); border: 1px solid color-mix(in oklab, var(--pp-secondary) 30%, var(--pp-border)); }
+.gd-viewing > svg { width: 15px; height: 15px; flex: none; color: var(--pp-text-mute); }
+.gd-viewing strong { color: var(--pp-text); }
+.gd-viewing__mine { margin-left: auto; color: var(--pp-primary); text-decoration: none; font-weight: 600; white-space: nowrap; }
+.gd-viewing__mine:hover { text-decoration: underline; }
+
+/* Cover + screenshots */
+.gd-hero__extras { display: flex; flex-direction: column; gap: 10px; }
+.gd-cover {
+    position: relative; aspect-ratio: 3 / 4; width: 58%; max-width: 220px; margin: 0 auto;
+    border-radius: var(--pp-radius-md); border: 2px solid var(--pp-border); overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 10px 30px rgba(0,0,0,0.4);
+    transition: transform var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+@media (min-width: 1024px) { .gd-cover { width: 100%; max-width: none; } }
+
+/* Headline "X Players" -- absolute top-right of the hero card, so it never reflows the content. */
+.gd-hero__players {
+    position: absolute; top: 12px; right: 14px; z-index: 2;
+    display: flex; flex-direction: column; align-items: flex-end; line-height: 1;
+    text-decoration: none; text-align: right;
+    animation: gdPlayersIn 0.5s var(--pp-ease) 0.22s backwards;
+}
+@keyframes gdPlayersIn { from { opacity: 0; } to { opacity: 1; } }
+.gd-hero__players-n { color: var(--pp-primary); line-height: 1; }
+.gd-hero__players-lbl { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 3px; transition: color var(--pp-dur-fast) var(--pp-ease); }
+.gd-hero__players:hover .gd-hero__players-lbl { color: var(--pp-primary); }
+.gd-hero__players:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: var(--pp-radius-sm); }
+@media (min-width: 768px) { .gd-hero__players { top: 18px; right: 20px; } }
+@media (min-width: 1024px) {
+    .gd-hero__players { top: 22px; right: 24px; }
+    /* Reserve the corner's footprint on the title so a long name wraps before it (only on desktop,
+       where main sits beside the cover; below 1024px the corner is up beside the stacked cover). */
+    .gd-hero__body:has(.gd-hero__players) .gd-hero__title { padding-right: 96px; }
+}
+@media (prefers-reduced-motion: reduce) { .gd-hero__players { animation: none; } }
+@media (hover: hover) {
+    .gd-cover:hover {
+        transform: translateY(-3px);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 16px 42px rgba(0,0,0,0.5);
+    }
+}
+/* Cover art materialises on load -- a subtle focus-in (fade + settle from a hair zoomed). Animating the
+   IMG (not the figure) keeps the figure's hover transform free of conflict. */
+.gd-cover img { animation: gdCoverIn 0.6s var(--pp-ease) both; }
+@keyframes gdCoverIn { from { opacity: 0; transform: scale(1.06); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .gd-cover img { animation: none; } }
+.gd-shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 100%; }
+.gd-shots__thumb {
+    position: relative; aspect-ratio: 16 / 9; border-radius: var(--pp-radius-sm); overflow: hidden;
+    border: 1px solid var(--pp-border); cursor: pointer; padding: 0; background: none;
+    transition: border-color var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-shots__thumb:hover { border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
+.gd-shots__more { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.55); color: #fff; font-weight: 700; font-size: 0.8rem; }
+
+/* Identity column — a tight cluster (chips → title → facts → flags). The .pp-head-cascade
+   lives on the card-body, so the hero row / substance / actions / band are the real beats. */
+.gd-hero__main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.gd-hero__chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.gd-plat {
+    display: inline-flex; align-items: center; gap: 3px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
+    padding: 2px 8px; border-radius: 999px; color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-bg-2) 70%, transparent); border: 1px solid var(--pp-border);
+}
+.gd-plat--region { color: var(--pp-text); }
+.gd-plat--ww svg { width: 12px; height: 12px; }
+.gd-plat--warn { color: var(--pp-warning); border-color: color-mix(in oklab, var(--pp-warning) 40%, var(--pp-border)); }
+
+.gd-hero__title { font-family: var(--pp-font-display); font-weight: 800; line-height: 1.05; font-size: clamp(1.5rem, 4vw, 2.4rem); color: var(--pp-text); }
+
+.gd-hero__facts { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.gd-fact { display: flex; flex-direction: column; gap: 1px; }
+.gd-fact__k { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+.gd-fact__v { font-size: 0.82rem; color: var(--pp-text-dim); }
+.gd-fact__v--link { color: var(--pp-text); text-decoration: none; transition: color var(--pp-dur-fast) var(--pp-ease); }
+.gd-fact__v--link:hover { color: var(--pp-primary); }
+
+/* Condensed About — fills the space beside the tall cover; jumps to the full About tab. */
+/* Hidden on mobile to save vertical space (the full About lives in the About tab); shown from md up. */
+.gd-hero__about { display: none; flex-direction: column; gap: 8px; margin-top: 2px; }
+@media (min-width: 768px) { .gd-hero__about { display: flex; } }
+.gd-about-blurb { font-size: 0.82rem; line-height: 1.5; color: var(--pp-text-dim); display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+/* When JS clamps the blurb to fit the header boundary, fade the cut edge instead of a hard clip. */
+.gd-hero__about.is-clamped .gd-about-blurb { -webkit-mask-image: linear-gradient(180deg, #000 58%, transparent 100%); mask-image: linear-gradient(180deg, #000 58%, transparent 100%); }
+.gd-about-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.gd-tag { font-size: 0.68rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 65%, transparent); border: 1px solid var(--pp-border); }
+.gd-tag--theme { color: var(--pp-text-mute); }
+.gd-about-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; font-size: 0.75rem; font-weight: 600; color: var(--pp-primary); background: none; border: none; cursor: pointer; }
+.gd-about-more svg { width: 14px; height: 14px; transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-about-more:hover svg { transform: translateX(2px); }
+/* Desktop: a few more summary lines; the genre/theme tags + "More about this game" sit directly beneath it. */
+@media (min-width: 1024px) { .gd-about-blurb { -webkit-line-clamp: 6; line-clamp: 6; } }
+
+/* Substance: the lean, ownership-aware progress readout (the game is the star). */
+/* Flex column so the anon stack (Outlook verdict, trophy grid, CTA) is spaced; 6px gap + the blocks'
+   2px margins == 8px, matching the badge/contract spine. Harmless for the authed single .gd-prog child;
+   margin-top:auto still floats it down. */
+.gd-substance { display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--pp-divider); }
+.gd-prog { display: flex; flex-direction: column; gap: 0.6rem; }
+.gd-prog__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gd-prog__state { display: inline-flex; align-items: center; gap: 5px; font-size: 0.8rem; font-weight: 600; color: var(--pp-text-dim); }
+.gd-prog__state svg { width: 15px; height: 15px; color: var(--pp-primary); }
+.gd-prog__avenue { font-size: 0.75rem; font-weight: 600; color: var(--pp-primary); text-decoration: none; white-space: nowrap; transition: color var(--pp-dur-fast) var(--pp-ease); }
+.gd-prog__avenue:hover { text-decoration: underline; }
+.gd-prog__meter { display: flex; align-items: center; gap: 0; }
+/* Neutral by default so the game title wins the hero; the % earns the cyan accent only at 100%. */
+.gd-prog__pct { color: var(--pp-text); line-height: 1; flex: none; }
+.gd-prog__pct.is-complete { color: var(--pp-primary); }
+.gd-prog__pctsign { font-family: var(--pp-font-display); font-weight: 800; font-size: 1rem; color: var(--pp-text-mute); flex: none; margin: 0 12px 0 1px; }
+.gd-prog__bar { flex: 1; }
+
+/* Composite per-trophy-group progress bar: one segment per group. Base = cyan (wide), DLC = violet. */
+.gd-groupbar { display: flex; align-items: stretch; gap: 3px; height: 11px; }
+.gd-groupbar__seg { position: relative; min-width: 12px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border); }
+/* Colour the track outline + a faint tint by type, so each segment reads even at 0% progress. */
+.gd-groupbar__seg--main { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 9%, var(--pp-bg-0)); }
+.gd-groupbar__seg--dlc { border-color: color-mix(in oklab, var(--pp-secondary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-secondary) 9%, var(--pp-bg-0)); }
+.gd-groupbar__fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 999px; transition: width 0.6s cubic-bezier(0.34, 1.3, 0.64, 1); }
+.gd-groupbar__seg--main .gd-groupbar__fill { background: linear-gradient(90deg, color-mix(in oklab, var(--pp-primary) 60%, transparent), var(--pp-primary)); box-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 60%, transparent), 0 0 4px color-mix(in oklab, var(--pp-primary) 45%, transparent); }
+.gd-groupbar__seg--dlc .gd-groupbar__fill { background: linear-gradient(90deg, color-mix(in oklab, var(--pp-secondary) 60%, transparent), var(--pp-secondary)); box-shadow: 0 0 10px color-mix(in oklab, var(--pp-secondary) 60%, transparent), 0 0 4px color-mix(in oklab, var(--pp-secondary) 45%, transparent); }
+.gd-groupbar__legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 0.62rem; color: var(--pp-text-mute); }
+.gd-groupbar__legend span { display: inline-flex; align-items: center; gap: 5px; }
+.gd-groupbar__dot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+.gd-groupbar__dot--main { background: var(--pp-primary); }
+.gd-groupbar__dot--dlc { background: var(--pp-secondary); }
+
+/* Actions */
+.gd-hero__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.gd-btn {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    padding: 7px 14px; border-radius: var(--pp-radius-sm); color: var(--pp-text);
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+    transition: background var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-btn svg { width: 15px; height: 15px; }
+.gd-btn:hover { background: color-mix(in oklab, var(--pp-primary) 22%, transparent); box-shadow: 0 0 14px -3px color-mix(in oklab, var(--pp-primary) 60%, transparent); }
+.gd-btn--ghost { background: transparent; border-color: var(--pp-border); color: var(--pp-text-dim); }
+.gd-btn--ghost:hover { background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); box-shadow: none; color: var(--pp-text); }
+#quick-add-container { position: relative; display: inline-flex; }
+
+/* ---- Left-column spine rows: the Badge series + Job Board contract this game belongs to.
+   Clickable rows (not boxes); the medallions / job icons are the focal point, with a caption
+   beneath and a chevron. Each opens a detail modal. ---- */
+.gd-spine { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.gd-spine__row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 11px; border-radius: var(--pp-radius-md); text-align: left; cursor: pointer; color: inherit; text-decoration: none; background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px solid transparent; transition: background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-spine__row:hover { background: var(--pp-bg-2); border-color: var(--pp-border); }
+.gd-spine__row:hover .gd-spine__chev { transform: translateX(2px); color: var(--pp-text-dim); }
+/* Badge row — cyan (brand) accent bar + wash. Contract row — coloured by the discipline(s) it spans. */
+.gd-spine__row--badges { position: relative; border-color: color-mix(in oklab, var(--pp-primary) 28%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 9%, color-mix(in oklab, var(--pp-bg-2) 45%, transparent)); }
+.gd-spine__row--badges:hover { border-color: color-mix(in oklab, var(--pp-primary) 48%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
+.gd-spine__row--contract { position: relative; border-color: color-mix(in oklab, var(--disc-1, var(--pp-primary)) 28%, var(--pp-border)); background: color-mix(in oklab, var(--disc-1, var(--pp-primary)) 9%, color-mix(in oklab, var(--pp-bg-2) 45%, transparent)); }
+.gd-spine__row--contract:hover { border-color: color-mix(in oklab, var(--disc-1, var(--pp-primary)) 48%, var(--pp-border)); background: color-mix(in oklab, var(--disc-1, var(--pp-primary)) 14%, var(--pp-bg-2)); }
+.gd-spine__disc { position: absolute; left: 0; top: 4px; bottom: 4px; width: 3px; border-radius: 0 3px 3px 0; background: var(--disc-grad, var(--pp-primary)); }
+.gd-spine__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.gd-spine__peek { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.gd-spine__peek:has(.gd-spine__obj--badge) { gap: 7px; }   /* badges get more room; the 6-job row stays tight */
+.gd-spine__obj { width: 40px; height: 40px; display: grid; place-items: center; }
+.gd-spine__obj--badge { width: auto; height: auto; }               /* the Medallion carries its own cast/rim depth */
+.gd-spine__obj--badge .pp-med { --sz: 44px; }                       /* override .pp-med's own --sz default */
+.gd-spine__obj--badge .pp-med__count { display: none; }            /* declutter the small peek */
+/* Empty badge socket: a dashed medallion-sized well, not a faded floating icon. */
+.gd-spine__obj--ph {
+    width: 44px; height: 44px; border-radius: 999px; color: var(--pp-text-mute);
+    background: radial-gradient(circle at 50% 36%, color-mix(in oklab, var(--pp-bg-3) 75%, transparent), var(--pp-bg-1));
+    border: 1.5px dashed color-mix(in oklab, var(--pp-border) 78%, var(--pp-text-mute));
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.28);
+}
+.gd-spine__obj--ph svg { width: 19px; height: 19px; opacity: 0.5; }
+.gd-spine__more { align-self: center; font-size: 0.68rem; font-weight: 700; color: var(--pp-text-mute); }
+.gd-spine__cap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.72rem; color: var(--pp-text-dim); }
+.gd-spine__chev { width: 16px; height: 16px; flex: none; color: var(--pp-text-mute); transition: transform var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease); }
+.gd-spine__row--empty { cursor: default; background: transparent; border-style: dashed; border-color: var(--pp-border); }
+.gd-spine__row--empty:hover { background: transparent; border-style: dashed; border-color: var(--pp-border); }
+.gd-spine__row--empty .gd-spine__cap { color: var(--pp-text-mute); }
+.gd-spine__state { font-size: 0.55rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.gd-spine__state--done { background: color-mix(in oklab, var(--pp-success) 20%, transparent); color: var(--pp-success); }
+.gd-spine__state--claim { background: color-mix(in oklab, var(--pp-accent) 20%, transparent); color: var(--pp-accent); }
+
+/* Disc-tinted job icon tile (contract peek + placeholder) — sized so all 6 possible jobs fit one line. */
+.gd-jobmini { --disc: var(--pp-primary); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--disc); background: color-mix(in oklab, var(--disc) 20%, var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 42%, var(--pp-border)); box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
+.gd-jobmini svg { width: 15px; height: 15px; }
+/* Empty job socket: same dashed-well language at the 28px job-tile footprint. */
+.gd-jobmini--ph {
+    --disc: var(--pp-text-mute); color: var(--pp-text-mute);
+    background: radial-gradient(circle at 50% 34%, color-mix(in oklab, var(--pp-bg-3) 75%, transparent), var(--pp-bg-1));
+    border: 1.5px dashed color-mix(in oklab, var(--pp-border) 78%, var(--pp-text-mute));
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.28);
+}
+.gd-jobmini--ph svg { opacity: 0.5; }
+
+/* Spine detail modals (badges list / contract summary). */
+.gd-modal { border: none; padding: 0; width: min(92vw, 440px); max-width: 440px; margin: auto; border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); color: var(--pp-text); box-shadow: 0 30px 90px rgba(0,0,0,0.55); overflow: hidden; }
+.gd-modal:not([open]) { display: none; }
+.gd-modal[open] { animation: gdModalIn 0.2s var(--pp-ease) both; }
+@keyframes gdModalIn { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
+/* Choreographed exit (JS adds .is-closing, waits for animationend, then .close()) -- exits as carefully
+   as entrances rather than popping shut. */
+.gd-modal.is-closing { animation: gdModalOut 0.18s var(--pp-ease) both; }
+@keyframes gdModalOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(6px) scale(0.985); } }
+.gd-modal.is-closing::backdrop { animation: gdModalScrimOut 0.18s ease both; }
+@keyframes gdModalScrimOut { from { opacity: 1; } to { opacity: 0; } }
+.gd-modal::backdrop { background: rgba(2, 4, 8, 0.6); backdrop-filter: blur(3px); }
+.gd-modal.pp-dismissable::before { display: none; }   /* swipe enabled, but no grabber over the header */
+.gd-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--pp-divider); }
+.gd-modal__head h3 { font-size: 0.95rem; font-weight: 700; }
+.gd-modal__close { background: none; border: none; cursor: pointer; color: var(--pp-text-mute); font-size: 1.4rem; line-height: 1; padding: 0 4px; }
+.gd-modal__close:hover { color: var(--pp-text); }
+.gd-modal__body { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; max-height: 70vh; overflow-y: auto; }
+/* Badges-this-game-is-in: a showcase grid of medallion objects (as-designed look). */
+.gd-modal--badges { width: min(94vw, 520px); max-width: 520px; }
+.gd-badgegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.gd-badgecard {
+    display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 14px 8px 11px; text-align: center; text-decoration: none;
+    border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    transition: transform var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-badgecard:hover { transform: translateY(-3px); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); box-shadow: 0 8px 22px -8px rgba(0,0,0,0.5); }
+.gd-badgecard__art { flex: none; }
+.gd-badgecard__art .pp-med { --sz: 70px; }        /* the medallion is the object; give it room */
+.gd-badgecard__art .pp-med__count { display: none; }
+.gd-badgecard__name { font-size: 0.8rem; font-weight: 700; line-height: 1.2; color: var(--pp-text); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gd-badgecard__type { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); }
+
+/* Staggered rise on open (JS re-arms .is-revealing). */
+@keyframes gdBadgeRise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+.gd-badgegrid.is-revealing .gd-badgecard { animation: gdBadgeRise 0.38s var(--pp-ease) both; }
+.gd-badgegrid.is-revealing .gd-badgecard:nth-child(2) { animation-delay: 0.045s; }
+.gd-badgegrid.is-revealing .gd-badgecard:nth-child(3) { animation-delay: 0.09s; }
+.gd-badgegrid.is-revealing .gd-badgecard:nth-child(4) { animation-delay: 0.135s; }
+.gd-badgegrid.is-revealing .gd-badgecard:nth-child(5) { animation-delay: 0.18s; }
+.gd-badgegrid.is-revealing .gd-badgecard:nth-child(n+6) { animation-delay: 0.225s; }
+@media (prefers-reduced-motion: reduce) { .gd-badgegrid.is-revealing .gd-badgecard { animation: none; } }
+
+/* ============================================================
+   Report-an-issue modal form (rebuilt from the old DaisyUI one)
+   ============================================================ */
+.gd-modal--report { width: min(94vw, 460px); max-width: 460px; }
+.gd-report { gap: 13px; }
+.gd-report__field { display: flex; flex-direction: column; gap: 5px; }
+.gd-report__label { font-size: 0.78rem; font-weight: 600; color: var(--pp-text-dim); }
+.gd-report__select, .gd-report__textarea {
+    width: 100%; font-family: inherit; font-size: 0.85rem; color: var(--pp-text);
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
+    padding: 9px 11px; transition: border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-report__select {
+    appearance: none; -webkit-appearance: none; padding-right: 32px; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b93a1' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; background-size: 15px;
+}
+.gd-report__select:focus, .gd-report__textarea:focus {
+    outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent);
+}
+.gd-report__textarea { min-height: 82px; resize: vertical; line-height: 1.5; }
+.gd-report__textarea::placeholder { color: var(--pp-text-mute); }
+.gd-report__count { align-self: flex-end; font-size: 0.68rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.gd-report__count b { color: var(--pp-text-dim); font-weight: 700; }
+.gd-report__note {
+    display: flex; gap: 8px; align-items: flex-start; font-size: 0.76rem; line-height: 1.45; color: var(--pp-text-dim);
+    padding: 9px 11px; border-radius: var(--pp-radius-md);
+    background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--pp-primary) 20%, var(--pp-border));
+}
+.gd-report__note svg { width: 15px; height: 15px; flex: none; color: var(--pp-primary); margin-top: 1px; }
+.gd-report__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+
+/* ============================================================
+   Premium polish: tactile press + keyboard focus (Google/Apple lens)
+   ============================================================ */
+/* Press: a subtle compress that reads as "physical", preserving any resting transform. */
+.gd-btn, .gd-shots__thumb, .gd-about-more, .gd-shotmodal__close, .gd-shotmodal__thumb { transition: transform 0.12s var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-btn:active { transform: scale(0.96); }
+.gd-shots__thumb:active { transform: scale(0.96); }
+.gd-about-more:active { transform: scale(0.96); }
+.gd-spine__row:active { transform: scale(0.985); }
+.gd-badgecard:active { transform: translateY(-1px) scale(0.98); }
+.gd-shotmodal__close:active, .gd-shotmodal__thumb:active { transform: scale(0.9); }
+.gd-shotmodal__nav:active { transform: translateY(-50%) scale(0.9); }   /* keep the vertical centering */
+
+/* Focus-visible: one cohesive keyboard ring across the hero's interactive elements. */
+.gd-btn:focus-visible, .gd-spine__row:focus-visible, .gd-badgecard:focus-visible, .gd-shots__thumb:focus-visible,
+.gd-about-more:focus-visible, .gd-prog__avenue:focus-visible, .gd-shotmodal__thumb:focus-visible,
+.gd-shotmodal__nav:focus-visible, .gd-shotmodal__close:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .gd-btn:active, .gd-shots__thumb:active, .gd-about-more:active, .gd-spine__row:active, .gd-badgecard:active,
+    .gd-shotmodal__close:active, .gd-shotmodal__thumb:active { transform: none; }
+    .gd-shotmodal__nav:active { transform: translateY(-50%); }
+}
+
+/* ============================================================
+   Trophy haul cards (hero) + My Stats modal
+   ============================================================ */
+
+/* Lead action button — a hair more presence than a peer .gd-btn, not a solid fill. */
+.gd-btn--primary { background: color-mix(in oklab, var(--pp-primary) 24%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 65%, transparent); font-weight: 700; }
+.gd-btn--primary:hover { background: color-mix(in oklab, var(--pp-primary) 34%, transparent); box-shadow: 0 0 16px -3px color-mix(in oklab, var(--pp-primary) 65%, transparent); }
+
+/* 4-across trophy tier cards, reusing the shared .scard. Mobile keeps all four in ONE compact row
+   (the tier colour already identifies each, so the label can shrink); md+ restores the fuller card. */
+.gd-tro { margin-top: 2px; }
+.scard--tro { padding: 8px 4px; }
+.scard--tro .scard__label { font-size: 9px; letter-spacing: 0.02em; margin-bottom: 5px; }
+.scard--tro .scard__value { font-size: 15px; }
+.scard--tro .scard__sub { font-size: 9.5px; margin-top: 3px; }
+.scard--tro-none { opacity: 0.5; }
+/* Per-tier progress topper: pp-horizon recoloured to the tier (--horizon-accent), the tier's ratio. */
+.gd-tro__bar { display: block; width: 100%; margin-bottom: 6px; }
+
+/* ============================================================
+   Anonymous Platinum Outlook + join CTA (logged-out hero substance)
+   ============================================================ */
+.gd-outlook { display: flex; flex-direction: column; gap: 9px; }
+
+/* Verdict: PSN-global platinum rarity as the difficulty headline. */
+.gd-outlook__verdict {
+    display: flex; align-items: center; gap: 12px; padding: 11px 13px;
+    border-radius: var(--pp-radius-md); border: 1px solid var(--pp-border);
+    background: linear-gradient(105deg, color-mix(in oklab, var(--pp-accent) 8%, var(--pp-bg-2)), var(--pp-bg-2) 62%);
+}
+/* Est. 100% time, tucked into the verdict card's right edge. */
+.gd-outlook__time { flex: none; align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); white-space: nowrap; }
+.gd-outlook__time svg { width: 13px; height: 13px; color: var(--pp-text-mute); flex: none; }
+.gd-outlook__verdict--noplat { background: var(--pp-bg-2); }
+.gd-outlook__ico { flex: none; width: 38px; height: 38px; display: grid; place-items: center; }
+.gd-outlook__ico img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.45)); }
+.gd-outlook__ico--noplat { color: var(--pp-text-mute); }
+.gd-outlook__ico--noplat svg { width: 26px; height: 26px; opacity: 0.6; }
+.gd-outlook__vmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.gd-outlook__tier { font-family: var(--pp-font-display); font-size: 1rem; font-weight: 800; line-height: 1.1; }
+.gd-outlook__rate { font-size: 0.77rem; color: var(--pp-text-dim); }
+.gd-outlook__rate b { color: var(--pp-text); font-weight: 800; font-size: 0.9rem; }
+.gd-outlook__meter { display: flex; align-items: center; gap: 3px; margin-top: 6px; }
+.gd-outlook__seg { width: 16px; height: 4px; border-radius: 999px; background: var(--pp-bg-3); }
+.gd-outlook__seg.is-on { background: var(--pp-accent); box-shadow: 0 0 6px -1px color-mix(in oklab, var(--pp-accent) 60%, transparent); }
+/* The difficulty gauge "charges" -- lit segments fill left-to-right in sequence on load. */
+.gd-outlook__seg.is-on { transform-origin: left; animation: gdSegCharge 0.3s var(--pp-ease) both; }
+@keyframes gdSegCharge { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.gd-outlook__seg.is-on:nth-child(2) { animation-delay: 0.08s; }
+.gd-outlook__seg.is-on:nth-child(3) { animation-delay: 0.16s; }
+.gd-outlook__seg.is-on:nth-child(4) { animation-delay: 0.24s; }
+@media (prefers-reduced-motion: reduce) { .gd-outlook__seg.is-on { animation: none; } }
+.gd-outlook__meter-lbl { margin-left: 6px; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-accent); }
+
+/* Contract detail modal (shared .pp-detail-modal) CLOSE fade: bdModalOut (fade the whole dialog) is
+   ID-scoped to the badge modals; a generic collection rule disables the dialog animation for every
+   other .pp-detail-modal (it uses a medallion shrink instead). Our contract modal has no medallion, so
+   opt it back in -- the ID selector beats the generic rule, so the content fades WITH the scrim. */
+#gd-contract-modal.is-closing:not([hidden]) .pp-detail-modal__dialog { animation: bdModalOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+#gd-contract-modal.is-closing:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrimOut 0.22s ease forwards; }
+
+/* Join CTA: social proof + the primary conversion action. */
+.gd-cta {
+    display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; margin-top: 2px;
+    border-radius: var(--pp-radius-md); border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border));
+    background: linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-2)), var(--pp-bg-2) 70%);
+}
+.gd-cta__proof { font-size: 0.82rem; color: var(--pp-text-dim); }
+.gd-cta__proof b { color: var(--pp-text); font-weight: 800; }
+.gd-cta__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.gd-cta__alt { font-size: 0.74rem; color: var(--pp-text-mute); }
+.gd-cta__alt a { color: var(--pp-primary); font-weight: 600; text-decoration: none; }
+.gd-cta__alt a:hover { text-decoration: underline; }
+.scard__value--none { color: var(--pp-text-mute); font-family: var(--pp-font-display); }
+@media (min-width: 768px) {
+    .scard--tro { padding: 13px 10px; }
+    .scard--tro .scard__label { font-size: 11px; letter-spacing: 0.12em; margin-bottom: 12px; }
+    .scard--tro .scard__value { font-size: 24px; }
+    .scard--tro .scard__sub { font-size: 12px; margin-top: 7px; }
+    .gd-tro__bar { margin-bottom: 9px; }
+}
+
+/* Stats modal is wider than the peek modals. */
+.gd-modal--stats { width: min(94vw, 560px); max-width: 560px; }
+
+.gd-mystats { display: flex; flex-direction: column; gap: 14px; }
+.gd-mystats__eyebrow { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--pp-text-mute); }
+.gd-mystats__title { font-family: var(--pp-font-display); font-size: 1.15rem; font-weight: 800; line-height: 1.15; margin-top: -8px; }
+
+/* Hero trio */
+.gd-mystats__hero { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.gd-mystats__big { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 13px 6px; border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border); text-align: center; }
+.gd-mystats__big-v { font-size: 1.55rem; font-weight: 800; line-height: 1; color: var(--pp-text); white-space: nowrap; }
+.gd-mystats__big-v--accent { color: var(--pp-primary); }
+.gd-mystats__unit { font-size: 0.78rem; font-weight: 700; color: var(--pp-text-mute); margin-left: 1px; }
+.gd-mystats__big-k { font-size: 0.64rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); }
+
+/* Standing — you vs community completion */
+.gd-mystats__vs { display: flex; flex-direction: column; gap: 4px; }
+.gd-mystats__vs-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.gd-mystats__vs-k { font-size: 0.74rem; color: var(--pp-text-dim); }
+.gd-mystats__vs-v { font-size: 0.82rem; font-weight: 700; color: var(--pp-text-mute); }
+.gd-mystats__vs-v--you { color: var(--pp-text); }
+.gd-mystats__vs-comm { margin-top: 1px; }
+.gd-mystats__vs-comm .pp-horizon__fill { background: var(--pp-text-mute); box-shadow: none; }
+
+/* Trophy haul pips */
+.gd-mystats__haul { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.gd-mystats__pip { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 9px 4px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); }
+.gd-mystats__pip i { width: 10px; height: 10px; border-radius: 999px; margin-bottom: 3px; }
+.gd-mystats__pip span { font-size: 0.98rem; font-weight: 800; color: var(--pp-text); line-height: 1; }
+.gd-mystats__pip b { font-size: 0.68rem; font-weight: 500; color: var(--pp-text-mute); }
+.gd-mystats__pip em { font-size: 0.58rem; font-style: normal; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 2px; }
+.gd-mystats__pip--platinum i { background: var(--color-trophy-platinum); }
+.gd-mystats__pip--gold i { background: var(--color-trophy-gold); }
+.gd-mystats__pip--silver i { background: var(--color-trophy-silver); }
+.gd-mystats__pip--bronze i { background: var(--color-trophy-bronze); }
+
+/* Journey timeline */
+.gd-mystats__sec { display: flex; flex-direction: column; gap: 9px; }
+.gd-mystats__sech { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+.gd-mystats__timeline { list-style: none; margin: 0; padding: 0; }
+.gd-mystats__tl { position: relative; display: flex; gap: 10px; padding-bottom: 12px; }
+.gd-mystats__tl:last-child { padding-bottom: 0; }
+.gd-mystats__tl::before { content: ''; position: absolute; left: 5px; top: 13px; bottom: -1px; width: 2px; background: var(--pp-divider); }
+.gd-mystats__tl:last-child::before { display: none; }
+.gd-mystats__tl-dot { position: relative; z-index: 1; flex: none; width: 12px; height: 12px; margin-top: 2px; border-radius: 999px; background: var(--pp-bg-3); border: 2px solid var(--pp-border); }
+.gd-mystats__tl.is-hit .gd-mystats__tl-dot { background: var(--pp-primary); border-color: var(--pp-primary); box-shadow: 0 0 8px -1px color-mix(in oklab, var(--pp-primary) 70%, transparent); }
+.gd-mystats__tl-body { flex: 1; min-width: 0; }
+.gd-mystats__tl-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.gd-mystats__tl-label { font-size: 0.82rem; font-weight: 600; color: var(--pp-text-dim); }
+.gd-mystats__tl.is-hit .gd-mystats__tl-label { color: var(--pp-text); }
+.gd-mystats__tl-date { font-size: 0.72rem; color: var(--pp-text-mute); white-space: nowrap; flex: none; }
+.gd-mystats__tl-trophy { display: flex; align-items: center; gap: 6px; margin-top: 4px; min-width: 0; }
+.gd-mystats__tl-trophy img { width: 22px; height: 22px; border-radius: 4px; object-fit: cover; flex: none; }
+.gd-mystats__tl-trophy span { font-size: 0.74rem; color: var(--pp-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Play footer */
+.gd-mystats__foot { display: flex; flex-wrap: wrap; gap: 4px 16px; padding-top: 11px; border-top: 1px solid var(--pp-divider); font-size: 0.76rem; color: var(--pp-text-dim); }
+.gd-mystats__foot b { color: var(--pp-text); font-weight: 700; }
+
+/* Reveal choreography — staggered rise on open (re-armed by JS each time). */
+@keyframes gdStatsRise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+.gd-mystats.is-revealing > * { animation: gdStatsRise 0.4s var(--pp-ease) both; }
+.gd-mystats.is-revealing > *:nth-child(2) { animation-delay: 0.05s; }
+.gd-mystats.is-revealing > *:nth-child(3) { animation-delay: 0.10s; }
+.gd-mystats.is-revealing > *:nth-child(4) { animation-delay: 0.15s; }
+.gd-mystats.is-revealing > *:nth-child(5) { animation-delay: 0.20s; }
+.gd-mystats.is-revealing > *:nth-child(6) { animation-delay: 0.25s; }
+@media (prefers-reduced-motion: reduce) { .gd-mystats.is-revealing > * { animation: none; } }
+
+/* Journey timeline draws itself on reveal: each connector grows from the top and its dot pops, staggered
+   top-to-bottom (--i is the row index, set in the template) after the sections have risen in. */
+@keyframes gdTlLine { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes gdTlDot { from { opacity: 0; transform: scale(0.3); } to { opacity: 1; transform: none; } }
+.gd-mystats.is-revealing .gd-mystats__tl::before { transform-origin: top; animation: gdTlLine 0.3s var(--pp-ease) both; animation-delay: calc(var(--i, 0) * 0.06s + 0.3s); }
+.gd-mystats.is-revealing .gd-mystats__tl-dot { animation: gdTlDot 0.34s cubic-bezier(0.34, 1.4, 0.64, 1) both; animation-delay: calc(var(--i, 0) * 0.06s + 0.26s); }
+@media (prefers-reduced-motion: reduce) {
+    .gd-mystats.is-revealing .gd-mystats__tl::before, .gd-mystats.is-revealing .gd-mystats__tl-dot { animation: none; }
+}
+
+/* Screenshots placeholder — keeps the left column consistent when a game has no shots. */
+.gd-shots--empty { display: flex; align-items: center; justify-content: center; gap: 7px; height: 54px; border-radius: var(--pp-radius-sm); border: 1px dashed var(--pp-border); font-size: 0.75rem; font-style: italic; color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-2) 40%, transparent); }
+.gd-shots--empty svg { width: 18px; height: 18px; opacity: 0.6; }
+
+/* Screenshot lightbox — image floats on the blurred scrim; filmstrip below. */
+.gd-shotmodal { border: none; padding: 0; background: transparent; width: min(92vw, 1100px); max-width: 1100px; margin: auto; color: #fff; }
+.gd-shotmodal:not([open]) { display: none; }
+.gd-shotmodal[open] { display: flex; flex-direction: column; gap: 8px; }
+.gd-shotmodal::backdrop { background: rgba(2, 4, 8, 0.66); backdrop-filter: blur(4px); }
+.gd-shotmodal[open]::backdrop { animation: gdScrimIn 0.28s ease both; }
+.gd-shotmodal.is-closing::backdrop { animation: gdScrimOut 0.22s ease both; }
+@keyframes gdScrimIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gdScrimOut { from { opacity: 1; } to { opacity: 0; } }
+/* The image is the focus — suppress the swipe-sheet's grabber handle on this modal. */
+.gd-shotmodal.pp-dismissable::before { display: none; }
+.gd-shotmodal__stage { position: relative; line-height: 0; border-radius: var(--pp-radius-md); }
+/* Clip the stage only while paging, so the sliding image can't overflow the viewport (scrollbar
+   flash). NOT clipped during the open/close FLIP — that image must fly outside, to/from the thumb. */
+.gd-shotmodal.is-paging .gd-shotmodal__stage { overflow: hidden; }
+.gd-shotmodal__img { width: 100%; height: auto; max-height: 74vh; object-fit: contain; border-radius: var(--pp-radius-md); display: block; box-shadow: 0 24px 70px rgba(0,0,0,0.55); }
+/* Outgoing image during a push swap: overlays the current image box, slid out by JS. */
+.gd-shotmodal__ghost { position: absolute; inset: 0; height: auto; max-height: 74vh; pointer-events: none; }
+.gd-shotmodal__close, .gd-shotmodal__nav { position: absolute; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 999px; border: none; cursor: pointer; background: rgba(0,0,0,0.55); color: #fff; transition: background var(--pp-dur-fast) var(--pp-ease); }
+.gd-shotmodal__close:hover, .gd-shotmodal__nav:hover { background: rgba(0,0,0,0.82); }
+.gd-shotmodal__close svg, .gd-shotmodal__nav svg { width: 20px; height: 20px; }
+.gd-shotmodal__close { top: 8px; right: 8px; }
+.gd-shotmodal__nav { top: 50%; transform: translateY(-50%); }
+.gd-shotmodal__nav--prev { left: 8px; }
+.gd-shotmodal__nav--next { right: 8px; }
+.gd-shotmodal__count { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); border-radius: 999px; padding: 3px 11px; font-size: 0.75rem; font-weight: 600; line-height: 1.5; }
+/* Chrome (arrows / close / count) stays hidden while the image is flying in/out, so it never
+   floats in empty space waiting for the image to arrive; it fades in once the image lands. */
+.gd-shotmodal__close, .gd-shotmodal__nav, .gd-shotmodal__count { transition: opacity 0.2s var(--pp-ease); }
+.gd-shotmodal.is-animating .gd-shotmodal__close,
+.gd-shotmodal.is-animating .gd-shotmodal__nav,
+.gd-shotmodal.is-animating .gd-shotmodal__count { opacity: 0; pointer-events: none; }
+.gd-shotmodal__strip { display: flex; gap: 6px; overflow-x: auto; padding: 4px; scrollbar-width: thin; scroll-behavior: smooth; }
+.gd-shotmodal__thumb { flex: 0 0 auto; width: 96px; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; padding: 0; background: none; cursor: pointer; border: 2px solid transparent; opacity: 0.5; transition: opacity var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-shotmodal__thumb:hover { opacity: 0.85; }
+.gd-shotmodal__thumb.is-active { opacity: 1; border-color: var(--pp-primary); }
+
+/* ============================================================
+   Shared tally cell (hero progress + group header)
+   ============================================================ */
+.gd-tly {
+    --tc: var(--pp-text-mute); display: flex; flex-direction: column; align-items: center; gap: 1px;
+    padding: 5px 4px; border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    border-bottom: 2px solid color-mix(in oklab, var(--tc) 45%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 7px rgba(0,0,0,0.18);
+}
+.gd-tly--bronze { --tc: var(--color-trophy-bronze); }
+.gd-tly--silver { --tc: var(--color-trophy-silver); }
+.gd-tly--gold { --tc: var(--color-trophy-gold); }
+.gd-tly--platinum { --tc: var(--color-trophy-platinum); }
+.gd-tly__num { font-size: 0.85rem; font-weight: 800; color: var(--pp-text-dim); line-height: 1.1; }
+.gd-tly__num b { color: var(--pp-text); }
+.gd-tly__num i { color: var(--pp-text-mute); font-style: normal; font-weight: 400; margin: 0 1px; }
+.gd-tly__num.pp-tally { font-family: var(--pp-font-display); }
+.gd-tly__lbl { font-size: 0.56rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--pp-text-mute); }
+
+/* ============================================================
+   Trophies panel
+   ============================================================ */
+.gd-syncing { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: var(--pp-radius-md); font-size: 0.9rem; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-info) 12%, transparent); border: 1px solid color-mix(in oklab, var(--pp-info) 30%, var(--pp-border)); }
+
+/* Toolbar (quiet chrome) */
+.gd-toolbar.pp-toolbar-card { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.22); }
+.gd-toolbar__row { display: flex; flex-wrap: wrap; gap: 8px; }
+.gd-field { display: flex; flex-direction: column; gap: 2px; min-width: 120px; flex: 1; }
+.gd-field__lbl { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+.gd-select { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-sm); background: color-mix(in oklab, var(--pp-bg-2) 80%, transparent); color: var(--pp-text); font-size: 0.85rem; padding: 7px 10px; cursor: pointer; }
+.gd-select:focus-visible { outline: 2px solid color-mix(in oklab, var(--pp-primary) 60%, transparent); outline-offset: 1px; }
+.gd-toolbar__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 8px; border-top: 1px solid var(--pp-divider); }
+.gd-toolbar__lbl { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+.gd-toolbar__sep { width: 1px; height: 16px; background: var(--pp-divider); margin: 0 4px; }
+.gd-chip { cursor: pointer; }
+.gd-chip__face { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-chip__face:hover { color: var(--pp-text); }
+.gd-chip input:checked + .gd-chip__face { --c: var(--pp-secondary); color: var(--pp-text); font-weight: 700; background: color-mix(in oklab, var(--c) 18%, transparent); border-color: color-mix(in oklab, var(--c) 50%, var(--pp-border)); }
+.gd-chip input:checked + .gd-chip__face--bronze { --c: var(--color-trophy-bronze); }
+.gd-chip input:checked + .gd-chip__face--silver { --c: var(--color-trophy-silver); }
+.gd-chip input:checked + .gd-chip__face--gold { --c: var(--color-trophy-gold); }
+.gd-chip input:checked + .gd-chip__face--platinum { --c: var(--color-trophy-platinum); }
+
+/* Group nav */
+.gd-groupnav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 14px; }
+.gd-groupnav__chip { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 5px 10px; border-radius: 999px; text-decoration: none; font-size: 0.78rem; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-groupnav__chip:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+.gd-groupnav__icon { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
+.gd-groupnav__name { white-space: nowrap; }
+.gd-groupnav__count { font-size: 0.62rem; font-weight: 700; padding: 0 6px; border-radius: 999px; color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-0) 50%, transparent); }
+
+/* Group header */
+.gd-group--sep { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--pp-divider); }
+.gd-group__head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 8px 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-1) 70%, transparent); border: 1px solid var(--pp-border); border-left: 3px solid color-mix(in oklab, var(--pp-accent) 60%, var(--pp-border)); }
+.gd-group__icon { width: 36px; height: 36px; border-radius: 8px; overflow: hidden; flex-shrink: 0; border: 1px solid var(--pp-border); }
+.gd-group__name { font-weight: 700; font-style: italic; font-size: 0.95rem; color: var(--pp-text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-group__tallies { display: flex; gap: 5px; flex-shrink: 0; }
+.gd-group__tallies .gd-tly { min-width: 44px; }
+
+/* Trophy cards */
+.gd-trophies { display: flex; flex-direction: column; gap: 7px; }
+.gd-trophy {
+    --tt: var(--pp-border); display: flex; align-items: center; gap: 12px; padding: 9px 11px;
+    border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-1) 65%, transparent); border: 1px solid var(--pp-border);
+    transition: border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-trophy--bronze { --tt: var(--color-trophy-bronze); }
+.gd-trophy--silver { --tt: var(--color-trophy-silver); }
+.gd-trophy--gold { --tt: var(--color-trophy-gold); }
+.gd-trophy--platinum { --tt: var(--color-trophy-platinum); }
+.gd-trophy:hover { border-color: color-mix(in oklab, var(--tt) 55%, var(--pp-border)); box-shadow: 0 0 16px -6px color-mix(in oklab, var(--tt) 60%, transparent); }
+.gd-trophy.is-earned { border-left: 3px solid var(--pp-success); }
+.gd-trophy__icon { width: 52px; height: 52px; border-radius: 9px; overflow: hidden; flex-shrink: 0; border: 2px solid var(--pp-border); transition: border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-trophy:hover .gd-trophy__icon { border-color: color-mix(in oklab, var(--tt) 55%, var(--pp-border)); }
+.gd-trophy__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.gd-trophy__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gd-trophy__name { font-weight: 600; font-size: 0.92rem; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.gd-trophy__type { --tc: var(--pp-text-mute); font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 7px; border-radius: 999px; color: var(--tc); border: 1px solid color-mix(in oklab, var(--tc) 45%, transparent); flex-shrink: 0; }
+.gd-trophy__detail { font-size: 0.76rem; color: var(--pp-text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-trophy__earned { font-size: 0.68rem; font-style: italic; color: color-mix(in oklab, var(--pp-success) 80%, var(--pp-text)); }
+.gd-trophy__prog { display: flex; align-items: center; gap: 8px; margin-top: 3px; max-width: 260px; }
+.gd-trophy__progtrack { flex: 1; height: 5px; border-radius: 999px; overflow: hidden; background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); }
+.gd-trophy__progfill { height: 100%; border-radius: 999px; background: var(--pp-accent); }
+.gd-trophy__progval { font-size: 0.62rem; font-weight: 700; color: var(--pp-accent); white-space: nowrap; }
+.gd-trophy__rates { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.gd-trophy__rates--mobile { gap: 8px; margin-top: 4px; }
+.gd-trophy__rates--desk { display: none; }
+.gd-trophy__got { display: inline-flex; }
+.gd-rate { display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; font-weight: 600; color: var(--pp-text-dim); }
+.gd-rate--stacked { flex-direction: column; gap: 1px; min-width: 52px; }
+.gd-rate__val { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; font-weight: 700; color: var(--pp-text-dim); }
+.gd-rate__lbl { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+@media (min-width: 768px) {
+    .gd-trophy__rates--mobile { display: none; }
+    .gd-trophy__rates--desk { display: flex; }
+    .gd-trophy__icon { width: 56px; height: 56px; }
+}
+
+/* Filter-empty state */
+.gd-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 48px 16px; text-align: center; color: var(--pp-text-mute); }
+.gd-empty svg { width: 44px; height: 44px; opacity: 0.5; }
+.gd-empty__title { font-weight: 600; color: var(--pp-text-dim); }
+.gd-empty__hint { font-size: 0.82rem; }
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+    .gd-cover, .gd-spine__row, .gd-spine__chev, .gd-about-more svg, .gd-trophy, .gd-trophy__icon, #browse-results,
+    .gd-groupbar__fill, .gd-shotmodal__close, .gd-shotmodal__nav, .gd-shotmodal__count, .gd-shotmodal__thumb { transition: none; }
+    .gd-shotmodal__strip { scroll-behavior: auto; }
+    .gd-shotmodal[open]::backdrop, .gd-shotmodal.is-closing::backdrop { animation: none; }
+    .gd-modal[open] { animation: none; }
+}

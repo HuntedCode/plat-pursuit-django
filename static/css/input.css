@@ -24,6 +24,7 @@
 @import "./components/titles.css";
 @import "./components/home.css";
 @import "./components/claim-ceremony.css";
+@import "./components/game-detail.css";
 @plugin "daisyui";
 
 @theme {

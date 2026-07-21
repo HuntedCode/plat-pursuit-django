@@ -1,168 +1,90 @@
 /**
- * Game Flag Module
- *
- * Handles the "Flag" button on game detail pages, allowing users
- * to report data quality issues (delisted, unobtainable, shovelware,
- * VR tagging, online trophies, buggy trophies, regional errors).
+ * Game report ("Report an issue") — wires the SSR report modal (templates/trophies/partials/
+ * game_detail/report_modal.html). The button opens it; a grouped flag-type select + optional details
+ * (required when "Other") submit to POST /api/v1/games/<id>/flag/. Rebuilt to the rebuild modal
+ * standard (was a DaisyUI modal injected from JS).
  */
 const GameFlag = (() => {
-    let modalElement = null;
-
     function init() {
+        const modal = document.getElementById('game-flag-modal');
         const btn = document.getElementById('game-flag-btn');
-        if (!btn) return;
-        btn.addEventListener('click', () => showModal(btn.dataset.gameId));
-    }
+        if (!modal || !btn) return;
 
-    function showModal(gameId) {
-        if (!modalElement) {
-            const html = `
-                <dialog id="game-flag-modal" class="modal">
-                    <div class="modal-box">
-                        <h3 class="font-bold text-lg mb-4">Flag Game</h3>
+        const form = modal.querySelector('#game-flag-form');
+        const select = modal.querySelector('[name="flag_type"]');
+        const textarea = modal.querySelector('[name="details"]');
+        const countEl = modal.querySelector('[data-flag-count]');
+        const detailsLabel = modal.querySelector('[data-flag-details-label]');
+        const submitBtn = modal.querySelector('[data-flag-submit]');
+        const gameId = modal.dataset.gameId;
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-                        <form id="game-flag-form" class="space-y-4">
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text">What would you like to report?</span>
-                                </label>
-                                <select class="select select-bordered w-full" name="flag_type" required>
-                                    <option value="" disabled selected>Select an issue</option>
-                                    <optgroup label="Store Status">
-                                        <option value="delisted">Game has been delisted</option>
-                                        <option value="not_delisted">Game is NOT delisted (incorrect flag)</option>
-                                    </optgroup>
-                                    <optgroup label="Trophy Obtainability">
-                                        <option value="unobtainable">Trophies are unobtainable</option>
-                                        <option value="obtainable">Trophies ARE obtainable (incorrect flag)</option>
-                                    </optgroup>
-                                    <optgroup label="Shovelware">
-                                        <option value="is_shovelware">Game is shovelware</option>
-                                        <option value="not_shovelware">Game is NOT shovelware (incorrect flag)</option>
-                                    </optgroup>
-                                    <optgroup label="VR Support">
-                                        <option value="missing_vr">Game supports VR but is not tagged</option>
-                                    </optgroup>
-                                    <optgroup label="Online Trophies">
-                                        <option value="has_online_trophies">Game has online-required trophies</option>
-                                        <option value="no_online_trophies">Game does NOT have online trophies (incorrect flag)</option>
-                                    </optgroup>
-                                    <optgroup label="Buggy Trophies">
-                                        <option value="has_buggy_trophies">Game has buggy/broken trophies</option>
-                                        <option value="buggy_trophies_resolved">Buggy trophies have been fixed</option>
-                                    </optgroup>
-                                    <optgroup label="Regional Info">
-                                        <option value="region_incorrect">Regional info is incorrect</option>
-                                    </optgroup>
-                                    <optgroup label="Other">
-                                        <option value="other">Other (please describe below)</option>
-                                    </optgroup>
-                                </select>
-                            </div>
-
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text">Additional details (optional)</span>
-                                </label>
-                                <textarea
-                                    class="textarea textarea-bordered h-24"
-                                    name="details"
-                                    placeholder="Provide any additional context that may help us review this flag..."
-                                    maxlength="500"></textarea>
-                                <label class="label">
-                                    <span class="label-text-alt"></span>
-                                    <span class="label-text-alt flag-details-count">0/500</span>
-                                </label>
-                            </div>
-
-                            <div class="alert alert-info">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                </svg>
-                                <span class="text-sm">Flags are reviewed by our team and help us keep game data accurate. Thank you for contributing!</span>
-                            </div>
-
-                            <div class="modal-action">
-                                <button type="button" class="btn btn-ghost" onclick="document.getElementById('game-flag-modal').close()">Cancel</button>
-                                <button type="submit" class="btn btn-primary">Submit Flag</button>
-                            </div>
-                        </form>
-                    </div>
-                    <form method="dialog" class="modal-backdrop">
-                        <button>close</button>
-                    </form>
-                </dialog>
-            `;
-            document.body.insertAdjacentHTML('beforeend', html);
-            modalElement = document.getElementById('game-flag-modal');
-
-            const textarea = modalElement.querySelector('textarea[name="details"]');
-            const counter = modalElement.querySelector('.flag-details-count');
-            const detailsLabel = textarea?.closest('.form-control')?.querySelector('.label-text');
-            const flagSelect = modalElement.querySelector('select[name="flag_type"]');
-
-            textarea.addEventListener('input', () => {
-                counter.textContent = `${textarea.value.length}/500`;
-            });
-
-            flagSelect.addEventListener('change', () => {
-                const isOther = flagSelect.value === 'other';
-                textarea.required = isOther;
-                if (detailsLabel) {
-                    detailsLabel.textContent = isOther
-                        ? 'Please describe the issue (required)'
-                        : 'Additional details (optional)';
-                }
-            });
+        function resetDetails() {
+            textarea.required = false;
+            detailsLabel.textContent = 'Additional details (optional)';
+            countEl.textContent = '0';
         }
 
-        modalElement.dataset.gameId = gameId;
+        // ── Open ──
+        btn.addEventListener('click', () => {
+            if (!modal.showModal || modal.open) return;
+            form.reset();
+            resetDetails();
+            modal.showModal();
+        });
 
-        const form = modalElement.querySelector('#game-flag-form');
-        form.reset();
-        modalElement.querySelector('.flag-details-count').textContent = '0/500';
+        // ── Field behaviour ──
+        textarea.addEventListener('input', () => { countEl.textContent = String(textarea.value.length); });
+        select.addEventListener('change', () => {
+            const isOther = select.value === 'other';
+            textarea.required = isOther;
+            detailsLabel.textContent = isOther ? 'Describe the issue (required)' : 'Additional details (optional)';
+        });
 
-        form.onsubmit = async (e) => {
+        // ── Choreographed close (matches the other rebuild modals: fade/scale out, then .close()) ──
+        function close() {
+            if (!modal.open) return;
+            if (reduce) { modal.close(); return; }
+            modal.classList.add('is-closing');
+            let done = false;
+            function finish() {
+                if (done) return; done = true;
+                modal.removeEventListener('animationend', onEnd);
+                modal.classList.remove('is-closing');
+                if (modal.open) modal.close();
+            }
+            function onEnd(e) { if (e.target === modal) finish(); }
+            modal.addEventListener('animationend', onEnd);
+            window.setTimeout(finish, 240);
+        }
+        modal.querySelectorAll('[data-gd-modal-close]').forEach((b) => b.addEventListener('click', close));
+        modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+        modal.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
+        if (window.PlatPursuit && PlatPursuit.dismissableSheet) {
+            PlatPursuit.dismissableSheet(modal, { onClose: function () { if (modal.close && modal.open) modal.close(); } });
+        }
+
+        // ── Submit ──
+        form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            await submitFlag(gameId, form);
-        };
-
-        modalElement.showModal();
-    }
-
-    async function submitFlag(gameId, form) {
-        const formData = new FormData(form);
-        const flagType = formData.get('flag_type');
-        const details = formData.get('details') || '';
-
-        const submitBtn = form.querySelector('button[type="submit"]');
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Submitting...';
-
-        try {
-            await PlatPursuit.API.post(`/api/v1/games/${gameId}/flag/`, {
-                flag_type: flagType,
-                details,
-            });
-
-            PlatPursuit.ToastManager.show(
-                'Flag submitted successfully. Thank you for helping improve our data!',
-                'success'
-            );
-
-            modalElement.close();
-
-        } catch (error) {
-            let msg = 'Failed to submit flag.';
+            const flagType = select.value;
+            const details = textarea.value || '';
+            const label = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting…';
             try {
-                const errData = await error.response?.json();
-                msg = errData?.error || msg;
-            } catch {}
-            PlatPursuit.ToastManager.show(msg, 'error');
-        } finally {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = 'Submit Flag';
-        }
+                await PlatPursuit.API.post(`/api/v1/games/${gameId}/flag/`, { flag_type: flagType, details });
+                PlatPursuit.ToastManager.show('Report submitted. Thanks for helping keep our data accurate!', 'success');
+                close();
+            } catch (error) {
+                let msg = 'Failed to submit report.';
+                try { const d = await error.response?.json(); msg = d?.error || msg; } catch (_) { /* no body */ }
+                PlatPursuit.ToastManager.show(msg, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = label;
+            }
+        });
     }
 
     return { init };

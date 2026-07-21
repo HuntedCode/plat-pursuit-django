@@ -3,6 +3,7 @@ import logging
 import math
 
 from core.services.tracking import track_page_view, track_site_event
+from core.services.site_heartbeat import get_cached_heartbeat
 from datetime import datetime, timedelta, date
 from django.core.cache import cache
 from django.contrib import messages
@@ -360,7 +361,13 @@ class GameDetailView(DetailView):
                 'franchise__name',
             ),
         )
-        return super().get_queryset().select_related('concept', 'concept__igdb_match').prefetch_related(
+        return super().get_queryset().select_related('concept', 'concept__igdb_match').defer(
+            # The ~30KB IGDB API blob is never read here -- every About-card field
+            # uses a parsed column (igdb_summary, time_to_beat_*, external_urls,
+            # igdb_screenshot_image_ids). select_related drags it into the join for
+            # free otherwise; deferring it keeps the per-render payload lean.
+            'concept__igdb_match__raw_response',
+        ).prefetch_related(
             'concept__concept_companies__company',
             'concept__concept_genres__genre',
             'concept__concept_themes__theme',
@@ -447,14 +454,23 @@ class GameDetailView(DetailView):
                     platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
                 )
 
-                # Calculate group totals
+                # Calculate group totals -- DB-aggregated (whale-safe: never
+                # iterate the per-user earned queryset in Python; a 250K-trophy
+                # profile would materialize hundreds of MB here). Bounded to
+                # ~groups x 4 rows. .order_by() clears the inherited earned-date
+                # sort so it can't leak into the GROUP BY.
                 profile_group_totals = {}
-                for e in ordered_earned_qs:
-                    group_id = e.trophy.trophy_group_id or 'default'
-                    trophy_type = e.trophy.trophy_type
-                    if group_id not in profile_group_totals:
-                        profile_group_totals[group_id] = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
-                    profile_group_totals[group_id][trophy_type] += 1
+                group_rows = (
+                    ordered_earned_qs.order_by()
+                    .values('trophy__trophy_group_id', 'trophy__trophy_type')
+                    .annotate(c=Count('id'))
+                )
+                for row in group_rows:
+                    group_id = row['trophy__trophy_group_id'] or 'default'
+                    bucket = profile_group_totals.setdefault(
+                        group_id, {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
+                    )
+                    bucket[row['trophy__trophy_type']] = row['c']
                 context['profile_group_totals'] = profile_group_totals
 
                 # Build milestones
@@ -492,8 +508,13 @@ class GameDetailView(DetailView):
 
     def _build_timeline_events(self, ordered_earned_qs, total_trophies, profile_progress, profile_game):
         """
-        Build timeline events for the player's journey
-        (started, first, 25%, 50%, 75%, platinum, 100%).
+        Build the player's journey timeline (started, first, 25/50/75%, platinum, 100%).
+
+        Events are ordered by WHERE they land in the earn sequence (index into the
+        date-sorted earned list), not a fixed slot. This matters because overall
+        completion counts DLC: a base-game platinum can be earned well before the
+        75%/100% overall milestones, so its position must float to when it actually
+        happened. 'Started Playing' is pinned first; '100%' is pinned last.
 
         Args:
             ordered_earned_qs: QuerySet of earned trophies ordered by date
@@ -502,77 +523,62 @@ class GameDetailView(DetailView):
             profile_game: ProfileGame instance for first_played_date_time
 
         Returns:
-            list: List of timeline event dicts
+            list: List of timeline event dicts, ordered by earn sequence
         """
-        events = []
         earned_list = list(ordered_earned_qs)
+        n = max(total_trophies, 1)
+        events = []   # (order, event) pairs, sorted at the end
 
-        # Started Playing
+        # Started Playing -- pinned first.
         first_played = profile_game.first_played_date_time
-        events.append(self._make_timeline_event(
+        events.append((-1, self._make_timeline_event(
             'Started Playing', 'started', first_played is not None, date=first_played
-        ))
+        )))
 
-        # First trophy
-        if len(earned_list) > 0:
+        # First trophy.
+        if earned_list:
             first = earned_list[0]
-            events.append(self._make_timeline_event(
+            events.append((0, self._make_timeline_event(
                 'First Trophy', 'trophy', True, date=first.earned_date_time, trophy=first.trophy
-            ))
+            )))
         else:
-            events.append(self._make_timeline_event('First Trophy', 'trophy', False))
+            events.append((0, self._make_timeline_event('First Trophy', 'trophy', False)))
 
-        # 25% trophy
-        quarter_idx = math.ceil((total_trophies - 1) * 0.25)
-        if len(earned_list) > quarter_idx:
-            quarter = earned_list[quarter_idx]
-            events.append(self._make_timeline_event(
-                '25% Trophy', 'trophy', True, date=quarter.earned_date_time, trophy=quarter.trophy
-            ))
-        else:
-            events.append(self._make_timeline_event('25% Trophy', 'trophy', False))
+        # Count-based milestones: the trophy sitting at each fraction of the full set, by earn order.
+        for label, frac in (('25% Trophy', 0.25), ('50% Trophy', 0.5), ('75% Trophy', 0.75)):
+            idx = math.ceil((n - 1) * frac)
+            if len(earned_list) > idx:
+                t = earned_list[idx]
+                events.append((idx, self._make_timeline_event(
+                    label, 'trophy', True, date=t.earned_date_time, trophy=t.trophy
+                )))
+            else:
+                events.append((idx, self._make_timeline_event(label, 'trophy', False)))
 
-        # 50% trophy
-        mid_idx = math.ceil((total_trophies - 1) * 0.5)
-        if len(earned_list) > mid_idx:
-            mid = earned_list[mid_idx]
-            events.append(self._make_timeline_event(
-                '50% Trophy', 'trophy', True, date=mid.earned_date_time, trophy=mid.trophy
-            ))
-        else:
-            events.append(self._make_timeline_event('50% Trophy', 'trophy', False))
-
-        # 75% trophy
-        three_quarter_idx = math.ceil((total_trophies - 1) * 0.75)
-        if len(earned_list) > three_quarter_idx:
-            three_quarter = earned_list[three_quarter_idx]
-            events.append(self._make_timeline_event(
-                '75% Trophy', 'trophy', True, date=three_quarter.earned_date_time, trophy=three_quarter.trophy
-            ))
-        else:
-            events.append(self._make_timeline_event('75% Trophy', 'trophy', False))
-
-        # Platinum trophy
-        plat_entry = None
-        if len(earned_list) > 0:
-            plat_entry = next((e for e in reversed(earned_list) if e.trophy.trophy_type == 'platinum'), None)
+        # Platinum -- positioned dynamically by its index in the earn sequence, so a
+        # base-game plat correctly precedes the 75%/100% milestones when DLC exists.
+        plat_entry = next((e for e in reversed(earned_list) if e.trophy.trophy_type == 'platinum'), None)
         if plat_entry:
-            events.append(self._make_timeline_event(
+            plat_order = earned_list.index(plat_entry)
+            events.append((plat_order, self._make_timeline_event(
                 'Platinum Trophy', 'trophy', True, date=plat_entry.earned_date_time, trophy=plat_entry.trophy
-            ))
+            )))
         else:
-            events.append(self._make_timeline_event('Platinum Trophy', 'trophy', False))
+            # Unearned: keep its default slot near the end, just before 100%.
+            events.append((n - 0.5, self._make_timeline_event('Platinum Trophy', 'trophy', False)))
 
-        # 100% trophy
+        # 100% -- pinned last (order beyond any real index).
         if profile_progress and profile_progress['progress'] == 100 and earned_list:
             complete = earned_list[-1]
-            events.append(self._make_timeline_event(
+            events.append((n + 1, self._make_timeline_event(
                 '100% Trophy', 'trophy', True, date=complete.earned_date_time, trophy=complete.trophy
-            ))
+            )))
         else:
-            events.append(self._make_timeline_event('100% Trophy', 'trophy', False))
+            events.append((n + 1, self._make_timeline_event('100% Trophy', 'trophy', False)))
 
-        return events
+        # Stable sort by sequence order; ties keep build order (Started, First, 25, 50, 75, Plat, 100).
+        events.sort(key=lambda pair: pair[0])
+        return [event for _, event in events]
 
     def _build_images_context(self, game):
         """
@@ -889,9 +895,23 @@ class GameDetailView(DetailView):
             community_tabs.append(tab_data)
         context['community_tabs'] = community_tabs
 
-        # Related badges
+        # Related badges — presented as shared Medallion objects. Build a showcase frame per
+        # badge (profile=None -> full "as-designed" look, no per-viewer queries; include_live_stats
+        # off skips the back-of-card Redis/DB lookups). FKs select_related per build_badge_frame's
+        # batch guidance so it issues ~0 extra queries per badge.
+        from trophies.services.frame_service import build_badge_frame
         series_slugs = Stage.objects.filter(concepts__games=game).values_list('series_slug', flat=True).distinct()
-        badges = Badge.objects.live().filter(series_slug__in=Subquery(series_slugs), tier=1).distinct().order_by('tier')
+        badges = list(
+            Badge.objects.live()
+            .filter(series_slug__in=Subquery(series_slugs), tier=1)
+            .select_related(
+                'franchise', 'developer', 'funded_by',
+                'base_badge__franchise', 'base_badge__developer', 'base_badge__funded_by',
+            )
+            .distinct().order_by('tier')
+        )
+        for b in badges:
+            b.frame = build_badge_frame(b, None, include_live_stats=False)
         context['badges'] = badges
 
         # Other platform versions
@@ -903,6 +923,106 @@ class GameDetailView(DetailView):
         context['other_versions'] = list(other_versions_qs)
 
         return context
+
+    def _build_pursuit_context(self, game, target_profile):
+        """Spine cross-link: the Contract this game belongs to + the Jobs it levels.
+
+        The job list is game-intrinsic (identical for every viewer); only the
+        banked/claimable state reflects the target profile. Cheap -- two bounded
+        queries via contract_by_concept_map (jobs prefetched), plus one for the
+        authed state lookup. Display-only here; the authoritative claim flow lives
+        on /career/.
+        """
+        empty = {'pursuit_contract': None, 'pursuit_jobs': [], 'pursuit_contract_state': None,
+                 'pursuit_xp_per_job': 0, 'pursuit_disc_style': ''}
+        if not game.concept_id:
+            return empty
+
+        from trophies.services import contract_service
+        from trophies.services.job_render import job_atom
+
+        contract = contract_service.contract_by_concept_map([game.concept_id]).get(game.concept_id)
+        if not contract:
+            return empty
+
+        jobs = [job_atom(j) for j in sorted(contract.jobs.all(), key=lambda j: j.display_order)]
+        # Ordered-unique disciplines this contract spans, prebuilt into the row's discipline-colour
+        # style (a gradient of the disciplines + a primary tint). Built here rather than looping
+        # var()s inside a template style attribute.
+        disciplines = list(dict.fromkeys(j['disc_slug'] for j in jobs))
+        if disciplines:
+            stops = [f'var(--disc-{d})' for d in disciplines]
+            if len(stops) == 1:
+                stops = stops * 2   # a gradient needs >= 2 stops
+            disc_style = (
+                f'--disc-1: var(--disc-{disciplines[0]}); '
+                f'--disc-grad: linear-gradient(180deg, {", ".join(stops)});'
+            )
+        else:
+            disc_style = ''
+
+        # XP per job = the contract's total XP split evenly across its jobs (mirrors
+        # contracts_service.xp_each). Cheap; no extra query.
+        from trophies.util_modules.constants import CONTRACT_XP_TOTAL
+        xp_total = contract.xp_total_override or CONTRACT_XP_TOTAL
+        xp_per_job = (xp_total // len(jobs)) if jobs else 0
+
+        state = None
+        if target_profile:
+            from trophies.models import EarnedContract
+            ec = EarnedContract.objects.filter(profile=target_profile, contract=contract).first()
+            if ec:
+                plat_claimable = bool(ec.platinum_reached_at and not ec.platinum_accepted_at)
+                full_claimable = bool(ec.full_reached_at and not ec.full_accepted_at)
+                fully_banked = bool(ec.full_accepted_at and (not ec.has_platinum or ec.platinum_accepted_at))
+                if plat_claimable or full_claimable:
+                    status = 'claimable'
+                elif fully_banked:
+                    status = 'banked'
+                else:
+                    status = 'pursuing'
+                state = {'status': status}
+        return {'pursuit_contract': contract, 'pursuit_jobs': jobs, 'pursuit_contract_state': state,
+                'pursuit_xp_per_job': xp_per_job, 'pursuit_disc_style': disc_style}
+
+    def _build_group_bars(self, trophy_groups, profile_group_totals):
+        """Composite per-group progress: ONE segment per trophy group (base + DLCs), each filled to
+        that group's earned/total %. The base segment always takes >= 50% of the width -- its flex
+        weight is (shown DLC count + 1), so with one DLC it's ~67/33 and it eases toward 50% as DLCs
+        grow. DLC segments are capped. Cheap: reads the already-aggregated group totals + defined
+        counts, no new queries. Returns None when there are no trophies to show.
+        """
+        DLC_CAP = 6
+
+        def entry(gid, group):
+            defined = group.get('defined_trophies') or {}
+            total = sum(int(v or 0) for v in defined.values())
+            earned = sum((profile_group_totals.get(gid) or {}).values())
+            pct = round(earned / total * 100) if total else 0
+            return {'name': group.get('trophy_group_name') or '', 'pct': pct, 'earned': earned, 'total': total}
+
+        main = None
+        dlcs = []
+        for gid, group in trophy_groups.items():
+            e = entry(gid, group)
+            if not e['total']:
+                continue
+            if gid == 'default':
+                e['name'] = 'Base Game'
+                main = e
+            else:
+                dlcs.append(e)
+        if main is None:
+            return None
+        dlc_total = len(dlcs)
+        combined = dlc_total > DLC_CAP
+        if combined:
+            # Too many DLC packs to show individually -> collapse to ONE "All DLC" segment at the
+            # aggregate %, so every DLC trophy is still represented (nothing dropped from the bar).
+            t = sum(d['total'] for d in dlcs)
+            e = sum(d['earned'] for d in dlcs)
+            dlcs = [{'name': 'All DLC', 'pct': round(e / t * 100) if t else 0, 'earned': e, 'total': t}]
+        return {'main': main, 'dlcs': dlcs, 'dlc_total': dlc_total, 'combined_dlc': combined}
 
     def _build_rating_context(self, user, game):
         """
@@ -956,6 +1076,50 @@ class GameDetailView(DetailView):
             {'text': f"{game.title_name}"}
         ]
 
+    # PSN-global rarity tiers (Trophy.trophy_rarity): Common=3 .. Ultra_Rare=0.
+    _RARITY_LABELS = {0: 'Ultra Rare', 1: 'Very Rare', 2: 'Rare', 3: 'Common'}
+
+    def _build_outlook_context(self, game):
+        """
+        Anonymous "Platinum Outlook" -- the logged-out counterpart to a member's
+        progress readout (this is the SEO inbound funnel). Leads with the PSN-GLOBAL
+        platinum rarity (a dense, platform-wide difficulty signal that does NOT depend
+        on our userbase size), plus denormed community reach and a cached site-wide
+        hunter count for the CTA.
+
+        Whale-safe: one indexed single-game platinum lookup, denorm reads straight off
+        `game`, and the hourly-cached heartbeat (never a request-path COUNT). Returns {}
+        on any failure so the panel degrades to absent.
+        """
+        try:
+            plat = (
+                Trophy.objects.filter(game=game, trophy_type='platinum')
+                .only('trophy_earn_rate', 'trophy_rarity').first()
+            )
+            plat_rate = plat.trophy_earn_rate if plat and plat.trophy_earn_rate else None
+            plat_rarity = plat.trophy_rarity if plat and plat.trophy_rarity is not None else None
+
+            heartbeat = get_cached_heartbeat()
+            hunters = (heartbeat or {}).get('always', {}).get('profiles_total', {}).get('value')
+
+            return {
+                'outlook': {
+                    'has_platinum': plat is not None,
+                    'plat_rate': plat_rate,
+                    'plat_rarity_label': self._RARITY_LABELS.get(plat_rarity),
+                    # 4 = Ultra Rare (hardest) .. 1 = Common, for a difficulty meter.
+                    'difficulty_level': (4 - plat_rarity) if plat_rarity is not None else None,
+                    'site_hunters': hunters,
+                    'played_count': game.played_count,
+                }
+            }
+        except Exception:
+            logger.exception(
+                "Failed to build outlook context for game %s",
+                getattr(game, 'np_communication_id', '?'),
+            )
+            return {}
+
     def get_template_names(self):
         if getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results':
             return ['trophies/partials/game_detail/trophy_browse_results.html']
@@ -1003,6 +1167,20 @@ class GameDetailView(DetailView):
                 self._make_timeline_event('100% Trophy', 'trophy', False),
             ]
 
+        # Expose the displayed profile under the badge-detail-style name too, so the
+        # hero's ownership-aware progress readout can gate on `target_profile`.
+        context['target_profile'] = target_profile
+
+        # Ownership-aware header: is the displayed profile someone OTHER than the
+        # viewer? Drives the "Viewing X's progress" banner (badge-detail pattern) so
+        # the hero reads correctly on the /games/<np>/<username>/ variant.
+        viewer_profile = getattr(user, 'profile', None) if user.is_authenticated else None
+        context['viewing_other_profile'] = (
+            target_profile
+            if target_profile and (viewer_profile is None or target_profile.pk != viewer_profile.pk)
+            else None
+        )
+
         # Build game images context
         context['image_urls'] = self._build_images_context(game)
 
@@ -1025,9 +1203,23 @@ class GameDetailView(DetailView):
             context['grouped_trophies'] = {}
             context['trophy_groups'] = {}
 
+        # Composite per-trophy-group progress bar (base + DLC segments), for a displayed profile.
+        context['group_bars'] = (
+            self._build_group_bars(context['trophy_groups'], context.get('profile_group_totals') or {})
+            if target_profile and context['trophy_groups'] else None
+        )
+
         # Build concept-related context (community ratings, badges, other versions)
         concept_context = self._build_concept_context(game)
         context.update(concept_context)
+
+        # Spine cross-link: this game's Contract + the Jobs it levels (hero band).
+        context.update(self._build_pursuit_context(game, target_profile))
+
+        # Platinum Outlook: PSN-global difficulty + community reach. Only the logged-out hero renders it,
+        # so skip the work (a trophy lookup) for members who'll never see it.
+        if not target_profile:
+            context.update(self._build_outlook_context(game))
 
         # Roadmap data for game detail CTA card (content now on dedicated page).
         # Each CTG gets its own Roadmap, so we surface per-CTG state for the

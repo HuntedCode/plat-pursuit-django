@@ -1,13 +1,13 @@
-{% comment %}
-Contract modal content -- injected into the shared .emodal on open (grows from the card). Header
-(contract identity) + the tier-2 job breakdown (full pills, finally shown here) + the from-scratch
-member-games grid. Rendered inside an inert <template> in the card, so nothing loads until opened.
-Expects: p (contract dict), profile (viewer).
-{% endcomment %}
 {% load humanize job_icons %}
-<div class="rpm" style="--rp-fam: {{ p.family_color }};">
-    {% comment %} Compact bar: hidden until the full header scrolls past (JS toggles .is-stuck), so the
-    contract stays identified while the games list scrolls. {% endcomment %}
+{% comment %}
+Anonymized contract modal -- the sign-up hook shown to logged-out / unlinked visitors (game-detail
+contract row), fetched from contract_modal_preview. Same shape as _contract_modal.html but: a reduced
+header, member games show their trophy make-up (profile is None -> _contract_game.html's anon branch)
+instead of the viewer's progress, and NO member-games "bank it" framing. The sign-up / link-PSN CTA
+lives in the shell footer (game_detail.html), replacing "Browse all Contracts".
+Expects: p (contract dict from build_contract_modal(None, slug)); profile is None.
+{% endcomment %}
+<div class="rpm rpm--preview" style="--rp-fam: {{ p.family_color }};">
     <div class="rpm__bar" aria-hidden="true">
         <span class="rpm__bar-art">{% if p.cover_game %}<img src="{% if p.cover_game.concept.landscape_url %}{{ p.cover_game.concept.landscape_url }}{% else %}{{ p.cover_game.display_image_url }}{% endif %}" alt="">{% endif %}</span>
         <span class="rpm__bar-title">{{ p.name }}</span>
@@ -35,9 +35,9 @@ Expects: p (contract dict), profile (viewer).
     </div>
 
     <div class="rpm__section">
-        <div class="rpm__label">Complete any one to bank it</div>
+        <div class="rpm__label">Games in this Contract</div>
         <div class="rpm__games">
-            {% for g in p.games %}{% include 'trophies/partials/contracts/_contract_game.html' with game=g.game pgame=g.profile_game has_guide=g.has_guide fam=p.family_color %}{% endfor %}
+            {% for g in p.games %}{% include 'trophies/partials/contracts/_contract_game.html' with game=g.game pgame=None has_guide=g.has_guide fam=p.family_color profile=None %}{% endfor %}
         </div>
     </div>
 </div>

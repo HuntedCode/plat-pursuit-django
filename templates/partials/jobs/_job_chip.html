@@ -1,0 +1,19 @@
+{% comment %}
+Shared job chip (.pp-jobchip): a discipline-tinted pill — icon + name (+ optional XP).
+The rebuilt "jobs this X levels" cross-link primitive. Reused by the Contract modal
+(with extra_class="rpm-job" for its staggered entrance) and the Game-detail hero's
+"In your Pursuit" band. Resting state is visible; any entrance animation is the caller's
+concern via extra_class.
+
+Params:
+  job         — object/dict with .disc_slug, .icon, .name (job_atom(...) or a contract element)
+  xp          — optional int; renders "+N" in the Tally face
+  job_title   — optional tooltip text
+  extra_class — optional extra classes (e.g. "rpm-job" entrance hook)
+{% endcomment %}
+{% load job_icons humanize %}
+<span class="pp-jobchip {{ extra_class }}" style="--disc: var(--disc-{{ job.disc_slug }}, var(--pp-primary));"{% if job_title %} title="{{ job_title }}"{% endif %}>
+    <span class="pp-jobchip__icon">{% job_icon job.icon '' %}</span>
+    <span class="pp-jobchip__name">{{ job.name }}</span>
+    {% if xp %}<span class="pp-jobchip__xp pp-tally">+{{ xp|intcomma }}</span>{% endif %}
+</span>

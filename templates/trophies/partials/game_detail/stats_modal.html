@@ -1,0 +1,92 @@
+{% load custom_filters humanize %}
+{% comment %}
+Game-specific "My Stats" modal body. All values come from context the view already builds
+(profile_progress, profile_trophy_totals, timeline_events, game denorm) -- no new queries.
+Ownership-aware via viewing_other_profile. Rendered inside the gd-stats-modal dialog, gated on
+target_profile. Count-ups + timeline reveal fire on open (see game-detail.js), so values are
+static in source and animate when the sheet appears.
+{% endcomment %}
+{% with pct=profile_progress.progress|floatformat:0|default:0 %}
+<div class="gd-mystats" data-gd-mystats>
+
+    <p class="gd-mystats__eyebrow">{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s progress{% else %}Your progress{% endif %}</p>
+    <h3 class="gd-mystats__title">{{ game.title_name }}</h3>
+
+    {# Hero trio: completion, trophy haul total, playtime #}
+    <div class="gd-mystats__hero">
+        <div class="gd-mystats__big">
+            <span class="gd-mystats__big-v gd-mystats__big-v--accent pp-tally"><span data-countup="{{ pct }}">{{ pct }}</span><span class="gd-mystats__unit">%</span></span>
+            <span class="gd-mystats__big-k">Complete</span>
+        </div>
+        <div class="gd-mystats__big">
+            <span class="gd-mystats__big-v pp-tally">{% if profile_trophy_totals %}{% with et=profile_trophy_totals.platinum|add:profile_trophy_totals.gold|add:profile_trophy_totals.silver|add:profile_trophy_totals.bronze %}<span data-countup="{{ et }}">{{ et }}</span>{% endwith %}{% else %}0{% endif %}<span class="gd-mystats__unit">/{{ game.get_total_defined_trophies }}</span></span>
+            <span class="gd-mystats__big-k">Trophies</span>
+        </div>
+        <div class="gd-mystats__big">
+            <span class="gd-mystats__big-v pp-tally">{% if profile_progress.play_duration %}{{ profile_progress.play_duration|timedelta_hours }}{% else %}&ndash;{% endif %}</span>
+            <span class="gd-mystats__big-k">Playtime</span>
+        </div>
+    </div>
+
+    {# Standing: honest completion-vs-community framing (no per-game percentile precomputed) #}
+    {% if game.avg_completion %}
+        <div class="gd-mystats__standing">
+            <div class="gd-mystats__vs">
+                <div class="gd-mystats__vs-row">
+                    <span class="gd-mystats__vs-k">{% if viewing_other_profile %}Their{% else %}Your{% endif %} completion</span>
+                    <span class="gd-mystats__vs-v gd-mystats__vs-v--you">{{ pct }}%</span>
+                </div>
+                <div class="pp-horizon pp-horizon__track" style="--horizon-h: 7px; --horizon-progress: {{ pct }}%;"><span class="pp-horizon__fill"></span></div>
+                <div class="gd-mystats__vs-row">
+                    <span class="gd-mystats__vs-k">Community average</span>
+                    <span class="gd-mystats__vs-v">{{ game.avg_completion|floatformat:0 }}%</span>
+                </div>
+                <div class="pp-horizon pp-horizon__track gd-mystats__vs-comm" style="--horizon-h: 7px; --horizon-progress: {{ game.avg_completion|floatformat:0 }}%;"><span class="pp-horizon__fill"></span></div>
+            </div>
+        </div>
+    {% endif %}
+
+    {# Trophy haul: pips + counts (earned / defined) #}
+    <div class="gd-mystats__haul">
+        <div class="gd-mystats__pip gd-mystats__pip--platinum"><i></i><span>{{ profile_trophy_totals.platinum|default:0 }}</span><b>/{{ game.defined_trophies.platinum }}</b><em>Platinum</em></div>
+        <div class="gd-mystats__pip gd-mystats__pip--gold"><i></i><span>{{ profile_trophy_totals.gold|default:0 }}</span><b>/{{ game.defined_trophies.gold }}</b><em>Gold</em></div>
+        <div class="gd-mystats__pip gd-mystats__pip--silver"><i></i><span>{{ profile_trophy_totals.silver|default:0 }}</span><b>/{{ game.defined_trophies.silver }}</b><em>Silver</em></div>
+        <div class="gd-mystats__pip gd-mystats__pip--bronze"><i></i><span>{{ profile_trophy_totals.bronze|default:0 }}</span><b>/{{ game.defined_trophies.bronze }}</b><em>Bronze</em></div>
+    </div>
+
+    {# Journey timeline: Started -> First -> 25/50/75% -> Platinum -> 100% (dates + the trophy at each beat) #}
+    {% if timeline_events %}
+        <div class="gd-mystats__sec">
+            <h4 class="gd-mystats__sech">The journey</h4>
+            <ol class="gd-mystats__timeline">
+                {% for ev in timeline_events %}
+                    <li class="gd-mystats__tl{% if ev.earned %} is-hit{% endif %}" style="--i: {{ forloop.counter0 }};">
+                        <span class="gd-mystats__tl-dot" aria-hidden="true"></span>
+                        <div class="gd-mystats__tl-body">
+                            <div class="gd-mystats__tl-top">
+                                <span class="gd-mystats__tl-label">{{ ev.label }}</span>
+                                <span class="gd-mystats__tl-date">{% if ev.date %}{{ ev.date|date:"M j, Y" }}{% else %}&mdash;{% endif %}</span>
+                            </div>
+                            {% if ev.trophy_name %}
+                                <div class="gd-mystats__tl-trophy">
+                                    {% if ev.trophy_icon_url %}<img src="{{ ev.trophy_icon_url }}" alt="" loading="lazy" decoding="async" />{% endif %}
+                                    <span>{{ ev.trophy_name }}</span>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </li>
+                {% endfor %}
+            </ol>
+        </div>
+    {% endif %}
+
+    {# Play footer #}
+    {# Only when PSN actually reported play activity -- otherwise this reads "0 play sessions, Last played -". #}
+    {% if profile_progress.play_count or profile_progress.last_played %}
+        <div class="gd-mystats__foot">
+            {% if profile_progress.play_count %}<span><b>{{ profile_progress.play_count|intcomma }}</b> play session{{ profile_progress.play_count|pluralize }}</span>{% endif %}
+            {% if profile_progress.last_played %}<span>Last played <b>{{ profile_progress.last_played|date:"M j, Y" }}</b></span>{% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endwith %}
