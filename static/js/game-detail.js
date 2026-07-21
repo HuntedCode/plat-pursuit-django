@@ -330,9 +330,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key === 'ArrowLeft') go(-1);
             else if (e.key === 'ArrowRight') go(1);
         });
-        // Swipe-down-to-close on touch (shared sheet gesture). The swipe animates the dialog off,
-        // so onClose just finalizes (clears state + closes the dialog).
-        if (PlatPursuit.dismissableSheet) { PlatPursuit.dismissableSheet(modal, { onClose: finalize }); }
+        // Touch: a horizontal swipe on the IMAGE navigates prev/next. No swipe-down-to-close here (it
+        // hijacked the whole dialog and fought the filmstrip's horizontal scroll), and the strip keeps
+        // its own native scroll (we only listen on the stage). Close via the button / backdrop / Esc.
+        const stage = modal.querySelector('.gd-shotmodal__stage');
+        if (stage && shots.length > 1) {
+            let sx = 0, sy = 0, tracking = false;
+            stage.addEventListener('touchstart', (e) => {
+                if (e.touches.length !== 1) { tracking = false; return; }
+                sx = e.touches[0].clientX; sy = e.touches[0].clientY; tracking = true;
+            }, { passive: true });
+            stage.addEventListener('touchend', (e) => {
+                if (!tracking) return;
+                tracking = false;
+                const t = e.changedTouches[0];
+                const dx = t.clientX - sx, dy = t.clientY - sy;
+                // Clear horizontal intent only (so a vertical drag doesn't accidentally page). Left -> next.
+                if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.4) { go(dx < 0 ? 1 : -1); }
+            }, { passive: true });
+        }
     })();
 
     // ============================================================
