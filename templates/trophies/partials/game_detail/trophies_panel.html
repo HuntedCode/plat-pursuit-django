@@ -11,6 +11,15 @@
           hx-target="#browse-results" hx-swap="innerHTML" hx-push-url="true"
           hx-trigger="change, submit" hx-sync="this:replace"
           class="pp-toolbar-card gd-toolbar">
+        {# Mobile-only collapse toggle (hidden at md+, where the filters are always shown). #}
+        <button type="button" class="gd-toolbar__toggle" data-gd-filters-toggle aria-expanded="false" aria-controls="gd-filter-body">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <span class="gd-toolbar__toggle-lbl">Filters &amp; Sort</span>
+            <span class="gd-toolbar__badge" data-gd-filter-count hidden></span>
+            <svg class="gd-toolbar__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="gd-toolbar__body" id="gd-filter-body">
+        <div class="gd-toolbar__body-inner">
         <div class="gd-toolbar__row">
             <label class="gd-field">
                 <span class="gd-field__lbl">Sort</span>
@@ -54,6 +63,8 @@
                 </label>
             {% endfor %}
         </div>
+        </div>{# /gd-toolbar__body-inner #}
+        </div>{# /gd-toolbar__body #}
     </form>
 
     {# Result count (count-ups on filter) + an in-flight indeterminate bar -- replaces the flat dim. #}

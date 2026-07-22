@@ -31,10 +31,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const views = document.querySelectorAll('.gd-view');
         if (!viewTabs.length || !views.length) return;
         const VIEW_ORDER = ['trophies', 'roadmap', 'community', 'about'];
-        // The minibar re-surfaces the same switcher (plain buttons, not a 2nd tablist) + per-view extras
-        // gated by data-mb-active. showView() keeps them all in lockstep.
+        // The minibar's per-view extras (sort / count / Filters) are gated by data-mb-active, which showView()
+        // keeps in sync with the active view.
         const minibar = document.querySelector('.gd-minibar');
-        const mbTabs = minibar ? Array.from(minibar.querySelectorAll('[data-view]')) : [];
 
         function currentView() {
             let cur = null;
@@ -62,7 +61,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 t.setAttribute('aria-selected', on ? 'true' : 'false');
                 if (on) activeTab = t;
             });
-            mbTabs.forEach((t) => t.classList.toggle('is-active', t.dataset.view === name));
             if (minibar) minibar.dataset.mbActive = name;   // gates the per-view extras (sort/count/Filters)
             if (tablist) tablist.syncTabindex();
             if (changed && activeTab && PlatPursuit.igniteTab) PlatPursuit.igniteTab(activeTab);
@@ -72,7 +70,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         tablist = PlatPursuit.wireTablist(viewTabs, { onSelect: (t) => showView(t.dataset.view) });
-        mbTabs.forEach((t) => t.addEventListener('click', () => showView(t.dataset.view)));
 
         // One-shot ignite on the active pill so it "comes alive" on load.
         const initTab = document.querySelector('#gd-switch .pp-switch__chip[data-view].is-active');
@@ -242,6 +239,47 @@ document.addEventListener('DOMContentLoaded', () => {
             mbGroupJump.addEventListener('change', () => { jumpToGroup(mbGroupJump.value); mbGroupJump.selectedIndex = 0; });
         }
         if (PlatPursuit.StickyReveal) PlatPursuit.StickyReveal.init();
+    })();
+
+    // Mobile filter collapse: the toolbar body is collapsed by default on phones (CSS); this wires the toggle
+    // + an active-filter count badge so it's clear when filters are applied while collapsed. At md+ the body is
+    // always open (CSS) and the toggle is hidden, so this is a no-op there.
+    (function () {
+        const form = document.getElementById('gd-filter-form');
+        const toggle = document.querySelector('[data-gd-filters-toggle]');
+        const body = document.getElementById('gd-filter-body');
+        const badge = document.querySelector('[data-gd-filter-count]');
+        if (!form || !toggle || !body) return;
+        function setOpen(open) {
+            body.classList.toggle('is-open', open);
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+        // Active filters = checked type/rarity chips + a non-default Show/DLC select (sort is ordering, not a filter).
+        function countActive() {
+            let n = form.querySelectorAll('.gd-chip input:checked').length;
+            form.querySelectorAll('select[name="earned"], select[name="dlc_filter"]').forEach((s) => { if (s.selectedIndex > 0) n++; });
+            return n;
+        }
+        function refreshBadge() {
+            if (!badge) return;
+            const n = countActive();
+            badge.textContent = String(n);
+            badge.hidden = n === 0;
+        }
+        toggle.addEventListener('click', () => setOpen(!body.classList.contains('is-open')));
+        form.addEventListener('change', refreshBadge);
+        refreshBadge();
+        // Pre-applied filters (e.g. a shared link) start expanded -- WITHOUT animating open on load (suppress
+        // the grid-rows transition for this one state change, then restore it for user toggles).
+        if (countActive() > 0) {
+            body.style.transition = 'none';
+            setOpen(true);
+            void body.offsetWidth;
+            body.style.transition = '';
+        }
+        // The minibar's "Filters" reach expands the panel too (its own handler does the scroll-to-toolbar).
+        const mbFilters = document.querySelector('[data-minibar-filters]');
+        if (mbFilters) mbFilters.addEventListener('click', () => setOpen(true));
     })();
 
     // ============================================================

@@ -21,12 +21,9 @@
 @keyframes gdLoadSlide { from { left: -40%; } to { left: 100%; } }
 
 /* Sticky minibar (page-level; persists across all views). Per-view extras show only for the active view. */
-/* Narrow-screen guard: this bar carries a lot (identity + sort + group-jump + 4-view switch + Filters), so on
-   a small phone its controls can exceed the width. It's position:fixed, so that overflow would add page scroll
-   width. Clip contains it (a control may be cut off < ~375px, better than a horizontally-scrolling page). */
+/* Defensive: the bar is position:fixed, so any control overflow would add page scroll width. Clip contains it. */
 .gd-minibar { overflow-x: clip; }
 .gd-minibar:not([data-mb-active="trophies"]) [data-mb-only="trophies"] { display: none; }
-.gd-minibar .pp-minibar__switch { flex-shrink: 0; }
 /* Both minibar selects use the shared .pp-gallery__select look (matches Browse Games). The group-jump keeps
    the compact minibar sizing but stays visible on mobile (unlike the sort, which hides < 768px). */
 .gd-minibar .pp-minibar__groupjump { height: 30px; font-size: 0.75rem; max-width: 150px; }
@@ -580,14 +577,34 @@
 
 /* Toolbar (quiet chrome) */
 .gd-toolbar.pp-toolbar-card { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.22); }
+/* Collapsible filter body: mobile shows a "Filters & Sort" toggle over a collapsed body; md+ hides the toggle
+   and keeps the body open. grid-template-rows 0fr->1fr animates height with no magic max-height number. */
+.gd-toolbar__toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 3px 2px; background: none; border: none; color: var(--pp-text); font: inherit; font-weight: 700; cursor: pointer; }
+.gd-toolbar__toggle > svg:first-child { width: 15px; height: 15px; color: var(--pp-text-mute); flex-shrink: 0; }
+.gd-toolbar__toggle-lbl { flex: 1; text-align: left; }
+.gd-toolbar__badge { min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; border-radius: 999px; font-size: 0.66rem; font-weight: 800; color: var(--pp-bg-0); background: var(--pp-primary); }
+.gd-toolbar__badge[hidden] { display: none; }
+.gd-toolbar__chev { width: 16px; height: 16px; color: var(--pp-text-mute); flex-shrink: 0; transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-toolbar__toggle[aria-expanded="true"] .gd-toolbar__chev { transform: rotate(180deg); }
+.gd-toolbar__body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--pp-dur) var(--pp-ease); }
+.gd-toolbar__body.is-open { grid-template-rows: 1fr; }
+.gd-toolbar__body-inner { display: flex; flex-direction: column; gap: 10px; overflow: hidden; min-height: 0; }
+@media (min-width: 768px) {
+    .gd-toolbar__toggle { display: none; }
+    .gd-toolbar__body { grid-template-rows: 1fr; }
+    .gd-toolbar__body-inner { overflow: visible; }
+}
 .gd-toolbar__row { display: flex; flex-wrap: wrap; gap: 8px; }
-.gd-field { display: flex; flex-direction: column; gap: 2px; min-width: 120px; flex: 1; }
+.gd-field { display: flex; flex-direction: column; gap: 2px; flex: 1 1 100%; }   /* mobile: each select full-width on its own row */
+@media (min-width: 768px) { .gd-field { flex-basis: 0; min-width: 120px; } }   /* tablet+: three across */
 .gd-field__lbl { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
 .gd-select { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-sm); background: color-mix(in oklab, var(--pp-bg-2) 80%, transparent); color: var(--pp-text); font-size: 0.85rem; padding: 7px 10px; cursor: pointer; }
 .gd-select:focus-visible { outline: 2px solid color-mix(in oklab, var(--pp-primary) 60%, transparent); outline-offset: 1px; }
 .gd-toolbar__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 8px; border-top: 1px solid var(--pp-divider); }
 .gd-toolbar__lbl { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
 .gd-toolbar__sep { width: 1px; height: 16px; background: var(--pp-divider); margin: 0 4px; }
+/* Mobile: break the chip row so Type and Rarity get their own rows (the separator becomes a full-width gap). */
+@media (max-width: 767px) { .gd-toolbar__sep { flex-basis: 100%; width: auto; height: 0; margin: 2px 0; background: none; } }
 .gd-chip { cursor: pointer; }
 .gd-chip__face { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
 .gd-chip__face:hover { color: var(--pp-text); }
@@ -609,11 +626,21 @@
 .gd-groupnav__name { white-space: nowrap; }
 .gd-groupnav__count { font-size: 0.62rem; font-weight: 700; padding: 0 6px; border-radius: 999px; color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-0) 50%, transparent); }
 
+/* Mobile tap targets: enlarge the interactive filter/jump controls (and their spacing) on phones -- the
+   desktop-compact sizes are too small to reliably tap. Restored to compact at md+ (mouse precision). */
+@media (max-width: 767px) {
+    .gd-select { padding: 10px 12px; }
+    .gd-toolbar__chips { gap: 8px; }
+    .gd-chip__face { padding: 8px 13px; }
+    .gd-groupnav { gap: 8px; }
+    .gd-groupnav__chip { padding: 9px 13px; }
+}
+
 /* Group header */
 .gd-group--sep { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--pp-divider); }
 /* Sticky under the chrome + pinned minibar (52px): each group header pins while its trophies scroll, then
    the next one pushes it up (iOS section-header behavior). Near-opaque bg so rows don't bleed through. */
-.gd-group__head { --head-bg: color-mix(in oklab, var(--pp-bg-1) 96%, var(--pp-bg-0)); position: sticky; top: calc(var(--sticky-top, 3.625rem) + 52px); z-index: 4; display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 8px 12px; border-radius: var(--pp-radius-md); background: var(--head-bg); border: 1px solid var(--pp-border); border-left: 3px solid color-mix(in oklab, var(--pp-accent) 60%, var(--pp-border)); }
+.gd-group__head { --head-bg: color-mix(in oklab, var(--pp-bg-1) 96%, var(--pp-bg-0)); position: sticky; top: calc(var(--sticky-top, 3.625rem) + 52px); z-index: 4; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; padding: 8px 12px; border-radius: var(--pp-radius-md); background: var(--head-bg); border: 1px solid var(--pp-border); border-left: 3px solid color-mix(in oklab, var(--pp-accent) 60%, var(--pp-border)); }
 /* Landing highlight: a soft background wash + glow (no hard ring -- reads cleaner against the sticky pin).
    Colors hoisted to custom props so the keyframe carries no color-mix() (lightningcss drops those frames). */
 .gd-group__head.is-flash { --flash-wash: color-mix(in oklab, var(--pp-primary) 15%, var(--head-bg)); --flash-glow: color-mix(in oklab, var(--pp-primary) 42%, transparent); animation: gdHeadFlash 1.05s var(--pp-ease); }
@@ -627,8 +654,9 @@
 .gd-group__progress { display: flex; align-items: center; gap: 8px; }
 .gd-group__bar { flex: 1 1 auto; max-width: 240px; }   /* a short bar; the % sits right at its end, not the header edge */
 .gd-group__pct { font-size: 0.8rem; font-weight: 800; color: var(--pp-text-dim); flex-shrink: 0; line-height: 1; }
-/* Flat tier dots (the glowing colored dot from the Collection header): color carries the tier, no boxes/labels. */
-.gd-group__counts { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+/* Flat tier dots (the glowing colored dot from the Collection header): color carries the tier, no boxes/labels.
+   Mobile: drops to its own row under the header (indented past the icon) so the group name has room; md: inline. */
+.gd-group__counts { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-basis: 100%; padding-left: 46px; margin-top: 2px; }
 .gd-gcount { --tc: var(--pp-text-mute); display: inline-flex; align-items: center; gap: 5px; }
 .gd-gcount--bronze { --tc: var(--color-trophy-bronze); }
 .gd-gcount--silver { --tc: var(--color-trophy-silver); }
@@ -637,7 +665,10 @@
 .gd-gcount__dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--tc); box-shadow: 0 0 6px color-mix(in oklab, var(--tc) 55%, transparent); }
 .gd-gcount__n { font-size: 0.82rem; font-weight: 700; color: var(--pp-text-dim); line-height: 1; white-space: nowrap; }
 .gd-gcount__n b { color: var(--pp-text); }
-@media (min-width: 768px) { .gd-group__counts { gap: 14px; } }
+@media (min-width: 768px) {
+    .gd-group__head { flex-wrap: nowrap; }
+    .gd-group__counts { flex-basis: auto; padding-left: 0; margin-top: 0; gap: 14px; }
+}
 
 /* Trophy cards */
 .gd-trophies { display: flex; flex-direction: column; gap: 7px; }
@@ -699,6 +730,7 @@
     .gd-groupbar__fill, .gd-jobmini, .gd-shotmodal__close, .gd-shotmodal__nav, .gd-shotmodal__count, .gd-shotmodal__thumb { transition: none; }
     .gd-spine__row--contract:hover .gd-jobmini { transform: none; }
     .gd-loadbar.is-active > span { animation: none; }
+    .gd-toolbar__body, .gd-toolbar__chev { transition: none; }
     .gd-shotmodal__strip { scroll-behavior: auto; }
     .gd-shotmodal[open]::backdrop, .gd-shotmodal.is-closing::backdrop { animation: none; }
     .gd-modal[open] { animation: none; }
