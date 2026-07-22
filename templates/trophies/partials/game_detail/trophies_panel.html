@@ -9,7 +9,7 @@
     <form id="gd-filter-form" method="get"
           hx-get="{% if url_psn_username %}{% url 'game_detail_with_profile' np_communication_id=game.np_communication_id psn_username=url_psn_username %}{% else %}{% url 'game_detail' np_communication_id=game.np_communication_id %}{% endif %}"
           hx-target="#browse-results" hx-swap="innerHTML" hx-push-url="true"
-          hx-trigger="change, submit"
+          hx-trigger="change, submit" hx-sync="this:replace"
           class="pp-toolbar-card gd-toolbar">
         <div class="gd-toolbar__row">
             <label class="gd-field">
@@ -55,6 +55,12 @@
             {% endfor %}
         </div>
     </form>
+
+    {# Result count (count-ups on filter) + an in-flight indeterminate bar -- replaces the flat dim. #}
+    <div class="gd-listmeta">
+        <span class="gd-listmeta__count"><span class="pp-tally" data-gd-count>{{ trophy_shown_count|intcomma }}</span> <span class="gd-listmeta__lbl">trophies</span></span>
+        <span class="gd-loadbar" data-gd-loadbar aria-hidden="true"><span></span></span>
+    </div>
 
     <div id="browse-results">
         {% include 'trophies/partials/game_detail/trophy_browse_results.html' %}

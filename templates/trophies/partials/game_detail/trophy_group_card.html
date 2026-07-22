@@ -5,36 +5,41 @@
         <img src="{{ group.trophy_group_icon_url }}" alt="{{ group.trophy_group_name }}" class="w-full h-full object-cover" loading="lazy" />
     </div>
     <div class="gd-group__meta">
-        <div class="gd-group__namerow">
-            <h3 class="gd-group__name">{{ group.trophy_group_name }}</h3>
-            {% if profile %}<span class="gd-group__pct pp-tally">{{ pct }}%</span>{% endif %}
-        </div>
+        <h3 class="gd-group__name">{{ group.trophy_group_name }}</h3>
         {% if profile %}
-            {# This group's own completion, at a glance -- so a user deep in a DLC doesn't have to sum the tallies. Band tone: cool far from done, hot (with a pulse) near it. #}
-            <div class="pp-horizon pp-horizon__track gd-group__bar" data-horizon-band="{{ pct|horizon_band }}" data-gd-fill="{{ pct }}" style="--horizon-h: 6px; --horizon-progress: 0%;" role="img" aria-label="{{ group.trophy_group_name }} completion: {{ pct }}%"><span class="pp-horizon__fill"></span></div>
+            {# This group's own completion, at a glance -- so a user deep in a DLC doesn't have to sum the per-tier counts. Band tone: cool far from done, hot (with a pulse) near it. #}
+            <div class="gd-group__progress">
+                <div class="pp-horizon pp-horizon__track gd-group__bar" data-horizon-band="{{ pct|horizon_band }}" data-gd-fill="{{ pct }}" style="--horizon-h: 6px; --horizon-progress: 0%;" role="img" aria-label="{{ group.trophy_group_name }} completion: {{ pct }}%"><span class="pp-horizon__fill"></span></div>
+                <span class="gd-group__pct pp-tally">{{ pct }}%</span>
+            </div>
         {% endif %}
     </div>
-    <div class="gd-group__tallies">
-        <div class="gd-tly gd-tly--bronze">
-            {% if profile %}<span class="gd-tly__num"><b>{{ profile_group_total.bronze|default:0 }}</b><i>/</i>{{ group.defined_trophies.bronze }}</span>
-            {% else %}<span class="gd-tly__num">{{ group.defined_trophies.bronze }}</span>{% endif %}
-            <span class="gd-tly__lbl">Bronze</span>
-        </div>
-        <div class="gd-tly gd-tly--silver">
-            {% if profile %}<span class="gd-tly__num"><b>{{ profile_group_total.silver|default:0 }}</b><i>/</i>{{ group.defined_trophies.silver }}</span>
-            {% else %}<span class="gd-tly__num">{{ group.defined_trophies.silver }}</span>{% endif %}
-            <span class="gd-tly__lbl">Silver</span>
-        </div>
-        <div class="gd-tly gd-tly--gold">
-            {% if profile %}<span class="gd-tly__num"><b>{{ profile_group_total.gold|default:0 }}</b><i>/</i>{{ group.defined_trophies.gold }}</span>
-            {% else %}<span class="gd-tly__num">{{ group.defined_trophies.gold }}</span>{% endif %}
-            <span class="gd-tly__lbl">Gold</span>
-        </div>
-        <div class="gd-tly gd-tly--platinum">
-            {% if profile %}<span class="gd-tly__num"><b>{{ profile_group_total.platinum|default:0 }}</b><i>/</i>{{ group.defined_trophies.platinum }}</span>
-            {% else %}<span class="gd-tly__num">{{ group.defined_trophies.platinum }}</span>{% endif %}
-            <span class="gd-tly__lbl">Platinum</span>
-        </div>
+    {# Flat tier dots (the glowing colored dot from the Collection header): color carries the tier, empty tiers (e.g. DLC platinum) omitted. #}
+    <div class="gd-group__counts">
+        {% if group.defined_trophies.bronze %}
+            <span class="gd-gcount gd-gcount--bronze" title="Bronze: {% if profile %}{{ profile_group_total.bronze|default:0 }} of {% endif %}{{ group.defined_trophies.bronze }}">
+                <span class="gd-gcount__dot" aria-hidden="true"></span>
+                <span class="gd-gcount__n pp-tally">{% if profile %}<b>{{ profile_group_total.bronze|default:0 }}</b>/{{ group.defined_trophies.bronze }}{% else %}{{ group.defined_trophies.bronze }}{% endif %}</span>
+            </span>
+        {% endif %}
+        {% if group.defined_trophies.silver %}
+            <span class="gd-gcount gd-gcount--silver" title="Silver: {% if profile %}{{ profile_group_total.silver|default:0 }} of {% endif %}{{ group.defined_trophies.silver }}">
+                <span class="gd-gcount__dot" aria-hidden="true"></span>
+                <span class="gd-gcount__n pp-tally">{% if profile %}<b>{{ profile_group_total.silver|default:0 }}</b>/{{ group.defined_trophies.silver }}{% else %}{{ group.defined_trophies.silver }}{% endif %}</span>
+            </span>
+        {% endif %}
+        {% if group.defined_trophies.gold %}
+            <span class="gd-gcount gd-gcount--gold" title="Gold: {% if profile %}{{ profile_group_total.gold|default:0 }} of {% endif %}{{ group.defined_trophies.gold }}">
+                <span class="gd-gcount__dot" aria-hidden="true"></span>
+                <span class="gd-gcount__n pp-tally">{% if profile %}<b>{{ profile_group_total.gold|default:0 }}</b>/{{ group.defined_trophies.gold }}{% else %}{{ group.defined_trophies.gold }}{% endif %}</span>
+            </span>
+        {% endif %}
+        {% if group.defined_trophies.platinum %}
+            <span class="gd-gcount gd-gcount--platinum" title="Platinum: {% if profile %}{{ profile_group_total.platinum|default:0 }} of {% endif %}{{ group.defined_trophies.platinum }}">
+                <span class="gd-gcount__dot" aria-hidden="true"></span>
+                <span class="gd-gcount__n pp-tally">{% if profile %}<b>{{ profile_group_total.platinum|default:0 }}</b>/{{ group.defined_trophies.platinum }}{% else %}{{ group.defined_trophies.platinum }}{% endif %}</span>
+            </span>
+        {% endif %}
     </div>
 </header>
 {% endwith %}

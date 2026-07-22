@@ -1,4 +1,6 @@
 {% load custom_filters %}
+{# Filtered trophy count, read by game-detail.js on swap to count-up the toolbar/minibar totals. #}
+<span id="gd-count-data" data-trophy-count="{{ trophy_shown_count }}" hidden></span>
 {% if game.has_trophy_groups and grouped_trophies %}
     <nav class="gd-groupnav" aria-label="Jump to trophy group">
         {% for group_id, trophies in grouped_trophies.items %}

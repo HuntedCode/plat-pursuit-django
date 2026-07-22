@@ -22,6 +22,33 @@
 
         {% include 'partials/ad_unit.html' with ad_slot="4478966946" %}
 
+        {% comment %} Sticky minibar: persists across all four views (page-level, outside the panels), pinned by
+        StickyReveal once the real switcher scrolls under the chrome. It always re-surfaces the view switcher +
+        game identity; per-view extras (sort / count / Filters reach for Trophies) are gated by data-mb-active,
+        so each view can utilize the bar differently as its panel is rebuilt. Controls are proxied to the real
+        toolbar in JS (no duplicate form fields). {% endcomment %}
+        <div class="pp-minibar gd-minibar" data-sticky-reveal data-sticky-sentinel="#gd-minibar-sentinel" data-mb-active="trophies">
+            <div class="pp-minibar__inner container mx-auto">
+                <span class="pp-minibar__id">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                    <span class="pp-minibar__title">{{ game.title_name }}</span>
+                    <span class="pp-minibar__count" data-minibar-count data-mb-only="trophies" title="trophies shown">{{ trophy_shown_count|intcomma }}</span>
+                </span>
+                <div class="pp-minibar__controls">
+                    {# Jump-to-group dropdown: JS fills it from the group-nav + hides it when there's no DLC (0-1 group). #}
+                    <select data-minibar-groupjump data-mb-only="trophies" class="pp-gallery__select pp-minibar__groupjump" aria-label="Jump to trophy group" hidden></select>
+                    <select data-minibar-sort data-mb-only="trophies" class="pp-gallery__select pp-minibar__sort" aria-label="Sort trophies"></select>
+                    <div class="pp-switch pp-minibar__switch" aria-label="Switch view">
+                        <button type="button" class="pp-switch__chip is-active" data-view="trophies" aria-label="Trophies" title="Trophies"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg></button>
+                        <button type="button" class="pp-switch__chip" data-view="roadmap" aria-label="Roadmap" title="Roadmap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5.764v15"/><path d="M9 3.236v15"/><path d="M18 3.236 15 5v15l6-3.764V1.236a1 1 0 0 0-1.447-.894L15 3.236"/><path d="M9 18.236 3 21V4.236a1 1 0 0 1 .553-.894L9 .764"/></svg></button>
+                        <button type="button" class="pp-switch__chip" data-view="community" aria-label="Community" title="Community"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></button>
+                        <button type="button" class="pp-switch__chip" data-view="about" aria-label="About" title="About"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></button>
+                    </div>
+                    <button type="button" class="pp-minibar__filters" data-minibar-filters data-mb-only="trophies" aria-label="Scroll to the trophy filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span class="pp-minibar__flbl">Filters</span></button>
+                </div>
+            </div>
+        </div>
+
         {# ── View switcher: Trophies (default) · Roadmap · Community · About ── #}
         <div class="flex items-center justify-end mt-5 mb-4">
             <div class="pp-switch" id="gd-switch" role="tablist" aria-label="Game detail view">
@@ -39,6 +66,8 @@
                 </button>
             </div>
         </div>
+        {# Sentinel: once the real switcher scrolls under the chrome, StickyReveal pins the minibar above. #}
+        <span id="gd-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
 
         {# ── Panels: every view server-rendered in the DOM (SEO-safe), toggled client-side. ── #}
         <div class="gd-view" id="gd-view-trophies" role="tabpanel" aria-labelledby="gd-tab-trophies" data-view="trophies">

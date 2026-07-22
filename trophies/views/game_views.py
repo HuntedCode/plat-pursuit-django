@@ -1231,6 +1231,10 @@ class GameDetailView(DetailView):
             context['grouped_trophies'] = {}
             context['trophy_groups'] = {}
 
+        # Trophies shown after the active filters (drives the count-up in the toolbar/minibar). Bounded
+        # to ~#groups sums; grouped_trophies is already materialized for rendering.
+        context['trophy_shown_count'] = sum(len(t) for t in context['grouped_trophies'].values())
+
         # Composite per-trophy-group progress bar (base + DLC segments), for a displayed profile.
         context['group_bars'] = (
             self._build_group_bars(context['trophy_groups'], context.get('profile_group_totals') or {})

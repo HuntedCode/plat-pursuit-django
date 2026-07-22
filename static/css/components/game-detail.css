@@ -8,7 +8,24 @@
 /* ---- View panels ---- */
 .gd-view[hidden] { display: none; }
 #browse-results { transition: opacity var(--pp-dur) var(--pp-ease); }
-#browse-results.is-swapping { opacity: 0.6; pointer-events: none; }
+#browse-results.is-swapping { opacity: 0.8; pointer-events: none; }
+
+/* Result count + in-flight indeterminate bar (a real loading affordance instead of just dimming). */
+.gd-listmeta { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.gd-listmeta__count { flex-shrink: 0; font-size: 0.82rem; font-weight: 600; color: var(--pp-text-mute); }
+.gd-listmeta__count .pp-tally { color: var(--pp-text); font-size: 0.95rem; font-weight: 800; margin-right: 1px; }
+.gd-loadbar { position: relative; flex: 1; height: 2px; border-radius: 999px; overflow: hidden; opacity: 0; transition: opacity 0.2s var(--pp-ease); }
+.gd-loadbar.is-active { opacity: 1; background: color-mix(in oklab, var(--pp-primary) 12%, transparent); }
+.gd-loadbar > span { position: absolute; top: 0; bottom: 0; left: -40%; width: 40%; border-radius: 999px; background: linear-gradient(90deg, transparent, var(--pp-primary), transparent); }
+.gd-loadbar.is-active > span { animation: gdLoadSlide 1s var(--pp-ease) infinite; }
+@keyframes gdLoadSlide { from { left: -40%; } to { left: 100%; } }
+
+/* Sticky minibar (page-level; persists across all views). Per-view extras show only for the active view. */
+.gd-minibar:not([data-mb-active="trophies"]) [data-mb-only="trophies"] { display: none; }
+.gd-minibar .pp-minibar__switch { flex-shrink: 0; }
+/* Both minibar selects use the shared .pp-gallery__select look (matches Browse Games). The group-jump keeps
+   the compact minibar sizing but stays visible on mobile (unlike the sort, which hides < 768px). */
+.gd-minibar .pp-minibar__groupjump { height: 30px; font-size: 0.75rem; max-width: 150px; }
 
 /* ============================================================
    Hero
@@ -553,26 +570,6 @@
 .gd-shotmodal__thumb.is-active { opacity: 1; border-color: var(--pp-primary); }
 
 /* ============================================================
-   Shared tally cell (hero progress + group header)
-   ============================================================ */
-.gd-tly {
-    --tc: var(--pp-text-mute); display: flex; flex-direction: column; align-items: center; gap: 1px;
-    padding: 5px 4px; border-radius: var(--pp-radius-sm);
-    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
-    border-bottom: 2px solid color-mix(in oklab, var(--tc) 45%, var(--pp-border));
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 7px rgba(0,0,0,0.18);
-}
-.gd-tly--bronze { --tc: var(--color-trophy-bronze); }
-.gd-tly--silver { --tc: var(--color-trophy-silver); }
-.gd-tly--gold { --tc: var(--color-trophy-gold); }
-.gd-tly--platinum { --tc: var(--color-trophy-platinum); }
-.gd-tly__num { font-size: 0.85rem; font-weight: 800; color: var(--pp-text-dim); line-height: 1.1; }
-.gd-tly__num b { color: var(--pp-text); }
-.gd-tly__num i { color: var(--pp-text-mute); font-style: normal; font-weight: 400; margin: 0 1px; }
-.gd-tly__num.pp-tally { font-family: var(--pp-font-display); }
-.gd-tly__lbl { font-size: 0.56rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--pp-text-mute); }
-
-/* ============================================================
    Trophies panel
    ============================================================ */
 .gd-syncing { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: var(--pp-radius-md); font-size: 0.9rem; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-info) 12%, transparent); border: 1px solid color-mix(in oklab, var(--pp-info) 30%, var(--pp-border)); }
@@ -594,6 +591,8 @@
 .gd-chip input:checked + .gd-chip__face--type { --c: var(--pp-primary); }      /* Type: cyan */
 .gd-chip input:checked + .gd-chip__face--rarity { --c: var(--pp-secondary); }  /* Rarity: violet */
 .gd-chip input:focus-visible + .gd-chip__face { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.gd-chip__face.is-pop { animation: gdChipPop 0.32s cubic-bezier(0.34, 1.6, 0.64, 1); }
+@keyframes gdChipPop { 0% { transform: scale(1); } 40% { transform: scale(1.13); } 100% { transform: scale(1); } }
 
 /* Group nav */
 .gd-groupnav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 14px; }
@@ -605,16 +604,33 @@
 
 /* Group header */
 .gd-group--sep { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--pp-divider); }
-.gd-group__head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 8px 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-1) 70%, transparent); border: 1px solid var(--pp-border); border-left: 3px solid color-mix(in oklab, var(--pp-accent) 60%, var(--pp-border)); }
+/* Sticky under the chrome + pinned minibar (52px): each group header pins while its trophies scroll, then
+   the next one pushes it up (iOS section-header behavior). Near-opaque bg so rows don't bleed through. */
+.gd-group__head { --head-bg: color-mix(in oklab, var(--pp-bg-1) 96%, var(--pp-bg-0)); position: sticky; top: calc(var(--sticky-top, 3.625rem) + 52px); z-index: 4; display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 8px 12px; border-radius: var(--pp-radius-md); background: var(--head-bg); border: 1px solid var(--pp-border); border-left: 3px solid color-mix(in oklab, var(--pp-accent) 60%, var(--pp-border)); }
+/* Landing highlight: a soft background wash + glow (no hard ring -- reads cleaner against the sticky pin).
+   Colors hoisted to custom props so the keyframe carries no color-mix() (lightningcss drops those frames). */
+.gd-group__head.is-flash { --flash-wash: color-mix(in oklab, var(--pp-primary) 15%, var(--head-bg)); --flash-glow: color-mix(in oklab, var(--pp-primary) 42%, transparent); animation: gdHeadFlash 1.05s var(--pp-ease); }
+@keyframes gdHeadFlash {
+    0%, 100% { background-color: var(--head-bg); box-shadow: 0 0 0 0 transparent; }
+    22% { background-color: var(--flash-wash); box-shadow: 0 0 20px -2px var(--flash-glow); }
+}
 .gd-group__icon { width: 36px; height: 36px; border-radius: 8px; overflow: hidden; flex-shrink: 0; border: 1px solid var(--pp-border); }
 .gd-group__meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-.gd-group__namerow { display: flex; align-items: baseline; gap: 8px; }
-.gd-group__name { font-weight: 700; font-style: italic; font-size: 0.95rem; color: var(--pp-text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-group__name { font-weight: 700; font-style: italic; font-size: 0.95rem; color: var(--pp-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-group__progress { display: flex; align-items: center; gap: 8px; }
+.gd-group__bar { flex: 1 1 auto; max-width: 240px; }   /* a short bar; the % sits right at its end, not the header edge */
 .gd-group__pct { font-size: 0.8rem; font-weight: 800; color: var(--pp-text-dim); flex-shrink: 0; line-height: 1; }
-/* Full meta-column width so the bar's right edge lines up with the % above it (the My Stats vs-bar pattern). */
-.gd-group__bar { width: 100%; }
-.gd-group__tallies { display: flex; gap: 5px; flex-shrink: 0; }
-.gd-group__tallies .gd-tly { min-width: 44px; }
+/* Flat tier dots (the glowing colored dot from the Collection header): color carries the tier, no boxes/labels. */
+.gd-group__counts { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.gd-gcount { --tc: var(--pp-text-mute); display: inline-flex; align-items: center; gap: 5px; }
+.gd-gcount--bronze { --tc: var(--color-trophy-bronze); }
+.gd-gcount--silver { --tc: var(--color-trophy-silver); }
+.gd-gcount--gold { --tc: var(--color-trophy-gold); }
+.gd-gcount--platinum { --tc: var(--color-trophy-platinum); }
+.gd-gcount__dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--tc); box-shadow: 0 0 6px color-mix(in oklab, var(--tc) 55%, transparent); }
+.gd-gcount__n { font-size: 0.82rem; font-weight: 700; color: var(--pp-text-dim); line-height: 1; white-space: nowrap; }
+.gd-gcount__n b { color: var(--pp-text); }
+@media (min-width: 768px) { .gd-group__counts { gap: 14px; } }
 
 /* Trophy cards */
 .gd-trophies { display: flex; flex-direction: column; gap: 7px; }
@@ -675,6 +691,7 @@
     .gd-cover, .gd-spine__row, .gd-spine__chev, .gd-about-more svg, .gd-trophy, .gd-trophy__icon, #browse-results,
     .gd-groupbar__fill, .gd-jobmini, .gd-shotmodal__close, .gd-shotmodal__nav, .gd-shotmodal__count, .gd-shotmodal__thumb { transition: none; }
     .gd-spine__row--contract:hover .gd-jobmini { transform: none; }
+    .gd-loadbar.is-active > span { animation: none; }
     .gd-shotmodal__strip { scroll-behavior: auto; }
     .gd-shotmodal[open]::backdrop, .gd-shotmodal.is-closing::backdrop { animation: none; }
     .gd-modal[open] { animation: none; }

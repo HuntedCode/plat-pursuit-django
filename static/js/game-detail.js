@@ -31,6 +31,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const views = document.querySelectorAll('.gd-view');
         if (!viewTabs.length || !views.length) return;
         const VIEW_ORDER = ['trophies', 'roadmap', 'community', 'about'];
+        // The minibar re-surfaces the same switcher (plain buttons, not a 2nd tablist) + per-view extras
+        // gated by data-mb-active. showView() keeps them all in lockstep.
+        const minibar = document.querySelector('.gd-minibar');
+        const mbTabs = minibar ? Array.from(minibar.querySelectorAll('[data-view]')) : [];
 
         function currentView() {
             let cur = null;
@@ -58,6 +62,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 t.setAttribute('aria-selected', on ? 'true' : 'false');
                 if (on) activeTab = t;
             });
+            mbTabs.forEach((t) => t.classList.toggle('is-active', t.dataset.view === name));
+            if (minibar) minibar.dataset.mbActive = name;   // gates the per-view extras (sort/count/Filters)
             if (tablist) tablist.syncTabindex();
             if (changed && activeTab && PlatPursuit.igniteTab) PlatPursuit.igniteTab(activeTab);
             if (PlatPursuit.syncViewParam) {
@@ -66,6 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         tablist = PlatPursuit.wireTablist(viewTabs, { onSelect: (t) => showView(t.dataset.view) });
+        mbTabs.forEach((t) => t.addEventListener('click', () => showView(t.dataset.view)));
 
         // One-shot ignite on the active pill so it "comes alive" on load.
         const initTab = document.querySelector('#gd-switch .pp-switch__chip[data-view].is-active');
@@ -153,13 +160,89 @@ document.addEventListener('DOMContentLoaded', () => {
     // Trophy group-nav smooth-jump, delegated on the persistent container (the nav re-renders inside
     // #browse-results on every filter swap, so a per-chip listener wouldn't survive). The <a href="#..">
     // stays the no-JS fallback; this just upgrades it to a reduced-motion-aware smooth scroll.
+    // Fire cb once scrolling has actually stopped (distance-independent, so a far jump waits as long as it
+    // needs and a near one fires promptly). Re-arms on each scroll tick; fires 110ms after the last one, or
+    // 110ms from now if nothing scrolls (target already in place).
+    function afterScrollSettle(cb) {
+        let idle = null;
+        const fire = () => { window.removeEventListener('scroll', arm); cb(); };
+        const arm = () => { window.clearTimeout(idle); idle = window.setTimeout(fire, 110); };
+        window.addEventListener('scroll', arm, { passive: true });
+        arm();
+    }
+    // Jump to a trophy group (group-nav chip OR minibar dropdown): scroll, then wash-highlight the header
+    // once the scroll settles so your eye catches the landing.
+    function jumpToGroup(id) {
+        const target = id && document.getElementById(id);
+        if (!target) return;
+        target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+        const head = target.querySelector('.gd-group__head');
+        if (head && !reduce) afterScrollSettle(() => { head.classList.remove('is-flash'); void head.offsetWidth; head.classList.add('is-flash'); });
+    }
     container.addEventListener('click', (e) => {
         const chip = e.target.closest('[data-gd-groupjump]');
         if (!chip) return;
         e.preventDefault();
-        const target = document.getElementById(chip.dataset.gdGroupjump);
-        if (target) target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+        jumpToGroup(chip.dataset.gdGroupjump);
     });
+
+    // Minibar "jump to group" dropdown: mirrors the group-nav (its chips reflect the current filtered groups),
+    // hidden when there's 0-1 group (no DLC). Rebuilt on load + after each filter swap. Options are set via
+    // new Option(text, value) so group names are inserted as text (no HTML injection).
+    function syncGroupJump() {
+        const sel = document.querySelector('[data-minibar-groupjump]');
+        if (!sel) return;
+        const chips = Array.from(document.querySelectorAll('#browse-results [data-gd-groupjump]'));
+        if (chips.length <= 1) { sel.hidden = true; return; }
+        sel.hidden = false;
+        sel.textContent = '';
+        const ph = new Option('Jump to group…', ''); ph.disabled = true; ph.selected = true;
+        sel.add(ph);
+        chips.forEach((c) => {
+            const name = c.querySelector('.gd-groupnav__name');
+            sel.add(new Option(name ? name.textContent : c.dataset.gdGroupjump, c.dataset.gdGroupjump));
+        });
+    }
+    syncGroupJump();
+
+    // Chip toggle "pop": a small spring on the type/rarity chip face when it changes. The toolbar isn't
+    // re-rendered on filter swaps, so a one-time wire holds.
+    if (!reduce) {
+        document.querySelectorAll('.gd-chip input').forEach((inp) => {
+            inp.addEventListener('change', () => {
+                const face = inp.nextElementSibling;
+                if (!face) return;
+                face.classList.remove('is-pop'); void face.offsetWidth; face.classList.add('is-pop');
+            });
+        });
+    }
+
+    // Minibar controls: the Sort proxy mirrors the real (in-form) sort so there's ONE source of truth and no
+    // duplicate form field; the Filters reach scrolls the real toolbar back into view. StickyReveal pins the
+    // bar once the switcher scrolls under the chrome.
+    (function () {
+        const filterForm = document.getElementById('gd-filter-form');
+        const realSort = filterForm ? filterForm.querySelector('select[name="sort"]') : null;
+        const mbSort = document.querySelector('[data-minibar-sort]');
+        if (mbSort && realSort) {
+            mbSort.innerHTML = realSort.innerHTML;   // one source of truth for the options
+            mbSort.value = realSort.value;
+            mbSort.addEventListener('change', () => {
+                realSort.value = mbSort.value;
+                realSort.dispatchEvent(new Event('change', { bubbles: true }));   // drives the form's hx-trigger
+            });
+            realSort.addEventListener('change', () => { mbSort.value = realSort.value; });
+        }
+        const mbFilters = document.querySelector('[data-minibar-filters]');
+        if (mbFilters && filterForm) {
+            mbFilters.addEventListener('click', () => filterForm.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }));
+        }
+        const mbGroupJump = document.querySelector('[data-minibar-groupjump]');
+        if (mbGroupJump) {
+            mbGroupJump.addEventListener('change', () => { jumpToGroup(mbGroupJump.value); mbGroupJump.selectedIndex = 0; });
+        }
+        if (PlatPursuit.StickyReveal) PlatPursuit.StickyReveal.init();
+    })();
 
     // ============================================================
     // Hero About fit: on desktop, clamp + fade the IGDB blurb so the main column
@@ -570,10 +653,37 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================================
     // Trophy filter: dim-while-swapping settle + scroll restore
     // ============================================================
+    // Result count-up + in-flight loading bar. The count reflects the active filters; on swap we read the
+    // new total off the partial's hidden data element and tick from the last shown value.
+    const gdCountEl = document.querySelector('[data-gd-count]');
+    const gdLoadbar = document.querySelector('[data-gd-loadbar]');
+    let loadbarTimer = null;   // only surface the bar if a filter actually takes a beat (instant ones show nothing)
+    function loadbarStop() { window.clearTimeout(loadbarTimer); if (gdLoadbar) gdLoadbar.classList.remove('is-active'); }
+    let trophyCountLast = gdCountEl ? parseInt(gdCountEl.textContent.replace(/[^0-9]/g, ''), 10) : null;
+    function syncTrophyCount(root) {
+        if (!gdCountEl || !root) return;
+        const data = root.querySelector('#gd-count-data');
+        if (!data) return;
+        const n = parseInt(data.dataset.trophyCount, 10);
+        if (isNaN(n)) return;
+        if (trophyCountLast === null) trophyCountLast = n;
+        if (PlatPursuit.countUp && !reduce && trophyCountLast !== n) {
+            gdCountEl.dataset.countup = n;
+            PlatPursuit.countUp(gdCountEl, 600, { from: trophyCountLast });
+        } else {
+            gdCountEl.textContent = n.toLocaleString();
+        }
+        trophyCountLast = n;
+        const mb = document.querySelector('[data-minibar-count]');   // keep the minibar total in sync
+        if (mb) mb.textContent = n.toLocaleString();
+    }
+
     document.body.addEventListener('htmx:beforeRequest', (e) => {
         if (e.target && e.target.id === 'gd-filter-form') {
             const results = document.getElementById('browse-results');
             if (results) results.classList.add('is-swapping');
+            // Delay-gate the bar: an instant filter never flashes it; only a slow one (whale library / slow net) surfaces it.
+            if (gdLoadbar) { window.clearTimeout(loadbarTimer); loadbarTimer = window.setTimeout(() => gdLoadbar.classList.add('is-active'), 220); }
             try { localStorage.setItem(scrollKey, window.scrollY); } catch (_) { /* ignore */ }
         }
     });
@@ -583,9 +693,21 @@ document.addEventListener('DOMContentLoaded', () => {
             // default now, so nothing can strand them -- then stagger them in with the bespoke WAAPI pass and
             // refill the per-group Horizons (they re-render at 0%).
             e.detail.target.classList.remove('is-swapping', 'pp-reveal');
+            loadbarStop();
+            syncTrophyCount(e.detail.target);
+            syncGroupJump();   // the group-nav re-rendered -> refresh the minibar jump list + its visibility
             staggerSwappedRows(e.detail.target);
             fillBars(e.detail.target);
         }
+    });
+    // Safety net: clear the loading bar if the filter request errors (afterSwap won't fire). Skip aborts
+    // (status 0 -- hx-sync replaced it): the superseding request owns the bar, so stopping here would clear
+    // ITS pending timer and hide the affordance on a slow follow-up.
+    document.body.addEventListener('htmx:afterRequest', (e) => {
+        const d = e.detail;
+        if (!d || !d.elt || d.elt.id !== 'gd-filter-form') return;
+        if (d.xhr && d.xhr.status === 0) return;
+        loadbarStop();
     });
 
     // Restore scroll after a full navigation that carried filter params.
