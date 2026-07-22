@@ -8,15 +8,20 @@ Pins:
     base-game plat precedes the 75%/100% overall milestones); "Started Playing" is pinned first and
     "100%" is pinned last.
 """
+import itertools
 from datetime import timedelta
 
 import pytest
 from django.utils import timezone
 
+from trophies.models import Contract, Job
 from trophies.views.game_views import GameDetailView
 from tests.factories import (
-    EarnedTrophyFactory, GameFactory, ProfileFactory, ProfileGameFactory, TrophyFactory,
+    ConceptFactory, EarnedTrophyFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
+    ProfileGameFactory, TrophyFactory,
 )
+
+_pursuit_igdb_seq = itertools.count(70001)   # distinct raw igdb ids per test contract
 
 pytestmark = pytest.mark.django_db
 
@@ -116,3 +121,106 @@ def test_timeline_platinum_stays_late_without_dlc():
 
     labels = _timeline_labels(game, profile)
     assert labels.index('75% Trophy') < labels.index('Platinum Trophy') < labels.index('100% Trophy')
+
+
+# ── _build_group_pct (per-group completion for the trophy-panel group headers) ──
+
+def test_group_pct_computes_earned_over_defined():
+    """Each group's % is its own earned/defined, keyed by group_id (base + DLC keyed independently)."""
+    pct = GameDetailView()._build_group_pct(
+        {
+            'default': {'defined_trophies': {'bronze': 6, 'silver': 2, 'gold': 1, 'platinum': 1}},  # 10 defined
+            '001': {'defined_trophies': {'bronze': 4, 'silver': 0, 'gold': 1, 'platinum': 0}},        # 5 defined
+        },
+        {
+            'default': {'bronze': 3, 'silver': 1, 'gold': 1, 'platinum': 0},  # 5 earned -> 50%
+            '001': {'bronze': 4, 'silver': 0, 'gold': 1, 'platinum': 0},      # 5 earned -> 100%
+        },
+    )
+    assert pct == {'default': 50, '001': 100}
+
+
+def test_group_pct_missing_totals_is_zero():
+    # Group defined but the profile earned nothing in it (no totals entry) -> 0%, not a KeyError.
+    pct = GameDetailView()._build_group_pct({'x': {'defined_trophies': {'bronze': 4}}}, {})
+    assert pct == {'x': 0}
+
+
+def test_group_pct_zero_defined_does_not_divide_by_zero():
+    pct = GameDetailView()._build_group_pct({'default': {'defined_trophies': {}}}, {})
+    assert pct['default'] == 0
+
+
+def test_group_pct_rounds_to_nearest_int():
+    # 1 of 3 -> 33.33 -> 33
+    pct = GameDetailView()._build_group_pct({'g': {'defined_trophies': {'bronze': 3}}}, {'g': {'bronze': 1}})
+    assert pct['g'] == 33
+
+
+# ── _build_pursuit_context (contract row always carries a status tag) ───────
+
+def _game_with_contract(job_slugs=('gunslinger',)):
+    """A live Contract keyed on a raw igdb id + an anchored, trusted-matched concept whose game
+    carries the membership (mirrors test_contracts_service._contract)."""
+    igdb_id = next(_pursuit_igdb_seq)
+    contract = Contract.objects.create(name=f'c{igdb_id}', slug=f'c-{igdb_id}', is_live=True, igdb_id=igdb_id)
+    contract.jobs.set(Job.objects.filter(slug__in=job_slugs))
+    concept = ConceptFactory(unified_title='Pursuit Game', anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=concept, igdb_id=igdb_id)
+    game = GameFactory(concept=concept)
+    return contract, game
+
+
+def test_contract_state_tag_mapping_is_complete():
+    """Every status the view can derive has a (label, variant) tag, so the row can always render one."""
+    tags = GameDetailView._CONTRACT_STATE_TAG
+    assert set(tags) == {'available', 'not_started', 'pursuing', 'claimable', 'banked'}
+    assert tags['pursuing'] == ('In Progress', 'active')
+    assert tags['banked'] == ('Banked', 'done')
+
+
+def test_pursuit_status_anonymous_is_available():
+    _c, game = _game_with_contract()
+    state = GameDetailView()._build_pursuit_context(game, None)['pursuit_contract_state']
+    assert state == {'status': 'available', 'label': 'Available', 'variant': 'todo'}
+
+
+def test_pursuit_status_linked_without_earned_contract_is_not_started():
+    _c, game = _game_with_contract()
+    profile = ProfileFactory()
+    state = GameDetailView()._build_pursuit_context(game, profile)['pursuit_contract_state']
+    assert state == {'status': 'not_started', 'label': 'Not Started', 'variant': 'todo'}
+
+
+def test_pursuit_status_with_bare_earned_contract_is_pursuing():
+    from trophies.models import EarnedContract
+    contract, game = _game_with_contract()
+    profile = ProfileFactory()
+    EarnedContract.objects.create(profile=profile, contract=contract)   # started, nothing reached/accepted
+    state = GameDetailView()._build_pursuit_context(game, profile)['pursuit_contract_state']
+    assert state['status'] == 'pursuing'
+    assert state['variant'] == 'active'
+
+
+def test_pursuit_status_reached_not_accepted_is_claimable():
+    from trophies.models import EarnedContract
+    contract, game = _game_with_contract()
+    profile = ProfileFactory()
+    # 100% reached but the XP not yet accepted -> claimable.
+    EarnedContract.objects.create(profile=profile, contract=contract, full_reached_at=timezone.now())
+    state = GameDetailView()._build_pursuit_context(game, profile)['pursuit_contract_state']
+    assert state['status'] == 'claimable'
+    assert state['variant'] == 'claim'
+
+
+def test_pursuit_status_fully_accepted_is_banked():
+    from trophies.models import EarnedContract
+    contract, game = _game_with_contract()
+    profile = ProfileFactory()
+    now = timezone.now()
+    # 100% reached AND accepted, no platinum tier to accept -> banked.
+    EarnedContract.objects.create(profile=profile, contract=contract,
+                                  has_platinum=False, full_reached_at=now, full_accepted_at=now)
+    state = GameDetailView()._build_pursuit_context(game, profile)['pursuit_contract_state']
+    assert state['status'] == 'banked'
+    assert state['variant'] == 'done'

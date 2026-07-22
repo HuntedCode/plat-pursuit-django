@@ -21,26 +21,18 @@
 
                     {% if profile and trophy.progress_target_value and not earned.earned %}
                         <div class="gd-trophy__prog">
-                            <div class="gd-trophy__progtrack">
-                                {% with earned.progress|default:0 as prog %}{% with trophy.progress_target_value as target %}
-                                    <div class="gd-trophy__progfill" style="width: {% widthratio prog target 100 %}%"></div>
-                                {% endwith %}{% endwith %}
-                            </div>
+                            {% with earned.progress|default:0 as prog %}{% with trophy.progress_target_value as target %}
+                                <div class="pp-horizon pp-horizon__track gd-trophy__progbar" style="--horizon-h: 5px; --horizon-accent: var(--pp-accent); --horizon-progress: {% widthratio prog target 100 %}%;"><span class="pp-horizon__fill"></span></div>
+                            {% endwith %}{% endwith %}
                             <span class="gd-trophy__progval">{{ earned.progress|default:0|intcomma }}/{{ trophy.progress_target_value|intcomma }}</span>
                         </div>
                     {% endif %}
 
-                    {# Mobile-only rarity row #}
-                    <div class="gd-trophy__rates gd-trophy__rates--mobile">
-                        {% if earned.earned %}<span class="gd-trophy__got" title="Earned">{% include 'partials/icons/checkmark.html' with color='var(--pp-success)' size='w-3.5 h-3.5' %}</span>{% endif %}
-                        <span class="gd-rate">{% include 'partials/icons/pp_logo.html' with size='w-3 h-3' %}{{ trophy.earn_rate|multiply:100|floatformat:1 }}%</span>
-                        <span class="gd-rate">{% include 'partials/icons/ps_logo.html' with size='w-3 h-3' %}{{ trophy.trophy_earn_rate }}%</span>
-                    </div>
                 </div>
 
-                {# Desktop rarity panel #}
-                <div class="gd-trophy__rates gd-trophy__rates--desk">
-                    {% if earned.earned %}<span class="gd-trophy__got" title="Earned">{% include 'partials/icons/checkmark.html' with color='var(--pp-success)' size='w-4 h-4 lg:w-5 lg:h-5' %}</span>{% endif %}
+                {# Rarity: one block. Desktop = right-hand stacked column with labels; mobile = wraps below the row, inline, labels hidden (CSS-driven, no duplicate markup). #}
+                <div class="gd-trophy__rates">
+                    {% if earned.earned %}<span class="gd-trophy__got" title="Earned">{% include 'partials/icons/checkmark.html' with color='var(--pp-success)' size='w-4 h-4' %}</span>{% endif %}
                     <div class="gd-rate gd-rate--stacked">
                         <span class="gd-rate__val">{% include 'partials/icons/pp_logo.html' with size='w-3.5 h-3.5' %}{{ trophy.earn_rate|multiply:100|floatformat:1 }}%</span>
                         <span class="gd-rate__lbl">PP Rate</span>

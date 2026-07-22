@@ -8,7 +8,7 @@
 /* ---- View panels ---- */
 .gd-view[hidden] { display: none; }
 #browse-results { transition: opacity var(--pp-dur) var(--pp-ease); }
-#browse-results.is-swapping { opacity: 0.45; pointer-events: none; }
+#browse-results.is-swapping { opacity: 0.6; pointer-events: none; }
 
 /* ============================================================
    Hero
@@ -48,26 +48,30 @@
 }
 @media (min-width: 1024px) { .gd-cover { width: 100%; max-width: none; } }
 
-/* Headline "X Players" -- absolute top-right of the hero card, so it never reflows the content. */
+/* Headline "X Players". Mobile: in flow, a left-aligned row that sits below the issue flags and above the
+   progress section (its entrance rides the .pp-head-cascade, so reduced-motion is handled for free). md+:
+   pinned absolute to the hero card's top-right corner so it never reflows the content. */
 .gd-hero__players {
-    position: absolute; top: 12px; right: 14px; z-index: 2;
-    display: flex; flex-direction: column; align-items: flex-end; line-height: 1;
-    text-decoration: none; text-align: right;
-    animation: gdPlayersIn 0.5s var(--pp-ease) 0.22s backwards;
+    display: inline-flex; flex-direction: row; align-items: baseline; gap: 6px;
+    align-self: flex-start; line-height: 1; text-decoration: none;
 }
-@keyframes gdPlayersIn { from { opacity: 0; } to { opacity: 1; } }
 .gd-hero__players-n { color: var(--pp-primary); line-height: 1; }
-.gd-hero__players-lbl { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 3px; transition: color var(--pp-dur-fast) var(--pp-ease); }
+.gd-hero__players-lbl { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--pp-text-mute); transition: color var(--pp-dur-fast) var(--pp-ease); }
 .gd-hero__players:hover .gd-hero__players-lbl { color: var(--pp-primary); }
 .gd-hero__players:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: var(--pp-radius-sm); }
-@media (min-width: 768px) { .gd-hero__players { top: 18px; right: 20px; } }
+@media (min-width: 768px) {
+    .gd-hero__players {
+        position: absolute; top: 18px; right: 20px; z-index: 2;
+        flex-direction: column; align-items: flex-end; text-align: right; gap: 0;
+    }
+    .gd-hero__players-lbl { margin-top: 3px; }
+}
 @media (min-width: 1024px) {
     .gd-hero__players { top: 22px; right: 24px; }
     /* Reserve the corner's footprint on the title so a long name wraps before it (only on desktop,
        where main sits beside the cover; below 1024px the corner is up beside the stacked cover). */
     .gd-hero__body:has(.gd-hero__players) .gd-hero__title { padding-right: 96px; }
 }
-@media (prefers-reduced-motion: reduce) { .gd-hero__players { animation: none; } }
 @media (hover: hover) {
     .gd-cover:hover {
         transform: translateY(-3px);
@@ -211,12 +215,21 @@
 .gd-spine__row--empty:hover { background: transparent; border-style: dashed; border-color: var(--pp-border); }
 .gd-spine__row--empty .gd-spine__cap { color: var(--pp-text-mute); }
 .gd-spine__state { font-size: 0.55rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.gd-spine__state--todo { background: color-mix(in oklab, var(--pp-text-mute) 16%, transparent); color: var(--pp-text-dim); }
+.gd-spine__state--active { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); color: var(--pp-primary); }
 .gd-spine__state--done { background: color-mix(in oklab, var(--pp-success) 20%, transparent); color: var(--pp-success); }
 .gd-spine__state--claim { background: color-mix(in oklab, var(--pp-accent) 20%, transparent); color: var(--pp-accent); }
 
 /* Disc-tinted job icon tile (contract peek + placeholder) — sized so all 6 possible jobs fit one line. */
-.gd-jobmini { --disc: var(--pp-primary); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--disc); background: color-mix(in oklab, var(--disc) 20%, var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 42%, var(--pp-border)); box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
+.gd-jobmini { --disc: var(--pp-primary); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--disc); background: color-mix(in oklab, var(--disc) 20%, var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 42%, var(--pp-border)); box-shadow: 0 2px 5px rgba(0,0,0,0.4); transition: transform 0.18s var(--pp-ease), box-shadow 0.18s var(--pp-ease); }
 .gd-jobmini svg { width: 15px; height: 15px; }
+/* Hovering the contract row lifts its job icons in a soft left-to-right wave; drop-out is uniform (no delay off :hover). */
+.gd-spine__row--contract:hover .gd-jobmini { transform: translateY(-3px); box-shadow: 0 5px 11px rgba(0,0,0,0.45); }
+.gd-spine__row--contract:hover .gd-jobmini:nth-child(2) { transition-delay: 0.03s; }
+.gd-spine__row--contract:hover .gd-jobmini:nth-child(3) { transition-delay: 0.06s; }
+.gd-spine__row--contract:hover .gd-jobmini:nth-child(4) { transition-delay: 0.09s; }
+.gd-spine__row--contract:hover .gd-jobmini:nth-child(5) { transition-delay: 0.12s; }
+.gd-spine__row--contract:hover .gd-jobmini:nth-child(6) { transition-delay: 0.15s; }
 /* Empty job socket: same dashed-well language at the 28px job-tile footprint. */
 .gd-jobmini--ph {
     --disc: var(--pp-text-mute); color: var(--pp-text-mute);
@@ -578,10 +591,9 @@
 .gd-chip__face { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
 .gd-chip__face:hover { color: var(--pp-text); }
 .gd-chip input:checked + .gd-chip__face { --c: var(--pp-secondary); color: var(--pp-text); font-weight: 700; background: color-mix(in oklab, var(--c) 18%, transparent); border-color: color-mix(in oklab, var(--c) 50%, var(--pp-border)); }
-.gd-chip input:checked + .gd-chip__face--bronze { --c: var(--color-trophy-bronze); }
-.gd-chip input:checked + .gd-chip__face--silver { --c: var(--color-trophy-silver); }
-.gd-chip input:checked + .gd-chip__face--gold { --c: var(--color-trophy-gold); }
-.gd-chip input:checked + .gd-chip__face--platinum { --c: var(--color-trophy-platinum); }
+.gd-chip input:checked + .gd-chip__face--type { --c: var(--pp-primary); }      /* Type: cyan */
+.gd-chip input:checked + .gd-chip__face--rarity { --c: var(--pp-secondary); }  /* Rarity: violet */
+.gd-chip input:focus-visible + .gd-chip__face { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
 /* Group nav */
 .gd-groupnav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 14px; }
@@ -595,14 +607,26 @@
 .gd-group--sep { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--pp-divider); }
 .gd-group__head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 8px 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-1) 70%, transparent); border: 1px solid var(--pp-border); border-left: 3px solid color-mix(in oklab, var(--pp-accent) 60%, var(--pp-border)); }
 .gd-group__icon { width: 36px; height: 36px; border-radius: 8px; overflow: hidden; flex-shrink: 0; border: 1px solid var(--pp-border); }
+.gd-group__meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.gd-group__namerow { display: flex; align-items: baseline; gap: 8px; }
 .gd-group__name { font-weight: 700; font-style: italic; font-size: 0.95rem; color: var(--pp-text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-group__pct { font-size: 0.8rem; font-weight: 800; color: var(--pp-text-dim); flex-shrink: 0; line-height: 1; }
+/* Full meta-column width so the bar's right edge lines up with the % above it (the My Stats vs-bar pattern). */
+.gd-group__bar { width: 100%; }
 .gd-group__tallies { display: flex; gap: 5px; flex-shrink: 0; }
 .gd-group__tallies .gd-tly { min-width: 44px; }
 
 /* Trophy cards */
 .gd-trophies { display: flex; flex-direction: column; gap: 7px; }
+/* Staggered arrival: staggerReveal drives the per-row WAAPI motion (the backwards-fill is what holds each
+   row hidden through its stagger delay). This rule is the strand-proof safety net -- a row is only ever
+   hidden while un-revealed. .pp-reveal is added by JS ONLY when it will animate (motion-gated -- reduced-
+   motion viewers never hide anything, and without JS the class is never added, so rows always show). */
+@media (prefers-reduced-motion: no-preference) {
+    #browse-results.pp-reveal .gd-trophy:not(.is-revealed) { opacity: 0; }
+}
 .gd-trophy {
-    --tt: var(--pp-border); display: flex; align-items: center; gap: 12px; padding: 9px 11px;
+    --tt: var(--pp-border); display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 9px 11px;
     border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-1) 65%, transparent); border: 1px solid var(--pp-border);
     transition: border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
 }
@@ -618,23 +642,25 @@
 .gd-trophy__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .gd-trophy__name { font-weight: 600; font-size: 0.92rem; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .gd-trophy__type { --tc: var(--pp-text-mute); font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 7px; border-radius: 999px; color: var(--tc); border: 1px solid color-mix(in oklab, var(--tc) 45%, transparent); flex-shrink: 0; }
-.gd-trophy__detail { font-size: 0.76rem; color: var(--pp-text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-trophy__detail { font-size: 0.76rem; color: var(--pp-text-mute); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .gd-trophy__earned { font-size: 0.68rem; font-style: italic; color: color-mix(in oklab, var(--pp-success) 80%, var(--pp-text)); }
 .gd-trophy__prog { display: flex; align-items: center; gap: 8px; margin-top: 3px; max-width: 260px; }
-.gd-trophy__progtrack { flex: 1; height: 5px; border-radius: 999px; overflow: hidden; background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); }
-.gd-trophy__progfill { height: 100%; border-radius: 999px; background: var(--pp-accent); }
+.gd-trophy__progbar { flex: 1; }   /* shared pp-horizon; amber via --horizon-accent (set inline) */
 .gd-trophy__progval { font-size: 0.62rem; font-weight: 700; color: var(--pp-accent); white-space: nowrap; }
-.gd-trophy__rates { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-.gd-trophy__rates--mobile { gap: 8px; margin-top: 4px; }
-.gd-trophy__rates--desk { display: none; }
+/* One rates block, reflowed responsively (no duplicate markup): mobile wraps it below the row (inline,
+   labels hidden, indented past the icon); desktop is the right-hand stacked column with labels. */
+.gd-trophy__rates { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-basis: 100%; padding-left: 64px; }
 .gd-trophy__got { display: inline-flex; }
-.gd-rate { display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; font-weight: 600; color: var(--pp-text-dim); }
-.gd-rate--stacked { flex-direction: column; gap: 1px; min-width: 52px; }
-.gd-rate__val { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; font-weight: 700; color: var(--pp-text-dim); }
-.gd-rate__lbl { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+.gd-rate { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; color: var(--pp-text-dim); }
+.gd-rate--stacked { flex-direction: row; align-items: center; gap: 4px; }
+.gd-rate__val { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); }
+.gd-rate__lbl { display: none; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
 @media (min-width: 768px) {
-    .gd-trophy__rates--mobile { display: none; }
-    .gd-trophy__rates--desk { display: flex; }
+    .gd-trophy { flex-wrap: nowrap; }
+    .gd-trophy__rates { flex-basis: auto; padding-left: 0; gap: 12px; }
+    .gd-rate--stacked { flex-direction: column; gap: 1px; min-width: 52px; }
+    .gd-rate__val { font-size: 0.85rem; }
+    .gd-rate__lbl { display: block; }
     .gd-trophy__icon { width: 56px; height: 56px; }
 }
 
@@ -647,7 +673,8 @@
 /* ---- Reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {
     .gd-cover, .gd-spine__row, .gd-spine__chev, .gd-about-more svg, .gd-trophy, .gd-trophy__icon, #browse-results,
-    .gd-groupbar__fill, .gd-shotmodal__close, .gd-shotmodal__nav, .gd-shotmodal__count, .gd-shotmodal__thumb { transition: none; }
+    .gd-groupbar__fill, .gd-jobmini, .gd-shotmodal__close, .gd-shotmodal__nav, .gd-shotmodal__count, .gd-shotmodal__thumb { transition: none; }
+    .gd-spine__row--contract:hover .gd-jobmini { transform: none; }
     .gd-shotmodal__strip { scroll-behavior: auto; }
     .gd-shotmodal[open]::backdrop, .gd-shotmodal.is-closing::backdrop { animation: none; }
     .gd-modal[open] { animation: none; }

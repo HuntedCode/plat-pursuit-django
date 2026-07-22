@@ -2,14 +2,6 @@
 <section class="gd-hero card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
     <div class="card-body gd-hero__body p-3 md:p-5 lg:p-6">
 
-        {# Headline "X Players" -- absolutely positioned in the top-right corner so it never reflows the card. Jumps to the Community view. #}
-        {% if game.played_count %}
-            <a href="?view=community" data-gd-goto="community" class="gd-hero__players" title="See who's played {{ game.title_name }}">
-                <span class="pp-tally pp-tally--lg gd-hero__players-n" data-gd-countup="{{ game.played_count }}">{{ game.played_count|intcomma }}</span>
-                <span class="gd-hero__players-lbl">Player{{ game.played_count|pluralize }} &rsaquo;</span>
-            </a>
-        {% endif %}
-
         {% if viewing_other_profile %}
             {# Ownership-aware banner (badge-detail pattern): this is someone else's progress. #}
             <div class="gd-viewing">
@@ -81,6 +73,14 @@
                     </div>
                 {% endif %}
                 {% endwith %}
+
+                {# Headline "X Players" -- absolute top-right corner at md+; on mobile it drops into flow here, below the flags and above progress. Jumps to Community. #}
+                {% if game.played_count %}
+                    <a href="?view=community" data-gd-goto="community" class="gd-hero__players" title="See who's played {{ game.title_name }}">
+                        <span class="pp-tally pp-tally--lg gd-hero__players-n" data-gd-countup="{{ game.played_count }}">{{ game.played_count|intcomma }}</span>
+                        <span class="gd-hero__players-lbl">Player{{ game.played_count|pluralize }} &rsaquo;</span>
+                    </a>
+                {% endif %}
 
                 {# Your progress on this game — lean + ownership-aware, tucked below About and pinned to the column bottom. #}
                 <div class="gd-substance">
@@ -227,7 +227,7 @@
                                 <div class="gd-spine__peek">
                                     {% for job in pursuit_jobs %}<span class="gd-jobmini" style="--disc: var(--disc-{{ job.disc_slug }}, var(--pp-primary));" title="{{ job.name }}">{% job_icon job.icon '' %}</span>{% endfor %}
                                 </div>
-                                <span class="gd-spine__cap">{{ pursuit_jobs|length }} Job{{ pursuit_jobs|length|pluralize }}{% if pursuit_xp_per_job %} &middot; {{ pursuit_xp_per_job|intcomma }} XP per Job{% endif %}{% if pursuit_contract_state.status == 'banked' %} <span class="gd-spine__state gd-spine__state--done">Banked</span>{% elif pursuit_contract_state.status == 'claimable' %} <span class="gd-spine__state gd-spine__state--claim">Claimable</span>{% endif %}</span>
+                                <span class="gd-spine__cap">{{ pursuit_jobs|length }} Job{{ pursuit_jobs|length|pluralize }}{% if pursuit_xp_per_job %} &middot; {{ pursuit_xp_per_job|intcomma }} XP/Job{% endif %}{% if pursuit_contract_state %} <span class="gd-spine__state gd-spine__state--{{ pursuit_contract_state.variant }}">{{ pursuit_contract_state.label }}</span>{% endif %}</span>
                             </div>
                             <svg class="gd-spine__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                         </a>

@@ -100,18 +100,65 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Fill the hero progress Horizon from 0 -> target, in step with the count-up. The
-    // width transition is CSS-gated under reduced motion (horizon.css), so this just jumps.
-    document.querySelectorAll('[data-gd-fill]').forEach((bar) => {
-        const fill = bar.querySelector('.pp-horizon__fill');
-        if (!fill) return;
-        const target = (bar.dataset.gdFill || '0') + '%';
-        requestAnimationFrame(() => requestAnimationFrame(() => bar.style.setProperty('--horizon-progress', target)));
-    });
-    // Composite group-bar segments fill from 0 -> each group's completion %.
-    document.querySelectorAll('.gd-groupbar__fill[data-gd-fill]').forEach((f) => {
-        const target = (f.dataset.gdFill || '0') + '%';
-        requestAnimationFrame(() => requestAnimationFrame(() => { f.style.width = target; }));
+    // Fill Horizon + composite group bars from 0 -> target within `root`. The width transition is
+    // CSS-gated under reduced motion (horizon.css), so this just jumps there. Called on load (hero +
+    // group headers) and again after each trophy-filter swap (the per-group bars re-render inside
+    // #browse-results, so they'd otherwise stay at 0%).
+    function fillBars(root) {
+        const scope = root || document;
+        scope.querySelectorAll('[data-gd-fill] .pp-horizon__fill').forEach((fill) => {
+            const bar = fill.closest('[data-gd-fill]');
+            const target = (bar.dataset.gdFill || '0') + '%';
+            requestAnimationFrame(() => requestAnimationFrame(() => bar.style.setProperty('--horizon-progress', target)));
+        });
+        scope.querySelectorAll('.gd-groupbar__fill[data-gd-fill]').forEach((f) => {
+            const target = (f.dataset.gdFill || '0') + '%';
+            requestAnimationFrame(() => requestAnimationFrame(() => { f.style.width = target; }));
+        });
+    }
+    fillBars(container);
+
+    // Trophy-row entrance. Two tools by design (motion-patterns "reveal-stagger is three tools"):
+    //  - INITIAL LOAD: shared staggerReveal. It adds .pp-reveal + stamps each row .is-revealed synchronously,
+    //    so the WAAPI backwards-fill (opacity 0 through each row's stagger delay) is what actually holds a row
+    //    hidden -- same as the game_list gallery. The .pp-reveal / :not(.is-revealed) CSS is a strand-proof
+    //    safety net (a row is only ever hidden while un-revealed), NOT a first-paint guard.
+    //  - FILTER SWAP: a bespoke WAAPI-only stagger (staggerSwappedRows). #browse-results PERSISTS across an
+    //    innerHTML swap, so its load-time .pp-reveal would otherwise strand the freshly-swapped rows (the
+    //    "cards disappear on filter" bug). We DROP .pp-reveal on swap and animate with NO persistent hide-
+    //    class, so a row is visible by default and can never be left hidden if anything goes sideways.
+    function revealTrophiesInitial() {
+        const grid = document.getElementById('browse-results');
+        if (!grid || !PlatPursuit.staggerReveal) return;
+        PlatPursuit.staggerReveal({
+            grid, cardSelector: '.gd-trophy', step: 18, batchCap: 480,
+            reveal: (el, delay) => el.animate(
+                [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
+                { duration: 340, delay, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' }
+            ),
+        });
+    }
+    function staggerSwappedRows(root) {
+        if (reduce || !root) return;
+        root.querySelectorAll('.gd-trophy').forEach((el, i) => {
+            if (!el.animate) return;
+            el.animate(
+                [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
+                { duration: 300, delay: Math.min(i * 14, 260), easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' }
+            );
+        });
+    }
+    revealTrophiesInitial();
+
+    // Trophy group-nav smooth-jump, delegated on the persistent container (the nav re-renders inside
+    // #browse-results on every filter swap, so a per-chip listener wouldn't survive). The <a href="#..">
+    // stays the no-JS fallback; this just upgrades it to a reduced-motion-aware smooth scroll.
+    container.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-gd-groupjump]');
+        if (!chip) return;
+        e.preventDefault();
+        const target = document.getElementById(chip.dataset.gdGroupjump);
+        if (target) target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
     });
 
     // ============================================================
@@ -141,7 +188,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const leftH = cover.offsetHeight + (extras ? ROW_GAP + extras.offsetHeight : 0);
             const gap = parseFloat(getComputedStyle(main).rowGap) || 8;
-            const kids = Array.from(main.children);
+            // Only FLOW children count toward the column height -- the "X Players" headline is absolutely
+            // positioned at md+ (it lives in this column but takes no flow space), so including its height
+            // over-counts mainH and falsely clamps the About blurb even when there's room.
+            const kids = Array.from(main.children).filter((c) => getComputedStyle(c).position !== 'absolute');
             const mainH = kids.reduce((h, c) => h + c.offsetHeight, 0) + gap * Math.max(0, kids.length - 1);
 
             const overflow = mainH - leftH;
@@ -529,7 +579,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.body.addEventListener('htmx:afterSwap', (e) => {
         if (e.detail && e.detail.target && e.detail.target.id === 'browse-results') {
-            e.detail.target.classList.remove('is-swapping');
+            // Drop BOTH the settle dim and the load-time .pp-reveal hide -- the swapped rows are visible by
+            // default now, so nothing can strand them -- then stagger them in with the bespoke WAAPI pass and
+            // refill the per-group Horizons (they re-render at 0%).
+            e.detail.target.classList.remove('is-swapping', 'pp-reveal');
+            staggerSwappedRows(e.detail.target);
+            fillBars(e.detail.target);
         }
     });
 

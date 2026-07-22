@@ -967,7 +967,9 @@ class GameDetailView(DetailView):
         xp_total = contract.xp_total_override or CONTRACT_XP_TOTAL
         xp_per_job = (xp_total // len(jobs)) if jobs else 0
 
-        state = None
+        # The contract row always carries a status tag (design: consistent presence). For a linked viewer
+        # it reflects their EarnedContract; a linked viewer who hasn't started reads "Not Started"; an anon/
+        # unlinked viewer (no target_profile) reads the neutral "Available".
         if target_profile:
             from trophies.models import EarnedContract
             ec = EarnedContract.objects.filter(profile=target_profile, contract=contract).first()
@@ -981,7 +983,12 @@ class GameDetailView(DetailView):
                     status = 'banked'
                 else:
                     status = 'pursuing'
-                state = {'status': status}
+            else:
+                status = 'not_started'
+        else:
+            status = 'available'
+        label, variant = self._CONTRACT_STATE_TAG[status]
+        state = {'status': status, 'label': label, 'variant': variant}
         return {'pursuit_contract': contract, 'pursuit_jobs': jobs, 'pursuit_contract_state': state,
                 'pursuit_xp_per_job': xp_per_job, 'pursuit_disc_style': disc_style}
 
@@ -1023,6 +1030,18 @@ class GameDetailView(DetailView):
             e = sum(d['earned'] for d in dlcs)
             dlcs = [{'name': 'All DLC', 'pct': round(e / t * 100) if t else 0, 'earned': e, 'total': t}]
         return {'main': main, 'dlcs': dlcs, 'dlc_total': dlc_total, 'combined_dlc': combined}
+
+    def _build_group_pct(self, trophy_groups, profile_group_totals):
+        """Per-group completion % keyed by group_id, for the trophy-panel group headers. Same
+        earned/total math as _build_group_bars, but keyed by group_id so each group's own header
+        can render its Horizon. Cheap: reads the already-aggregated group totals + defined counts.
+        """
+        pct = {}
+        for gid, group in trophy_groups.items():
+            total = sum(int(v or 0) for v in (group.get('defined_trophies') or {}).values())
+            earned = sum((profile_group_totals.get(gid) or {}).values())
+            pct[gid] = round(earned / total * 100) if total else 0
+        return pct
 
     def _build_rating_context(self, user, game):
         """
@@ -1078,6 +1097,15 @@ class GameDetailView(DetailView):
 
     # PSN-global rarity tiers (Trophy.trophy_rarity): Common=3 .. Ultra_Rare=0.
     _RARITY_LABELS = {0: 'Ultra Rare', 1: 'Very Rare', 2: 'Rare', 3: 'Common'}
+
+    # Contract-row status tag -> (label, CSS variant). Always shown on the pursuit spine row.
+    _CONTRACT_STATE_TAG = {
+        'available': ('Available', 'todo'),
+        'not_started': ('Not Started', 'todo'),
+        'pursuing': ('In Progress', 'active'),
+        'claimable': ('Claimable', 'claim'),
+        'banked': ('Banked', 'done'),
+    }
 
     def _build_outlook_context(self, game):
         """
@@ -1207,6 +1235,12 @@ class GameDetailView(DetailView):
         context['group_bars'] = (
             self._build_group_bars(context['trophy_groups'], context.get('profile_group_totals') or {})
             if target_profile and context['trophy_groups'] else None
+        )
+
+        # Per-group completion % keyed by group_id, for the trophy-panel group headers (authed only).
+        context['profile_group_pct'] = (
+            self._build_group_pct(context['trophy_groups'], context.get('profile_group_totals') or {})
+            if target_profile and context['trophy_groups'] else {}
         )
 
         # Build concept-related context (community ratings, badges, other versions)

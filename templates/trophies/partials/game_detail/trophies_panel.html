@@ -42,7 +42,7 @@
             {% for value, display in form.trophy_type.field.choices %}
                 <label class="gd-chip">
                     <input type="checkbox" name="trophy_type" value="{{ value }}" class="sr-only peer" {% if value in selected_trophy_types %}checked{% endif %} />
-                    <span class="gd-chip__face gd-chip__face--{{ value }}">{{ display }}</span>
+                    <span class="gd-chip__face gd-chip__face--type">{{ display }}</span>
                 </label>
             {% endfor %}
             <span class="gd-toolbar__sep" aria-hidden="true"></span>

@@ -3,8 +3,7 @@
     <nav class="gd-groupnav" aria-label="Jump to trophy group">
         {% for group_id, trophies in grouped_trophies.items %}
             {% with trophy_groups|dict_get:group_id as group %}
-                <a href="#trophy-group-{{ group_id }}" class="gd-groupnav__chip"
-                   onclick="event.preventDefault(); document.getElementById('trophy-group-{{ group_id }}').scrollIntoView({behavior:'smooth', block:'start'})">
+                <a href="#trophy-group-{{ group_id }}" class="gd-groupnav__chip" data-gd-groupjump="trophy-group-{{ group_id }}">
                     <img src="{{ group.trophy_group_icon_url }}" class="gd-groupnav__icon" alt="" loading="lazy" />
                     <span class="gd-groupnav__name">{{ group.trophy_group_name }}</span>
                     <span class="gd-groupnav__count">{{ trophies|length }}</span>
