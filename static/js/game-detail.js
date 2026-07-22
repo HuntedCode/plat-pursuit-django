@@ -529,6 +529,7 @@ document.addEventListener('DOMContentLoaded', () => {
     (function () {
         const badgesModal = document.getElementById('gd-badges-modal');
         const statsModal = document.getElementById('gd-stats-modal');
+        const versionsModal = document.getElementById('gd-versions-modal');
         function wire(m) {
             if (!m) return;
             // Choreographed exit: fade/scale out (.is-closing) then .close(), so the modal leaves as
@@ -555,7 +556,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Swipe-down-to-close on touch (shared sheet gesture) animates the dialog off itself, so just close.
             if (PlatPursuit.dismissableSheet) { PlatPursuit.dismissableSheet(m, { onClose: function () { pageRecede(false); if (m.close && m.open) m.close(); } }); }
         }
-        wire(badgesModal); wire(statsModal);
+        wire(badgesModal); wire(statsModal); wire(versionsModal);
         // Native <dialog>.showModal() scrolls the page to the dialog on mobile; keep the scroll put.
         function openKeepScroll(m) {
             const y = window.scrollY;
@@ -569,6 +570,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 pageRecede(true);
                 const grid = badgesModal.querySelector('[data-gd-badgegrid]');   // re-arm the staggered card reveal
                 if (grid && !reduce) { grid.classList.remove('is-revealing'); void grid.offsetWidth; grid.classList.add('is-revealing'); }
+            });
+        });
+
+        document.querySelectorAll('[data-versions-open]').forEach((op) => {
+            op.addEventListener('click', () => {
+                if (!versionsModal || !versionsModal.showModal || versionsModal.open) return;
+                openKeepScroll(versionsModal);
+                pageRecede(true);
             });
         });
 

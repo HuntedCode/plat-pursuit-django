@@ -14,7 +14,7 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from trophies.models import Contract, Job
+from trophies.models import Contract, GameFamily, Job
 from trophies.views.game_views import GameDetailView
 from tests.factories import (
     ConceptFactory, EarnedTrophyFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
@@ -224,3 +224,31 @@ def test_pursuit_status_fully_accepted_is_banked():
     state = GameDetailView()._build_pursuit_context(game, profile)['pursuit_contract_state']
     assert state['status'] == 'banked'
     assert state['variant'] == 'done'
+
+
+# ── _build_family_versions (other concepts in the same GameFamily) ──────────
+
+def test_family_versions_empty_without_family():
+    game = GameFactory(concept=ConceptFactory())
+    assert GameDetailView()._build_family_versions(game) == []
+
+
+def test_family_versions_lists_siblings_with_most_played_representative():
+    family = GameFamily.objects.create(canonical_name='Cool Series')
+    c0 = ConceptFactory(unified_title='Cool Game', family=family)
+    game = GameFactory(concept=c0)
+    sib = ConceptFactory(unified_title='Cool Game Remastered', family=family)
+    GameFactory(concept=sib, played_count=5)
+    rep = GameFactory(concept=sib, played_count=99)   # most-played -> the representative
+
+    fv = GameDetailView()._build_family_versions(game)
+    assert len(fv) == 1                       # the current concept is excluded
+    assert fv[0]['concept'].pk == sib.pk
+    assert fv[0]['game'].pk == rep.pk
+
+
+def test_family_versions_skips_sibling_with_no_games():
+    family = GameFamily.objects.create(canonical_name='Series')
+    game = GameFactory(concept=ConceptFactory(family=family))
+    ConceptFactory(family=family)             # sibling concept, but no games -> nothing to link to
+    assert GameDetailView()._build_family_versions(game) == []

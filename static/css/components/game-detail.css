@@ -132,6 +132,16 @@
 .gd-fact__v--link { color: var(--pp-text); text-decoration: none; transition: color var(--pp-dur-fast) var(--pp-ease); }
 .gd-fact__v--link:hover { color: var(--pp-primary); }
 
+/* "Versions & editions" cross-link (opens the versions modal). Quiet pill so it doesn't rival the actions. */
+.gd-versions-link { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 5px 8px 5px 10px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); color: var(--pp-text-dim); font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-versions-link > svg:first-child { width: 15px; height: 15px; color: var(--pp-text-mute); flex-shrink: 0; }
+.gd-versions-link:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)); }
+.gd-versions-link__n { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: color-mix(in oklab, var(--pp-primary) 22%, transparent); color: var(--pp-primary); font-size: 0.68rem; font-weight: 800; }
+.gd-versions-link__chev { width: 14px; height: 14px; color: var(--pp-text-mute); transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-versions-link:hover .gd-versions-link__chev { transform: translateX(2px); color: var(--pp-primary); }
+.gd-versions-link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .gd-versions-link__chev, .gd-vrow__chev { transition: none; } }
+
 /* Condensed About — fills the space beside the tall cover; jumps to the full About tab. */
 /* Hidden on mobile to save vertical space (the full About lives in the About tab); shown from md up. */
 .gd-hero__about { display: none; flex-direction: column; gap: 8px; margin-top: 2px; }
@@ -281,6 +291,24 @@
 .gd-modal__body { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; max-height: 70vh; overflow-y: auto; }
 /* Badges-this-game-is-in: a showcase grid of medallion objects (as-designed look). */
 .gd-modal--badges { width: min(94vw, 520px); max-width: 520px; }
+
+/* Versions & editions modal: two sections (other platforms / same family), each a list of cover + name + platforms. */
+.gd-modal--versions { width: min(94vw, 460px); max-width: 460px; }
+.gd-vsec + .gd-vsec { margin-top: 14px; }
+.gd-vsec__h { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-dim); }
+.gd-vsec__sub { font-size: 0.72rem; color: var(--pp-text-mute); margin: 1px 0 8px; }
+.gd-vlist { display: flex; flex-direction: column; gap: 6px; }
+.gd-vrow { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px solid var(--pp-border); text-decoration: none; transition: border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-vrow:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)); }
+.gd-vrow:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.gd-vrow__cover { width: 38px; aspect-ratio: 3 / 4; flex-shrink: 0; border-radius: 6px; overflow: hidden; border: 1px solid var(--pp-border); background: var(--pp-bg-0); }
+.gd-vrow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.gd-vrow__name { font-size: 0.85rem; font-weight: 600; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-vrow__meta { display: flex; flex-wrap: wrap; gap: 4px; }
+.gd-vrow__plat { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 1px 6px; border-radius: 999px; color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border); }
+.gd-vrow__plat--region { color: var(--pp-secondary); border-color: color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border)); }
+.gd-vrow__chev { width: 16px; height: 16px; flex-shrink: 0; color: var(--pp-text-mute); transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-vrow:hover .gd-vrow__chev { transform: translateX(2px); color: var(--pp-primary); }
 .gd-badgegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
 .gd-badgecard {
     display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 14px 8px 11px; text-align: center; text-decoration: none;
