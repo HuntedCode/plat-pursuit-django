@@ -21,6 +21,10 @@
 @keyframes gdLoadSlide { from { left: -40%; } to { left: 100%; } }
 
 /* Sticky minibar (page-level; persists across all views). Per-view extras show only for the active view. */
+/* Narrow-screen guard: this bar carries a lot (identity + sort + group-jump + 4-view switch + Filters), so on
+   a small phone its controls can exceed the width. It's position:fixed, so that overflow would add page scroll
+   width. Clip contains it (a control may be cut off < ~375px, better than a horizontally-scrolling page). */
+.gd-minibar { overflow-x: clip; }
 .gd-minibar:not([data-mb-active="trophies"]) [data-mb-only="trophies"] { display: none; }
 .gd-minibar .pp-minibar__switch { flex-shrink: 0; }
 /* Both minibar selects use the shared .pp-gallery__select look (matches Browse Games). The group-jump keeps
@@ -595,7 +599,10 @@
 @keyframes gdChipPop { 0% { transform: scale(1); } 40% { transform: scale(1.13); } 100% { transform: scale(1); } }
 
 /* Group nav */
-.gd-groupnav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 14px; }
+/* Wrap the jump pills (don't horizontally scroll): a scroll container here sits in the page's flex column
+   (#zoom-wrapper) and its intrinsic min-content propagates up, widening the whole page on many-DLC games.
+   Wrapping has no intrinsic-width to leak, and shows every group at once. */
+.gd-groupnav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .gd-groupnav__chip { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 5px 10px; border-radius: 999px; text-decoration: none; font-size: 0.78rem; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
 .gd-groupnav__chip:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
 .gd-groupnav__icon { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
