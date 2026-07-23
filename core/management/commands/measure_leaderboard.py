@@ -119,7 +119,10 @@ class Command(BaseCommand):
         self.stdout.write(f"    500 games  ~{500 * 1000 * 100 / 1_000_000:.0f} MB"
                           f"   |   2,000 games  ~{2000 * 1000 * 100 / 1_000_000:.0f} MB")
 
-        self._head('2. LEADERBOARD QUERY TODAY (no composite index yet)')
+        has_index = bool(self._q(
+            "SELECT 1 FROM pg_indexes WHERE indexname = %s", ['pg_game_leaderboard_idx']))
+        self._head('2. LEADERBOARD QUERY  (pg_game_leaderboard_idx: {})'.format(
+            'PRESENT' if has_index else 'MISSING'))
 
         tops = self._q("""
             SELECT id, np_communication_id, played_count
@@ -183,18 +186,19 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(
                 "  Rank lookup was never measured (every probed game had too few eligible players).\n"
                 "  Re-run with a smaller --depth to exercise it."))
+        timings = f"Worst page {worst_page:.1f}ms, worst rank {worst_rank:.1f}ms."
         if worst_page < 25 and worst_rank < 100:
             self.stdout.write(self.style.SUCCESS(
-                f"  DB-only is fine. Worst page {worst_page:.0f}ms, worst rank {worst_rank:.0f}ms.\n"
-                "  Add the composite index and skip Redis entirely for now."))
-        elif worst_page < 25:
+                f"  DB-only is fine. {timings}\n"
+                "  No reason to reach for Redis: the DB serves this comfortably."))
+        elif not has_index:
             self.stdout.write(self.style.WARNING(
-                f"  Pages are fast ({worst_page:.0f}ms) but deep rank is slow ({worst_rank:.0f}ms).\n"
-                "  Add the composite index, then re-run: it targets exactly this."))
+                f"  {timings}\n"
+                "  pg_game_leaderboard_idx is MISSING -- add it and re-run before concluding anything.\n"
+                "  Index: (game_id, progress DESC, most_recent_trophy_date ASC, profile_id)\n"
+                "  In the EXPLAIN, a Sort node with a large rows= is what that index removes."))
         else:
             self.stdout.write(self.style.WARNING(
-                f"  Worst page {worst_page:.0f}ms, worst rank {worst_rank:.0f}ms.\n"
-                "  Add the composite index and re-run before considering Redis."))
-        self.stdout.write(
-            "  Index to add: (game_id, progress DESC, most_recent_trophy_date ASC, profile_id)\n"
-            "  In the EXPLAIN, a Sort node with a large rows= is what that index removes.")
+                f"  {timings}\n"
+                "  The index is present but this is still slow -- check the EXPLAIN for a plan that\n"
+                "  is NOT a plain Index Scan on pg_game_leaderboard_idx before considering Redis."))
