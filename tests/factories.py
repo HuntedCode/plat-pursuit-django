@@ -30,6 +30,7 @@ from trophies.models import (
     Review,
     Stage,
     Trophy,
+    TrophyGroup,
     UserBadge,
     UserBadgeProgress,
     UserConceptRating,
@@ -269,6 +270,17 @@ class TrophyFactory(factory.django.DjangoModelFactory):
     trophy_id = factory.Sequence(lambda n: n)
     trophy_type = "bronze"
     trophy_name = factory.Sequence(lambda n: f"Trophy {n}")
+
+
+class TrophyGroupFactory(factory.django.DjangoModelFactory):
+    """A game's trophy group. 'default' is the base game; '001', '002'... are DLC."""
+
+    class Meta:
+        model = TrophyGroup
+
+    game = factory.SubFactory(GameFactory)
+    trophy_group_id = "default"
+    trophy_group_name = factory.Sequence(lambda n: f"Group {n}")
 
 
 class EarnedTrophyFactory(factory.django.DjangoModelFactory):

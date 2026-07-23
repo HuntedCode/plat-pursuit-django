@@ -76,6 +76,70 @@ class Command(BaseCommand):
         self.stdout.write('')
         self.stdout.write(self.style.MIGRATE_HEADING(text))
 
+    def _sizing_for_group_boards(self):
+        """Size a future per-group leaderboard (the plat race = the default group's board).
+
+        Per-group standings are NOT denormalized anywhere today -- ProfileGame carries overall progress
+        only -- so group boards need a ProfileTrophyGroup-style table maintained by sync. This sizes it.
+        """
+        self._head('3. GROUP-SCOPED BOARDS (sizing a ProfileTrophyGroup denorm)')
+
+        total_groups = int(self._q("SELECT COUNT(*) FROM trophies_trophygroup")[0][0])
+        if not total_groups:
+            self.stdout.write(self.style.WARNING('  No TrophyGroup rows. Nothing to size.'))
+            return
+
+        row = self._q("""
+            SELECT COUNT(*),
+                   COUNT(*) FILTER (WHERE groups > 1),
+                   MAX(groups),
+                   ROUND(AVG(groups), 2)
+            FROM (SELECT game_id, COUNT(*) AS groups FROM trophies_trophygroup GROUP BY game_id) g
+        """)[0]
+        self.stdout.write(f"  TrophyGroup rows total       : {total_groups:,}")
+        self.stdout.write(f"  Games with groups synced     : {int(row[0]):,}")
+        self.stdout.write(f"  Games with DLC (>1 group)    : {int(row[1]):,}")
+        self.stdout.write(f"  Most groups on one game      : {int(row[2]):,}")
+        self.stdout.write(f"  Average groups per game      : {row[3]}")
+
+        self.stdout.write("\n  Distribution (groups per game):")
+        for groups, games in self._q("""
+            SELECT groups, COUNT(*) FROM (
+                SELECT game_id, COUNT(*) AS groups FROM trophies_trophygroup GROUP BY game_id
+            ) g GROUP BY groups ORDER BY groups LIMIT 12
+        """):
+            self.stdout.write(f"    {int(groups):>3} group(s) : {int(games):,} games")
+
+        # Upper bound: a row per (player, group) for every group of every game they own. Uses the
+        # denormalized played_count so this doesn't scan ProfileGame.
+        projected = self._q("""
+            SELECT COALESCE(SUM(g.played_count::bigint * grp.groups), 0)
+            FROM trophies_game g
+            JOIN (SELECT game_id, COUNT(*) AS groups FROM trophies_trophygroup GROUP BY game_id) grp
+              ON grp.game_id = g.id
+        """)[0][0]
+        self.stdout.write(f"\n  Projected ProfileTrophyGroup rows (eager, a row per player per group):")
+        self.stdout.write(f"    ~{int(projected):,}")
+        self.stdout.write("    (Upper bound. Creating rows lazily on first trophy in a group would be lower;")
+        self.stdout.write("     measuring that exactly means scanning EarnedTrophy, so it is left out here.)")
+
+        # Time-based boards depend on these two being populated.
+        cov = self._q("""
+            SELECT COUNT(*),
+                   COUNT(*) FILTER (WHERE play_duration IS NOT NULL),
+                   COUNT(*) FILTER (WHERE first_played_date_time IS NOT NULL),
+                   COUNT(*) FILTER (WHERE most_recent_trophy_date IS NOT NULL)
+            FROM trophies_profilegame
+        """)[0]
+        total = int(cov[0]) or 1
+        self.stdout.write("\n  Coverage for TIME-based boards:")
+        for label, count in (('play_duration', cov[1]),
+                             ('first_played_date_time', cov[2]),
+                             ('most_recent_trophy_date', cov[3])):
+            count = int(count)
+            self.stdout.write(f"    {label:<24}: {count:>10,} / {total:,}  ({count * 100.0 / total:.1f}%)")
+        self.stdout.write("    A board over a field that is mostly null is a bad experience regardless of the idea.")
+
     # -- main ------------------------------------------------------------
 
     def handle(self, *args, **options):
@@ -173,8 +237,10 @@ class Command(BaseCommand):
             self.stdout.write(f"    {label:<16}: {ms:8.1f} ms   "
                               f"({int(rows[0][0]):,} players ahead)")
 
+        self._sizing_for_group_boards()
+
         if options['explain']:
-            self._head('3. EXPLAIN (biggest game, top-20 page)')
+            self._head('4. EXPLAIN (biggest game, top-20 page)')
             with connection.cursor() as cur:
                 cur.execute('EXPLAIN (ANALYZE, BUFFERS) ' + PAGE_SQL, [tops[0][0]])
                 for line in cur.fetchall():

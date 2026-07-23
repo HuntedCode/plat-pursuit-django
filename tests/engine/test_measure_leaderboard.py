@@ -3,12 +3,13 @@
 The command is a production diagnostic, so the bar is: it must run without error against real
 Postgres (its SQL is raw), it must be read-only, and it must not fall over on an empty table.
 """
+from datetime import timedelta
 from io import StringIO
 
 import pytest
 from django.core.management import call_command
 
-from tests.factories import GameFactory, ProfileFactory, ProfileGameFactory
+from tests.factories import GameFactory, ProfileFactory, ProfileGameFactory, TrophyGroupFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -49,6 +50,46 @@ def test_explain_flag_emits_a_query_plan():
     assert 'EXPLAIN' in output
     # Postgres plans always name the scanned relation.
     assert 'profilegame' in output.lower()
+
+
+def test_group_sizing_counts_dlc_and_projects_denorm_rows():
+    """Sizes a future ProfileTrophyGroup table: a 3-group game with 10 players projects 30 rows."""
+    dlc_game = GameFactory(played_count=10)
+    for gid in ('default', '001', '002'):
+        TrophyGroupFactory(game=dlc_game, trophy_group_id=gid)
+    base_only = GameFactory(played_count=4)
+    TrophyGroupFactory(game=base_only, trophy_group_id='default')
+
+    output = _run()
+
+    assert 'GROUP-SCOPED BOARDS' in output
+    assert 'Games with DLC (>1 group)    : 1' in output
+    assert 'Most groups on one game      : 3' in output
+    assert '~34' in output                      # 10 players x 3 groups + 4 x 1
+
+
+def test_group_sizing_handles_no_trophy_groups():
+    """A database with no synced groups must not divide by zero or crash."""
+    GameFactory(played_count=3)
+
+    output = _run()
+
+    assert 'Nothing to size' in output
+
+
+def test_group_sizing_reports_time_field_coverage():
+    """Time-based boards depend on these fields; a mostly-null field should be visible up front."""
+    game = GameFactory(played_count=2)
+    TrophyGroupFactory(game=game)
+    ProfileGameFactory(profile=ProfileFactory(), game=game, play_duration=None)
+    ProfileGameFactory(profile=ProfileFactory(), game=GameFactory(),
+                       play_duration=timedelta(hours=5))
+
+    output = _run()
+
+    assert 'play_duration' in output
+    assert 'first_played_date_time' in output
+    assert '50.0%' in output      # 1 of 2 rows has play_duration
 
 
 def test_is_read_only(django_assert_num_queries):
