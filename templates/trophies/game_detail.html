@@ -185,6 +185,7 @@
                             <span class="gd-vrow__body">
                                 <span class="gd-vrow__name">{{ v.title_name }}</span>
                                 <span class="gd-vrow__meta">{% for p in v.title_platform %}<span class="gd-vrow__plat">{{ p }}</span>{% endfor %}{% if v.is_regional %}{% for r in v.region %}<span class="gd-vrow__plat gd-vrow__plat--region">{{ r }}</span>{% endfor %}{% endif %}</span>
+                                {% include 'trophies/partials/game_detail/_version_trophy_dots.html' with game=v %}
                             </span>
                             <svg class="gd-vrow__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                         </a>
@@ -203,6 +204,7 @@
                             <span class="gd-vrow__body">
                                 <span class="gd-vrow__name">{{ fv.concept.unified_title }}</span>
                                 <span class="gd-vrow__meta">{% for p in fv.game.title_platform %}<span class="gd-vrow__plat">{{ p }}</span>{% endfor %}{% if fv.game.is_regional %}{% for r in fv.game.region %}<span class="gd-vrow__plat gd-vrow__plat--region">{{ r }}</span>{% endfor %}{% endif %}</span>
+                                {% include 'trophies/partials/game_detail/_version_trophy_dots.html' with game=fv.game %}
                             </span>
                             <svg class="gd-vrow__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                         </a>

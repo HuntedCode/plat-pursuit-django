@@ -305,6 +305,9 @@
 .gd-vrow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .gd-vrow__name { font-size: 0.85rem; font-weight: 600; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gd-vrow__meta { display: flex; flex-wrap: wrap; gap: 4px; }
+/* Defined trophy composition (reuses the .gd-gcount tier dots), a touch smaller for the compact card. */
+.gd-vrow__trophies { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 9px; margin-top: 3px; }
+.gd-vrow__trophies .gd-gcount__n { font-size: 0.74rem; }
 .gd-vrow__plat { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 1px 6px; border-radius: 999px; color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border); }
 .gd-vrow__plat--region { color: var(--pp-secondary); border-color: color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border)); }
 .gd-vrow__chev { width: 16px; height: 16px; flex-shrink: 0; color: var(--pp-text-mute); transition: transform var(--pp-dur-fast) var(--pp-ease); }

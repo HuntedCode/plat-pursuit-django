@@ -1,0 +1,10 @@
+{# Defined trophy counts as flat tier dots for a versions-modal card. Expects `game`. Empty tiers omitted; #}
+{# defined_trophies is a denormalized JSONField, so this reads no extra queries. #}
+{% if game.defined_trophies %}
+<span class="gd-vrow__trophies">
+    {% if game.defined_trophies.bronze %}<span class="gd-gcount gd-gcount--bronze" title="Bronze: {{ game.defined_trophies.bronze }}"><span class="gd-gcount__dot" aria-hidden="true"></span><span class="gd-gcount__n">{{ game.defined_trophies.bronze }}</span></span>{% endif %}
+    {% if game.defined_trophies.silver %}<span class="gd-gcount gd-gcount--silver" title="Silver: {{ game.defined_trophies.silver }}"><span class="gd-gcount__dot" aria-hidden="true"></span><span class="gd-gcount__n">{{ game.defined_trophies.silver }}</span></span>{% endif %}
+    {% if game.defined_trophies.gold %}<span class="gd-gcount gd-gcount--gold" title="Gold: {{ game.defined_trophies.gold }}"><span class="gd-gcount__dot" aria-hidden="true"></span><span class="gd-gcount__n">{{ game.defined_trophies.gold }}</span></span>{% endif %}
+    {% if game.defined_trophies.platinum %}<span class="gd-gcount gd-gcount--platinum" title="Platinum: {{ game.defined_trophies.platinum }}"><span class="gd-gcount__dot" aria-hidden="true"></span><span class="gd-gcount__n">{{ game.defined_trophies.platinum }}</span></span>{% endif %}
+</span>
+{% endif %}

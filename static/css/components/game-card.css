@@ -48,27 +48,15 @@
 .pp-gcard__barfill--chase   { background: var(--pp-accent); }
 .pp-gcard__barfill--prog    { background: color-mix(in oklab, var(--pp-info) 52%, var(--pp-text-mute)); }
 
-/* Community stats footer: a quiet bottom row of game-community facts (players / plats earned / 100%
-   completions / avg completion). A top divider (no box), with the stats inset by the chips' padding so
-   the content stays bounded to the same horizontal area as the badge/contract chips above -- not spread to
-   the card edges. Tabular numerals match the facts row. */
-.pp-gcard__cstats {
-    display: flex; align-items: center; justify-content: space-between; gap: 6px;
-    padding: 6px 8px 0; border-top: 1px solid var(--pp-divider);
-    font-size: 10.5px; font-weight: 700; color: var(--pp-text-dim); font-variant-numeric: tabular-nums;
-}
-.pp-gcard__cstat { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
-.pp-gcard__cstat svg { width: 13px; height: 13px; flex-shrink: 0; }
-/* Per-stat icon tints tie to the progress-bar state palette (info / platinum / success / accent). */
-.pp-gcard__cstat--players svg { color: var(--pp-info); }
-.pp-gcard__cstat--plat svg { color: var(--color-trophy-platinum); }
-.pp-gcard__cstat--full svg { color: var(--pp-success); }
-.pp-gcard__cstat--avg svg { color: var(--pp-accent); }
-/* Mobile compaction: one stat drops out below md so the row of 4 isn't cramped on phones (the template
-   picks which -- 100%-completions when a platinum exists, else the always-zero platinum stat). Both
-   return at md+ where there's room for the full set. */
-.pp-gcard__cstat--sm-hide { display: none; }
-@media (min-width: 768px) { .pp-gcard__cstat--sm-hide { display: inline-flex; } }
+/* Footer: platform (+ region) chips on the left, player count on the right. A solid body row (top divider)
+   so platform reads on any cover art -- unlike an over-the-art badge. All denormalized Game columns: zero
+   queries. Region chips only render for regional releases (worldwide is the unmarked default). */
+.pp-gcard__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px solid var(--pp-divider); }
+.pp-gcard__plats { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.pp-gcard__plat { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1; padding: 3px 6px; border-radius: 4px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border); }
+.pp-gcard__plat--region { color: var(--pp-secondary); border-color: color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border)); }
+.pp-gcard__players { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; font-size: 0.7rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--pp-text-mute); }
+.pp-gcard__players svg { width: 13px; height: 13px; color: var(--pp-info); flex-shrink: 0; }
 
 /* Quick-add to a list (signed in): a small info-tinted circle, revealed on hover (always visible on touch). */
 .pp-gcard__add {

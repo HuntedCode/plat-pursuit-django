@@ -116,31 +116,32 @@ def test_card_dlc_tag_shows_pack_count(client):
     assert content.count('pp-gcard__dlc-n') == 1  # only the DLC game carries a count (no-groups game omits it)
 
 
-def test_card_shows_community_stats_badge(client):
-    """A game with players renders the community-stats badge (.pp-gcard__cstats) with compact counts + a
-    rounded avg completion. Reads plain denormed Game columns -> no extra queries."""
+def test_card_footer_shows_platform_and_players(client):
+    """The card footer (.pp-gcard__foot) carries the platform chips on the left and, when the game has
+    players, a compact player count on the right. Plain denormed Game columns -> no extra queries."""
     from trophies.models import Game
 
-    game = GameFactory(title_name='Stats Badge Game', title_platform=['PS5'])
-    Game.objects.filter(pk=game.pk).update(
-        played_count=128400, plats_earned_count=41000, full_completion_count=39000, avg_completion=63.0,
-    )
+    game = GameFactory(title_name='Footer Game', title_platform=['PS5'])
+    Game.objects.filter(pk=game.pk).update(played_count=128400)
     url, params = _url()
     content = client.get(url, params).content.decode()
 
-    assert 'pp-gcard__cstats' in content
-    assert '128.4k' in content   # compact_number(128400)
-    assert '63%' in content       # avg_completion floatformat:0
+    assert 'pp-gcard__foot' in content
+    assert 'pp-gcard__plat' in content       # a platform chip rendered
+    assert 'pp-gcard__players' in content
+    assert '128.4k' in content                # compact_number(128400)
 
 
-def test_card_hides_stats_badge_when_no_players(client):
-    """A game nobody has played (played_count=0) omits the stats badge (would just read zeros)."""
+def test_card_footer_shows_platform_without_players(client):
+    """A game nobody has played still shows the platform footer -- just no player-count span."""
     GameFactory(title_name='Unplayed Game', title_platform=['PS5'])  # played_count defaults to 0
     url, params = _url()
     content = client.get(url, params).content.decode()
 
     assert 'Unplayed Game' in content
-    assert 'pp-gcard__cstats' not in content
+    assert 'pp-gcard__foot' in content
+    assert 'pp-gcard__plat' in content        # platform chip still shows
+    assert 'pp-gcard__players' not in content  # but no player count
 
 
 def test_active_filter_chips_render(client):
