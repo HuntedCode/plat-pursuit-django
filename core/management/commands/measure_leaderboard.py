@@ -137,17 +137,31 @@ class Command(BaseCommand):
         worst_rank = 0.0
         for game_id, npid, players in tops:
             players = int(players or 0)
-            self.stdout.write(f"\n  {npid}  (id={game_id}, {players:,} players)")
+
+            # played_count counts EVERY ProfileGame row; the board filters hidden ones out. Size the rank
+            # probe off the eligible rows or the offset overshoots and silently measures nothing -- and
+            # report both, because the gap is what the leaderboard header has to reconcile.
+            eligible = int(self._q("""
+                SELECT COUNT(*) FROM trophies_profilegame
+                WHERE game_id = %s AND hidden_flag = false AND user_hidden = false
+            """, [game_id])[0][0])
+            hidden = players - eligible
+            self.stdout.write(f"\n  {npid}  (id={game_id})")
+            self.stdout.write(f"    played_count     : {players:,}")
+            self.stdout.write(f"    on the board     : {eligible:,}"
+                              + (f"   ({hidden:,} hidden/excluded)" if hidden else ""))
 
             _, ms = self._timed(PAGE_SQL, [game_id])
             worst_page = max(worst_page, ms)
             self.stdout.write(f"    {'top-20 page':<16}: {ms:8.1f} ms")
 
-            depth = min(options['depth'], max(players - 1, 0))
+            depth = min(options['depth'], max(eligible - 1, 0))
             if depth <= 0:
+                self.stdout.write("    rank lookup      : skipped (too few players)")
                 continue
             sample = self._q(PAGE_SQL.replace('LIMIT 20', 'OFFSET %s LIMIT 1'), [game_id, depth])
             if not sample:
+                self.stdout.write("    rank lookup      : skipped (no row at that depth)")
                 continue
             pid, prog, dt = sample[0]
             rows, ms = self._timed(RANK_SQL, [game_id, prog, prog, dt, prog, dt, pid])
@@ -164,6 +178,11 @@ class Command(BaseCommand):
                     self.stdout.write(f"  {line[0]}")
 
         self._head('VERDICT')
+        if worst_rank == 0.0:
+            # Don't let an unmeasured rank read as a fast one.
+            self.stdout.write(self.style.WARNING(
+                "  Rank lookup was never measured (every probed game had too few eligible players).\n"
+                "  Re-run with a smaller --depth to exercise it."))
         if worst_page < 25 and worst_rank < 100:
             self.stdout.write(self.style.SUCCESS(
                 f"  DB-only is fine. Worst page {worst_page:.0f}ms, worst rank {worst_rank:.0f}ms.\n"
