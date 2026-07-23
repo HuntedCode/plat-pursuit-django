@@ -7,8 +7,10 @@
 const GameFlag = (() => {
     function init() {
         const modal = document.getElementById('game-flag-modal');
-        const btn = document.getElementById('game-flag-btn');
-        if (!modal || !btn) return;
+        // Several surfaces open the same modal: the hero's Report button and the About tab's empty-state
+        // CTA. Any element carrying [data-flag-open] joins in without touching this file again.
+        const btns = document.querySelectorAll('#game-flag-btn, [data-flag-open]');
+        if (!modal || !btns.length) return;
 
         const form = modal.querySelector('#game-flag-form');
         const select = modal.querySelector('[name="flag_type"]');
@@ -26,7 +28,7 @@ const GameFlag = (() => {
         }
 
         // ── Open ──
-        btn.addEventListener('click', () => {
+        btns.forEach((btn) => btn.addEventListener('click', () => {
             if (!modal.showModal || modal.open) return;
             form.reset();
             resetDetails();
@@ -34,7 +36,7 @@ const GameFlag = (() => {
             const y = window.scrollY;
             modal.showModal();
             if (window.scrollY !== y) window.scrollTo(0, y);
-        });
+        }));
 
         // ── Field behaviour ──
         textarea.addEventListener('input', () => { countEl.textContent = String(textarea.value.length); });

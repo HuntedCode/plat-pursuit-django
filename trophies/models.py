@@ -6263,7 +6263,7 @@ class IGDBMatch(models.Model):
         ]
 
     @staticmethod
-    def _format_seconds(seconds):
+    def format_seconds(seconds):
         """Format a duration in seconds to a human-readable string like '42h' or '30m'."""
         if not seconds:
             return None
@@ -6284,21 +6284,21 @@ class IGDBMatch(models.Model):
         """
         if not self.is_trusted:
             return None
-        return self._format_seconds(self.time_to_beat_completely)
+        return self.format_seconds(self.time_to_beat_completely)
 
     @property
     def speedrun_time_display(self):
         """Human-readable speedrun time estimate. None on untrusted matches."""
         if not self.is_trusted:
             return None
-        return self._format_seconds(self.time_to_beat_hastily)
+        return self.format_seconds(self.time_to_beat_hastily)
 
     @property
     def normal_time_display(self):
         """Human-readable average playthrough time estimate. None on untrusted matches."""
         if not self.is_trusted:
             return None
-        return self._format_seconds(self.time_to_beat_normally)
+        return self.format_seconds(self.time_to_beat_normally)
 
     @property
     def has_time_to_beat(self):

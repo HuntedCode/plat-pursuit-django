@@ -27,23 +27,34 @@ so the gating stays out of the template.
         </section>
         {% endif %}
 
-        {% if igdb.has_time_to_beat %}
+        {% if about_ttb %}
         <section class="gd-acard">
             <h3 class="gd-acard__h">Time to beat</h3>
+            {% comment %} Bars share ONE scale (computed in _build_about_ttb) so the ratio between the
+            estimates is readable without mental arithmetic, and the viewer's own playtime lands on that
+            same scale. data-gd-fill + --horizon-progress: 0% lets the shared fillBars() grow them when the
+            tab is first opened. A lone estimate falls back to the plain tally, since a single full bar
+            would imply a ratio that isn't there. {% endcomment %}
+            {% if about_ttb.comparative %}
             <div class="gd-ttb">
-                <div class="gd-ttb__cell">
-                    <span class="gd-ttb__v pp-tally{% if not igdb.speedrun_time_display %} is-empty{% endif %}">{% if igdb.speedrun_time_display %}{{ igdb.speedrun_time_display }}{% else %}&ndash;{% endif %}</span>
-                    <span class="gd-ttb__k">Speedrun</span>
+                {% for row in about_ttb.rows %}
+                <div class="gd-ttb__row{% if row.is_you %} gd-ttb__row--you{% endif %}">
+                    <span class="gd-ttb__lbl">{{ row.label }}</span>
+                    <span class="pp-horizon pp-horizon__track gd-ttb__bar" data-gd-fill="{{ row.pct }}" style="--horizon-h: 8px; --horizon-progress: 0%;{% if row.is_you %} --horizon-accent: var(--pp-accent);{% endif %}"><span class="pp-horizon__fill"></span></span>
+                    <span class="gd-ttb__val pp-tally">{{ row.display }}</span>
                 </div>
-                <div class="gd-ttb__cell">
-                    <span class="gd-ttb__v pp-tally{% if not igdb.normal_time_display %} is-empty{% endif %}">{% if igdb.normal_time_display %}{{ igdb.normal_time_display }}{% else %}&ndash;{% endif %}</span>
-                    <span class="gd-ttb__k">Normal</span>
-                </div>
-                <div class="gd-ttb__cell">
-                    <span class="gd-ttb__v pp-tally{% if not igdb.completion_time_display %} is-empty{% endif %}">{% if igdb.completion_time_display %}{{ igdb.completion_time_display }}{% else %}&ndash;{% endif %}</span>
-                    <span class="gd-ttb__k">Completionist</span>
-                </div>
+                {% endfor %}
             </div>
+            {% else %}
+            <div class="gd-ttb__solo">
+                {% for row in about_ttb.rows %}
+                <div class="gd-ttb__cell">
+                    <span class="gd-ttb__v pp-tally">{{ row.display }}</span>
+                    <span class="gd-ttb__k">{{ row.label }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </section>
         {% endif %}
 
@@ -96,6 +107,15 @@ so the gating stays out of the template.
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         <p class="gd-empty__title">No extended info yet</p>
         <p class="gd-empty__hint">Summaries, genres, and time-to-beat come from IGDB. This game hasn't been matched yet, or that data isn't available for it.</p>
+        {% comment %} Give the dead end a path: this is the same SSR report modal the hero's Report button
+        opens (game-flag.js binds every [data-flag-open]). Gated on is_linked to match that button -- an
+        unlinked visitor would get a control that goes nowhere. {% endcomment %}
+        {% if user.is_authenticated and user.profile.is_linked %}
+        <button type="button" class="gd-empty__cta" data-flag-open aria-haspopup="dialog">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>
+            Know this game? Tell us what's missing
+        </button>
+        {% endif %}
     </div>
     {% endif %}
 

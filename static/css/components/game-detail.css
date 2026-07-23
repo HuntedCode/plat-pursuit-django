@@ -754,6 +754,12 @@
 .gd-empty svg { width: 44px; height: 44px; opacity: 0.5; }
 .gd-empty__title { font-weight: 600; color: var(--pp-text-dim); }
 .gd-empty__hint { font-size: 0.82rem; }
+/* Turns the dead end into a path -- opens the same report modal as the hero's Report button. */
+.gd-empty__cta { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; padding: 8px 14px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; color: var(--pp-text-dim); cursor: pointer; background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-empty__cta svg { width: 14px; height: 14px; color: var(--pp-text-mute); transition: color var(--pp-dur-fast) var(--pp-ease); }
+.gd-empty__cta:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-2)); }
+.gd-empty__cta:hover svg { color: var(--pp-primary); }
+.gd-empty__cta:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
 /* ============================================================
    About panel
@@ -774,14 +780,33 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 
 /* Sections are stacked full-width bands (see game_about_card.html) -- no grid, so a missing section can
    never leave an empty cell. Each band adapts internally instead. */
+/* Band cascade on first arrival. staggerReveal drives the WAAPI motion; these only hold the hidden/shown
+   states, and it only adds .pp-reveal when it will actually reveal, so a band can never stick hidden. */
+@media (prefers-reduced-motion: no-preference) {
+    .gd-about.pp-reveal > .gd-acard,
+    .gd-about.pp-reveal > .gd-empty { opacity: 0; }
+    .gd-about.pp-reveal > .gd-acard.is-revealed,
+    .gd-about.pp-reveal > .gd-empty.is-revealed { opacity: 1; }
+}
 
 /* Time to beat: three figures (speedrun / normal / completionist). */
-/* max-width so three tallies in a full-width band stay compact rather than stretching into giant boxes. */
-.gd-ttb { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-@media (min-width: 768px) { .gd-ttb { max-width: 460px; } }
+/* Time to beat: label / shared-scale bar / value rows. The bars carry the information (the RATIO between
+   the estimates), so they get the width; max-width keeps them from stretching across a full-width band. */
+.gd-ttb { display: grid; gap: 7px; }
+@media (min-width: 768px) { .gd-ttb { max-width: 560px; } }
+.gd-ttb__row { display: grid; grid-template-columns: 5.5rem 1fr auto; align-items: center; gap: 10px; }
+.gd-ttb__lbl { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+.gd-ttb__bar { --horizon-accent: var(--pp-primary); min-width: 0; }
+.gd-ttb__val { font-size: 0.82rem; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+/* The viewer's own time is the one row that isn't an estimate -- accent it so it reads as "you are here". */
+.gd-ttb__row--you .gd-ttb__lbl { color: var(--pp-accent); }
+.gd-ttb__row--you .gd-ttb__val { color: var(--pp-accent); }
+
+/* Fallback for a lone estimate (no ratio to show): the original centred tally. */
+.gd-ttb__solo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 768px) { .gd-ttb__solo { max-width: 460px; } }
 .gd-ttb__cell { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; border-radius: var(--pp-radius-sm); background: color-mix(in oklab, var(--pp-bg-0) 45%, transparent); border: 1px solid var(--pp-border); }
 .gd-ttb__v { font-size: 1rem; font-weight: 800; color: var(--pp-text); line-height: 1; }
-.gd-ttb__v.is-empty { color: var(--pp-text-mute); }
 .gd-ttb__k { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); text-align: center; }
 
 /* Quick facts: shared .gd-fact key/value blocks flowed into columns, so a full-width band reads as a short

@@ -23,6 +23,32 @@ document.addEventListener('DOMContentLoaded', () => {
         if (zoomContainer) zoomContainer.classList.toggle('pp-receded', on);
     }
 
+    // About panel entrance, ONE-SHOT on first arrival (revisiting a tab shouldn't replay the show).
+    // The panel is server-rendered but hidden, so the load-time fillBars(container) has already filled its
+    // time-to-beat bars -- reset them to 0 first, otherwise there's nothing left to grow. Bands cascade via
+    // the shared staggerReveal; both are skipped under reduced motion (staggerReveal self-gates too, but
+    // the bar reset has to be guarded here or the bars would sit empty for those viewers).
+    //
+    // MUST be declared ABOVE the switcher IIFE: that IIFE runs immediately and honors an initial ?view=
+    // by calling showView() during setup, so a `let` declared after it would still be in the temporal dead
+    // zone and throw -- which aborted the rest of this file on any ?view=about reload.
+    let aboutRevealed = false;
+    function revealAbout(panel) {
+        if (aboutRevealed || reduce) return;
+        aboutRevealed = true;
+        panel.querySelectorAll('[data-gd-fill]').forEach((b) => b.style.setProperty('--horizon-progress', '0%'));
+        fillBars(panel);
+        const wrap = panel.querySelector('.gd-about');
+        if (!wrap || !PlatPursuit.staggerReveal) return;
+        PlatPursuit.staggerReveal({
+            grid: wrap, cardSelector: '.gd-acard, .gd-empty', step: 55, batchCap: 300,
+            reveal: (el, delay) => el.animate(
+                [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
+                { duration: 420, delay, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' }
+            ),
+        });
+    }
+
     // ============================================================
     // View switcher: Trophies (default) / Roadmap / Community / About
     // ============================================================
@@ -67,6 +93,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (PlatPursuit.syncViewParam) {
                 PlatPursuit.syncViewParam(name, { default: 'trophies' });
             }
+            // Decorative, so it runs LAST: tab state (panels, chips, URL) is fully synced before any
+            // entrance animation, and a fault in the flourish can never strand the switcher mid-update.
+            if (changed && shown && name === 'about') revealAbout(shown);
         }
 
         tablist = PlatPursuit.wireTablist(viewTabs, { onSelect: (t) => showView(t.dataset.view) });

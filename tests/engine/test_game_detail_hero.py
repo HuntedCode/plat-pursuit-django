@@ -370,6 +370,111 @@ def test_about_facts_lead_with_developer_and_publisher():
     assert facts[0]['items'][0]['url']  # links to the company detail page
 
 
+# --- About: time-to-beat proportions -----------------------------------------
+#
+# The bars share ONE scale so the ratio between the estimates is the readable thing. These pin the scaling
+# rules, since a wrong denominator silently produces a plausible-looking but meaningless chart.
+
+_HOUR = 3600
+
+
+def _ttb_match(hasty=10, normal=20, complete=40):
+    return IGDBMatchFactory(
+        time_to_beat_hastily=hasty * _HOUR if hasty else None,
+        time_to_beat_normally=normal * _HOUR if normal else None,
+        time_to_beat_completely=complete * _HOUR if complete else None,
+    )
+
+
+def test_about_ttb_scales_bars_to_the_longest_estimate():
+    ttb = GameDetailView._build_about_ttb(_ttb_match(), None)
+
+    assert [r['pct'] for r in ttb['rows']] == [25, 50, 100]
+    assert [r['label'] for r in ttb['rows']] == ['Speedrun', 'Normal', 'Completionist']
+    assert not any(r['is_you'] for r in ttb['rows'])
+    assert ttb['comparative'] is True
+
+
+def test_about_ttb_slots_viewer_between_the_estimates_they_fall_between():
+    """The viewer's row sorts by TIME, not last: 15h sits between the 10h speedrun and 20h normal, so the
+    column reads as one ascending scale and their position is the visible fact."""
+    ttb = GameDetailView._build_about_ttb(_ttb_match(), timedelta(hours=15))
+
+    assert [r['label'] for r in ttb['rows']] == ['Speedrun', 'You', 'Normal', 'Completionist']
+    assert [r['pct'] for r in ttb['rows']] == [25, 38, 50, 100]
+
+
+def test_about_ttb_viewer_sorts_after_an_estimate_they_match():
+    """On a tie the estimate reads first -- "you have reached Normal" rather than displacing it."""
+    ttb = GameDetailView._build_about_ttb(_ttb_match(), timedelta(hours=20))
+
+    assert [r['label'] for r in ttb['rows']] == ['Speedrun', 'Normal', 'You', 'Completionist']
+    you = next(r for r in ttb['rows'] if r['is_you'])
+    assert you['pct'] == 50          # same scale as the estimates, i.e. level with Normal
+
+
+def test_about_ttb_rescales_when_viewer_outruns_the_estimates():
+    """Someone already past the completionist estimate must cap the scale, not overflow the track."""
+    ttb = GameDetailView._build_about_ttb(_ttb_match(), timedelta(hours=100))
+
+    assert [r['label'] for r in ttb['rows']] == ['Speedrun', 'Normal', 'Completionist', 'You']
+    assert [r['pct'] for r in ttb['rows']] == [10, 20, 40, 100]
+
+
+def test_about_ttb_lone_estimate_is_not_comparative():
+    """One full-width bar would imply a ratio that isn't there, so the template falls back to a tally."""
+    solo = _ttb_match(hasty=None, normal=20, complete=None)
+    assert GameDetailView._build_about_ttb(solo, None)['comparative'] is False
+    # ...but the viewer's own time gives that lone estimate something to be compared against.
+    assert GameDetailView._build_about_ttb(solo, timedelta(hours=10))['comparative'] is True
+
+
+def test_game_detail_renders_ttb_bars(client):
+    """The comparative bars reach the page with their fill targets, ready for fillBars() to grow."""
+    concept = ConceptFactory()
+    IGDBMatchFactory(concept=concept, igdb_summary='A summary.', time_to_beat_hastily=10 * _HOUR,
+                     time_to_beat_normally=20 * _HOUR, time_to_beat_completely=40 * _HOUR)
+    content = _detail(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
+
+    assert 'gd-ttb__row' in content
+    assert 'data-gd-fill="100"' in content    # completionist sets the scale
+    assert 'data-gd-fill="25"' in content     # speedrun against it
+    assert 'Completionist' in content
+
+
+def test_game_detail_renders_ttb_you_row_for_viewer_with_playtime(client):
+    """The logged-in path: the viewer's own playtime renders on the same scale as the estimates."""
+    # is_linked=True: _get_target_profile only resolves a LINKED profile, so an unlinked viewer would fall
+    # through to the anonymous path and never get a "You" row.
+    profile = ProfileFactory(is_linked=True)
+    concept = ConceptFactory()
+    IGDBMatchFactory(concept=concept, igdb_summary='A summary.', time_to_beat_hastily=10 * _HOUR,
+                     time_to_beat_normally=20 * _HOUR, time_to_beat_completely=40 * _HOUR)
+    game = GameFactory(concept=concept, defined_trophies=_DEFINED)
+    ProfileGameFactory(profile=profile, game=game, play_duration=timedelta(hours=20))
+    client.force_login(profile.user)
+
+    content = _detail(client, game)
+
+    assert 'gd-ttb__row--you' in content
+    assert 'data-gd-fill="50"' in content    # 20h against the 40h completionist scale
+
+
+@pytest.mark.parametrize('played', [timedelta(0), timedelta(hours=-3)])
+def test_about_ttb_drops_non_positive_playtime(played):
+    """Zero is falsy so it was already dropped, but a NEGATIVE duration is truthy -- it would have rendered
+    a "You" row with a negative bar and a "-3h" label. play_duration has no non-negative DB constraint."""
+    ttb = GameDetailView._build_about_ttb(_ttb_match(), played)
+
+    assert not any(r['is_you'] for r in ttb['rows'])
+    assert [r['pct'] for r in ttb['rows']] == [25, 50, 100]
+
+
+def test_about_ttb_none_without_data():
+    assert GameDetailView._build_about_ttb(None, None) is None
+    assert GameDetailView._build_about_ttb(_ttb_match(None, None, None), None) is None
+
+
 def test_get_total_defined_trophies_tolerates_empty_blob():
     """defined_trophies defaults to {}; indexing the tiers directly used to KeyError and 500 the detail page."""
     assert GameFactory(defined_trophies={}).get_total_defined_trophies() == 0

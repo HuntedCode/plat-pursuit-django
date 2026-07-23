@@ -997,6 +997,54 @@ class GameDetailView(DetailView):
 
         return facts
 
+    @staticmethod
+    def _build_about_ttb(igdb_match, play_duration):
+        """Time-to-beat as PROPORTIONS on one shared scale, not three isolated numbers.
+
+        The relationship between the estimates is the actual information -- that completionist is 4x normal
+        is what a hunter wants -- and reading that off three formatted strings is mental arithmetic. One
+        shared scale makes the shape readable at a glance, and the viewer's own play_duration joins that
+        scale as a final row when we have it (PSN doesn't always expose it, so it's optional by design).
+
+        Returns None when there's nothing to plot. `comparative` is False for a lone estimate with no
+        playtime, where a single full-width bar would imply a ratio that isn't there -- the template falls
+        back to the plain tally in that case.
+        """
+        if not igdb_match or not igdb_match.has_time_to_beat:
+            return None
+
+        specs = (
+            ('Speedrun', igdb_match.time_to_beat_hastily, igdb_match.speedrun_time_display),
+            ('Normal', igdb_match.time_to_beat_normally, igdb_match.normal_time_display),
+            ('Completionist', igdb_match.time_to_beat_completely, igdb_match.completion_time_display),
+        )
+        played = int(play_duration.total_seconds()) if play_duration else 0
+        # Scale to the longest bar INCLUDING the viewer's own time, so someone who has already run past the
+        # completionist estimate gets a full bar rather than one overflowing its track.
+        scale = max([secs for _, secs, _ in specs if secs] + [played])
+        if not scale:
+            return None
+
+        rows = [
+            {'label': label, 'display': display, 'secs': secs, 'is_you': False}
+            for label, secs, display in specs if secs
+        ]
+        estimates = len(rows)
+        # `> 0` not truthiness: play_duration has no non-negative DB constraint, and a negative one is
+        # truthy (unlike timedelta(0)), which would render a "You" row with a negative bar and a "-16m"
+        # label instead of being dropped like the missing case.
+        if played > 0:
+            # Reuse IGDBMatch's own formatter so "41h" here matches the estimates' formatting exactly.
+            rows.append({'label': 'You', 'display': igdb_match.format_seconds(played),
+                         'secs': played, 'is_you': True})
+        # Slot the viewer's bar where their time actually FALLS rather than pinning it last, so the column
+        # reads as one ascending scale and their position between two estimates is the visible fact. On a
+        # tie the viewer sorts after the estimate they've matched.
+        rows.sort(key=lambda r: (r['secs'], r['is_you']))
+        for row in rows:
+            row['pct'] = round(row['secs'] * 100 / scale)
+        return {'rows': rows, 'comparative': estimates > 1 or played > 0}
+
     def _build_other_versions(self, game):
         """Other platform versions -- Games whose Concept shares the EXACT same IGDB id. Being on another
         platform doesn't require the SAME Concept: a PS4 and PS5 edition that IGDB lists as one game share an
@@ -1372,6 +1420,13 @@ class GameDetailView(DetailView):
         # Build concept-related context (community ratings, badges, other versions)
         concept_context = self._build_concept_context(game)
         context.update(concept_context)
+
+        # About time-to-beat needs BOTH the concept's IGDB match and the viewer's profile_progress, so it's
+        # composed here where both already exist rather than re-fetching either.
+        context['about_ttb'] = self._build_about_ttb(
+            getattr(game.concept, 'igdb_match', None),
+            (context.get('profile_progress') or {}).get('play_duration'),
+        )
 
         # Spine cross-link: this game's Contract + the Jobs it levels (hero band).
         context.update(self._build_pursuit_context(game, target_profile))
