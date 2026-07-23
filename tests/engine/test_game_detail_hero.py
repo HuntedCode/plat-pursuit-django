@@ -252,3 +252,46 @@ def test_family_versions_skips_sibling_with_no_games():
     game = GameFactory(concept=ConceptFactory(family=family))
     ConceptFactory(family=family)             # sibling concept, but no games -> nothing to link to
     assert GameDetailView()._build_family_versions(game) == []
+
+
+# ── _build_other_versions (grouped by shared IGDB id, across concepts) ──────
+
+def test_other_versions_groups_separate_concepts_by_shared_igdb_id():
+    """A PS4 and a PS5 edition IGDB lists as one game are separate Concepts sharing an igdb_id -- they must
+    still group as 'other platforms'."""
+    c_ps4 = ConceptFactory(unified_title='Game PS4')
+    IGDBMatchFactory(concept=c_ps4, igdb_id=555)
+    game = GameFactory(concept=c_ps4)
+    c_ps5 = ConceptFactory(unified_title='Game PS5')
+    IGDBMatchFactory(concept=c_ps5, igdb_id=555)      # same igdb id, DIFFERENT concept
+    ps5_game = GameFactory(concept=c_ps5)
+
+    versions = GameDetailView()._build_other_versions(game)
+    assert ps5_game in versions
+    assert game not in versions                       # the current game is excluded
+
+
+def test_other_versions_fallback_to_same_concept_without_igdb_match():
+    concept = ConceptFactory()                        # no IGDB match -> no igdb_id
+    game = GameFactory(concept=concept)
+    sibling_game = GameFactory(concept=concept)       # another game in the same concept
+    assert sibling_game in GameDetailView()._build_other_versions(game)
+
+
+def test_family_versions_excludes_same_igdb_id_siblings():
+    """Same-family concepts that SHARE this game's igdb id are 'other platforms', not family. Only a
+    different-igdb concept (a remaster) belongs in family."""
+    family = GameFamily.objects.create(canonical_name='Series')
+    c0 = ConceptFactory(unified_title='Game', family=family)
+    IGDBMatchFactory(concept=c0, igdb_id=100)
+    game = GameFactory(concept=c0)
+    c_same = ConceptFactory(unified_title='Game (other platform)', family=family)
+    IGDBMatchFactory(concept=c_same, igdb_id=100)     # SAME igdb -> other platforms
+    GameFactory(concept=c_same)
+    c_remaster = ConceptFactory(unified_title='Game Remastered', family=family)
+    IGDBMatchFactory(concept=c_remaster, igdb_id=200)  # DIFFERENT igdb -> family
+    GameFactory(concept=c_remaster)
+
+    fam_pks = {fv['concept'].pk for fv in GameDetailView()._build_family_versions(game)}
+    assert c_remaster.pk in fam_pks
+    assert c_same.pk not in fam_pks

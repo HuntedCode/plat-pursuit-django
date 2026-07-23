@@ -914,41 +914,55 @@ class GameDetailView(DetailView):
             b.frame = build_badge_frame(b, None, include_live_stats=False)
         context['badges'] = badges
 
-        # Other platform versions -- the other Games in THIS Concept (PS4/PS5/regional editions of the same
-        # game). select_related the cover-art path so the modal thumbnails don't N+1 (CLAUDE.md cover rule).
-        other_versions_qs = (
-            game.concept.games.exclude(pk=game.pk)
-            .select_related('concept', 'concept__igdb_match')
-            .defer('concept__igdb_match__raw_response')
-        )
-        platform_order = {plat: idx for idx, plat in enumerate(ALL_PLATFORMS)}
-        other_versions_qs = other_versions_qs.annotate(
-            platform_order=Case(*[When(title_platform__contains=plat, then=Value(idx)) for plat, idx in platform_order.items()], default=999, output_field=IntegerField())
-        ).order_by('platform_order', 'title_name')
-        context['other_versions'] = list(other_versions_qs)
-
-        # Same GameFamily, OTHER Concepts (remasters / remakes / collections). One representative game per
-        # sibling concept (the most-played, as the entry point). Family-level metadata -- bounded (families
-        # hold a handful of concepts), identical for every viewer, so no per-user/whale concern.
+        # "Other platforms" + "In the same family" cross-links (rendered in the versions modal).
+        context['other_versions'] = self._build_other_versions(game)
         context['family_versions'] = self._build_family_versions(game)
         context['versions_total'] = len(context['other_versions']) + len(context['family_versions'])
 
         return context
 
+    def _build_other_versions(self, game):
+        """Other platform versions -- Games whose Concept shares the EXACT same IGDB id. Being on another
+        platform doesn't require the SAME Concept: a PS4 and PS5 edition that IGDB lists as one game share an
+        igdb_id across separate Concepts (multi-concept-per-id), so grouping is by igdb_id, not concept.
+        Falls back to same-Concept games when the Concept has no IGDB match. Cover-safe (CLAUDE.md rule).
+        """
+        concept = game.concept
+        if not concept:
+            return []
+        igdb_id = getattr(getattr(concept, 'igdb_match', None), 'igdb_id', None)
+        qs = (
+            Game.objects
+            .select_related('concept', 'concept__igdb_match')
+            .defer('concept__igdb_match__raw_response')
+            .exclude(pk=game.pk)
+        )
+        qs = qs.filter(concept__igdb_match__igdb_id=igdb_id) if igdb_id else qs.filter(concept_id=concept.pk)
+        platform_order = {plat: idx for idx, plat in enumerate(ALL_PLATFORMS)}
+        qs = qs.annotate(
+            platform_order=Case(*[When(title_platform__contains=plat, then=Value(idx)) for plat, idx in platform_order.items()], default=999, output_field=IntegerField())
+        ).order_by('platform_order', 'title_name')
+        return list(qs)
+
     def _build_family_versions(self, game):
-        family_id = getattr(game.concept, 'family_id', None) if game.concept_id else None
+        """Other Concepts in the same GameFamily with a DIFFERENT IGDB id (remasters / remakes / collections).
+        Concepts that share this game's exact igdb_id are 'other platforms', not family, so they're excluded
+        here. One representative game (most-played) per sibling concept. Bounded, game-level, cover-safe.
+        """
+        concept = game.concept
+        family_id = getattr(concept, 'family_id', None) if game.concept_id else None
         if not family_id:
             return []
+        igdb_id = getattr(getattr(concept, 'igdb_match', None), 'igdb_id', None)
+        sib_qs = concept.family.concepts.exclude(pk=concept.pk)
+        if igdb_id:
+            sib_qs = sib_qs.exclude(igdb_match__igdb_id=igdb_id)   # same igdb id -> other platforms, not family
         rep_games = (
             Game.objects.select_related('concept', 'concept__igdb_match')
             .defer('concept__igdb_match__raw_response')
             .order_by('-played_count', 'title_name')
         )
-        siblings = (
-            game.concept.family.concepts.exclude(pk=game.concept_id)
-            .prefetch_related(Prefetch('games', queryset=rep_games, to_attr='rep_list'))
-            .order_by(Lower('unified_title'))
-        )
+        siblings = sib_qs.prefetch_related(Prefetch('games', queryset=rep_games, to_attr='rep_list')).order_by(Lower('unified_title'))
         out = []
         for sib in siblings:
             rep = sib.rep_list[0] if getattr(sib, 'rep_list', None) else None
