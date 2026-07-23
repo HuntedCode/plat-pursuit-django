@@ -1552,6 +1552,24 @@ class ProfileGame(models.Model):
             models.Index(fields=['earned_trophies_count'], name='pg_earned_count_idx'),
             models.Index(fields=['unearned_trophies_count'], name='pg_unearned_count_idx'),
             models.Index(fields=['has_plat'], name='pg_has_plat_idx'),
+            # Per-game leaderboard: rank players by completion, ties broken by who got there first.
+            # Field order mirrors the query exactly -- game_id equality, then the sort keys.
+            #
+            # profile is a UNIQUE final key, not decoration: (progress, most_recent_trophy_date) ties
+            # are common (everyone at 100%), and without a total order Postgres may order tied rows
+            # differently between calls, so pagination can skip/duplicate players and a rank can
+            # flicker between refreshes.
+            #
+            # Null handling lines up with Postgres defaults: ASC is NULLS LAST (players at 0% have a
+            # null date and sort last, which is what we want) and progress is NOT NULL.
+            #
+            # Without this, the planner walks profilegame_progress_idx backward to satisfy
+            # ORDER BY progress DESC and filters out ~458K non-matching rows to find 20 -- ~290 ms and
+            # ~250 MB of buffers on beta for a game with 1,421 players.
+            models.Index(
+                fields=['game', '-progress', 'most_recent_trophy_date', 'profile'],
+                name='pg_game_leaderboard_idx',
+            ),
         ]
     
     @property
