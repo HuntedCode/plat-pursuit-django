@@ -371,6 +371,10 @@ class GameDetailView(DetailView):
             'concept__concept_companies__company',
             'concept__concept_genres__genre',
             'concept__concept_themes__theme',
+            # The About panel's Engine line walks concept_engines -> engine; without this it's an extra
+            # query per engine row on EVERY game-detail load (all panels are server-rendered for SEO,
+            # so About's queries run even when the tab is never opened).
+            'concept__concept_engines__engine',
             franchise_prefetch,
         )
 
@@ -822,12 +826,13 @@ class GameDetailView(DetailView):
         # land in their respective bucket as equal members; admins can hide
         # individual links via ConceptFranchise.is_excluded=True.
         #
-        # `franchise_has_any_links` tracks the raw CF row count (including
-        # excluded). The about-card's `{% elif igdb.franchise_names %}` denorm
-        # fallback is gated on this so it only fires for truly un-enriched
-        # concepts (zero CF rows) — otherwise an admin exclusion would leak
-        # through that fallback because franchise_names is rewritten from IGDB
-        # raw on every enrichment.
+        # `cf_row_count` tracks the raw CF row count (including excluded). The igdb.franchise_names denorm
+        # fallback in _build_about_facts is gated on it so the fallback only fires for truly un-enriched
+        # concepts (zero CF rows) — otherwise an admin exclusion would leak through it, because
+        # franchise_names is rewritten from IGDB raw on every enrichment.
+        #
+        # These stay LOCAL: they feed _build_about_facts only. They used to be context keys read by the old
+        # franchise_lines.html partial, which this rebuild deleted.
         franchises = []
         collections = []
         cf_row_count = 0
@@ -839,9 +844,20 @@ class GameDetailView(DetailView):
                 collections.append(cf)
             else:
                 franchises.append(cf)
-        context['franchises'] = franchises
-        context['franchise_collections'] = collections
-        context['franchise_has_any_links'] = cf_row_count > 0
+        # About panel: the Quick Facts rows plus the gating flags, computed here so the template stays free
+        # of gnarly boolean chains. `about_has_info` drives the empty state. Prefetched reads only.
+        igdb_match = getattr(game.concept, 'igdb_match', None)
+        about_trusted = bool(igdb_match and igdb_match.is_trusted)
+        context['about_facts'] = self._build_about_facts(game, franchises, collections, cf_row_count > 0)
+        context['about_has_facts'] = bool(context['about_facts'])
+        context['about_has_info'] = bool(about_trusted and (
+            igdb_match.igdb_summary
+            or list(game.concept.concept_genres.all())
+            or list(game.concept.concept_themes.all())
+            or igdb_match.has_time_to_beat
+            or context['about_has_facts']
+            or igdb_match.notable_external_urls
+        ))
 
         # Community averages (base game, for backward compat)
         context['community_averages'] = RatingService.get_cached_community_averages(game.concept)
@@ -920,6 +936,66 @@ class GameDetailView(DetailView):
         context['versions_total'] = len(context['other_versions']) + len(context['family_versions'])
 
         return context
+
+    def _build_about_facts(self, game, franchises, collections, has_cf_rows):
+        """Quick Facts rows for the About panel: ONE row per role with its entries grouped, rather than one
+        row per company. A game like God of War Ragnarok credits 7 supporting studios -- repeating the label
+        for each turned the card into a wall of "Additional dev". Each row is
+        {'label', 'items': [{'name', 'url'}]}; the template shows 3 then a "+N more" disclosure.
+        Reads prefetched caches only, so no extra queries.
+        """
+        concept = game.concept
+        igdb = getattr(concept, 'igdb_match', None)
+        facts = []
+
+        def add(single, plural, items):
+            if items:
+                facts.append({'label': single if len(items) == 1 else plural, 'items': items})
+
+        # Credits first (who made and shipped it), then the technical + lineage facts. The hero shows the
+        # lead developer/publisher as a glance; About repeats them so the panel reads as a complete credit
+        # list rather than jumping straight to "Ported by".
+        developers, publishers, porting, supporting = [], [], [], []
+        for cc in concept.concept_companies.all():
+            entry = {'name': cc.company.name,
+                     'url': reverse('company_detail', kwargs={'slug': cc.company.slug})}
+            if cc.is_developer:
+                developers.append(entry)
+            if cc.is_publisher:
+                publishers.append(entry)
+            if cc.is_porting:
+                porting.append(entry)
+            if cc.is_supporting:
+                supporting.append(entry)
+        add('Developer', 'Developers', developers)
+        add('Publisher', 'Publishers', publishers)
+        add('Ported by', 'Ported by', porting)
+        add('Additional dev', 'Additional devs', supporting)
+
+        engines = [
+            {'name': ce.engine.name, 'url': reverse('engine_detail', kwargs={'slug': ce.engine.slug})}
+            for ce in concept.concept_engines.all()
+        ]
+        if not engines and igdb and igdb.game_engine_name:
+            # Denorm fallback for concepts not re-enriched since the GameEngine rollout (no link target).
+            engines = [{'name': igdb.game_engine_name, 'url': ''}]
+        add('Engine', 'Engines', engines)
+
+        franchise_items = [
+            {'name': cf.franchise.name, 'url': reverse('franchise_detail', kwargs={'slug': cf.franchise.slug})}
+            for cf in franchises
+        ]
+        if not franchise_items and igdb and igdb.franchise_names and not has_cf_rows:
+            # Denorm fallback, gated on zero ConceptFranchise rows so an admin-excluded link can't leak.
+            franchise_items = [{'name': name, 'url': ''} for name in igdb.franchise_names]
+        add('Franchise', 'Franchises', franchise_items)
+
+        add('Series', 'Series', [
+            {'name': cf.franchise.name, 'url': reverse('franchise_detail', kwargs={'slug': cf.franchise.slug})}
+            for cf in collections
+        ])
+
+        return facts
 
     def _build_other_versions(self, game):
         """Other platform versions -- Games whose Concept shares the EXACT same IGDB id. Being on another

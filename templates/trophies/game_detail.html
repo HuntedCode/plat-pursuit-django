@@ -81,7 +81,6 @@
         </div>
 
         <div class="gd-view" id="gd-view-about" role="tabpanel" aria-labelledby="gd-tab-about" data-view="about" hidden>
-            {# TODO(Phase 5): rebuilt About panel. Legacy IGDB card for now. #}
             {% include 'trophies/partials/game_detail/game_about_card.html' %}
         </div>
     </div>
@@ -174,44 +173,7 @@
         <button type="button" class="gd-modal__close" data-gd-modal-close aria-label="Close">&times;</button>
     </div>
     <div class="gd-modal__body">
-        {% if other_versions %}
-            <section class="gd-vsec">
-                <h4 class="gd-vsec__h">Other platforms</h4>
-                <p class="gd-vsec__sub">The same game on other systems or regions.</p>
-                <div class="gd-vlist">
-                    {% for v in other_versions %}
-                        <a class="gd-vrow" href="{% if url_psn_username %}{% url 'game_detail_with_profile' v.np_communication_id url_psn_username %}{% else %}{% url 'game_detail' v.np_communication_id %}{% endif %}">
-                            <span class="gd-vrow__cover"><img src="{{ v.display_image_url }}" alt="" loading="lazy" decoding="async" class="w-full h-full {% if v.has_cover_art %}object-cover object-top{% else %}object-contain p-2{% endif %}" /></span>
-                            <span class="gd-vrow__body">
-                                <span class="gd-vrow__name">{{ v.title_name }}</span>
-                                <span class="gd-vrow__meta">{% for p in v.title_platform %}<span class="gd-vrow__plat">{{ p }}</span>{% endfor %}{% if v.is_regional %}{% for r in v.region %}<span class="gd-vrow__plat gd-vrow__plat--region">{{ r }}</span>{% endfor %}{% endif %}</span>
-                                {% include 'trophies/partials/game_detail/_version_trophy_dots.html' with game=v %}
-                            </span>
-                            <svg class="gd-vrow__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-                        </a>
-                    {% endfor %}
-                </div>
-            </section>
-        {% endif %}
-        {% if family_versions %}
-            <section class="gd-vsec">
-                <h4 class="gd-vsec__h">In the same family</h4>
-                <p class="gd-vsec__sub">Remasters, remakes, and collections &mdash; each has its own trophy list.</p>
-                <div class="gd-vlist">
-                    {% for fv in family_versions %}
-                        <a class="gd-vrow" href="{% if url_psn_username %}{% url 'game_detail_with_profile' fv.game.np_communication_id url_psn_username %}{% else %}{% url 'game_detail' fv.game.np_communication_id %}{% endif %}">
-                            <span class="gd-vrow__cover"><img src="{{ fv.game.display_image_url }}" alt="" loading="lazy" decoding="async" class="w-full h-full {% if fv.game.has_cover_art %}object-cover object-top{% else %}object-contain p-2{% endif %}" /></span>
-                            <span class="gd-vrow__body">
-                                <span class="gd-vrow__name">{{ fv.concept.unified_title }}</span>
-                                <span class="gd-vrow__meta">{% for p in fv.game.title_platform %}<span class="gd-vrow__plat">{{ p }}</span>{% endfor %}{% if fv.game.is_regional %}{% for r in fv.game.region %}<span class="gd-vrow__plat gd-vrow__plat--region">{{ r }}</span>{% endfor %}{% endif %}</span>
-                                {% include 'trophies/partials/game_detail/_version_trophy_dots.html' with game=fv.game %}
-                            </span>
-                            <svg class="gd-vrow__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-                        </a>
-                    {% endfor %}
-                </div>
-            </section>
-        {% endif %}
+        {% include 'trophies/partials/game_detail/_version_sections.html' %}
     </div>
 </dialog>
 {% endif %}

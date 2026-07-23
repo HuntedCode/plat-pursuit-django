@@ -653,7 +653,10 @@ class Game(models.Model):
         return self.shovelware_status in ('auto_flagged', 'manually_flagged')
 
     def get_total_defined_trophies(self):
-        return self.defined_trophies['bronze'] + self.defined_trophies['silver'] + self.defined_trophies['gold'] + self.defined_trophies['platinum']
+        # Tolerate a missing/partial defined_trophies blob. It defaults to {} on the model, so indexing the
+        # tiers directly raised KeyError and 500'd any page that summarises a not-yet-synced game.
+        dt = self.defined_trophies or {}
+        return sum(int(dt.get(tier) or 0) for tier in ('bronze', 'silver', 'gold', 'platinum'))
 
     def get_icon_url(self):
         if self.force_title_icon or not self.title_image:

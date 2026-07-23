@@ -12,13 +12,16 @@ import itertools
 from datetime import timedelta
 
 import pytest
+from django.contrib.auth.models import AnonymousUser
+from django.test import RequestFactory
+from django.urls import reverse
 from django.utils import timezone
 
 from trophies.models import Contract, GameFamily, Job
 from trophies.views.game_views import GameDetailView
 from tests.factories import (
-    ConceptFactory, EarnedTrophyFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
-    ProfileGameFactory, TrophyFactory,
+    CompanyFactory, ConceptCompanyFactory, ConceptFactory, EarnedTrophyFactory, GameFactory,
+    IGDBMatchFactory, ProfileFactory, ProfileGameFactory, TrophyFactory,
 )
 
 _pursuit_igdb_seq = itertools.count(70001)   # distinct raw igdb ids per test contract
@@ -295,3 +298,119 @@ def test_family_versions_excludes_same_igdb_id_siblings():
     fam_pks = {fv['concept'].pk for fv in GameDetailView()._build_family_versions(game)}
     assert c_remaster.pk in fam_pks
     assert c_same.pk not in fam_pks
+
+
+# ── About-panel gating (drives which sections render + the empty state) ─────
+
+def _concept_ctx(game):
+    """_build_concept_context reads self.request.user (rating permissions), so give it an anonymous one."""
+    view = GameDetailView()
+    view.request = RequestFactory().get('/')
+    view.request.user = AnonymousUser()
+    return view._build_concept_context(game)
+
+
+def test_about_has_info_false_without_trusted_igdb():
+    """No trusted IGDB match -> no About sections, so the panel falls back to its empty state."""
+    ctx = _concept_ctx(GameFactory(concept=ConceptFactory()))
+    assert ctx['about_has_info'] is False
+    assert ctx['about_has_facts'] is False
+
+
+def test_about_has_info_true_with_summary():
+    concept = ConceptFactory()
+    IGDBMatchFactory(concept=concept, igdb_summary='A game about things.')
+    ctx = _concept_ctx(GameFactory(concept=concept))
+    assert ctx['about_has_info'] is True
+
+
+def test_about_has_facts_true_with_porting_company():
+    """A porting/supporting credit alone is enough to render the Quick facts card (and thus the panel)."""
+    concept = ConceptFactory()
+    IGDBMatchFactory(concept=concept)
+    # is_developer=False so this really is the porting-only case (the factory defaults it to True).
+    ConceptCompanyFactory(concept=concept, company=CompanyFactory(),
+                          is_developer=False, is_porting=True)
+    ctx = _concept_ctx(GameFactory(concept=concept))
+    assert ctx['about_has_facts'] is True
+    assert ctx['about_has_info'] is True
+    assert [f['label'] for f in ctx['about_facts']] == ['Ported by']
+
+
+def test_about_facts_group_companies_by_role():
+    """Many supporting studios collapse into ONE 'Additional devs' row rather than one row each (a game
+    like God of War Ragnarok credits seven, which used to render seven repeated labels)."""
+    concept = ConceptFactory()
+    IGDBMatchFactory(concept=concept)
+    for _ in range(5):
+        ConceptCompanyFactory(concept=concept, company=CompanyFactory(),
+                              is_developer=False, is_supporting=True)
+
+    facts = _concept_ctx(GameFactory(concept=concept))['about_facts']
+    devs = [f for f in facts if f['label'] == 'Additional devs']
+    assert len(devs) == 1                 # one grouped row...
+    assert len(devs[0]['items']) == 5     # ...holding all five studios
+
+
+def test_about_facts_lead_with_developer_and_publisher():
+    """Quick facts opens with the primary credits, so it doesn't jump straight to 'Ported by'."""
+    concept = ConceptFactory()
+    IGDBMatchFactory(concept=concept)
+    # Flags are independent booleans (a studio can be several roles at once) and the factory defaults
+    # is_developer=True, so the non-developer rows have to switch it off explicitly.
+    ConceptCompanyFactory(concept=concept, company=CompanyFactory(name='Santa Monica'), is_developer=True)
+    ConceptCompanyFactory(concept=concept, company=CompanyFactory(name='Sony'),
+                          is_developer=False, is_publisher=True)
+    ConceptCompanyFactory(concept=concept, company=CompanyFactory(name='Jetpack'),
+                          is_developer=False, is_porting=True)
+
+    facts = _concept_ctx(GameFactory(concept=concept))['about_facts']
+    assert [f['label'] for f in facts] == ['Developer', 'Publisher', 'Ported by']
+    assert facts[0]['items'][0]['name'] == 'Santa Monica'
+    assert facts[0]['items'][0]['url']  # links to the company detail page
+
+
+def test_get_total_defined_trophies_tolerates_empty_blob():
+    """defined_trophies defaults to {}; indexing the tiers directly used to KeyError and 500 the detail page."""
+    assert GameFactory(defined_trophies={}).get_total_defined_trophies() == 0
+    assert GameFactory(defined_trophies={'bronze': 3}).get_total_defined_trophies() == 3
+
+
+# ── Game-detail page render (also guards the templates against syntax errors) ──
+
+#: the view's meta-description calls get_total_defined_trophies(), which indexes these keys directly.
+_DEFINED = {'bronze': 10, 'silver': 5, 'gold': 2, 'platinum': 1}
+
+
+def _detail(client, game):
+    url = reverse('game_detail', kwargs={'np_communication_id': game.np_communication_id})
+    return client.get(url).content.decode()
+
+
+def test_game_detail_renders_about_panel(client):
+    """An IGDB-enriched game renders the rebuilt About panel with its summary and grouped Quick facts."""
+    concept = ConceptFactory()
+    IGDBMatchFactory(concept=concept, igdb_summary='A summary about the game.')
+    for i in range(4):
+        ConceptCompanyFactory(concept=concept, company=CompanyFactory(name=f'Studio {i}'),
+                              is_developer=False, is_supporting=True)
+    content = _detail(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
+
+    assert 'gd-about' in content
+    assert 'About this game' in content
+    assert 'A summary about the game.' in content
+    # One grouped row, first 3 inline and the 4th behind the "+N more" disclosure.
+    assert content.count('Additional devs') == 1
+    assert 'Studio 0' in content and 'Studio 3' in content
+    assert '+1 more' in content
+    # The separating comma sits OUTSIDE <details> (so a wrap can't strand it on the next line), which means
+    # the expanded items must not re-emit their own leading comma.
+    assert ', ,' not in content and ',,' not in content
+
+
+def test_game_detail_about_panel_shows_empty_state(client):
+    """A game with no trusted IGDB match (and no other versions) gets the About empty state, not a blank tab.
+    Deliberately leaves defined_trophies empty -- an unsynced game must still render the page."""
+    content = _detail(client, GameFactory(concept=ConceptFactory()))
+
+    assert 'No extended info yet' in content

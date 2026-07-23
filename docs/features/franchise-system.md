@@ -24,7 +24,7 @@ The browse page surfaces every franchise with at least one non-excluded link and
 | `templates/trophies/partials/franchise_list/browse_results.html` | HTMX partial for the filtered results grid |
 | `templates/trophies/partials/franchise_list/franchise_cards.html` | Individual browse card |
 | `templates/trophies/partials/franchise_detail/game_groups_list.html` | Reusable game-group list (single unified list on the franchise detail page) |
-| `templates/trophies/partials/game_detail/franchise_lines.html` | "Franchises / Series" lines on the game detail About card |
+| `templates/trophies/partials/game_detail/game_about_card.html` | "Franchise / Series" rows in the game detail About card's Quick facts |
 | `trophies/models.py` (Franchise, ConceptFranchise) | Data models — see [IGDB Integration](../architecture/igdb-integration.md) for full docs |
 | `core/hub_subnav.py` | Adds "Franchises" to the Browse hub sub-nav |
 
@@ -95,10 +95,16 @@ Each version row shows:
 
 ### Game Detail About Card
 
-The game detail page's About card shows franchise/series relationships via two labeled lines rendered by `templates/trophies/partials/game_detail/franchise_lines.html`. The view (`GameDetailView._build_concept_context`) walks the prefetched `concept_franchises` and partitions non-excluded links into two buckets:
+The game detail page's About card shows franchise/series relationships as two of the **Quick facts** rows.
+`GameDetailView._build_concept_context` walks the prefetched `concept_franchises` and partitions non-excluded
+links into two buckets, which `_build_about_facts` then turns into fact rows alongside the company credits
+and engine (the old dedicated `franchise_lines.html` partial was folded into that helper in the About
+rebuild, so every fact type shares one grouping/truncation path):
 
-- **Franchise(s)**: all `source_type='franchise'` links. Singular/plural label. Capped at 3 visible with a `<details>`/`<summary>` "+ N more" disclosure for the rest.
-- **Series**: all `source_type='collection'` links. Same capped-at-3-with-disclosure pattern. The label is "Series" in both singular and plural — fewer template branches and reads cleaner.
+- **Franchise(s)**: all `source_type='franchise'` links. Singular/plural label.
+- **Series**: all `source_type='collection'` links. The label is "Series" in both singular and plural.
+
+Every fact row shows 3 entries inline, then a `<details>`/`<summary>` "+N more" disclosure for the rest.
 
 `is_excluded=True` links are filtered out entirely. The legacy "Franchise: X / Also Featured" partition is gone — every IGDB-listed franchise appears equally now.
 

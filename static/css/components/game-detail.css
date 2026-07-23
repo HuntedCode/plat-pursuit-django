@@ -755,6 +755,68 @@
 .gd-empty__title { font-weight: 600; color: var(--pp-text-dim); }
 .gd-empty__hint { font-size: 0.82rem; }
 
+/* ============================================================
+   About panel
+   Stacked cards; the discrete sections sit in a 2-up grid on tablet+ so the wide panel isn't one tall
+   skinny column. Reuses .gd-fact (key/value), .gd-tag (genre/theme chips) and .gd-empty (empty state).
+   ============================================================ */
+.gd-about { display: flex; flex-direction: column; gap: 12px; }
+.gd-acard { padding: 14px 16px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-1) 70%, transparent); border: 1px solid var(--pp-border); }
+.gd-acard__h { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); margin-bottom: 10px; }
+/* Full summary (the hero carries the clamped teaser, so nothing is truncated here). */
+.gd-about__summary { font-size: 0.9rem; line-height: 1.65; color: var(--pp-text-dim); }
+.gd-about__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+/* .gd-tag is a span in the hero; here it's a link, so it needs link + hover/focus states. */
+a.gd-tag { text-decoration: none; transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+a.gd-tag:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-2)); }
+a.gd-tag--theme:hover { border-color: color-mix(in oklab, var(--pp-secondary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-secondary) 10%, var(--pp-bg-2)); }
+a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* Sections are stacked full-width bands (see game_about_card.html) -- no grid, so a missing section can
+   never leave an empty cell. Each band adapts internally instead. */
+
+/* Time to beat: three figures (speedrun / normal / completionist). */
+/* max-width so three tallies in a full-width band stay compact rather than stretching into giant boxes. */
+.gd-ttb { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 768px) { .gd-ttb { max-width: 460px; } }
+.gd-ttb__cell { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; border-radius: var(--pp-radius-sm); background: color-mix(in oklab, var(--pp-bg-0) 45%, transparent); border: 1px solid var(--pp-border); }
+.gd-ttb__v { font-size: 1rem; font-weight: 800; color: var(--pp-text); line-height: 1; }
+.gd-ttb__v.is-empty { color: var(--pp-text-mute); }
+.gd-ttb__k { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); text-align: center; }
+
+/* Quick facts: shared .gd-fact key/value blocks flowed into columns, so a full-width band reads as a short
+   wide block instead of one long ladder (a game crediting seven studios was the worst case). */
+.gd-about__facts { display: grid; grid-template-columns: 1fr; gap: 10px 20px; }
+@media (min-width: 768px) { .gd-about__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .gd-about__facts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.gd-fact__link { color: var(--pp-primary); text-decoration: none; }
+.gd-fact__link:hover { text-decoration: underline; }
+/* No-JS "+N more" disclosure for long franchise/series lists. */
+.gd-more { display: inline; }
+/* nowrap so the toggle never splits across lines. The separating comma lives OUTSIDE the <details> so it
+   stays welded to the preceding name instead of being dragged down with the toggle on a wrap. */
+.gd-more > summary { display: inline; white-space: nowrap; cursor: pointer; list-style: none; color: var(--pp-text-mute); }
+.gd-more > summary::-webkit-details-marker { display: none; }
+.gd-more > summary:hover { color: var(--pp-primary); }
+.gd-more > summary:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 3px; }
+/* Open: flex ONLY so `order` can move the toggle after the revealed names -- otherwise it would interrupt
+   the list mid-run. The summary must stay visible: hiding it left no way to re-collapse, and a focused
+   element going display:none drops keyboard focus to <body>, silently losing the user's place. */
+.gd-more[open] { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.35em; }
+.gd-more[open] > summary { order: 2; font-size: 0.72rem; }
+.gd-more__rest { order: 1; }
+.gd-more__shut { display: none; }
+.gd-more[open] .gd-more__open { display: none; }
+.gd-more[open] .gd-more__shut { display: inline; }
+
+/* External links. */
+.gd-about__links { display: flex; flex-wrap: wrap; gap: 6px; }
+.gd-alink { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; color: var(--pp-text-dim); text-decoration: none; background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-alink svg { width: 13px; height: 13px; flex-shrink: 0; color: var(--pp-text-mute); }
+.gd-alink:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-2)); }
+.gd-alink:hover svg { color: var(--pp-primary); }
+.gd-alink:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
 /* ---- Reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {
     .gd-cover, .gd-spine__row, .gd-spine__chev, .gd-about-more svg, .gd-trophy, .gd-trophy__icon, #browse-results,
