@@ -210,6 +210,7 @@ Commands for debugging and monitoring. These do not modify data (except where no
 | `force_platinum_notification` | Directly invoke the platinum notification handler |
 | `audit_genre_data` | Report genre/subgenre coverage statistics |
 | `check_profile_badge_series` | Test badge evaluation for a specific profile + series |
+| `measure_leaderboard` | Read-only probe for per-game leaderboard feasibility: data scale, top-20 page timing, and deep rank-lookup timing. Prod-safe (planner estimate instead of a `COUNT(*)` seq scan). Flags: `--games`, `--depth`, `--explain` |
 
 ---
 
