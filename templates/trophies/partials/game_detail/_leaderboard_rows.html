@@ -1,0 +1,25 @@
+{% comment %} One keyset page of leaderboard rows. Rendered standalone for the infinite scroller to
+append (GameLeaderboardView returns just this when ?after= is present), and included by the panel for
+the first page.
+
+Each row carries its own cursor so the scroller never has to derive one; the trailing .gd-lb__more marker
+carries the cursor for the NEXT page and is removed by the JS once consumed. No marker == last page.
+{% endcomment %}
+{% load humanize %}
+{% for row in rows %}
+<li class="gd-lb__row{% if viewer_profile and row.profile_id == viewer_profile.id %} gd-lb__row--you{% endif %}" data-lb-cursor="{{ row.cursor }}" data-lb-rank="{{ row.rank }}">
+    <span class="gd-lb__rank">{{ row.rank|intcomma }}</span>
+    <a class="gd-lb__who" href="{% url 'profile_detail' row.profile.psn_username %}">
+        <span class="gd-lb__av">
+            {% if row.profile.avatar_url %}<img src="{{ row.profile.avatar_url }}" alt="" loading="lazy" />{% endif %}
+        </span>
+        <span class="gd-lb__name">{{ row.profile.display_psn_username|default:row.profile.psn_username }}</span>
+    </a>
+    <span class="pp-horizon pp-horizon__track gd-lb__bar" style="--horizon-h: 5px; --horizon-progress: {{ row.progress }}%;{% if row.progress == 100 %} --horizon-accent: var(--color-trophy-platinum);{% endif %}"><span class="pp-horizon__fill"></span></span>
+    <span class="gd-lb__pct">{{ row.progress }}%</span>
+    <span class="gd-lb__when">
+        {% if row.most_recent_trophy_date %}{{ row.most_recent_trophy_date|date:"M j, Y" }}{% else %}&mdash;{% endif %}
+    </span>
+</li>
+{% endfor %}
+{% if next_cursor %}{% with tail=rows|last %}<li class="gd-lb__more" data-lb-next="{{ next_cursor }}" data-lb-from="{{ tail.rank|add:1 }}" aria-hidden="true"></li>{% endwith %}{% endif %}

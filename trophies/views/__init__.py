@@ -5,6 +5,7 @@ Re-exports all view classes for backward compatibility with existing URL configu
 """
 
 from .game_views import GamesListView, GameDetailView, GuideListView, FlaggedGamesView, RecentlyAddedView, RandomGameView
+from .game_leaderboard_views import GameLeaderboardView
 from .trophy_views import TrophiesListView, TrophyCaseView, ToggleSelectionView
 from .profile_views import ProfilesListView, ProfileDetailView, LinkPSNView, ProfileVerifyView, ProfileEditorView
 from .badge_views import BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView

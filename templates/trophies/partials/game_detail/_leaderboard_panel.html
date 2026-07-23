@@ -1,0 +1,53 @@
+{% comment %} The Leaderboard panel, fetched on first activation of the tab (never server-rendered with
+the page -- it is the only panel whose cost scales with a game's popularity, and most visitors never
+open it).
+
+Ranked by completion, ties broken by who got there first, so completers sit at the top ordered by when
+they finished and everyone else follows by how close they are. The count is the BOARD size, not
+Game.played_count: that counts hidden rows too, and the header would disagree with the list.
+{% endcomment %}
+{% load humanize %}
+<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}">
+
+    {% if rows %}
+    <div class="gd-lb__head">
+        <span class="gd-lb__count">
+            <span class="pp-tally">{{ board_size|intcomma }}</span>
+            <span class="gd-lb__countlbl">{{ board_size|pluralize:"hunter,hunters" }} on the board</span>
+        </span>
+        {% if viewer_rank %}
+        <button type="button" class="gd-lb__jump" data-lb-jump>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+            You&rsquo;re #{{ viewer_rank|intcomma }}
+        </button>
+        {% endif %}
+    </div>
+
+    <ol class="gd-lb__list" data-lb-list>
+        {% include 'trophies/partials/game_detail/_leaderboard_rows.html' %}
+    </ol>
+
+    {% comment %} Pinned self-row: only when the viewer sits below the first page, so it never duplicates
+    a row already on screen. JS hides it while their real row is in view. {% endcomment %}
+    {% if viewer_offscreen %}
+    <div class="gd-lb__self" data-lb-self hidden>
+        <span class="gd-lb__rank">{{ viewer_rank|intcomma }}</span>
+        <span class="gd-lb__who">
+            <span class="gd-lb__av">
+                {% if viewer_profile.avatar_url %}<img src="{{ viewer_profile.avatar_url }}" alt="" loading="lazy" />{% endif %}
+            </span>
+            <span class="gd-lb__name">You</span>
+        </span>
+        <button type="button" class="gd-lb__jump gd-lb__jump--self" data-lb-jump>Jump to my rank</button>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="gd-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+        <p class="gd-empty__title">No hunters yet</p>
+        <p class="gd-empty__hint">Nobody tracked on Platinum Pursuit has played this one. Be the first and you&rsquo;ll top the board.</p>
+    </div>
+    {% endif %}
+
+</div>

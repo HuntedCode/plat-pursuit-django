@@ -64,6 +64,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Franchise System](features/franchise-system.md) | Franchise / collection browse + detail pages, main vs. tie-in partitioning, user progress summary |
 | [Fundraiser](features/fundraiser.md) | Campaign system, donations, badge claims |
 | [Game Family](features/game-family.md) | Cross-generation game matching and unification |
+| [Game Leaderboards](features/game-leaderboards.md) | Per-game Ranks tab: completion ranking with first-to-finish tie-break, keyset pagination, jump-to-my-rank; why it is DB-only and lazy-loaded |
 | [Home Page Router](features/home-page.md) | Smart `/` router: anonymous, no-PSN, syncing, and synced shells |
 | [Monthly Recap](features/monthly-recap.md) | Recap generation, slides, email, share cards |
 | [My Pursuit Hub](features/my-pursuit-hub.md) | Personal-progression hub at `/my-pursuit/`: badges, milestones, titles (forward-compatible with gamification) |

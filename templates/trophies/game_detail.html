@@ -55,6 +55,9 @@
                 <button type="button" id="gd-tab-community" aria-controls="gd-view-community" class="pp-switch__chip" data-view="community" role="tab" aria-selected="false">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="pp-switch__lbl">Community</span>
                 </button>
+                <button type="button" id="gd-tab-leaderboard" aria-controls="gd-view-leaderboard" class="pp-switch__chip" data-view="leaderboard" role="tab" aria-selected="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg><span class="pp-switch__lbl">Ranks</span>
+                </button>
                 <button type="button" id="gd-tab-about" aria-controls="gd-view-about" class="pp-switch__chip" data-view="about" role="tab" aria-selected="false">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><span class="pp-switch__lbl">About</span>
                 </button>
@@ -77,6 +80,17 @@
             {# TODO(Phase 4): rebuilt ratings + community-stats tiles + players modal. Legacy ratings for now. #}
             <div id="community-tabs-section">
                 {% include 'trophies/partials/game_detail/community_tabs_section.html' %}
+            </div>
+        </div>
+
+        {% comment %} Deliberately EMPTY at render time -- the only panel not server-rendered. It is the
+        one whose cost scales with a game's popularity, and most visitors arrive from search for trophy
+        info and never open it, so it is fetched on first activation (game-detail.js). {% endcomment %}
+        <div class="gd-view" id="gd-view-leaderboard" role="tabpanel" aria-labelledby="gd-tab-leaderboard" data-view="leaderboard"
+             data-lb-src="{% url 'game_leaderboard' game.np_communication_id %}" hidden>
+            <div class="gd-lb__loading" data-lb-loading>
+                <span class="gd-lb__spinner" aria-hidden="true"></span>
+                <span>Counting the hunters&hellip;</span>
             </div>
         </div>
 
@@ -229,7 +243,6 @@
 {% block js_scripts %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
     <script src="{% static 'js/game-detail.js' %}"></script>
-    <script src="{% static 'js/game-players-modal.js' %}"></script>
     <script src="{% static 'js/submit_shimmer.js' %}"></script>
     {% if earned_trophy_id %}
     <script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>

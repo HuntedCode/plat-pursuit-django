@@ -49,6 +49,103 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Leaderboard panel. The ONLY panel not server-rendered: its cost scales with a game's popularity
+    // and most visitors never open it, so it is fetched on first activation and then cached in the DOM.
+    // Declared above the switcher IIFE for the same reason as revealAbout -- that IIFE honors an initial
+    // ?view= during setup, so a `let` declared after it would still be in the temporal dead zone.
+    let lbLoaded = false;
+    function loadLeaderboard(panel) {
+        if (lbLoaded) return;
+        lbLoaded = true;
+        const src = panel.dataset.lbSrc;
+        if (!src) return;
+        fetch(src, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))
+            .then((html) => { panel.innerHTML = html; wireLeaderboard(panel, src); })
+            .catch(() => {
+                // Let a later tab visit retry rather than leaving a dead panel.
+                lbLoaded = false;
+                panel.innerHTML = '<div class="gd-empty"><p class="gd-empty__title">Couldn\'t load the board</p>'
+                    + '<p class="gd-empty__hint">Switch tabs and back to try again.</p></div>';
+            });
+    }
+
+    function wireLeaderboard(panel, src) {
+        const list = panel.querySelector('[data-lb-list]');
+        if (!list) return;
+        let busy = false;
+
+        // Infinite scroll: observe the trailing marker, which carries the next cursor AND the rank the
+        // next page starts at (so appended rows keep numbering correctly).
+        const io = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting || busy) return;
+                const marker = entry.target;
+                busy = true;
+                io.unobserve(marker);
+                const url = src + '?after=' + encodeURIComponent(marker.dataset.lbNext)
+                    + '&from=' + encodeURIComponent(marker.dataset.lbFrom || '1');
+                fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))
+                    .then((html) => {
+                        marker.remove();                       // consumed; the new page brings its own
+                        list.insertAdjacentHTML('beforeend', html);
+                        busy = false;
+                        watchTail();
+                    })
+                    .catch(() => { busy = false; });
+            });
+        }, { rootMargin: '300px 0px' });
+
+        function watchTail() {
+            const marker = list.querySelector('.gd-lb__more');
+            if (marker) io.observe(marker);
+        }
+        watchTail();
+
+        // Jump to my rank. A deep viewer's row isn't loaded, so the server opens a window around them
+        // and we swap the list to it rather than paging forward hundreds of times.
+        panel.addEventListener('click', (e) => {
+            if (!e.target.closest('[data-lb-jump]')) return;
+            const mine = list.querySelector('.gd-lb__row--you');
+            if (mine) { scrollToMine(mine); return; }
+            if (busy) return;
+            busy = true;
+            fetch(src + '?around=me', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))
+                .then((html) => {
+                    list.innerHTML = html;
+                    busy = false;
+                    watchTail();
+                    const row = list.querySelector('.gd-lb__row--you');
+                    if (row) scrollToMine(row);
+                })
+                .catch(() => { busy = false; });
+        });
+
+        function scrollToMine(row) {
+            row.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+            row.classList.remove('is-found');
+            void row.offsetWidth;                              // restart the flash if jumped twice
+            row.classList.add('is-found');
+        }
+
+        // Pinned self-row: only while the real row is off screen, so it never duplicates what's visible.
+        const self = panel.querySelector('[data-lb-self]');
+        if (self) {
+            const mine = list.querySelector('.gd-lb__row--you');
+            if (!mine) {
+                self.hidden = false;                           // they're deeper than anything loaded
+            } else {
+                const watcher = new IntersectionObserver(
+                    ([entry]) => { self.hidden = entry.isIntersecting; },
+                    { threshold: 0 }
+                );
+                watcher.observe(mine);
+            }
+        }
+    }
+
     // ============================================================
     // View switcher: Trophies (default) / Roadmap / Community / About
     // ============================================================
@@ -56,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const viewTabs = document.querySelectorAll('#gd-switch .pp-switch__chip[data-view]');
         const views = document.querySelectorAll('.gd-view');
         if (!viewTabs.length || !views.length) return;
-        const VIEW_ORDER = ['trophies', 'roadmap', 'community', 'about'];
+        const VIEW_ORDER = ['trophies', 'roadmap', 'community', 'leaderboard', 'about'];
         // The minibar's per-view extras (sort / count / Filters) are gated by data-mb-active, which showView()
         // keeps in sync with the active view.
         const minibar = document.querySelector('.gd-minibar');
@@ -96,6 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Decorative, so it runs LAST: tab state (panels, chips, URL) is fully synced before any
             // entrance animation, and a fault in the flourish can never strand the switcher mid-update.
             if (changed && shown && name === 'about') revealAbout(shown);
+            if (shown && name === 'leaderboard') loadLeaderboard(shown);
         }
 
         tablist = PlatPursuit.wireTablist(viewTabs, { onSelect: (t) => showView(t.dataset.view) });

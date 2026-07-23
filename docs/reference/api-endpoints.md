@@ -111,7 +111,7 @@ Staff-authored platinum guides on game detail pages. Replaces the old Checklists
 | POST | `/api/v1/lists/<id>/like/` | Login | Toggle like |
 | POST | `/api/v1/lists/<id>/copy/` | Login | Copy list |
 | GET | `/api/v1/games/search/` | Login | Game search (typeahead) |
-| GET | `/api/v1/games/<np_comm_id>/players/` | Login | Game players list |
+| GET | `/api/v1/games/<np_comm_id>/players/` | Public | Game players list (JSON). Sets `authentication_classes = []` / `permission_classes = []`, so it is anonymous despite what this table said previously. Its in-app consumer (the game-detail players modal) was retired in favour of the Ranks tab; kept in case an external client uses it. See [Game Leaderboards](../features/game-leaderboards.md) |
 
 ### A-Z Challenge
 
