@@ -44,6 +44,15 @@
                     rank/hunter search is the point -- find a position without scrolling back to the toolbar.
                     Same typeahead wiring as the toolbar field, pointed at the persistent leaderboard panel.
                     Filters reaches the toolbar toggles. {% endcomment %}
+                    {% comment %} Your standing while scrolled: shown only when the viewer is ranked (JS
+                    fills it from the panel). The chevron points toward your rank -- down if it's below where
+                    you're scrolled, up if above -- and flips with a spring as you cross your own row; a
+                    "here" state when your row is on screen. Click jumps to it. {% endcomment %}
+                    <button type="button" class="gd-lb__mbrank" data-lb-mb-rank data-mb-only="leaderboard" data-lb-dir="down" hidden aria-label="Jump to your rank">
+                        <svg class="gd-lb__mbrank-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+                        <span class="gd-lb__mbrank-lbl">You</span>
+                        <span class="gd-lb__mbrank-n" data-lb-mb-rank-n></span>
+                    </button>
                     <form class="gd-lb__find gd-lb__find--mb" data-mb-only="leaderboard" data-search-wrap data-lb-mb-findform role="search">
                         <svg class="gd-lb__findicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                         <input type="search" class="gd-lb__findinput" data-lb-mb-find autocomplete="off" spellcheck="false"

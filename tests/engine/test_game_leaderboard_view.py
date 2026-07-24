@@ -158,10 +158,9 @@ def test_linked_viewer_sees_their_rank_and_their_row_is_marked(client):
     assert 'gd-lb__row--you' in body
 
 
-def test_self_row_renders_whenever_the_viewer_is_ranked(client):
-    """Rendered (hidden) even when the viewer is on the first page, so the JS can surface it once they
-    scroll their own row away."""
-    game, rows = _board(3)                                   # viewer will be on the first page
+def test_ranked_viewer_exposes_their_rank_for_the_minibar(client):
+    """The rank rides on the .gd-lb root; the JS reads it to fill the minibar 'You #N' widget."""
+    game, rows = _board(3)
     me = rows[0]
     me.profile.is_linked = True
     me.profile.save(update_fields=['is_linked'])
@@ -169,14 +168,13 @@ def test_self_row_renders_whenever_the_viewer_is_ranked(client):
 
     body = client.get(_url(game)).content.decode()
 
-    assert 'data-lb-self' in body
-    assert 'gd-lb__self--bottom' in body                     # default edge before JS flips it
+    assert 'data-lb-viewer-rank="1"' in body
 
 
-def test_anonymous_viewer_gets_no_self_row(client):
+def test_anonymous_viewer_exposes_no_rank(client):
     game, _ = _board(3)
 
-    assert 'data-lb-self' not in client.get(_url(game)).content.decode()
+    assert 'data-lb-viewer-rank=""' in client.get(_url(game)).content.decode()
 
 
 def test_anonymous_viewer_gets_no_rank_control(client):
@@ -481,9 +479,10 @@ def test_detail_page_offers_the_tab_but_does_not_render_the_board(client):
     assert 'data-lb-src' in body                   # and the panel knows where to fetch
     assert 'gd-lb__row' not in body                # but no rows shipped with the page
     assert 'hunters on the board' not in body
-    # The minibar carries the leaderboard search + filters reach (shown while the Ranks tab is active).
+    # The minibar carries the leaderboard search + filters reach + the "You #N" rank widget.
     assert 'data-lb-mb-find' in body
     assert 'data-lb-mb-filters' in body
+    assert 'data-lb-mb-rank' in body
 
 
 def test_detail_page_renders_with_the_leaderboard_deep_link(client):

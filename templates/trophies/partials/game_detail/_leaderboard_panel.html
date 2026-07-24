@@ -7,7 +7,7 @@ they finished and everyone else follows by how close they are. The count is the 
 not Game.played_count -- that counts hidden rows and ignores filters, so it would disagree with the list.
 {% endcomment %}
 {% load humanize %}
-<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}">
+<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}">
 
     {% comment %} Controls always render (even over an empty filtered board) so a too-tight filter can be
     relaxed. Each toggle carries its state in aria-pressed; the JS reads that, rebuilds the query, and
@@ -57,25 +57,12 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
         {% endif %}
     </div>
 
+    {% comment %} Your standing while scrolled lives in the minibar (data-lb-mb-rank), not a floating row --
+    the header above shows it at the top of the board, the minibar shows it once scrolled, so the two
+    cover each other without a third surface. viewer_rank rides on the .gd-lb root for the JS to read. {% endcomment %}
     <ol class="gd-lb__list" data-lb-list>
         {% include 'trophies/partials/game_detail/_leaderboard_rows.html' %}
     </ol>
-
-    {% comment %} Pinned self-row: rendered whenever the viewer is on the board, hidden by default. The JS
-    shows it only while the viewer's real row is off screen (so it never duplicates a visible row) and
-    flips it to the top or bottom edge depending on which way the viewer's place lies. {% endcomment %}
-    {% if viewer_rank %}
-    <div class="gd-lb__self gd-lb__self--bottom" data-lb-self hidden>
-        <span class="gd-lb__rank">{{ viewer_rank|intcomma }}</span>
-        <span class="gd-lb__who">
-            <span class="gd-lb__av">
-                {% if viewer_profile.avatar_url %}<img src="{{ viewer_profile.avatar_url }}" alt="" loading="lazy" />{% endif %}
-            </span>
-            <span class="gd-lb__name">You</span>
-        </span>
-        <button type="button" class="gd-lb__jump gd-lb__jump--self" data-lb-jump>Jump to my rank</button>
-    </div>
-    {% endif %}
 
     {% else %}
     <div class="gd-empty">

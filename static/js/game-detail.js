@@ -119,10 +119,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const list = panel.querySelector('[data-lb-list]');
         const observers = [];
         // Also disconnect the self-row observer, which a jump/append may have re-mounted OUTSIDE this
-        // array (tracked only on panel._lbSelfObserver).
+        // array (tracked only on panel._lbArrowObs).
         panel._lbTeardown = () => {
             observers.forEach((o) => o.disconnect());
-            if (panel._lbSelfObserver) { panel._lbSelfObserver.disconnect(); panel._lbSelfObserver = null; }
+            if (panel._lbArrowObs) { panel._lbArrowObs.disconnect(); panel._lbArrowObs = null; }
             panel._lbTeardown = null;
         };
         panel._lbBusy = false;                                 // a freshly-wired panel is never mid-fetch
@@ -144,7 +144,8 @@ document.addEventListener('DOMContentLoaded', () => {
         observers.push(io);
         panel._lbIO = io;
         lbWatchMarkers(panel);
-        lbMountSelf(panel, observers);
+        lbSyncMbRank(panel);
+        lbMountRankArrow(panel);
         lbWireFind(panel);
     }
 
@@ -159,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 list.insertAdjacentHTML('beforeend', html);
                 panel._lbBusy = false;
                 lbWatchMarkers(panel);
-                lbMountSelf(panel);                        // the viewer's row may have just appended
+                lbMountRankArrow(panel);                  // the viewer's row may have just appended
             })
             .catch(() => { if (list.isConnected) panel._lbBusy = false; });
     }
@@ -182,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (delta) window.scrollBy({ top: delta, left: 0, behavior: 'instant' });
                 panel._lbBusy = false;
                 lbWatchMarkers(panel);
-                lbMountSelf(panel);
+                lbMountRankArrow(panel);
             })
             .catch(() => { if (list.isConnected) panel._lbBusy = false; });
     }
@@ -303,48 +304,41 @@ document.addEventListener('DOMContentLoaded', () => {
         return Math.round(nav + 52);
     }
 
-    // The pinned self-row: shown only while the viewer's real row is off screen, and flipped to the
-    // TOP or BOTTOM edge depending on which way their place lies -- pointing the reminder toward them.
-    // Re-mounted after any list swap because it observes a specific row node that swaps out.
-    function lbMountSelf(panel, observers) {
-        const list = panel.querySelector('[data-lb-list]');
-        const self = panel.querySelector('[data-lb-self]');
-        if (panel._lbSelfObserver) { panel._lbSelfObserver.disconnect(); panel._lbSelfObserver = null; }
-        if (!self || !list) return;
-        const mine = list.querySelector('.gd-lb__row--you');
-        if (!mine) { self.hidden = false; lbSelfDir(panel, 'bottom'); return; }   // deeper than loaded
-        self.hidden = true;                                    // real row present until scrolled away
-        // rootMargin shrinks the top of the root by the real chrome height (nav + the 52px minibar), so the
-        // row counts as "gone" the moment it slips behind the chrome, not only once it passes y=0 -- else
-        // there'd be a gap where the real row is behind the bar but the reminder hasn't appeared. Read the
-        // measured nav height from --sticky-top (main.js keeps it accurate across font/DPI/breakpoint) rather
-        // than hardcoding it.
-        const w = new IntersectionObserver(([entry]) => {
-            if (entry.isIntersecting) { self.hidden = true; return; }
-            const rootTop = entry.rootBounds ? entry.rootBounds.top : 0;
-            // Real row above the (chrome-inset) viewport top => the viewer is UP the board => pin to TOP.
-            lbSelfDir(panel, entry.boundingClientRect.top < rootTop ? 'top' : 'bottom');
-            self.hidden = false;
-        }, { threshold: 0, rootMargin: '-' + lbChromeInset() + 'px 0px 0px 0px' });
-        w.observe(mine);
-        panel._lbSelfObserver = w;
-        if (observers) observers.push(w);
+    // Fill the minibar's "You #N" widget from the freshly-loaded panel and show it only when the viewer is
+    // ranked. The rank rides on the .gd-lb root (data-lb-viewer-rank); a filter change re-ranks, so this
+    // runs on every panel load.
+    function lbSyncMbRank(panel) {
+        const widget = document.querySelector('[data-lb-mb-rank]');
+        if (!widget) return;
+        const root = panel.querySelector('.gd-lb');
+        const rank = parseInt(root ? root.dataset.lbViewerRank : '', 10);
+        if (rank >= 1) {
+            widget.querySelector('[data-lb-mb-rank-n]').textContent = '#' + rank.toLocaleString();
+            widget.hidden = false;
+        } else {
+            widget.hidden = true;
+        }
     }
 
-    // Position the self-row at the chosen edge. A sticky element only pins toward the edge its DOM
-    // position allows, so it's moved before/after the list to make top/bottom sticking actually engage.
-    function lbSelfDir(panel, dir) {
-        const self = panel.querySelector('[data-lb-self]');
+    // Point the minibar rank chevron toward the viewer's place: 'down' if their row is below where they're
+    // scrolled, 'up' if above, 'here' when it's on screen. The CSS springs the flip. No moving elements --
+    // just a data attribute -- so this is all that survived the old floating self-row. Re-mounted after any
+    // list swap because it observes a specific row node that swaps out.
+    function lbMountRankArrow(panel) {
+        const widget = document.querySelector('[data-lb-mb-rank]');
+        if (panel._lbArrowObs) { panel._lbArrowObs.disconnect(); panel._lbArrowObs = null; }
+        if (!widget) return;
         const list = panel.querySelector('[data-lb-list]');
-        if (!self || !list) return;
-        self.classList.toggle('gd-lb__self--top', dir === 'top');
-        self.classList.toggle('gd-lb__self--bottom', dir === 'bottom');
-        // Move only if it isn't already at the target edge (guards against thrashing the DOM every tick).
-        if (dir === 'top' && list.previousElementSibling !== self) {
-            list.insertAdjacentElement('beforebegin', self);
-        } else if (dir === 'bottom' && list.nextElementSibling !== self) {
-            list.insertAdjacentElement('afterend', self);
-        }
+        const mine = list && list.querySelector('.gd-lb__row--you');
+        if (!mine) return;                                     // row not loaded -> keep the last direction
+        // Inset the root's top by the real chrome height so "here" ends the moment the row hits the bar.
+        const obs = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) { widget.dataset.lbDir = 'here'; return; }
+            const rootTop = entry.rootBounds ? entry.rootBounds.top : 0;
+            widget.dataset.lbDir = entry.boundingClientRect.top < rootTop ? 'up' : 'down';
+        }, { threshold: 0, rootMargin: '-' + lbChromeInset() + 'px 0px 0px 0px' });
+        obs.observe(mine);
+        panel._lbArrowObs = obs;
     }
 
     function lbFlashScroll(row) {
@@ -369,7 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 lbDropMarkers(panel);
                 list.innerHTML = html;
                 lbWatchMarkers(panel);
-                lbMountSelf(panel);
+                lbMountRankArrow(panel);
                 const row = list.querySelector('.gd-lb__row--you');
                 if (row) lbFlashScroll(row);
             })
@@ -388,7 +382,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 lbDropMarkers(panel);
                 list.innerHTML = html;
                 lbWatchMarkers(panel);
-                lbMountSelf(panel);
+                lbMountRankArrow(panel);
                 const target = list.querySelector('[data-lb-rank="' + n + '"]');
                 if (target) lbFlashScroll(target);
                 else list.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
@@ -631,6 +625,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
                 });
             }
+            const mbRank = document.querySelector('[data-lb-mb-rank]');
+            if (mbRank) mbRank.addEventListener('click', () => lbJumpToMe(lbPanel));
         }
 
         if (PlatPursuit.StickyReveal) PlatPursuit.StickyReveal.init();

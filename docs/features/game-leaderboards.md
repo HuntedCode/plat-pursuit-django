@@ -95,11 +95,20 @@ player never appears) and selecting a result jumps to their rank. It reuses the 
 chrome (`PlatPursuit.wireSearchField`) and `debounce`, mirroring the navbar/browse search.
 
 **The minibar** (the sticky bar that surfaces on scroll) carries the SAME search field while the Ranks tab
-is active (`data-mb-only="leaderboard"`), plus a Filters button that reaches the toolbar toggles. The
-search works in place -- the whole point while scrolled deep is finding a position without scrolling back
-up. One `lbWireSearch(input, drop, form, panel)` drives both fields; the minibar field is wired once to the
-persistent leaderboard panel element, so it reads the panel's live toggle state and jumps the board below.
-No jump-to-me is duplicated here -- the directional sticky self-row already covers that.
+is active (`data-mb-only="leaderboard"`), a Filters button that reaches the toolbar toggles, and a
+**"You #N"** rank widget. The search works in place -- the whole point while scrolled deep is finding a
+position without scrolling back up. One `lbWireSearch(input, drop, form, panel)` drives both the toolbar and
+minibar fields; the minibar field is wired once to the persistent leaderboard panel element, so it reads the
+panel's live toggle state and jumps the board below.
+
+**Your standing while scrolled** lives in the minibar's rank widget, not a floating row: the header shows
+"You're #N" at the top of the board, the minibar shows it once scrolled, so the two cover each other without
+a third surface. The chevron points toward your rank -- down if it's below where you're scrolled, up if
+above -- and springs the flip as you cross your own row (a lit "here" state when your row is on screen); a
+click jumps to it. The rank rides on the `.gd-lb` root (`data-lb-viewer-rank`); `lbSyncMbRank` fills the
+widget on each panel load and `lbMountRankArrow` drives the chevron from an observer on the viewer's row.
+(This replaced an earlier floating self-row that pinned to the top/bottom edge -- more moving parts, and the
+minibar was the natural home.)
 
 ### View options (BoardOptions)
 
@@ -155,12 +164,10 @@ kind of thing a later "just include it" refactor would quietly undo.
 - **A control change re-fetches the WHOLE panel**, not just the list - the controls, header, count, and
   the viewer's rank all depend on the active options. The JS reads the toggle `aria-pressed` states to
   rebuild the query, so the returned HTML re-renders the toggles in the state it was asked for.
-- **The directional self-row is moved in the DOM.** A `position: sticky` element only pins toward the edge
-  its DOM position allows, so the JS inserts the self-row *before* the list to pin it to the top and
-  *after* to pin it to the bottom, depending on which way the viewer's real row lies. The move happens
-  while it's hidden (the real row is crossing the viewport at that moment), so there's no flash.
-- **The self-row observer watches a specific row node**, which is swapped out by a jump or a filter change,
-  so it's re-mounted after every list swap (`lbMountSelf`).
+- **The rank-arrow observer watches a specific row node** (the viewer's `.gd-lb__row--you`), which is
+  swapped out by a jump or a filter change, so it's re-mounted after every list swap (`lbMountRankArrow`).
+  Its root is inset by the chrome height (`lbChromeInset` reads the measured `--sticky-top` + the 52px
+  minibar) so "here" ends exactly when the row slips behind the bar, not at y=0.
 
 ---
 
@@ -190,7 +197,7 @@ thing we rank on (system clocks can be manipulated offline), so it needs anomaly
 |------|------|
 | `trophies/services/game_leaderboard_service.py` | Ordering, keyset paging, rank, jump window |
 | `trophies/views/game_leaderboard_views.py` | The three response shapes |
-| `templates/trophies/partials/game_detail/_leaderboard_panel.html` | Header + list + pinned self-row |
+| `templates/trophies/partials/game_detail/_leaderboard_panel.html` | Controls + header + list |
 | `templates/trophies/partials/game_detail/_leaderboard_rows.html` | One page of rows + the next-cursor marker |
 | `static/js/game-detail.js` | `loadLeaderboard` / `wireLeaderboard` |
 | `static/css/components/game-detail.css` | `.gd-lb*` |
