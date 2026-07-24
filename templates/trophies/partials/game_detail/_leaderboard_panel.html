@@ -27,11 +27,19 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
                 <span>Invert</span>
             </button>
         </div>
-        <form class="gd-lb__rankjump" data-lb-rankform>
-            <input type="number" min="1" inputmode="numeric" class="gd-lb__rankinput" data-lb-rankinput placeholder="Rank #" aria-label="Jump to rank" />
-            <button type="submit" class="gd-lb__rankgo" aria-label="Go to rank">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        {% comment %} One field for both jumps: a bare number jumps to that rank, text runs a typeahead over
+        the hunters ON this board (?suggest=). Reuses the shared [data-search-wrap] chrome (clear button +
+        in-flight spinner, wired by PlatPursuit.wireSearchField) that the browse/collection pages use. {% endcomment %}
+        <form class="gd-lb__find" data-search-wrap data-lb-findform role="search">
+            <svg class="gd-lb__findicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="search" class="gd-lb__findinput" data-lb-find autocomplete="off" spellcheck="false"
+                   role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="gd-lb-suggest"
+                   placeholder="Rank # or hunter" aria-label="Jump to a rank, or search a hunter" />
+            <button type="button" class="pp-search-clear" data-search-clear aria-label="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
+            <span class="pp-search-spin" aria-hidden="true"></span>
+            <div class="gd-lb__suggest" id="gd-lb-suggest" data-lb-suggest role="listbox" hidden></div>
         </form>
     </div>
 

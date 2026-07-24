@@ -294,7 +294,7 @@ def test_panel_renders_the_controls_with_default_state(client):
     assert 'data-lb-opt="earners"' in body
     assert 'data-lb-opt="registered"' in body
     assert 'data-lb-opt="invert"' in body
-    assert 'data-lb-rankinput' in body
+    assert 'data-lb-find' in body                            # the rank-or-hunter search field
     # Earners is on by default; the others off.
     assert 'data-lb-opt="earners" aria-pressed="true"' in body
     assert 'data-lb-opt="invert" aria-pressed="false"' in body
@@ -377,6 +377,49 @@ def test_jump_to_out_of_range_rank_clamps(client):
 
     assert 'data-lb-rank="8"' in body                        # clamped to the last rank
     assert 'gd-lb__row' in body
+
+
+# --- search typeahead --------------------------------------------------------
+
+
+def test_suggest_returns_matching_hunters_with_rank(client):
+    import json
+    game = GameFactory()
+    a = ProfileGameFactory(game=game, profile=ProfileFactory(psn_username='TrophyKing'), progress=100,
+                           most_recent_trophy_date=timezone.now() - timedelta(minutes=5))
+    ProfileGameFactory(game=game, profile=ProfileFactory(psn_username='SomeoneElse'), progress=90,
+                       most_recent_trophy_date=timezone.now())
+
+    data = json.loads(client.get(_url(game, suggest='trophy')).content)
+
+    assert len(data['players']) == 1
+    assert data['players'][0]['username'] == 'trophyking'   # stored lowercased
+    assert data['players'][0]['rank'] == 1                   # 100% earlier -> rank 1
+    assert 'url' in data['players'][0]
+
+
+def test_suggest_respects_the_active_filters(client):
+    import json
+    game = GameFactory()
+    ProfileGameFactory(game=game, profile=ProfileFactory(psn_username='HunterA', user=None), progress=95,
+                       most_recent_trophy_date=timezone.now())
+    ProfileGameFactory(game=game, profile=ProfileFactory(psn_username='HunterB'), progress=80,
+                       most_recent_trophy_date=timezone.now())
+
+    both = json.loads(client.get(_url(game, suggest='hunter')).content)
+    members = json.loads(client.get(_url(game, suggest='hunter', registered=1)).content)
+
+    assert {p['username'] for p in both['players']} == {'huntera', 'hunterb'}
+    assert {p['username'] for p in members['players']} == {'hunterb'}   # unregistered filtered out
+
+
+def test_suggest_below_two_chars_returns_nothing(client):
+    import json
+    game, _ = _board(3)
+
+    data = json.loads(client.get(_url(game, suggest='a')).content)
+
+    assert data['players'] == []
 
 
 # --- wiring into the page ----------------------------------------------------

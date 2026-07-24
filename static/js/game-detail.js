@@ -113,13 +113,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (e.target.closest('[data-lb-jump]')) lbJumpToMe(panel);
         });
-        panel.addEventListener('submit', (e) => {
-            const form = e.target.closest('[data-lb-rankform]');
-            if (!form) return;
-            e.preventDefault();
-            const n = parseInt(form.querySelector('[data-lb-rankinput]').value, 10);
-            if (n >= 1) lbJumpToRank(panel, n);
-        });
     }
 
     function lbWire(panel) {
@@ -162,6 +155,91 @@ document.addEventListener('DOMContentLoaded', () => {
         panel._lbIO = io;
         lbWatchTail(panel);
         lbMountSelf(panel, observers);
+        lbWireFind(panel);
+    }
+
+    // The search field: one input for both jumps. A bare number jumps to that rank; text runs a debounced
+    // typeahead over the hunters on this board (?suggest= -> JSON) and selecting one jumps to their rank.
+    // Reuses PlatPursuit.wireSearchField (clear button + spinner) and debounce. Re-wired per panel fetch;
+    // its listeners live on the replaced input/dropdown, so they die with the old DOM (no leak).
+    function lbWireFind(panel) {
+        const input = panel.querySelector('[data-lb-find]');
+        const drop = panel.querySelector('[data-lb-suggest]');
+        const form = panel.querySelector('[data-lb-findform]');
+        if (!input || !drop || !form || !PlatPursuit.wireSearchField) return;
+        const field = PlatPursuit.wireSearchField(input, { onClear: closeDrop });
+        let items = [], active = -1, seq = 0;
+
+        function closeDrop() {
+            drop.hidden = true; drop.textContent = ''; items = []; active = -1;
+            input.setAttribute('aria-expanded', 'false');
+        }
+        function setActive(i) {
+            active = i;
+            drop.querySelectorAll('.gd-lb__sugg').forEach((o, j) => o.classList.toggle('is-active', j === i));
+        }
+        function render(players) {
+            drop.textContent = '';
+            items = players || [];
+            if (!items.length) { closeDrop(); return; }
+            items.forEach((p) => {
+                const row = document.createElement('button');
+                row.type = 'button'; row.className = 'gd-lb__sugg'; row.setAttribute('role', 'option');
+                row.dataset.rank = p.rank;
+                const av = document.createElement('span'); av.className = 'gd-lb__sugg-av';
+                if (p.avatar) { const img = document.createElement('img'); img.src = p.avatar; img.alt = ''; av.appendChild(img); }
+                row.appendChild(av);
+                const name = document.createElement('span'); name.className = 'gd-lb__sugg-name';
+                name.textContent = p.display;                  // textContent: safe against a hostile name
+                row.appendChild(name);
+                const rank = document.createElement('span'); rank.className = 'gd-lb__sugg-rank';
+                rank.textContent = '#' + Number(p.rank).toLocaleString();
+                row.appendChild(rank);
+                drop.appendChild(row);
+            });
+            drop.hidden = false;
+            input.setAttribute('aria-expanded', 'true');
+            setActive(0);
+        }
+
+        const doSuggest = PlatPursuit.debounce((q) => {
+            const mine = ++seq;
+            fetch(lbOptsUrl(panel, { suggest: q }), LB_XHR)
+                .then((r) => (r.ok ? r.json() : Promise.reject()))
+                .then((data) => { if (mine === seq) { field.setBusy(false); render(data.players); } })
+                .catch(() => { if (mine === seq) { field.setBusy(false); closeDrop(); } });
+        }, 180);
+
+        input.addEventListener('input', () => {
+            const q = input.value.trim();
+            // A number is a rank jump (handled on submit), not a name search -- don't fetch for it.
+            if (q.length < 2 || /^\d+$/.test(q)) { field.setBusy(false); closeDrop(); return; }
+            field.setBusy(true);
+            doSuggest(q);
+        });
+        input.addEventListener('keydown', (e) => {
+            if (drop.hidden) return;
+            const n = drop.querySelectorAll('.gd-lb__sugg').length;
+            if (e.key === 'ArrowDown') { e.preventDefault(); setActive(Math.min(active + 1, n - 1)); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(Math.max(active - 1, 0)); }
+            else if (e.key === 'Escape') { e.preventDefault(); closeDrop(); }
+        });
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const q = input.value.trim();
+            if (/^\d+$/.test(q)) { lbJumpToRank(panel, parseInt(q, 10)); closeDrop(); input.blur(); return; }
+            const pick = items[active >= 0 ? active : 0];
+            if (pick) { lbJumpToRank(panel, parseInt(pick.rank, 10)); closeDrop(); input.blur(); }
+        });
+        // mousedown (not click) so it fires before the input's blur closes the dropdown.
+        drop.addEventListener('mousedown', (e) => {
+            const row = e.target.closest('.gd-lb__sugg');
+            if (!row) return;
+            e.preventDefault();
+            lbJumpToRank(panel, parseInt(row.dataset.rank, 10));
+            closeDrop(); input.blur();
+        });
+        input.addEventListener('blur', () => setTimeout(closeDrop, 120));
     }
 
     function lbWatchTail(panel) {

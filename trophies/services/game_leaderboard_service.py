@@ -239,6 +239,11 @@ def _ahead_of(row):
     return ahead
 
 
+def _rank_of_row(game, opts, row):
+    """Canonical rank of a row we already hold (no re-fetch) -- count everyone ahead of it, +1."""
+    return _base_qs(game, opts).filter(_ahead_of(row)).count() + 1
+
+
 def rank_for(game, profile, opts):
     """1-indexed CANONICAL rank (from the top / best), or None if the profile isn't on this board.
 
@@ -248,4 +253,23 @@ def rank_for(game, profile, opts):
     row = _board_row(game, profile, opts)
     if row is None:
         return None
-    return _base_qs(game, opts).filter(_ahead_of(row)).count() + 1
+    return _rank_of_row(game, opts, row)
+
+
+def suggest(game, opts, query, limit=8):
+    """Board players whose PSN name matches `query`, each with its rank -- for the search typeahead.
+
+    Scoped to the filtered board, so a hidden/filtered-out player never appears. Ranks are computed per
+    match (a bounded count each), which is fine at typeahead limits. Returns [] below 2 chars so a single
+    keystroke doesn't scan.
+    """
+    q = (query or '').strip()
+    if len(q) < 2:
+        return []
+    matches = list(
+        board_queryset(game, opts)
+        .filter(Q(profile__psn_username__icontains=q) | Q(profile__display_psn_username__icontains=q))
+        .select_related('profile')[:limit]
+    )
+    return [{'profile': row.profile, 'progress': row.progress, 'rank': _rank_of_row(game, opts, row)}
+            for row in matches]

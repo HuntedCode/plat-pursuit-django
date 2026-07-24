@@ -271,6 +271,39 @@ def test_jump_returns_none_on_an_empty_board():
     assert svc.page_at_rank(GameFactory(), DEFAULT, 1) is None
 
 
+# --- search suggest ----------------------------------------------------------
+
+
+def test_suggest_matches_by_name_and_carries_rank():
+    game = GameFactory()
+    for i, name in enumerate(['AceHunter', 'AceRunner', 'Nobody']):
+        ProfileGameFactory(game=game, profile=ProfileFactory(psn_username=name), progress=100 - i,
+                           most_recent_trophy_date=timezone.now() - timedelta(minutes=i + 1))
+
+    results = svc.suggest(game, DEFAULT, 'ace')
+
+    assert {r['profile'].psn_username for r in results} == {'acehunter', 'acerunner'}  # stored lowercased
+    ranks = {r['profile'].psn_username: r['rank'] for r in results}
+    assert ranks['acehunter'] == 1 and ranks['acerunner'] == 2
+
+
+def test_suggest_is_scoped_to_the_filtered_board():
+    game = GameFactory()
+    ProfileGameFactory(game=game, profile=ProfileFactory(psn_username='ZedEarner'), progress=50,
+                       most_recent_trophy_date=timezone.now())
+    ProfileGameFactory(game=game, profile=ProfileFactory(psn_username='ZedZero'), progress=0,
+                       most_recent_trophy_date=None)                          # filtered by earners-default
+
+    assert {r['profile'].psn_username for r in svc.suggest(game, DEFAULT, 'zed')} == {'zedearner'}
+    assert {r['profile'].psn_username for r in svc.suggest(game, ALL, 'zed')} == {'zedearner', 'zedzero'}
+
+
+def test_suggest_short_query_returns_empty():
+    game, _ = _board(3)
+    assert svc.suggest(game, DEFAULT, 'a') == []
+    assert svc.suggest(game, DEFAULT, '') == []
+
+
 # --- index contract ----------------------------------------------------------
 
 

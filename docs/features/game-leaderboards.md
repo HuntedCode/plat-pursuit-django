@@ -87,6 +87,12 @@ Response shapes from one URL (all honour the view options below):
 | `?after=<cursor>&from=<rank>` | Rows only | Infinite scroll append |
 | `?around=me` | Rows only, a window centred on the viewer | "Jump to my rank" |
 | `?rank=N` | Rows only, a window centred on canonical rank N | Typed rank jump |
+| `?suggest=<q>` | **JSON** `{players: [{display, username, avatar, rank, progress, url}]}` | Search typeahead |
+
+The toolbar's search field is one input for both: a bare number jumps to that rank, text runs the
+`?suggest=` typeahead over the hunters on this board (scoped to the active filters, so a hidden/filtered
+player never appears) and selecting a result jumps to their rank. It reuses the shared `[data-search-wrap]`
+chrome (`PlatPursuit.wireSearchField`) and `debounce`, mirroring the navbar/browse search.
 
 ### View options (BoardOptions)
 

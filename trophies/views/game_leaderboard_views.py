@@ -15,7 +15,9 @@ the top) either way, so an inverted board simply counts down.
 """
 import logging
 
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views import View
 
 from trophies.models import Game
@@ -35,6 +37,20 @@ class GameLeaderboardView(View):
         opts = svc.BoardOptions.from_request(request)
         profile = self._viewer_profile(request)
         step = -1 if opts.invert else 1
+
+        # Typeahead: board players matching a name -> JSON, for the search dropdown.
+        if request.GET.get('suggest') is not None:
+            return JsonResponse({'players': [
+                {
+                    'display': m['profile'].display_psn_username or m['profile'].psn_username,
+                    'username': m['profile'].psn_username,
+                    'avatar': m['profile'].avatar_url or '',
+                    'rank': m['rank'],
+                    'progress': m['progress'],
+                    'url': reverse('profile_detail', args=[m['profile'].psn_username]),
+                }
+                for m in svc.suggest(game, opts, request.GET.get('suggest', ''))
+            ]})
 
         # Jump to the viewer, or to a typed rank -> a window, rows only.
         if request.GET.get('around') == 'me' or request.GET.get('rank') is not None:
