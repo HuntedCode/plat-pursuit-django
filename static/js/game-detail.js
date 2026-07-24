@@ -145,7 +145,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const dataByPos = new Map();                           // display-pos (1-indexed) -> row HTML, cached
         const rendered = new Map();                            // display-pos -> element in the DOM
         const fetchedPages = new Set();                        // page indices already fetched / in flight
-        let pendingFlash = 0;                                  // display-pos to flash once it mounts
+        let highlightDp = 0;                                  // display-pos kept lit after a jump
+        let highlightAnchor = 0;                              // scrollTop at the jump; lets us detect a scroll away
+
+        function setHighlight(dp) {
+            clearHighlight();
+            highlightDp = dp;
+            highlightAnchor = lbScroller().scrollTop;
+            const el = rendered.get(dp);
+            if (el) el.classList.add('is-found');
+        }
+        function clearHighlight() {
+            if (!highlightDp) return;
+            const el = rendered.get(highlightDp);
+            if (el) el.classList.remove('is-found');
+            highlightDp = 0;
+        }
 
         // Canonical rank of a display position, and vice versa. The label is canonical; layout is by position.
         const rankOf = (dp) => (invert ? total - dp + 1 : dp);
@@ -169,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
             el.style.top = ((dp - 1) * H) + 'px';
             list.appendChild(el);
             rendered.set(dp, el);
-            if (dp === pendingFlash) { lbFlash(el); pendingFlash = 0; }
+            if (dp === highlightDp) el.classList.add('is-found');   // keep the jump target lit across remount
         }
 
         function fetchPage(p) {
@@ -198,6 +213,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function render() {
+            // Drop the jump highlight once the user has scrolled a row or more from where they landed
+            // (the jump's own programmatic scroll leaves scrollTop == the anchor, so it never self-clears).
+            if (highlightDp && Math.abs(lbScroller().scrollTop - highlightAnchor) > H) clearHighlight();
             const [first, last, localTop, localBottom] = visible();
             // Evict rows well outside the window.
             rendered.forEach((el, dp) => {
@@ -230,12 +248,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const inset = lbChromeInset();
             const y = listTopDoc + (dp - 1) * H - inset - (window.innerHeight - inset) * 0.34;
             lbScroller().scrollTop = Math.max(0, y);
-            pendingFlash = dp;
-            // If the target was ALREADY in the DOM, render() won't re-mount it (so mount()'s flash won't
-            // fire) -- flash it here. Otherwise mount() flashes it once, now or when its page lands.
-            const wasRendered = rendered.has(dp);
-            render();
-            if (wasRendered) { lbFlash(rendered.get(dp)); pendingFlash = 0; }
+            render();                                          // mount the window at the landing position
+            setHighlight(dp);                                  // stays lit until the user scrolls away
         }
         panel._lbJump = jump;
 
@@ -384,12 +398,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             widget.hidden = true;
         }
-    }
-
-    function lbFlash(row) {
-        row.classList.remove('is-found');
-        void row.offsetWidth;                                  // restart the flash if targeted twice
-        row.classList.add('is-found');
     }
 
     // Both jumps resolve to a canonical rank, then hand off to the virtualizer's scroll-to-position.
