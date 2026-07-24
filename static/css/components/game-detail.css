@@ -961,9 +961,11 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 }
 
 .gd-lb__rank { font-size: 0.78rem; font-weight: 800; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; text-align: right; }
-.gd-lb__row:nth-child(1) .gd-lb__rank { color: var(--color-trophy-platinum); }
-.gd-lb__row:nth-child(2) .gd-lb__rank { color: var(--color-trophy-gold); }
-.gd-lb__row:nth-child(3) .gd-lb__rank { color: var(--color-trophy-silver); }
+/* Medals key off canonical rank (set in the row template), not DOM order -- virtualized rows mount in
+   scroll order, so nth-child would colour the wrong rows after any scroll-away-and-back. */
+.gd-lb__rank--1 { color: var(--color-trophy-platinum); }
+.gd-lb__rank--2 { color: var(--color-trophy-gold); }
+.gd-lb__rank--3 { color: var(--color-trophy-silver); }
 
 .gd-lb__who { display: flex; align-items: center; gap: 8px; min-width: 0; text-decoration: none; color: inherit; }
 .gd-lb__av { flex: none; width: 26px; height: 26px; border-radius: 50%; overflow: hidden; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }

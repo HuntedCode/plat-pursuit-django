@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let H = readH();                                       // --lb-row-h changes across the md breakpoint
         const BUFFER = 8;                                       // rows rendered beyond the viewport each way
         const EVICT = 30;                                       // keep rows within this of the window in the DOM
-        const PAGE = 50;                                        // fetch granularity (matches the server)
+        const PAGE = parseInt(root.dataset.lbPageSize, 10) || 50;   // fetch granularity, from the server (no drift)
 
         const dataByPos = new Map();                           // display-pos (1-indexed) -> row HTML, cached
         const rendered = new Map();                            // display-pos -> element in the DOM
@@ -231,9 +231,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const y = listTopDoc + (dp - 1) * H - inset - (window.innerHeight - inset) * 0.34;
             lbScroller().scrollTop = Math.max(0, y);
             pendingFlash = dp;
-            render();                                          // mount the window here; flash fires on mount
-            const already = rendered.get(dp);                  // if the target was already on screen, flash now
-            if (already) { lbFlash(already); pendingFlash = 0; }
+            // If the target was ALREADY in the DOM, render() won't re-mount it (so mount()'s flash won't
+            // fire) -- flash it here. Otherwise mount() flashes it once, now or when its page lands.
+            const wasRendered = rendered.has(dp);
+            render();
+            if (wasRendered) { lbFlash(rendered.get(dp)); pendingFlash = 0; }
         }
         panel._lbJump = jump;
 
@@ -246,17 +248,20 @@ document.addEventListener('DOMContentLoaded', () => {
             render();
         }
 
+        // Both scroll and resize coalesce to one rAF (resize -> full relayout, scroll -> render).
         let ticking = false;
-        function onScroll() {
+        function tick(fn) {
             if (ticking) return;
             ticking = true;
-            requestAnimationFrame(() => { ticking = false; render(); });
+            requestAnimationFrame(() => { ticking = false; fn(); });
         }
+        function onScroll() { tick(render); }
+        function onResize() { tick(relayout); }
         window.addEventListener('scroll', onScroll, { passive: true });
-        window.addEventListener('resize', relayout, { passive: true });
+        window.addEventListener('resize', onResize, { passive: true });
         panel._lbTeardown = () => {
             window.removeEventListener('scroll', onScroll);
-            window.removeEventListener('resize', relayout);
+            window.removeEventListener('resize', onResize);
             panel._lbJump = null;
             panel._lbTeardown = null;
         };

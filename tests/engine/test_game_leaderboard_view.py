@@ -64,6 +64,28 @@ def test_panel_carries_the_header_the_spacer_total_and_a_first_window(client):
     assert body.count('gd-lb__row') >= 3
 
 
+def test_medal_classes_key_off_rank_not_dom_position(client):
+    """Virtualized rows mount in scroll order, so the top-3 medal colour must come from the rank itself
+    (a class), not nth-child -- otherwise it colours whatever three rows are first in the DOM."""
+    game, _ = _board(80)
+
+    # A deep window (ranks 51..80) must carry NO medal classes...
+    deep = client.get(_url(game, range=51, **{'from': 51})).content.decode()
+    assert 'gd-lb__rank--1' not in deep and 'gd-lb__rank--2' not in deep and 'gd-lb__rank--3' not in deep
+
+    # ...while the top window carries exactly ranks 1/2/3.
+    top = client.get(_url(game, range=1, **{'from': 1})).content.decode()
+    assert top.count('gd-lb__rank--1') == 1
+    assert top.count('gd-lb__rank--2') == 1
+    assert top.count('gd-lb__rank--3') == 1
+
+
+def test_panel_stamps_the_page_size_for_the_client(client):
+    game, _ = _board(3)
+
+    assert 'data-lb-page-size="50"' in client.get(_url(game)).content.decode()
+
+
 def test_range_returns_rows_only_numbered_from_the_given_rank(client):
     """A virtual-window fetch: just the rows, positioned by the client via their rank."""
     game, _ = _board(80)                          # more than one PAGE_SIZE (50) window

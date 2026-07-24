@@ -7,7 +7,7 @@ they finished and everyone else follows by how close they are. The count is the 
 not Game.played_count -- that counts hidden rows and ignores filters, so it would disagree with the list.
 {% endcomment %}
 {% load humanize %}
-<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}" data-lb-total="{{ board_size }}" data-lb-invert="{% if opts.invert %}1{% else %}0{% endif %}">
+<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}" data-lb-total="{{ board_size }}" data-lb-invert="{% if opts.invert %}1{% else %}0{% endif %}" data-lb-page-size="{{ page_size }}">
 
     {% comment %} Controls always render (even over an empty filtered board) so a too-tight filter can be
     relaxed. Each toggle carries its state in aria-pressed; the JS reads that, rebuilds the query, and

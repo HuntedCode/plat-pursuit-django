@@ -4,7 +4,9 @@ client positions each row by its data-lb-rank -- no markers, no cursors. {% endc
 {% load humanize custom_filters %}
 {% for row in rows %}
 <li class="gd-lb__row{% if viewer_profile and row.profile_id == viewer_profile.id %} gd-lb__row--you{% endif %}" data-lb-rank="{{ row.rank }}">
-    <span class="gd-lb__rank">{{ row.rank|intcomma }}</span>
+    {% comment %} Medal colour keys off the canonical rank, NOT DOM order -- the virtualizer appends rows as
+    they scroll into view, so nth-child(1..3) would colour whatever three happen to be first in the DOM. {% endcomment %}
+    <span class="gd-lb__rank{% if row.rank == 1 %} gd-lb__rank--1{% elif row.rank == 2 %} gd-lb__rank--2{% elif row.rank == 3 %} gd-lb__rank--3{% endif %}">{{ row.rank|intcomma }}</span>
     <a class="gd-lb__who" href="{% url 'profile_detail' row.profile.psn_username %}">
         <span class="gd-lb__av">
             {% if row.profile.avatar_url %}<img src="{{ row.profile.avatar_url }}" alt="" loading="lazy" />{% endif %}

@@ -71,6 +71,7 @@ class GameLeaderboardView(View):
             'game': game,
             'opts': opts,
             'board_size': total,
+            'page_size': svc.PAGE_SIZE,        # stamped into the DOM so the JS fetch granularity can't drift
             'viewer_rank': viewer_rank,
             'viewer_profile': profile,
             **self._rows_ctx(rows, start_rank, step, profile),
