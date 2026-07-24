@@ -146,12 +146,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const rendered = new Map();                            // display-pos -> element in the DOM
         const fetchedPages = new Set();                        // page indices already fetched / in flight
         let highlightDp = 0;                                  // display-pos kept lit after a jump
-        let highlightAnchor = 0;                              // scrollTop at the jump; lets us detect a scroll away
+        let highlightAnchor = 0;                              // the destination scrollTop the jump scrolls TO
+        let highlightArmed = false;                           // true once the jump scroll has actually arrived
 
-        function setHighlight(dp) {
+        // Light `dp` and remember where the jump is scrolling to. `armed` stays false until that scroll
+        // reaches the anchor, so the jump's own (smooth) travel is never mistaken for the user scrolling
+        // away. render() arms it on arrival, then a row-plus of further movement is the user leaving.
+        function setHighlight(dp, anchorY) {
             clearHighlight();
             highlightDp = dp;
-            highlightAnchor = lbScroller().scrollTop;
+            highlightAnchor = anchorY;
+            highlightArmed = false;
             const el = rendered.get(dp);
             if (el) el.classList.add('is-found');
         }
@@ -160,6 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const el = rendered.get(highlightDp);
             if (el) el.classList.remove('is-found');
             highlightDp = 0;
+            highlightArmed = false;
         }
 
         // Canonical rank of a display position, and vice versa. The label is canonical; layout is by position.
@@ -213,9 +219,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function render() {
-            // Drop the jump highlight once the user has scrolled a row or more from where they landed
-            // (the jump's own programmatic scroll leaves scrollTop == the anchor, so it never self-clears).
-            if (highlightDp && Math.abs(lbScroller().scrollTop - highlightAnchor) > H) clearHighlight();
+            // Keep the jump highlight lit through the jump's own scroll, drop it once the USER scrolls away.
+            // Movement alone can't tell the two apart, so we ARM on arrival: while the (smooth) scroll is
+            // still travelling toward the anchor it stays lit (not armed); once scrollTop lands within a row
+            // of the anchor it's arrived (armed); after that, a row-plus of movement is the user leaving.
+            if (highlightDp) {
+                const dist = Math.abs(lbScroller().scrollTop - highlightAnchor);
+                if (!highlightArmed) { if (dist <= H) highlightArmed = true; }
+                else if (dist > H) clearHighlight();
+            }
             const [first, last, localTop, localBottom] = visible();
             // Evict rows well outside the window.
             rendered.forEach((el, dp) => {
@@ -240,19 +252,21 @@ document.addEventListener('DOMContentLoaded', () => {
             widget.dataset.lbDir = vTop + H < localTop ? 'up' : (vTop > localBottom ? 'down' : 'here');
         }
 
-        // Jump: scroll the PAGE so the target row lands ~a third down below the chrome. It must LAND, not
-        // travel across virtual space -- there are no real rows between here and there to animate past. The
-        // `behavior: 'instant'` is load-bearing: it overrides the global `scroll-behavior: smooth`, so
-        // scrollTop equals the landing position immediately. Without it the smooth animation drifts scrollTop
-        // past highlightAnchor and render() clears the found-highlight before it ever arrives.
+        // Jump: smooth-scroll the PAGE so the target row lands ~a third down below the chrome, and keep it
+        // lit on arrival. We anchor the highlight to the DESTINATION and let render() arm it once the scroll
+        // gets there (see setHighlight) -- so the animation's own travel can't read as "scrolled away" and
+        // clear the highlight before it lands. Reduced-motion users get an instant landing (armed at once).
         function jump(rank) {
             const dp = Math.max(1, Math.min(posOf(rank), total));
+            const sc = lbScroller();
             const listTopDoc = window.scrollY + list.getBoundingClientRect().top;
             const inset = lbChromeInset();
-            const y = listTopDoc + (dp - 1) * H - inset - (window.innerHeight - inset) * 0.34;
-            lbScroller().scrollTo({ top: Math.max(0, y), behavior: 'instant' });
-            render();                                          // mount the window at the landing position
-            setHighlight(dp);                                  // stays lit until the user scrolls away
+            const maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
+            const y = Math.min(Math.max(0, listTopDoc + (dp - 1) * H - inset - (window.innerHeight - inset) * 0.34), maxTop);
+            const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            setHighlight(dp, y);                               // anchor to where the scroll will land
+            sc.scrollTo({ top: y, behavior: reduce ? 'instant' : 'smooth' });
+            render();                                          // mount the current window; the travel mounts the rest
         }
         panel._lbJump = jump;
 
