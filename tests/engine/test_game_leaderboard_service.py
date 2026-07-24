@@ -298,6 +298,32 @@ def test_jump_then_walk_up_reproduces_everything_above(opts):
     assert len(collected) == len(set(collected))         # nothing repeated
 
 
+@pytest.mark.parametrize('opts', [ALL, INVERTED])
+def test_page_before_over_ties_and_the_null_tail(opts):
+    """page_before's riskiest case (per the module's own note): a cursor inside a tie cluster with a
+    null-date tail below. Paging up from just below the tail must reproduce everything above it exactly."""
+    game = GameFactory()
+    stamp = timezone.now()
+    for _ in range(3):                                   # progress-50 tie cluster, same timestamp
+        ProfileGameFactory(game=game, profile=ProfileFactory(), progress=50, most_recent_trophy_date=stamp)
+    _player(game, 80, minutes_ago=5)                     # someone above the cluster
+    for _ in range(2):
+        _player(game, 0, minutes_ago=None)               # null-date tail (only present with only_earners off)
+    order = _ids(game, opts)
+
+    # Start from the last row and walk up; the collected rows must equal everything above it.
+    last = svc.board_queryset(game, opts).select_related('profile')[len(order) - 1]
+    collected, cursor, guard = [], svc.encode_cursor(last), 0
+    while cursor:
+        rows, cursor = svc.page_before(game, opts, cursor, limit=2)
+        collected = [r.profile_id for r in rows] + collected
+        guard += 1
+        assert guard < 50
+
+    assert collected == order[:-1]
+    assert len(collected) == len(set(collected))
+
+
 def test_page_before_at_the_top_has_no_further_cursor():
     game = GameFactory()
     for pct in (100, 80, 60, 40):

@@ -380,6 +380,22 @@ def test_scroll_up_prepends_the_page_above_the_jump(client):
     assert 'data-lb-rank="1"' in body                        # up to the top of the board
 
 
+def test_scroll_up_prepends_correctly_when_inverted(client):
+    """Inverted upward-scroll numbering counts the other way -- the one combination hand-verified but
+    previously untested at the HTTP layer."""
+    game, _ = _board(60)
+    window = client.get(_url(game, invert=1, rank=20)).content.decode()
+    prev_cursor = window.split('data-lb-prev="')[1].split('"')[0]
+    fromtop = window.split('data-lb-fromtop="')[1].split('"')[0]     # inverted window top = a HIGH rank
+
+    body = client.get(_url(game, invert=1, before=prev_cursor, fromtop=fromtop)).content.decode()
+
+    # Inverted: ranks above the window are HIGHER, so the prepend counts UP from fromtop+1.
+    expected = str(int(fromtop) + 1)
+    assert f'data-lb-rank="{expected}"' in body
+    assert 'data-lb-next' not in body                        # upward only
+
+
 def test_inverted_numbering_continues_correctly_across_a_page(client):
     """Inverted page 1 starts at the highest rank and counts DOWN; the next page must continue the count."""
     game, _ = _board(30)                                    # PAGE_SIZE is 25

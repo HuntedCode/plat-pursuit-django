@@ -175,7 +175,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 marker.remove();
                 list.insertAdjacentHTML('afterbegin', html);
                 const delta = document.documentElement.scrollHeight - beforeH;
-                if (delta) window.scrollBy(0, delta);
+                // behavior:'instant' is REQUIRED -- the site sets scroll-behavior:smooth globally, and a bare
+                // scrollBy inherits it, so the compensation would ANIMATE (the very lurch it prevents) and
+                // fight the user's own upward scroll. The avatar box is a fixed-size flex item, so lazy
+                // images don't shift height after this measurement.
+                if (delta) window.scrollBy({ top: delta, left: 0, behavior: 'instant' });
                 panel._lbBusy = false;
                 lbWatchMarkers(panel);
                 lbMountSelf(panel);
@@ -272,11 +276,15 @@ document.addEventListener('DOMContentLoaded', () => {
         input.addEventListener('blur', () => setTimeout(closeDrop, 120));
     }
 
-    // Observe both end markers (bottom = next page, top = previous page after a jump).
+    // Observe both end markers (bottom = next page, top = previous page after a jump). unobserve THEN
+    // observe forces a fresh initial callback even for a marker that's already observed and still in view --
+    // otherwise, when BOTH markers land in the 300px zone at once (a short jump window fits inside it), only
+    // the first fires and the other direction is starved until the user scrolls it out and back. Re-arming
+    // pumps the starved side; it self-terminates because each load grows the list past the zone.
     function lbWatchMarkers(panel) {
         const list = panel.querySelector('[data-lb-list]');
         if (!list || !panel._lbIO) return;
-        list.querySelectorAll('.gd-lb__more').forEach((m) => panel._lbIO.observe(m));
+        list.querySelectorAll('.gd-lb__more').forEach((m) => { panel._lbIO.unobserve(m); panel._lbIO.observe(m); });
     }
 
     // Stop observing the markers before a jump wipes the list, or the destroyed nodes leak as retained
@@ -285,6 +293,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const list = panel.querySelector('[data-lb-list]');
         if (!list || !panel._lbIO) return;
         list.querySelectorAll('.gd-lb__more').forEach((m) => panel._lbIO.unobserve(m));
+    }
+
+    // Height of the fixed chrome above the board: the measured nav (--sticky-top, kept accurate by main.js)
+    // plus the 52px minibar. Used to inset the self-row observer's top so the reminder appears exactly as
+    // the real row slips behind the chrome.
+    function lbChromeInset() {
+        const nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sticky-top')) || 58;
+        return Math.round(nav + 52);
     }
 
     // The pinned self-row: shown only while the viewer's real row is off screen, and flipped to the
@@ -298,16 +314,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const mine = list.querySelector('.gd-lb__row--you');
         if (!mine) { self.hidden = false; lbSelfDir(panel, 'bottom'); return; }   // deeper than loaded
         self.hidden = true;                                    // real row present until scrolled away
-        // rootMargin shrinks the top of the root by the fixed chrome (nav + minibar ~= 110px), so the row
-        // counts as "gone" the moment it slips behind the chrome, not only once it passes y=0 -- otherwise
-        // there'd be a gap where the real row is hidden behind the bar but the reminder hasn't appeared.
+        // rootMargin shrinks the top of the root by the real chrome height (nav + the 52px minibar), so the
+        // row counts as "gone" the moment it slips behind the chrome, not only once it passes y=0 -- else
+        // there'd be a gap where the real row is behind the bar but the reminder hasn't appeared. Read the
+        // measured nav height from --sticky-top (main.js keeps it accurate across font/DPI/breakpoint) rather
+        // than hardcoding it.
         const w = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting) { self.hidden = true; return; }
             const rootTop = entry.rootBounds ? entry.rootBounds.top : 0;
             // Real row above the (chrome-inset) viewport top => the viewer is UP the board => pin to TOP.
             lbSelfDir(panel, entry.boundingClientRect.top < rootTop ? 'top' : 'bottom');
             self.hidden = false;
-        }, { threshold: 0, rootMargin: '-110px 0px 0px 0px' });
+        }, { threshold: 0, rootMargin: '-' + lbChromeInset() + 'px 0px 0px 0px' });
         w.observe(mine);
         panel._lbSelfObserver = w;
         if (observers) observers.push(w);
