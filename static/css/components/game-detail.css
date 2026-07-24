@@ -867,7 +867,10 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    finished and chasers follow by closeness. Rows are a grid so the rank, name and percentage columns
    stay aligned down the whole list -- a ragged left edge is what makes a leaderboard read as a list
    instead of a ranking. Fetched on first tab activation, so it needs its own loading state. */
-.gd-lb { display: flex; flex-direction: column; gap: 10px; }
+/* --lb-row-h is the FIXED virtual-row height the JS keys everything off (spacer height, row offsets, jump
+   targets). Two-line rows on mobile are taller; the single-line table at md+ is shorter. */
+.gd-lb { display: flex; flex-direction: column; gap: 10px; --lb-row-h: 58px; }
+@media (min-width: 768px) { .gd-lb { --lb-row-h: 44px; } }
 
 /* Controls toolbar: filter toggles (aria-pressed drives the lit state) + a jump-to-rank field. */
 .gd-lb__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
@@ -913,26 +916,27 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* The list is a card: it frames the rows as one object, so they read as a ranking table rather than a
    stack of floating chips. Rows lose their own background (chip-in-card is busy) and separate by a
    hairline instead. */
-/* overflow-anchor: none so the browser's own scroll-anchoring can't fight the manual scrollTop compensation
-   the JS applies when prepending rows above the viewport (it would otherwise double-adjust). */
-.gd-lb__list { list-style: none; margin: 0; padding: 4px; display: flex; flex-direction: column; overflow-anchor: none; background: color-mix(in oklab, var(--pp-bg-1) 65%, transparent); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); }
+/* Virtual list: the card is a full-height spacer (JS sets height = board_size * --lb-row-h) so the page
+   scrollbar spans the WHOLE board; rows are absolutely positioned inside by rank, only the visible ~30 in
+   the DOM. overflow: hidden clips rows to the rounded card. */
+.gd-lb__list { list-style: none; margin: 0; padding: 0; position: relative; overflow: hidden; background: color-mix(in oklab, var(--pp-bg-1) 65%, transparent); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); }
 
-/* MOBILE: a two-line card. Cramming rank|name|trophies|%|date into 375px left only name + % legible, so
-   the row stacks -- primary line (rank, name, %) with a secondary metadata line beneath it (trophy haul +
-   date/time). rank spans both rows down the left.
-   md+: collapse to a single-line table. `grid-template-areas: none` makes the cells' area names resolve
-   to auto, so they flow in DOM order (rank, who, trophies, bar, pct, when). The trophy column is then a
-   FIXED width so one player's platinum dot can't shove the % and date columns out of alignment. */
+/* Each row is a fixed-height (--lb-row-h) absolutely-positioned band; the JS sets `top`. A bottom hairline
+   is the divider (absolute rows have no flow adjacency).
+   MOBILE: a two-line layout -- rank|name|% on top, trophy haul + date/time beneath -- because cramming
+   everything into 375px left only name + % legible. md+: a single-line table (grid-template-areas: none
+   lets the cells flow in DOM order); the trophy column is fixed-width so a platinum dot can't shove % and
+   date out of alignment. */
 .gd-lb__row {
+    position: absolute; left: 0; right: 0; height: var(--lb-row-h);
     display: grid;
     grid-template-columns: 2.25rem minmax(0, 1fr) auto;
     grid-template-areas: "rank who  pct" "rank meta meta";
-    align-items: center; column-gap: 10px; row-gap: 3px;
-    padding: 8px; border-radius: var(--pp-radius-sm);
+    align-items: center; column-gap: 10px; row-gap: 2px;
+    padding: 6px 10px; border-bottom: 1px solid color-mix(in oklab, var(--pp-border) 55%, transparent);
     transition: background var(--pp-dur-fast) var(--pp-ease);
 }
 .gd-lb__row:hover { background: var(--pp-bg-2); }
-.gd-lb__row + .gd-lb__row { box-shadow: 0 -1px 0 color-mix(in oklab, var(--pp-border) 60%, transparent); }
 @media (min-width: 768px) { .gd-lb__row { grid-template-columns: 3rem minmax(0, 1fr) 9rem 3rem 6.5rem; grid-template-areas: none; row-gap: 0; } }
 @media (min-width: 1024px) { .gd-lb__row { grid-template-columns: 3rem minmax(0, 1fr) 9rem 7rem 3rem 6.5rem; } }
 

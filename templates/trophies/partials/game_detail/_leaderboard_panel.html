@@ -7,7 +7,7 @@ they finished and everyone else follows by how close they are. The count is the 
 not Game.played_count -- that counts hidden rows and ignores filters, so it would disagree with the list.
 {% endcomment %}
 {% load humanize %}
-<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}">
+<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}" data-lb-total="{{ board_size }}" data-lb-invert="{% if opts.invert %}1{% else %}0{% endif %}">
 
     {% comment %} Controls always render (even over an empty filtered board) so a too-tight filter can be
     relaxed. Each toggle carries its state in aria-pressed; the JS reads that, rebuilds the query, and
@@ -57,10 +57,11 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
         {% endif %}
     </div>
 
-    {% comment %} Your standing while scrolled lives in the minibar (data-lb-mb-rank), not a floating row --
-    the header above shows it at the top of the board, the minibar shows it once scrolled, so the two
-    cover each other without a third surface. viewer_rank rides on the .gd-lb root for the JS to read. {% endcomment %}
-    <ol class="gd-lb__list" data-lb-list>
+    {% comment %} Virtualized list: .gd-lb__virt is a full-height spacer (JS sizes it to board_size rows) so
+    the page scrollbar represents the WHOLE board; only the visible ~30 rows live in the DOM, absolutely
+    positioned by their rank. The first window is server-rendered for instant first paint + SEO. Your
+    standing while scrolled lives in the minibar (data-lb-mb-rank); the header shows it at the top. {% endcomment %}
+    <ol class="gd-lb__list gd-lb__virt" data-lb-list data-lb-total="{{ board_size }}">
         {% include 'trophies/partials/game_detail/_leaderboard_rows.html' %}
     </ol>
 

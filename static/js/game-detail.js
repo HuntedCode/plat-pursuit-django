@@ -115,78 +115,153 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function lbWire(panel) {
-        const list = panel.querySelector('[data-lb-list]');
-        const observers = [];
-        // Also disconnect the self-row observer, which a jump/append may have re-mounted OUTSIDE this
-        // array (tracked only on panel._lbArrowObs).
-        panel._lbTeardown = () => {
-            observers.forEach((o) => o.disconnect());
-            if (panel._lbArrowObs) { panel._lbArrowObs.disconnect(); panel._lbArrowObs = null; }
-            panel._lbTeardown = null;
-        };
-        panel._lbBusy = false;                                 // a freshly-wired panel is never mid-fetch
-        if (!list) return;
-
-        // Bidirectional infinite scroll: each end carries a marker. The bottom (.gd-lb__more) appends the
-        // next page; the top (.gd-lb__more--prev, present after a jump) prepends the page above so you can
-        // scroll back up to rank 1 without the jump having loaded everything in between.
-        const io = new IntersectionObserver((entries) => {
-            entries.forEach((entry) => {
-                if (!entry.isIntersecting || panel._lbBusy) return;
-                const marker = entry.target;
-                panel._lbBusy = true;
-                io.unobserve(marker);
-                if (marker.classList.contains('gd-lb__more--prev')) lbPrepend(panel, marker, list);
-                else lbAppend(panel, marker, list);
-            });
-        }, { rootMargin: '300px 0px' });
-        observers.push(io);
-        panel._lbIO = io;
-        lbWatchMarkers(panel);
-        lbSyncMbRank(panel);
-        lbMountRankArrow(panel);
-        lbWireFind(panel);
-    }
-
-    function lbAppend(panel, marker, list) {
-        fetch(lbOptsUrl(panel, { after: marker.dataset.lbNext, from: marker.dataset.lbFrom || '1' }), LB_XHR)
-            .then(lbText)
-            .then((html) => {
-                // A control change may have replaced the whole panel while this was in flight; if so `list`
-                // is detached -- drop the stale page rather than writing into limbo.
-                if (!list.isConnected) return;
-                marker.remove();                           // consumed; the new page brings its own
-                list.insertAdjacentHTML('beforeend', html);
-                panel._lbBusy = false;
-                lbWatchMarkers(panel);
-                lbMountRankArrow(panel);                  // the viewer's row may have just appended
-            })
-            .catch(() => { if (list.isConnected) panel._lbBusy = false; });
-    }
-
     function lbScroller() { return document.scrollingElement || document.documentElement; }
 
-    function lbPrepend(panel, marker, list) {
-        fetch(lbOptsUrl(panel, { before: marker.dataset.lbPrev, fromtop: marker.dataset.lbFromtop || '1' }), LB_XHR)
-            .then(lbText)
-            .then((html) => {
-                if (!list.isConnected) return;
-                // Adding rows ABOVE shifts everything down. Hold the viewport still by nudging scrollTop by
-                // the exact height added -- a DIRECT scrollTop write, not scrollBy: it's always instant and
-                // immune to the site's global scroll-behavior:smooth (which was animating the correction, so
-                // the content visibly lurched down before snapping back). .gd-lb__list also opts out of the
-                // browser's own scroll-anchoring (CSS) so it can't double-adjust on top of this.
-                const el = lbScroller();
-                const beforeH = el.scrollHeight;
-                marker.remove();
-                list.insertAdjacentHTML('afterbegin', html);
-                el.scrollTop += el.scrollHeight - beforeH;      // avatar box is fixed-size, so no late img shift
-                panel._lbBusy = false;
-                lbWatchMarkers(panel);
-                lbMountRankArrow(panel);
-            })
-            .catch(() => { if (list.isConnected) panel._lbBusy = false; });
+    function lbWire(panel) {
+        if (panel._lbTeardown) panel._lbTeardown();
+        panel._lbTeardown = null;
+        lbSyncMbRank(panel);
+        lbWireFind(panel);
+        lbVirtualize(panel);
+    }
+
+    // The virtualized list. The .gd-lb__list is a full-height spacer (total rows x --lb-row-h), so the
+    // PAGE scrollbar spans the whole board; only the visible ~30 rows live in the DOM, absolutely positioned
+    // by rank. This is why jumping is just a scroll position and scrolling never inserts rows above the
+    // viewport -- the two things that made the old marker/prepend approach lurch.
+    function lbVirtualize(panel) {
+        const list = panel.querySelector('[data-lb-list]');
+        const root = panel.querySelector('.gd-lb');
+        if (!list || !root) return;
+        const total = parseInt(list.dataset.lbTotal || root.dataset.lbTotal || '0', 10);
+        if (!total) return;                                    // empty board -> nothing to virtualize
+        const invert = root.dataset.lbInvert === '1';
+        const readH = () => parseFloat(getComputedStyle(root).getPropertyValue('--lb-row-h')) || 44;
+        let H = readH();                                       // --lb-row-h changes across the md breakpoint
+        const BUFFER = 8;                                       // rows rendered beyond the viewport each way
+        const EVICT = 30;                                       // keep rows within this of the window in the DOM
+        const PAGE = 50;                                        // fetch granularity (matches the server)
+
+        const dataByPos = new Map();                           // display-pos (1-indexed) -> row HTML, cached
+        const rendered = new Map();                            // display-pos -> element in the DOM
+        const fetchedPages = new Set();                        // page indices already fetched / in flight
+        let pendingFlash = 0;                                  // display-pos to flash once it mounts
+
+        // Canonical rank of a display position, and vice versa. The label is canonical; layout is by position.
+        const rankOf = (dp) => (invert ? total - dp + 1 : dp);
+        const posOf = (rank) => (invert ? total - rank + 1 : rank);
+
+        list.style.height = (total * H) + 'px';
+
+        // Seed the cache + DOM from the server-rendered first window; convert those rows to absolute.
+        list.querySelectorAll('.gd-lb__row').forEach((el) => {
+            const dp = posOf(parseInt(el.dataset.lbRank, 10));
+            el.style.top = ((dp - 1) * H) + 'px';
+            dataByPos.set(dp, el.outerHTML);
+            rendered.set(dp, el);
+        });
+        fetchedPages.add(0);                                   // first window == page 0
+
+        function mount(dp) {
+            const tmp = document.createElement('template');
+            tmp.innerHTML = dataByPos.get(dp).trim();
+            const el = tmp.content.firstElementChild;
+            el.style.top = ((dp - 1) * H) + 'px';
+            list.appendChild(el);
+            rendered.set(dp, el);
+            if (dp === pendingFlash) { lbFlash(el); pendingFlash = 0; }
+        }
+
+        function fetchPage(p) {
+            if (fetchedPages.has(p)) return;
+            fetchedPages.add(p);
+            const start = p * PAGE + 1;
+            fetch(lbOptsUrl(panel, { range: start, from: rankOf(start), count: PAGE }), LB_XHR)
+                .then(lbText)
+                .then((html) => {
+                    if (!list.isConnected) return;
+                    const tmp = document.createElement('template');
+                    tmp.innerHTML = html.trim();
+                    tmp.content.querySelectorAll('.gd-lb__row').forEach((el, i) => dataByPos.set(start + i, el.outerHTML));
+                    render();
+                })
+                .catch(() => { fetchedPages.delete(p); });     // allow a retry on the next scroll
+        }
+
+        function visible() {
+            const rect = list.getBoundingClientRect();         // list top relative to the viewport
+            const localTop = Math.max(0, -rect.top);
+            const localBottom = Math.min(total * H, window.innerHeight - rect.top);
+            const first = Math.max(1, Math.floor(localTop / H) + 1 - BUFFER);
+            const last = Math.min(total, Math.ceil(localBottom / H) + BUFFER);
+            return [first, last, localTop, localBottom];
+        }
+
+        function render() {
+            const [first, last, localTop, localBottom] = visible();
+            // Evict rows well outside the window.
+            rendered.forEach((el, dp) => {
+                if (dp < first - EVICT || dp > last + EVICT) { el.remove(); rendered.delete(dp); }
+            });
+            // Mount visible rows we have data for; fetch the pages for any we don't.
+            for (let dp = first; dp <= last; dp++) {
+                if (rendered.has(dp)) continue;
+                if (dataByPos.has(dp)) mount(dp);
+                else fetchPage(Math.floor((dp - 1) / PAGE));
+            }
+            updateArrow(localTop, localBottom);
+        }
+
+        // The minibar chevron: where does the viewer's row sit relative to what's on screen?
+        function updateArrow(localTop, localBottom) {
+            const widget = document.querySelector('[data-lb-mb-rank]');
+            if (!widget || widget.hidden) return;
+            const vr = parseInt(root.dataset.lbViewerRank || '', 10);
+            if (!(vr >= 1)) return;
+            const vTop = (posOf(vr) - 1) * H;
+            widget.dataset.lbDir = vTop + H < localTop ? 'up' : (vTop > localBottom ? 'down' : 'here');
+        }
+
+        // Jump: scroll the PAGE so the target row lands ~a third down below the chrome. A real scroll to a
+        // real position (instant, via scrollTop) -- it lands, it doesn't travel across virtual space.
+        function jump(rank) {
+            const dp = Math.max(1, Math.min(posOf(rank), total));
+            const listTopDoc = window.scrollY + list.getBoundingClientRect().top;
+            const inset = lbChromeInset();
+            const y = listTopDoc + (dp - 1) * H - inset - (window.innerHeight - inset) * 0.34;
+            lbScroller().scrollTop = Math.max(0, y);
+            pendingFlash = dp;
+            render();                                          // mount the window here; flash fires on mount
+            const already = rendered.get(dp);                  // if the target was already on screen, flash now
+            if (already) { lbFlash(already); pendingFlash = 0; }
+        }
+        panel._lbJump = jump;
+
+        // The row height changes across the md breakpoint, so re-read it, resize the spacer, and re-place
+        // the rendered rows before rendering again.
+        function relayout() {
+            H = readH();
+            list.style.height = (total * H) + 'px';
+            rendered.forEach((el, dp) => { el.style.top = ((dp - 1) * H) + 'px'; });
+            render();
+        }
+
+        let ticking = false;
+        function onScroll() {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(() => { ticking = false; render(); });
+        }
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', relayout, { passive: true });
+        panel._lbTeardown = () => {
+            window.removeEventListener('scroll', onScroll);
+            window.removeEventListener('resize', relayout);
+            panel._lbJump = null;
+            panel._lbTeardown = null;
+        };
+
+        render();
     }
 
     // The toolbar search field, wired per panel fetch (its listeners live on the replaced DOM, so they die
@@ -283,23 +358,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // otherwise, when BOTH markers land in the 300px zone at once (a short jump window fits inside it), only
     // the first fires and the other direction is starved until the user scrolls it out and back. Re-arming
     // pumps the starved side; it self-terminates because each load grows the list past the zone.
-    function lbWatchMarkers(panel) {
-        const list = panel.querySelector('[data-lb-list]');
-        if (!list || !panel._lbIO) return;
-        list.querySelectorAll('.gd-lb__more').forEach((m) => { panel._lbIO.unobserve(m); panel._lbIO.observe(m); });
-    }
-
-    // Stop observing the markers before a jump wipes the list, or the destroyed nodes leak as retained
-    // observation targets.
-    function lbDropMarkers(panel) {
-        const list = panel.querySelector('[data-lb-list]');
-        if (!list || !panel._lbIO) return;
-        list.querySelectorAll('.gd-lb__more').forEach((m) => panel._lbIO.unobserve(m));
-    }
-
     // Height of the fixed chrome above the board: the measured nav (--sticky-top, kept accurate by main.js)
-    // plus the 52px minibar. Used to inset the self-row observer's top so the reminder appears exactly as
-    // the real row slips behind the chrome.
+    // plus the 52px minibar. Insets the jump target so it lands just below the chrome.
     function lbChromeInset() {
         const nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sticky-top')) || 58;
         return Math.round(nav + 52);
@@ -321,92 +381,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Point the minibar rank chevron toward the viewer's place: 'down' if their row is below where they're
-    // scrolled, 'up' if above, 'here' when it's on screen. The CSS springs the flip. No moving elements --
-    // just a data attribute -- so this is all that survived the old floating self-row. Re-mounted after any
-    // list swap because it observes a specific row node that swaps out.
-    function lbMountRankArrow(panel) {
-        const widget = document.querySelector('[data-lb-mb-rank]');
-        if (panel._lbArrowObs) { panel._lbArrowObs.disconnect(); panel._lbArrowObs = null; }
-        if (!widget) return;
-        const list = panel.querySelector('[data-lb-list]');
-        const mine = list && list.querySelector('.gd-lb__row--you');
-        if (!mine) return;                                     // row not loaded -> keep the last direction
-        // Inset the root's top by the real chrome height so "here" ends the moment the row hits the bar.
-        const obs = new IntersectionObserver(([entry]) => {
-            if (entry.isIntersecting) { widget.dataset.lbDir = 'here'; return; }
-            const rootTop = entry.rootBounds ? entry.rootBounds.top : 0;
-            widget.dataset.lbDir = entry.boundingClientRect.top < rootTop ? 'up' : 'down';
-        }, { threshold: 0, rootMargin: '-' + lbChromeInset() + 'px 0px 0px 0px' });
-        obs.observe(mine);
-        panel._lbArrowObs = obs;
-    }
-
     function lbFlash(row) {
         row.classList.remove('is-found');
         void row.offsetWidth;                                  // restart the flash if targeted twice
         row.classList.add('is-found');
     }
 
-    // A row already in the DOM and near the viewport -> a SMOOTH scroll to centre it (small, continuous).
-    function lbFlashScroll(row) {
-        row.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
-        lbFlash(row);
+    // Both jumps resolve to a canonical rank, then hand off to the virtualizer's scroll-to-position.
+    function lbJump(panel, rank) {
+        if (rank >= 1 && panel._lbJump) panel._lbJump(rank);
     }
-
-    // A row in a FRESHLY-swapped window (a jump across hundreds of ranks) -> land instantly. The old list
-    // may have been many pages tall and just collapsed to a 25-row window, so a smooth scroll would travel
-    // across rows that no longer exist -- which is exactly what read as "the board lurched the wrong way".
-    // Place the target ~a third down the space below the chrome, via a direct scrollTop (guaranteed instant).
-    function lbTeleportTo(row) {
-        const el = lbScroller();
-        const inset = lbChromeInset();
-        const y = el.scrollTop + row.getBoundingClientRect().top - inset - (window.innerHeight - inset) * 0.34;
-        el.scrollTop = Math.max(0, y);
-        lbFlash(row);
-    }
-
-    // Jump to the viewer's row. If it's already loaded, just scroll; otherwise the server opens a window
-    // around them and we swap the list to it rather than paging forward hundreds of times.
     function lbJumpToMe(panel) {
-        const list = panel.querySelector('[data-lb-list]');
-        const here = list && list.querySelector('.gd-lb__row--you');
-        if (here) { lbFlashScroll(here); return; }             // already visible/near -> gentle scroll
-        if (!list || panel._lbBusy) return;
-        panel._lbBusy = true;
-        fetch(lbOptsUrl(panel, { around: 'me' }), LB_XHR).then(lbText)
-            .then((html) => {
-                panel._lbBusy = false;
-                if (html.indexOf('gd-lb__row') === -1) return;   // nothing to jump to; keep the list
-                lbDropMarkers(panel);
-                list.innerHTML = html;
-                lbWatchMarkers(panel);
-                lbMountRankArrow(panel);
-                const row = list.querySelector('.gd-lb__row--you');
-                if (row) lbTeleportTo(row);                      // swapped window -> land, don't travel
-            })
-            .catch(() => { panel._lbBusy = false; });
+        const root = panel.querySelector('.gd-lb');
+        lbJump(panel, parseInt(root ? root.dataset.lbViewerRank : '', 10));
     }
-
-    // Jump to a typed rank: a window centred on that position (server clamps out-of-range).
-    function lbJumpToRank(panel, n) {
-        const list = panel.querySelector('[data-lb-list]');
-        if (!list || panel._lbBusy) return;
-        panel._lbBusy = true;
-        fetch(lbOptsUrl(panel, { rank: n }), LB_XHR).then(lbText)
-            .then((html) => {
-                panel._lbBusy = false;
-                if (html.indexOf('gd-lb__row') === -1) return;   // empty board; keep the list
-                lbDropMarkers(panel);
-                list.innerHTML = html;
-                lbWatchMarkers(panel);
-                lbMountRankArrow(panel);
-                // The exact rank if present (search hits it; a clamped typed rank may not) else the window top.
-                const target = list.querySelector('[data-lb-rank="' + n + '"]') || list.querySelector('.gd-lb__row');
-                if (target) lbTeleportTo(target);
-            })
-            .catch(() => { panel._lbBusy = false; });
-    }
+    function lbJumpToRank(panel, n) { lbJump(panel, n); }
 
     // ============================================================
     // View switcher: Trophies (default) / Roadmap / Community / About

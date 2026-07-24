@@ -49,54 +49,50 @@ def _board(n, game=None):
 # --- response shapes ---------------------------------------------------------
 
 
-def test_panel_carries_the_header_and_the_first_page(client):
+def _ranks(html):
+    return [int(seg.split('"')[0]) for seg in html.split('data-lb-rank="')[1:]]
+
+
+def test_panel_carries_the_header_the_spacer_total_and_a_first_window(client):
     game, _ = _board(3)
 
     body = client.get(_url(game)).content.decode()
 
     assert 'gd-lb__head' in body
     assert 'hunters on the board' in body
+    assert 'data-lb-total="3"' in body            # the JS sizes the virtual spacer from this
     assert body.count('gd-lb__row') >= 3
 
 
-def test_continuation_returns_rows_only_so_the_scroller_can_append(client):
-    """Chrome in an appended page would duplicate the header partway down the list."""
-    game, _ = _board(30)          # must exceed PAGE_SIZE or there is no second page
-    first = client.get(_url(game)).content.decode()
-    cursor = first.split('data-lb-next="')[1].split('"')[0]
+def test_range_returns_rows_only_numbered_from_the_given_rank(client):
+    """A virtual-window fetch: just the rows, positioned by the client via their rank."""
+    game, _ = _board(80)                          # more than one PAGE_SIZE (50) window
 
-    body = client.get(_url(game, after=cursor)).content.decode()
+    body = client.get(_url(game, range=51, **{'from': 51})).content.decode()
 
-    assert 'gd-lb__row' in body
-    assert 'gd-lb__head' not in body
-    assert 'gd-lb__list' not in body
+    assert 'gd-lb__head' not in body and 'gd-lb__list' not in body   # rows only
+    assert _ranks(body) == list(range(51, 81))    # ranks 51..80, contiguous
 
 
-def test_pages_do_not_overlap(client):
-    """The cursor boundary, end to end through HTTP rather than the service."""
-    game, _ = _board(30)
-    first = client.get(_url(game)).content.decode()
-    cursor = first.split('data-lb-next="')[1].split('"')[0]
-    second = client.get(_url(game, after=cursor)).content.decode()
+def test_adjacent_ranges_tile_without_gap_or_overlap(client):
+    """The virtual-scroll guarantee, end to end through HTTP."""
+    game, _ = _board(80)
 
-    # Compare the row CURSORS, which identify players. Rank numbers would be the wrong key: they come
-    # from ?from=, so a continuation fetched without it legitimately restarts numbering at 1.
-    def cursors(html):
-        return [seg.split('"')[0] for seg in html.split('data-lb-cursor="')[1:]]
+    first = _ranks(client.get(_url(game, range=1, **{'from': 1})).content.decode())
+    second = _ranks(client.get(_url(game, range=51, **{'from': 51})).content.decode())
 
-    assert len(cursors(first)) == 25 and len(cursors(second)) == 5
-    assert set(cursors(first)) & set(cursors(second)) == set()
+    assert first == list(range(1, 51)) and second == list(range(51, 81))
+    assert set(first).isdisjoint(second)
 
 
-def test_rank_numbering_continues_across_pages(client):
-    game, _ = _board(30)
-    first = client.get(_url(game)).content.decode()
-    marker = first.split('data-lb-from="')[1].split('"')[0]
-    cursor = first.split('data-lb-next="')[1].split('"')[0]
+def test_range_numbering_counts_down_when_inverted(client):
+    game, _ = _board(80)
+    total = 80
 
-    second = client.get(_url(game, after=cursor, **{'from': marker})).content.decode()
+    # Inverted window at display position 51 -> canonical ranks count DOWN from (total-51+1)=30.
+    body = client.get(_url(game, invert=1, range=51, **{'from': total - 51 + 1})).content.decode()
 
-    assert f'data-lb-rank="{marker}"' in second
+    assert _ranks(body) == list(range(30, 0, -1))   # 30, 29, ..., 1
 
 
 def test_empty_board_shows_the_empty_state(client):
@@ -125,13 +121,12 @@ def test_unknown_game_404s(client):
     assert client.get(_url(game)).status_code == 404
 
 
-def test_malformed_cursor_serves_the_first_page_rather_than_erroring(client):
+def test_garbage_range_params_do_not_error(client):
     game, _ = _board(3)
 
-    response = client.get(_url(game, after='garbage~~'))
+    response = client.get(_url(game, range='nope', **{'from': 'nope', 'count': 'nope'}))
 
     assert response.status_code == 200
-    assert 'gd-lb__row' in response.content.decode()
 
 
 def test_board_is_public(client):
@@ -184,32 +179,6 @@ def test_anonymous_viewer_gets_no_rank_control(client):
 
     assert 'gd-lb__row--you' not in body
     assert 'data-lb-jump' not in body
-
-
-def test_jump_window_centres_on_the_viewer(client):
-    """?around=me exists so a deep viewer doesn't have to page forward to reach themselves."""
-    game, rows = _board(30)
-    me = rows[19]
-    me.profile.is_linked = True
-    me.profile.save(update_fields=['is_linked'])
-    client.force_login(me.profile.user)
-
-    body = client.get(_url(game, around='me')).content.decode()
-
-    assert 'gd-lb__row--you' in body
-    assert 'gd-lb__head' not in body          # rows only; it replaces the list
-    assert 'data-lb-rank="16"' in body        # opens a few places above rank 20
-
-
-def test_jump_window_is_harmless_for_someone_not_on_the_board(client):
-    game, _ = _board(3)
-    outsider = ProfileFactory(is_linked=True)
-    client.force_login(outsider.user)
-
-    response = client.get(_url(game, around='me'))
-
-    assert response.status_code == 200
-    assert 'gd-lb__row' not in response.content.decode()
 
 
 def test_rows_show_the_players_trophy_haul(client):
@@ -343,79 +312,15 @@ def test_invert_keeps_ranks_canonical(client):
     assert first_rank == '5'                                 # counts down from the bottom
 
 
-def test_jump_to_typed_rank_windows_on_that_position(client):
-    game, _ = _board(60)                                     # big enough that rank 20 is mid-board
-
-    body = client.get(_url(game, rank=20)).content.decode()
-
-    assert 'gd-lb__head' not in body                         # rows only
-    assert 'data-lb-rank="16"' in body                       # opens a few places above 20
-    assert 'data-lb-rank="20"' in body
-    assert 'data-lb-prev' in body                            # can scroll UP from the jump
-    assert 'data-lb-next' in body                            # and DOWN
-
-
-def test_jump_near_the_top_has_no_prev_marker(client):
+def test_inverted_panel_first_window_starts_at_the_highest_rank(client):
+    """Inverted: the top of the display is the WORST player, labelled with the highest (canonical) rank,
+    counting down. (Jumping itself is client-side now -- a scroll position, not a server round-trip.)"""
     game, _ = _board(30)
 
-    body = client.get(_url(game, rank=2)).content.decode()   # window clamps to the top
+    body = client.get(_url(game, invert=1)).content.decode()
 
-    assert 'data-lb-rank="1"' in body
-    assert 'data-lb-prev' not in body                        # nothing above to load
-
-
-def test_scroll_up_prepends_the_page_above_the_jump(client):
-    """?before= returns the rows above, numbered contiguously, with no next marker (that end is loaded)."""
-    game, _ = _board(30)
-    window = client.get(_url(game, rank=20)).content.decode()
-    prev_cursor = window.split('data-lb-prev="')[1].split('"')[0]
-    fromtop = window.split('data-lb-fromtop="')[1].split('"')[0]     # rank of the window's top row (16)
-
-    body = client.get(_url(game, before=prev_cursor, fromtop=fromtop)).content.decode()
-
-    assert 'gd-lb__head' not in body and 'data-lb-next' not in body  # rows only, upward
-    assert 'data-lb-rank="15"' in body                       # immediately above the window's top (16)
-    assert 'data-lb-rank="1"' in body                        # up to the top of the board
-
-
-def test_scroll_up_prepends_correctly_when_inverted(client):
-    """Inverted upward-scroll numbering counts the other way -- the one combination hand-verified but
-    previously untested at the HTTP layer."""
-    game, _ = _board(60)
-    window = client.get(_url(game, invert=1, rank=20)).content.decode()
-    prev_cursor = window.split('data-lb-prev="')[1].split('"')[0]
-    fromtop = window.split('data-lb-fromtop="')[1].split('"')[0]     # inverted window top = a HIGH rank
-
-    body = client.get(_url(game, invert=1, before=prev_cursor, fromtop=fromtop)).content.decode()
-
-    # Inverted: ranks above the window are HIGHER, so the prepend counts UP from fromtop+1.
-    expected = str(int(fromtop) + 1)
-    assert f'data-lb-rank="{expected}"' in body
-    assert 'data-lb-next' not in body                        # upward only
-
-
-def test_inverted_numbering_continues_correctly_across_a_page(client):
-    """Inverted page 1 starts at the highest rank and counts DOWN; the next page must continue the count."""
-    game, _ = _board(30)                                    # PAGE_SIZE is 25
-
-    first = client.get(_url(game, invert=1)).content.decode()
-    assert first.split('data-lb-rank="')[1].split('"')[0] == '30'   # worst player first
-    marker_from = first.split('data-lb-from="')[1].split('"')[0]
-    cursor = first.split('data-lb-next="')[1].split('"')[0]
-    assert marker_from == '5'                               # 30 - 25 rows
-
-    second = client.get(_url(game, invert=1, after=cursor, **{'from': marker_from})).content.decode()
-    assert second.split('data-lb-rank="')[1].split('"')[0] == '5'   # continues down
-    assert 'data-lb-rank="1"' in second                    # to the top of the board
-
-
-def test_jump_to_out_of_range_rank_clamps(client):
-    game, _ = _board(8)
-
-    body = client.get(_url(game, rank=9999)).content.decode()
-
-    assert 'data-lb-rank="8"' in body                        # clamped to the last rank
-    assert 'gd-lb__row' in body
+    assert _ranks(body)[0] == 30                             # worst player first
+    assert _ranks(body) == list(range(30, 0, -1))            # counts down 30..1
 
 
 # --- search typeahead --------------------------------------------------------

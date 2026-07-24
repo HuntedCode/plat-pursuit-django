@@ -30,11 +30,11 @@ Ties on the first two keys are the **normal** case, not an edge case - everyone 
 `progress=100`, and identical timestamps happen. Without a unique final key, Postgres may return tied
 rows in a different order between calls, which means:
 
-- keyset pagination **skips or duplicates** players across page boundaries, and
+- adjacent virtual windows **skip or duplicate** players at their shared boundary, and
 - a displayed rank **flickers** between refreshes.
 
-Both are silent. `tests/engine/test_game_leaderboard_service.py` pages through boards made entirely of
-tied rows specifically to catch this.
+Both are silent. `tests/engine/test_game_leaderboard_service.py` tiles boards made entirely of tied rows
+with adjacent ranges and asserts they reconstruct the board exactly, to catch this.
 
 ### Null dates
 
@@ -65,13 +65,26 @@ aggregation over `EarnedTrophy`. This board's score is two stored columns on one
 cache layer would add a second source of truth to accelerate something already faster than the network
 hop. Re-check with `python manage.py measure_leaderboard --explain` before revisiting.
 
-### Keyset, not offset
+### Virtualized, so scroll position == rank
 
-Pagination uses a cursor (`progress~timestamp~profile_id`), never `OFFSET`. `OFFSET n` degrades linearly
-with depth and is a breaking change to swap once clients depend on the parameter shape.
+The client renders the board **virtualized**: `.gd-lb__list` is a full-height spacer (`board_size ×
+--lb-row-h`), so the **page scrollbar spans the whole board** (1..N), but only the visible ~30 rows are in
+the DOM, absolutely positioned by rank. This is the architecture that makes scrolling and jumping feel
+native, because:
 
-> **Gotcha:** the cursor separator is `~`, not `.`. The timestamp is a float, so a dot separator splits
-> it in half. This shipped broken in the first draft and was caught by a round-trip test.
+- **Scrolling never inserts rows above the viewport** -- it swaps which of the fixed-position rows are
+  rendered. There's nothing to scroll-compensate, so it can't lurch. (The earlier keyset + prepend approach
+  fought the page scroll and never stopped feeling janky.)
+- **A jump is just a scroll position:** `scrollTop = rank × row_height`. It lands where the rank actually
+  is, deep in the board, and the scrollbar thumb moves there too. It can't feel backwards.
+
+The one requirement virtualization carries is a **fixed row height** (`--lb-row-h`, 44px desktop / 58px the
+two-line mobile row); the JS keys the spacer height, row offsets, and jump targets off it, and re-lays-out
+on the breakpoint resize. Rows are fetched by rank RANGE (`page_range`) as the window moves, page-aligned
+and cached, so a range is fetched at most once. `game-detail.js` `lbVirtualize` is the engine.
+
+Plain `OFFSET` is fine for the range reads -- a single game's board is small (biggest on beta ~1,400), so
+even the deepest window is single-digit ms on the composite index.
 
 ---
 
@@ -79,36 +92,35 @@ with depth and is a breaking change to swap once clients depend on the parameter
 
 `GET /games/<np_communication_id>/leaderboard/` - **HTML**, not JSON, and public.
 
-Response shapes from one URL (all honour the view options below):
+Three shapes from one URL (all honour the view options below):
 
 | Query | Returns | Used by |
 |-------|---------|---------|
-| *(none)* | Full panel: controls, header, first page, the viewer's standing | First activation of the tab / a control change |
-| `?after=<cursor>&from=<rank>` | Rows only | Infinite scroll append |
-| `?around=me` | Rows only, a window centred on the viewer | "Jump to my rank" |
-| `?rank=N` | Rows only, a window centred on canonical rank N | Typed rank jump |
+| *(none)* | Full panel: controls, header, the viewer's standing, `data-lb-total` (spacer size), and the first window | First activation of the tab / a control change |
+| `?range=<display-pos>&from=<canonical-rank>&count=<n>` | Rows only, positioned by the client | A virtual window as the list scrolls |
 | `?suggest=<q>` | **JSON** `{players: [{display, username, avatar, rank, progress, url}]}` | Search typeahead |
 
-The toolbar's search field is one input for both: a bare number jumps to that rank, text runs the
-`?suggest=` typeahead over the hunters on this board (scoped to the active filters, so a hidden/filtered
-player never appears) and selecting a result jumps to their rank. It reuses the shared `[data-search-wrap]`
-chrome (`PlatPursuit.wireSearchField`) and `debounce`, mirroring the navbar/browse search.
+`range` is a 1-indexed display position; `from` is the canonical rank of the window's first row, which the
+client derives from the position + the `total` it already holds -- so a range fetch costs no COUNT. Ranks
+stay canonical (from the top); an inverted board just counts down.
+
+The toolbar's search field is one input for both: a bare number **jumps to that rank** (a client-side
+scroll), text runs the `?suggest=` typeahead over the hunters on this board (scoped to the active filters,
+so a hidden/filtered player never appears) and selecting a result jumps to their rank. It reuses the shared
+`[data-search-wrap]` chrome (`PlatPursuit.wireSearchField`) and `debounce`, mirroring the navbar/browse
+search.
 
 **The minibar** (the sticky bar that surfaces on scroll) carries the SAME search field while the Ranks tab
 is active (`data-mb-only="leaderboard"`), a Filters button that reaches the toolbar toggles, and a
-**"You #N"** rank widget. The search works in place -- the whole point while scrolled deep is finding a
-position without scrolling back up. One `lbWireSearch(input, drop, form, panel)` drives both the toolbar and
-minibar fields; the minibar field is wired once to the persistent leaderboard panel element, so it reads the
-panel's live toggle state and jumps the board below.
+**"You #N"** rank widget. One `lbWireSearch(input, drop, form, panel)` drives both the toolbar and minibar
+fields; the minibar field is wired once to the persistent panel element and jumps the board below.
 
-**Your standing while scrolled** lives in the minibar's rank widget, not a floating row: the header shows
-"You're #N" at the top of the board, the minibar shows it once scrolled, so the two cover each other without
-a third surface. The chevron points toward your rank -- down if it's below where you're scrolled, up if
-above -- and springs the flip as you cross your own row (a lit "here" state when your row is on screen); a
-click jumps to it. The rank rides on the `.gd-lb` root (`data-lb-viewer-rank`); `lbSyncMbRank` fills the
-widget on each panel load and `lbMountRankArrow` drives the chevron from an observer on the viewer's row.
-(This replaced an earlier floating self-row that pinned to the top/bottom edge -- more moving parts, and the
-minibar was the natural home.)
+**Your standing while scrolled** lives in the minibar's rank widget: the header shows "You're #N" at the top
+of the board, the minibar shows it once scrolled. The chevron points toward your rank -- down if it's below
+where you're scrolled, up if above, a lit "here" when your row is on screen -- and springs the flip as you
+cross your own row; a click jumps to it. The rank rides on the `.gd-lb` root (`data-lb-viewer-rank`);
+`lbSyncMbRank` fills the widget, and the virtualizer sets the chevron direction each render by comparing the
+viewer's rank offset to the visible range -- no observer, just scroll math.
 
 ### View options (BoardOptions)
 
@@ -119,18 +131,14 @@ Parsed from the query string, carried by the JS on every fetch so the view stays
 | `earners` | `1` (on) | `earners=0` includes 0%/zero-trophy owners | Free/faster - those rows sit at the index's bottom, so keeping them out just ends the scan sooner |
 | `registered` | off | `registered=1` shows only profiles with a site account (`Profile.user` set) | A post-join filter, not index-served, but negligible at board scale |
 | `invert` | off | `invert=1` shows the board bottom-first | Free - the same index scanned **backward** |
-| `rank` / `around` | - | jump to a typed rank / to the viewer | Bounded `OFFSET`, trivial at ≤ a few thousand rows |
 
-**Filters change the population**, so `rank_for` / `board_size` / paging all apply them - a rank is always
+**Filters change the population**, so `rank_for` / `board_size` / windows all apply them - a rank is always
 "position within the currently-viewed board." **Invert is display-only**: rank NUMBERS stay canonical (from
-the top), so an inverted board simply counts down. The rows are numbered from a `start_rank` stepping by
-+1 (forward) or -1 (inverted); the scroller's marker carries the next page's starting rank in `from`.
+the top), so an inverted board simply counts down.
 
-`from` supplies the rank the page starts at. It is **display only** - deriving it server-side would mean
-an O(rank) count per page fetch, and a tampered value only shows that one viewer wrong numbers.
-
-`?around=me` exists because a viewer ranked 900th has no row loaded; paging forward to reach them would
-be absurd. The server steps back a few places from them and opens a normal keyset page there.
+A jump (typed rank, searched hunter, or the "You #N" widget) resolves to a canonical rank and is a
+**client-side scroll** to that rank's offset in the virtual spacer -- no server round-trip; the row's data
+is fetched by the normal range read as the window lands there.
 
 ---
 
@@ -159,15 +167,18 @@ kind of thing a later "just include it" refactor would quietly undo.
 - **JS init order.** The lazy-load flag is declared *above* the view-switcher IIFE. That IIFE runs
   immediately and honors an initial `?view=` by calling `showView()` during setup, so a `let` declared
   after it would still be in its temporal dead zone and throw - which previously aborted the whole file.
-- **Rank numbering restarts at 1** if a continuation is fetched without `from`. The scroller always sends
-  it; anything else calling this endpoint must too.
-- **A control change re-fetches the WHOLE panel**, not just the list - the controls, header, count, and
-  the viewer's rank all depend on the active options. The JS reads the toggle `aria-pressed` states to
-  rebuild the query, so the returned HTML re-renders the toggles in the state it was asked for.
-- **The rank-arrow observer watches a specific row node** (the viewer's `.gd-lb__row--you`), which is
-  swapped out by a jump or a filter change, so it's re-mounted after every list swap (`lbMountRankArrow`).
-  Its root is inset by the chrome height (`lbChromeInset` reads the measured `--sticky-top` + the 52px
-  minibar) so "here" ends exactly when the row slips behind the bar, not at y=0.
+- **Row height is fixed and load-bearing.** The virtualizer keys the spacer height, every row's `top`, and
+  jump targets off `--lb-row-h` (44px desktop / 58px the two-line mobile row). If a row's content ever
+  exceeds that height it clips (`overflow: hidden` on the card); if the value and the real row disagree,
+  positions drift. Changing the row layout means re-checking the height. The JS re-lays-out on the md
+  breakpoint resize.
+- **A control change re-fetches the WHOLE panel** (new `board_size` -> new spacer, re-ranked viewer). The
+  JS reads the toggle `aria-pressed` states to rebuild the query, so the returned HTML re-renders the
+  toggles in the state it was asked for, and `lbVirtualize` re-initialises (teardown removes the old scroll
+  listeners first).
+- **First paint isn't a FOUC** even though rows are `position: absolute` with no server-set `top`: the panel
+  is lazy-loaded, so `innerHTML = html` and `lbVirtualize` (which sets every `top`) run in the same
+  synchronous step before the browser paints.
 
 ---
 
@@ -195,10 +206,10 @@ thing we rank on (system clocks can be manipulated offline), so it needs anomaly
 
 | File | Role |
 |------|------|
-| `trophies/services/game_leaderboard_service.py` | Ordering, keyset paging, rank, jump window |
+| `trophies/services/game_leaderboard_service.py` | Ordering, windowed reads (page_range), rank, suggest |
 | `trophies/views/game_leaderboard_views.py` | The three response shapes |
 | `templates/trophies/partials/game_detail/_leaderboard_panel.html` | Controls + header + list |
-| `templates/trophies/partials/game_detail/_leaderboard_rows.html` | One page of rows + the next-cursor marker |
+| `templates/trophies/partials/game_detail/_leaderboard_rows.html` | A window of rows (positioned client-side by rank) |
 | `static/js/game-detail.js` | `loadLeaderboard` / `wireLeaderboard` |
 | `static/css/components/game-detail.css` | `.gd-lb*` |
 | `core/management/commands/measure_leaderboard.py` | Read-only feasibility/perf probe |
