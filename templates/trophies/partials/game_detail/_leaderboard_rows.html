@@ -28,7 +28,7 @@ client positions each row by its data-lb-rank -- no markers, no cursors. {% endc
     the time makes an apparent tie legible. All rows render in the viewer's timezone (activated by
     middleware), so they're directly comparable; format_time respects the viewer's 12/24-hour preference. {% endcomment %}
     <span class="gd-lb__when">
-        {% if row.most_recent_trophy_date %}<span class="gd-lb__date">{{ row.most_recent_trophy_date|date:"M j, Y" }}</span><span class="gd-lb__time">{{ row.most_recent_trophy_date|format_time }}</span>{% else %}&mdash;{% endif %}
+        {% if row.most_recent_trophy_date %}<span class="gd-lb__date gd-lb__date--long">{{ row.most_recent_trophy_date|date:"M j, Y" }}</span><span class="gd-lb__date gd-lb__date--short">{{ row.most_recent_trophy_date|date:"n/j/y" }}</span><span class="gd-lb__time">{{ row.most_recent_trophy_date|format_time }}</span>{% else %}&mdash;{% endif %}
     </span>
 </li>
 {% endfor %}

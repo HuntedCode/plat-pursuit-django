@@ -218,6 +218,42 @@ def test_suggest_short_query_returns_empty():
     assert svc.suggest(game, DEFAULT, '') == []
 
 
+# --- row_at_rank (the number typeahead) --------------------------------------
+
+
+def test_row_at_rank_returns_the_hunter_at_that_canonical_rank():
+    game = GameFactory()
+    players = [_player(game, 100 - i, minutes_ago=i + 1) for i in range(5)]
+
+    for n, p in enumerate(players, start=1):
+        row = svc.row_at_rank(game, DEFAULT, n)
+        assert row['profile'].id == p.profile_id
+        assert row['rank'] == n
+
+
+def test_row_at_rank_is_canonical_even_when_inverted():
+    game = GameFactory()
+    leader = _player(game, 100, minutes_ago=5)
+    _player(game, 60, minutes_ago=1)
+
+    assert svc.row_at_rank(game, INVERTED, 1)['profile'].id == leader.profile_id
+
+
+def test_row_at_rank_past_the_board_is_none():
+    game = GameFactory()
+    _player(game, 100, minutes_ago=5)
+    assert svc.row_at_rank(game, DEFAULT, 2) is None
+
+
+def test_row_at_rank_respects_the_filters():
+    game = GameFactory()
+    _player(game, 100, minutes_ago=5, registered=False)     # rank 1 overall, filtered out for members
+    member = _player(game, 90, minutes_ago=1, registered=True)
+
+    assert svc.row_at_rank(game, DEFAULT, 1)['progress'] == 100
+    assert svc.row_at_rank(game, BoardOptions(registered_only=True), 1)['profile'].id == member.profile_id
+
+
 # --- index contract ----------------------------------------------------------
 
 

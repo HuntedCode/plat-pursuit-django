@@ -243,9 +243,10 @@ def test_rows_show_the_tiebreaker_time_under_the_date(client):
 
     body = client.get(_url(game)).content.decode()
 
-    assert body.count('gd-lb__time') == 2       # a time cell on each row
-    assert body.count('gd-lb__date') == 2
-    assert ':15' in body and ':42' in body      # the two distinct minutes both render
+    assert body.count('gd-lb__time') == 2            # a time cell on each row (visible mobile + desktop)
+    assert body.count('gd-lb__date--long') == 2      # spelled-out date for desktop
+    assert body.count('gd-lb__date--short') == 2     # compact numeric date for the tight mobile row
+    assert ':15' in body and ':42' in body           # the two distinct minutes both render
 
 
 def test_zero_trophy_owner_renders_cleanly(client):
@@ -386,6 +387,57 @@ def test_suggest_below_two_chars_returns_nothing(client):
     data = json.loads(client.get(_url(game, suggest='a')).content)
 
     assert data['players'] == []
+
+
+def test_at_previews_the_hunter_at_a_canonical_rank(client):
+    import json
+    game = GameFactory()
+    ProfileGameFactory(game=game, profile=ProfileFactory(psn_username='TopDog'), progress=100,
+                       most_recent_trophy_date=timezone.now() - timedelta(minutes=5))
+    ProfileGameFactory(game=game, profile=ProfileFactory(psn_username='Runner'), progress=90,
+                       most_recent_trophy_date=timezone.now())
+
+    data = json.loads(client.get(_url(game, at=2)).content)
+
+    assert len(data['players']) == 1
+    assert data['players'][0]['username'] == 'runner'
+    assert data['players'][0]['rank'] == 2
+
+
+def test_at_ignores_invert_and_stays_canonical(client):
+    """The number a viewer types is the rank shown on a row, which counts from the best down -- so ?at=1
+    is the leader even while the board is displayed bottom-first."""
+    import json
+    game, _ = _board(4)
+
+    data = json.loads(client.get(_url(game, at=1, invert=1)).content)
+
+    assert data['players'][0]['rank'] == 1
+    assert data['players'][0]['progress'] == 100    # the leader, not the inverted first row
+
+
+def test_at_past_the_board_returns_nothing(client):
+    import json
+    game, _ = _board(3)
+
+    data = json.loads(client.get(_url(game, at=99)).content)
+
+    assert data['players'] == []
+
+
+def test_at_respects_the_active_filters(client):
+    import json
+    game = GameFactory()
+    ProfileGameFactory(game=game, profile=ProfileFactory(psn_username='Member'), progress=100,
+                       most_recent_trophy_date=timezone.now() - timedelta(minutes=5))
+    ProfileGameFactory(game=game, profile=ProfileFactory(psn_username='Guest', user=None), progress=90,
+                       most_recent_trophy_date=timezone.now())
+
+    everyone = json.loads(client.get(_url(game, at=2)).content)
+    members = json.loads(client.get(_url(game, at=2, registered=1)).content)
+
+    assert everyone['players'][0]['username'] == 'guest'
+    assert members['players'] == []                 # only one member, so rank 2 is empty on that board
 
 
 # --- wiring into the page ----------------------------------------------------

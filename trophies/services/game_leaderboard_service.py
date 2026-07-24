@@ -150,6 +150,20 @@ def rank_for(game, profile, opts):
     return _rank_of_row(game, opts, row)
 
 
+def row_at_rank(game, opts, rank):
+    """The hunter at 1-indexed CANONICAL rank (from the top / best), or None if past the board.
+
+    Always forward order, ignoring invert: the number a viewer types is the rank shown beside a row, which
+    counts from the best down regardless of which way they're scrolling. One bounded OFFSET read, so the
+    number typeahead previews who's there without a COUNT. Same shape as `suggest`'s items.
+    """
+    rank = max(1, rank)
+    row = _base_qs(game, opts).order_by(*ORDER_BY).select_related('profile')[rank - 1: rank].first()
+    if row is None:
+        return None
+    return {'profile': row.profile, 'progress': row.progress, 'rank': rank}
+
+
 def suggest(game, opts, query, limit=8):
     """Board players whose PSN name matches `query`, each with its rank -- for the search typeahead.
 

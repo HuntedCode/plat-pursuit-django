@@ -42,17 +42,14 @@ class GameLeaderboardView(View):
 
         # Typeahead: board players matching a name -> JSON, for the search dropdown.
         if request.GET.get('suggest') is not None:
-            return JsonResponse({'players': [
-                {
-                    'display': m['profile'].display_psn_username or m['profile'].psn_username,
-                    'username': m['profile'].psn_username,
-                    'avatar': m['profile'].avatar_url or '',
-                    'rank': m['rank'],
-                    'progress': m['progress'],
-                    'url': reverse('profile_detail', args=[m['profile'].psn_username]),
-                }
-                for m in svc.suggest(game, opts, request.GET.get('suggest', ''))
-            ]})
+            matches = svc.suggest(game, opts, request.GET.get('suggest', ''))
+            return JsonResponse({'players': [self._player_json(m) for m in matches]})
+
+        # Number typeahead: preview the hunter at a specific rank -> JSON. The client already holds the total
+        # (data-lb-total), so it never asks for a rank past the board -- no COUNT needed here.
+        if request.GET.get('at') is not None:
+            m = svc.row_at_rank(game, opts, self._int(request.GET.get('at'), 0))
+            return JsonResponse({'players': [self._player_json(m)] if m else []})
 
         # A virtual window: rows at a display range, numbered from the caller-supplied canonical rank.
         if request.GET.get('range') is not None:
@@ -93,6 +90,19 @@ class GameLeaderboardView(View):
             return max(lo, min(int(raw), hi))
         except (TypeError, ValueError):
             return default
+
+    @staticmethod
+    def _player_json(m):
+        """Serialize one board match (from suggest / row_at_rank) for the search dropdown."""
+        p = m['profile']
+        return {
+            'display': p.display_psn_username or p.psn_username,
+            'username': p.psn_username,
+            'avatar': p.avatar_url or '',
+            'rank': m['rank'],
+            'progress': m['progress'],
+            'url': reverse('profile_detail', args=[p.psn_username]),
+        }
 
     @staticmethod
     def _rows_ctx(rows, start_rank, step, profile):

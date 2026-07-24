@@ -340,10 +340,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 .catch(() => { if (mine === seq) { field.setBusy(false); closeDrop(); } });
         }, 180);
 
+        // A bare number previews the hunter at that rank (?at= -> one JSON row); selecting it, or Enter,
+        // jumps there. We hold the board total on the panel root, so a rank past the board skips the fetch.
+        const doRank = PlatPursuit.debounce((n) => {
+            const mine = ++seq;
+            const root = panel.querySelector('.gd-lb');
+            const total = parseInt(root ? root.dataset.lbTotal : '', 10);
+            if (n < 1 || (total && n > total)) { field.setBusy(false); closeDrop(); return; }
+            fetch(lbOptsUrl(panel, { at: n }), LB_XHR)
+                .then((r) => (r.ok ? r.json() : Promise.reject()))
+                .then((data) => { if (mine === seq) { field.setBusy(false); render(data.players); } })
+                .catch(() => { if (mine === seq) { field.setBusy(false); closeDrop(); } });
+        }, 180);
+
         input.addEventListener('input', () => {
             const q = input.value.trim();
-            // A number is a rank jump (handled on submit), not a name search -- don't fetch for it.
-            if (q.length < 2 || /^\d+$/.test(q)) { field.setBusy(false); closeDrop(); return; }
+            if (/^\d+$/.test(q)) { field.setBusy(true); doRank(parseInt(q, 10)); return; }
+            if (q.length < 2) { field.setBusy(false); closeDrop(); return; }
             field.setBusy(true);
             doSuggest(q);
         });
