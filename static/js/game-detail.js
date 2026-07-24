@@ -240,14 +240,17 @@ document.addEventListener('DOMContentLoaded', () => {
             widget.dataset.lbDir = vTop + H < localTop ? 'up' : (vTop > localBottom ? 'down' : 'here');
         }
 
-        // Jump: scroll the PAGE so the target row lands ~a third down below the chrome. A real scroll to a
-        // real position (instant, via scrollTop) -- it lands, it doesn't travel across virtual space.
+        // Jump: scroll the PAGE so the target row lands ~a third down below the chrome. It must LAND, not
+        // travel across virtual space -- there are no real rows between here and there to animate past. The
+        // `behavior: 'instant'` is load-bearing: it overrides the global `scroll-behavior: smooth`, so
+        // scrollTop equals the landing position immediately. Without it the smooth animation drifts scrollTop
+        // past highlightAnchor and render() clears the found-highlight before it ever arrives.
         function jump(rank) {
             const dp = Math.max(1, Math.min(posOf(rank), total));
             const listTopDoc = window.scrollY + list.getBoundingClientRect().top;
             const inset = lbChromeInset();
             const y = listTopDoc + (dp - 1) * H - inset - (window.innerHeight - inset) * 0.34;
-            lbScroller().scrollTop = Math.max(0, y);
+            lbScroller().scrollTo({ top: Math.max(0, y), behavior: 'instant' });
             render();                                          // mount the window at the landing position
             setHighlight(dp);                                  // stays lit until the user scrolls away
         }
