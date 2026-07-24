@@ -165,22 +165,23 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch(() => { if (list.isConnected) panel._lbBusy = false; });
     }
 
+    function lbScroller() { return document.scrollingElement || document.documentElement; }
+
     function lbPrepend(panel, marker, list) {
         fetch(lbOptsUrl(panel, { before: marker.dataset.lbPrev, fromtop: marker.dataset.lbFromtop || '1' }), LB_XHR)
             .then(lbText)
             .then((html) => {
                 if (!list.isConnected) return;
-                // Adding rows ABOVE shifts everything down; hold the viewport still so the upward scroll
-                // stays smooth instead of lurching.
-                const beforeH = document.documentElement.scrollHeight;
+                // Adding rows ABOVE shifts everything down. Hold the viewport still by nudging scrollTop by
+                // the exact height added -- a DIRECT scrollTop write, not scrollBy: it's always instant and
+                // immune to the site's global scroll-behavior:smooth (which was animating the correction, so
+                // the content visibly lurched down before snapping back). .gd-lb__list also opts out of the
+                // browser's own scroll-anchoring (CSS) so it can't double-adjust on top of this.
+                const el = lbScroller();
+                const beforeH = el.scrollHeight;
                 marker.remove();
                 list.insertAdjacentHTML('afterbegin', html);
-                const delta = document.documentElement.scrollHeight - beforeH;
-                // behavior:'instant' is REQUIRED -- the site sets scroll-behavior:smooth globally, and a bare
-                // scrollBy inherits it, so the compensation would ANIMATE (the very lurch it prevents) and
-                // fight the user's own upward scroll. The avatar box is a fixed-size flex item, so lazy
-                // images don't shift height after this measurement.
-                if (delta) window.scrollBy({ top: delta, left: 0, behavior: 'instant' });
+                el.scrollTop += el.scrollHeight - beforeH;      // avatar box is fixed-size, so no late img shift
                 panel._lbBusy = false;
                 lbWatchMarkers(panel);
                 lbMountRankArrow(panel);
@@ -341,11 +342,28 @@ document.addEventListener('DOMContentLoaded', () => {
         panel._lbArrowObs = obs;
     }
 
+    function lbFlash(row) {
+        row.classList.remove('is-found');
+        void row.offsetWidth;                                  // restart the flash if targeted twice
+        row.classList.add('is-found');
+    }
+
+    // A row already in the DOM and near the viewport -> a SMOOTH scroll to centre it (small, continuous).
     function lbFlashScroll(row) {
         row.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
-        row.classList.remove('is-found');
-        void row.offsetWidth;                                  // restart the flash if jumped twice
-        row.classList.add('is-found');
+        lbFlash(row);
+    }
+
+    // A row in a FRESHLY-swapped window (a jump across hundreds of ranks) -> land instantly. The old list
+    // may have been many pages tall and just collapsed to a 25-row window, so a smooth scroll would travel
+    // across rows that no longer exist -- which is exactly what read as "the board lurched the wrong way".
+    // Place the target ~a third down the space below the chrome, via a direct scrollTop (guaranteed instant).
+    function lbTeleportTo(row) {
+        const el = lbScroller();
+        const inset = lbChromeInset();
+        const y = el.scrollTop + row.getBoundingClientRect().top - inset - (window.innerHeight - inset) * 0.34;
+        el.scrollTop = Math.max(0, y);
+        lbFlash(row);
     }
 
     // Jump to the viewer's row. If it's already loaded, just scroll; otherwise the server opens a window
@@ -353,7 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function lbJumpToMe(panel) {
         const list = panel.querySelector('[data-lb-list]');
         const here = list && list.querySelector('.gd-lb__row--you');
-        if (here) { lbFlashScroll(here); return; }
+        if (here) { lbFlashScroll(here); return; }             // already visible/near -> gentle scroll
         if (!list || panel._lbBusy) return;
         panel._lbBusy = true;
         fetch(lbOptsUrl(panel, { around: 'me' }), LB_XHR).then(lbText)
@@ -365,7 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 lbWatchMarkers(panel);
                 lbMountRankArrow(panel);
                 const row = list.querySelector('.gd-lb__row--you');
-                if (row) lbFlashScroll(row);
+                if (row) lbTeleportTo(row);                      // swapped window -> land, don't travel
             })
             .catch(() => { panel._lbBusy = false; });
     }
@@ -383,9 +401,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 list.innerHTML = html;
                 lbWatchMarkers(panel);
                 lbMountRankArrow(panel);
-                const target = list.querySelector('[data-lb-rank="' + n + '"]');
-                if (target) lbFlashScroll(target);
-                else list.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+                // The exact rank if present (search hits it; a clamped typed rank may not) else the window top.
+                const target = list.querySelector('[data-lb-rank="' + n + '"]') || list.querySelector('.gd-lb__row');
+                if (target) lbTeleportTo(target);
             })
             .catch(() => { panel._lbBusy = false; });
     }

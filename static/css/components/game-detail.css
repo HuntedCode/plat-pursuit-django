@@ -913,7 +913,9 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* The list is a card: it frames the rows as one object, so they read as a ranking table rather than a
    stack of floating chips. Rows lose their own background (chip-in-card is busy) and separate by a
    hairline instead. */
-.gd-lb__list { list-style: none; margin: 0; padding: 4px; display: flex; flex-direction: column; background: color-mix(in oklab, var(--pp-bg-1) 65%, transparent); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); }
+/* overflow-anchor: none so the browser's own scroll-anchoring can't fight the manual scrollTop compensation
+   the JS applies when prepending rows above the viewport (it would otherwise double-adjust). */
+.gd-lb__list { list-style: none; margin: 0; padding: 4px; display: flex; flex-direction: column; overflow-anchor: none; background: color-mix(in oklab, var(--pp-bg-1) 65%, transparent); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); }
 
 /* MOBILE: a two-line card. Cramming rank|name|trophies|%|date into 375px left only name + % legible, so
    the row stacks -- primary line (rank, name, %) with a secondary metadata line beneath it (trophy haul +
