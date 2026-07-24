@@ -24,7 +24,7 @@ Filters change the POPULATION, so rank / board_size / paging all apply them cons
 "position within the currently-viewed board", which is what a viewer toggling a filter expects.
 """
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone as dt_timezone
 
 from django.db.models import Q, F
@@ -179,15 +179,36 @@ def page(game, opts, cursor=None, limit=PAGE_SIZE):
     return rows, (encode_cursor(rows[-1]) if has_more and rows else None)
 
 
+def page_before(game, opts, cursor, limit=PAGE_SIZE):
+    """The `limit` rows immediately BEFORE `cursor` in display order, for scrolling UP after a jump.
+
+    Returns (rows, prev_cursor) in display order (top-most first). "Before in display order" is just
+    "after in the REVERSED order", so this reuses `_after` with invert flipped, then flips the result
+    back. prev_cursor continues further up, or None at the top of the board.
+    """
+    decoded = decode_cursor(cursor)
+    if not decoded:
+        return [], None
+    rev = replace(opts, invert=not opts.invert)
+    qs = board_queryset(game, rev).select_related('profile').filter(_after(decoded, rev))
+    rows = list(qs[:limit + 1])                     # reversed-display order: closest-to-cursor first
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    prev_cursor = encode_cursor(rows[-1]) if has_more and rows else None   # farthest kept -> further up
+    rows.reverse()                                  # back to display order (top-most first)
+    return rows, prev_cursor
+
+
 def page_at_rank(game, opts, rank, before=4, limit=PAGE_SIZE):
     """A window of the board centred on a canonical `rank` (for "jump to my rank" and typed jumps).
 
-    Returns (rows, next_cursor, start_rank, total), or None if the board is empty. The window opens a few
-    places above the target so you see who you're chasing. `rank` is canonical (from the top); under
-    invert it's mapped to the matching display position. Bounded OFFSET -- fine at board scale.
+    Returns (rows, next_cursor, prev_cursor, start_rank, total), or None if the board is empty. The window
+    opens a few places above the target so you see who you're chasing. `rank` is canonical (from the top);
+    under invert it's mapped to the matching display position. Bounded OFFSET -- fine at board scale.
 
     `start_rank` is the canonical rank of the FIRST returned row; the caller numbers rows from it with a
-    step of +1 (forward) or -1 (inverted). next_cursor continues the scroll via keyset from the last row.
+    step of +1 (forward) or -1 (inverted). next_cursor continues DOWN via keyset; prev_cursor continues UP
+    (None when the window already starts at the top of the board).
     """
     total = board_size(game, opts)
     if total == 0:
@@ -203,9 +224,11 @@ def page_at_rank(game, opts, rank, before=4, limit=PAGE_SIZE):
     has_more = len(rows) > limit
     rows = rows[:limit]
     next_cursor = encode_cursor(rows[-1]) if has_more and rows else None
+    # Rows exist above the window unless it opened at the very top; the top row's cursor loads them.
+    prev_cursor = encode_cursor(rows[0]) if rows and start_display > 1 else None
 
     start_rank = start_display if not opts.invert else (total - start_display + 1)
-    return rows, next_cursor, start_rank, total
+    return rows, next_cursor, prev_cursor, start_rank, total
 
 
 # ── rank ─────────────────────────────────────────────────────────────────────

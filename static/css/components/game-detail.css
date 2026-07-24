@@ -995,7 +995,9 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    edge the viewer's real place lies toward (the shadow points the same way). --top clears the sticky chrome. */
 .gd-lb__self { position: sticky; z-index: 2; display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--pp-radius-sm); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-0)); border: 1px solid color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); }
 .gd-lb__self--bottom { bottom: 8px; top: auto; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
-.gd-lb__self--top { top: calc(var(--sticky-top, 3.625rem) + 8px); bottom: auto; box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.35); }
+/* +52px clears the fixed minibar (same offset the trophy group headers use), so the top-pinned reminder
+   sits just below the chrome rather than behind it. */
+.gd-lb__self--top { top: calc(var(--sticky-top, 3.625rem) + 52px + 6px); bottom: auto; box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.35); }
 @media (min-width: 768px) { .gd-lb__self { grid-template-columns: 3rem minmax(0, 1fr) auto; } }
 .gd-lb__self .gd-lb__name { color: var(--pp-primary); }
 .gd-lb__jump--self { padding: 4px 10px; font-size: 0.7rem; }

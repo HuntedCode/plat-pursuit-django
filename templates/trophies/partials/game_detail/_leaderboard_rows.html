@@ -6,6 +6,7 @@ Each row carries its own cursor so the scroller never has to derive one; the tra
 carries the cursor for the NEXT page and is removed by the JS once consumed. No marker == last page.
 {% endcomment %}
 {% load humanize custom_filters %}
+{% if prev_cursor %}<li class="gd-lb__more gd-lb__more--prev" data-lb-prev="{{ prev_cursor }}" data-lb-fromtop="{{ prev_from }}" aria-hidden="true"></li>{% endif %}
 {% for row in rows %}
 <li class="gd-lb__row{% if viewer_profile and row.profile_id == viewer_profile.id %} gd-lb__row--you{% endif %}" data-lb-cursor="{{ row.cursor }}" data-lb-rank="{{ row.rank }}">
     <span class="gd-lb__rank">{{ row.rank|intcomma }}</span>

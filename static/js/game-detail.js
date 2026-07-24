@@ -128,34 +128,59 @@ document.addEventListener('DOMContentLoaded', () => {
         panel._lbBusy = false;                                 // a freshly-wired panel is never mid-fetch
         if (!list) return;
 
-        // Infinite scroll: the trailing marker carries the next cursor AND the rank the next page starts
-        // at, so appended rows keep numbering correctly (counting up, or down when inverted).
+        // Bidirectional infinite scroll: each end carries a marker. The bottom (.gd-lb__more) appends the
+        // next page; the top (.gd-lb__more--prev, present after a jump) prepends the page above so you can
+        // scroll back up to rank 1 without the jump having loaded everything in between.
         const io = new IntersectionObserver((entries) => {
             entries.forEach((entry) => {
                 if (!entry.isIntersecting || panel._lbBusy) return;
                 const marker = entry.target;
                 panel._lbBusy = true;
                 io.unobserve(marker);
-                fetch(lbOptsUrl(panel, { after: marker.dataset.lbNext, from: marker.dataset.lbFrom || '1' }), LB_XHR)
-                    .then(lbText)
-                    .then((html) => {
-                        // A control change may have replaced the whole panel while this was in flight;
-                        // if so `list` is detached -- drop the stale page rather than writing into limbo.
-                        if (!list.isConnected) return;
-                        marker.remove();                       // consumed; the new page brings its own
-                        list.insertAdjacentHTML('beforeend', html);
-                        panel._lbBusy = false;
-                        lbWatchTail(panel);
-                        lbMountSelf(panel);                    // the viewer's row may have just appended
-                    })
-                    .catch(() => { if (list.isConnected) panel._lbBusy = false; });
+                if (marker.classList.contains('gd-lb__more--prev')) lbPrepend(panel, marker, list);
+                else lbAppend(panel, marker, list);
             });
         }, { rootMargin: '300px 0px' });
         observers.push(io);
         panel._lbIO = io;
-        lbWatchTail(panel);
+        lbWatchMarkers(panel);
         lbMountSelf(panel, observers);
         lbWireFind(panel);
+    }
+
+    function lbAppend(panel, marker, list) {
+        fetch(lbOptsUrl(panel, { after: marker.dataset.lbNext, from: marker.dataset.lbFrom || '1' }), LB_XHR)
+            .then(lbText)
+            .then((html) => {
+                // A control change may have replaced the whole panel while this was in flight; if so `list`
+                // is detached -- drop the stale page rather than writing into limbo.
+                if (!list.isConnected) return;
+                marker.remove();                           // consumed; the new page brings its own
+                list.insertAdjacentHTML('beforeend', html);
+                panel._lbBusy = false;
+                lbWatchMarkers(panel);
+                lbMountSelf(panel);                        // the viewer's row may have just appended
+            })
+            .catch(() => { if (list.isConnected) panel._lbBusy = false; });
+    }
+
+    function lbPrepend(panel, marker, list) {
+        fetch(lbOptsUrl(panel, { before: marker.dataset.lbPrev, fromtop: marker.dataset.lbFromtop || '1' }), LB_XHR)
+            .then(lbText)
+            .then((html) => {
+                if (!list.isConnected) return;
+                // Adding rows ABOVE shifts everything down; hold the viewport still so the upward scroll
+                // stays smooth instead of lurching.
+                const beforeH = document.documentElement.scrollHeight;
+                marker.remove();
+                list.insertAdjacentHTML('afterbegin', html);
+                const delta = document.documentElement.scrollHeight - beforeH;
+                if (delta) window.scrollBy(0, delta);
+                panel._lbBusy = false;
+                lbWatchMarkers(panel);
+                lbMountSelf(panel);
+            })
+            .catch(() => { if (list.isConnected) panel._lbBusy = false; });
     }
 
     // The toolbar search field, wired per panel fetch (its listeners live on the replaced DOM, so they die
@@ -247,18 +272,19 @@ document.addEventListener('DOMContentLoaded', () => {
         input.addEventListener('blur', () => setTimeout(closeDrop, 120));
     }
 
-    function lbWatchTail(panel) {
+    // Observe both end markers (bottom = next page, top = previous page after a jump).
+    function lbWatchMarkers(panel) {
         const list = panel.querySelector('[data-lb-list]');
-        const marker = list && list.querySelector('.gd-lb__more');
-        if (marker && panel._lbIO) panel._lbIO.observe(marker);
+        if (!list || !panel._lbIO) return;
+        list.querySelectorAll('.gd-lb__more').forEach((m) => panel._lbIO.observe(m));
     }
 
-    // Stop observing the current tail marker before a jump wipes the list, or the destroyed node leaks
-    // as a retained observation target.
-    function lbDropTail(panel) {
+    // Stop observing the markers before a jump wipes the list, or the destroyed nodes leak as retained
+    // observation targets.
+    function lbDropMarkers(panel) {
         const list = panel.querySelector('[data-lb-list]');
-        const marker = list && list.querySelector('.gd-lb__more');
-        if (marker && panel._lbIO) panel._lbIO.unobserve(marker);
+        if (!list || !panel._lbIO) return;
+        list.querySelectorAll('.gd-lb__more').forEach((m) => panel._lbIO.unobserve(m));
     }
 
     // The pinned self-row: shown only while the viewer's real row is off screen, and flipped to the
@@ -272,13 +298,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const mine = list.querySelector('.gd-lb__row--you');
         if (!mine) { self.hidden = false; lbSelfDir(panel, 'bottom'); return; }   // deeper than loaded
         self.hidden = true;                                    // real row present until scrolled away
+        // rootMargin shrinks the top of the root by the fixed chrome (nav + minibar ~= 110px), so the row
+        // counts as "gone" the moment it slips behind the chrome, not only once it passes y=0 -- otherwise
+        // there'd be a gap where the real row is hidden behind the bar but the reminder hasn't appeared.
         const w = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting) { self.hidden = true; return; }
             const rootTop = entry.rootBounds ? entry.rootBounds.top : 0;
-            // Real row above the viewport top => the viewer is UP the board => pin the reminder to the TOP.
+            // Real row above the (chrome-inset) viewport top => the viewer is UP the board => pin to TOP.
             lbSelfDir(panel, entry.boundingClientRect.top < rootTop ? 'top' : 'bottom');
             self.hidden = false;
-        }, { threshold: 0 });
+        }, { threshold: 0, rootMargin: '-110px 0px 0px 0px' });
         w.observe(mine);
         panel._lbSelfObserver = w;
         if (observers) observers.push(w);
@@ -319,9 +348,9 @@ document.addEventListener('DOMContentLoaded', () => {
             .then((html) => {
                 panel._lbBusy = false;
                 if (html.indexOf('gd-lb__row') === -1) return;   // nothing to jump to; keep the list
-                lbDropTail(panel);
+                lbDropMarkers(panel);
                 list.innerHTML = html;
-                lbWatchTail(panel);
+                lbWatchMarkers(panel);
                 lbMountSelf(panel);
                 const row = list.querySelector('.gd-lb__row--you');
                 if (row) lbFlashScroll(row);
@@ -338,9 +367,9 @@ document.addEventListener('DOMContentLoaded', () => {
             .then((html) => {
                 panel._lbBusy = false;
                 if (html.indexOf('gd-lb__row') === -1) return;   // empty board; keep the list
-                lbDropTail(panel);
+                lbDropMarkers(panel);
                 list.innerHTML = html;
-                lbWatchTail(panel);
+                lbWatchMarkers(panel);
                 lbMountSelf(panel);
                 const target = list.querySelector('[data-lb-rank="' + n + '"]');
                 if (target) lbFlashScroll(target);

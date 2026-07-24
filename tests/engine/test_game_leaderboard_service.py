@@ -226,7 +226,7 @@ def _board(n, opts=DEFAULT):
 def test_jump_opens_a_few_places_above_the_target():
     game, _ = _board(30)
 
-    rows, _cur, start_rank, total = svc.page_at_rank(game, DEFAULT, 20, before=4, limit=10)
+    rows, _cur, _prev, start_rank, total = svc.page_at_rank(game, DEFAULT, 20, before=4, limit=10)
 
     assert total == 30
     assert start_rank == 16                                  # 4 above rank 20
@@ -236,7 +236,7 @@ def test_jump_opens_a_few_places_above_the_target():
 def test_jump_clamps_at_the_top():
     game, _ = _board(10)
 
-    rows, _cur, start_rank, _total = svc.page_at_rank(game, DEFAULT, 2, before=4, limit=5)
+    rows, _cur, _prev, start_rank, _total = svc.page_at_rank(game, DEFAULT, 2, before=4, limit=5)
 
     assert start_rank == 1
     assert [r.profile_id for r in rows] == _ids(game, DEFAULT)[:5]
@@ -245,7 +245,7 @@ def test_jump_clamps_at_the_top():
 def test_jump_clamps_an_out_of_range_rank():
     game, _ = _board(8)
 
-    rows, _cur, start_rank, total = svc.page_at_rank(game, DEFAULT, 999, before=3, limit=10)
+    rows, _cur, _prev, start_rank, total = svc.page_at_rank(game, DEFAULT, 999, before=3, limit=10)
 
     assert total == 8
     assert start_rank == 5                                   # clamped to rank 8, 3 above
@@ -258,7 +258,7 @@ def test_jump_numbers_the_target_row_correctly_under_invert():
     order = _ids(game, DEFAULT)                              # canonical (forward) order
     target_pid = order[19]                                   # canonical rank 20
 
-    rows, _cur, start_rank, total = svc.page_at_rank(
+    rows, _cur, _prev, start_rank, total = svc.page_at_rank(
         game, BoardOptions(invert=True), 20, before=4, limit=10)
 
     # start_rank counts DOWN by one per row; find where the target lands and check its number.
@@ -269,6 +269,56 @@ def test_jump_numbers_the_target_row_correctly_under_invert():
 
 def test_jump_returns_none_on_an_empty_board():
     assert svc.page_at_rank(GameFactory(), DEFAULT, 1) is None
+
+
+# --- scroll up from a jump (page_before) -------------------------------------
+
+
+@pytest.mark.parametrize('opts', [DEFAULT, BoardOptions(invert=True)])
+def test_jump_then_walk_up_reproduces_everything_above(opts):
+    """The bidirectional guard: land mid-board, page UP repeatedly, and the collected rows must equal the
+    slice of the board above the landing window exactly -- no skip, no repeat, forward and inverted."""
+    game = GameFactory()
+    for pct in range(60, 0, -1):                          # 60 players, distinct progress
+        _player(game, pct, minutes_ago=pct)
+    order = _ids(game, opts)                              # full board in display order
+
+    rows, _next, prev_cursor, _start, _total = svc.page_at_rank(game, opts, 30, before=4, limit=8)
+    window_ids = [r.profile_id for r in rows]
+    landing_top = order.index(window_ids[0])             # display index of the window's first row
+
+    collected, cursor, guard = [], prev_cursor, 0
+    while cursor:
+        prev_rows, cursor = svc.page_before(game, opts, cursor, limit=8)
+        collected = [r.profile_id for r in prev_rows] + collected   # prepend (display order)
+        guard += 1
+        assert guard < 50
+
+    assert collected == order[:landing_top]              # exactly the rows above the window
+    assert len(collected) == len(set(collected))         # nothing repeated
+
+
+def test_page_before_at_the_top_has_no_further_cursor():
+    game = GameFactory()
+    for pct in (100, 80, 60, 40):
+        _player(game, pct, minutes_ago=pct)
+    order = _ids(game, DEFAULT)
+
+    # cursor = the 3rd row; page_before it returns the 2 above, and no more.
+    third = svc.board_queryset(game, DEFAULT)[2]
+    rows, prev_cursor = svc.page_before(game, DEFAULT, svc.encode_cursor(third), limit=25)
+
+    assert [r.profile_id for r in rows] == order[:2]
+    assert prev_cursor is None
+
+
+def test_jump_window_has_no_prev_cursor_when_it_opens_at_the_top():
+    game, _ = _board(10)
+
+    _rows, _next, prev_cursor, start_rank, _total = svc.page_at_rank(game, DEFAULT, 2, before=4, limit=5)
+
+    assert start_rank == 1                                # clamped to the top
+    assert prev_cursor is None                            # nothing above to load
 
 
 # --- search suggest ----------------------------------------------------------

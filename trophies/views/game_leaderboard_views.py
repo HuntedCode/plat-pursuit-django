@@ -52,7 +52,7 @@ class GameLeaderboardView(View):
                 for m in svc.suggest(game, opts, request.GET.get('suggest', ''))
             ]})
 
-        # Jump to the viewer, or to a typed rank -> a window, rows only.
+        # Jump to the viewer, or to a typed rank -> a window (rows only) that can scroll BOTH ways.
         if request.GET.get('around') == 'me' or request.GET.get('rank') is not None:
             if request.GET.get('around') == 'me':
                 rank = svc.rank_for(game, profile, opts)
@@ -63,10 +63,20 @@ class GameLeaderboardView(View):
             window = svc.page_at_rank(game, opts, rank)
             if window is None:
                 return self._rows(request, game, opts, [], None, None, step, profile)
-            rows, next_cursor, start_rank, _total = window
-            return self._rows(request, game, opts, rows, next_cursor, start_rank, step, profile)
+            rows, next_cursor, prev_cursor, start_rank, _total = window
+            return self._rows(request, game, opts, rows, next_cursor, start_rank, step, profile, prev_cursor)
 
-        # Keyset continuation -> rows only, numbered from the caller-supplied rank.
+        # Scroll UP from a jump window -> the page above, prepended. Rows only, a prev marker if more, no
+        # next marker (that end is already in the DOM).
+        before = request.GET.get('before')
+        if before:
+            rows, prev_cursor = svc.page_before(game, opts, before)
+            fromtop = self._int(request.GET.get('fromtop'), 1)
+            # Number so the last prepended row sits immediately above the current top (fromtop - step).
+            start_rank = fromtop - len(rows) * step
+            return self._rows(request, game, opts, rows, None, start_rank, step, profile, prev_cursor)
+
+        # Keyset continuation DOWN -> rows only, numbered from the caller-supplied rank.
         cursor = request.GET.get('after')
         if cursor:
             rows, next_cursor = svc.page(game, opts, cursor=cursor)
@@ -107,8 +117,8 @@ class GameLeaderboardView(View):
             return default
 
     @staticmethod
-    def _rows_ctx(rows, next_cursor, start_rank, step, profile):
-        """Number the rows and derive the marker the scroller needs for the next page."""
+    def _rows_ctx(rows, next_cursor, start_rank, step, profile, prev_cursor=None):
+        """Number the rows and derive the markers the scroller needs for the next page each way."""
         for i, row in enumerate(rows):
             row.rank = start_rank + i * step
             row.cursor = svc.encode_cursor(row)
@@ -116,9 +126,12 @@ class GameLeaderboardView(View):
             'rows': rows,
             'next_cursor': next_cursor,
             'next_from': (start_rank + len(rows) * step) if rows else None,
+            'prev_cursor': prev_cursor,
+            'prev_from': start_rank if rows else None,   # top-most row's rank; the next prepend goes above it
             'viewer_profile': profile,
         }
 
-    def _rows(self, request, game, opts, rows, next_cursor, start_rank, step, profile):
-        ctx = {'game': game, 'opts': opts, **self._rows_ctx(rows, next_cursor, start_rank, step, profile)}
+    def _rows(self, request, game, opts, rows, next_cursor, start_rank, step, profile, prev_cursor=None):
+        ctx = {'game': game, 'opts': opts,
+               **self._rows_ctx(rows, next_cursor, start_rank, step, profile, prev_cursor)}
         return render(request, ROWS_TEMPLATE, ctx)

@@ -346,13 +346,38 @@ def test_invert_keeps_ranks_canonical(client):
 
 
 def test_jump_to_typed_rank_windows_on_that_position(client):
-    game, _ = _board(30)
+    game, _ = _board(60)                                     # big enough that rank 20 is mid-board
 
     body = client.get(_url(game, rank=20)).content.decode()
 
     assert 'gd-lb__head' not in body                         # rows only
     assert 'data-lb-rank="16"' in body                       # opens a few places above 20
     assert 'data-lb-rank="20"' in body
+    assert 'data-lb-prev' in body                            # can scroll UP from the jump
+    assert 'data-lb-next' in body                            # and DOWN
+
+
+def test_jump_near_the_top_has_no_prev_marker(client):
+    game, _ = _board(30)
+
+    body = client.get(_url(game, rank=2)).content.decode()   # window clamps to the top
+
+    assert 'data-lb-rank="1"' in body
+    assert 'data-lb-prev' not in body                        # nothing above to load
+
+
+def test_scroll_up_prepends_the_page_above_the_jump(client):
+    """?before= returns the rows above, numbered contiguously, with no next marker (that end is loaded)."""
+    game, _ = _board(30)
+    window = client.get(_url(game, rank=20)).content.decode()
+    prev_cursor = window.split('data-lb-prev="')[1].split('"')[0]
+    fromtop = window.split('data-lb-fromtop="')[1].split('"')[0]     # rank of the window's top row (16)
+
+    body = client.get(_url(game, before=prev_cursor, fromtop=fromtop)).content.decode()
+
+    assert 'gd-lb__head' not in body and 'data-lb-next' not in body  # rows only, upward
+    assert 'data-lb-rank="15"' in body                       # immediately above the window's top (16)
+    assert 'data-lb-rank="1"' in body                        # up to the top of the board
 
 
 def test_inverted_numbering_continues_correctly_across_a_page(client):
