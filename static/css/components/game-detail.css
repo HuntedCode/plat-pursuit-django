@@ -861,6 +861,26 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    instead of a ranking. Fetched on first tab activation, so it needs its own loading state. */
 .gd-lb { display: flex; flex-direction: column; gap: 10px; }
 
+/* Controls toolbar: filter toggles (aria-pressed drives the lit state) + a jump-to-rank field. */
+.gd-lb__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.gd-lb__filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.gd-lb__opt { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px; font-size: 0.74rem; font-weight: 700; cursor: pointer; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-lb__opt svg { width: 13px; height: 13px; }
+.gd-lb__opt:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border)); }
+.gd-lb__opt[aria-pressed="true"] { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 42%, var(--pp-border)); }
+.gd-lb__opt:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+.gd-lb__rankjump { display: flex; align-items: center; gap: 0; }
+.gd-lb__rankinput { width: 5.5rem; padding: 6px 9px; font-size: 0.75rem; color: var(--pp-text); background: var(--pp-bg-0); border: 1px solid var(--pp-border); border-radius: 999px 0 0 999px; border-right: none; -moz-appearance: textfield; appearance: textfield; }
+.gd-lb__rankinput::-webkit-outer-spin-button, .gd-lb__rankinput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.gd-lb__rankinput::placeholder { color: var(--pp-text-mute); }
+.gd-lb__rankinput:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+.gd-lb__rankgo { display: inline-flex; align-items: center; justify-content: center; padding: 6px 10px; cursor: pointer; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); border-radius: 0 999px 999px 0; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-lb__rankgo svg { width: 14px; height: 14px; }
+.gd-lb__rankjump:focus-within .gd-lb__rankinput { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+.gd-lb__rankgo:hover { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2)); }
+.gd-lb__rankgo:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
 .gd-lb__loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 48px 16px; font-size: 0.82rem; color: var(--pp-text-mute); }
 .gd-lb__spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--pp-border); border-top-color: var(--pp-primary); animation: gdLbSpin 0.7s linear infinite; }
 @keyframes gdLbSpin { to { transform: rotate(360deg); } }
@@ -956,7 +976,11 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 @keyframes gdLbFound { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 25% { box-shadow: 0 0 0 3px var(--lb-found-ring); } }
 
 /* Pinned self-row: shown only while their real row is off screen (JS toggles [hidden]). */
-.gd-lb__self { position: sticky; bottom: 8px; z-index: 2; display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--pp-radius-sm); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-0)); border: 1px solid color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
+/* Pinned self-row. JS moves it before/after the list and toggles --top/--bottom so it sticks to whichever
+   edge the viewer's real place lies toward (the shadow points the same way). --top clears the sticky chrome. */
+.gd-lb__self { position: sticky; z-index: 2; display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--pp-radius-sm); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-0)); border: 1px solid color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); }
+.gd-lb__self--bottom { bottom: 8px; top: auto; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
+.gd-lb__self--top { top: calc(var(--sticky-top, 3.625rem) + 8px); bottom: auto; box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.35); }
 @media (min-width: 768px) { .gd-lb__self { grid-template-columns: 3rem minmax(0, 1fr) auto; } }
 .gd-lb__self .gd-lb__name { color: var(--pp-primary); }
 .gd-lb__jump--self { padding: 4px 10px; font-size: 0.7rem; }

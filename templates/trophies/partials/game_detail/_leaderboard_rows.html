@@ -34,4 +34,4 @@ carries the cursor for the NEXT page and is removed by the JS once consumed. No 
     </span>
 </li>
 {% endfor %}
-{% if next_cursor %}{% with tail=rows|last %}<li class="gd-lb__more" data-lb-next="{{ next_cursor }}" data-lb-from="{{ tail.rank|add:1 }}" aria-hidden="true"></li>{% endwith %}{% endif %}
+{% if next_cursor %}<li class="gd-lb__more" data-lb-next="{{ next_cursor }}" data-lb-from="{{ next_from }}" aria-hidden="true"></li>{% endif %}

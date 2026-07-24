@@ -53,97 +53,217 @@ document.addEventListener('DOMContentLoaded', () => {
     // and most visitors never open it, so it is fetched on first activation and then cached in the DOM.
     // Declared above the switcher IIFE for the same reason as revealAbout -- that IIFE honors an initial
     // ?view= during setup, so a `let` declared after it would still be in the temporal dead zone.
+    const LB_XHR = { headers: { 'X-Requested-With': 'XMLHttpRequest' } };
+    const lbText = (r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)));
     let lbLoaded = false;
+
     function loadLeaderboard(panel) {
         if (lbLoaded) return;
         lbLoaded = true;
-        const src = panel.dataset.lbSrc;
-        if (!src) return;
-        fetch(src, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-            .then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))
-            .then((html) => { panel.innerHTML = html; wireLeaderboard(panel, src); })
+        if (!panel.dataset.lbSrc) return;
+        lbDelegate(panel);                                     // attach control/jump handlers once
+        lbFetchPanel(panel, panel.dataset.lbSrc);              // whole panel (header + first page)
+    }
+
+    // The current view's query, read from the control toggles so every fetch preserves the active
+    // filters/sort. earners is on by default, so only its OFF state is a param.
+    function lbOptsUrl(panel, extra) {
+        const params = new URLSearchParams();
+        panel.querySelectorAll('[data-lb-opt]').forEach((btn) => {
+            const on = btn.getAttribute('aria-pressed') === 'true';
+            const key = btn.dataset.lbOpt;
+            if (key === 'invert' && on) params.set('invert', '1');
+            if (key === 'earners' && !on) params.set('earners', '0');
+            if (key === 'registered' && on) params.set('registered', '1');
+        });
+        if (extra) Object.keys(extra).forEach((k) => params.set(k, extra[k]));
+        const qs = params.toString();
+        return qs ? panel.dataset.lbSrc + '?' + qs : panel.dataset.lbSrc;
+    }
+
+    // Fetch the WHOLE panel (initial load or after a control change) and re-wire its observers.
+    function lbFetchPanel(panel, url) {
+        fetch(url, LB_XHR).then(lbText)
+            .then((html) => {
+                if (panel._lbTeardown) panel._lbTeardown();
+                panel.innerHTML = html;
+                lbWire(panel);
+            })
             .catch(() => {
-                // Let a later tab visit retry rather than leaving a dead panel.
-                lbLoaded = false;
+                lbLoaded = false;                              // let a later tab visit retry
+                if (panel._lbTeardown) panel._lbTeardown();
                 panel.innerHTML = '<div class="gd-empty"><p class="gd-empty__title">Couldn\'t load the board</p>'
                     + '<p class="gd-empty__hint">Switch tabs and back to try again.</p></div>';
             });
     }
 
-    function wireLeaderboard(panel, src) {
-        const list = panel.querySelector('[data-lb-list]');
-        if (!list) return;
-        let busy = false;
+    // Delegated handlers live on the persistent panel element, attached ONCE -- innerHTML swaps replace
+    // the controls, so per-wire listeners would stack.
+    function lbDelegate(panel) {
+        // Once only: loadLeaderboard can run again after a failed fetch (it resets lbLoaded), and the panel
+        // element persists, so re-attaching here would stack a second handler per retry.
+        if (panel._lbDelegated) return;
+        panel._lbDelegated = true;
+        panel.addEventListener('click', (e) => {
+            const opt = e.target.closest('[data-lb-opt]');
+            if (opt) {
+                opt.setAttribute('aria-pressed', opt.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+                lbFetchPanel(panel, lbOptsUrl(panel));         // re-render the whole board in the new view
+                return;
+            }
+            if (e.target.closest('[data-lb-jump]')) lbJumpToMe(panel);
+        });
+        panel.addEventListener('submit', (e) => {
+            const form = e.target.closest('[data-lb-rankform]');
+            if (!form) return;
+            e.preventDefault();
+            const n = parseInt(form.querySelector('[data-lb-rankinput]').value, 10);
+            if (n >= 1) lbJumpToRank(panel, n);
+        });
+    }
 
-        // Infinite scroll: observe the trailing marker, which carries the next cursor AND the rank the
-        // next page starts at (so appended rows keep numbering correctly).
+    function lbWire(panel) {
+        const list = panel.querySelector('[data-lb-list]');
+        const observers = [];
+        // Also disconnect the self-row observer, which a jump/append may have re-mounted OUTSIDE this
+        // array (tracked only on panel._lbSelfObserver).
+        panel._lbTeardown = () => {
+            observers.forEach((o) => o.disconnect());
+            if (panel._lbSelfObserver) { panel._lbSelfObserver.disconnect(); panel._lbSelfObserver = null; }
+            panel._lbTeardown = null;
+        };
+        panel._lbBusy = false;                                 // a freshly-wired panel is never mid-fetch
+        if (!list) return;
+
+        // Infinite scroll: the trailing marker carries the next cursor AND the rank the next page starts
+        // at, so appended rows keep numbering correctly (counting up, or down when inverted).
         const io = new IntersectionObserver((entries) => {
             entries.forEach((entry) => {
-                if (!entry.isIntersecting || busy) return;
+                if (!entry.isIntersecting || panel._lbBusy) return;
                 const marker = entry.target;
-                busy = true;
+                panel._lbBusy = true;
                 io.unobserve(marker);
-                const url = src + '?after=' + encodeURIComponent(marker.dataset.lbNext)
-                    + '&from=' + encodeURIComponent(marker.dataset.lbFrom || '1');
-                fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                    .then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))
+                fetch(lbOptsUrl(panel, { after: marker.dataset.lbNext, from: marker.dataset.lbFrom || '1' }), LB_XHR)
+                    .then(lbText)
                     .then((html) => {
+                        // A control change may have replaced the whole panel while this was in flight;
+                        // if so `list` is detached -- drop the stale page rather than writing into limbo.
+                        if (!list.isConnected) return;
                         marker.remove();                       // consumed; the new page brings its own
                         list.insertAdjacentHTML('beforeend', html);
-                        busy = false;
-                        watchTail();
+                        panel._lbBusy = false;
+                        lbWatchTail(panel);
+                        lbMountSelf(panel);                    // the viewer's row may have just appended
                     })
-                    .catch(() => { busy = false; });
+                    .catch(() => { if (list.isConnected) panel._lbBusy = false; });
             });
         }, { rootMargin: '300px 0px' });
+        observers.push(io);
+        panel._lbIO = io;
+        lbWatchTail(panel);
+        lbMountSelf(panel, observers);
+    }
 
-        function watchTail() {
-            const marker = list.querySelector('.gd-lb__more');
-            if (marker) io.observe(marker);
-        }
-        watchTail();
+    function lbWatchTail(panel) {
+        const list = panel.querySelector('[data-lb-list]');
+        const marker = list && list.querySelector('.gd-lb__more');
+        if (marker && panel._lbIO) panel._lbIO.observe(marker);
+    }
 
-        // Jump to my rank. A deep viewer's row isn't loaded, so the server opens a window around them
-        // and we swap the list to it rather than paging forward hundreds of times.
-        panel.addEventListener('click', (e) => {
-            if (!e.target.closest('[data-lb-jump]')) return;
-            const mine = list.querySelector('.gd-lb__row--you');
-            if (mine) { scrollToMine(mine); return; }
-            if (busy) return;
-            busy = true;
-            fetch(src + '?around=me', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                .then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))
-                .then((html) => {
-                    list.innerHTML = html;
-                    busy = false;
-                    watchTail();
-                    const row = list.querySelector('.gd-lb__row--you');
-                    if (row) scrollToMine(row);
-                })
-                .catch(() => { busy = false; });
-        });
+    // Stop observing the current tail marker before a jump wipes the list, or the destroyed node leaks
+    // as a retained observation target.
+    function lbDropTail(panel) {
+        const list = panel.querySelector('[data-lb-list]');
+        const marker = list && list.querySelector('.gd-lb__more');
+        if (marker && panel._lbIO) panel._lbIO.unobserve(marker);
+    }
 
-        function scrollToMine(row) {
-            row.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
-            row.classList.remove('is-found');
-            void row.offsetWidth;                              // restart the flash if jumped twice
-            row.classList.add('is-found');
-        }
-
-        // Pinned self-row: only while the real row is off screen, so it never duplicates what's visible.
+    // The pinned self-row: shown only while the viewer's real row is off screen, and flipped to the
+    // TOP or BOTTOM edge depending on which way their place lies -- pointing the reminder toward them.
+    // Re-mounted after any list swap because it observes a specific row node that swaps out.
+    function lbMountSelf(panel, observers) {
+        const list = panel.querySelector('[data-lb-list]');
         const self = panel.querySelector('[data-lb-self]');
-        if (self) {
-            const mine = list.querySelector('.gd-lb__row--you');
-            if (!mine) {
-                self.hidden = false;                           // they're deeper than anything loaded
-            } else {
-                const watcher = new IntersectionObserver(
-                    ([entry]) => { self.hidden = entry.isIntersecting; },
-                    { threshold: 0 }
-                );
-                watcher.observe(mine);
-            }
+        if (panel._lbSelfObserver) { panel._lbSelfObserver.disconnect(); panel._lbSelfObserver = null; }
+        if (!self || !list) return;
+        const mine = list.querySelector('.gd-lb__row--you');
+        if (!mine) { self.hidden = false; lbSelfDir(panel, 'bottom'); return; }   // deeper than loaded
+        self.hidden = true;                                    // real row present until scrolled away
+        const w = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) { self.hidden = true; return; }
+            const rootTop = entry.rootBounds ? entry.rootBounds.top : 0;
+            // Real row above the viewport top => the viewer is UP the board => pin the reminder to the TOP.
+            lbSelfDir(panel, entry.boundingClientRect.top < rootTop ? 'top' : 'bottom');
+            self.hidden = false;
+        }, { threshold: 0 });
+        w.observe(mine);
+        panel._lbSelfObserver = w;
+        if (observers) observers.push(w);
+    }
+
+    // Position the self-row at the chosen edge. A sticky element only pins toward the edge its DOM
+    // position allows, so it's moved before/after the list to make top/bottom sticking actually engage.
+    function lbSelfDir(panel, dir) {
+        const self = panel.querySelector('[data-lb-self]');
+        const list = panel.querySelector('[data-lb-list]');
+        if (!self || !list) return;
+        self.classList.toggle('gd-lb__self--top', dir === 'top');
+        self.classList.toggle('gd-lb__self--bottom', dir === 'bottom');
+        // Move only if it isn't already at the target edge (guards against thrashing the DOM every tick).
+        if (dir === 'top' && list.previousElementSibling !== self) {
+            list.insertAdjacentElement('beforebegin', self);
+        } else if (dir === 'bottom' && list.nextElementSibling !== self) {
+            list.insertAdjacentElement('afterend', self);
         }
+    }
+
+    function lbFlashScroll(row) {
+        row.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+        row.classList.remove('is-found');
+        void row.offsetWidth;                                  // restart the flash if jumped twice
+        row.classList.add('is-found');
+    }
+
+    // Jump to the viewer's row. If it's already loaded, just scroll; otherwise the server opens a window
+    // around them and we swap the list to it rather than paging forward hundreds of times.
+    function lbJumpToMe(panel) {
+        const list = panel.querySelector('[data-lb-list]');
+        const here = list && list.querySelector('.gd-lb__row--you');
+        if (here) { lbFlashScroll(here); return; }
+        if (!list || panel._lbBusy) return;
+        panel._lbBusy = true;
+        fetch(lbOptsUrl(panel, { around: 'me' }), LB_XHR).then(lbText)
+            .then((html) => {
+                panel._lbBusy = false;
+                if (html.indexOf('gd-lb__row') === -1) return;   // nothing to jump to; keep the list
+                lbDropTail(panel);
+                list.innerHTML = html;
+                lbWatchTail(panel);
+                lbMountSelf(panel);
+                const row = list.querySelector('.gd-lb__row--you');
+                if (row) lbFlashScroll(row);
+            })
+            .catch(() => { panel._lbBusy = false; });
+    }
+
+    // Jump to a typed rank: a window centred on that position (server clamps out-of-range).
+    function lbJumpToRank(panel, n) {
+        const list = panel.querySelector('[data-lb-list]');
+        if (!list || panel._lbBusy) return;
+        panel._lbBusy = true;
+        fetch(lbOptsUrl(panel, { rank: n }), LB_XHR).then(lbText)
+            .then((html) => {
+                panel._lbBusy = false;
+                if (html.indexOf('gd-lb__row') === -1) return;   // empty board; keep the list
+                lbDropTail(panel);
+                list.innerHTML = html;
+                lbWatchTail(panel);
+                lbMountSelf(panel);
+                const target = list.querySelector('[data-lb-rank="' + n + '"]');
+                if (target) lbFlashScroll(target);
+                else list.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+            })
+            .catch(() => { panel._lbBusy = false; });
     }
 
     // ============================================================

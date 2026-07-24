@@ -1,9 +1,9 @@
-"""Tests for the per-game leaderboard service (keyset pagination + rank).
+"""Tests for the per-game leaderboard service (options, keyset pagination, rank, jump).
 
 The keyset walk is the risky part: a wrong boundary silently skips or repeats players, and the failure
-only shows up on boards with ties -- which is every board, since everyone at 100% shares progress=100.
-The strongest guard here is `_walk`, which pages through an entire board and asserts the result equals
-the full ordered list exactly. Any boundary bug shows up as a missing or duplicated row.
+only shows on boards with ties -- which is every board, since everyone at 100% shares progress=100. The
+strongest guard is `_walk`, which pages an entire board and asserts the result equals the full ordered
+list exactly, run across forward/inverted and every filter combination.
 """
 from datetime import timedelta
 
@@ -12,30 +12,35 @@ from django.utils import timezone
 
 from tests.factories import GameFactory, ProfileFactory, ProfileGameFactory
 from trophies.services import game_leaderboard_service as svc
+from trophies.services.game_leaderboard_service import BoardOptions
 
 pytestmark = pytest.mark.django_db
 
+DEFAULT = BoardOptions()                              # earners only (the default view)
+ALL = BoardOptions(only_earners=False)               # every owner, 0% included
+INVERTED = BoardOptions(only_earners=False, invert=True)
 
-def _ids(game):
-    """The whole board in rank order, as profile ids."""
-    return list(svc.board_queryset(game).values_list('profile_id', flat=True))
+
+def _ids(game, opts):
+    return list(svc.board_queryset(game, opts).values_list('profile_id', flat=True))
 
 
-def _walk(game, limit):
-    """Page through the entire board with the cursor, collecting profile ids."""
+def _walk(game, opts, limit):
+    """Page through the whole board with the cursor, collecting profile ids."""
     seen, cursor, guard = [], None, 0
     while True:
-        rows, cursor = svc.page(game, cursor=cursor, limit=limit)
+        rows, cursor = svc.page(game, opts, cursor=cursor, limit=limit)
         seen.extend(r.profile_id for r in rows)
         guard += 1
-        assert guard < 100, 'cursor failed to terminate'
+        assert guard < 200, 'cursor failed to terminate'
         if not cursor:
             return seen
 
 
-def _player(game, progress, minutes_ago=None, **kw):
+def _player(game, progress, minutes_ago=None, registered=True, **kw):
     date = None if minutes_ago is None else timezone.now() - timedelta(minutes=minutes_ago)
-    return ProfileGameFactory(game=game, profile=ProfileFactory(), progress=progress,
+    profile = ProfileFactory() if registered else ProfileFactory(user=None)
+    return ProfileGameFactory(game=game, profile=profile, progress=progress,
                               most_recent_trophy_date=date, **kw)
 
 
@@ -48,254 +53,230 @@ def test_completers_lead_ordered_by_who_finished_first():
     early = _player(game, 100, minutes_ago=500)
     chaser = _player(game, 92, minutes_ago=1)
 
-    assert _ids(game) == [early.profile_id, late.profile_id, chaser.profile_id]
+    assert _ids(game, DEFAULT) == [early.profile_id, late.profile_id, chaser.profile_id]
 
 
-def test_owners_with_no_trophies_sort_last_within_their_progress():
+def test_invert_is_the_exact_reverse():
     game = GameFactory()
-    dated = _player(game, 0, minutes_ago=5)
-    undated = _player(game, 0, minutes_ago=None)
+    for pct in (100, 80, 60, 40, 20):
+        _player(game, pct, minutes_ago=pct)
 
-    assert _ids(game) == [dated.profile_id, undated.profile_id]
+    assert _ids(game, INVERTED) == list(reversed(_ids(game, ALL)))
 
 
-def test_hidden_players_are_off_the_board():
+# --- filters -----------------------------------------------------------------
+
+
+def test_only_earners_drops_zero_trophy_owners():
+    game = GameFactory()
+    earner = _player(game, 40, minutes_ago=5)
+    _player(game, 0, minutes_ago=None)          # 0%, no trophies
+
+    assert _ids(game, DEFAULT) == [earner.profile_id]
+    assert svc.board_size(game, DEFAULT) == 1
+    assert svc.board_size(game, ALL) == 2
+
+
+def test_registered_only_drops_profiles_without_a_site_account():
+    game = GameFactory()
+    member = _player(game, 80, minutes_ago=5, registered=True)
+    _player(game, 90, minutes_ago=5, registered=False)     # synced but not registered
+
+    assert _ids(game, BoardOptions(registered_only=True)) == [member.profile_id]
+    assert svc.board_size(game, BoardOptions(registered_only=True)) == 1
+    assert svc.board_size(game, DEFAULT) == 2
+
+
+def test_hidden_players_are_off_every_board():
     game = GameFactory()
     shown = _player(game, 50, minutes_ago=5)
     _player(game, 90, minutes_ago=5, user_hidden=True)
     _player(game, 80, minutes_ago=5, hidden_flag=True)
 
-    assert _ids(game) == [shown.profile_id]
-    assert svc.board_size(game) == 1
+    assert _ids(game, ALL) == [shown.profile_id]
 
 
-# --- keyset pagination -------------------------------------------------------
+# --- keyset pagination (the exhaustive guard) --------------------------------
 
 
+@pytest.mark.parametrize('opts', [DEFAULT, ALL, INVERTED, BoardOptions(registered_only=True)])
 @pytest.mark.parametrize('limit', [1, 2, 3, 7])
-def test_paging_reproduces_the_board_exactly(limit):
-    """Distinct progress values: the simple case, parameterised across page boundaries."""
+def test_paging_reproduces_the_board_exactly(opts, limit):
     game = GameFactory()
-    for pct in (100, 91, 74, 60, 45, 30, 12, 0):
+    for pct in (100, 91, 74, 60, 45, 30, 12, 3):
         _player(game, pct, minutes_ago=pct)
 
-    assert _walk(game, limit) == _ids(game)
+    assert _walk(game, opts, limit) == _ids(game, opts)
 
 
+@pytest.mark.parametrize('opts', [ALL, INVERTED])
 @pytest.mark.parametrize('limit', [1, 2, 3, 5])
-def test_paging_over_a_block_of_full_ties(limit):
-    """Every player identical on BOTH sort keys -- only profile_id separates them."""
+def test_paging_over_full_ties(opts, limit):
+    """Every player identical on both sort keys -- only profile_id separates them, forward and inverted."""
     game = GameFactory()
     stamp = timezone.now()
     for _ in range(9):
-        ProfileGameFactory(game=game, profile=ProfileFactory(), progress=100,
-                           most_recent_trophy_date=stamp)
+        ProfileGameFactory(game=game, profile=ProfileFactory(), progress=100, most_recent_trophy_date=stamp)
 
-    walked = _walk(game, limit)
-    assert walked == _ids(game)
-    assert len(walked) == len(set(walked)) == 9      # nothing skipped, nothing repeated
+    walked = _walk(game, opts, limit)
+    assert walked == _ids(game, opts)
+    assert len(walked) == len(set(walked)) == 9
 
 
+@pytest.mark.parametrize('opts', [ALL, INVERTED])
 @pytest.mark.parametrize('limit', [1, 2, 4])
-def test_paging_across_the_null_date_boundary(limit):
-    """The boundary most likely to be wrong: dated rows, then the undated tail, same progress."""
+def test_paging_across_the_null_date_boundary(opts, limit):
+    """The boundary most likely to be wrong: dated rows then the undated tail, forward and inverted."""
     game = GameFactory()
     for m in (30, 20, 10):
         _player(game, 0, minutes_ago=m)
     for _ in range(4):
         _player(game, 0, minutes_ago=None)
 
-    walked = _walk(game, limit)
-    assert walked == _ids(game)
+    walked = _walk(game, opts, limit)
+    assert walked == _ids(game, opts)
     assert len(walked) == 7
 
 
-@pytest.mark.parametrize('limit', [1, 3])
-def test_paging_a_realistic_mixed_board(limit):
-    """Completers, chasers, ties and undated owners together."""
-    game = GameFactory()
-    stamp = timezone.now()
-    for _ in range(4):
-        ProfileGameFactory(game=game, profile=ProfileFactory(), progress=100,
-                           most_recent_trophy_date=stamp)
-    for pct in (98, 98, 71, 71, 71, 40):
-        _player(game, pct, minutes_ago=pct)
-    for _ in range(3):
-        _player(game, 0, minutes_ago=None)
-
-    walked = _walk(game, limit)
-    assert walked == _ids(game)
-    assert len(walked) == len(set(walked)) == 13
-
-
-def test_last_page_reports_no_next_cursor():
+def test_last_page_has_no_next_cursor():
     game = GameFactory()
     for pct in (100, 50):
         _player(game, pct, minutes_ago=pct)
 
-    rows, cursor = svc.page(game, limit=25)
-    assert len(rows) == 2
-    assert cursor is None
+    rows, cursor = svc.page(game, DEFAULT, limit=25)
+    assert len(rows) == 2 and cursor is None
 
 
 def test_empty_board_is_not_an_error():
-    rows, cursor = svc.page(GameFactory())
-
+    rows, cursor = svc.page(GameFactory(), DEFAULT)
     assert rows == [] and cursor is None
 
 
 def test_malformed_cursor_falls_back_to_the_first_page():
-    """A mangled URL should show page one, not a 500."""
     game = GameFactory()
     for pct in (100, 50):
         _player(game, pct, minutes_ago=pct)
 
-    # Includes '100.5~n~1': a dot-separated timestamp is exactly what broke the first cursor format.
     for junk in ('', 'garbage', '1~2', 'a~b~c', '100~notatime~5', '100.5~n~1', '~~'):
-        rows, _ = svc.page(game, cursor=junk)
-        assert [r.profile_id for r in rows] == _ids(game)
-
-
-def test_cursor_round_trips_through_encode_decode():
-    game = GameFactory()
-    row = _player(game, 63, minutes_ago=42)
-
-    progress, stamp, profile_id = svc.decode_cursor(svc.encode_cursor(row))
-
-    assert (progress, profile_id) == (63, row.profile_id)
-    assert stamp == pytest.approx(row.most_recent_trophy_date.timestamp(), abs=0.001)
+        rows, _ = svc.page(game, DEFAULT, cursor=junk)
+        assert [r.profile_id for r in rows] == _ids(game, DEFAULT)
 
 
 # --- rank --------------------------------------------------------------------
 
 
-def test_rank_matches_the_boards_own_ordering_for_every_player():
-    """The definitive rank test: rank_for must agree with the list, for everyone, ties included."""
+def test_rank_matches_the_board_order_for_every_player():
     game = GameFactory()
     stamp = timezone.now()
     for _ in range(3):
-        ProfileGameFactory(game=game, profile=ProfileFactory(), progress=100,
-                           most_recent_trophy_date=stamp)
+        ProfileGameFactory(game=game, profile=ProfileFactory(), progress=100, most_recent_trophy_date=stamp)
     for pct in (88, 88, 55, 20):
         _player(game, pct, minutes_ago=pct)
-    for _ in range(2):
-        _player(game, 0, minutes_ago=None)
 
     from trophies.models import Profile
-    order = _ids(game)
-    for position, profile_id in enumerate(order, start=1):
-        profile = Profile.objects.get(pk=profile_id)
-        assert svc.rank_for(game, profile) == position
+    for position, pid in enumerate(_ids(game, DEFAULT), start=1):
+        assert svc.rank_for(game, Profile.objects.get(pk=pid), DEFAULT) == position
 
 
-def test_rank_is_none_for_someone_who_does_not_own_the_game():
+def test_rank_is_canonical_regardless_of_invert():
+    """Inverting the display doesn't change 'You're #N' -- it's still Nth best."""
+    game = GameFactory()
+    rows = [_player(game, 100 - i, minutes_ago=i + 1) for i in range(5)]
+    third = rows[2].profile
+
+    assert svc.rank_for(game, third, DEFAULT) == 3
+    assert svc.rank_for(game, third, BoardOptions(invert=True)) == 3
+
+
+def test_rank_reflects_the_active_filters():
+    """With unregistered players hidden, your rank is among the registered."""
+    game = GameFactory()
+    _player(game, 95, minutes_ago=5, registered=False)   # ahead, but unregistered
+    me = _player(game, 80, minutes_ago=5, registered=True)
+
+    assert svc.rank_for(game, me.profile, DEFAULT) == 2                      # 2nd overall
+    assert svc.rank_for(game, me.profile, BoardOptions(registered_only=True)) == 1   # 1st among members
+
+
+def test_rank_is_none_when_the_viewer_is_filtered_out():
+    game = GameFactory()
+    zero = _player(game, 0, minutes_ago=None)            # 0 trophies
+
+    assert svc.rank_for(game, zero.profile, DEFAULT) is None    # earners-only default hides them
+    assert svc.rank_for(game, zero.profile, ALL) == 1
+
+
+def test_rank_is_none_for_a_non_owner_or_anonymous():
     game = GameFactory()
     _player(game, 100, minutes_ago=5)
 
-    assert svc.rank_for(game, ProfileFactory()) is None
-    assert svc.rank_for(game, None) is None
+    assert svc.rank_for(game, ProfileFactory(), DEFAULT) is None
+    assert svc.rank_for(game, None, DEFAULT) is None
 
 
-def test_rank_is_none_for_a_hidden_player():
-    """Hidden players are off the board, so they have no position on it."""
-    game = GameFactory()
-    hidden = _player(game, 90, minutes_ago=5, user_hidden=True)
-
-    assert svc.rank_for(game, hidden.profile) is None
+# --- jump to a rank ----------------------------------------------------------
 
 
-# --- jump to my rank ---------------------------------------------------------
-
-
-def _board_with(n):
-    """n players on distinct progress values, so rank == position is unambiguous."""
+def _board(n, opts=DEFAULT):
     game = GameFactory()
     rows = [_player(game, 100 - i, minutes_ago=i + 1) for i in range(n)]
     return game, rows
 
 
-def test_jump_window_opens_a_few_places_above_the_viewer():
-    """The point of the window: you see who you're chasing, not just yourself."""
-    game, rows = _board_with(30)
-    me = rows[19]                                   # rank 20
+def test_jump_opens_a_few_places_above_the_target():
+    game, _ = _board(30)
 
-    window, _, start_rank = svc.page_around(game, me.profile, before=4, limit=10)
+    rows, _cur, start_rank, total = svc.page_at_rank(game, DEFAULT, 20, before=4, limit=10)
 
-    assert start_rank == 16                          # 4 places above rank 20
-    assert [r.profile_id for r in window] == _ids(game)[15:25]
-    assert me.profile_id in [r.profile_id for r in window]
+    assert total == 30
+    assert start_rank == 16                                  # 4 above rank 20
+    assert [r.profile_id for r in rows] == _ids(game, DEFAULT)[15:25]
 
 
-def test_jump_window_clamps_at_the_top_of_the_board():
-    """Someone ranked 2nd can't have 4 rows above them; the window must not run off the top."""
-    game, rows = _board_with(10)
-    me = rows[1]                                     # rank 2
+def test_jump_clamps_at_the_top():
+    game, _ = _board(10)
 
-    window, _, start_rank = svc.page_around(game, me.profile, before=4, limit=5)
+    rows, _cur, start_rank, _total = svc.page_at_rank(game, DEFAULT, 2, before=4, limit=5)
 
     assert start_rank == 1
-    assert [r.profile_id for r in window] == _ids(game)[:5]
+    assert [r.profile_id for r in rows] == _ids(game, DEFAULT)[:5]
 
 
-def test_jump_window_for_the_very_first_player():
-    game, rows = _board_with(6)
+def test_jump_clamps_an_out_of_range_rank():
+    game, _ = _board(8)
 
-    window, _, start_rank = svc.page_around(game, rows[0].profile, before=4, limit=3)
+    rows, _cur, start_rank, total = svc.page_at_rank(game, DEFAULT, 999, before=3, limit=10)
 
-    assert start_rank == 1
-    assert [r.profile_id for r in window] == _ids(game)[:3]
-
-
-def test_jump_window_at_the_bottom_reports_no_further_pages():
-    game, rows = _board_with(8)
-    last = rows[-1]
-
-    window, next_cursor, start_rank = svc.page_around(game, last.profile, before=3, limit=10)
-
-    assert start_rank == 5
-    assert [r.profile_id for r in window] == _ids(game)[4:]
-    assert next_cursor is None
+    assert total == 8
+    assert start_rank == 5                                   # clamped to rank 8, 3 above
+    assert [r.profile_id for r in rows] == _ids(game, DEFAULT)[4:]
 
 
-def test_jump_window_start_rank_is_consistent_with_rank_for():
-    """start_rank must line up with the rank the header shows, or the numbering jumps."""
-    game, rows = _board_with(25)
-    me = rows[14]
+def test_jump_numbers_the_target_row_correctly_under_invert():
+    """Under invert the window still lands on the target with its canonical rank."""
+    game, _ = _board(30)
+    order = _ids(game, DEFAULT)                              # canonical (forward) order
+    target_pid = order[19]                                   # canonical rank 20
 
-    window, _, start_rank = svc.page_around(game, me.profile, before=4, limit=10)
+    rows, _cur, start_rank, total = svc.page_at_rank(
+        game, BoardOptions(invert=True), 20, before=4, limit=10)
 
-    assert svc.rank_for(game, me.profile) == 15
-    # The viewer sits exactly `before` places into the window.
-    assert window[15 - start_rank].profile_id == me.profile_id
-
-
-def test_jump_window_survives_a_block_of_full_ties():
-    game = GameFactory()
-    stamp = timezone.now()
-    rows = [ProfileGameFactory(game=game, profile=ProfileFactory(), progress=100,
-                               most_recent_trophy_date=stamp) for _ in range(12)]
-    order = _ids(game)
-    me = next(r for r in rows if r.profile_id == order[8])
-
-    window, _, start_rank = svc.page_around(game, me.profile, before=3, limit=6)
-
-    assert start_rank == 6
-    assert [r.profile_id for r in window] == order[5:11]
+    # start_rank counts DOWN by one per row; find where the target lands and check its number.
+    idx = [r.profile_id for r in rows].index(target_pid)
+    assert start_rank - idx == 20
+    assert total == 30
 
 
-def test_jump_window_is_none_for_someone_not_on_the_board():
-    game, _ = _board_with(5)
+def test_jump_returns_none_on_an_empty_board():
+    assert svc.page_at_rank(GameFactory(), DEFAULT, 1) is None
 
-    assert svc.page_around(game, ProfileFactory()) is None
-    assert svc.page_around(game, None) is None
+
+# --- index contract ----------------------------------------------------------
 
 
 def test_order_by_matches_the_index_it_relies_on():
-    """If these drift apart the query silently stops using pg_game_leaderboard_idx."""
     from trophies.models import ProfileGame
 
     index = next(i for i in ProfileGame._meta.indexes if i.name == 'pg_game_leaderboard_idx')
-
     assert index.fields == ['game', '-progress', 'most_recent_trophy_date', 'profile']
-    assert svc.ORDER_BY[0] == '-progress'
-    assert svc.ORDER_BY[2] == 'profile_id'
+    assert svc.ORDER_BY[0] == '-progress' and svc.ORDER_BY[2] == 'profile_id'

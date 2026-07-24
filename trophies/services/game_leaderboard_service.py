@@ -1,19 +1,31 @@
-"""Per-game leaderboard: ranking, keyset pagination, and rank lookup.
+"""Per-game leaderboard: ranking, keyset pagination, rank lookup, and view options.
 
-Ranking is `progress DESC, most_recent_trophy_date ASC (NULLS LAST), profile_id ASC`, backed by
-`pg_game_leaderboard_idx`. Completers sort to the top ordered by WHEN they finished, then everyone else
-by how close they are -- so a game's board reads as a race rather than a snapshot.
+Canonical ranking is `progress DESC, most_recent_trophy_date ASC (NULLS LAST), profile_id ASC`, backed by
+`pg_game_leaderboard_idx`. Completers sort to the top ordered by WHEN they finished, then everyone else by
+how close they are -- so a game's board reads as a race rather than a snapshot.
 
-The third sort key is load-bearing, not decoration. Ties on the first two are the normal case (everyone
-at 100% shares progress=100), and without a unique final key Postgres may order tied rows differently
-between calls, which makes pagination skip or duplicate players and makes a displayed rank flicker.
+The third sort key is load-bearing, not decoration. Ties on the first two are the normal case (everyone at
+100% shares progress=100), and without a unique final key Postgres may order tied rows differently between
+calls, which makes pagination skip or duplicate players and makes a displayed rank flicker.
 
-KEYSET, not OFFSET. `OFFSET n` degrades linearly with depth and is a breaking change to swap later once
-clients depend on the parameter shape; a cursor stays flat at any depth. Measured on beta: a top-20 page
-is 0.6 ms and a rank lookup 1,400 deep is 1.4 ms, so this needs no cache today. If a game ever gets deep
-enough to matter, `rank_for` is the one call to memoise.
+KEYSET, not OFFSET, for the main scroll. `OFFSET n` degrades linearly with depth; a cursor stays flat. Jump
+targets (to a typed rank, or to the viewer) DO use a bounded offset -- fine because a single game's board is
+small (biggest on beta ~1,400), so a deep offset is still single-digit ms.
+
+VIEW OPTIONS (BoardOptions):
+  - invert: show the board bottom-first. Served by scanning the SAME index BACKWARD -- no extra cost. Rank
+    NUMBERS stay canonical (from the top / best); inverting only reverses the display, so ranks count down.
+  - only_earners (default ON): drop 0%/zero-trophy owners. They sit at the bottom of the index, so excluding
+    them just ends the scan earlier -- free, often faster.
+  - registered_only: only profiles with a linked site account (Profile.user is set). A post-join filter, not
+    index-served, but negligible at board scale.
+
+Filters change the POPULATION, so rank / board_size / paging all apply them consistently: a rank is always
+"position within the currently-viewed board", which is what a viewer toggling a filter expects.
 """
 import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone as dt_timezone
 
 from django.db.models import Q, F
 
@@ -23,9 +35,10 @@ logger = logging.getLogger('psn_api')
 
 PAGE_SIZE = 25
 
-# Mirrors pg_game_leaderboard_idx field-for-field. Changing one without the other silently costs the
-# index scan, so they are asserted equal in the tests.
+# Mirrors pg_game_leaderboard_idx field-for-field; asserted equal in the tests. INVERTED is the exact
+# reverse (Postgres serves it by scanning the same index backward, nulls flipping LAST<->FIRST).
 ORDER_BY = ('-progress', F('most_recent_trophy_date').asc(nulls_last=True), 'profile_id')
+INVERTED_ORDER = ('progress', F('most_recent_trophy_date').desc(nulls_first=True), '-profile_id')
 
 _NULL = 'n'          # cursor marker for "no trophy date" (a 0% owner)
 # NOT '.' -- the timestamp is a float, so a dot separator splits it in half. '~' is URL-unreserved and
@@ -33,19 +46,58 @@ _NULL = 'n'          # cursor marker for "no trophy date" (a 0% owner)
 _SEP = '~'
 
 
-def board_queryset(game):
-    """Every player eligible for `game`'s board, in rank order.
+@dataclass(frozen=True)
+class BoardOptions:
+    """The viewer's board controls. `only_earners` defaults ON -- the common board is people who've
+    actually started, not every owner."""
+    invert: bool = False
+    only_earners: bool = True
+    registered_only: bool = False
 
-    Scope is everyone who OWNS the game, 0% included, so every viewer can find themselves and
-    "jump to my rank" always has somewhere to go. Hidden rows are excluded, which is why the header
-    count comes from here rather than from the denormalized Game.played_count (that counts them).
-    """
-    return (
-        ProfileGame.objects
-        .filter(game=game, hidden_flag=False, user_hidden=False)
-        .order_by(*ORDER_BY)
-    )
+    @classmethod
+    def from_request(cls, request):
+        get = request.GET.get
+        return cls(
+            invert=get('invert') == '1',
+            only_earners=get('earners', '1') != '0',   # default on; ?earners=0 shows all owners
+            registered_only=get('registered') == '1',
+        )
 
+    def as_params(self):
+        """The non-default flags, for building continuation/jump URLs that preserve the view."""
+        params = {}
+        if self.invert:
+            params['invert'] = '1'
+        if not self.only_earners:
+            params['earners'] = '0'
+        if self.registered_only:
+            params['registered'] = '1'
+        return params
+
+
+def _base_qs(game, opts):
+    """The filtered population for `game`'s board, WITHOUT ordering (rank/count use forward order; paging
+    uses display order). Scope is everyone who owns the game minus hidden rows, then the opt filters."""
+    qs = ProfileGame.objects.filter(game=game, hidden_flag=False, user_hidden=False)
+    if opts.only_earners:
+        qs = qs.filter(progress__gt=0)
+    if opts.registered_only:
+        qs = qs.filter(profile__user__isnull=False)
+    return qs
+
+
+def board_queryset(game, opts):
+    """The board in DISPLAY order (respects invert). Used for paging and jump windows."""
+    return _base_qs(game, opts).order_by(*(INVERTED_ORDER if opts.invert else ORDER_BY))
+
+
+def board_size(game, opts):
+    """Players on the currently-filtered board. NOT Game.played_count (that counts hidden rows AND
+    ignores the filters, so it would disagree with the list)."""
+    return _base_qs(game, opts).count()
+
+
+# ── cursors ──────────────────────────────────────────────────────────────────
 
 def encode_cursor(row):
     """Opaque-ish cursor naming a row's exact position in the ordering."""
@@ -73,38 +125,53 @@ def decode_cursor(raw):
         return None
 
 
-def _after(cursor):
-    """Q matching rows strictly AFTER the cursor position, in ranking order.
+def _after(cursor, opts):
+    """Q matching rows strictly AFTER the cursor in the current DISPLAY order (forward or inverted).
 
-    Mirrors the ORDER BY exactly, including NULLS LAST: a null date sorts after every real date, so a
-    row with no trophies is only ever preceded by dated rows at the same progress.
+    Mirrors the ORDER BY exactly, including the null placement, which flips under inversion: NULLS LAST
+    forward (0% no-date owners trail) becomes NULLS FIRST inverted (they lead). Only reachable with
+    only_earners OFF, since earners always have a date.
     """
     progress, stamp, profile_id = cursor
-    from datetime import datetime, timezone as dt_timezone
+    moment = None if stamp is None else datetime.fromtimestamp(stamp, tz=dt_timezone.utc)
 
-    if stamp is None:
-        # Cursor sits in the null-date tail; only higher profile_ids in that same tail follow it.
-        same = Q(progress=progress, most_recent_trophy_date__isnull=True, profile_id__gt=profile_id)
-    else:
-        moment = datetime.fromtimestamp(stamp, tz=dt_timezone.utc)
+    if not opts.invert:
+        if moment is None:
+            same = Q(progress=progress, most_recent_trophy_date__isnull=True, profile_id__gt=profile_id)
+        else:
+            same = Q(progress=progress) & (
+                Q(most_recent_trophy_date__gt=moment)
+                | Q(most_recent_trophy_date__isnull=True)          # nulls trail every real date
+                | Q(most_recent_trophy_date=moment, profile_id__gt=profile_id)
+            )
+        return Q(progress__lt=progress) | same
+
+    # Inverted: progress ascending, dates descending with nulls first, ids descending.
+    if moment is None:
         same = Q(progress=progress) & (
-            Q(most_recent_trophy_date__gt=moment)
-            | Q(most_recent_trophy_date__isnull=True)          # nulls trail every real date
-            | Q(most_recent_trophy_date=moment, profile_id__gt=profile_id)
+            Q(most_recent_trophy_date__isnull=False)               # non-nulls follow the null head
+            | Q(most_recent_trophy_date__isnull=True, profile_id__lt=profile_id)
         )
-    return Q(progress__lt=progress) | same
+    else:
+        same = Q(progress=progress) & (
+            Q(most_recent_trophy_date__lt=moment)
+            | Q(most_recent_trophy_date=moment, profile_id__lt=profile_id)
+        )
+    return Q(progress__gt=progress) | same
 
 
-def page(game, cursor=None, limit=PAGE_SIZE):
+# ── pages ────────────────────────────────────────────────────────────────────
+
+def page(game, opts, cursor=None, limit=PAGE_SIZE):
     """One page of the board plus the cursor for the next.
 
     Returns (rows, next_cursor). next_cursor is None on the last page. Fetches limit+1 rows so
     "is there more" costs nothing extra -- no COUNT, no OFFSET.
     """
-    qs = board_queryset(game).select_related('profile')
+    qs = board_queryset(game, opts).select_related('profile')
     decoded = decode_cursor(cursor)
     if decoded:
-        qs = qs.filter(_after(decoded))
+        qs = qs.filter(_after(decoded, opts))
 
     rows = list(qs[:limit + 1])
     has_more = len(rows) > limit
@@ -112,59 +179,54 @@ def page(game, cursor=None, limit=PAGE_SIZE):
     return rows, (encode_cursor(rows[-1]) if has_more and rows else None)
 
 
-def page_around(game, profile, before=4, limit=PAGE_SIZE):
-    """A window of the board centred on `profile`, for "jump to my rank".
+def page_at_rank(game, opts, rank, before=4, limit=PAGE_SIZE):
+    """A window of the board centred on a canonical `rank` (for "jump to my rank" and typed jumps).
 
-    Returns (rows, next_cursor, start_rank), or None if they aren't on the board.
+    Returns (rows, next_cursor, start_rank, total), or None if the board is empty. The window opens a few
+    places above the target so you see who you're chasing. `rank` is canonical (from the top); under
+    invert it's mapped to the matching display position. Bounded OFFSET -- fine at board scale.
 
-    Loading forward page by page until we reach someone ranked 900th would be absurd, so instead we
-    step back a few places from them and start a normal keyset page there. Two cheap queries: find the
-    row `before + 1` places ahead, then page from its cursor.
+    `start_rank` is the canonical rank of the FIRST returned row; the caller numbers rows from it with a
+    step of +1 (forward) or -1 (inverted). next_cursor continues the scroll via keyset from the last row.
     """
-    row = _board_row(game, profile)
-    if row is None:
+    total = board_size(game, opts)
+    if total == 0:
         return None
-    ahead_q = _ahead_of(row)
-    rank = board_queryset(game).filter(ahead_q).count() + 1
+    rank = max(1, min(rank, total))
 
-    # Walk backwards from the viewer: the board order reversed, restricted to those ahead of them.
-    step_back = min(before, rank - 1)
-    anchor_cursor, start_rank = None, rank - step_back
-    if step_back:
-        ahead = (
-            board_queryset(game)
-            .filter(ahead_q)
-            .order_by('progress', F('most_recent_trophy_date').desc(nulls_first=True), '-profile_id')
-        )
-        anchor = list(ahead[:step_back + 1])
-        # The (step_back + 1)-th row ahead is the one we page AFTER, so the window opens on the row
-        # exactly `step_back` places above them. Fewer than that means we ran into the top of the board.
-        if len(anchor) == step_back + 1:
-            anchor_cursor = encode_cursor(anchor[-1])
-        else:
-            start_rank = 1
+    # Canonical rank -> position in the current display order.
+    display_pos = rank if not opts.invert else (total - rank + 1)
+    start_display = max(1, display_pos - before)
 
-    rows, next_cursor = page(game, cursor=anchor_cursor, limit=limit)
-    return rows, next_cursor, start_rank
+    qs = board_queryset(game, opts).select_related('profile')
+    rows = list(qs[start_display - 1: start_display - 1 + limit + 1])
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    next_cursor = encode_cursor(rows[-1]) if has_more and rows else None
+
+    start_rank = start_display if not opts.invert else (total - start_display + 1)
+    return rows, next_cursor, start_rank, total
 
 
-def _board_row(game, profile):
-    """The profile's own row on this board, or None if they don't own the game / are hidden."""
+# ── rank ─────────────────────────────────────────────────────────────────────
+
+def _board_row(game, profile, opts):
+    """The profile's own row on the FILTERED board, or None if absent (doesn't own it, hidden, or
+    filtered out -- e.g. a 0-trophy viewer when only_earners is on)."""
     if not profile:
         return None
     return (
-        ProfileGame.objects
-        .filter(game=game, profile=profile, hidden_flag=False, user_hidden=False)
+        _base_qs(game, opts)
+        .filter(profile=profile)
         .only('progress', 'most_recent_trophy_date', 'profile_id')
         .first()
     )
 
 
 def _ahead_of(row):
-    """Q matching everyone ranked strictly above `row` on its board."""
+    """Q matching everyone ranked strictly above `row` in canonical (forward) order."""
     ahead = Q(progress__gt=row.progress)
     if row.most_recent_trophy_date is None:
-        # Every dated row at this progress leads an undated one, then lower ids within the tail.
         ahead |= Q(progress=row.progress) & (
             Q(most_recent_trophy_date__isnull=False)
             | Q(most_recent_trophy_date__isnull=True, profile_id__lt=row.profile_id)
@@ -177,22 +239,13 @@ def _ahead_of(row):
     return ahead
 
 
-def rank_for(game, profile):
-    """1-indexed rank, or None if the profile isn't on this board.
+def rank_for(game, profile, opts):
+    """1-indexed CANONICAL rank (from the top / best), or None if the profile isn't on this board.
 
-    Counts everyone ahead, so it is O(rank). Bounded by the players of ONE game (biggest board on beta
-    is ~1,400), which is why this is 1.4 ms rather than the tens of ms a global leaderboard would cost.
+    Canonical regardless of invert -- "You're #42" means 42nd best. Respects the filters, so it's the
+    rank within the currently-viewed population. O(rank), bounded by one game's players.
     """
-    row = _board_row(game, profile)
+    row = _board_row(game, profile, opts)
     if row is None:
         return None
-    return board_queryset(game).filter(_ahead_of(row)).count() + 1
-
-
-def board_size(game):
-    """Players actually on the board.
-
-    NOT Game.played_count: that counts hidden rows too, so the header and the list would disagree.
-    Cheap at this scale (the index makes it a counted range scan).
-    """
-    return board_queryset(game).count()
+    return _base_qs(game, opts).filter(_ahead_of(row)).count() + 1

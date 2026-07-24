@@ -79,13 +79,30 @@ with depth and is a breaking change to swap once clients depend on the parameter
 
 `GET /games/<np_communication_id>/leaderboard/` - **HTML**, not JSON, and public.
 
-Three response shapes from one URL:
+Response shapes from one URL (all honour the view options below):
 
 | Query | Returns | Used by |
 |-------|---------|---------|
-| *(none)* | Full panel: header, first page, the viewer's standing | First activation of the tab |
+| *(none)* | Full panel: controls, header, first page, the viewer's standing | First activation of the tab / a control change |
 | `?after=<cursor>&from=<rank>` | Rows only | Infinite scroll append |
 | `?around=me` | Rows only, a window centred on the viewer | "Jump to my rank" |
+| `?rank=N` | Rows only, a window centred on canonical rank N | Typed rank jump |
+
+### View options (BoardOptions)
+
+Parsed from the query string, carried by the JS on every fetch so the view stays consistent:
+
+| Param | Default | Effect | Cost |
+|-------|---------|--------|------|
+| `earners` | `1` (on) | `earners=0` includes 0%/zero-trophy owners | Free/faster - those rows sit at the index's bottom, so keeping them out just ends the scan sooner |
+| `registered` | off | `registered=1` shows only profiles with a site account (`Profile.user` set) | A post-join filter, not index-served, but negligible at board scale |
+| `invert` | off | `invert=1` shows the board bottom-first | Free - the same index scanned **backward** |
+| `rank` / `around` | - | jump to a typed rank / to the viewer | Bounded `OFFSET`, trivial at ≤ a few thousand rows |
+
+**Filters change the population**, so `rank_for` / `board_size` / paging all apply them - a rank is always
+"position within the currently-viewed board." **Invert is display-only**: rank NUMBERS stay canonical (from
+the top), so an inverted board simply counts down. The rows are numbered from a `start_rank` stepping by
++1 (forward) or -1 (inverted); the scroller's marker carries the next page's starting rank in `from`.
 
 `from` supplies the rank the page starts at. It is **display only** - deriving it server-side would mean
 an O(rank) count per page fetch, and a tampered value only shows that one viewer wrong numbers.
@@ -122,6 +139,15 @@ kind of thing a later "just include it" refactor would quietly undo.
   after it would still be in its temporal dead zone and throw - which previously aborted the whole file.
 - **Rank numbering restarts at 1** if a continuation is fetched without `from`. The scroller always sends
   it; anything else calling this endpoint must too.
+- **A control change re-fetches the WHOLE panel**, not just the list - the controls, header, count, and
+  the viewer's rank all depend on the active options. The JS reads the toggle `aria-pressed` states to
+  rebuild the query, so the returned HTML re-renders the toggles in the state it was asked for.
+- **The directional self-row is moved in the DOM.** A `position: sticky` element only pins toward the edge
+  its DOM position allows, so the JS inserts the self-row *before* the list to pin it to the top and
+  *after* to pin it to the bottom, depending on which way the viewer's real row lies. The move happens
+  while it's hidden (the real row is crossing the viewport at that moment), so there's no flash.
+- **The self-row observer watches a specific row node**, which is swapped out by a jump or a filter change,
+  so it's re-mounted after every list swap (`lbMountSelf`).
 
 ---
 

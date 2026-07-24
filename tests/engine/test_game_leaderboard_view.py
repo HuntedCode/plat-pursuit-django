@@ -100,10 +100,22 @@ def test_rank_numbering_continues_across_pages(client):
 
 
 def test_empty_board_shows_the_empty_state(client):
-    body = client.get(_url(GameFactory())).content.decode()
+    """A game nobody's played, with filters explicitly off, gets the 'no one at all' message."""
+    body = client.get(_url(GameFactory(), earners=0)).content.decode()
 
     assert 'No hunters yet' in body
     assert 'gd-lb__row' not in body
+
+
+def test_filtered_to_empty_shows_the_relax_your_filters_hint(client):
+    """The default earners-only view of a game with only 0% owners should suggest relaxing, not dead-end."""
+    game = GameFactory()
+    ProfileGameFactory(game=game, profile=ProfileFactory(), progress=0, most_recent_trophy_date=None)
+
+    body = client.get(_url(game)).content.decode()      # default: earners only -> board empty
+
+    assert 'No hunters match' in body
+    assert 'to see everyone' in body
 
 
 def test_unknown_game_404s(client):
@@ -144,6 +156,27 @@ def test_linked_viewer_sees_their_rank_and_their_row_is_marked(client):
     assert 'data-lb-jump' in body      # the "jump to my rank" control
     assert '#3' in body
     assert 'gd-lb__row--you' in body
+
+
+def test_self_row_renders_whenever_the_viewer_is_ranked(client):
+    """Rendered (hidden) even when the viewer is on the first page, so the JS can surface it once they
+    scroll their own row away."""
+    game, rows = _board(3)                                   # viewer will be on the first page
+    me = rows[0]
+    me.profile.is_linked = True
+    me.profile.save(update_fields=['is_linked'])
+    client.force_login(me.profile.user)
+
+    body = client.get(_url(game)).content.decode()
+
+    assert 'data-lb-self' in body
+    assert 'gd-lb__self--bottom' in body                     # default edge before JS flips it
+
+
+def test_anonymous_viewer_gets_no_self_row(client):
+    game, _ = _board(3)
+
+    assert 'data-lb-self' not in client.get(_url(game)).content.decode()
 
 
 def test_anonymous_viewer_gets_no_rank_control(client):
@@ -233,7 +266,7 @@ def test_zero_trophy_owner_renders_cleanly(client):
     ProfileGameFactory(game=game, profile=ProfileFactory(), progress=0,
                        most_recent_trophy_date=None, earned_trophies={})
 
-    body = client.get(_url(game)).content.decode()
+    body = client.get(_url(game, earners=0)).content.decode()   # earners-only default would hide them
 
     assert body.count('gd-lb__row') == 1
     assert 'gd-gcount' not in body       # no tier dots for an empty haul
@@ -248,6 +281,102 @@ def test_hidden_players_are_absent_from_the_endpoint(client):
     body = client.get(_url(game)).content.decode()
 
     assert body.count('gd-lb__row') == 2
+
+
+# --- controls: filters, invert, jump-to-rank ---------------------------------
+
+
+def test_panel_renders_the_controls_with_default_state(client):
+    game, _ = _board(3)
+
+    body = client.get(_url(game)).content.decode()
+
+    assert 'data-lb-opt="earners"' in body
+    assert 'data-lb-opt="registered"' in body
+    assert 'data-lb-opt="invert"' in body
+    assert 'data-lb-rankinput' in body
+    # Earners is on by default; the others off.
+    assert 'data-lb-opt="earners" aria-pressed="true"' in body
+    assert 'data-lb-opt="invert" aria-pressed="false"' in body
+
+
+def test_earners_filter_default_hides_zero_trophy_owners(client):
+    game = GameFactory()
+    ProfileGameFactory(game=game, profile=ProfileFactory(), progress=80,
+                       most_recent_trophy_date=timezone.now())
+    ProfileGameFactory(game=game, profile=ProfileFactory(), progress=0, most_recent_trophy_date=None)
+
+    default = client.get(_url(game)).content.decode()
+    show_all = client.get(_url(game, earners=0)).content.decode()
+
+    assert default.count('gd-lb__row') == 1                 # 0% owner hidden by default
+    assert show_all.count('gd-lb__row') == 2
+
+
+def test_registered_filter_hides_synced_only_profiles(client):
+    game = GameFactory()
+    ProfileGameFactory(game=game, profile=ProfileFactory(), progress=80,
+                       most_recent_trophy_date=timezone.now())
+    ProfileGameFactory(game=game, profile=ProfileFactory(user=None), progress=90,
+                       most_recent_trophy_date=timezone.now())
+
+    assert client.get(_url(game)).content.decode().count('gd-lb__row') == 2
+    assert client.get(_url(game, registered=1)).content.decode().count('gd-lb__row') == 1
+
+
+def test_invert_reverses_the_visible_order(client):
+    game, rows = _board(4)                                   # progress 100, 99, 98, 97
+    order = [reverse('profile_detail', args=[r.profile.psn_username]) for r in rows]
+
+    forward = client.get(_url(game)).content.decode()
+    inverted = client.get(_url(game, invert=1)).content.decode()
+
+    assert forward.index(order[0]) < forward.index(order[-1])    # best first
+    assert inverted.index(order[-1]) < inverted.index(order[0])  # worst first
+
+
+def test_invert_keeps_ranks_canonical(client):
+    """The top row inverted is the WORST player, but still labeled with its canonical (highest) rank."""
+    game, _ = _board(5)
+
+    body = client.get(_url(game, invert=1)).content.decode()
+    first_rank = body.split('data-lb-rank="')[1].split('"')[0]
+
+    assert first_rank == '5'                                 # counts down from the bottom
+
+
+def test_jump_to_typed_rank_windows_on_that_position(client):
+    game, _ = _board(30)
+
+    body = client.get(_url(game, rank=20)).content.decode()
+
+    assert 'gd-lb__head' not in body                         # rows only
+    assert 'data-lb-rank="16"' in body                       # opens a few places above 20
+    assert 'data-lb-rank="20"' in body
+
+
+def test_inverted_numbering_continues_correctly_across_a_page(client):
+    """Inverted page 1 starts at the highest rank and counts DOWN; the next page must continue the count."""
+    game, _ = _board(30)                                    # PAGE_SIZE is 25
+
+    first = client.get(_url(game, invert=1)).content.decode()
+    assert first.split('data-lb-rank="')[1].split('"')[0] == '30'   # worst player first
+    marker_from = first.split('data-lb-from="')[1].split('"')[0]
+    cursor = first.split('data-lb-next="')[1].split('"')[0]
+    assert marker_from == '5'                               # 30 - 25 rows
+
+    second = client.get(_url(game, invert=1, after=cursor, **{'from': marker_from})).content.decode()
+    assert second.split('data-lb-rank="')[1].split('"')[0] == '5'   # continues down
+    assert 'data-lb-rank="1"' in second                    # to the top of the board
+
+
+def test_jump_to_out_of_range_rank_clamps(client):
+    game, _ = _board(8)
+
+    body = client.get(_url(game, rank=9999)).content.decode()
+
+    assert 'data-lb-rank="8"' in body                        # clamped to the last rank
+    assert 'gd-lb__row' in body
 
 
 # --- wiring into the page ----------------------------------------------------

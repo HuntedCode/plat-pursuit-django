@@ -1,12 +1,17 @@
-"""Game leaderboard panel (the Leaderboard tab on game detail).
+"""Game leaderboard panel (the Ranks tab on game detail).
 
 Served as an HTML partial rather than JSON because the panel is lazy-loaded: it is deliberately NOT
 server-rendered with the rest of the page, since it is the only panel whose cost scales with a game's
 popularity and most visitors arrive from search wanting trophy info, never opening it.
 
-Two response shapes from one endpoint:
-  - no ?after=  -> the whole panel (header + first page + the viewer's own standing)
-  - ?after=...  -> just the next page of rows, for the infinite scroller to append
+Response shapes from one endpoint (all honour the BoardOptions in the query string):
+  - no cursor/jump  -> the whole panel (controls + header + first page + the viewer's own standing)
+  - ?after=&from=   -> the next keyset page of rows, for the infinite scroller to append
+  - ?around=me      -> a window centred on the viewer (jump to my rank), rows only
+  - ?rank=N         -> a window centred on canonical rank N (typed jump), rows only
+
+Rows are numbered from `start_rank` stepping by +1 (forward) or -1 (inverted); ranks stay canonical (from
+the top) either way, so an inverted board simply counts down.
 """
 import logging
 
@@ -23,51 +28,53 @@ PANEL_TEMPLATE = 'trophies/partials/game_detail/_leaderboard_panel.html'
 
 
 class GameLeaderboardView(View):
-    """One keyset page of a game's leaderboard, as HTML."""
+    """One page/window of a game's leaderboard, as HTML."""
 
     def get(self, request, np_communication_id):
         game = get_object_or_404(Game, np_communication_id=np_communication_id)
-        cursor = request.GET.get('after')
-        # Resolved for EVERY shape, not just the panel: the rows partial needs it to mark the viewer's
-        # own row, and without it appended pages would silently lose the highlight.
+        opts = svc.BoardOptions.from_request(request)
         profile = self._viewer_profile(request)
+        step = -1 if opts.invert else 1
 
-        # "Jump to my rank": a window centred on the viewer, replacing the list. Paging forward until we
-        # reach someone ranked 900th would be absurd, so the server opens the window directly.
-        if request.GET.get('around') == 'me':
-            window = svc.page_around(game, profile)
+        # Jump to the viewer, or to a typed rank -> a window, rows only.
+        if request.GET.get('around') == 'me' or request.GET.get('rank') is not None:
+            if request.GET.get('around') == 'me':
+                rank = svc.rank_for(game, profile, opts)
+                if rank is None:                       # filtered out / not an owner -> nothing to jump to
+                    return self._rows(request, game, opts, [], None, None, step, profile)
+            else:
+                rank = self._int(request.GET.get('rank'), 1)
+            window = svc.page_at_rank(game, opts, rank)
             if window is None:
-                return render(request, ROWS_TEMPLATE,
-                              {'game': game, 'rows': [], 'next_cursor': None, 'viewer_profile': profile})
-            rows, next_cursor, start_rank = window
-            return render(request, ROWS_TEMPLATE, {
-                'game': game,
-                'rows': self._decorate(rows, start_rank),
-                'next_cursor': next_cursor,
-                'viewer_profile': profile,
-            })
+                return self._rows(request, game, opts, [], None, None, step, profile)
+            rows, next_cursor, start_rank, _total = window
+            return self._rows(request, game, opts, rows, next_cursor, start_rank, step, profile)
 
-        rows, next_cursor = svc.page(game, cursor=cursor)
+        # Keyset continuation -> rows only, numbered from the caller-supplied rank.
+        cursor = request.GET.get('after')
+        if cursor:
+            rows, next_cursor = svc.page(game, opts, cursor=cursor)
+            start_rank = self._int(request.GET.get('from'), 1)
+            return self._rows(request, game, opts, rows, next_cursor, start_rank, step, profile)
+
+        # Full panel.
+        rows, next_cursor = svc.page(game, opts)
+        total = svc.board_size(game, opts)
+        start_rank = total if opts.invert else 1
+        viewer_rank = svc.rank_for(game, profile, opts)
         context = {
             'game': game,
-            'rows': self._decorate(rows, self._start_rank(request)),
-            'next_cursor': next_cursor,
-            'viewer_profile': profile,
-        }
-
-        # Continuation: rows only. The scroller appends these, so anything else would duplicate chrome.
-        if cursor:
-            return render(request, ROWS_TEMPLATE, context)
-
-        viewer_rank = svc.rank_for(game, profile)
-        context.update({
-            'board_size': svc.board_size(game),
+            'opts': opts,
+            'board_size': total,
             'viewer_rank': viewer_rank,
-            # Only pin a self-row when they're deep enough to be off the first page; otherwise their
-            # highlighted row is already visible and a duplicate would be noise.
-            'viewer_offscreen': bool(viewer_rank and viewer_rank > len(rows)),
-        })
+            'viewer_profile': profile,
+            # The self-row renders whenever the viewer is ranked; the JS shows it only while their real
+            # row is off screen, so it works whether or not they're on the first page.
+            **self._rows_ctx(rows, next_cursor, start_rank, step, profile),
+        }
         return render(request, PANEL_TEMPLATE, context)
+
+    # -- helpers ---------------------------------------------------------
 
     @staticmethod
     def _viewer_profile(request):
@@ -77,21 +84,25 @@ class GameLeaderboardView(View):
         return profile if profile and profile.is_linked else None
 
     @staticmethod
-    def _start_rank(request):
-        """Rank of this page's first row, supplied by the scroller as it appends.
-
-        Display only. Deriving it server-side would mean an O(rank) count on every page fetch, and the
-        worst a tampered value can do is show that one viewer wrong numbers on their own screen.
-        """
+    def _int(raw, default, lo=1, hi=10_000_000):
         try:
-            return max(1, min(int(request.GET.get('from', 1)), 10_000_000))
+            return max(lo, min(int(raw), hi))
         except (TypeError, ValueError):
-            return 1
+            return default
 
     @staticmethod
-    def _decorate(rows, start_rank):
-        """Attach rank + the cursor each row would produce, so the template doesn't re-derive either."""
-        for offset, row in enumerate(rows):
-            row.rank = start_rank + offset
+    def _rows_ctx(rows, next_cursor, start_rank, step, profile):
+        """Number the rows and derive the marker the scroller needs for the next page."""
+        for i, row in enumerate(rows):
+            row.rank = start_rank + i * step
             row.cursor = svc.encode_cursor(row)
-        return rows
+        return {
+            'rows': rows,
+            'next_cursor': next_cursor,
+            'next_from': (start_rank + len(rows) * step) if rows else None,
+            'viewer_profile': profile,
+        }
+
+    def _rows(self, request, game, opts, rows, next_cursor, start_rank, step, profile):
+        ctx = {'game': game, 'opts': opts, **self._rows_ctx(rows, next_cursor, start_rank, step, profile)}
+        return render(request, ROWS_TEMPLATE, ctx)

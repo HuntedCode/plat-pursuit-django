@@ -1,13 +1,39 @@
 {% comment %} The Leaderboard panel, fetched on first activation of the tab (never server-rendered with
 the page -- it is the only panel whose cost scales with a game's popularity, and most visitors never
-open it).
+open it). Re-fetched whole whenever a control changes, so the controls reflect the active BoardOptions.
 
 Ranked by completion, ties broken by who got there first, so completers sit at the top ordered by when
-they finished and everyone else follows by how close they are. The count is the BOARD size, not
-Game.played_count: that counts hidden rows too, and the header would disagree with the list.
+they finished and everyone else follows by how close they are. The count is the BOARD size (filtered),
+not Game.played_count -- that counts hidden rows and ignores filters, so it would disagree with the list.
 {% endcomment %}
 {% load humanize %}
 <div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}">
+
+    {% comment %} Controls always render (even over an empty filtered board) so a too-tight filter can be
+    relaxed. Each toggle carries its state in aria-pressed; the JS reads that, rebuilds the query, and
+    re-fetches the panel. {% endcomment %}
+    <div class="gd-lb__toolbar">
+        <div class="gd-lb__filters" role="group" aria-label="Leaderboard filters">
+            <button type="button" class="gd-lb__opt" data-lb-opt="earners" aria-pressed="{% if opts.only_earners %}true{% else %}false{% endif %}" title="Hide owners who haven't earned a trophy yet">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                <span>Started</span>
+            </button>
+            <button type="button" class="gd-lb__opt" data-lb-opt="registered" aria-pressed="{% if opts.registered_only %}true{% else %}false{% endif %}" title="Only players with a Platinum Pursuit account">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m19 8 2 2 4-4"/></svg>
+                <span>Members</span>
+            </button>
+            <button type="button" class="gd-lb__opt" data-lb-opt="invert" aria-pressed="{% if opts.invert %}true{% else %}false{% endif %}" title="Show the board bottom-first">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M11 4h10"/><path d="M11 8h7"/><path d="M11 12h4"/></svg>
+                <span>Invert</span>
+            </button>
+        </div>
+        <form class="gd-lb__rankjump" data-lb-rankform>
+            <input type="number" min="1" inputmode="numeric" class="gd-lb__rankinput" data-lb-rankinput placeholder="Rank #" aria-label="Jump to rank" />
+            <button type="submit" class="gd-lb__rankgo" aria-label="Go to rank">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </button>
+        </form>
+    </div>
 
     {% if rows %}
     <div class="gd-lb__head">
@@ -27,10 +53,11 @@ Game.played_count: that counts hidden rows too, and the header would disagree wi
         {% include 'trophies/partials/game_detail/_leaderboard_rows.html' %}
     </ol>
 
-    {% comment %} Pinned self-row: only when the viewer sits below the first page, so it never duplicates
-    a row already on screen. JS hides it while their real row is in view. {% endcomment %}
-    {% if viewer_offscreen %}
-    <div class="gd-lb__self" data-lb-self hidden>
+    {% comment %} Pinned self-row: rendered whenever the viewer is on the board, hidden by default. The JS
+    shows it only while the viewer's real row is off screen (so it never duplicates a visible row) and
+    flips it to the top or bottom edge depending on which way the viewer's place lies. {% endcomment %}
+    {% if viewer_rank %}
+    <div class="gd-lb__self gd-lb__self--bottom" data-lb-self hidden>
         <span class="gd-lb__rank">{{ viewer_rank|intcomma }}</span>
         <span class="gd-lb__who">
             <span class="gd-lb__av">
@@ -45,8 +72,13 @@ Game.played_count: that counts hidden rows too, and the header would disagree wi
     {% else %}
     <div class="gd-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+        {% if opts.only_earners or opts.registered_only %}
+        <p class="gd-empty__title">No hunters match</p>
+        <p class="gd-empty__hint">No one fits these filters yet. Turn off &ldquo;Started&rdquo; or &ldquo;Members&rdquo; to see everyone who owns it.</p>
+        {% else %}
         <p class="gd-empty__title">No hunters yet</p>
         <p class="gd-empty__hint">Nobody tracked on Platinum Pursuit has played this one. Be the first and you&rsquo;ll top the board.</p>
+        {% endif %}
     </div>
     {% endif %}
 
