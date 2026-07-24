@@ -63,7 +63,8 @@ and discarded 458,561 rows to return 20. If a plan ever shows `Incremental Sort`
 **No Redis.** The badge leaderboards live in Redis sorted sets because their score is an expensive
 aggregation over `EarnedTrophy`. This board's score is two stored columns on one indexed table, so a
 cache layer would add a second source of truth to accelerate something already faster than the network
-hop. Re-check with `python manage.py measure_leaderboard --explain` before revisiting.
+hop. Re-check with `python manage.py measure_leaderboard --explain` before revisiting. (The one exception
+is a single mega-board of millions; see [Scaling to huge boards](#scaling-to-huge-boards-when-the-time-comes).)
 
 ### Virtualized, so scroll position == rank
 
@@ -88,6 +89,42 @@ even the deepest window is single-digit ms on the composite index.
 
 ---
 
+## Scaling to huge boards (when the time comes)
+
+Today the biggest board is ~1,400 and everything here is comfortable. This section records where the current
+design has ceilings and what to change when a board actually approaches one, so the work is not rediscovered
+under pressure. For context, our reference competitor tracks ~2M players on a single game (GTA V).
+
+**The load-bearing rule: never store a dense per-row `rank`.** Rank is volatile -- one new syncer landing
+mid-board shifts every rank below it, so a materialized integer rank would fire an **O(n) write cascade on
+sync**, the hottest path we have. We deliberately compute rank on demand (`rank_for`), only ever for the
+viewer plus a few jump targets, never for every row. That is why there is no cascade today. The scale plan
+**keeps rank a read** and makes that read cheap on the few boards that need it; it does not materialize rank.
+
+Everything below is **additive and local to the board that needs it** (frontend or query only). None of it
+changes how rank is stored, so there is no migration risk in deferring: when a board crosses a threshold,
+attach the matching fix to that board. The long tail of small boards stays exactly as it is.
+
+| Ceiling | What breaks | Roughly when | Fix |
+|---------|-------------|--------------|-----|
+| **The full-height spacer** | Browsers cap element height (~17.9M px Firefox, ~33.5M px Chrome). At 44px/row that is a wall near **~400K rows** where the board's bottom becomes unreachable | board > ~400K | Frontend only: a **scaled / segmented scrollbar** (non-linear pixel mapping), or reframe to **Top-N + Around-You** windows |
+| **`board_size` COUNT** | A filtered COUNT per panel load / control change; ~100-500ms at millions | board > ~500K | Cache the count (short TTL); it need not be exact |
+| **`rank_for`, viewer's deep rank** | O(rank) count; ~1.4ms at rank 1,400, hundreds of ms at rank 1M+ | deep viewer on board > ~500K | A **progress-bucket histogram**: rank ~= prefix-sum of higher buckets + a bounded in-bucket count. O(1) to maintain (bump one counter on a progress change), no cascade |
+| **Deep `OFFSET` reads** | `OFFSET` scans and discards the skipped rows; single-digit ms shallow, ~100-300ms at offset ~1M | jump/scroll deeper than ~100K on a huge board | **Keyset/seek** the range (seek the sort tuple) instead of OFFSET; O(log n) at any depth |
+
+**The mega-board accelerator (Redis).** For a GTA-V-class board (millions), the cleanest single fix is a
+**per-hot-board Redis sorted set**: `ZADD` on sync (O(log n), no cascade), `ZREVRANK` for rank, `ZRANGE` for
+a window. This is how game leaderboards do millions, and we already run live Redis sorted sets for the badge
+leaderboards. The catch is memory (a 2M-member ZSET is ~150MB), so it attaches to the **handful of huge
+boards only**, not every game -- the long tail stays on the DB-compute path. The progress-bucket histogram
+is the pure-DB alternative when we would rather not hold a board resident in Redis.
+
+**Rejected: denormalizing rank into a column** (the cascade above). The Phase 2 `ProfileTrophyGroup` denorm
+stores per-group **standings** (progress + dates), from which rank is still *computed* -- it does not store
+rank itself, and must not.
+
+---
+
 ## Endpoint
 
 `GET /games/<np_communication_id>/leaderboard/` - **HTML**, not JSON, and public.
@@ -98,17 +135,20 @@ Three shapes from one URL (all honour the view options below):
 |-------|---------|---------|
 | *(none)* | Full panel: controls, header, the viewer's standing, `data-lb-total` (spacer size), and the first window | First activation of the tab / a control change |
 | `?range=<display-pos>&from=<canonical-rank>&count=<n>` | Rows only, positioned by the client | A virtual window as the list scrolls |
-| `?suggest=<q>` | **JSON** `{players: [{display, username, avatar, rank, progress, url}]}` | Search typeahead |
+| `?suggest=<q>` | **JSON** `{players: [{display, username, avatar, rank, progress, url}]}` | Search typeahead (by name) |
+| `?at=<rank>` | **JSON**, same shape, the single hunter at that canonical rank (or `[]` past the board) | Number typeahead (rank preview) |
 
 `range` is a 1-indexed display position; `from` is the canonical rank of the window's first row, which the
 client derives from the position + the `total` it already holds -- so a range fetch costs no COUNT. Ranks
 stay canonical (from the top); an inverted board just counts down.
 
-The toolbar's search field is one input for both: a bare number **jumps to that rank** (a client-side
-scroll), text runs the `?suggest=` typeahead over the hunters on this board (scoped to the active filters,
-so a hidden/filtered player never appears) and selecting a result jumps to their rank. It reuses the shared
-`[data-search-wrap]` chrome (`PlatPursuit.wireSearchField`) and `debounce`, mirroring the navbar/browse
-search.
+The toolbar's search field is one input for both jump kinds. A bare **number previews the hunter at that
+rank** (`?at=` -> `row_at_rank`, one bounded read) so you see who you'd land on before committing; text runs
+the `?suggest=` typeahead over the hunters on this board (scoped to the active filters, so a hidden/filtered
+player never appears). Selecting either result, or pressing Enter on a number, **jumps** (a client-side
+scroll to that rank's offset). The rank preview is canonical and skips the fetch when the number is past the
+board, since the client already holds `total`. It reuses the shared `[data-search-wrap]` chrome
+(`PlatPursuit.wireSearchField`) and `debounce`, mirroring the navbar/browse search.
 
 **The minibar** (the sticky bar that surfaces on scroll) carries the SAME search field while the Ranks tab
 is active (`data-mb-only="leaderboard"`), a Filters button that reaches the toolbar toggles, and a
