@@ -94,6 +94,13 @@ The toolbar's search field is one input for both: a bare number jumps to that ra
 player never appears) and selecting a result jumps to their rank. It reuses the shared `[data-search-wrap]`
 chrome (`PlatPursuit.wireSearchField`) and `debounce`, mirroring the navbar/browse search.
 
+**The minibar** (the sticky bar that surfaces on scroll) carries the SAME search field while the Ranks tab
+is active (`data-mb-only="leaderboard"`), plus a Filters button that reaches the toolbar toggles. The
+search works in place -- the whole point while scrolled deep is finding a position without scrolling back
+up. One `lbWireSearch(input, drop, form, panel)` drives both fields; the minibar field is wired once to the
+persistent leaderboard panel element, so it reads the panel's live toggle state and jumps the board below.
+No jump-to-me is duplicated here -- the directional sticky self-row already covers that.
+
 ### View options (BoardOptions)
 
 Parsed from the query string, carried by the JS on every fetch so the view stays consistent:

@@ -440,6 +440,9 @@ def test_detail_page_offers_the_tab_but_does_not_render_the_board(client):
     assert 'data-lb-src' in body                   # and the panel knows where to fetch
     assert 'gd-lb__row' not in body                # but no rows shipped with the page
     assert 'hunters on the board' not in body
+    # The minibar carries the leaderboard search + filters reach (shown while the Ranks tab is active).
+    assert 'data-lb-mb-find' in body
+    assert 'data-lb-mb-filters' in body
 
 
 def test_detail_page_renders_with_the_leaderboard_deep_link(client):

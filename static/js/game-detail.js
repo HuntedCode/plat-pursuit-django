@@ -158,14 +158,19 @@ document.addEventListener('DOMContentLoaded', () => {
         lbWireFind(panel);
     }
 
-    // The search field: one input for both jumps. A bare number jumps to that rank; text runs a debounced
-    // typeahead over the hunters on this board (?suggest= -> JSON) and selecting one jumps to their rank.
-    // Reuses PlatPursuit.wireSearchField (clear button + spinner) and debounce. Re-wired per panel fetch;
-    // its listeners live on the replaced input/dropdown, so they die with the old DOM (no leak).
+    // The toolbar search field, wired per panel fetch (its listeners live on the replaced DOM, so they die
+    // with it -- no leak).
     function lbWireFind(panel) {
-        const input = panel.querySelector('[data-lb-find]');
-        const drop = panel.querySelector('[data-lb-suggest]');
-        const form = panel.querySelector('[data-lb-findform]');
+        lbWireSearch(panel.querySelector('[data-lb-find]'), panel.querySelector('[data-lb-suggest]'),
+                     panel.querySelector('[data-lb-findform]'), panel);
+    }
+
+    // The search behaviour, shared by the toolbar field AND the minibar field. One input for both jumps: a
+    // bare number jumps to that rank; text runs a debounced typeahead over the hunters on this board
+    // (?suggest= -> JSON) and selecting one jumps to their rank. `panel` supplies the current options
+    // (lbOptsUrl reads its toggles) and the jump target, so the minibar field drives the same board below.
+    // Reuses PlatPursuit.wireSearchField (clear button + spinner) and debounce.
+    function lbWireSearch(input, drop, form, panel) {
         if (!input || !drop || !form || !PlatPursuit.wireSearchField) return;
         const field = PlatPursuit.wireSearchField(input, { onClear: closeDrop });
         let items = [], active = -1, seq = 0;
@@ -563,6 +568,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (mbGroupJump) {
             mbGroupJump.addEventListener('change', () => { jumpToGroup(mbGroupJump.value); mbGroupJump.selectedIndex = 0; });
         }
+
+        // Leaderboard minibar controls, wired ONCE to the persistent leaderboard panel (its innerHTML swaps,
+        // but the element and its data-lb-src / current toggles persist). The panel loads lazily, but these
+        // controls are hidden until the Ranks tab is active, which loads it -- so by the time they're usable
+        // the panel exists and lbOptsUrl reads its live toggle state.
+        const lbPanel = document.getElementById('gd-view-leaderboard');
+        if (lbPanel) {
+            lbWireSearch(document.querySelector('[data-lb-mb-find]'), document.querySelector('[data-lb-mb-suggest]'),
+                         document.querySelector('[data-lb-mb-findform]'), lbPanel);
+            const mbLbFilters = document.querySelector('[data-lb-mb-filters]');
+            if (mbLbFilters) {
+                mbLbFilters.addEventListener('click', () => {
+                    const target = lbPanel.querySelector('.gd-lb__toolbar') || lbPanel;
+                    target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+                });
+            }
+        }
+
         if (PlatPursuit.StickyReveal) PlatPursuit.StickyReveal.init();
     })();
 

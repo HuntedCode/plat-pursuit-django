@@ -39,6 +39,23 @@
                     <select data-minibar-groupjump data-mb-only="trophies" class="pp-gallery__select pp-minibar__groupjump" aria-label="Jump to trophy group" hidden></select>
                     <select data-minibar-sort data-mb-only="trophies" class="pp-gallery__select pp-minibar__sort" aria-label="Sort trophies"></select>
                     <button type="button" class="pp-minibar__filters" data-minibar-filters data-mb-only="trophies" aria-label="Scroll to the trophy filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span class="pp-minibar__flbl">Filters</span></button>
+
+                    {% comment %} Leaderboard controls (shown while the Ranks tab is active). The in-place
+                    rank/hunter search is the point -- find a position without scrolling back to the toolbar.
+                    Same typeahead wiring as the toolbar field, pointed at the persistent leaderboard panel.
+                    Filters reaches the toolbar toggles. {% endcomment %}
+                    <form class="gd-lb__find gd-lb__find--mb" data-mb-only="leaderboard" data-search-wrap data-lb-mb-findform role="search">
+                        <svg class="gd-lb__findicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        <input type="search" class="gd-lb__findinput" data-lb-mb-find autocomplete="off" spellcheck="false"
+                               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="gd-lb-mb-suggest"
+                               placeholder="Rank # or hunter" aria-label="Jump to a rank, or search a hunter" />
+                        <button type="button" class="pp-search-clear" data-search-clear aria-label="Clear">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                        </button>
+                        <span class="pp-search-spin" aria-hidden="true"></span>
+                        <div class="gd-lb__suggest" id="gd-lb-mb-suggest" data-lb-mb-suggest role="listbox" hidden></div>
+                    </form>
+                    <button type="button" class="pp-minibar__filters" data-lb-mb-filters data-mb-only="leaderboard" aria-label="Scroll to the leaderboard filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span class="pp-minibar__flbl">Filters</span></button>
                 </div>
             </div>
         </div>

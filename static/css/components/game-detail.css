@@ -24,6 +24,14 @@
 /* Defensive: the bar is position:fixed, so any control overflow would add page scroll width. Clip contains it. */
 .gd-minibar { overflow-x: clip; }
 .gd-minibar:not([data-mb-active="trophies"]) [data-mb-only="trophies"] { display: none; }
+.gd-minibar:not([data-mb-active="leaderboard"]) [data-mb-only="leaderboard"] { display: none; }
+
+/* Minibar-compact variant of the rank/hunter search: shorter, sized to the 30px minibar control row. */
+.gd-lb__find--mb { flex: 0 1 11rem; min-width: 7rem; }
+.gd-lb__find--mb .gd-lb__findinput { padding: 5px 10px 5px 30px; background: var(--pp-bg-2); }
+.gd-lb__find--mb .gd-lb__findicon { left: 9px; width: 14px; height: 14px; }
+/* The minibar sits above the panel, so let the dropdown be a touch wider than the compact field. */
+.gd-lb__find--mb .gd-lb__suggest { min-width: 15rem; }
 /* Both minibar selects use the shared .pp-gallery__select look (matches Browse Games). The group-jump keeps
    the compact minibar sizing but stays visible on mobile (unlike the sort, which hides < 768px). */
 .gd-minibar .pp-minibar__groupjump { height: 30px; font-size: 0.75rem; max-width: 150px; }
