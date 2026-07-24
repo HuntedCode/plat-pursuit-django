@@ -181,6 +181,66 @@ def test_jump_window_is_harmless_for_someone_not_on_the_board(client):
     assert 'gd-lb__row' not in response.content.decode()
 
 
+def test_rows_show_the_players_trophy_haul(client):
+    """Per-tier counts come free off the row's earned_trophies JSON -- no extra query."""
+    game = GameFactory()
+    ProfileGameFactory(game=game, profile=ProfileFactory(), progress=100,
+                       most_recent_trophy_date=timezone.now(),
+                       earned_trophies={'bronze': 30, 'silver': 8, 'gold': 3, 'platinum': 1})
+
+    body = client.get(_url(game)).content.decode()
+
+    assert 'gd-lb__trophies' in body
+    assert 'gd-gcount--platinum' in body
+    assert 'Bronze: 30' in body
+    assert 'Gold: 3' in body
+
+
+def test_rows_omit_tiers_the_player_has_not_earned(client):
+    """A player with no platinum shows no platinum dot -- so the plat dot appearing IS the finished signal."""
+    game = GameFactory()
+    ProfileGameFactory(game=game, profile=ProfileFactory(), progress=60,
+                       most_recent_trophy_date=timezone.now(),
+                       earned_trophies={'bronze': 12, 'silver': 2, 'gold': 0, 'platinum': 0})
+
+    body = client.get(_url(game)).content.decode()
+
+    assert 'gd-gcount--bronze' in body
+    assert 'gd-gcount--platinum' not in body
+    assert 'gd-gcount--gold' not in body
+
+
+def test_rows_show_the_tiebreaker_time_under_the_date(client):
+    """Two players at the same progress are ranked by exact time, so the time must be visible or the
+    ordering looks arbitrary."""
+    game = GameFactory()
+    ProfileGameFactory(game=game, profile=ProfileFactory(), progress=100,
+                       most_recent_trophy_date=timezone.now().replace(hour=8, minute=15))
+    ProfileGameFactory(game=game, profile=ProfileFactory(), progress=100,
+                       most_recent_trophy_date=timezone.now().replace(hour=20, minute=42))
+
+    body = client.get(_url(game)).content.decode()
+
+    assert body.count('gd-lb__time') == 2       # a time cell on each row
+    assert body.count('gd-lb__date') == 2
+    assert ':15' in body and ':42' in body      # the two distinct minutes both render
+
+
+def test_zero_trophy_owner_renders_cleanly(client):
+    """An owner synced with the empty-dict default and no trophy date must not crash or print zeros --
+    no tier dots, and the date cell falls back to a dash."""
+    game = GameFactory()
+    ProfileGameFactory(game=game, profile=ProfileFactory(), progress=0,
+                       most_recent_trophy_date=None, earned_trophies={})
+
+    body = client.get(_url(game)).content.decode()
+
+    assert body.count('gd-lb__row') == 1
+    assert 'gd-gcount' not in body       # no tier dots for an empty haul
+    assert 'gd-lb__time' not in body     # no time span when there's no date
+    assert '&mdash;' in body or '—' in body
+
+
 def test_hidden_players_are_absent_from_the_endpoint(client):
     game, _ = _board(2)
     ProfileGameFactory(game=game, profile=ProfileFactory(), progress=100, user_hidden=True)

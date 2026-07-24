@@ -5,7 +5,7 @@ the first page.
 Each row carries its own cursor so the scroller never has to derive one; the trailing .gd-lb__more marker
 carries the cursor for the NEXT page and is removed by the JS once consumed. No marker == last page.
 {% endcomment %}
-{% load humanize %}
+{% load humanize custom_filters %}
 {% for row in rows %}
 <li class="gd-lb__row{% if viewer_profile and row.profile_id == viewer_profile.id %} gd-lb__row--you{% endif %}" data-lb-cursor="{{ row.cursor }}" data-lb-rank="{{ row.rank }}">
     <span class="gd-lb__rank">{{ row.rank|intcomma }}</span>
@@ -15,10 +15,22 @@ carries the cursor for the NEXT page and is removed by the JS once consumed. No 
         </span>
         <span class="gd-lb__name">{{ row.profile.display_psn_username|default:row.profile.psn_username }}</span>
     </a>
+    {% comment %} Per-tier haul from the row's own earned_trophies JSON (written by sync) -- zero extra
+    queries. Reuses the shared .gd-gcount tier dots. Zero tiers are omitted, so the platinum dot appearing
+    is itself the signal that this hunter finished. {% endcomment %}
+    <span class="gd-lb__trophies">
+        {% if row.earned_trophies.platinum %}<span class="gd-gcount gd-gcount--platinum" title="Platinum: {{ row.earned_trophies.platinum }}"><span class="gd-gcount__dot" aria-hidden="true"></span><span class="gd-gcount__n">{{ row.earned_trophies.platinum }}</span></span>{% endif %}
+        {% if row.earned_trophies.gold %}<span class="gd-gcount gd-gcount--gold" title="Gold: {{ row.earned_trophies.gold }}"><span class="gd-gcount__dot" aria-hidden="true"></span><span class="gd-gcount__n">{{ row.earned_trophies.gold }}</span></span>{% endif %}
+        {% if row.earned_trophies.silver %}<span class="gd-gcount gd-gcount--silver" title="Silver: {{ row.earned_trophies.silver }}"><span class="gd-gcount__dot" aria-hidden="true"></span><span class="gd-gcount__n">{{ row.earned_trophies.silver }}</span></span>{% endif %}
+        {% if row.earned_trophies.bronze %}<span class="gd-gcount gd-gcount--bronze" title="Bronze: {{ row.earned_trophies.bronze }}"><span class="gd-gcount__dot" aria-hidden="true"></span><span class="gd-gcount__n">{{ row.earned_trophies.bronze }}</span></span>{% endif %}
+    </span>
     <span class="pp-horizon pp-horizon__track gd-lb__bar" style="--horizon-h: 5px; --horizon-progress: {{ row.progress }}%;{% if row.progress == 100 %} --horizon-accent: var(--color-trophy-platinum);{% endif %}"><span class="pp-horizon__fill"></span></span>
     <span class="gd-lb__pct">{{ row.progress }}%</span>
+    {% comment %} Date over time: the timestamp is the tiebreaker between players at the same progress, so
+    the time makes an apparent tie legible. All rows render in the viewer's timezone (activated by
+    middleware), so they're directly comparable; format_time respects the viewer's 12/24-hour preference. {% endcomment %}
     <span class="gd-lb__when">
-        {% if row.most_recent_trophy_date %}{{ row.most_recent_trophy_date|date:"M j, Y" }}{% else %}&mdash;{% endif %}
+        {% if row.most_recent_trophy_date %}<span class="gd-lb__date">{{ row.most_recent_trophy_date|date:"M j, Y" }}</span><span class="gd-lb__time">{{ row.most_recent_trophy_date|format_time }}</span>{% else %}&mdash;{% endif %}
     </span>
 </li>
 {% endfor %}

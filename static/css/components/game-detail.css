@@ -875,13 +875,49 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-lb__jump:hover { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); }
 .gd-lb__jump:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
-.gd-lb__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+/* The list is a card: it frames the rows as one object, so they read as a ranking table rather than a
+   stack of floating chips. Rows lose their own background (chip-in-card is busy) and separate by a
+   hairline instead. */
+.gd-lb__list { list-style: none; margin: 0; padding: 4px; display: flex; flex-direction: column; background: color-mix(in oklab, var(--pp-bg-1) 65%, transparent); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); }
 
-/* Columns: rank | who | bar | % | date. The bar and date drop on mobile -- the percentage carries the
-   same information in less room, and a date column at 375px squeezes the name to nothing. */
-.gd-lb__row { display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--pp-radius-sm); background: color-mix(in oklab, var(--pp-bg-1) 55%, transparent); border: 1px solid transparent; transition: background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
-.gd-lb__row:hover { background: var(--pp-bg-2); border-color: var(--pp-border); }
-@media (min-width: 768px) { .gd-lb__row { grid-template-columns: 3rem minmax(0, 1fr) 7rem 3rem 6.5rem; } }
+/* MOBILE: a two-line card. Cramming rank|name|trophies|%|date into 375px left only name + % legible, so
+   the row stacks -- primary line (rank, name, %) with a secondary metadata line beneath it (trophy haul +
+   date/time). rank spans both rows down the left.
+   md+: collapse to a single-line table. `grid-template-areas: none` makes the cells' area names resolve
+   to auto, so they flow in DOM order (rank, who, trophies, bar, pct, when). The trophy column is then a
+   FIXED width so one player's platinum dot can't shove the % and date columns out of alignment. */
+.gd-lb__row {
+    display: grid;
+    grid-template-columns: 2.25rem minmax(0, 1fr) auto;
+    grid-template-areas: "rank who  pct" "rank meta meta";
+    align-items: center; column-gap: 10px; row-gap: 3px;
+    padding: 8px; border-radius: var(--pp-radius-sm);
+    transition: background var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-lb__row:hover { background: var(--pp-bg-2); }
+.gd-lb__row + .gd-lb__row { box-shadow: 0 -1px 0 color-mix(in oklab, var(--pp-border) 60%, transparent); }
+@media (min-width: 768px) { .gd-lb__row { grid-template-columns: 3rem minmax(0, 1fr) 9rem 3rem 6.5rem; grid-template-areas: none; row-gap: 0; } }
+@media (min-width: 1024px) { .gd-lb__row { grid-template-columns: 3rem minmax(0, 1fr) 9rem 7rem 3rem 6.5rem; } }
+
+/* Cell placement. On mobile the metadata line is ONE spanning area holding the trophy haul (pinned left)
+   and date/time (pinned right); keeping pct in its own narrow row-1 column stops the wide date from
+   coupling to pct and squeezing the name. At md+ (areas:none) the cells resolve to auto and flow in DOM
+   order into the linear table. */
+.gd-lb__rank { grid-area: rank; }
+.gd-lb__who { grid-area: who; }
+/* max-width reserves the right side of the shared meta cell for the date/time, so a big trophy haul
+   (a completionist on a large game, on a narrow phone) clips its tail instead of colliding with the date.
+   Reset at md+ where trophies gets its own 9rem column. */
+.gd-lb__trophies { grid-area: meta; justify-self: start; max-width: calc(100% - 9.5rem); display: flex; align-items: center; gap: 9px; overflow: hidden; }
+.gd-lb__trophies .gd-gcount__n { font-size: 0.74rem; }
+.gd-lb__bar { grid-area: bar; }
+.gd-lb__pct { grid-area: pct; }
+.gd-lb__when { grid-area: meta; justify-self: end; }
+@media (min-width: 768px) {
+    .gd-lb__rank, .gd-lb__who, .gd-lb__bar, .gd-lb__pct { grid-area: auto; }
+    .gd-lb__trophies { grid-area: auto; justify-self: auto; max-width: none; }
+    .gd-lb__when { grid-area: auto; justify-self: auto; }
+}
 
 .gd-lb__rank { font-size: 0.78rem; font-weight: 800; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; text-align: right; }
 .gd-lb__row:nth-child(1) .gd-lb__rank { color: var(--color-trophy-platinum); }
@@ -894,10 +930,22 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-lb__name { font-size: 0.82rem; font-weight: 600; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gd-lb__who:hover .gd-lb__name { color: var(--pp-primary); }
 
+/* Bar only at lg (the trophy column already carries visual weight at md); date at md. */
 .gd-lb__bar { display: none; --horizon-accent: var(--pp-primary); }
 .gd-lb__pct { font-size: 0.78rem; font-weight: 700; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; text-align: right; }
-.gd-lb__when { display: none; font-size: 0.7rem; color: var(--pp-text-mute); text-align: right; font-variant-numeric: tabular-nums; }
-@media (min-width: 768px) { .gd-lb__bar, .gd-lb__when { display: block; } }
+/* The time is the visible tiebreaker. On mobile it sits inline after the date on the metadata line (with
+   a middot) to keep rows to two lines; at md+ it stacks under the date in the narrow date column. */
+.gd-lb__when { display: flex; align-items: baseline; gap: 5px; text-align: right; font-variant-numeric: tabular-nums; }
+.gd-lb__date { font-size: 0.68rem; color: var(--pp-text-mute); }
+.gd-lb__time { font-size: 0.66rem; color: var(--pp-text-dim); opacity: 0.8; }
+.gd-lb__time::before { content: "\00b7"; margin-right: 5px; color: var(--pp-text-mute); opacity: 0.6; }
+@media (min-width: 768px) {
+    .gd-lb__when { flex-direction: column; align-items: flex-end; gap: 0; line-height: 1.25; }
+    .gd-lb__date { font-size: 0.7rem; }
+    .gd-lb__time { font-size: 0.64rem; opacity: 0.75; }
+    .gd-lb__time::before { display: none; }
+}
+@media (min-width: 1024px) { .gd-lb__bar { display: block; } }
 
 /* The viewer's own row, and the flash when they jump to it. */
 .gd-lb__row--you { background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-1)); border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); }

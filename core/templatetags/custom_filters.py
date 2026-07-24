@@ -324,6 +324,33 @@ def format_date(value, arg=None):
     return formatted
 
 @register.filter
+def format_time(value):
+    """Time-of-day only, in the viewer's timezone, respecting their 12/24-hour clock preference.
+
+    Companion to format_date for surfaces that show the date and time on separate lines (e.g. a
+    leaderboard row, where the time is the visible tiebreaker under the date). Same tz + preference
+    handling as format_date so the two read consistently.
+
+    Expects a datetime. Unlike format_date it does NOT parse date strings -- a non-datetime returns ''
+    rather than being coerced. Pass the model field, not a serialized string.
+    """
+    if not isinstance(value, datetime):
+        return ''
+
+    localized_value = value.astimezone(timezone.get_current_timezone())
+
+    use_24hr = False
+    try:
+        request = get_current_request()
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            use_24hr = getattr(request.user, 'use_24hr_clock', False)
+    except AttributeError:
+        pass
+
+    return localized_value.strftime('%H:%M' if use_24hr else '%I:%M %p')
+
+
+@register.filter
 def compact_number(value):
     """Format large numbers compactly: 1234 -> 1.2k, 25000 -> 25k, 1500000 -> 1.5M."""
     try:
