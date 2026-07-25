@@ -77,12 +77,33 @@ profile-scoped grouped aggregate; the denominator is `COUNT(Trophy)`, not `defin
 **Hidden games** are filtered at read time by the group boards via a subquery on `ProfileGame` (rare, tiny
 anti-join) rather than denormed onto the standings row -- no staleness to propagate.
 
-**The switcher.** `board_menu(game)` builds the selector (a couple of small aggregates; the panel is
+**The switcher.** `board_menu(game, active)` builds the selector (a couple of small aggregates; the panel is
 lazy-loaded): a segmented mode row (Standings / Fastest / Most Played), each present only when it has a
 board (Fastest needs a ≥2-trophy group; Most Played needs play-time data), plus a group row on DLC games.
-Single-group games (~95%) show just the mode row, or nothing when there's a single board. Each chip carries
-its full `?board=` param; clicking re-fetches the whole panel exactly like a filter toggle, and the active
-board rides on the `.gd-lb` root so every continuation fetch hits the same board.
+On the group row, **Base Game and Everything are pills but the DLCs collapse into a "DLC" dropdown** (some
+games have a lot of DLC); the dropdown button stays a static "DLC" and lights up when a DLC is active (its
+name surfaces in the title, not the button, so its width can't jump the row). Single-group games (~95%) show
+just the mode row, or nothing when there's a single board. Each chip carries its full `?board=` param;
+clicking re-fetches the whole panel exactly like a filter toggle, and the active board rides on the `.gd-lb`
+root so every continuation fetch hits the same board.
+
+- **Default board** (`default_board_param`): a fresh tab lands on the **base-game standings** for a DLC game
+  (the platinum race) and on the overall board otherwise. `Standings` and `Fastest` both prefer the base game
+  (groups sort by id, so `'default'` sorts after `'001'` -- picked explicitly).
+- **Title.** `board_menu` returns a short title for the active board ("Base Game Standings", "Fastest: Blood
+  and Wine", "Most Played"). It's the panel header (the hunter count sits under it as a subtitle) and is
+  mirrored into the minibar at desktop widths (`lbSyncMbTitle`, off `data-lb-title`).
+- **Column header.** A desktop-only header row labels the columns once (so the rows carry no per-cell labels);
+  its CSS mirrors each board's row grid + the 11px row inset, so labels sit over their columns.
+- **Row variants** (`board_kind`): standings = trophy haul + bar + % + latest-date; speed = started → elapsed
+  → finished (date over time, no labels -- the dates flank the centered elapsed); playtime = play time +
+  overall progress + last-played. The `Started` filter is hidden on speed/playtime (a no-op there), and the
+  empty-state copy is board-aware.
+- **Motion** (all reduced-motion safe, in `game-detail.js`): a **first-load skeleton** (shimmer rows) while
+  the lazy panel fetches; a **first-reveal stagger** of the on-screen rows + a **count-up** of the tally; a
+  **switch settle** (the outgoing content dims via `.is-swapping` during the fetch, the new board rises+fades
+  in) so board changes read as a transition, not a flash. Plus a soft medal-colour **glow on the top-3 ranks**
+  and a **"You" pill** on the viewer's row.
 
 ---
 
@@ -277,6 +298,13 @@ kind of thing a later "just include it" refactor would quietly undo.
 - **First paint isn't a FOUC** even though rows are `position: absolute` with no server-set `top`: the panel
   is lazy-loaded, so `innerHTML = html` and `lbVirtualize` (which sets every `top`) run in the same
   synchronous step before the browser paints.
+- **The "ghost" group row is deliberate.** On Most Played (no group row) a DLC game renders an INVISIBLE copy
+  of the group row (`gd-lb__seg--ghost`, `visibility: hidden`) so the switcher keeps its exact height and
+  switching to Most Played doesn't collapse it and jump the page. Same markup = same height, unlike a
+  `min-height` estimate.
+- **First-reveal vs switch motion** keys off `panel._lbRevealed`. The stagger + count-up run only on the
+  first reveal (grand entrance); every later load is a "switch" (dim-out + settle). The flag lives on the
+  persistent panel element, so a failed-fetch retry counts as a switch, not a re-entrance.
 
 ---
 
@@ -289,8 +317,8 @@ Remaining / deferred:
   board is the obvious target. Shipped guards are **data hygiene only** -- `completion_seconds` is null for
   non-positive / untimestamped elapsed, so a broken pair can't sort a garbage row to the top. Real outlier
   detection (vs. the game's typical completion time) is parked until it's worth the effort.
-- **Per-board control affordances.** `only_earners` is a no-op on speed/playtime boards (all complete / not a
-  completion metric); the toggle still renders. Hiding irrelevant toggles per board is a polish follow-up.
+- **Scaling to millions** is documented separately (see [Scaling to huge boards](#scaling-to-huge-boards-when-the-time-comes));
+  additive when a board actually gets big.
 
 ---
 
