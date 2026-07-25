@@ -1526,10 +1526,24 @@ function staggerReveal(o) {
     var batchCap = o.batchCap != null ? o.batchCap : 560;
     var appendCap = o.appendCap != null ? o.appendCap : 200;
     grid.classList.add(o.hideClass || 'pp-reveal');   // hides the cards until each is revealed
-    function play(el, delay) { el.classList.add('is-revealed'); o.reveal(el, delay); }
-    // Reveal cards already present in ONE synchronous DOM-order batch. DOM order == visual reading order for
-    // a row-major grid, independent of the (possibly transitional) column count during a view swap.
-    grid.querySelectorAll(sel + ':not(.is-revealed)').forEach(function (el, i) { play(el, Math.min(i * step, batchCap)); });
+    function play(el, delay) {
+        // Idempotent: a card reveals exactly once even if re-selected by a re-entrant batch (e.g. a filter
+        // swap that also fires a paired OOB afterSwap) or re-observed. `pp-revealing` is set synchronously so
+        // the guard holds within the same frame. The VISIBLE resting state (`.is-revealed` -> opacity 1) is
+        // flipped one frame LATER: a freshly created WAAPI animation doesn't apply its 0-opacity backwards
+        // fill until the next frame, so setting opacity:1 synchronously paints one full-opacity frame before
+        // the reveal takes hold -- the "flash to black" (the card shows, then the animation yanks it to 0 and
+        // fades up). Deferring keeps the base style hidden (pp-reveal) for that first paint; the running
+        // animation then masks the resting state, and at its end the backwards fill reverts to .is-revealed.
+        if (el.classList.contains('pp-revealing') || el.classList.contains('is-revealed')) { return; }
+        el.classList.add('pp-revealing');
+        o.reveal(el, delay);
+        if (window.requestAnimationFrame) { requestAnimationFrame(function () { el.classList.add('is-revealed'); }); }
+        else { el.classList.add('is-revealed'); }
+    }
+    // Reveal cards already present in ONE DOM-order batch. DOM order == visual reading order for a row-major
+    // grid, independent of the (possibly transitional) column count during a view swap.
+    grid.querySelectorAll(sel + ':not(.pp-revealing):not(.is-revealed)').forEach(function (el, i) { play(el, Math.min(i * step, batchCap)); });
     // The observer ONLY scroll-reveals infinite-scroll-appended cards (call observe() on newly-added nodes).
     var io = new IntersectionObserver(function (entries) {
         var shown = entries.filter(function (e) { return e.isIntersecting; }).map(function (e) { return e.target; });
