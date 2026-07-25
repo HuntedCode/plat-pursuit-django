@@ -885,14 +885,18 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    targets). Two-line rows on mobile are taller; the single-line table at md+ is shorter. */
 .gd-lb { display: flex; flex-direction: column; gap: 10px; --lb-row-h: 58px; }
 @media (min-width: 768px) { .gd-lb { --lb-row-h: 44px; } }
+/* The Fastest board stacks label / date / time in its Started & Finished columns, so its rows are taller
+   than the single-line standings row (desktop only -- mobile shows just the headline). */
+@media (min-width: 768px) { .gd-lb--speed { --lb-row-h: 58px; } }
 
 /* Board switcher: the segmented-switcher standard (bordered pill container, transparent chips, tinted-flat
    active). A primary mode row (Standings / Fastest / Most Played) and, on DLC games, a smaller group row
    below it. Scrolls horizontally rather than wrapping so it stays one clean line on a phone. */
-.gd-lb__boards { display: flex; flex-direction: column; gap: 6px; }
-/* Reserve the group-row line for DLC games so switching to Most Played (which has no group row) doesn't
-   collapse the switcher height and jump the page up. */
-.gd-lb__boards--multi { min-height: 4.6rem; }
+/* A thin divider under the switcher separates picking a board from viewing it (the filters + list below). */
+.gd-lb__boards { display: flex; flex-direction: column; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid color-mix(in oklab, var(--pp-border) 60%, transparent); }
+/* Most Played has no group row; a ghost copy (same markup) reserves the EXACT height so switching to it
+   never shifts the page -- unlike a min-height estimate, this can't be off. */
+.gd-lb__seg--ghost { visibility: hidden; }
 .gd-lb__seg { display: inline-flex; align-self: flex-start; max-width: 100%; gap: 2px; padding: 3px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); overflow-x: auto; scrollbar-width: none; }
 .gd-lb__seg::-webkit-scrollbar { display: none; }
 .gd-lb__segchip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 6px 13px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; cursor: pointer; color: var(--pp-text-dim); background: none; border: none; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
@@ -1083,6 +1087,8 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-lb__col { display: flex; flex-direction: column; align-items: flex-end; justify-self: end; line-height: 1.15; min-width: 0; }
 .gd-lb__collbl { font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
 .gd-lb__colval { font-size: 0.72rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The time under the date on the Fastest board -- a speedrun's start/finish matter to the minute. */
+.gd-lb__coltime { font-size: 0.64rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0.85; }
 
 /* The viewer's own row, and the flash when they jump to it. */
 .gd-lb__row--you { background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-1)); border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); }

@@ -26,12 +26,12 @@ tiebreak timestamp, normalized by the view across ProfileGame / ProfileTrophyGro
     mobile to keep one line. {% endcomment %}
     <span class="gd-lb__col gd-lb__col--start">
         <span class="gd-lb__collbl">Started</span>
-        <span class="gd-lb__colval">{% if row.started %}{{ row.started|date:"M j, Y" }}{% else %}&mdash;{% endif %}</span>
+        {% if row.started %}<span class="gd-lb__colval">{{ row.started|date:"M j, Y" }}</span><span class="gd-lb__coltime">{{ row.started|format_time }}</span>{% else %}<span class="gd-lb__colval">&mdash;</span>{% endif %}
     </span>
     <span class="gd-lb__metric gd-lb__metric--speed">{{ row.elapsed_label }}</span>
     <span class="gd-lb__col gd-lb__col--finish">
         <span class="gd-lb__collbl">Finished</span>
-        <span class="gd-lb__colval">{% if row.when %}{{ row.when|date:"M j, Y" }}{% else %}&mdash;{% endif %}</span>
+        {% if row.when %}<span class="gd-lb__colval">{{ row.when|date:"M j, Y" }}</span><span class="gd-lb__coltime">{{ row.when|format_time }}</span>{% else %}<span class="gd-lb__colval">&mdash;</span>{% endif %}
     </span>
 
     {% elif board_kind == 'playtime' %}

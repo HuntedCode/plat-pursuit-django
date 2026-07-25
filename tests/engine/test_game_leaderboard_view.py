@@ -484,9 +484,11 @@ def _ptg_row(game, gid, progress, minutes_ago, completion_seconds=None, username
     group, _ = TrophyGroup.objects.get_or_create(game=game, trophy_group_id=gid, defaults={'defined_trophies': {}})
     profile = ProfileFactory(psn_username=username) if username else ProfileFactory()
     ProfileGameFactory(game=game, profile=profile, progress=progress)   # owns the game (not hidden)
+    last = timezone.now() - timedelta(minutes=minutes_ago)
     return ProfileTrophyGroup.objects.create(
         profile=profile, trophy_group=group, progress=progress,
-        last_trophy_at=timezone.now() - timedelta(minutes=minutes_ago),
+        first_trophy_at=last - timedelta(seconds=completion_seconds or 0),
+        last_trophy_at=last,
         completion_seconds=completion_seconds,
     )
 
@@ -513,6 +515,8 @@ def test_board_param_routes_to_the_speed_board(client):
     assert body.count('data-lb-rank=') == 2                  # only the two completers (row--speed doubles a gd-lb__row count)
     assert 'gd-lb__metric--speed' in body
     assert 'gd-lb__col--start' in body and 'gd-lb__col--finish' in body   # started -> finished window
+    assert 'gd-lb__coltime' in body                          # date AND time on the start/finish columns
+    assert 'gd-lb--speed' in body                            # taller-row class for the stacked cells
     assert 'data-lb-total="2"' in body
 
 
