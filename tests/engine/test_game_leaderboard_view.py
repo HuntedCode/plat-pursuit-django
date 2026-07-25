@@ -597,6 +597,26 @@ def test_dropdown_button_shows_and_marks_the_active_dlc(client):
     assert 'gd-lb__dropbtn' in body and 'aria-pressed="true"' in body  # and reads as active
 
 
+def test_started_toggle_hidden_on_non_progress_boards(client):
+    game = GameFactory()
+    _ptg_row(game, 'default', progress=100, minutes_ago=5, completion_seconds=3600)
+
+    speed = client.get(_url(game, board='speed:default')).content.decode()
+    assert 'data-lb-opt="earners"' not in speed                # no-op on speed -> hidden
+    assert 'data-lb-opt="registered"' in speed and 'data-lb-opt="invert"' in speed   # these still apply
+
+    standings = client.get(_url(game, board='progress:all')).content.decode()
+    assert 'data-lb-opt="earners"' in standings                # kept on standings
+
+
+def test_empty_copy_is_board_aware(client):
+    game = GameFactory()
+    TrophyGroup.objects.create(game=game, trophy_group_id='default', defined_trophies={})
+
+    speed = client.get(_url(game, board='speed:default')).content.decode()   # no completers
+    assert 'No finishers yet' in speed
+
+
 def test_dlc_game_defaults_to_base_game_standings(client):
     game, _ = _board(2)
     base = TrophyGroup.objects.create(game=game, trophy_group_id='default', defined_trophies={})

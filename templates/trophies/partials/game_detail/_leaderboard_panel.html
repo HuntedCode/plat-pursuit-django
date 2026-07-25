@@ -72,10 +72,14 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
     re-fetches the panel. {% endcomment %}
     <div class="gd-lb__toolbar">
         <div class="gd-lb__filters" role="group" aria-label="Leaderboard filters">
+            {% comment %} "Started" (hide 0-trophy owners) only means something on a progress board -- speed
+            rows are all 100% complete and playtime isn't a completion metric, so it's hidden there. {% endcomment %}
+            {% if board_kind == 'progress' %}
             <button type="button" class="gd-lb__opt" data-lb-opt="earners" aria-pressed="{% if opts.only_earners %}true{% else %}false{% endif %}" title="Hide owners who haven't earned a trophy yet">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
                 <span>Started</span>
             </button>
+            {% endif %}
             <button type="button" class="gd-lb__opt" data-lb-opt="registered" aria-pressed="{% if opts.registered_only %}true{% else %}false{% endif %}" title="Only players with a Platinum Pursuit account">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m19 8 2 2 4-4"/></svg>
                 <span>Members</span>
@@ -146,9 +150,18 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
     {% else %}
     <div class="gd-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-        {% if opts.only_earners or opts.registered_only %}
+        {% if opts.registered_only %}
+        <p class="gd-empty__title">No members here yet</p>
+        <p class="gd-empty__hint">No Platinum Pursuit members on this board. Turn off &ldquo;Members&rdquo; to see everyone.</p>
+        {% elif board_kind == 'speed' %}
+        <p class="gd-empty__title">No finishers yet</p>
+        <p class="gd-empty__hint">Nobody tracked has completed this set. Be the first to finish and you&rsquo;ll set the time to beat.</p>
+        {% elif board_kind == 'playtime' %}
+        <p class="gd-empty__title">No play time tracked</p>
+        <p class="gd-empty__hint">PSN hasn&rsquo;t reported play time for anyone here yet.</p>
+        {% elif opts.only_earners %}
         <p class="gd-empty__title">No hunters match</p>
-        <p class="gd-empty__hint">No one fits these filters yet. Turn off &ldquo;Started&rdquo; or &ldquo;Members&rdquo; to see everyone who owns it.</p>
+        <p class="gd-empty__hint">No one&rsquo;s started this yet. Turn off &ldquo;Started&rdquo; to see everyone who owns it.</p>
         {% else %}
         <p class="gd-empty__title">No hunters yet</p>
         <p class="gd-empty__hint">Nobody tracked on Platinum Pursuit has played this one. Be the first and you&rsquo;ll top the board.</p>
