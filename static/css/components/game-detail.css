@@ -1032,8 +1032,17 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-lb__row--speed > *, .gd-lb__row--playtime > * { grid-area: auto; justify-self: auto; }
 .gd-lb__row--speed .gd-lb__col--start, .gd-lb__row--playtime .gd-lb__col--prog { display: none; }
 @media (min-width: 768px) {
-    .gd-lb__row--speed, .gd-lb__row--playtime { grid-template-columns: 3rem minmax(0, 1fr) auto auto auto; }
-    .gd-lb__row--speed .gd-lb__col--start, .gd-lb__row--playtime .gd-lb__col--prog { display: flex; }
+    /* Distribute across the width: the three metric columns are FRACTIONAL (equal shares of the free space)
+       rather than auto -- auto sized them to their content and bunched all three against the right while the
+       flexible name column swallowed the empty space. Each column's value then aligns start / center / end
+       so the row reads left-to-right and actually uses the room. */
+    .gd-lb__row--speed, .gd-lb__row--playtime { grid-template-columns: 3rem minmax(0, 1.4fr) 1fr 1fr 1fr; column-gap: 18px; }
+    .gd-lb__row--speed .gd-lb__col--start { display: flex; justify-self: start; align-items: flex-start; }
+    .gd-lb__row--speed .gd-lb__metric--speed { justify-self: center; }
+    .gd-lb__row--speed .gd-lb__col--finish { justify-self: end; align-items: flex-end; }
+    .gd-lb__row--playtime .gd-lb__metric--playtime { justify-self: start; }
+    .gd-lb__row--playtime .gd-lb__col--prog { display: flex; justify-self: center; align-items: center; }
+    .gd-lb__row--playtime .gd-lb__col--last { justify-self: end; align-items: flex-end; }
 }
 /* The metric (elapsed / play time) is the row's headline number. Speed centers it between the two dates;
    playtime leads with it right after the name. */
