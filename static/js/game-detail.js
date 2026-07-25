@@ -160,6 +160,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('click', (e) => {
             if (!e.target.closest('[data-lb-drop]')) lbCloseDrops(panel);
         });
+        // Escape closes it and returns focus to the trigger (menu a11y).
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            const openToggle = panel.querySelector('[data-lb-drop-toggle][aria-expanded="true"]');
+            if (!openToggle) return;
+            lbCloseDrops(panel);
+            openToggle.focus();
+        });
     }
 
     function lbCloseDrops(panel) {
