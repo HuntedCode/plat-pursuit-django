@@ -1024,19 +1024,28 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 }
 @media (min-width: 1024px) { .gd-lb__bar { display: block; } }
 
-/* Speed / playtime rows: fewer columns than standings, so a single line even on mobile (same fixed height
-   the virtualizer depends on). Reset the standings grid areas so the cells flow in DOM order. */
-.gd-lb__row--playtime { grid-template-columns: 2.25rem minmax(0, 1fr) auto; grid-template-areas: none; }
-.gd-lb__row--speed { grid-template-columns: 2.25rem minmax(0, 1fr) auto auto; grid-template-areas: none; column-gap: 12px; }
+/* Speed / playtime rows flow the cells in DOM order (no standings grid areas), and hide one context column
+   on mobile (started / progress) to stay a single line at the same fixed height the virtualizer depends on.
+   Desktop restores it. Speed: rank | who | Started | ELAPSED | Finished. Playtime: rank | who | TIME |
+   Progress | Last played. */
+.gd-lb__row--speed, .gd-lb__row--playtime { grid-template-columns: 2.25rem minmax(0, 1fr) auto auto; grid-template-areas: none; column-gap: 12px; }
 .gd-lb__row--speed > *, .gd-lb__row--playtime > * { grid-area: auto; justify-self: auto; }
+.gd-lb__row--speed .gd-lb__col--start, .gd-lb__row--playtime .gd-lb__col--prog { display: none; }
 @media (min-width: 768px) {
-    .gd-lb__row--playtime { grid-template-columns: 3rem minmax(0, 1fr) auto; }
-    .gd-lb__row--speed { grid-template-columns: 3rem minmax(0, 1fr) auto 6.5rem; }
+    .gd-lb__row--speed, .gd-lb__row--playtime { grid-template-columns: 3rem minmax(0, 1fr) auto auto auto; }
+    .gd-lb__row--speed .gd-lb__col--start, .gd-lb__row--playtime .gd-lb__col--prog { display: flex; }
 }
-/* The metric (elapsed / play time) is the row's headline number. */
+/* The metric (elapsed / play time) is the row's headline number. Speed centers it between the two dates;
+   playtime leads with it right after the name. */
 .gd-lb__metric { justify-self: end; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 0.9rem; color: var(--pp-text); white-space: nowrap; }
-.gd-lb__metric--speed { color: var(--pp-primary); }
-.gd-lb__row--speed .gd-lb__when { justify-self: end; }
+.gd-lb__metric--speed { justify-self: center; color: var(--pp-primary); }
+.gd-lb__metric--playtime { justify-self: start; }
+
+/* A stacked context cell: a tiny uppercase hint over a muted value (Started/Finished/Progress/Last played).
+   The label is small enough to read as a column hint, not row noise. */
+.gd-lb__col { display: flex; flex-direction: column; align-items: flex-end; justify-self: end; line-height: 1.15; min-width: 0; }
+.gd-lb__collbl { font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+.gd-lb__colval { font-size: 0.72rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* The viewer's own row, and the flash when they jump to it. */
 .gd-lb__row--you { background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-1)); border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); }

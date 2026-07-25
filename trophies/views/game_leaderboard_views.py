@@ -118,9 +118,15 @@ class GameLeaderboardView(View):
             row.rank = start_rank + i * step
             row.when = getattr(row, 'most_recent_trophy_date', None) or getattr(row, 'last_trophy_at', None)
             if board_kind == 'speed':
+                # The elapsed is the headline; the started->finished window makes it tangible (row.when is
+                # the finish = last_trophy_at). Every row on a speed board shares the same trophy haul, so
+                # that's deliberately NOT shown -- the dates are what differ.
                 row.elapsed_label = _fmt_seconds(getattr(row, 'completion_seconds', None))
+                row.started = getattr(row, 'first_trophy_at', None)
             elif board_kind == 'playtime':
+                # Play time is the headline; overall completion and recency give it context.
                 row.playtime_label = _fmt_playtime(getattr(row, 'play_duration', None))
+                row.last_played = getattr(row, 'last_played_date_time', None)
         return {'rows': rows, 'viewer_profile': profile, 'board_kind': board_kind}
 
     def _rows(self, request, game, opts, rows, start_rank, step, profile, board_kind):

@@ -20,16 +20,32 @@ tiebreak timestamp, normalized by the view across ProfileGame / ProfileTrophyGro
     </a>
 
     {% if board_kind == 'speed' %}
-    {% comment %} Fastest board: the elapsed first->last trophy is the ranking; the completion date follows
-    as context (and the tiebreak between equal times). {% endcomment %}
+    {% comment %} Fastest board: the elapsed first->last trophy is the headline, flanked by the started ->
+    finished window that makes it tangible (row.when is the finish = last_trophy_at). Every row shares the
+    same group haul, so that's deliberately omitted -- the dates are what differ. Started is hidden on
+    mobile to keep one line. {% endcomment %}
+    <span class="gd-lb__col gd-lb__col--start">
+        <span class="gd-lb__collbl">Started</span>
+        <span class="gd-lb__colval">{% if row.started %}{{ row.started|date:"M j, Y" }}{% else %}&mdash;{% endif %}</span>
+    </span>
     <span class="gd-lb__metric gd-lb__metric--speed">{{ row.elapsed_label }}</span>
-    <span class="gd-lb__when">
-        {% if row.when %}<span class="gd-lb__date gd-lb__date--long">{{ row.when|date:"M j, Y" }}</span><span class="gd-lb__date gd-lb__date--short">{{ row.when|date:"n/j/y" }}</span>{% else %}&mdash;{% endif %}
+    <span class="gd-lb__col gd-lb__col--finish">
+        <span class="gd-lb__collbl">Finished</span>
+        <span class="gd-lb__colval">{% if row.when %}{{ row.when|date:"M j, Y" }}{% else %}&mdash;{% endif %}</span>
     </span>
 
     {% elif board_kind == 'playtime' %}
-    {% comment %} Most-played board: PSN-reported play time, the whole row's point. {% endcomment %}
+    {% comment %} Most-played board: PSN play time is the headline; overall completion and recency give it
+    context (450h at 60% tells a story). Progress is hidden on mobile to keep one line. {% endcomment %}
     <span class="gd-lb__metric gd-lb__metric--playtime">{{ row.playtime_label }}</span>
+    <span class="gd-lb__col gd-lb__col--prog">
+        <span class="gd-lb__collbl">Progress</span>
+        <span class="gd-lb__colval">{{ row.progress }}%</span>
+    </span>
+    <span class="gd-lb__col gd-lb__col--last">
+        <span class="gd-lb__collbl">Last played</span>
+        <span class="gd-lb__colval">{% if row.last_played %}{{ row.last_played|date:"M j, Y" }}{% else %}&mdash;{% endif %}</span>
+    </span>
 
     {% else %}
     {% comment %} Standings board: per-tier haul from the row's own earned_trophies JSON (zero extra queries),

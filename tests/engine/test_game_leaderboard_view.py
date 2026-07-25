@@ -511,12 +511,14 @@ def test_board_param_routes_to_the_speed_board(client):
 
     assert body.count('data-lb-rank=') == 2                  # only the two completers (row--speed doubles a gd-lb__row count)
     assert 'gd-lb__metric--speed' in body
+    assert 'gd-lb__col--start' in body and 'gd-lb__col--finish' in body   # started -> finished window
     assert 'data-lb-total="2"' in body
 
 
 def test_board_param_routes_to_the_playtime_board(client):
     game = GameFactory()
-    ProfileGameFactory(game=game, profile=ProfileFactory(), play_duration=timedelta(hours=50))
+    ProfileGameFactory(game=game, profile=ProfileFactory(), play_duration=timedelta(hours=50),
+                       progress=87, last_played_date_time=timezone.now())
     ProfileGameFactory(game=game, profile=ProfileFactory(), play_duration=None)       # no reported time -> excluded
 
     body = client.get(_url(game, board='playtime')).content.decode()
@@ -524,6 +526,8 @@ def test_board_param_routes_to_the_playtime_board(client):
     assert body.count('data-lb-rank=') == 1
     assert 'gd-lb__metric--playtime' in body
     assert '50h' in body                                     # the compact play-time label
+    assert '87%' in body                                     # overall progress column
+    assert 'gd-lb__col--prog' in body and 'gd-lb__col--last' in body   # progress + last-played context
     assert 'data-lb-total="1"' in body
 
 
