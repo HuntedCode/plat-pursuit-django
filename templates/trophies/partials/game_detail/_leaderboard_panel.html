@@ -27,11 +27,29 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
         </div>
         {% if board_nav.multi and board_nav.active_mode != 'playtime' %}
         <div class="gd-lb__seg gd-lb__seg--groups" role="group" aria-label="Trophy group">
-            {% for g in board_nav.groups %}{% if board_nav.active_mode != 'speed' or g.speed %}
-            <button type="button" class="gd-lb__segchip" data-lb-board="{{ board_nav.active_mode }}:{{ g.id }}" aria-pressed="{% if board_nav.active_group == g.id %}true{% else %}false{% endif %}">
-                <span>{{ g.label }}</span>
+            {% if board_nav.base %}
+            <button type="button" class="gd-lb__segchip" data-lb-board="{{ board_nav.active_mode }}:default" aria-pressed="{% if board_nav.active_group == 'default' %}true{% else %}false{% endif %}">
+                <span>Base Game</span>
             </button>
-            {% endif %}{% endfor %}
+            {% endif %}
+            {% if board_nav.dlcs %}
+            {% comment %} DLCs collapse into a dropdown -- some games have a lot of DLC, and a wall of pills
+            reads worse than a menu. The button shows the active DLC's name when one is picked, else "DLC".
+            The items are board chips (data-lb-board), so selecting one re-fetches like any other chip. {% endcomment %}
+            <div class="gd-lb__drop" data-lb-drop>
+                <button type="button" class="gd-lb__segchip gd-lb__dropbtn" data-lb-drop-toggle aria-haspopup="true" aria-expanded="false" aria-pressed="{% if board_nav.active_dlc %}true{% else %}false{% endif %}">
+                    <span>{% if board_nav.active_dlc %}{{ board_nav.active_dlc.label }}{% else %}DLC{% endif %}</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+                <div class="gd-lb__dropmenu" data-lb-dropmenu role="menu" hidden>
+                    {% for g in board_nav.dlcs %}
+                    <button type="button" class="gd-lb__segchip gd-lb__dropitem" data-lb-board="{{ board_nav.active_mode }}:{{ g.id }}" aria-pressed="{% if board_nav.active_group == g.id %}true{% else %}false{% endif %}" role="menuitem">
+                        <span>{{ g.label }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
             {% if board_nav.active_mode == 'progress' %}
             <button type="button" class="gd-lb__segchip" data-lb-board="progress:all" aria-pressed="{% if board_nav.active_group == 'all' %}true{% else %}false{% endif %}">
                 <span>Everything</span>

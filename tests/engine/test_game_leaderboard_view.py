@@ -560,6 +560,33 @@ def test_switcher_shows_modes_and_a_group_row_for_a_dlc_game(client):
     assert 'DLC One' in body
 
 
+def test_dlc_groups_collapse_into_a_dropdown(client):
+    game, _ = _board(2)
+    TrophyGroup.objects.create(game=game, trophy_group_id='default', defined_trophies={})
+    TrophyGroup.objects.create(game=game, trophy_group_id='001', trophy_group_name='First DLC', defined_trophies={})
+    TrophyGroup.objects.create(game=game, trophy_group_id='002', trophy_group_name='Second DLC', defined_trophies={})
+
+    body = client.get(_url(game)).content.decode()
+
+    assert 'data-lb-drop' in body and 'data-lb-dropmenu' in body       # the dropdown + its menu
+    assert 'data-lb-board="progress:001"' in body and 'First DLC' in body      # both DLCs are menu items
+    assert 'data-lb-board="progress:002"' in body and 'Second DLC' in body
+    assert 'data-lb-board="progress:default"' in body                  # Base Game stays a pill
+    assert 'data-lb-board="progress:all"' in body                      # Everything stays a pill
+    assert '<span>DLC</span>' in body                                  # no DLC active -> button reads "DLC"
+
+
+def test_dropdown_button_shows_and_marks_the_active_dlc(client):
+    game, _ = _board(2)
+    TrophyGroup.objects.create(game=game, trophy_group_id='default', defined_trophies={})
+    TrophyGroup.objects.create(game=game, trophy_group_id='001', trophy_group_name='Blood and Wine', defined_trophies={})
+
+    body = client.get(_url(game, board='progress:001')).content.decode()
+
+    assert '<span>Blood and Wine</span>' in body                       # button carries the active DLC name
+    assert 'gd-lb__dropbtn' in body and 'aria-pressed="true"' in body  # and reads as active
+
+
 def test_switcher_absent_when_only_one_board(client):
     """A single-group game with no speed (no >=2-trophy group here) and no playtime data has just the
     overall board -- nothing to switch, so no switcher chrome."""

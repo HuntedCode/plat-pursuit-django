@@ -110,6 +110,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (panel._lbDelegated) return;
         panel._lbDelegated = true;
         panel.addEventListener('click', (e) => {
+            // DLC dropdown toggle: open/close its menu. Checked before the chip handler -- the toggle is a
+            // .gd-lb__segchip for styling but carries no board of its own.
+            const toggle = e.target.closest('[data-lb-drop-toggle]');
+            if (toggle) {
+                const menu = toggle.parentElement.querySelector('[data-lb-dropmenu]');
+                const willOpen = menu && menu.hidden;
+                lbCloseDrops(panel);
+                if (willOpen) { menu.hidden = false; toggle.setAttribute('aria-expanded', 'true'); }
+                return;
+            }
             // Board switcher: select a board and re-fetch the whole panel. Match the CHIP class (not
             // [data-lb-board]) so clicks elsewhere in .gd-lb -- which carries the active board -- don't match.
             const chip = e.target.closest('.gd-lb__segchip');
@@ -125,6 +135,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (e.target.closest('[data-lb-jump]')) lbJumpToMe(panel);
         });
+        // Close an open DLC dropdown on any click outside a dropdown (once; the panel element persists).
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('[data-lb-drop]')) lbCloseDrops(panel);
+        });
+    }
+
+    function lbCloseDrops(panel) {
+        panel.querySelectorAll('[data-lb-dropmenu]').forEach((m) => { m.hidden = true; });
+        panel.querySelectorAll('[data-lb-drop-toggle]').forEach((t) => t.setAttribute('aria-expanded', 'false'));
     }
 
     function lbScroller() { return document.scrollingElement || document.documentElement; }

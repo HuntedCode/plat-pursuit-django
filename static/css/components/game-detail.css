@@ -892,8 +892,20 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-lb__segchip:hover { color: var(--pp-text); }
 .gd-lb__segchip[aria-pressed="true"] { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 15%, var(--pp-bg-1)); }
 .gd-lb__segchip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-/* The group row is the secondary axis: same treatment, smaller. */
+/* The group row is the secondary axis: same treatment, smaller. It holds a dropdown, so it must NOT clip
+   (the mode row keeps overflow-x for its scroll). */
+.gd-lb__seg--groups { overflow: visible; }
 .gd-lb__seg--groups .gd-lb__segchip { font-size: 0.72rem; font-weight: 600; padding: 5px 11px; }
+
+/* DLC dropdown: the trigger is a segchip with a chevron; its menu is an anchored popover of DLC boards. */
+.gd-lb__drop { position: relative; display: inline-flex; }
+.gd-lb__dropbtn { gap: 4px; }
+.gd-lb__dropbtn svg { width: 12px; height: 12px; transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-lb__dropbtn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.gd-lb__dropmenu { position: absolute; z-index: 30; top: calc(100% + 5px); left: 0; min-width: max(100%, 9.5rem); max-height: 15rem; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px; border-radius: var(--pp-radius-md); background: var(--pp-bg-1); border: 1px solid var(--pp-border); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
+.gd-lb__dropmenu[hidden] { display: none; }
+.gd-lb__dropitem { justify-content: flex-start; width: 100%; text-align: left; border-radius: var(--pp-radius-sm); padding: 7px 11px; }
+.gd-lb__dropitem:hover { background: color-mix(in oklab, var(--pp-primary) 10%, transparent); }
 
 /* Controls toolbar: filter toggles (aria-pressed drives the lit state) + a jump-to-rank field. */
 .gd-lb__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
@@ -1024,24 +1036,24 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 }
 @media (min-width: 1024px) { .gd-lb__bar { display: block; } }
 
-/* Speed / playtime rows flow the cells in DOM order (no standings grid areas), and hide one context column
-   on mobile (started / progress) to stay a single line at the same fixed height the virtualizer depends on.
-   Desktop restores it. Speed: rank | who | Started | ELAPSED | Finished. Playtime: rank | who | TIME |
-   Progress | Last played. */
-.gd-lb__row--speed, .gd-lb__row--playtime { grid-template-columns: 2.25rem minmax(0, 1fr) auto auto; grid-template-areas: none; column-gap: 12px; }
+/* Speed / playtime rows flow the cells in DOM order (no standings grid areas). MOBILE: there's only room
+   for the headline number, so every context column is hidden -- rank | who | metric. md+ restores the
+   context columns (Started/Finished, Progress/Last played) and anchors them (below). */
+.gd-lb__row--speed, .gd-lb__row--playtime { grid-template-columns: 2.25rem minmax(0, 1fr) auto; grid-template-areas: none; column-gap: 12px; }
 .gd-lb__row--speed > *, .gd-lb__row--playtime > * { grid-area: auto; justify-self: auto; }
-.gd-lb__row--speed .gd-lb__col--start, .gd-lb__row--playtime .gd-lb__col--prog { display: none; }
+.gd-lb__row--speed .gd-lb__col, .gd-lb__row--playtime .gd-lb__col { display: none; }
 @media (min-width: 768px) {
     /* Anchor the metric area to the SAME left edge as the standings board's trophy section, so all three
        board types line up. Standings' metric block is 9+3+6.5 = 18.5rem at md (name column = 1fr, 10px
        gaps); matching the three metric columns to that total, with the same 1fr name column and gap, starts
        them at the same x. Values run start / center / end across the block. */
     .gd-lb__row--speed, .gd-lb__row--playtime { grid-template-columns: 3rem minmax(0, 1fr) 6rem 6.5rem 6rem; column-gap: 10px; }
-    .gd-lb__row--speed .gd-lb__col--start { display: flex; justify-self: start; align-items: flex-start; }
+    .gd-lb__row--speed .gd-lb__col, .gd-lb__row--playtime .gd-lb__col { display: flex; }
+    .gd-lb__row--speed .gd-lb__col--start { justify-self: start; align-items: flex-start; }
     .gd-lb__row--speed .gd-lb__metric--speed { justify-self: center; }
     .gd-lb__row--speed .gd-lb__col--finish { justify-self: end; align-items: flex-end; }
     .gd-lb__row--playtime .gd-lb__metric--playtime { justify-self: start; }
-    .gd-lb__row--playtime .gd-lb__col--prog { display: flex; justify-self: center; align-items: center; }
+    .gd-lb__row--playtime .gd-lb__col--prog { justify-self: center; align-items: center; }
     .gd-lb__row--playtime .gd-lb__col--last { justify-self: end; align-items: flex-end; }
 }
 @media (min-width: 1024px) {
@@ -1049,11 +1061,11 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
        columns to match so the left edge stays aligned. */
     .gd-lb__row--speed, .gd-lb__row--playtime { grid-template-columns: 3rem minmax(0, 1fr) 8.5rem 8.5rem 8.5rem; }
 }
-/* The metric (elapsed / play time) is the row's headline number. Speed centers it between the two dates;
-   playtime leads with it right after the name. */
+/* The metric (elapsed / play time) is the row's headline number. On mobile it sits at the right (its column
+   is content-width after the 1fr name). md+ centers speed between the two dates / leads playtime after the
+   name. */
 .gd-lb__metric { justify-self: end; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 0.9rem; color: var(--pp-text); white-space: nowrap; }
-.gd-lb__metric--speed { justify-self: center; color: var(--pp-primary); }
-.gd-lb__metric--playtime { justify-self: start; }
+.gd-lb__metric--speed { color: var(--pp-primary); }
 
 /* A stacked context cell: a tiny uppercase hint over a muted value (Started/Finished/Progress/Last played).
    The label is small enough to read as a column hint, not row noise. */

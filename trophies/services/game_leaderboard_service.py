@@ -358,9 +358,21 @@ def board_menu(game, active_param):
         modes.append({'key': 'playtime', 'label': 'Most Played', 'param': 'playtime'})
 
     active_mode, active_group = active_parts(active_param)
+
+    # The group row: Base Game and Everything stay as pills, but the DLCs collapse into a dropdown (some
+    # games have a lot of DLC). Filter to the active mode's eligible groups -- speed shows only >=2-trophy
+    # groups, and has no Everything.
+    row_groups = [g for g in groups if g['speed']] if active_mode == 'speed' else groups
+    base = next((g for g in row_groups if g['id'] == 'default'), None)
+    dlcs = [g for g in row_groups if g['id'] != 'default']
+    active_dlc = next((g for g in dlcs if g['id'] == active_group), None)
+
     return {
         'modes': modes,
         'groups': groups,
+        'base': base,
+        'dlcs': dlcs,
+        'active_dlc': active_dlc,
         'multi': len(groups) > 1,
         'active_mode': active_mode,
         'active_group': active_group,
