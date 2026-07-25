@@ -26,9 +26,9 @@ so rank / size / windows all apply them consistently.
 import logging
 from dataclasses import dataclass
 
-from django.db.models import Q, F
+from django.db.models import Q, F, Count
 
-from trophies.models import ProfileGame, ProfileTrophyGroup, TrophyGroup
+from trophies.models import ProfileGame, ProfileTrophyGroup, Trophy, TrophyGroup
 
 logger = logging.getLogger('psn_api')
 
@@ -99,6 +99,7 @@ class Board:
     """A single leaderboard. Subclasses set KEYS (canonical order, unique final key) and _population()."""
 
     KEYS = ()
+    kind = 'progress'          # how the row renders: 'progress' | 'speed' | 'playtime'
 
     def __init__(self, game, opts):
         self.game = game
@@ -220,6 +221,7 @@ class EverythingBoard(Board):
 class PlaytimeBoard(Board):
     """Most PSN-reported play time for the whole game (ProfileGame). Partial-index population: only rows with
     a reported duration. only_earners does not apply (it is playtime, not completion)."""
+    kind = 'playtime'
     KEYS = (
         SortKey('play_duration', desc=True),
         SortKey('profile_id', desc=False),
@@ -271,6 +273,7 @@ class GroupProgressBoard(_GroupBoard):
 class GroupSpeedBoard(_GroupBoard):
     """Fastest first->last completion of a group. Population is the partial speed index: only rows with a
     completion_seconds (fully earned, >=2-trophy groups). only_earners does not apply (all are complete)."""
+    kind = 'speed'
     KEYS = (
         SortKey('completion_seconds', desc=False),
         SortKey('last_trophy_at', desc=False),
@@ -309,3 +312,56 @@ def resolve_board(game, param, opts):
             if kind == 'progress':
                 return GroupProgressBoard(game, group, opts)
     return EverythingBoard(game, opts)
+
+
+def active_parts(param):
+    """Split a board param into (mode, group_id) for marking the selector's active chips. The default /
+    Everything board is ('progress', 'all'); playtime has no group."""
+    p = (param or '').strip() or 'progress:all'
+    if p == 'playtime':
+        return 'playtime', None
+    if ':' in p:
+        mode, gid = p.split(':', 1)
+        return mode, gid
+    return 'progress', 'all'
+
+
+def board_menu(game, active_param):
+    """The boards available for `game`, for the selector. Cheap (the panel is lazy-loaded): a couple of
+    small aggregates. Returns the mode chips (Standings / Fastest / Most Played -- each present only if it
+    has a board), the trophy groups (with which qualify for a speed board), and the active mode/group.
+
+    A group qualifies for a speed board only with >=2 trophies: a one-trophy group is completed instantly,
+    so its speed board would just duplicate the progress board's first-earners race.
+    """
+    counts = {
+        r['trophy_group_id']: r['n']
+        for r in Trophy.objects.filter(game=game).values('trophy_group_id').annotate(n=Count('id'))
+    }
+    groups = []
+    for i, tg in enumerate(game.trophy_groups.order_by('trophy_group_id')):
+        gid = tg.trophy_group_id
+        groups.append({
+            'id': gid,
+            'label': 'Base Game' if gid == 'default' else (tg.trophy_group_name or f'DLC {i}'),
+            'speed': counts.get(gid, 0) >= 2,
+        })
+
+    modes = [{'key': 'progress', 'label': 'Standings', 'param': 'progress:all'}]
+    first_speed = next((g['id'] for g in groups if g['speed']), None)
+    if first_speed is not None:
+        modes.append({'key': 'speed', 'label': 'Fastest', 'param': f'speed:{first_speed}'})
+    has_playtime = ProfileGame.objects.filter(
+        game=game, hidden_flag=False, user_hidden=False, play_duration__isnull=False
+    ).exists()
+    if has_playtime:
+        modes.append({'key': 'playtime', 'label': 'Most Played', 'param': 'playtime'})
+
+    active_mode, active_group = active_parts(active_param)
+    return {
+        'modes': modes,
+        'groups': groups,
+        'multi': len(groups) > 1,
+        'active_mode': active_mode,
+        'active_group': active_group,
+    }

@@ -509,7 +509,8 @@ def test_board_param_routes_to_the_speed_board(client):
 
     body = client.get(_url(game, board='speed:default')).content.decode()
 
-    assert body.count('gd-lb__row') == 2                     # only the two completers
+    assert body.count('data-lb-rank=') == 2                  # only the two completers (row--speed doubles a gd-lb__row count)
+    assert 'gd-lb__metric--speed' in body
     assert 'data-lb-total="2"' in body
 
 
@@ -520,7 +521,9 @@ def test_board_param_routes_to_the_playtime_board(client):
 
     body = client.get(_url(game, board='playtime')).content.decode()
 
-    assert body.count('gd-lb__row') == 1
+    assert body.count('data-lb-rank=') == 1
+    assert 'gd-lb__metric--playtime' in body
+    assert '50h' in body                                     # the compact play-time label
     assert 'data-lb-total="1"' in body
 
 
@@ -529,7 +532,38 @@ def test_unknown_board_param_falls_back_to_the_overall_board(client):
 
     body = client.get(_url(game, board='nonsense')).content.decode()
 
-    assert body.count('gd-lb__row') == 3                     # the Everything board, unchanged
+    assert body.count('data-lb-rank=') == 3                  # the Everything board, unchanged
+
+
+def test_switcher_shows_modes_and_a_group_row_for_a_dlc_game(client):
+    game, _ = _board(2)
+    # a DLC group with >=2 trophies (qualifies for a speed board) + playtime data -> all three modes
+    from tests.factories import TrophyFactory
+    TrophyGroup.objects.create(game=game, trophy_group_id='default', defined_trophies={})
+    dlc = TrophyGroup.objects.create(game=game, trophy_group_id='001', trophy_group_name='DLC One', defined_trophies={})
+    TrophyFactory(game=game, trophy_group_id='001', trophy_id=1)
+    TrophyFactory(game=game, trophy_group_id='001', trophy_id=2)
+    ProfileGameFactory(game=game, profile=ProfileFactory(), play_duration=timedelta(hours=5))
+    ProfileTrophyGroup.objects.create(profile=ProfileFactory(), trophy_group=dlc, progress=100,
+                                      last_trophy_at=timezone.now())
+
+    body = client.get(_url(game)).content.decode()
+
+    assert 'data-lb-boards' in body                          # the switcher rendered
+    assert 'data-lb-board="progress:all"' in body            # Standings (Everything)
+    assert 'data-lb-board="speed:001"' in body               # Fastest, group row for the DLC
+    assert 'data-lb-board="playtime"' in body                # Most Played
+    assert 'DLC One' in body
+
+
+def test_switcher_absent_when_only_one_board(client):
+    """A single-group game with no speed (no >=2-trophy group here) and no playtime data has just the
+    overall board -- nothing to switch, so no switcher chrome."""
+    game, _ = _board(2)
+
+    body = client.get(_url(game)).content.decode()
+
+    assert 'data-lb-boards' not in body
 
 
 def test_retired_players_modal_is_gone():

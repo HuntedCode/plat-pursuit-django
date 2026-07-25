@@ -76,6 +76,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (key === 'earners' && !on) params.set('earners', '0');
             if (key === 'registered' && on) params.set('registered', '1');
         });
+        // Which board is active rides on the .gd-lb root, so every continuation fetch (range/suggest/at)
+        // hits the SAME board the user is looking at, not the default one.
+        const root = panel.querySelector('.gd-lb');
+        const board = root && root.dataset.lbBoard;
+        if (board) params.set('board', board);
         if (extra) Object.keys(extra).forEach((k) => params.set(k, extra[k]));
         const qs = params.toString();
         return qs ? panel.dataset.lbSrc + '?' + qs : panel.dataset.lbSrc;
@@ -105,6 +110,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (panel._lbDelegated) return;
         panel._lbDelegated = true;
         panel.addEventListener('click', (e) => {
+            // Board switcher: select a board and re-fetch the whole panel. Match the CHIP class (not
+            // [data-lb-board]) so clicks elsewhere in .gd-lb -- which carries the active board -- don't match.
+            const chip = e.target.closest('.gd-lb__segchip');
+            if (chip && chip.dataset.lbBoard) {
+                lbFetchPanel(panel, lbOptsUrl(panel, { board: chip.dataset.lbBoard }));
+                return;
+            }
             const opt = e.target.closest('[data-lb-opt]');
             if (opt) {
                 opt.setAttribute('aria-pressed', opt.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');

@@ -7,7 +7,40 @@ they finished and everyone else follows by how close they are. The count is the 
 not Game.played_count -- that counts hidden rows and ignores filters, so it would disagree with the list.
 {% endcomment %}
 {% load humanize %}
-<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}" data-lb-total="{{ board_size }}" data-lb-invert="{% if opts.invert %}1{% else %}0{% endif %}" data-lb-page-size="{{ page_size }}">
+<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}" data-lb-total="{{ board_size }}" data-lb-invert="{% if opts.invert %}1{% else %}0{% endif %}" data-lb-page-size="{{ page_size }}" data-lb-board="{{ active_board }}">
+
+    {% comment %} Board switcher: a segmented mode switch (Standings / Fastest / Most Played), each present
+    only when it has a board. On a game with DLC a second row picks the trophy group; single-group games
+    (~95%) show just the mode row, or nothing when there is only one board. Each chip carries the full
+    ?board= param it selects; the JS re-fetches the whole panel, exactly like the filter toggles. {% endcomment %}
+    {% if board_nav.modes|length > 1 or board_nav.multi %}
+    <div class="gd-lb__boards" data-lb-boards>
+        <div class="gd-lb__seg" role="group" aria-label="Leaderboard type">
+            {% for m in board_nav.modes %}
+            <button type="button" class="gd-lb__segchip" data-lb-board="{{ m.param }}" aria-pressed="{% if board_nav.active_mode == m.key %}true{% else %}false{% endif %}">
+                {% if m.key == 'progress' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"/><rect x="6" y="10" width="3.5" height="7" rx="1"/><rect x="14.5" y="6" width="3.5" height="11" rx="1"/></svg>
+                {% elif m.key == 'speed' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 13V9"/><path d="M9 2h6"/></svg>
+                {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>{% endif %}
+                <span>{{ m.label }}</span>
+            </button>
+            {% endfor %}
+        </div>
+        {% if board_nav.multi and board_nav.active_mode != 'playtime' %}
+        <div class="gd-lb__seg gd-lb__seg--groups" role="group" aria-label="Trophy group">
+            {% for g in board_nav.groups %}{% if board_nav.active_mode != 'speed' or g.speed %}
+            <button type="button" class="gd-lb__segchip" data-lb-board="{{ board_nav.active_mode }}:{{ g.id }}" aria-pressed="{% if board_nav.active_group == g.id %}true{% else %}false{% endif %}">
+                <span>{{ g.label }}</span>
+            </button>
+            {% endif %}{% endfor %}
+            {% if board_nav.active_mode == 'progress' %}
+            <button type="button" class="gd-lb__segchip" data-lb-board="progress:all" aria-pressed="{% if board_nav.active_group == 'all' %}true{% else %}false{% endif %}">
+                <span>Everything</span>
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
 
     {% comment %} Controls always render (even over an empty filtered board) so a too-tight filter can be
     relaxed. Each toggle carries its state in aria-pressed; the JS reads that, rebuilds the query, and

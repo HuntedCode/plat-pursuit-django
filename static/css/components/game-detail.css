@@ -881,6 +881,20 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-lb { display: flex; flex-direction: column; gap: 10px; --lb-row-h: 58px; }
 @media (min-width: 768px) { .gd-lb { --lb-row-h: 44px; } }
 
+/* Board switcher: the segmented-switcher standard (bordered pill container, transparent chips, tinted-flat
+   active). A primary mode row (Standings / Fastest / Most Played) and, on DLC games, a smaller group row
+   below it. Scrolls horizontally rather than wrapping so it stays one clean line on a phone. */
+.gd-lb__boards { display: flex; flex-direction: column; gap: 6px; }
+.gd-lb__seg { display: inline-flex; align-self: flex-start; max-width: 100%; gap: 2px; padding: 3px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); overflow-x: auto; scrollbar-width: none; }
+.gd-lb__seg::-webkit-scrollbar { display: none; }
+.gd-lb__segchip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 6px 13px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; cursor: pointer; color: var(--pp-text-dim); background: none; border: none; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-lb__segchip svg { width: 14px; height: 14px; }
+.gd-lb__segchip:hover { color: var(--pp-text); }
+.gd-lb__segchip[aria-pressed="true"] { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 15%, var(--pp-bg-1)); }
+.gd-lb__segchip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* The group row is the secondary axis: same treatment, smaller. */
+.gd-lb__seg--groups .gd-lb__segchip { font-size: 0.72rem; font-weight: 600; padding: 5px 11px; }
+
 /* Controls toolbar: filter toggles (aria-pressed drives the lit state) + a jump-to-rank field. */
 .gd-lb__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .gd-lb__filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -1009,6 +1023,20 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
     .gd-lb__time::before { display: none; }
 }
 @media (min-width: 1024px) { .gd-lb__bar { display: block; } }
+
+/* Speed / playtime rows: fewer columns than standings, so a single line even on mobile (same fixed height
+   the virtualizer depends on). Reset the standings grid areas so the cells flow in DOM order. */
+.gd-lb__row--playtime { grid-template-columns: 2.25rem minmax(0, 1fr) auto; grid-template-areas: none; }
+.gd-lb__row--speed { grid-template-columns: 2.25rem minmax(0, 1fr) auto auto; grid-template-areas: none; column-gap: 12px; }
+.gd-lb__row--speed > *, .gd-lb__row--playtime > * { grid-area: auto; justify-self: auto; }
+@media (min-width: 768px) {
+    .gd-lb__row--playtime { grid-template-columns: 3rem minmax(0, 1fr) auto; }
+    .gd-lb__row--speed { grid-template-columns: 3rem minmax(0, 1fr) auto 6.5rem; }
+}
+/* The metric (elapsed / play time) is the row's headline number. */
+.gd-lb__metric { justify-self: end; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 0.9rem; color: var(--pp-text); white-space: nowrap; }
+.gd-lb__metric--speed { color: var(--pp-primary); }
+.gd-lb__row--speed .gd-lb__when { justify-self: end; }
 
 /* The viewer's own row, and the flash when they jump to it. */
 .gd-lb__row--you { background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-1)); border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); }

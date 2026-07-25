@@ -377,6 +377,36 @@ def test_resolve_board_falls_back_to_everything_for_unknown_or_missing_group():
     assert isinstance(svc.resolve_board(game, 'progress:999', DEFAULT), svc.EverythingBoard)  # no such group
 
 
+def test_board_menu_lists_modes_and_marks_speed_eligible_groups():
+    from tests.factories import TrophyFactory
+    game = GameFactory()
+    _group(game, 'default')
+    _group(game, '001')
+    # default group has 2 trophies (speed-eligible); the DLC has 1 (not)
+    TrophyFactory(game=game, trophy_group_id='default', trophy_id=1)
+    TrophyFactory(game=game, trophy_group_id='default', trophy_id=2)
+    TrophyFactory(game=game, trophy_group_id='001', trophy_id=3)
+    ProfileGameFactory(game=game, profile=ProfileFactory(), play_duration=timedelta(hours=3))
+
+    menu = svc.board_menu(game, 'progress:all')
+
+    assert [m['key'] for m in menu['modes']] == ['progress', 'speed', 'playtime']
+    speed_mode = next(m for m in menu['modes'] if m['key'] == 'speed')
+    assert speed_mode['param'] == 'speed:default'            # first speed-eligible group
+    groups = {g['id']: g['speed'] for g in menu['groups']}
+    assert groups == {'default': True, '001': False}         # DLC's single trophy is not a speed board
+    assert menu['multi'] is True and menu['active_mode'] == 'progress' and menu['active_group'] == 'all'
+
+
+def test_board_menu_hides_speed_and_playtime_when_absent():
+    game = GameFactory()
+    _group(game, 'default')                                  # no trophies -> no speed; no playtime rows
+    menu = svc.board_menu(game, '')
+
+    assert [m['key'] for m in menu['modes']] == ['progress']
+    assert menu['multi'] is False
+
+
 # --- index contract ----------------------------------------------------------
 
 

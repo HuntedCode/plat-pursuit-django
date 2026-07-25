@@ -59,7 +59,7 @@ class GameLeaderboardView(View):
             count = self._int(request.GET.get('count'), svc.PAGE_SIZE, hi=200)
             from_rank = self._int(request.GET.get('from'), start)
             rows = board.page_range(start, count)
-            return self._rows(request, game, opts, rows, from_rank, step, profile)
+            return self._rows(request, game, opts, rows, from_rank, step, profile, board.kind)
 
         # Full panel: the first window seeds first paint; board_size sizes the virtual spacer.
         total = board.size()
@@ -70,11 +70,13 @@ class GameLeaderboardView(View):
             'game': game,
             'opts': opts,
             'board_param': board_param,        # carried on continuation fetches so the view stays consistent
+            'active_board': board_param or 'progress:all',
+            'board_nav': svc.board_menu(game, board_param),
             'board_size': total,
             'page_size': svc.PAGE_SIZE,        # stamped into the DOM so the JS fetch granularity can't drift
             'viewer_rank': viewer_rank,
             'viewer_profile': profile,
-            **self._rows_ctx(rows, start_rank, step, profile),
+            **self._rows_ctx(rows, start_rank, step, profile, board.kind),
         }
         return render(request, PANEL_TEMPLATE, context)
 
@@ -108,12 +110,45 @@ class GameLeaderboardView(View):
         }
 
     @staticmethod
-    def _rows_ctx(rows, start_rank, step, profile):
-        """Number the rows for the template (the client positions them by rank)."""
+    def _rows_ctx(rows, start_rank, step, profile, board_kind):
+        """Number the rows and stamp the display fields the row template reads uniformly across board types.
+        `when` normalizes the tiebreak timestamp (ProfileGame.most_recent_trophy_date vs
+        ProfileTrophyGroup.last_trophy_at); speed/playtime rows also get a compact metric label."""
         for i, row in enumerate(rows):
             row.rank = start_rank + i * step
-        return {'rows': rows, 'viewer_profile': profile}
+            row.when = getattr(row, 'most_recent_trophy_date', None) or getattr(row, 'last_trophy_at', None)
+            if board_kind == 'speed':
+                row.elapsed_label = _fmt_seconds(getattr(row, 'completion_seconds', None))
+            elif board_kind == 'playtime':
+                row.playtime_label = _fmt_playtime(getattr(row, 'play_duration', None))
+        return {'rows': rows, 'viewer_profile': profile, 'board_kind': board_kind}
 
-    def _rows(self, request, game, opts, rows, start_rank, step, profile):
-        ctx = {'game': game, 'opts': opts, **self._rows_ctx(rows, start_rank, step, profile)}
+    def _rows(self, request, game, opts, rows, start_rank, step, profile, board_kind):
+        ctx = {'game': game, 'opts': opts, **self._rows_ctx(rows, start_rank, step, profile, board_kind)}
         return render(request, ROWS_TEMPLATE, ctx)
+
+
+def _fmt_seconds(s):
+    """A completion elapsed, compact: the two most significant units (5d 6h, 3h 20m, 45m, <1m)."""
+    if s is None:
+        return None
+    s = int(s)
+    d, r = divmod(s, 86400)
+    h, r = divmod(r, 3600)
+    m, _ = divmod(r, 60)
+    if d:
+        return f'{d}d {h}h' if h else f'{d}d'
+    if h:
+        return f'{h}h {m}m' if m else f'{h}h'
+    return f'{m}m' if m else '<1m'
+
+
+def _fmt_playtime(td):
+    """PSN play time, compact -- hours are the natural unit gamers read (452h); minutes only under an hour."""
+    if td is None:
+        return None
+    total = int(td.total_seconds())
+    h, m = total // 3600, (total % 3600) // 60
+    if h:
+        return f'{h}h'
+    return f'{m}m' if m else '<1m'
