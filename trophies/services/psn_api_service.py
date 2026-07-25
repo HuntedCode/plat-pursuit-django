@@ -6,8 +6,8 @@ from django.utils import timezone
 from django.db import transaction, IntegrityError, OperationalError
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from collections import defaultdict
-from django.db.models import Count, Max, Q
-from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
+from django.db.models import Count, Max, Min, Q
+from trophies.models import Profile, Game, ProfileGame, ProfileTrophyGroup, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
 from psnawp_api.models.title_stats import TitleStats
 from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
 from trophies.discord_utils.discord_notifications import notify_new_platinum
@@ -710,10 +710,98 @@ class PsnApiService:
         # keeping them live between cron runs. See
         # docs/guides/cron-jobs.md#recalc_earn_rates.
 
+        # Per-group standings (the group/speed leaderboards) ride on the same populations.
+        cls.update_trophy_group_stats(profile_ids, game_ids_set)
+
         duration = time.time() - start_time
         logger.info(f"profilegame stats updated games={total_pgs} dur={duration:.2f}s")
-            
-    
+
+
+    @classmethod
+    def update_trophy_group_stats(cls, profile_ids, game_ids):
+        """Upsert ProfileTrophyGroup rows (per-group standings) for these (profile, game) populations.
+
+        One grouped aggregate over EarnedTrophy -- earned counts (total + per tier) and the first/last earned
+        timestamps per (profile, game, trophy_group_id) -- joined to each group's defined-trophy total for
+        the percentage. Pure DB aggregation, whale-safe: no per-row Python iteration over EarnedTrophy. Same
+        shape as update_profilegame_stats; called from it on every sync and from backfill_profile_trophy_groups.
+
+        A row is written for each (profile, group) the profile has earned at least one trophy in (the aggregate
+        filters earned=True, so a group with nothing earned yields no row). `completion_seconds` is set only
+        when the group is fully earned AND defines >=2 trophies -- that is what puts a row on the speed board;
+        everyone else stays null and out of the partial speed index. Upsert-only: earned counts never fall,
+        so rows are created or refreshed, never deleted here.
+        """
+        if not profile_ids or not game_ids:
+            return
+
+        profile_ids = list(profile_ids)
+        game_ids = list(game_ids)
+
+        # Denominator per (game, group): the group's defined-trophy total. Also maps to the TrophyGroup PK.
+        group_meta = {}   # (game_id, trophy_group_id) -> (trophy_group_pk, defined_total)
+        for tg in TrophyGroup.objects.filter(game_id__in=game_ids).only(
+            'id', 'game_id', 'trophy_group_id', 'defined_trophies'
+        ):
+            dt = tg.defined_trophies or {}
+            total = sum(int(dt.get(k, 0) or 0) for k in ('bronze', 'silver', 'gold', 'platinum'))
+            group_meta[(tg.game_id, tg.trophy_group_id)] = (tg.id, total)
+
+        rows = (
+            EarnedTrophy.objects
+            .filter(profile_id__in=profile_ids, trophy__game_id__in=game_ids, earned=True)
+            .values('profile_id', 'trophy__game_id', 'trophy__trophy_group_id')
+            .annotate(
+                earned=Count('id'),
+                platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
+                gold=Count('id', filter=Q(trophy__trophy_type='gold')),
+                silver=Count('id', filter=Q(trophy__trophy_type='silver')),
+                bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
+                first_at=Min('earned_date_time'),
+                last_at=Max('earned_date_time'),
+            )
+        )
+
+        to_upsert = []
+        for r in rows:
+            meta = group_meta.get((r['trophy__game_id'], r['trophy__trophy_group_id']))
+            if not meta:
+                continue                       # group not in the DB (stale/inconsistent data) -- skip
+            tg_pk, total = meta
+            if total <= 0:
+                continue
+            earned = r['earned']
+            progress = min(100, earned * 100 // total)     # floored: reads 100 iff earned == total
+            first_at, last_at = r['first_at'], r['last_at']
+
+            completion_seconds = None
+            if earned >= total and total >= 2 and first_at and last_at:
+                delta = int((last_at - first_at).total_seconds())
+                if delta >= 0:                 # data hygiene: never sort a negative/garbage row onto the speed board
+                    completion_seconds = delta
+
+            to_upsert.append(ProfileTrophyGroup(
+                profile_id=r['profile_id'],
+                trophy_group_id=tg_pk,
+                progress=progress,
+                earned_trophies={
+                    'platinum': r['platinum'], 'gold': r['gold'],
+                    'silver': r['silver'], 'bronze': r['bronze'],
+                },
+                first_trophy_at=first_at,
+                last_trophy_at=last_at,
+                completion_seconds=completion_seconds,
+            ))
+
+        for i in range(0, len(to_upsert), 500):
+            ProfileTrophyGroup.objects.bulk_create(
+                to_upsert[i:i + 500],
+                update_conflicts=True,
+                unique_fields=['profile', 'trophy_group'],
+                update_fields=['progress', 'earned_trophies', 'first_trophy_at', 'last_trophy_at', 'completion_seconds'],
+            )
+
+
     @classmethod
     def create_badge_group_from_form(cls, form_data: dict):
         name = form_data['name']

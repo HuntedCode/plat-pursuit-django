@@ -1570,8 +1570,16 @@ class ProfileGame(models.Model):
                 fields=['game', '-progress', 'most_recent_trophy_date', 'profile'],
                 name='pg_game_leaderboard_idx',
             ),
+            # Playtime board: most-played first, for the whole game. PARTIAL -- only rows with a
+            # PSN-reported duration can appear, so the ~24% with no reported time stay out of the index.
+            # profile is the total-order tiebreak, same rationale as the leaderboard index above.
+            models.Index(
+                fields=['game', '-play_duration', 'profile'],
+                condition=Q(play_duration__isnull=False),
+                name='pg_playtime_idx',
+            ),
         ]
-    
+
     @property
     def total_trophies(self):
         return self.earned_trophies_count + self.unearned_trophies_count
@@ -1729,6 +1737,67 @@ class ConceptTrophyGroup(models.Model):
 
     def __str__(self):
         return f"{self.display_name} ({self.concept.unified_title})"
+
+
+class ProfileTrophyGroup(models.Model):
+    """Per-(profile, trophy group) standings -- the denorm behind the group-scoped leaderboards.
+
+    Phase 1's board ranks by ProfileGame.progress, one % across ALL of a game's trophies, whose denominator
+    MOVES when DLC lands (a day-one platter slides down because of content that did not exist when they
+    finished). This stores each profile's standing WITHIN a single trophy group, so a group's board -- the
+    base-game platinum race, each DLC board, and the group speed boards -- is as cheap to rank as the overall
+    board: an indexed slice, never a live aggregate over EarnedTrophy on the request path.
+
+    Maintained on every sync by PSNApiService.update_profilegame_stats (the same place ProfileGame's
+    earned/plat/recent-date denorms are refreshed) and seeded once by the backfill_profile_trophy_groups
+    command. Rows are created for every group a profile has trophy data for, hidden or not; the board query
+    filters hidden games at read time.
+
+    FK grain is the game-level TrophyGroup, NOT Concept / ConceptTrophyGroup: a game's TrophyGroups travel
+    with the Game during concept reassignment, so this model has NO direct Concept relation and therefore
+    needs NO Concept.absorb() branch.
+    """
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='trophy_group_standings')
+    trophy_group = models.ForeignKey(TrophyGroup, on_delete=models.CASCADE, related_name='profile_standings')
+
+    progress = models.PositiveSmallIntegerField(
+        default=0,
+        help_text='Completion % within this group, FLOORED -- so it reads 100 iff every trophy in the group is earned.'
+    )
+    earned_trophies = models.JSONField(
+        default=dict, blank=True,
+        help_text="Per-tier EARNED counts in this group, e.g. {'platinum':1,'gold':2,'silver':4,'bronze':9}. Feeds the row tier dots."
+    )
+    first_trophy_at = models.DateTimeField(null=True, blank=True, help_text='Earliest trophy earned in this group (the speed-board start).')
+    last_trophy_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='Latest trophy earned in this group -- the progress-board recency tiebreak AND the speed-board completion time.'
+    )
+    completion_seconds = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text='Elapsed first->last trophy in seconds, set ONLY when the group is fully earned and defines >=2 trophies. Null = not on the speed board.'
+    )
+
+    class Meta:
+        unique_together = ['profile', 'trophy_group']
+        indexes = [
+            # Group PROGRESS board: rank by completion, ties broken by who reached their standing first.
+            # Mirrors pg_game_leaderboard_idx field-for-field; `profile` is the load-bearing final key that
+            # makes the order TOTAL, so adjacent virtual windows never skip/duplicate and a rank never
+            # flickers (everyone at 100% shares progress, so ties are the common case, not an edge one).
+            models.Index(fields=['trophy_group', '-progress', 'last_trophy_at', 'profile'], name='ptg_progress_idx'),
+            # Group SPEED board: fastest first->last completion. PARTIAL -- completion_seconds is null for
+            # everyone who has not fully completed the group, so only completers are indexed, keeping it far
+            # smaller and hotter than the table.
+            models.Index(
+                fields=['trophy_group', 'completion_seconds', 'last_trophy_at', 'profile'],
+                condition=Q(completion_seconds__isnull=False),
+                name='ptg_speed_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} @ {self.trophy_group} ({self.progress}%)"
 
 
 class EarnedTrophy(models.Model):
