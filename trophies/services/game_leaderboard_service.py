@@ -1,42 +1,38 @@
-"""Per-game leaderboard: ranking, windowed reads, rank lookup, and view options.
+"""Per-game leaderboards: one windowing/rank/suggest engine, several boards.
 
-Canonical ranking is `progress DESC, most_recent_trophy_date ASC (NULLS LAST), profile_id ASC`, backed by
-`pg_game_leaderboard_idx`. Completers sort to the top ordered by WHEN they finished, then everyone else by
-how close they are -- so a game's board reads as a race rather than a snapshot.
+A **Board** is a filtered population + a TOTAL ordering. The engine below (windowed reads, rank lookup,
+suggest, size) is written ONCE against that interface; each board subclass supplies only its queryset and
+its sort keys. Boards:
 
-The third sort key is load-bearing, not decoration. Ties on the first two are the normal case (everyone at
-100% shares progress=100), and without a unique final key Postgres may order tied rows differently between
-calls, so a row's rank -- its position in this order -- would flicker between reads.
+  - EverythingBoard   -- ProfileGame, progress across ALL of a game's trophies (the original overall board)
+  - GroupProgressBoard-- ProfileTrophyGroup, completion WITHIN one trophy group (base game or a DLC)
+  - GroupSpeedBoard   -- ProfileTrophyGroup, fastest first->last completion of a group (the "Fastest Platinum"
+                         race for the default group). Only fully-completed, >=2-trophy groups qualify.
+  - PlaytimeBoard     -- ProfileGame, most PSN-reported play time (whole game)
 
-The client renders the board VIRTUALIZED (a full-height spacer, only the visible ~30 rows in the DOM), so
-it reads rows by rank RANGE (`page_range`) rather than by cursor. Plain OFFSET is fine here: a single game's
-board is small (biggest on beta ~1,400), so even the deepest window is single-digit ms on the index.
+Every board's canonical order ends in `profile_id`, a UNIQUE final key that makes the order TOTAL. That is
+load-bearing, not decoration: ties on the earlier keys are the normal case (everyone at 100% shares
+progress; identical completion_seconds happen), and without a unique tail Postgres may order tied rows
+differently between calls, so a row's rank would flicker and adjacent virtual windows would skip/duplicate.
 
-VIEW OPTIONS (BoardOptions):
-  - invert: show the board bottom-first. Served by scanning the SAME index BACKWARD -- no extra cost.
-  - only_earners (default ON): drop 0%/zero-trophy owners. They sit at the bottom of the index, so excluding
-    them just ends the scan earlier -- free, often faster.
-  - registered_only: only profiles with a linked site account (Profile.user is set). A post-join filter,
-    not index-served, but negligible at board scale.
+Each board is backed by an index that serves its ORDER BY directly (pg_game_leaderboard_idx, ptg_progress_idx,
+ptg_speed_idx, pg_playtime_idx), so windowed reads are single-digit ms. Plain OFFSET is fine at board scale;
+the millions-of-players ceilings and their fixes are documented in docs/features/game-leaderboards.md.
 
-Filters change the POPULATION, so rank / board_size / windows all apply them consistently: a rank is always
-"position within the currently-viewed board", which is what a viewer toggling a filter expects.
+VIEW OPTIONS (BoardOptions): invert (bottom-first, same index scanned backward), only_earners (drop 0%
+rows -- progress boards only), registered_only (linked site accounts only). Filters change the POPULATION,
+so rank / size / windows all apply them consistently.
 """
 import logging
 from dataclasses import dataclass
 
 from django.db.models import Q, F
 
-from trophies.models import ProfileGame
+from trophies.models import ProfileGame, ProfileTrophyGroup, TrophyGroup
 
 logger = logging.getLogger('psn_api')
 
 PAGE_SIZE = 50          # rows per fetched window (the client asks for ranges this size)
-
-# Mirrors pg_game_leaderboard_idx field-for-field; asserted equal in the tests. INVERTED is the exact
-# reverse (Postgres serves it by scanning the same index backward, nulls flipping LAST<->FIRST).
-ORDER_BY = ('-progress', F('most_recent_trophy_date').asc(nulls_last=True), 'profile_id')
-INVERTED_ORDER = ('progress', F('most_recent_trophy_date').desc(nulls_first=True), '-profile_id')
 
 
 @dataclass(frozen=True)
@@ -68,115 +64,242 @@ class BoardOptions:
         return params
 
 
-def _base_qs(game, opts):
-    """The filtered population for `game`'s board, WITHOUT ordering. Scope is everyone who owns the game
-    minus hidden rows, then the opt filters."""
-    qs = ProfileGame.objects.filter(game=game, hidden_flag=False, user_hidden=False)
-    if opts.only_earners:
-        qs = qs.filter(progress__gt=0)
-    if opts.registered_only:
-        qs = qs.filter(profile__user__isnull=False)
-    return qs
+@dataclass(frozen=True)
+class SortKey:
+    """One key in a board's total ordering. `nulls_last` marks a nullable key whose FORWARD order is
+    ascending-nulls-last (our only nullable pattern: the tiebreak timestamps). Its inverted order is the
+    exact reverse (descending-nulls-first)."""
+    field: str
+    desc: bool
+    nulls_last: bool = False
+
+    def order_expr(self, invert):
+        if self.nulls_last:                                   # nullable tiebreak: asc-nulls-last forward
+            f = F(self.field)
+            return f.desc(nulls_first=True) if invert else f.asc(nulls_last=True)
+        descending = self.desc ^ invert
+        return ('-' if descending else '') + self.field       # plain string; the index serves it
+
+    def better(self, value):
+        """Q for 'this row's field ranks strictly ahead of `value` on this key alone' (canonical order)."""
+        if self.nulls_last and value is None:
+            return Q(**{f'{self.field}__isnull': False})      # any non-null beats a null (nulls sort last)
+        if self.nulls_last:
+            return Q(**{f'{self.field}__lt': value})          # nullable tiebreaks are ascending
+        op = 'gt' if self.desc else 'lt'
+        return Q(**{f'{self.field}__{op}': value})
+
+    def tied(self, value):
+        if value is None:
+            return Q(**{f'{self.field}__isnull': True})
+        return Q(**{self.field: value})
 
 
-def board_queryset(game, opts):
-    """The board in DISPLAY order (respects invert)."""
-    return _base_qs(game, opts).order_by(*(INVERTED_ORDER if opts.invert else ORDER_BY))
+class Board:
+    """A single leaderboard. Subclasses set KEYS (canonical order, unique final key) and _population()."""
+
+    KEYS = ()
+
+    def __init__(self, game, opts):
+        self.game = game
+        self.opts = opts
+
+    # -- subclass hooks --------------------------------------------------
+
+    def _population(self):
+        """The filtered, UNORDERED queryset for this board (model + population filters)."""
+        raise NotImplementedError
+
+    # -- ordering --------------------------------------------------------
+
+    def _order(self, invert):
+        return tuple(k.order_expr(invert) for k in self.KEYS)
+
+    def ordered(self):
+        """The board in DISPLAY order (respects invert)."""
+        return self._population().order_by(*self._order(self.opts.invert))
+
+    # -- reads -----------------------------------------------------------
+
+    def size(self):
+        """Players on the currently-filtered board -- the client sizes the virtual spacer from this."""
+        return self._population().count()
+
+    def page_range(self, start, count=PAGE_SIZE):
+        """Rows at 1-indexed display ranks [start, start+count). Bounded OFFSET slice; the index serves the
+        ordering. Returns model instances (select_related profile) in display order; caller numbers them."""
+        start = max(1, start)
+        count = max(1, min(count, 500))
+        return list(self.ordered().select_related('profile')[start - 1: start - 1 + count])
+
+    def row_at_rank(self, rank):
+        """The row at 1-indexed CANONICAL rank (from the best), or None past the board. Forward order, always
+        (the number a viewer types is the rank shown beside a row, counted from the top regardless of invert)."""
+        rank = max(1, rank)
+        row = self._population().order_by(*self._order(invert=False)).select_related('profile')[rank - 1: rank].first()
+        return self._suggestion(row) if row else None
+
+    def rank_for(self, profile):
+        """1-indexed CANONICAL rank of `profile` on this board, or None if absent. O(rank), bounded by one
+        game's players."""
+        row = self._board_row(profile)
+        return None if row is None else self._rank_of_row(row)
+
+    def suggest(self, query, limit=8):
+        """Board players whose PSN name matches `query`, each with its rank -- the search typeahead. Scoped
+        to the filtered board, so a hidden/filtered-out player never appears. Returns [] below 2 chars."""
+        q = (query or '').strip()
+        if len(q) < 2:
+            return []
+        matches = list(
+            self.ordered()
+            .filter(Q(profile__psn_username__icontains=q) | Q(profile__display_psn_username__icontains=q))
+            .select_related('profile')[:limit]
+        )
+        return [self._suggestion(row) for row in matches]
+
+    # -- internals -------------------------------------------------------
+
+    def _board_row(self, profile):
+        if not profile:
+            return None
+        return (
+            self._population()
+            .filter(profile=profile)
+            .only(*[k.field for k in self.KEYS])
+            .first()
+        )
+
+    def _ahead_of(self, row):
+        """Q matching everyone ranked strictly ahead of `row` in canonical order, built from KEYS: ahead at
+        key i means tied on keys 0..i-1 and strictly better at key i. The unique final key closes it off."""
+        result = Q(pk__in=[])                                 # matches nothing; OR terms accumulate
+        tie = None
+        for key in self.KEYS:
+            value = getattr(row, key.field)
+            clause = key.better(value) if tie is None else (tie & key.better(value))
+            result = result | clause
+            eq = key.tied(value)
+            tie = eq if tie is None else (tie & eq)
+        return result
+
+    def _rank_of_row(self, row):
+        return self._population().filter(self._ahead_of(row)).count() + 1
+
+    def _suggestion(self, row):
+        """The dict shape the view serializes for the typeahead / rank preview."""
+        return {'profile': row.profile, 'progress': getattr(row, 'progress', None), 'rank': self._rank_of_row(row)}
 
 
-def board_size(game, opts):
-    """Players on the currently-filtered board -- the client sizes the virtual spacer from this. NOT
-    Game.played_count (that counts hidden rows AND ignores the filters, so it would disagree with the list)."""
-    return _base_qs(game, opts).count()
+# ── board types ──────────────────────────────────────────────────────────────
 
-
-def page_range(game, opts, start, count=PAGE_SIZE):
-    """Rows at 1-indexed display ranks [start, start+count), for the virtualized list.
-
-    Bounded OFFSET slice -- fine at board scale, and the index serves the ordering directly. Returns model
-    instances (select_related profile) in display order; the caller numbers them start, start+1, ...
-    """
-    start = max(1, start)
-    count = max(1, min(count, 500))
-    return list(board_queryset(game, opts).select_related('profile')[start - 1: start - 1 + count])
-
-
-# ── rank ─────────────────────────────────────────────────────────────────────
-
-def _board_row(game, profile, opts):
-    """The profile's own row on the FILTERED board, or None if absent (doesn't own it, hidden, or filtered
-    out -- e.g. a 0-trophy viewer when only_earners is on)."""
-    if not profile:
-        return None
-    return (
-        _base_qs(game, opts)
-        .filter(profile=profile)
-        .only('progress', 'most_recent_trophy_date', 'profile_id')
-        .first()
+class EverythingBoard(Board):
+    """Overall completion across ALL of a game's trophies (ProfileGame). The original board; for a
+    single-group game this IS the default-group board."""
+    KEYS = (
+        SortKey('progress', desc=True),
+        SortKey('most_recent_trophy_date', desc=False, nulls_last=True),
+        SortKey('profile_id', desc=False),
     )
 
-
-def _ahead_of(row):
-    """Q matching everyone ranked strictly above `row` in canonical (forward) order."""
-    ahead = Q(progress__gt=row.progress)
-    if row.most_recent_trophy_date is None:
-        ahead |= Q(progress=row.progress) & (
-            Q(most_recent_trophy_date__isnull=False)
-            | Q(most_recent_trophy_date__isnull=True, profile_id__lt=row.profile_id)
-        )
-    else:
-        ahead |= Q(progress=row.progress) & (
-            Q(most_recent_trophy_date__lt=row.most_recent_trophy_date)
-            | Q(most_recent_trophy_date=row.most_recent_trophy_date, profile_id__lt=row.profile_id)
-        )
-    return ahead
+    def _population(self):
+        qs = ProfileGame.objects.filter(game=self.game, hidden_flag=False, user_hidden=False)
+        if self.opts.only_earners:
+            qs = qs.filter(progress__gt=0)
+        if self.opts.registered_only:
+            qs = qs.filter(profile__user__isnull=False)
+        return qs
 
 
-def _rank_of_row(game, opts, row):
-    """Canonical rank of a row we already hold (no re-fetch) -- count everyone ahead of it, +1."""
-    return _base_qs(game, opts).filter(_ahead_of(row)).count() + 1
-
-
-def rank_for(game, profile, opts):
-    """1-indexed CANONICAL rank (from the top / best), or None if the profile isn't on this board.
-
-    Canonical regardless of invert -- "You're #42" means 42nd best. Respects the filters, so it's the rank
-    within the currently-viewed population. The client converts it to a display position (total - rank + 1
-    when inverted) to place the row in the virtual list. O(rank), bounded by one game's players.
-    """
-    row = _board_row(game, profile, opts)
-    if row is None:
-        return None
-    return _rank_of_row(game, opts, row)
-
-
-def row_at_rank(game, opts, rank):
-    """The hunter at 1-indexed CANONICAL rank (from the top / best), or None if past the board.
-
-    Always forward order, ignoring invert: the number a viewer types is the rank shown beside a row, which
-    counts from the best down regardless of which way they're scrolling. One bounded OFFSET read, so the
-    number typeahead previews who's there without a COUNT. Same shape as `suggest`'s items.
-    """
-    rank = max(1, rank)
-    row = _base_qs(game, opts).order_by(*ORDER_BY).select_related('profile')[rank - 1: rank].first()
-    if row is None:
-        return None
-    return {'profile': row.profile, 'progress': row.progress, 'rank': rank}
-
-
-def suggest(game, opts, query, limit=8):
-    """Board players whose PSN name matches `query`, each with its rank -- for the search typeahead.
-
-    Scoped to the filtered board, so a hidden/filtered-out player never appears. Ranks are computed per
-    match (a bounded count each), fine at typeahead limits. Returns [] below 2 chars.
-    """
-    q = (query or '').strip()
-    if len(q) < 2:
-        return []
-    matches = list(
-        board_queryset(game, opts)
-        .filter(Q(profile__psn_username__icontains=q) | Q(profile__display_psn_username__icontains=q))
-        .select_related('profile')[:limit]
+class PlaytimeBoard(Board):
+    """Most PSN-reported play time for the whole game (ProfileGame). Partial-index population: only rows with
+    a reported duration. only_earners does not apply (it is playtime, not completion)."""
+    KEYS = (
+        SortKey('play_duration', desc=True),
+        SortKey('profile_id', desc=False),
     )
-    return [{'profile': row.profile, 'progress': row.progress, 'rank': _rank_of_row(game, opts, row)}
-            for row in matches]
+
+    def _population(self):
+        qs = ProfileGame.objects.filter(
+            game=self.game, hidden_flag=False, user_hidden=False, play_duration__isnull=False
+        )
+        if self.opts.registered_only:
+            qs = qs.filter(profile__user__isnull=False)
+        return qs
+
+
+class _GroupBoard(Board):
+    """Shared base for the per-trophy-group boards (ProfileTrophyGroup). Hidden games are filtered at read
+    time against ProfileGame -- a rare, tiny anti-join -- rather than denormed onto the standings row."""
+
+    def __init__(self, game, group, opts):
+        super().__init__(game, opts)
+        self.group = group
+
+    def _group_qs(self):
+        hidden = (
+            ProfileGame.objects.filter(game=self.game)
+            .filter(Q(hidden_flag=True) | Q(user_hidden=True))
+            .values('profile_id')
+        )
+        return ProfileTrophyGroup.objects.filter(trophy_group=self.group).exclude(profile_id__in=hidden)
+
+
+class GroupProgressBoard(_GroupBoard):
+    """Completion within one trophy group. Ties broken by who reached their standing first."""
+    KEYS = (
+        SortKey('progress', desc=True),
+        SortKey('last_trophy_at', desc=False, nulls_last=True),
+        SortKey('profile_id', desc=False),
+    )
+
+    def _population(self):
+        qs = self._group_qs()
+        if self.opts.only_earners:
+            qs = qs.filter(progress__gt=0)                    # hide the sub-1% who've barely started
+        if self.opts.registered_only:
+            qs = qs.filter(profile__user__isnull=False)
+        return qs
+
+
+class GroupSpeedBoard(_GroupBoard):
+    """Fastest first->last completion of a group. Population is the partial speed index: only rows with a
+    completion_seconds (fully earned, >=2-trophy groups). only_earners does not apply (all are complete)."""
+    KEYS = (
+        SortKey('completion_seconds', desc=False),
+        SortKey('last_trophy_at', desc=False),
+        SortKey('profile_id', desc=False),
+    )
+
+    def _population(self):
+        qs = self._group_qs().filter(completion_seconds__isnull=False)
+        if self.opts.registered_only:
+            qs = qs.filter(profile__user__isnull=False)
+        return qs
+
+
+# ── board resolution ─────────────────────────────────────────────────────────
+
+def group_for(game, group_id):
+    """The game's TrophyGroup with this trophy_group_id ('default', '001', ...), or None."""
+    return TrophyGroup.objects.filter(game=game, trophy_group_id=group_id).first()
+
+
+def resolve_board(game, param, opts):
+    """Map a `?board=` value to a Board. Recognized: 'progress:all' (Everything), 'progress:<gid>',
+    'speed:<gid>', 'playtime'. Anything missing or unrecognized falls back to the Everything board, so a
+    stale/hand-typed value degrades gracefully rather than erroring."""
+    param = (param or '').strip()
+    if param == 'playtime':
+        return PlaytimeBoard(game, opts)
+    if ':' in param:
+        kind, gid = param.split(':', 1)
+        if kind == 'progress' and gid == 'all':
+            return EverythingBoard(game, opts)
+        group = group_for(game, gid)
+        if group is not None:
+            if kind == 'speed':
+                return GroupSpeedBoard(game, group, opts)
+            if kind == 'progress':
+                return GroupProgressBoard(game, group, opts)
+    return EverythingBoard(game, opts)

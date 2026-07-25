@@ -37,18 +37,20 @@ class GameLeaderboardView(View):
     def get(self, request, np_communication_id):
         game = get_object_or_404(Game, np_communication_id=np_communication_id)
         opts = svc.BoardOptions.from_request(request)
+        board_param = request.GET.get('board', '')
+        board = svc.resolve_board(game, board_param, opts)   # which board (?board=); defaults to Everything
         profile = self._viewer_profile(request)
         step = -1 if opts.invert else 1
 
         # Typeahead: board players matching a name -> JSON, for the search dropdown.
         if request.GET.get('suggest') is not None:
-            matches = svc.suggest(game, opts, request.GET.get('suggest', ''))
+            matches = board.suggest(request.GET.get('suggest', ''))
             return JsonResponse({'players': [self._player_json(m) for m in matches]})
 
         # Number typeahead: preview the hunter at a specific rank -> JSON. The client already holds the total
         # (data-lb-total), so it never asks for a rank past the board -- no COUNT needed here.
         if request.GET.get('at') is not None:
-            m = svc.row_at_rank(game, opts, self._int(request.GET.get('at'), 0))
+            m = board.row_at_rank(self._int(request.GET.get('at'), 0))
             return JsonResponse({'players': [self._player_json(m)] if m else []})
 
         # A virtual window: rows at a display range, numbered from the caller-supplied canonical rank.
@@ -56,17 +58,18 @@ class GameLeaderboardView(View):
             start = self._int(request.GET.get('range'), 1)
             count = self._int(request.GET.get('count'), svc.PAGE_SIZE, hi=200)
             from_rank = self._int(request.GET.get('from'), start)
-            rows = svc.page_range(game, opts, start, count)
+            rows = board.page_range(start, count)
             return self._rows(request, game, opts, rows, from_rank, step, profile)
 
         # Full panel: the first window seeds first paint; board_size sizes the virtual spacer.
-        total = svc.board_size(game, opts)
-        rows = svc.page_range(game, opts, 1, svc.PAGE_SIZE)
+        total = board.size()
+        rows = board.page_range(1, svc.PAGE_SIZE)
         start_rank = total if opts.invert else 1
-        viewer_rank = svc.rank_for(game, profile, opts)
+        viewer_rank = board.rank_for(profile)
         context = {
             'game': game,
             'opts': opts,
+            'board_param': board_param,        # carried on continuation fetches so the view stays consistent
             'board_size': total,
             'page_size': svc.PAGE_SIZE,        # stamped into the DOM so the JS fetch granularity can't drift
             'viewer_rank': viewer_rank,

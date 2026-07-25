@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from tests.factories import GameFactory, ProfileFactory, ProfileGameFactory
+from trophies.models import ProfileTrophyGroup, TrophyGroup
 
 pytestmark = pytest.mark.django_db
 
@@ -473,6 +474,62 @@ def test_detail_page_renders_with_the_leaderboard_deep_link(client):
 
     assert response.status_code == 200
     assert 'gd-view-leaderboard' in response.content.decode()
+
+
+# --- board selection (?board=) -----------------------------------------------
+
+
+def _ptg_row(game, gid, progress, minutes_ago, completion_seconds=None, username=None):
+    group, _ = TrophyGroup.objects.get_or_create(game=game, trophy_group_id=gid, defaults={'defined_trophies': {}})
+    profile = ProfileFactory(psn_username=username) if username else ProfileFactory()
+    ProfileGameFactory(game=game, profile=profile, progress=progress)   # owns the game (not hidden)
+    return ProfileTrophyGroup.objects.create(
+        profile=profile, trophy_group=group, progress=progress,
+        last_trophy_at=timezone.now() - timedelta(minutes=minutes_ago),
+        completion_seconds=completion_seconds,
+    )
+
+
+def test_board_param_routes_to_a_dlc_group_board(client):
+    game, _ = _board(3)                                        # overall board has 3 ProfileGame rows
+    _ptg_row(game, '001', progress=100, minutes_ago=5)
+    _ptg_row(game, '001', progress=40, minutes_ago=2)         # only 2 players on the DLC group
+
+    body = client.get(_url(game, board='progress:001')).content.decode()
+
+    assert body.count('gd-lb__row') == 2                     # the DLC group's population, not the overall 3
+    assert 'data-lb-total="2"' in body
+
+
+def test_board_param_routes_to_the_speed_board(client):
+    game = GameFactory()
+    _ptg_row(game, 'default', progress=100, minutes_ago=10, completion_seconds=3600)
+    _ptg_row(game, 'default', progress=100, minutes_ago=10, completion_seconds=7200)
+    _ptg_row(game, 'default', progress=60, minutes_ago=5, completion_seconds=None)   # not complete -> off speed board
+
+    body = client.get(_url(game, board='speed:default')).content.decode()
+
+    assert body.count('gd-lb__row') == 2                     # only the two completers
+    assert 'data-lb-total="2"' in body
+
+
+def test_board_param_routes_to_the_playtime_board(client):
+    game = GameFactory()
+    ProfileGameFactory(game=game, profile=ProfileFactory(), play_duration=timedelta(hours=50))
+    ProfileGameFactory(game=game, profile=ProfileFactory(), play_duration=None)       # no reported time -> excluded
+
+    body = client.get(_url(game, board='playtime')).content.decode()
+
+    assert body.count('gd-lb__row') == 1
+    assert 'data-lb-total="1"' in body
+
+
+def test_unknown_board_param_falls_back_to_the_overall_board(client):
+    game, _ = _board(3)
+
+    body = client.get(_url(game, board='nonsense')).content.decode()
+
+    assert body.count('gd-lb__row') == 3                     # the Everything board, unchanged
 
 
 def test_retired_players_modal_is_gone():
