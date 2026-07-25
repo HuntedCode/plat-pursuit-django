@@ -3,8 +3,9 @@
 The **Ranks** tab on game detail (`/games/<np_communication_id>/`): every hunter who owns a game, ranked
 by completion, with the viewer's own standing surfaced.
 
-**Status**: Phase 1 shipped (overall board). Phase 2 (per-trophy-group boards) and Phase 3 (time boards)
-are designed but not built - see [Roadmap](#roadmap).
+**Status**: shipped. A family of boards per game -- overall + per-trophy-group standings, a "Fastest"
+(speed) board per group, and a whole-game playtime board -- served by one engine over one denorm. See
+[Board family](#board-family).
 
 ---
 
@@ -44,10 +45,62 @@ index and the query must both rely on that default (they do).
 
 ---
 
+## Board family
+
+Each game exposes several boards, all served by **one engine**. A `Board` (in `game_leaderboard_service.py`)
+is a filtered population + a total ordering; the windowing / rank / suggest / row-preview logic is written
+once against that interface, and each board subclass supplies only its queryset and its `SortKey` list. The
+generic "who ranks strictly ahead of this row" Q is built from the keys, so adding a board is a few lines,
+not a re-implementation of the rank math.
+
+| Board | Model | Ranked by | Notes |
+|-------|-------|-----------|-------|
+| **Everything** (`progress:all`) | `ProfileGame` | overall completion across all trophies | the original board; for a single-group game it IS the base board |
+| **Group standings** (`progress:<gid>`) | `ProfileTrophyGroup` | completion within one trophy group | base game or a DLC; fixed denominator, so a day-one platter never slides |
+| **Group speed** (`speed:<gid>`) | `ProfileTrophyGroup` | fastest first→last completion of the group | the "Fastest Platinum" race for the default group; only fully-completed, ≥2-trophy groups qualify |
+| **Playtime** (`playtime`) | `ProfileGame` | most PSN-reported play time (whole game) | only rows with a reported duration; excludes the ~24% without |
+
+**Why per-group standings exist.** The Everything board ranks by `ProfileGame.progress`, one % across ALL
+trophies, whose denominator MOVES when DLC lands: everyone's percentage falls and a player who platted on
+day one slides down because of content that did not exist when they finished. A group board's denominator
+is fixed, so the base-game race stays a race.
+
+**The denorm.** Per-group standings live in `ProfileTrophyGroup` (one row per profile per group with ≥1
+earned trophy): `progress` (floored, so 100 iff every group trophy is earned), per-tier `earned_trophies`,
+`first/last_trophy_at`, and `completion_seconds` (set only when the group is fully earned AND has ≥2
+trophies -- the speed metric). Maintained on every sync by `PsnApiService.update_trophy_group_stats` (one
+profile-scoped grouped aggregate; the denominator is `COUNT(Trophy)`, not `defined_trophies`, so
+`earned <= total` is guaranteed) and seeded by `backfill_profile_trophy_groups`. ~1.46M rows on beta
+(1.73× ProfileGame). It has no direct `Concept` relation (FK grain is game-level `TrophyGroup`), so it needs
+**no `Concept.absorb()` branch**.
+
+**Hidden games** are filtered at read time by the group boards via a subquery on `ProfileGame` (rare, tiny
+anti-join) rather than denormed onto the standings row -- no staleness to propagate.
+
+**The switcher.** `board_menu(game)` builds the selector (a couple of small aggregates; the panel is
+lazy-loaded): a segmented mode row (Standings / Fastest / Most Played), each present only when it has a
+board (Fastest needs a ≥2-trophy group; Most Played needs play-time data), plus a group row on DLC games.
+Single-group games (~95%) show just the mode row, or nothing when there's a single board. Each chip carries
+its full `?board=` param; clicking re-fetches the whole panel exactly like a filter toggle, and the active
+board rides on the `.gd-lb` root so every continuation fetch hits the same board.
+
+---
+
 ## Performance
 
-Backed by `pg_game_leaderboard_idx` on `ProfileGame (game, progress DESC, most_recent_trophy_date, profile)`
-(migration `0260`, built `CONCURRENTLY`).
+Every board is backed by an index that serves its `ORDER BY` directly, so windowed reads never sort in
+memory. Each ends in `profile` (the unique total-order key):
+
+| Index | Model | Fields | Migration |
+|-------|-------|--------|-----------|
+| `pg_game_leaderboard_idx` | ProfileGame | `game, -progress, most_recent_trophy_date, profile` | `0260` (CONCURRENTLY) |
+| `ptg_progress_idx` | ProfileTrophyGroup | `trophy_group, -progress, last_trophy_at, profile` | `0261` (empty table) |
+| `ptg_speed_idx` | ProfileTrophyGroup | `trophy_group, completion_seconds, last_trophy_at, profile` **partial** `WHERE completion_seconds IS NOT NULL` | `0261` |
+| `pg_playtime_idx` | ProfileGame | `game, -play_duration, profile` **partial** `WHERE play_duration IS NOT NULL` | `0262` (CONCURRENTLY) |
+
+The `ptg_*` indexes ride with the empty-table `CreateModel` (instant, no CONCURRENTLY needed); the two
+ProfileGame indexes are on a populated table so they build `CONCURRENTLY`. The partial indexes carry only
+the rows that can appear on their board (completers / players with reported time), keeping them small.
 
 Measured on beta (844K `ProfileGame` rows, biggest board 1,421 players):
 
@@ -129,14 +182,19 @@ rank itself, and must not.
 
 `GET /games/<np_communication_id>/leaderboard/` - **HTML**, not JSON, and public.
 
-Three shapes from one URL (all honour the view options below):
+Shapes from one URL (all honour `?board=` and the view options below):
 
 | Query | Returns | Used by |
 |-------|---------|---------|
-| *(none)* | Full panel: controls, header, the viewer's standing, `data-lb-total` (spacer size), and the first window | First activation of the tab / a control change |
+| *(none)* | Full panel: board switcher, controls, header, the viewer's standing, `data-lb-total` (spacer size), and the first window | First activation of the tab / a control or board change |
 | `?range=<display-pos>&from=<canonical-rank>&count=<n>` | Rows only, positioned by the client | A virtual window as the list scrolls |
 | `?suggest=<q>` | **JSON** `{players: [{display, username, avatar, rank, progress, url}]}` | Search typeahead (by name) |
 | `?at=<rank>` | **JSON**, same shape, the single hunter at that canonical rank (or `[]` past the board) | Number typeahead (rank preview) |
+
+`?board=` selects which board: `progress:all` (Everything, the default), `progress:<gid>`, `speed:<gid>`, or
+`playtime`. Unrecognized / missing → the Everything board (`resolve_board` degrades gracefully). The client
+carries the active board on every fetch (it rides on the `.gd-lb` root), so range/suggest/at always hit the
+board the viewer is looking at.
 
 `range` is a 1-indexed display position; `from` is the canonical rank of the window's first row, which the
 client derives from the position + the `total` it already holds -- so a range fetch costs no COUNT. Ranks
@@ -224,21 +282,15 @@ kind of thing a later "just include it" refactor would quietly undo.
 
 ## Roadmap
 
-**Phase 2 - group-scoped boards.** The platinum race is not a separate feature: it is the **default
-trophy group's** board. DLC boards are the other groups'. This fixes a real defect in progress-only
-ranking - `progress` has a moving denominator, so when DLC lands everyone's percentage falls and the
-player who platted on day one slides down a board because of content that did not exist when they
-finished.
+Overall, group standings, group speed, and playtime boards are **shipped** (see [Board family](#board-family)).
+Remaining / deferred:
 
-Needs a `ProfileTrophyGroup` denorm (per-group standings are not stored anywhere today). Sized on beta at
-**~1.46M rows**, only 1.73x `ProfileGame`, so eager row creation is fine. Denominators come free from
-`TrophyGroup.defined_trophies`. Only 1,681 of 37,398 games have DLC, so the board selector must be absent
-entirely on single-group games.
-
-**Phase 3 - time boards.** Falls out of Phase 2's `first_trophy_at` / `last_trophy_at`. Elapsed
-first-to-last trophy has 92.1% coverage; PSN `play_duration` only 76.1%, so it is secondary and must
-render "not tracked" rather than silently dropping a quarter of players. Time is also the most spoofable
-thing we rank on (system clocks can be manipulated offline), so it needs anomaly filtering.
+- **Anti-cheat.** Time is the most spoofable thing we rank on (offline clock manipulation), and the speed
+  board is the obvious target. Shipped guards are **data hygiene only** -- `completion_seconds` is null for
+  non-positive / untimestamped elapsed, so a broken pair can't sort a garbage row to the top. Real outlier
+  detection (vs. the game's typical completion time) is parked until it's worth the effort.
+- **Per-board control affordances.** `only_earners` is a no-op on speed/playtime boards (all complete / not a
+  completion metric); the toggle still renders. Hiding irrelevant toggles per board is a polish follow-up.
 
 ---
 
@@ -246,11 +298,14 @@ thing we rank on (system clocks can be manipulated offline), so it needs anomaly
 
 | File | Role |
 |------|------|
-| `trophies/services/game_leaderboard_service.py` | Ordering, windowed reads (page_range), rank, suggest |
-| `trophies/views/game_leaderboard_views.py` | The three response shapes |
-| `templates/trophies/partials/game_detail/_leaderboard_panel.html` | Controls + header + list |
-| `templates/trophies/partials/game_detail/_leaderboard_rows.html` | A window of rows (positioned client-side by rank) |
-| `static/js/game-detail.js` | `loadLeaderboard` / `wireLeaderboard` |
+| `trophies/services/game_leaderboard_service.py` | The `Board` engine (ordering, windowed reads, rank, suggest), the board types, `resolve_board`, `board_menu` |
+| `trophies/views/game_leaderboard_views.py` | The response shapes; board resolution; row display-field stamping |
+| `trophies/models.py` `ProfileTrophyGroup` | Per-group standings denorm |
+| `trophies/services/psn_api_service.py` `update_trophy_group_stats` | Maintains the denorm on sync |
+| `trophies/management/commands/backfill_profile_trophy_groups.py` | One-time seed of the denorm |
+| `templates/trophies/partials/game_detail/_leaderboard_panel.html` | Board switcher + controls + header + list |
+| `templates/trophies/partials/game_detail/_leaderboard_rows.html` | A window of rows (standings / speed / playtime variants) |
+| `static/js/game-detail.js` | `loadLeaderboard`, `lbVirtualize`, board/control wiring |
 | `static/css/components/game-detail.css` | `.gd-lb*` |
 | `core/management/commands/measure_leaderboard.py` | Read-only feasibility/perf probe |
 
