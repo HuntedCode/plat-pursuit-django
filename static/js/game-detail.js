@@ -86,8 +86,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return qs ? panel.dataset.lbSrc + '?' + qs : panel.dataset.lbSrc;
     }
 
-    // Fetch the WHOLE panel (initial load or after a control change) and re-wire its observers.
-    function lbFetchPanel(panel, url) {
+    // Fetch the WHOLE panel (initial load or after a control change) and re-wire its observers. `isSwitch`
+    // marks a board/filter change (vs the first load): the outgoing list dims during the fetch, then the
+    // new content settles in (see lbEntrance) so switching reads as a deliberate transition, not a flash.
+    function lbFetchPanel(panel, url, isSwitch) {
+        if (isSwitch && !reduce) {
+            const root = panel.querySelector('.gd-lb');
+            if (root) root.classList.add('is-swapping');
+        }
         fetch(url, LB_XHR).then(lbText)
             .then((html) => {
                 if (panel._lbTeardown) panel._lbTeardown();
@@ -124,13 +130,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // [data-lb-board]) so clicks elsewhere in .gd-lb -- which carries the active board -- don't match.
             const chip = e.target.closest('.gd-lb__segchip');
             if (chip && chip.dataset.lbBoard) {
-                lbFetchPanel(panel, lbOptsUrl(panel, { board: chip.dataset.lbBoard }));
+                lbFetchPanel(panel, lbOptsUrl(panel, { board: chip.dataset.lbBoard }), true);
                 return;
             }
             const opt = e.target.closest('[data-lb-opt]');
             if (opt) {
                 opt.setAttribute('aria-pressed', opt.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
-                lbFetchPanel(panel, lbOptsUrl(panel));         // re-render the whole board in the new view
+                lbFetchPanel(panel, lbOptsUrl(panel), true);   // re-render the whole board in the new view
                 return;
             }
             if (e.target.closest('[data-lb-jump]')) lbJumpToMe(panel);
@@ -155,6 +161,31 @@ document.addEventListener('DOMContentLoaded', () => {
         lbSyncMbTitle(panel);
         lbWireFind(panel);
         lbVirtualize(panel);
+        lbEntrance(panel);
+    }
+
+    // Entrance motion, after the virtualizer has mounted the first window. FIRST reveal (tab open): the
+    // on-screen rows cascade in -- a one-time grand entrance. Every later load (board / filter switch): the
+    // board content settles in with a soft rise+fade (the outgoing content was dimmed via .is-swapping while
+    // the fetch was in flight). Reduced-motion skips it entirely.
+    function lbEntrance(panel) {
+        if (reduce) return;
+        const root = panel.querySelector('.gd-lb');
+        if (!root) return;
+        const spring = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+        if (!panel._lbRevealed) {
+            panel._lbRevealed = true;
+            panel.querySelectorAll('.gd-lb__row').forEach((row, i) => {
+                if (i > 13) return;                            // just the visible window -- keep it quick
+                row.animate([{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
+                            { duration: 340, delay: i * 26, easing: spring, fill: 'backwards' });
+            });
+        } else {
+            [root.querySelector('.gd-lb__head'), root.querySelector('.gd-lb__list')].forEach((el) => {
+                if (el) el.animate([{ opacity: 0.5, transform: 'translateY(7px)' }, { opacity: 1, transform: 'none' }],
+                                   { duration: 240, easing: spring, fill: 'backwards' });
+            });
+        }
     }
 
     // The virtualized list. The .gd-lb__list is a full-height spacer (total rows x --lb-row-h), so the

@@ -176,6 +176,7 @@ def test_linked_viewer_sees_their_rank_and_their_row_is_marked(client):
     assert 'data-lb-jump' in body      # the "jump to my rank" control
     assert '#3' in body
     assert 'gd-lb__row--you' in body
+    assert 'gd-lb__youpill' in body    # the "You" pill on the viewer's own row
 
 
 def test_ranked_viewer_exposes_their_rank_for_the_minibar(client):

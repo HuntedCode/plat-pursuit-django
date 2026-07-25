@@ -885,6 +885,11 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    targets). Two-line rows on mobile are taller; the single-line table at md+ is shorter. */
 .gd-lb { display: flex; flex-direction: column; gap: 10px; --lb-row-h: 58px; }
 @media (min-width: 768px) { .gd-lb { --lb-row-h: 44px; } }
+/* While a board/filter switch is fetching, dim the board content and block input (the switcher stays lit so
+   the change you just made reads as active). The JS removes it by swapping in the new panel, which settles
+   in via lbEntrance. */
+.gd-lb.is-swapping { pointer-events: none; }
+.gd-lb.is-swapping .gd-lb__head, .gd-lb.is-swapping .gd-lb__list { opacity: 0.4; transition: opacity 0.12s var(--pp-ease); }
 
 /* Board switcher: the segmented-switcher standard (bordered pill container, transparent chips, tinted-flat
    active). A primary mode row (Standings / Fastest / Most Played) and, on DLC games, a smaller group row
@@ -1013,16 +1018,19 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 
 .gd-lb__rank { font-size: 0.78rem; font-weight: 800; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; text-align: right; }
 /* Medals key off canonical rank (set in the row template), not DOM order -- virtualized rows mount in
-   scroll order, so nth-child would colour the wrong rows after any scroll-away-and-back. */
-.gd-lb__rank--1 { color: var(--color-trophy-platinum); }
-.gd-lb__rank--2 { color: var(--color-trophy-gold); }
-.gd-lb__rank--3 { color: var(--color-trophy-silver); }
+   scroll order, so nth-child would colour the wrong rows after any scroll-away-and-back. The soft glow gives
+   the podium quiet weight without a badge that would shove the tabular alignment around. */
+.gd-lb__rank--1 { color: var(--color-trophy-platinum); text-shadow: 0 0 9px color-mix(in oklab, var(--color-trophy-platinum) 45%, transparent); }
+.gd-lb__rank--2 { color: var(--color-trophy-gold); text-shadow: 0 0 8px color-mix(in oklab, var(--color-trophy-gold) 40%, transparent); }
+.gd-lb__rank--3 { color: var(--color-trophy-silver); text-shadow: 0 0 8px color-mix(in oklab, var(--color-trophy-silver) 38%, transparent); }
 
 .gd-lb__who { display: flex; align-items: center; gap: 8px; min-width: 0; text-decoration: none; color: inherit; }
 .gd-lb__av { flex: none; width: 26px; height: 26px; border-radius: 50%; overflow: hidden; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }
 .gd-lb__av img { width: 100%; height: 100%; object-fit: cover; }
 .gd-lb__name { font-size: 0.82rem; font-weight: 600; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gd-lb__who:hover .gd-lb__name { color: var(--pp-primary); }
+/* A "You" pill on the viewer's own row, so it's scannable while scrolling past. */
+.gd-lb__youpill { flex: none; padding: 1px 6px; border-radius: 999px; font-size: 0.56rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 18%, transparent); }
 
 /* Bar only at lg (the trophy column already carries visual weight at md); date at md. */
 .gd-lb__bar { display: none; --horizon-accent: var(--pp-primary); }

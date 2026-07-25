@@ -17,6 +17,7 @@ tiebreak timestamp, normalized by the view across ProfileGame / ProfileTrophyGro
             {% if row.profile.avatar_url %}<img src="{{ row.profile.avatar_url }}" alt="" loading="lazy" />{% endif %}
         </span>
         <span class="gd-lb__name">{{ row.profile.display_psn_username|default:row.profile.psn_username }}</span>
+        {% if viewer_profile and row.profile_id == viewer_profile.id %}<span class="gd-lb__youpill">You</span>{% endif %}
     </a>
 
     {% if board_kind == 'speed' %}
