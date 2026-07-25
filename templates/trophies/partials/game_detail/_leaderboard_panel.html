@@ -118,6 +118,23 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
         {% endif %}
     </div>
 
+    {% comment %} Column header: labels the columns once so the rows stay label-free. Desktop only (mobile
+    rows are 2-line / headline-only); the CSS mirrors each board's row grid + inset so the labels sit over
+    their columns. h-start/center/end match each column's content alignment; h-bar is the lg-only bar slot. {% endcomment %}
+    {% if board_kind == 'speed' %}
+    <div class="gd-lb__colhead gd-lb__colhead--speed">
+        <span class="h-end">#</span><span class="h-start">Hunter</span><span class="h-start">Started</span><span class="h-center">Elapsed</span><span class="h-end">Finished</span>
+    </div>
+    {% elif board_kind == 'playtime' %}
+    <div class="gd-lb__colhead gd-lb__colhead--playtime">
+        <span class="h-end">#</span><span class="h-start">Hunter</span><span class="h-start">Play time</span><span class="h-center">Progress</span><span class="h-end">Last played</span>
+    </div>
+    {% else %}
+    <div class="gd-lb__colhead gd-lb__colhead--progress">
+        <span class="h-end">#</span><span class="h-start">Hunter</span><span class="h-start">Trophies</span><span class="h-bar"></span><span class="h-end">Progress</span><span class="h-end">Latest</span>
+    </div>
+    {% endif %}
+
     {% comment %} Virtualized list: .gd-lb__virt is a full-height spacer (JS sizes it to board_size rows) so
     the page scrollbar represents the WHOLE board; only the visible ~30 rows live in the DOM, absolutely
     positioned by their rank. The first window is server-rendered for instant first paint + SEO. Your

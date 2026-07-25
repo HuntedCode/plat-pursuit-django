@@ -1079,13 +1079,32 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-lb__metric { justify-self: end; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 0.9rem; color: var(--pp-text); white-space: nowrap; }
 .gd-lb__metric--speed { color: var(--pp-primary); }
 
-/* A stacked context cell: a tiny uppercase hint over a muted value (Started/Finished/Progress/Last played).
-   The label is small enough to read as a column hint, not row noise. */
+/* A context cell (speed dates / playtime progress + last-played). Columns are labelled once by the header
+   row above, so the cells hold just values. */
 .gd-lb__col { display: flex; flex-direction: column; align-items: flex-end; justify-self: end; line-height: 1.15; min-width: 0; }
-.gd-lb__collbl { font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
 .gd-lb__colval { font-size: 0.72rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* The time under the date on the Fastest board -- a speedrun's start/finish matter to the minute. */
 .gd-lb__coltime { font-size: 0.64rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0.85; }
+
+/* Column header: labels the columns once, desktop only (mobile rows are 2-line / headline-only). It mirrors
+   each board's row grid, plus the row's 10px inset and the card's 1px border (11px padding), so each label
+   sits over its column. The lg-only h-bar slot matches the standings progress-bar column. */
+.gd-lb__colhead { display: none; }
+@media (min-width: 768px) {
+    .gd-lb__colhead { display: grid; align-items: end; column-gap: 10px; padding: 0 11px 5px; }
+    .gd-lb__colhead > span { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gd-lb__colhead .h-start { justify-self: start; }
+    .gd-lb__colhead .h-center { justify-self: center; }
+    .gd-lb__colhead .h-end { justify-self: end; }
+    .gd-lb__colhead .h-bar { display: none; }
+    .gd-lb__colhead--progress { grid-template-columns: 3rem minmax(0, 1fr) 9rem 3rem 6.5rem; }
+    .gd-lb__colhead--speed, .gd-lb__colhead--playtime { grid-template-columns: 3rem minmax(0, 1fr) 6rem 6.5rem 6rem; }
+}
+@media (min-width: 1024px) {
+    .gd-lb__colhead--progress { grid-template-columns: 3rem minmax(0, 1fr) 9rem 7rem 3rem 6.5rem; }
+    .gd-lb__colhead--speed, .gd-lb__colhead--playtime { grid-template-columns: 3rem minmax(0, 1fr) 8.5rem 8.5rem 8.5rem; }
+    .gd-lb__colhead .h-bar { display: block; }
+}
 
 /* The viewer's own row, and the flash when they jump to it. */
 .gd-lb__row--you { background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-1)); border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); }

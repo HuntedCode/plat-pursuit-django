@@ -63,6 +63,8 @@ def test_panel_carries_the_header_the_spacer_total_and_a_first_window(client):
     assert 'hunters on the board' in body
     assert 'data-lb-total="3"' in body            # the JS sizes the virtual spacer from this
     assert body.count('gd-lb__row') >= 3
+    assert 'gd-lb__colhead--progress' in body     # standings column header
+    assert 'Trophies' in body and 'Latest' in body
 
 
 def test_medal_classes_key_off_rank_not_dom_position(client):
@@ -516,6 +518,8 @@ def test_board_param_routes_to_the_speed_board(client):
     assert 'gd-lb__metric--speed' in body
     assert 'gd-lb__col--start' in body and 'gd-lb__col--finish' in body   # started -> finished window
     assert 'gd-lb__coltime' in body                          # date AND time on the start/finish columns
+    assert 'gd-lb__colhead--speed' in body                   # the column header labels the columns
+    assert 'Started' in body and 'Elapsed' in body and 'Finished' in body
     assert 'data-lb-total="2"' in body
 
 
@@ -532,6 +536,8 @@ def test_board_param_routes_to_the_playtime_board(client):
     assert '50h' in body                                     # the compact play-time label
     assert '87%' in body                                     # overall progress column
     assert 'gd-lb__col--prog' in body and 'gd-lb__col--last' in body   # progress + last-played context
+    assert 'gd-lb__colhead--playtime' in body                # header labels the columns
+    assert 'Play time' in body and 'Last played' in body
     assert 'data-lb-total="1"' in body
 
 

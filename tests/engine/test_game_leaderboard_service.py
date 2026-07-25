@@ -426,6 +426,23 @@ def test_standings_mode_lands_on_base_game_for_a_dlc_game():
     assert standings['param'] == 'progress:default'
 
 
+def test_fastest_mode_prefers_the_base_game_over_a_dlc():
+    """Groups sort by id, so a DLC ('001') sorts before 'default' -- the Fastest chip must still land on the
+    base game when it qualifies, not the first DLC."""
+    from tests.factories import TrophyFactory
+    game = GameFactory()
+    _group(game, 'default')
+    _group(game, '001')
+    tid = 0
+    for gid in ('default', '001'):
+        for _ in range(2):                                   # both groups speed-eligible (>=2 trophies)
+            TrophyFactory(game=game, trophy_group_id=gid, trophy_id=tid)
+            tid += 1
+
+    speed = next(m for m in svc.board_menu(game, 'progress:all')['modes'] if m['key'] == 'speed')
+    assert speed['param'] == 'speed:default'
+
+
 def test_board_menu_title_describes_the_active_board():
     from tests.factories import TrophyFactory
     game = GameFactory()

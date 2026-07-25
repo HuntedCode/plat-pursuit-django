@@ -40,11 +40,9 @@ tiebreak timestamp, normalized by the view across ProfileGame / ProfileTrophyGro
     context (450h at 60% tells a story). Progress is hidden on mobile to keep one line. {% endcomment %}
     <span class="gd-lb__metric gd-lb__metric--playtime">{{ row.playtime_label }}</span>
     <span class="gd-lb__col gd-lb__col--prog">
-        <span class="gd-lb__collbl">Progress</span>
         <span class="gd-lb__colval">{{ row.progress }}%</span>
     </span>
     <span class="gd-lb__col gd-lb__col--last">
-        <span class="gd-lb__collbl">Last played</span>
         <span class="gd-lb__colval">{% if row.last_played %}{{ row.last_played|date:"M j, Y" }}{% else %}&mdash;{% endif %}</span>
     </span>
 

@@ -353,7 +353,10 @@ def board_menu(game, active_param):
     has_default = any(g['id'] == 'default' for g in groups)
     standings_param = 'progress:default' if (multi and has_default) else 'progress:all'
     modes = [{'key': 'progress', 'label': 'Standings', 'param': standings_param}]
-    first_speed = next((g['id'] for g in groups if g['speed']), None)
+    # Fastest defaults to the base game (the platinum race) when it qualifies. Groups sort by id, which puts
+    # 'default' AFTER '001', so pick it explicitly before falling back to the first DLC.
+    first_speed = ('default' if any(g['id'] == 'default' and g['speed'] for g in groups)
+                   else next((g['id'] for g in groups if g['speed']), None))
     if first_speed is not None:
         modes.append({'key': 'speed', 'label': 'Fastest', 'param': f'speed:{first_speed}'})
     has_playtime = ProfileGame.objects.filter(
