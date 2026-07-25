@@ -134,10 +134,11 @@ class Board:
 
     def row_at_rank(self, rank):
         """The row at 1-indexed CANONICAL rank (from the best), or None past the board. Forward order, always
-        (the number a viewer types is the rank shown beside a row, counted from the top regardless of invert)."""
+        (the number a viewer types is the rank shown beside a row, counted from the top regardless of invert).
+        The rank is the fetch offset, so pass it straight through -- no COUNT, unlike the name suggest."""
         rank = max(1, rank)
         row = self._population().order_by(*self._order(invert=False)).select_related('profile')[rank - 1: rank].first()
-        return self._suggestion(row) if row else None
+        return self._suggestion(row, rank) if row else None
 
     def rank_for(self, profile):
         """1-indexed CANONICAL rank of `profile` on this board, or None if absent. O(rank), bounded by one
@@ -186,9 +187,14 @@ class Board:
     def _rank_of_row(self, row):
         return self._population().filter(self._ahead_of(row)).count() + 1
 
-    def _suggestion(self, row):
-        """The dict shape the view serializes for the typeahead / rank preview."""
-        return {'profile': row.profile, 'progress': getattr(row, 'progress', None), 'rank': self._rank_of_row(row)}
+    def _suggestion(self, row, rank=None):
+        """The dict shape the view serializes for the typeahead / rank preview. `rank` is passed when the
+        caller already knows it (row_at_rank); the name suggest omits it, so it's counted."""
+        return {
+            'profile': row.profile,
+            'progress': getattr(row, 'progress', None),
+            'rank': rank if rank is not None else self._rank_of_row(row),
+        }
 
 
 # ── board types ──────────────────────────────────────────────────────────────

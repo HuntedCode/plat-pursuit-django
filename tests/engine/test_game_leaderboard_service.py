@@ -259,6 +259,18 @@ def test_row_at_rank_past_the_board_is_none():
     assert _ever(game, DEFAULT).row_at_rank(2) is None
 
 
+def test_row_at_rank_is_a_single_query(django_assert_num_queries):
+    """The rank is the fetch offset, so row_at_rank must NOT re-count it -- one indexed slice, no COUNT."""
+    game = GameFactory()
+    for i in range(5):
+        _player(game, 100 - i, minutes_ago=i + 1)
+    board = _ever(game, DEFAULT)
+
+    with django_assert_num_queries(1):
+        row = board.row_at_rank(3)
+    assert row['rank'] == 3
+
+
 def test_row_at_rank_respects_the_filters():
     game = GameFactory()
     _player(game, 100, minutes_ago=5, registered=False)     # rank 1 overall, filtered out for members
