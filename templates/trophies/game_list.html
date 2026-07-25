@@ -585,7 +585,7 @@
 
         // ── Infinite scroll + staggered card reveal (mirrors the Badges gallery). browse-filters.js owns the
         // filtering; this owns the scroll append, the card reveal, and the filter/sort settle dim. ──
-        var scroller = null, revealHandle = null;
+        var scroller = null, revealHandle = null, handledGrid = null;
         function initReveal() {
             if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
             var grid = document.getElementById('items-grid');
@@ -641,13 +641,19 @@
         document.body.addEventListener('htmx:afterSwap', function (e) {
             var t = (e.detail && e.detail.target) || e.target;
             if (!t || t.id !== 'browse-results') { return; }
+            // A single filter/sort swap fires afterSwap on #browse-results TWICE: once for the grid swap and
+            // once for the paired OOB swap of the active-filter chips (htmx reports both against #browse-results).
+            // Re-running the reveal on the duplicate replays the arrival animation on the same cards -- the
+            // flash. Only a genuinely NEW #items-grid element should re-init; ignore the duplicate afterSwap.
+            var grid = t.querySelector('#items-grid');
+            if (grid && grid === handledGrid) { return; }
+            handledGrid = grid;
             t.classList.remove('is-swapping');
             refreshBadge();
             // Header result-count tick (old -> new). Read the NEW total off the freshly-swapped grid
             // (#items-grid[data-result-count]) -- that's the main swap target, so it's reliably the new
             // content right here, unlike an OOB text swap on the header (whose timing raced the animation
             // and made it read a stale/previous count). Start from the JS-tracked last value.
-            var grid = t.querySelector('#items-grid');
             var countEl = document.getElementById('gbrowse-count');
             if (grid && countEl && window.PlatPursuit && PlatPursuit.countUp) {
                 var newVal = parseFloat(grid.getAttribute('data-result-count'));
