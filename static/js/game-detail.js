@@ -152,6 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (panel._lbTeardown) panel._lbTeardown();
         panel._lbTeardown = null;
         lbSyncMbRank(panel);
+        lbSyncMbTitle(panel);
         lbWireFind(panel);
         lbVirtualize(panel);
     }
@@ -459,6 +460,15 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             widget.hidden = true;
         }
+    }
+
+    // Mirror the active board's title into the minibar (shown at desktop widths via CSS). Runs on every
+    // panel load, so switching boards updates it. The title rides on the .gd-lb root (data-lb-title).
+    function lbSyncMbTitle(panel) {
+        const el = document.querySelector('[data-lb-mb-title]');
+        if (!el) return;
+        const root = panel.querySelector('.gd-lb');
+        el.textContent = root ? (root.dataset.lbTitle || '') : '';
     }
 
     // Both jumps resolve to a canonical rank, then hand off to the virtualizer's scroll-to-position.

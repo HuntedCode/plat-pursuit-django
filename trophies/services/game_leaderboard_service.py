@@ -347,7 +347,12 @@ def board_menu(game, active_param):
             'speed': counts.get(gid, 0) >= 2,
         })
 
-    modes = [{'key': 'progress', 'label': 'Standings', 'param': 'progress:all'}]
+    # Standings lands on the base game for a game with DLC (the platinum race, and the tab default); the
+    # overall board otherwise. Everything stays reachable from the group row.
+    multi = len(groups) > 1
+    has_default = any(g['id'] == 'default' for g in groups)
+    standings_param = 'progress:default' if (multi and has_default) else 'progress:all'
+    modes = [{'key': 'progress', 'label': 'Standings', 'param': standings_param}]
     first_speed = next((g['id'] for g in groups if g['speed']), None)
     if first_speed is not None:
         modes.append({'key': 'speed', 'label': 'Fastest', 'param': f'speed:{first_speed}'})
@@ -367,13 +372,36 @@ def board_menu(game, active_param):
     dlcs = [g for g in row_groups if g['id'] != 'default']
     active_dlc = next((g for g in dlcs if g['id'] == active_group), None)
 
+    # A short title for the active board, for context (the header + the desktop minibar). The DLC dropdown
+    # button stays a static "DLC", so this is where the specific DLC name surfaces.
+    if active_mode == 'playtime':
+        title = 'Most Played'
+    else:
+        if active_group == 'default':
+            scope = 'Base Game'
+        elif active_dlc:
+            scope = active_dlc['label']
+        else:
+            scope = 'Overall'
+        title = f'Fastest: {scope}' if active_mode == 'speed' else f'{scope} Standings'
+
     return {
         'modes': modes,
         'groups': groups,
         'base': base,
         'dlcs': dlcs,
         'active_dlc': active_dlc,
-        'multi': len(groups) > 1,
+        'title': title,
+        'multi': multi,
         'active_mode': active_mode,
         'active_group': active_group,
     }
+
+
+def default_board_param(game):
+    """The board a fresh Ranks tab lands on: base-game standings for a game with DLC (the platinum race),
+    else the overall board (which, for a single-group game, IS the whole game)."""
+    ids = list(game.trophy_groups.values_list('trophy_group_id', flat=True))
+    if len(ids) > 1 and 'default' in ids:
+        return 'progress:default'
+    return 'progress:all'

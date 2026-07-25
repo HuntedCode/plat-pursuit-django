@@ -463,6 +463,7 @@ def test_detail_page_offers_the_tab_but_does_not_render_the_board(client):
     assert 'data-lb-mb-find' in body
     assert 'data-lb-mb-filters' in body
     assert 'data-lb-mb-rank' in body
+    assert 'data-lb-mb-title' in body             # the board-title slot (filled by JS on the Ranks tab, desktop)
 
 
 def test_detail_page_renders_with_the_leaderboard_deep_link(client):
@@ -585,6 +586,20 @@ def test_dropdown_button_shows_and_marks_the_active_dlc(client):
 
     assert '<span>Blood and Wine</span>' in body                       # button carries the active DLC name
     assert 'gd-lb__dropbtn' in body and 'aria-pressed="true"' in body  # and reads as active
+
+
+def test_dlc_game_defaults_to_base_game_standings(client):
+    game, _ = _board(2)
+    base = TrophyGroup.objects.create(game=game, trophy_group_id='default', defined_trophies={})
+    TrophyGroup.objects.create(game=game, trophy_group_id='001', trophy_group_name='DLC One', defined_trophies={})
+    ProfileTrophyGroup.objects.create(profile=ProfileFactory(), trophy_group=base, progress=100,
+                                      last_trophy_at=timezone.now())                          # so the board isn't empty
+
+    body = client.get(_url(game)).content.decode()                                            # no ?board= -> the default
+
+    assert 'data-lb-board="progress:default"' in body        # active board is base-game standings
+    assert 'Base Game Standings' in body                     # the header title reflects it
+    assert 'data-lb-board="progress:default" aria-pressed="true"' in body   # Base Game chip is the active one
 
 
 def test_switcher_absent_when_only_one_board(client):

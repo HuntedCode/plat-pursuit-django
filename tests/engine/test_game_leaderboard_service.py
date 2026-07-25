@@ -283,8 +283,8 @@ def test_row_at_rank_respects_the_filters():
 # --- group / speed / playtime boards -----------------------------------------
 
 
-def _group(game, gid='default'):
-    return TrophyGroup.objects.create(game=game, trophy_group_id=gid, defined_trophies={})
+def _group(game, gid='default', name=''):
+    return TrophyGroup.objects.create(game=game, trophy_group_id=gid, trophy_group_name=name, defined_trophies={})
 
 
 def _ptg(group, profile, progress, last_minutes_ago=None, completion_seconds=None):
@@ -405,6 +405,40 @@ def test_board_menu_hides_speed_and_playtime_when_absent():
 
     assert [m['key'] for m in menu['modes']] == ['progress']
     assert menu['multi'] is False
+
+
+def test_default_board_param_is_base_game_for_dlc_else_overall():
+    single = GameFactory()
+    _group(single, 'default')
+    assert svc.default_board_param(single) == 'progress:all'      # one group -> the overall board
+
+    dlc = GameFactory()
+    _group(dlc, 'default')
+    _group(dlc, '001')
+    assert svc.default_board_param(dlc) == 'progress:default'     # base-game standings (the platinum race)
+
+
+def test_standings_mode_lands_on_base_game_for_a_dlc_game():
+    game = GameFactory()
+    _group(game, 'default')
+    _group(game, '001')
+    standings = next(m for m in svc.board_menu(game, 'progress:all')['modes'] if m['key'] == 'progress')
+    assert standings['param'] == 'progress:default'
+
+
+def test_board_menu_title_describes_the_active_board():
+    from tests.factories import TrophyFactory
+    game = GameFactory()
+    _group(game, 'default')
+    _group(game, '001', name='First DLC')
+    for i in (1, 2):                                          # make the DLC speed-eligible
+        TrophyFactory(game=game, trophy_group_id='001', trophy_id=i)
+
+    assert svc.board_menu(game, 'progress:all')['title'] == 'Overall Standings'
+    assert svc.board_menu(game, 'progress:default')['title'] == 'Base Game Standings'
+    assert svc.board_menu(game, 'progress:001')['title'] == 'First DLC Standings'
+    assert svc.board_menu(game, 'speed:001')['title'] == 'Fastest: First DLC'
+    assert svc.board_menu(game, 'playtime')['title'] == 'Most Played'
 
 
 # --- index contract ----------------------------------------------------------

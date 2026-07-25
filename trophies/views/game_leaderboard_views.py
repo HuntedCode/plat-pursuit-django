@@ -37,8 +37,10 @@ class GameLeaderboardView(View):
     def get(self, request, np_communication_id):
         game = get_object_or_404(Game, np_communication_id=np_communication_id)
         opts = svc.BoardOptions.from_request(request)
-        board_param = request.GET.get('board', '')
-        board = svc.resolve_board(game, board_param, opts)   # which board (?board=); defaults to Everything
+        # A fresh tab (no ?board=) lands on the base-game standings for a DLC game, the overall board
+        # otherwise. Continuation fetches always carry the active board, so this only fires on first load.
+        board_param = request.GET.get('board') or svc.default_board_param(game)
+        board = svc.resolve_board(game, board_param, opts)
         profile = self._viewer_profile(request)
         step = -1 if opts.invert else 1
 
@@ -70,7 +72,7 @@ class GameLeaderboardView(View):
             'game': game,
             'opts': opts,
             'board_param': board_param,        # carried on continuation fetches so the view stays consistent
-            'active_board': board_param or 'progress:all',
+            'active_board': board_param,
             'board_nav': svc.board_menu(game, board_param),
             'board_size': total,
             'page_size': svc.PAGE_SIZE,        # stamped into the DOM so the JS fetch granularity can't drift

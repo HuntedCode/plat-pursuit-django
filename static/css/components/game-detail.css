@@ -27,6 +27,11 @@
 .gd-minibar:not([data-mb-active="leaderboard"]) [data-mb-only="leaderboard"] { display: none; }
 /* On the Ranks tab the identity icon is the podium, not the trophy. */
 .gd-minibar[data-mb-active="leaderboard"] .pp-minibar__ico--trophy { display: none; }
+/* The active board's title in the minibar: Ranks tab, desktop widths only (the mobile minibar is too tight
+   already). Filled by lbSyncMbTitle; the middot separates it from the game name. */
+.gd-lb__mbtitle { display: none; font-size: 0.82rem; font-weight: 700; color: var(--pp-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 15rem; }
+.gd-lb__mbtitle::before { content: "\2022"; margin: 0 9px; color: var(--pp-text-mute); font-weight: 400; }
+@media (min-width: 1024px) { .gd-minibar[data-mb-active="leaderboard"] .gd-lb__mbtitle { display: inline-block; } }
 /* Mobile minibar is tight with the leaderboard's search + You + Filters, so drop the game title (the page
    header already shows it) and the "You" word (the #N + chevron carry it). */
 @media (max-width: 767px) {
@@ -885,6 +890,9 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    active). A primary mode row (Standings / Fastest / Most Played) and, on DLC games, a smaller group row
    below it. Scrolls horizontally rather than wrapping so it stays one clean line on a phone. */
 .gd-lb__boards { display: flex; flex-direction: column; gap: 6px; }
+/* Reserve the group-row line for DLC games so switching to Most Played (which has no group row) doesn't
+   collapse the switcher height and jump the page up. */
+.gd-lb__boards--multi { min-height: 4.6rem; }
 .gd-lb__seg { display: inline-flex; align-self: flex-start; max-width: 100%; gap: 2px; padding: 3px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); overflow-x: auto; scrollbar-width: none; }
 .gd-lb__seg::-webkit-scrollbar { display: none; }
 .gd-lb__segchip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 6px 13px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; cursor: pointer; color: var(--pp-text-dim); background: none; border: none; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
@@ -939,9 +947,12 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 @keyframes gdLbSpin { to { transform: rotate(360deg); } }
 
 .gd-lb__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 0 2px; }
-.gd-lb__count { display: flex; align-items: baseline; gap: 7px; }
-.gd-lb__count .pp-tally { font-size: 1.05rem; font-weight: 800; color: var(--pp-text); }
-.gd-lb__countlbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+/* The active board's title is the header; the count sits under it as a muted subtitle. */
+.gd-lb__heading { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.gd-lb__title { font-size: 1.05rem; font-weight: 800; color: var(--pp-text); line-height: 1.2; }
+.gd-lb__count { display: flex; align-items: baseline; gap: 6px; }
+.gd-lb__count .pp-tally { font-size: 0.82rem; font-weight: 800; color: var(--pp-text-dim); }
+.gd-lb__countlbl { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
 
 .gd-lb__jump { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; cursor: pointer; color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 12%, transparent); border: 1px solid color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border)); transition: background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
 .gd-lb__jump svg { width: 13px; height: 13px; }

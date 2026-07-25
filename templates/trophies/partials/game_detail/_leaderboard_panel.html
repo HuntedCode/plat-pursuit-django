@@ -7,14 +7,14 @@ they finished and everyone else follows by how close they are. The count is the 
 not Game.played_count -- that counts hidden rows and ignores filters, so it would disagree with the list.
 {% endcomment %}
 {% load humanize %}
-<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}" data-lb-total="{{ board_size }}" data-lb-invert="{% if opts.invert %}1{% else %}0{% endif %}" data-lb-page-size="{{ page_size }}" data-lb-board="{{ active_board }}">
+<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}" data-lb-total="{{ board_size }}" data-lb-invert="{% if opts.invert %}1{% else %}0{% endif %}" data-lb-page-size="{{ page_size }}" data-lb-board="{{ active_board }}" data-lb-title="{{ board_nav.title }}">
 
     {% comment %} Board switcher: a segmented mode switch (Standings / Fastest / Most Played), each present
     only when it has a board. On a game with DLC a second row picks the trophy group; single-group games
     (~95%) show just the mode row, or nothing when there is only one board. Each chip carries the full
     ?board= param it selects; the JS re-fetches the whole panel, exactly like the filter toggles. {% endcomment %}
     {% if board_nav.modes|length > 1 or board_nav.multi %}
-    <div class="gd-lb__boards" data-lb-boards>
+    <div class="gd-lb__boards{% if board_nav.multi %} gd-lb__boards--multi{% endif %}" data-lb-boards>
         <div class="gd-lb__seg" role="group" aria-label="Leaderboard type">
             {% for m in board_nav.modes %}
             <button type="button" class="gd-lb__segchip" data-lb-board="{{ m.param }}" aria-pressed="{% if board_nav.active_mode == m.key %}true{% else %}false{% endif %}">
@@ -37,8 +37,11 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
             reads worse than a menu. The button shows the active DLC's name when one is picked, else "DLC".
             The items are board chips (data-lb-board), so selecting one re-fetches like any other chip. {% endcomment %}
             <div class="gd-lb__drop" data-lb-drop>
+                {% comment %} Static "DLC" label -- swapping it to the selected DLC's name jumped the layout
+                (the button width changed). The active DLC surfaces in the board title instead; here it just
+                lights up when a DLC is selected. {% endcomment %}
                 <button type="button" class="gd-lb__segchip gd-lb__dropbtn" data-lb-drop-toggle aria-haspopup="true" aria-expanded="false" aria-pressed="{% if board_nav.active_dlc %}true{% else %}false{% endif %}">
-                    <span>{% if board_nav.active_dlc %}{{ board_nav.active_dlc.label }}{% else %}DLC{% endif %}</span>
+                    <span>DLC</span>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                 </button>
                 <div class="gd-lb__dropmenu" data-lb-dropmenu role="menu" hidden>
@@ -96,10 +99,13 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
 
     {% if rows %}
     <div class="gd-lb__head">
-        <span class="gd-lb__count">
-            <span class="pp-tally">{{ board_size|intcomma }}</span>
-            <span class="gd-lb__countlbl">{{ board_size|pluralize:"hunter,hunters" }} on the board</span>
-        </span>
+        <div class="gd-lb__heading">
+            <span class="gd-lb__title">{{ board_nav.title }}</span>
+            <span class="gd-lb__count">
+                <span class="pp-tally">{{ board_size|intcomma }}</span>
+                <span class="gd-lb__countlbl">{{ board_size|pluralize:"hunter,hunters" }} on the board</span>
+            </span>
+        </div>
         {% if viewer_rank %}
         <button type="button" class="gd-lb__jump" data-lb-jump>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
