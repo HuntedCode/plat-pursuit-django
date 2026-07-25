@@ -62,7 +62,22 @@ document.addEventListener('DOMContentLoaded', () => {
         lbLoaded = true;
         if (!panel.dataset.lbSrc) return;
         lbDelegate(panel);                                     // attach control/jump handlers once
-        lbFetchPanel(panel, panel.dataset.lbSrc);              // whole panel (header + first page)
+        panel.innerHTML = lbSkeleton();                        // instant placeholder -- the panel is lazy-loaded,
+        lbFetchPanel(panel, panel.dataset.lbSrc);              // so there's nothing to dim; a skeleton reads better
+    }
+
+    // Shimmer placeholder shown while the first fetch is in flight (a skeleton, not a spinner, to match the
+    // rest of the site). Swapped out when the real panel lands.
+    function lbSkeleton() {
+        let rows = '';
+        for (let i = 0; i < 7; i++) {
+            rows += '<div class="gd-lb__skel-row"><span class="gd-lb__skel-cell gd-lb__skel-rank"></span>'
+                  + '<span class="gd-lb__skel-cell gd-lb__skel-av"></span>'
+                  + '<span class="gd-lb__skel-cell gd-lb__skel-name"></span>'
+                  + '<span class="gd-lb__skel-cell gd-lb__skel-meta"></span></div>';
+        }
+        return '<div class="gd-lb__skel" aria-hidden="true"><span class="gd-lb__skel-cell gd-lb__skel-bar"></span>'
+             + '<div class="gd-lb__skel-list">' + rows + '</div></div>';
     }
 
     // The current view's query, read from the control toggles so every fetch preserves the active
@@ -180,6 +195,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 row.animate([{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
                             { duration: 340, delay: i * 26, easing: spring, fill: 'backwards' });
             });
+            const tally = root.querySelector('.gd-lb__count .pp-tally');   // count the board size up, site-style
+            if (tally && PlatPursuit.countUp) PlatPursuit.countUp(tally, 700, { from: 0 });
         } else {
             [root.querySelector('.gd-lb__head'), root.querySelector('.gd-lb__list')].forEach((el) => {
                 if (el) el.animate([{ opacity: 0.5, transform: 'translateY(7px)' }, { opacity: 1, transform: 'none' }],

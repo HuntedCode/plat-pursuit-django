@@ -952,6 +952,20 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-lb__spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--pp-border); border-top-color: var(--pp-primary); animation: gdLbSpin 0.7s linear infinite; }
 @keyframes gdLbSpin { to { transform: rotate(360deg); } }
 
+/* First-load skeleton: placeholder rows that shimmer while the panel fetches. The panel is lazy-loaded, so
+   there's nothing to dim -- a skeleton reads better than a spinner and matches the rest of the site. */
+.gd-lb__skel { display: flex; flex-direction: column; gap: 10px; }
+.gd-lb__skel-bar { height: 34px; width: 55%; border-radius: 999px; }
+.gd-lb__skel-list { display: flex; flex-direction: column; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); overflow: hidden; }
+.gd-lb__skel-row { display: grid; grid-template-columns: 1.5rem 26px minmax(0, 1fr) 5rem; align-items: center; gap: 10px; height: 44px; padding: 0 10px; border-bottom: 1px solid color-mix(in oklab, var(--pp-border) 55%, transparent); }
+.gd-lb__skel-cell { border-radius: 6px; background: linear-gradient(90deg, var(--pp-bg-2) 0%, color-mix(in oklab, var(--pp-bg-2) 82%, var(--pp-text-dim)) 50%, var(--pp-bg-2) 100%); background-size: 200% 100%; animation: gdLbSkel 1.4s ease-in-out infinite; }
+.gd-lb__skel-rank { height: 0.8rem; }
+.gd-lb__skel-av { width: 26px; height: 26px; border-radius: 50%; }
+.gd-lb__skel-name { height: 0.9rem; width: 55%; }
+.gd-lb__skel-meta { height: 0.9rem; }
+@keyframes gdLbSkel { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .gd-lb__skel-cell { animation: none; } }
+
 .gd-lb__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 0 2px; }
 /* The active board's title is the header; the count sits under it as a muted subtitle. */
 .gd-lb__heading { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
