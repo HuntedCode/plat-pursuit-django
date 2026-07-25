@@ -7,7 +7,7 @@ they finished and everyone else follows by how close they are. The count is the 
 not Game.played_count -- that counts hidden rows and ignores filters, so it would disagree with the list.
 {% endcomment %}
 {% load humanize %}
-<div class="gd-lb{% if board_kind == 'speed' %} gd-lb--speed{% endif %}" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}" data-lb-total="{{ board_size }}" data-lb-invert="{% if opts.invert %}1{% else %}0{% endif %}" data-lb-page-size="{{ page_size }}" data-lb-board="{{ active_board }}" data-lb-title="{{ board_nav.title }}">
+<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}" data-lb-total="{{ board_size }}" data-lb-invert="{% if opts.invert %}1{% else %}0{% endif %}" data-lb-page-size="{{ page_size }}" data-lb-board="{{ active_board }}" data-lb-title="{{ board_nav.title }}">
 
     {% comment %} Board switcher: a segmented mode switch (Standings / Fastest / Most Played), each present
     only when it has a board. On a game with DLC a second row picks the trophy group; single-group games

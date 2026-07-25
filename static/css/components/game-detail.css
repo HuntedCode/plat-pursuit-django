@@ -885,9 +885,6 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    targets). Two-line rows on mobile are taller; the single-line table at md+ is shorter. */
 .gd-lb { display: flex; flex-direction: column; gap: 10px; --lb-row-h: 58px; }
 @media (min-width: 768px) { .gd-lb { --lb-row-h: 44px; } }
-/* The Fastest board stacks label / date / time in its Started & Finished columns, so its rows are taller
-   than the single-line standings row (desktop only -- mobile shows just the headline). */
-@media (min-width: 768px) { .gd-lb--speed { --lb-row-h: 58px; } }
 
 /* Board switcher: the segmented-switcher standard (bordered pill container, transparent chips, tinted-flat
    active). A primary mode row (Standings / Fastest / Most Played) and, on DLC games, a smaller group row

@@ -516,7 +516,6 @@ def test_board_param_routes_to_the_speed_board(client):
     assert 'gd-lb__metric--speed' in body
     assert 'gd-lb__col--start' in body and 'gd-lb__col--finish' in body   # started -> finished window
     assert 'gd-lb__coltime' in body                          # date AND time on the start/finish columns
-    assert 'gd-lb--speed' in body                            # taller-row class for the stacked cells
     assert 'data-lb-total="2"' in body
 
 
