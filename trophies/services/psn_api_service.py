@@ -710,8 +710,12 @@ class PsnApiService:
         # keeping them live between cron runs. See
         # docs/guides/cron-jobs.md#recalc_earn_rates.
 
-        # Per-group standings (the group/speed leaderboards) ride on the same populations.
-        cls.update_trophy_group_stats(profile_ids, game_ids_set)
+        # Per-group standings (the group/speed leaderboards) ride on the same populations. Isolated so a
+        # denorm hiccup only leaves group boards stale -- it can never break the core sync stats above.
+        try:
+            cls.update_trophy_group_stats(profile_ids, game_ids_set)
+        except Exception:
+            logger.exception("update_trophy_group_stats failed; leaderboard group denorm left stale")
 
         duration = time.time() - start_time
         logger.info(f"profilegame stats updated games={total_pgs} dur={duration:.2f}s")
@@ -722,15 +726,20 @@ class PsnApiService:
         """Upsert ProfileTrophyGroup rows (per-group standings) for these (profile, game) populations.
 
         One grouped aggregate over EarnedTrophy -- earned counts (total + per tier) and the first/last earned
-        timestamps per (profile, game, trophy_group_id) -- joined to each group's defined-trophy total for
-        the percentage. Pure DB aggregation, whale-safe: no per-row Python iteration over EarnedTrophy. Same
-        shape as update_profilegame_stats; called from it on every sync and from backfill_profile_trophy_groups.
+        timestamps per (profile, game, trophy_group_id) -- over the actual Trophy-row count per group for the
+        percentage. Pure DB aggregation, whale-safe: no per-row Python iteration over EarnedTrophy. Same shape
+        as update_profilegame_stats; called from it on every sync and from backfill_profile_trophy_groups.
 
         A row is written for each (profile, group) the profile has earned at least one trophy in (the aggregate
         filters earned=True, so a group with nothing earned yields no row). `completion_seconds` is set only
-        when the group is fully earned AND defines >=2 trophies -- that is what puts a row on the speed board;
+        when the group is fully earned AND has >=2 trophies -- that is what puts a row on the speed board;
         everyone else stays null and out of the partial speed index. Upsert-only: earned counts never fall,
         so rows are created or refreshed, never deleted here.
+
+        Denominator note: total comes from COUNT(Trophy), the real trophies in the group, NOT
+        TrophyGroup.defined_trophies (a PSN summary that can drift from the actual Trophy rows -- see
+        token_keeper). This guarantees earned <= total, so progress never falsely reads 100 and no bogus row
+        reaches the speed board.
         """
         if not profile_ids or not game_ids:
             return
@@ -738,14 +747,15 @@ class PsnApiService:
         profile_ids = list(profile_ids)
         game_ids = list(game_ids)
 
-        # Denominator per (game, group): the group's defined-trophy total. Also maps to the TrophyGroup PK.
-        group_meta = {}   # (game_id, trophy_group_id) -> (trophy_group_pk, defined_total)
-        for tg in TrophyGroup.objects.filter(game_id__in=game_ids).only(
-            'id', 'game_id', 'trophy_group_id', 'defined_trophies'
-        ):
-            dt = tg.defined_trophies or {}
-            total = sum(int(dt.get(k, 0) or 0) for k in ('bronze', 'silver', 'gold', 'platinum'))
-            group_meta[(tg.game_id, tg.trophy_group_id)] = (tg.id, total)
+        # Each group's TrophyGroup PK, and its denominator = the real number of Trophy rows in the group.
+        tg_pk = {}          # (game_id, trophy_group_id) -> TrophyGroup pk
+        for tg in TrophyGroup.objects.filter(game_id__in=game_ids).only('id', 'game_id', 'trophy_group_id'):
+            tg_pk[(tg.game_id, tg.trophy_group_id)] = tg.id
+        trophy_totals = {   # (game_id, trophy_group_id) -> count of trophies defined in the group
+            (r['game_id'], r['trophy_group_id']): r['n']
+            for r in Trophy.objects.filter(game_id__in=game_ids)
+            .values('game_id', 'trophy_group_id').annotate(n=Count('id'))
+        }
 
         rows = (
             EarnedTrophy.objects
@@ -764,14 +774,13 @@ class PsnApiService:
 
         to_upsert = []
         for r in rows:
-            meta = group_meta.get((r['trophy__game_id'], r['trophy__trophy_group_id']))
-            if not meta:
-                continue                       # group not in the DB (stale/inconsistent data) -- skip
-            tg_pk, total = meta
-            if total <= 0:
-                continue
+            key = (r['trophy__game_id'], r['trophy__trophy_group_id'])
+            pk = tg_pk.get(key)
+            total = trophy_totals.get(key, 0)
+            if pk is None or total <= 0:
+                continue                       # group not in the DB, or no trophies on record yet -- skip
             earned = r['earned']
-            progress = min(100, earned * 100 // total)     # floored: reads 100 iff earned == total
+            progress = min(100, earned * 100 // total)     # earned <= total, so this reads 100 iff complete
             first_at, last_at = r['first_at'], r['last_at']
 
             completion_seconds = None
@@ -782,7 +791,7 @@ class PsnApiService:
 
             to_upsert.append(ProfileTrophyGroup(
                 profile_id=r['profile_id'],
-                trophy_group_id=tg_pk,
+                trophy_group_id=pk,
                 progress=progress,
                 earned_trophies={
                     'platinum': r['platinum'], 'gold': r['gold'],
