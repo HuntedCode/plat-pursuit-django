@@ -634,6 +634,14 @@ html {
    */
   scroll-padding-top: calc(var(--chrome-height, 5rem) + 1.5rem);
 }
+/*
+ * Universal nav search sits INSIDE the sticky nav, pinned within the scroll-padding-top
+ * zone above. The browser's "keep the focused caret below scroll-padding-top" logic can
+ * never be satisfied for a sticky-pinned input, so it creeps the page toward the top on
+ * every keystroke (smoothly, via scroll-behavior above). Drop the offset to zero while the
+ * search is focused: no anchor navigation happens mid-search, so this is side-effect free.
+ */
+html:has(.pp-navsearch__input:focus) { scroll-padding-top: 0; }
 
 /* ===== <details> open/close animation =================================
    `<details>` doesn't animate natively — content snaps when the open
