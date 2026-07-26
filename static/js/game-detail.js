@@ -1599,7 +1599,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     catch (_) { /* fall through; the rate call surfaces needs_guidelines if this failed */ }
                 }
                 const data = await PlatPursuit.API.post('/api/v1/ratings/' + conceptId + '/group/' + groupId + '/rate/', payload);
-                PlatPursuit.ToastManager.show(data.message || 'Rating saved!', 'success');
+                const savedMsg = data.message || 'Rating saved!';
 
                 // Live-update the source group's panel in place (no reload): hero verdict/score/count, the
                 // hours callout, and each quality's marker + verdict. Handles empty -> filled (drop --empty).
@@ -1653,6 +1653,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (lbl) lbl.textContent = 'Update rating';
                 }
                 closeQr();
+                // Toast AFTER close so it lands on the viewport #toast-container, not the modal's popover
+                // (which the dialog takes down on close). The in-place live-update above is the primary
+                // feedback; this is the persistent confirmation once the modal is gone.
+                PlatPursuit.ToastManager.show(savedMsg, 'success');
             } catch (error) {
                 let msg = 'Failed to save rating.';
                 // The rate endpoint returns field validation (e.g. a banned-word blurb) under `errors` (a
@@ -1778,9 +1782,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 try {
                     const data = await PlatPursuit.API.post('/api/v1/ratings/blurb/' + reportId + '/report/', payload);
-                    PlatPursuit.ToastManager.show(data.message || 'Thanks, our team will take a look.', 'success');
                     if (reportCard) reportCard.classList.add('is-reported');
                     closeReport();
+                    // Toast AFTER close: while the modal is open the toast host is its top-layer popover, which
+                    // the dialog takes down with it on close -- so a success toast would flash and vanish. Once
+                    // closed, ToastManager routes to the viewport #toast-container, where it persists.
+                    PlatPursuit.ToastManager.show(data.message || 'Thanks, our team will take a look.', 'success');
                 } catch (error) {
                     let msg = 'Could not submit report.';
                     try { const ed = await error.response?.json(); msg = ed?.error || msg; } catch (_) { /* ignore */ }
