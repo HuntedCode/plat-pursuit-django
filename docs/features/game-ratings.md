@@ -39,7 +39,7 @@ All four rating filters (`rating_tone` / `rating_verdict` / `rating_summary` / `
 
 ## Gotchas and Pitfalls
 
-- **`.gd-rate` is the ratings-panel block — do not reuse it.** It once collided with a per-trophy earn-rate widget (`display: inline-flex`), which shrink-wrapped the whole tab to ~460px on desktop. That widget is now `.gd-trate`. Before adding any bare `.gd-*` block class, grep for existing use. See [[feedback_narrow_panel_suspect_class_collision]].
+- **Bare `.gd-*` block names collide — this stylesheet has bitten us twice.** `.gd-rate` (ratings panel) once collided with a per-trophy earn-rate widget (`display: inline-flex`), shrink-wrapping the whole tab to ~460px on desktop (widget renamed `.gd-trate`). The blurb-report modal's `.gd-report*` collided with the hero "Report an issue" modal's `.gd-report*` — both dialogs are on the page, so the shared `.gd-report__select` `background` shorthand wiped the chevron (blurb modal renamed `.gd-breport*`). Before adding any bare `.gd-*` block class, grep for existing use. See [[feedback_narrow_panel_suspect_class_collision]].
 - **The stored blurb is plain, UN-escaped text** (`sanitize_text` un-escapes entities). Render it ONLY in an auto-escaped `{{ }}` HTML text context — never `|safe`, never a JS/attribute/JSON-to-client context. `visible_blurbs()` documents this.
 - **Per-group queries must stay bounded.** The blurb preview is `visible_blurbs().filter(...)[:6]` with `select_related('profile')`; keep it index-backed and capped (whale-safe).
 - **SSR↔JS parity.** The four rating filters have JS twins in `game-detail.js`; a threshold/wording change must move both.

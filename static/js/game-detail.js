@@ -1555,7 +1555,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const st = card.querySelector('[data-cond-stars]');
                     if (st) { st.style.setProperty('--fill', (avg.avg_rating / 5 * 100) + '%'); st.setAttribute('aria-label', avg.avg_rating.toFixed(1) + ' out of 5'); }
                     const ct = card.querySelector('[data-rate-count]');
-                    if (ct && avg.count != null) ct.textContent = '· ' + avg.count.toLocaleString() + ' rating' + (avg.count === 1 ? '' : 's');
+                    if (ct && avg.count != null) ct.textContent = avg.count.toLocaleString() + ' rating' + (avg.count === 1 ? '' : 's');
                     const hrs = card.querySelector('[data-cond-hours]'); if (hrs && avg.avg_hours != null) hrs.textContent = Math.round(avg.avg_hours).toLocaleString();
                     const byStat = { difficulty: avg.avg_difficulty, grindiness: avg.avg_grindiness, fun: avg.avg_fun };
                     Object.keys(byStat).forEach((kind) => {

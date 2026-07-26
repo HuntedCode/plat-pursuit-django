@@ -20,7 +20,7 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
         <div class="gd-cond__herorow">
             <div class="gd-cond__rating">
                 <span class="gd-cond__stars" data-cond-stars style="--fill: {% if averages %}{% widthratio averages.avg_rating 5 100 %}{% else %}0{% endif %}%;" role="img" aria-label="{% if averages %}{{ averages.avg_rating|floatformat:1 }} out of 5{% else %}Not rated{% endif %}"><span class="gd-cond__stars-on"></span></span>
-                <span class="gd-cond__scoreline"><b class="gd-cond__score-n pp-tally{% if averages %} pp-tally--glow{% endif %}" data-cond-score>{% if averages %}{{ averages.avg_rating|floatformat:1 }}{% else %}&mdash;{% endif %}</b><span class="gd-cond__of">/5</span></span>
+                <span class="gd-cond__scoreline" aria-hidden="true"><b class="gd-cond__score-n pp-tally{% if averages %} pp-tally--glow{% endif %}" data-cond-score>{% if averages %}{{ averages.avg_rating|floatformat:1 }}{% else %}&mdash;{% endif %}</b><span class="gd-cond__of">/5</span></span>
             </div>
             <div class="gd-cond__hours">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>

@@ -1270,6 +1270,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
     .gd-rate { gap: 16px; }
     .gd-rate__panel { gap: 16px; }
     .gd-rate__stat-n { font-size: 1.85rem; }
+    .gd-rate__stat-unit { font-size: 1rem; }
     .gd-rate__stat-lbl { font-size: 0.7rem; }
 
     .gd-cond { gap: 18px; }
@@ -1372,15 +1373,18 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* Coarse pointers have no hover to reveal the report control, so keep it faintly visible there. */
 @media (hover: none) { .gd-blurb__report { opacity: 0.6; } }
 
-/* ---- Report-a-blurb modal (gd-modal--report) ---- */
-.gd-modal--report { width: min(94vw, 440px); max-width: 440px; }
-.gd-report { display: flex; flex-direction: column; gap: 14px; }
-.gd-report__lead { font-size: 0.82rem; color: var(--pp-text-dim); line-height: 1.4; }
-.gd-report__field { display: flex; flex-direction: column; gap: 6px; }
-.gd-report__lbl { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 600; color: var(--pp-text); }
-.gd-report__select, .gd-report__area { width: 100%; padding: 9px 11px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font: inherit; font-size: 0.85rem; }
-.gd-report__area { line-height: 1.4; resize: none; }
-.gd-report__select:focus, .gd-report__area:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
-.gd-report__area::placeholder { color: var(--pp-text-mute); }
+/* ---- Report-a-blurb modal (gd-modal--breport). Namespaced apart from the hero report modal's .gd-report*
+   (both dialogs live on the page at once, so sharing the bare class names cross-contaminated -- the shared
+   .gd-report__select `background` shorthand wiped the hero's chevron). See game-ratings.md gotchas. ---- */
+.gd-modal--breport { width: min(94vw, 440px); max-width: 440px; }
+.gd-breport { display: flex; flex-direction: column; gap: 14px; }
+.gd-breport__lead { font-size: 0.82rem; color: var(--pp-text-dim); line-height: 1.4; }
+.gd-breport__field { display: flex; flex-direction: column; gap: 6px; }
+.gd-breport__lbl { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 600; color: var(--pp-text); }
+.gd-breport__select, .gd-breport__area { width: 100%; padding: 9px 11px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font: inherit; font-size: 0.85rem; }
+.gd-breport__select { appearance: none; -webkit-appearance: none; padding-right: 32px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b93a1' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 15px; }
+.gd-breport__area { line-height: 1.4; resize: none; }
+.gd-breport__select:focus, .gd-breport__area:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+.gd-breport__area::placeholder { color: var(--pp-text-mute); }
 
 @media (prefers-reduced-motion: reduce) { .gd-rate__dropbtn svg { transition: none; } .gd-blurb__report { transition: none; } }
