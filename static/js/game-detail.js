@@ -57,8 +57,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (ratingsRevealed || reduce) return;
         ratingsRevealed = true;
         const active = panel.querySelector('.gd-rate__panel:not(.is-hidden)') || panel;
-        active.querySelectorAll('[data-gd-fill]').forEach((b) => b.style.setProperty('--horizon-progress', '0%'));
-        fillBars(active);
+        // Spectrum markers slide from centre to their community position (transition:left in CSS).
+        const markers = active.querySelectorAll('.gd-spec__marker');
+        markers.forEach((m) => { m.dataset.pos = (m.style.getPropertyValue('--pos') || '50%').trim(); m.style.setProperty('--pos', '50%'); });
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            markers.forEach((m) => m.style.setProperty('--pos', m.dataset.pos || '50%'));
+        }));
         if (PlatPursuit.countUp) {
             panel.querySelectorAll('.gd-rate__stats [data-gd-countup]').forEach((el, i) => {
                 const n = parseInt(el.dataset.gdCountup, 10);
@@ -1463,16 +1467,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (kind === 'overall') return v < 2 ? 'bad' : v < 4 ? 'warn' : 'good';
             return v < 4 ? 'bad' : v < 8 ? 'warn' : 'good';   // fun
         }
-        function pctOf(kind, v) {
-            if (kind === 'hours') return Math.min(100, Math.round(v));
-            if (kind === 'overall') return Math.round(v / 5 * 100);
-            return Math.round(v * 10);   // difficulty / grindiness / fun (out of 10)
+        // Verdict words mirror core/templatetags/custom_filters.py rating_verdict (keep in sync).
+        function verdictOf(kind, v) {
+            if (kind === 'difficulty') return v < 2.5 ? 'A breeze' : v < 5 ? 'Fair' : v < 7.5 ? 'Tough' : 'Brutal';
+            if (kind === 'grindiness') return v < 2.5 ? 'Breezy' : v < 5 ? 'Some grind' : v < 7.5 ? 'Grindy' : 'A slog';
+            if (kind === 'fun') return v < 2.5 ? 'A chore' : v < 5 ? 'So-so' : v < 7.5 ? 'Fun' : 'A blast';
+            if (kind === 'overall') return v < 2 ? 'Rough' : v < 3 ? 'Mixed' : v < 4 ? 'Solid' : v < 4.5 ? 'Great' : 'Beloved';
+            return '';
         }
-        function valHtml(kind, v) {
-            if (kind === 'hours') return Math.round(v).toLocaleString() + '<span class="gd-rate__row-unit">h</span>';
-            if (kind === 'overall') return v.toFixed(1) + '<span class="gd-rate__row-unit">/5</span>';
-            return v.toFixed(1);
-        }
+        function posOf(v) { return Math.max(0, Math.min(100, Math.round(v * 10))); }   // marker on a /10 axis
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -1492,28 +1495,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await PlatPursuit.API.post('/api/v1/ratings/' + conceptId + '/group/' + groupId + '/rate/', payload);
                 PlatPursuit.ToastManager.show(data.message || 'Rating saved!', 'success');
 
-                // Live-update the source group's panel: bars grow, values/tone/count refresh (empty -> filled too).
+                // Live-update the source group's panel in place (no reload): hero verdict/score/count, the
+                // hours callout, and each quality's marker + verdict. Handles empty -> filled (drop --empty).
                 const avg = data.community_averages;
                 const panel = srcBtn && srcBtn.closest('[data-rate-panel]');
-                if (avg && panel) {
-                    const grid = panel.querySelector('[data-rate-grid]');
-                    if (grid) {
-                        grid.classList.remove('gd-rate__bars--empty');
-                        const byStat = { difficulty: avg.avg_difficulty, grindiness: avg.avg_grindiness, hours: avg.avg_hours, fun: avg.avg_fun, overall: avg.avg_rating };
-                        Object.keys(byStat).forEach((kind) => {
-                            const v = byStat[kind];
-                            const row = grid.querySelector('.gd-rate__row[data-stat="' + kind + '"]');
-                            if (!row || v == null) return;
-                            row.dataset.tone = toneOf(kind, v);
-                            const valEl = row.querySelector('[data-stat-value]');
-                            if (valEl) { valEl.classList.remove('gd-rate__row-val--empty'); valEl.innerHTML = valHtml(kind, v); }
-                            const bar = row.querySelector('[data-gd-fill]');
-                            if (bar) bar.dataset.gdFill = pctOf(kind, v);
-                        });
-                        fillBars(panel);
+                const spec = panel && panel.querySelector('[data-rate-grid]');
+                if (avg && spec) {
+                    spec.classList.remove('gd-spec--empty');
+                    const overall = spec.querySelector('.gd-spec__overall');
+                    if (overall) {
+                        overall.dataset.tone = toneOf('overall', avg.avg_rating);
+                        const ov = overall.querySelector('[data-spec-verdict]'); if (ov) ov.textContent = verdictOf('overall', avg.avg_rating);
+                        const sc = overall.querySelector('[data-spec-score]'); if (sc) sc.textContent = avg.avg_rating.toFixed(1);
+                        const ct = overall.querySelector('[data-rate-count]');
+                        if (ct && avg.count != null) ct.textContent = '· ' + avg.count.toLocaleString() + ' rating' + (avg.count === 1 ? '' : 's');
                     }
-                    const count = panel.querySelector('[data-rate-count]');
-                    if (count && avg.count != null) count.textContent = 'Based on ' + avg.count.toLocaleString() + ' community rating' + (avg.count === 1 ? '' : 's') + '.';
+                    const hrs = spec.querySelector('[data-spec-hours]');
+                    if (hrs && avg.avg_hours != null) hrs.textContent = Math.round(avg.avg_hours).toLocaleString();
+                    const byStat = { difficulty: avg.avg_difficulty, grindiness: avg.avg_grindiness, fun: avg.avg_fun };
+                    Object.keys(byStat).forEach((kind) => {
+                        const v = byStat[kind];
+                        const row = spec.querySelector('.gd-spec__row[data-stat="' + kind + '"]');
+                        if (!row || v == null) return;
+                        row.dataset.tone = toneOf(kind, v);
+                        const rv = row.querySelector('[data-spec-verdict]'); if (rv) rv.textContent = verdictOf(kind, v);
+                        const mk = row.querySelector('[data-spec-marker]'); if (mk) mk.style.setProperty('--pos', posOf(v) + '%');
+                    });
                 }
                 if (srcBtn) {
                     srcBtn.dataset.existing = JSON.stringify(payload);

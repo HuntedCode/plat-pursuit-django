@@ -1197,23 +1197,56 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* Only the active group's panel shows; the rest are hidden (no unmount -- state is cheap and SSR'd). */
 .gd-rate__panel.is-hidden { display: none; }
 
-/* Rating rows: label + value on one line, the pp-horizon bar spanning full-width below (label-length-proof). */
-.gd-rate__bars { display: flex; flex-direction: column; gap: 13px; }
-.gd-rate__row { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 10px; --rate-accent: var(--pp-text-dim); }
-.gd-rate__row[data-tone="good"] { --rate-accent: var(--pp-success); }
-.gd-rate__row[data-tone="warn"] { --rate-accent: var(--pp-warning); }
-.gd-rate__row[data-tone="bad"]  { --rate-accent: var(--pp-error); }
-.gd-rate__row[data-tone="high"] { --rate-accent: var(--pp-accent); }
-.gd-rate__row-lbl { grid-column: 1; font-size: 0.8rem; font-weight: 600; color: var(--pp-text-dim); }
-.gd-rate__row-val { grid-column: 2; font-size: 0.92rem; font-weight: 800; color: var(--rate-accent); font-variant-numeric: tabular-nums; text-align: right; }
-.gd-rate__row-val--empty { color: var(--pp-text-mute); font-weight: 600; }
-.gd-rate__row-unit { font-size: 0.62rem; font-weight: 600; color: var(--pp-text-mute); margin-left: 1px; }
-.gd-rate__bar { grid-column: 1 / -1; display: block; width: 100%; --horizon-accent: var(--rate-accent); }
-.gd-rate__bar .pp-horizon__fill { background: var(--rate-accent); }
+/* ---- Ratings surface: Overall hero + subjective-quality spectrum rows + an hours callout ---- */
+.gd-spec { display: flex; flex-direction: column; gap: 20px; }
 
-.gd-rate__foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 17px; padding-top: 13px; border-top: 1px solid var(--pp-divider); }
-.gd-rate__count { flex: 1; min-width: 8rem; font-size: 0.76rem; font-style: italic; color: var(--pp-text-mute); }
+/* Hero: the Overall VERDICT is the headline (a word reads faster + more human than a bare number and is
+   honest that this is a vote average); score + count sit under it, the hours callout alongside. */
+.gd-spec__hero { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding: 15px 18px; border-radius: var(--pp-radius-lg); background: color-mix(in oklab, var(--pp-bg-2) 40%, transparent); border: 1px solid var(--pp-border); }
+.gd-spec__overall { display: flex; flex-direction: column; gap: 3px; --rate-accent: var(--pp-text); }
+.gd-spec__overall[data-tone="good"] { --rate-accent: var(--pp-success); }
+.gd-spec__overall[data-tone="warn"] { --rate-accent: var(--pp-warning); }
+.gd-spec__overall[data-tone="bad"]  { --rate-accent: var(--pp-error); }
+.gd-spec__overall[data-tone="high"] { --rate-accent: var(--pp-accent); }
+.gd-spec__verdict { font-size: 1.55rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.04; color: var(--rate-accent); }
+/* Not-yet-rated: same structure, muted. The live-update drops .gd-spec--empty and sets values in place. */
+.gd-spec--empty .gd-spec__verdict { font-size: 1.2rem; color: var(--pp-text-mute); }
+.gd-spec--empty .gd-spec__score, .gd-spec--empty .gd-spec__of { color: var(--pp-text-mute); }
+.gd-spec--empty .gd-spec__star { color: var(--pp-text-mute); opacity: 0.5; }
+.gd-spec--empty .gd-spec__hours-num b { color: var(--pp-text-dim); }
+.gd-spec--empty .gd-spec__rowverdict { color: var(--pp-text-mute); }
+.gd-spec--empty .gd-spec__marker { background: var(--pp-text-mute); opacity: 0.3; box-shadow: none; }
+.gd-spec__score { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 0.82rem; color: var(--pp-text-dim); }
+.gd-spec__star { width: 15px; height: 15px; color: var(--color-trophy-gold); }
+.gd-spec__score b { font-size: 1rem; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.gd-spec__of { color: var(--pp-text-mute); }
+.gd-spec__count { color: var(--pp-text-mute); }
+.gd-spec__hours { display: inline-flex; align-items: center; gap: 9px; }
+.gd-spec__hours svg { width: 21px; height: 21px; color: var(--pp-text-mute); flex-shrink: 0; }
+.gd-spec__hours-txt { display: flex; flex-direction: column; line-height: 1.1; }
+.gd-spec__hours-num { font-size: 1.02rem; color: var(--pp-text-dim); }
+.gd-spec__hours-num b { font-size: 1.15rem; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.gd-spec__hours-lbl { font-size: 0.58rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); margin-top: 1px; }
+
+/* Subjective qualities: a marker on a NAMED axis. ONLY the marker carries the accent (restraint) and the
+   track stays neutral -- so a marker toward "Brutal" and one toward "A blast" never read as the same fill. */
+.gd-spec__rows { display: flex; flex-direction: column; gap: 17px; }
+.gd-spec__row { --rate-accent: var(--pp-text-dim); }
+.gd-spec__row[data-tone="good"] { --rate-accent: var(--pp-success); }
+.gd-spec__row[data-tone="warn"] { --rate-accent: var(--pp-warning); }
+.gd-spec__row[data-tone="bad"]  { --rate-accent: var(--pp-error); }
+.gd-spec__row[data-tone="high"] { --rate-accent: var(--pp-accent); }
+.gd-spec__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+.gd-spec__name { font-size: 0.8rem; font-weight: 600; color: var(--pp-text-dim); }
+.gd-spec__rowverdict { font-size: 0.9rem; font-weight: 800; color: var(--rate-accent); }
+.gd-spec__axis { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
+.gd-spec__end { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); white-space: nowrap; }
+.gd-spec__track { position: relative; height: 4px; border-radius: 999px; background: color-mix(in oklab, var(--pp-text-mute) 22%, transparent); }
+.gd-spec__marker { position: absolute; top: 50%; left: var(--pos, 50%); width: 14px; height: 14px; border-radius: 50%; background: var(--rate-accent); transform: translate(-50%, -50%); box-shadow: 0 0 0 3px color-mix(in oklab, var(--rate-accent) 22%, transparent), 0 1px 5px rgba(0, 0, 0, 0.45); transition: left var(--pp-dur) var(--pp-ease); }
+
+.gd-rate__foot { display: flex; justify-content: flex-end; margin-top: 4px; }
 .gd-rate__cta { flex-shrink: 0; }
+@media (prefers-reduced-motion: reduce) { .gd-spec__marker { transition: none; } }
 
 /* ---- Quick-rate modal (gd-modal--qr) ---- */
 .gd-modal--qr { width: min(94vw, 460px); max-width: 460px; }

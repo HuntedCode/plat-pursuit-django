@@ -204,6 +204,28 @@ def rating_tone(value, kind):
 
 
 @register.filter
+def rating_verdict(value, kind):
+    """Plain-language verdict for a community rating, by stat ``kind`` (the Ratings tab shows the WORD, not a
+    bare number -- more human, and honest that this is a vote average). game-detail.js verdictOf mirrors these
+    exact bands -- keep in sync. Polarity matches rating_tone: low difficulty/grindiness is good, high fun/
+    overall is good. overall is /5, the rest /10.
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return ''
+    if kind == 'difficulty':
+        return 'A breeze' if v < 2.5 else 'Fair' if v < 5 else 'Tough' if v < 7.5 else 'Brutal'
+    if kind == 'grindiness':
+        return 'Breezy' if v < 2.5 else 'Some grind' if v < 5 else 'Grindy' if v < 7.5 else 'A slog'
+    if kind == 'fun':
+        return 'A chore' if v < 2.5 else 'So-so' if v < 5 else 'Fun' if v < 7.5 else 'A blast'
+    if kind == 'overall':  # /5
+        return 'Rough' if v < 2 else 'Mixed' if v < 3 else 'Solid' if v < 4 else 'Great' if v < 4.5 else 'Beloved'
+    return ''
+
+
+@register.filter
 def psn_rarity(rarity_int):
     labels = {0: 'Ultra Rare', 1: 'Very Rare', 2: 'Rare', 3: 'Common'}
     return labels.get(rarity_int, '')
