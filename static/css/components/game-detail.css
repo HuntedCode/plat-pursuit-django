@@ -1168,6 +1168,20 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-rate { display: flex; flex-direction: column; gap: 14px; }
 .gd-rate__panel { display: flex; flex-direction: column; gap: 14px; }
 
+/* Band cascade on first arrival -- same shared staggerReveal engine as the About panel. These hold only the
+   hidden/shown states; ALL panels' cards get revealed (so switching DLC never lands on an unrevealed band), and
+   staggerReveal adds .pp-reveal only when it will actually reveal, so a band can never stick hidden. */
+@media (prefers-reduced-motion: no-preference) {
+    .gd-rate.pp-reveal .gd-rate__snapshot,
+    .gd-rate.pp-reveal .gd-rate__sel,
+    .gd-rate.pp-reveal .gd-rate__panel > .gd-acard,
+    .gd-rate.pp-reveal .gd-rate__panel > .gd-blurbs { opacity: 0; }
+    .gd-rate.pp-reveal .gd-rate__snapshot.is-revealed,
+    .gd-rate.pp-reveal .gd-rate__sel.is-revealed,
+    .gd-rate.pp-reveal .gd-rate__panel > .gd-acard.is-revealed,
+    .gd-rate.pp-reveal .gd-rate__panel > .gd-blurbs.is-revealed { opacity: 1; }
+}
+
 /* Community snapshot: the four per-game numbers as a plain stat row inside the band (dividers on md+). */
 .gd-rate__stats { display: flex; flex-wrap: wrap; gap: 6px 8px; }
 .gd-rate__stat { flex: 1 1 calc(50% - 4px); display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 10px; text-align: center; }
@@ -1195,6 +1209,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-rate__dropmenu[hidden] { display: none; }
 .gd-rate__dropitem { justify-content: flex-start; width: 100%; text-align: left; border-radius: var(--pp-radius-sm); padding: 7px 11px; white-space: nowrap; }
 .gd-rate__dropitem:hover { background: color-mix(in oklab, var(--pp-primary) 10%, transparent); }
+.gd-rate__dropitem:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
 /* Only the active group's panel shows; the rest are hidden (no unmount -- state is cheap and SSR'd). */
 .gd-rate__panel.is-hidden { display: none; }
@@ -1230,7 +1245,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__tile[data-tone="warn"] { --rate-accent: var(--pp-warning); }
 .gd-cond__tile[data-tone="bad"]  { --rate-accent: var(--pp-error); }
 .gd-cond__tile[data-tone="high"] { --rate-accent: var(--pp-accent); }
-.gd-cond__icon { width: 18px; height: 18px; color: var(--rate-accent); margin-bottom: 3px; }
+.gd-cond__icon { width: 18px; height: 18px; color: var(--rate-accent); margin-bottom: 3px; transition: color var(--pp-dur-fast) var(--pp-ease); }
 .gd-cond--empty .gd-cond__icon { color: var(--pp-text-mute); opacity: 0.6; }
 .gd-cond__lbl { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
 .gd-cond__figure { display: inline-flex; align-items: baseline; gap: 1px; margin-top: 2px; }
@@ -1238,7 +1253,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond--empty .gd-cond__num { color: var(--pp-text-mute); }
 .gd-cond__unit { font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute); }
 .gd-cond--empty .gd-cond__unit { display: none; }
-.gd-cond__verdict { font-size: 0.9rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; color: var(--rate-accent); }
+.gd-cond__verdict { font-size: 0.9rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; color: var(--rate-accent); transition: color var(--pp-dur-fast) var(--pp-ease); }
 .gd-cond--empty .gd-cond__verdict { color: var(--pp-text-mute); }
 
 /* Hours: a labeled time value, set apart from the qualities (a duration, not a 1-10 opinion). */
@@ -1266,7 +1281,8 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    Per the design-system responsive progressions: type + padding + gaps step up; the columns do not reflow. ---- */
 @media (min-width: 1024px) {
     .gd-rate .gd-acard { padding: 20px 24px; }
-    .gd-rate .gd-acard__h { font-size: 0.78rem; margin-bottom: 14px; }
+    .gd-rate .gd-acard__h, .gd-blurbs__title { font-size: 0.78rem; }
+    .gd-rate .gd-acard__h { margin-bottom: 14px; }
     .gd-rate { gap: 16px; }
     .gd-rate__panel { gap: 16px; }
     .gd-rate__stat-n { font-size: 1.85rem; }
@@ -1341,7 +1357,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    games-list browse grid), under a section label -- no outer card so each card reads clearly. ---- */
 .gd-blurbs { display: flex; flex-direction: column; gap: 10px; }
 .gd-blurbs.is-empty { display: none; }
-.gd-blurbs__title { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
+.gd-blurbs__title { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }   /* matches .gd-acard__h */
 /* Wider-than-tall cards: a ~320px floor packs 2 columns on a standard panel (3 when very wide, 1 when narrow),
    so a full 140-char blurb lands in ~2-3 lines rather than a skinny 6-line column. auto-fill (not auto-fit)
    keeps a lone card at track width instead of stretching it to the full panel. */

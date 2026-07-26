@@ -49,30 +49,68 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Ratings panel entrance, ONE-SHOT on first arrival (same shape as revealAbout). The panel is SSR'd but
-    // hidden, so load-time fillBars/count-up already ran; reset the ACTIVE group's bars to 0 and the stat
-    // tiles to 0, then re-grow/re-count so the reveal is visible. Reduced motion skips (values already final).
+    // countReveal: zero a number now (it shows its SSR final value), then count 0->final after a stagger delay.
+    function countReveal(el, delay, decimals) {
+        if (!el || !PlatPursuit.countUp) return;
+        const target = parseFloat((el.textContent || '').replace(/,/g, ''));
+        if (isNaN(target)) return;   // empty state (— / blank): nothing to count
+        el.dataset.countup = String(target);
+        if (decimals) el.dataset.countupDecimals = String(decimals);
+        el.textContent = decimals ? (0).toFixed(decimals) : '0';
+        window.setTimeout(() => PlatPursuit.countUp(el, 650, { from: 0 }), delay);
+    }
+    // countTo: tick a number from its current value to a new one (the "your input mattered" reward on submit).
+    function countTo(el, target, decimals) {
+        if (!el) return;
+        const t = parseFloat(target); if (isNaN(t)) return;
+        const from = parseFloat((el.textContent || '').replace(/,/g, ''));
+        el.dataset.countup = String(t);
+        if (decimals) el.dataset.countupDecimals = String(decimals); else delete el.dataset.countupDecimals;
+        if (PlatPursuit.countUp) PlatPursuit.countUp(el, 600, { from: isNaN(from) ? 0 : from });
+        else el.textContent = decimals ? t.toFixed(decimals) : String(Math.round(t));
+    }
+
+    // Ratings panel entrance, ONE-SHOT on first arrival. Uses the SAME shared staggerReveal engine + motion the
+    // About panel does (revealAbout), so the two sibling tabs open with one identical band cascade; then the
+    // signature numbers (score / per-quality / hours) count up as their band lands -- parity with About's
+    // growing bars and Career's hero count-ups. staggerReveal + countUp self-gate reduced motion; the extra
+    // count-up + star-grow block is skipped there (the SSR values are already final).
     let ratingsRevealed = false;
     function revealRatings(panel) {
-        if (ratingsRevealed || reduce) return;
+        if (ratingsRevealed) return;
         ratingsRevealed = true;
-        const active = panel.querySelector('.gd-rate__panel:not(.is-hidden)') || panel;
-        // Fade + rise the summary headline and the condition tiles in, lightly staggered.
-        active.querySelectorAll('.gd-cond__hero, .gd-cond__tile').forEach((el, i) => {
-            if (!el.animate) return;
-            el.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
-                       { duration: 420, delay: i * 55, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
-        });
-        if (PlatPursuit.countUp) {
-            panel.querySelectorAll('.gd-rate__stats [data-gd-countup]').forEach((el, i) => {
-                const n = parseInt(el.dataset.gdCountup, 10);
-                if (isNaN(n)) return;
-                // Zero the tile NOW (it already shows its final value from the load-time pass), so the staggered
-                // count-up doesn't flash the final number for a frame before snapping back to 0.
-                el.dataset.countup = n;
-                el.textContent = '0';
-                window.setTimeout(() => PlatPursuit.countUp(el, 650, { from: 0 }), i * 55);
+        const root = panel.querySelector('[data-gd-rate]');
+        if (root && PlatPursuit.staggerReveal) {
+            // ALL panels' cards (not just the active group's) so switching DLC never lands on an unrevealed band.
+            PlatPursuit.staggerReveal({
+                grid: root,
+                cardSelector: '.gd-rate__snapshot, .gd-rate__sel, .gd-rate__panel > .gd-acard, .gd-rate__panel > .gd-blurbs',
+                step: 55, batchCap: 300,
+                reveal: (el, delay) => el.animate(
+                    [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
+                    { duration: 420, delay, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' }
+                ),
             });
+        }
+        if (reduce) return;
+        const active = panel.querySelector('.gd-rate__panel:not(.is-hidden)') || panel;
+        // Count the signature numbers up as the verdict band lands (~110ms into the cascade).
+        countReveal(active.querySelector('[data-cond-score]'), 120, 1);
+        active.querySelectorAll('[data-cond-num]').forEach((el, i) => countReveal(el, 150 + i * 40, 1));
+        countReveal(active.querySelector('[data-cond-hours]'), 135, 0);
+        panel.querySelectorAll('.gd-rate__stats [data-gd-countup]').forEach((el, i) => {
+            const n = parseInt(el.dataset.gdCountup, 10);
+            if (isNaN(n)) return;
+            el.dataset.countup = n;
+            el.textContent = '0';
+            window.setTimeout(() => PlatPursuit.countUp(el, 650, { from: 0 }), i * 55);
+        });
+        // Grow the star bar from empty, pairing with the score count-up (mirrors About resetting its bars first).
+        const stars = active.querySelector('[data-cond-stars]');
+        if (stars) {
+            const fill = stars.style.getPropertyValue('--fill') || '0%';
+            stars.style.setProperty('--fill', '0%');
+            requestAnimationFrame(() => requestAnimationFrame(() => stars.style.setProperty('--fill', fill)));
         }
     }
 
@@ -1551,12 +1589,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (avg && card) {
                     card.classList.remove('gd-cond--empty');
                     const summary = card.querySelector('[data-cond-summary]'); if (summary) summary.textContent = summaryOf(avg);
-                    const sc = card.querySelector('[data-cond-score]'); if (sc) { sc.textContent = avg.avg_rating.toFixed(1); sc.classList.add('pp-tally--glow'); }
+                    const sc = card.querySelector('[data-cond-score]'); if (sc) { countTo(sc, avg.avg_rating, 1); sc.classList.add('pp-tally--glow'); }
                     const st = card.querySelector('[data-cond-stars]');
                     if (st) { st.style.setProperty('--fill', (avg.avg_rating / 5 * 100) + '%'); st.setAttribute('aria-label', avg.avg_rating.toFixed(1) + ' out of 5'); }
                     const ct = card.querySelector('[data-rate-count]');
                     if (ct && avg.count != null) ct.textContent = avg.count.toLocaleString() + ' rating' + (avg.count === 1 ? '' : 's');
-                    const hrs = card.querySelector('[data-cond-hours]'); if (hrs && avg.avg_hours != null) hrs.textContent = Math.round(avg.avg_hours).toLocaleString();
+                    const hrs = card.querySelector('[data-cond-hours]'); if (hrs && avg.avg_hours != null) countTo(hrs, Math.round(avg.avg_hours), 0);
                     const byStat = { difficulty: avg.avg_difficulty, grindiness: avg.avg_grindiness, fun: avg.avg_fun };
                     Object.keys(byStat).forEach((kind) => {
                         const v = byStat[kind];
@@ -1564,7 +1602,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (!tile || v == null) return;
                         tile.dataset.tone = toneOf(kind, v);
                         const vd = tile.querySelector('[data-cond-verdict]'); if (vd) vd.textContent = verdictOf(kind, v);
-                        const nm = tile.querySelector('[data-cond-num]'); if (nm) nm.textContent = v.toFixed(1);
+                        const nm = tile.querySelector('[data-cond-num]'); if (nm) countTo(nm, v, 1);
                     });
                 }
                 // Live-sync the viewer's "Your take" comparison band (add / update / remove).
