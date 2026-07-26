@@ -1244,6 +1244,15 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond--empty .gd-cond__hours-num b { color: var(--pp-text-dim); }
 .gd-cond__hours-lbl { font-size: 0.58rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); margin-top: 1px; }
 
+/* "Your take": the viewer's personal comparison layer -- a quiet, primary-tinted band under the community
+   tiles. Distinct from the neutral aggregate above it (this one is about YOU), but low-weight. */
+.gd-cond__you { display: flex; flex-direction: column; gap: 4px; padding: 11px 13px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-primary) 6%, transparent); border: 1px solid color-mix(in oklab, var(--pp-primary) 20%, var(--pp-border)); }
+.gd-cond__you-lbl { font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pp-primary); }
+.gd-cond__you-txt { font-size: 0.92rem; font-weight: 600; line-height: 1.35; color: var(--pp-text); text-wrap: balance; }
+.gd-cond__you-scores { font-size: 0.72rem; color: var(--pp-text-mute); }
+.gd-cond__you-scores b { font-size: 0.86rem; font-weight: 800; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.gd-cond__you-vs { margin: 0 5px; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+
 .gd-rate__foot { display: flex; justify-content: flex-end; margin-top: 4px; }
 .gd-rate__cta { flex-shrink: 0; }
 

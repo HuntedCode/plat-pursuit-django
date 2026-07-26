@@ -15,7 +15,7 @@ import pytest
 from django.template.loader import render_to_string
 from django.urls import reverse
 
-from core.templatetags.custom_filters import rating_tone, rating_verdict, rating_summary
+from core.templatetags.custom_filters import rating_tone, rating_verdict, rating_summary, rating_comparison
 from trophies.models import UserConceptRating
 from tests.factories import ConceptFactory, ConceptTrophyGroupFactory, GameFactory, ProfileFactory
 
@@ -86,6 +86,34 @@ def test_rating_summary_blank_without_data():
     assert rating_summary({'avg_difficulty': 5.0}) == ''   # missing grind/fun
 
 
+# ── rating_comparison ("your take vs community", mirrored by game-detail.js comparisonOf) ──
+
+def _rater(difficulty, grindiness, fun_ranking, overall_rating=4.0):
+    return type('R', (), {'difficulty': difficulty, 'grindiness': grindiness,
+                          'fun_ranking': fun_ranking, 'overall_rating': overall_rating})()
+
+
+def test_rating_comparison_harder_but_fun_uses_but():
+    a = {'avg_difficulty': 5.0, 'avg_grindiness': 5.0, 'avg_fun': 5.0}
+    assert rating_comparison(_rater(9, 8, 9), a) == 'You found it tougher than most, grindier, but more fun.'
+
+
+def test_rating_comparison_in_line_collapses():
+    """All three axes within the threshold -> one clean 'in line' line, not a clunky triple 'about as'."""
+    a = {'avg_difficulty': 5.2, 'avg_grindiness': 4.8, 'avg_fun': 5.3}
+    assert rating_comparison(_rater(5, 5, 5), a) == 'Right in line with the community.'
+
+
+def test_rating_comparison_easier_and_less_fun_uses_and():
+    a = {'avg_difficulty': 6.0, 'avg_grindiness': 6.0, 'avg_fun': 6.0}
+    assert rating_comparison(_rater(2, 2, 2), a) == 'You found it easier than most, less grindy, and less fun.'
+
+
+def test_rating_comparison_blank_without_inputs():
+    assert rating_comparison(None, {'avg_difficulty': 5}) == ''
+    assert rating_comparison(_rater(5, 5, 5), None) == ''
+
+
 # ── _rating_conditions.html (summary headline + icon word-tiles) ────────────
 
 _AVERAGES = {
@@ -142,6 +170,28 @@ def test_conditions_quick_rate_button_contract():
 
 def test_conditions_no_button_when_cannot_rate():
     assert 'quick-rate-btn' not in _conditions(_AVERAGES, can_rate=False)
+
+
+# ── "Your take" personal comparison band ────────────────────────────────────
+
+_YOU = type('R', (), {'difficulty': 9, 'grindiness': 8, 'fun_ranking': 9,
+                      'overall_rating': 4.5, 'hours_to_platinum': 50, 'blurb': ''})()
+
+
+def test_conditions_your_take_band_when_rated():
+    html = _conditions(_AVERAGES, user_rating=_YOU)   # _AVERAGES: diff 7.0 / grind 2.0 / fun 9.0, count 12
+    assert 'gd-cond__you' in html and 'Your take' in html
+    assert 'You found it tougher than most, grindier, and just as fun.' in html
+    assert 'community <b>4.5</b>' in html             # your score vs community, juxtaposed
+
+
+def test_conditions_no_your_take_without_rating():
+    assert 'gd-cond__you' not in _conditions(_AVERAGES)          # not rated -> no personal band
+
+
+def test_conditions_no_your_take_when_sole_rater():
+    solo = {**_AVERAGES, 'count': 1}
+    assert 'gd-cond__you' not in _conditions(solo, user_rating=_YOU)   # nothing to compare against
 
 
 # ── Full page: tab rename + stats strip + adaptive selector ─────────────────

@@ -247,6 +247,31 @@ def rating_summary(averages):
     return f'{diff}, {grind}, {conj} {fun}.'
 
 
+@register.simple_tag
+def rating_comparison(user_rating, averages):
+    """One synthesized sentence comparing the VIEWER's own scores to the community on the three subjective
+    axes (difficulty / grindiness / fun) -- the 'Your take' layer on the Ratings card. Callers gate on
+    user_rating present + averages['count'] > 1 (a lone rater has nothing to compare against).
+    game-detail.js comparisonOf mirrors this -- keep in sync. Returns '' if the inputs aren't all present.
+    """
+    if not user_rating or not averages:
+        return ''
+    try:
+        d = float(user_rating.difficulty) - float(averages.get('avg_difficulty'))
+        g = float(user_rating.grindiness) - float(averages.get('avg_grindiness'))
+        f = float(user_rating.fun_ranking) - float(averages.get('avg_fun'))
+    except (TypeError, ValueError, AttributeError):
+        return ''
+    T = 0.8   # within ~0.8 on the 1-10 scale reads as "about the same"
+    if abs(d) < T and abs(g) < T and abs(f) < T:
+        return 'Right in line with the community.'
+    diff = 'tougher than most' if d >= T else 'easier than most' if d <= -T else 'about as tough as most'
+    grind = 'grindier' if g >= T else 'less grindy' if g <= -T else 'about as grindy'
+    fun = 'more fun' if f >= T else 'less fun' if f <= -T else 'just as fun'
+    conj = 'but' if (f >= T and (d >= T or g >= T)) else 'and'   # harder/grindier YET more fun -> contrast
+    return f'You found it {diff}, {grind}, {conj} {fun}.'
+
+
 @register.filter
 def psn_rarity(rarity_int):
     labels = {0: 'Ultra Rare', 1: 'Very Rare', 2: 'Rare', 3: 'Common'}

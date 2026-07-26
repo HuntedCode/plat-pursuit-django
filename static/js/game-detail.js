@@ -1550,6 +1550,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         const nm = tile.querySelector('[data-cond-num]'); if (nm) nm.textContent = v.toFixed(1);
                     });
                 }
+                // Live-sync the viewer's "Your take" comparison band (add / update / remove).
+                if (card && avg) syncYouTake(card, payload, avg);
                 // Live-sync the viewer's own quick take in this group's strip (add / replace / remove).
                 syncOwnBlurb(panel, blurbVal, payload.overall_rating);
                 if (srcBtn) {
@@ -1611,6 +1613,39 @@ document.addEventListener('DOMContentLoaded', () => {
             if (existing) existing.replaceWith(fresh);
             else if (list) list.insertBefore(fresh, list.firstChild);
             wrap.classList.remove('is-empty');
+        }
+
+        // Synthesized "you vs community" sentence -- mirrors core/templatetags/custom_filters.py
+        // rating_comparison (keep the T threshold + wording in sync).
+        function comparisonOf(u, a) {
+            const d = u.difficulty - a.avg_difficulty, g = u.grindiness - a.avg_grindiness, f = u.fun_ranking - a.avg_fun;
+            const T = 0.8;
+            if (Math.abs(d) < T && Math.abs(g) < T && Math.abs(f) < T) return 'Right in line with the community.';
+            const diff = d >= T ? 'tougher than most' : d <= -T ? 'easier than most' : 'about as tough as most';
+            const grind = g >= T ? 'grindier' : g <= -T ? 'less grindy' : 'about as grindy';
+            const fun = f >= T ? 'more fun' : f <= -T ? 'less fun' : 'just as fun';
+            const conj = (f >= T && (d >= T || g >= T)) ? 'but' : 'and';
+            return 'You found it ' + diff + ', ' + grind + ', ' + conj + ' ' + fun + '.';
+        }
+        // Add / update / remove the "Your take" band after a submit. Shows only with >1 rating to compare to.
+        function syncYouTake(card, u, a) {
+            let band = card.querySelector('[data-cond-you]');
+            if (!a || a.count <= 1) { if (band) band.remove(); return; }
+            if (!band) {
+                band = document.createElement('div');
+                band.className = 'gd-cond__you';
+                band.setAttribute('data-cond-you', '');
+                band.innerHTML = '<span class="gd-cond__you-lbl">Your take</span>' +
+                    '<p class="gd-cond__you-txt" data-cond-you-txt></p>' +
+                    '<span class="gd-cond__you-scores" data-cond-you-scores></span>';
+                const tiles = card.querySelector('.gd-cond__tiles');
+                if (tiles) tiles.insertAdjacentElement('afterend', band); else card.appendChild(band);
+            }
+            const txt = band.querySelector('[data-cond-you-txt]'); if (txt) txt.textContent = comparisonOf(u, a);
+            const sc = band.querySelector('[data-cond-you-scores]');
+            // Numbers only (our own computed floats) -> innerHTML is safe here.
+            if (sc) sc.innerHTML = 'You <b>' + u.overall_rating.toFixed(1) + '</b>' +
+                '<span class="gd-cond__you-vs">vs</span>community <b>' + a.avg_rating.toFixed(1) + '</b>';
         }
 
         // ── Report a quick take. One shared modal, opened from any card's [data-blurb-report]. ──
