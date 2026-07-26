@@ -1163,22 +1163,20 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
  * RATINGS TAB (.gd-rate) -- community-stats context strip over per-group community ratings.
  * Bars are pp-horizon primitives tinted by a per-stat tone (--rate-accent, set from [data-tone]).
  * ============================================================ */
-.gd-rate { display: block; }
+/* The Ratings tab is a stack of full-width framed sections (.gd-acard, like the About panel) -- nothing sits
+   bare on the page substrate. Consistent section rhythm via flex-gap. */
+.gd-rate { display: flex; flex-direction: column; gap: 14px; }
+.gd-rate__panel { display: flex; flex-direction: column; gap: 14px; }
 
-/* Community-stats context tiles (players / plats / 100%s / avg completion). 2-up on mobile, even row on md+. */
-.gd-rate__stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
-.gd-rate__stat {
-    flex: 1 1 calc(50% - 4px); display: flex; flex-direction: column; align-items: center; gap: 2px;
-    padding: 12px 10px; border-radius: var(--pp-radius-md); text-align: center;
-    background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px solid var(--pp-border);
-}
-@media (min-width: 768px) { .gd-rate__stat { flex: 1 1 0; } }
+/* Community snapshot: the four per-game numbers as a plain stat row inside the band (dividers on md+). */
+.gd-rate__stats { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.gd-rate__stat { flex: 1 1 calc(50% - 4px); display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 10px; text-align: center; }
+@media (min-width: 768px) { .gd-rate__stat { flex: 1 1 0; } .gd-rate__stat:not(:last-child) { border-right: 1px solid var(--pp-divider); } }
 .gd-rate__stat-n { font-size: 1.4rem; font-weight: 800; color: var(--pp-text); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .gd-rate__stat-unit { font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); margin-left: 1px; }
 .gd-rate__stat-lbl { font-size: 0.64rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
 
 /* Adaptive DLC selector: pill row (few groups) or Base pill + dropdown (many) -- mirrors the leaderboard switcher. */
-.gd-rate__sel { margin-bottom: 15px; }
 .gd-rate__seg { display: inline-flex; align-self: flex-start; max-width: 100%; gap: 2px; padding: 3px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); overflow-x: auto; scrollbar-width: none; }
 .gd-rate__seg::-webkit-scrollbar { display: none; }
 /* overflow-x:auto (for the horizontal pill-scroll) forces overflow-y to auto too, which clips the absolutely-
@@ -1223,9 +1221,9 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__summary { font-size: 1.18rem; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; color: var(--pp-text); text-wrap: balance; }
 .gd-cond--empty .gd-cond__summary { color: var(--pp-text-mute); font-weight: 600; }
 
-/* Conditions tiles: word-forward. The verdict is the tile headline (polarity lives in the WORD, so nothing
-   reads backwards the way a bar length can); the number is a quiet subscript. Only the icon + word carry the
-   subtle tone accent -- the tile surface stays neutral. */
+/* Conditions tiles: the number is the figure (prioritized, Tally face), the verdict word its plain-language
+   descriptor (polarity lives in the WORD, so nothing reads backwards). Only the icon + verdict take the tone
+   accent -- the tile surface stays neutral. */
 .gd-cond__tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
 .gd-cond__tile { display: flex; flex-direction: column; gap: 3px; padding: 13px 13px 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); --rate-accent: var(--pp-text-dim); }
 .gd-cond__tile[data-tone="good"] { --rate-accent: var(--pp-success); }
@@ -1235,9 +1233,13 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__icon { width: 18px; height: 18px; color: var(--rate-accent); margin-bottom: 3px; }
 .gd-cond--empty .gd-cond__icon { color: var(--pp-text-mute); opacity: 0.6; }
 .gd-cond__lbl { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
-.gd-cond__verdict { font-size: 1.02rem; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; color: var(--rate-accent); }
+.gd-cond__figure { display: inline-flex; align-items: baseline; gap: 1px; margin-top: 2px; }
+.gd-cond__num { font-size: 1.7rem; line-height: 1; color: var(--pp-text); }   /* .pp-tally supplies the display face */
+.gd-cond--empty .gd-cond__num { color: var(--pp-text-mute); }
+.gd-cond__unit { font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute); }
+.gd-cond--empty .gd-cond__unit { display: none; }
+.gd-cond__verdict { font-size: 0.9rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; color: var(--rate-accent); }
 .gd-cond--empty .gd-cond__verdict { color: var(--pp-text-mute); }
-.gd-cond__num { font-size: 0.68rem; font-weight: 600; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
 
 /* Hours: a labeled time value, set apart from the qualities (a duration, not a 1-10 opinion). */
 .gd-cond__hours { display: inline-flex; align-items: center; gap: 9px; }
@@ -1257,8 +1259,35 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__you-scores b { font-size: 0.86rem; font-weight: 800; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
 .gd-cond__you-vs { margin: 0 5px; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
 
-.gd-rate__foot { display: flex; justify-content: flex-end; margin-top: 4px; }
+.gd-rate__foot { display: flex; justify-content: flex-end; margin-top: 14px; }
 .gd-rate__cta { flex-shrink: 0; }
+
+/* ---- Desktop (lg+): scale the aggregate up so it fills the width -- the tab previously had NO desktop tier.
+   Per the design-system responsive progressions: type + padding + gaps step up; the columns do not reflow. ---- */
+@media (min-width: 1024px) {
+    .gd-rate .gd-acard { padding: 20px 24px; }
+    .gd-rate .gd-acard__h { font-size: 0.78rem; margin-bottom: 14px; }
+    .gd-rate { gap: 16px; }
+    .gd-rate__panel { gap: 16px; }
+    .gd-rate__stat-n { font-size: 1.85rem; }
+    .gd-rate__stat-lbl { font-size: 0.7rem; }
+
+    .gd-cond { gap: 18px; }
+    .gd-cond__stars { font-size: 1.6rem; letter-spacing: 4px; }
+    .gd-cond__score-n { font-size: 2.75rem; }
+    .gd-cond__of { font-size: 1.05rem; }
+    .gd-cond__summary { font-size: 1.42rem; }
+    .gd-cond__tiles { gap: 12px; }
+    .gd-cond__tile { padding: 18px 16px 16px; }
+    .gd-cond__icon { width: 22px; height: 22px; }
+    .gd-cond__num { font-size: 2.1rem; }
+    .gd-cond__unit { font-size: 0.82rem; }
+    .gd-cond__verdict { font-size: 1rem; }
+    .gd-cond__hours svg { width: 24px; height: 24px; }
+    .gd-cond__hours-num { font-size: 1.05rem; }
+    .gd-cond__hours-num b { font-size: 1.3rem; }
+    .gd-cond__you-txt { font-size: 1rem; }
+}
 
 /* ---- Quick-rate modal (gd-modal--qr) ---- */
 .gd-modal--qr { width: min(94vw, 460px); max-width: 460px; }
@@ -1297,16 +1326,15 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-guide__rule::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; border-radius: 50%; background: color-mix(in oklab, var(--pp-primary) 60%, transparent); }
 .gd-guide__rule b { color: var(--pp-text); font-weight: 700; }
 
-/* ---- Quick takes: individual community blurbs under the aggregate (a quiet, secondary voice) ---- */
-.gd-blurbs { display: flex; flex-direction: column; gap: 11px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--pp-divider); }
+/* ---- Quick takes: individual community blurbs, in their own framed .gd-acard section ---- */
+.gd-blurbs { display: flex; flex-direction: column; gap: 12px; }
 .gd-blurbs.is-empty { display: none; }
-.gd-blurbs__title { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pp-text-mute); }
 /* Wider-than-tall cards: a ~320px floor packs 2 columns on a standard panel (3 when very wide, 1 when narrow),
    so a full 140-char blurb lands in ~2-3 lines rather than a skinny 6-line column. auto-fill (not auto-fit)
    keeps a lone card at track width instead of stretching it to the full panel. */
 .gd-blurbs__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 9px; }
 
-.gd-blurb { display: flex; gap: 10px; padding: 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); }
+.gd-blurb { display: flex; gap: 10px; padding: 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); }
 .gd-blurb--you { border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 5%, transparent); }
 .gd-blurb.is-reported { opacity: 0.45; }
 .gd-blurb.is-reported .gd-blurb__report { pointer-events: none; }

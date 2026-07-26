@@ -1551,7 +1551,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (avg && card) {
                     card.classList.remove('gd-cond--empty');
                     const summary = card.querySelector('[data-cond-summary]'); if (summary) summary.textContent = summaryOf(avg);
-                    const sc = card.querySelector('[data-cond-score]'); if (sc) sc.textContent = avg.avg_rating.toFixed(1);
+                    const sc = card.querySelector('[data-cond-score]'); if (sc) { sc.textContent = avg.avg_rating.toFixed(1); sc.classList.add('pp-tally--glow'); }
                     const st = card.querySelector('[data-cond-stars]');
                     if (st) { st.style.setProperty('--fill', (avg.avg_rating / 5 * 100) + '%'); st.setAttribute('aria-label', avg.avg_rating.toFixed(1) + ' out of 5'); }
                     const ct = card.querySelector('[data-rate-count]');

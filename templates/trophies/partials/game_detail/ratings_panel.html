@@ -6,8 +6,10 @@ trophy groups, a Base Game pill + "DLC" dropdown once there are many (some games
 runs the reveal (revealRatings). Players drill-down lives in the Ranks tab now; written reviews are deferred. {% endcomment %}
 <section class="gd-rate" data-gd-rate{% if viewer_profile_id and request.user.profile %} data-viewer-name="{{ request.user.profile.display_psn_username|default:request.user.profile.psn_username }}" data-viewer-avatar="{{ request.user.profile.avatar_url|default:'' }}" data-viewer-url="{% url 'profile_detail' request.user.profile.psn_username %}"{% endif %}>
 
-    {# ── Community stats: player-count context. Denormed on Game, recomputed nightly. ── #}
-    <div class="gd-rate__stats">
+    {# ── Community stats band: per-game context (players / plats / 100% / avg). Framed like About's sections. ── #}
+    <section class="gd-acard gd-rate__snapshot">
+        <h3 class="gd-acard__h">Community</h3>
+        <div class="gd-rate__stats">
         <div class="gd-rate__stat">
             <span class="gd-rate__stat-n" data-gd-countup="{{ game.played_count|default:0 }}">{{ game.played_count|default:0|intcomma }}</span>
             <span class="gd-rate__stat-lbl">Players</span>
@@ -27,7 +29,8 @@ runs the reveal (revealRatings). Players drill-down lives in the Ranks tab now; 
             <span class="gd-rate__stat-n"><span data-gd-countup="{{ game.avg_completion|floatformat:0 }}">{{ game.avg_completion|floatformat:0 }}</span><span class="gd-rate__stat-unit">%</span></span>
             <span class="gd-rate__stat-lbl">Avg completion</span>
         </div>
-    </div>
+        </div>
+    </section>
 
     {# ── Adaptive DLC selector (only when the game has more than the base group) ── #}
     {% if community_tabs|length > 1 %}
