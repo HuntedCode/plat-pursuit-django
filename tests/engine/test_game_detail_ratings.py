@@ -271,6 +271,16 @@ def test_quick_rate_modal_form_contract(client):
     assert 'data-gd-qr-count' in content        # + its char counter
 
 
+def test_quick_rate_persistent_guidelines_notice_and_sheet(client):
+    """The compose modal shows a persistent guidelines notice; the rules open in an in-context sheet."""
+    content = _detail(client, GameFactory(defined_trophies=_DEFINED))
+    assert 'gd-qr__notice' in content                     # persistent notice (always shown, not JS-toggled)
+    assert 'data-gd-guidelines-open' in content           # its Community Guidelines trigger
+    assert 'id="gd-guidelines-modal"' in content          # the in-context sheet is on the page
+    assert 'Mark spoilers.' in content                    # a real rule rendered in the sheet
+    assert 'data-gd-qr-fine' not in content               # the old conditional fine-print is gone
+
+
 # ── Quick takes: the community blurb strip under the aggregate ──────────────
 
 def _blurb_row(concept, profile, text, ctg=None, hidden=False):

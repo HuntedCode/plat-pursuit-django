@@ -1282,9 +1282,20 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-qr__area { width: 100%; padding: 9px 11px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font: inherit; font-size: 0.85rem; line-height: 1.4; resize: none; }
 .gd-qr__area::placeholder { color: var(--pp-text-mute); }
 .gd-qr__area:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
-.gd-qr__fine { font-size: 0.68rem; color: var(--pp-text-mute); }
-.gd-qr__fine a { color: var(--pp-primary); text-decoration: none; }
-.gd-qr__fine a:hover { text-decoration: underline; }
+/* Persistent guidelines notice above the Post button (always shown; posting is the agreement). */
+.gd-qr__notice { font-size: 0.72rem; line-height: 1.45; color: var(--pp-text-mute); }
+.gd-qr__guidelink { display: inline; padding: 0; border: none; background: none; font: inherit; font-weight: 700; color: var(--pp-primary); cursor: pointer; }
+.gd-qr__guidelink:hover { text-decoration: underline; }
+.gd-qr__guidelink:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 3px; }
+
+/* Community Guidelines sheet (opens over the compose modal; reading the rules keeps the draft). */
+.gd-modal--guidelines { width: min(94vw, 500px); max-width: 500px; }
+.gd-guide { display: flex; flex-direction: column; gap: 13px; }
+.gd-guide__lead { font-size: 0.85rem; line-height: 1.45; color: var(--pp-text-dim); }
+.gd-guide__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.gd-guide__rule { position: relative; padding-left: 16px; font-size: 0.82rem; line-height: 1.45; color: var(--pp-text-mute); }
+.gd-guide__rule::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; border-radius: 50%; background: color-mix(in oklab, var(--pp-primary) 60%, transparent); }
+.gd-guide__rule b { color: var(--pp-text); font-weight: 700; }
 
 /* ---- Quick takes: individual community blurbs under the aggregate (a quiet, secondary voice) ---- */
 .gd-blurbs { display: flex; flex-direction: column; gap: 11px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--pp-divider); }

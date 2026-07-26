@@ -38,8 +38,12 @@ fun_ranking, overall_rating) are the API contract -- do not rename. Value/label/
         <label class="gd-qr__field gd-qr__field--blurb">
             <span class="gd-qr__lbl">Quick take <span class="gd-qr__opt">optional</span><span class="gd-qr__count" data-gd-qr-count>140</span></span>
             <textarea name="blurb" maxlength="140" rows="2" class="gd-qr__area" data-gd-qr-blurb placeholder="How was the platinum? One line for fellow hunters."></textarea>
-            <span class="gd-qr__fine" data-gd-qr-fine hidden>By posting, you agree to our <a href="{% url 'terms' %}" target="_blank" rel="noopener">community guidelines</a>.</span>
         </label>
+        {% comment %} Persistent guidelines notice, right above the action: the act of posting IS the
+        agreement (still recorded server-side on submit). Shown every time, never hidden after first
+        agreement. The link opens the rules in a sheet OVER this modal, so reading them never loses the
+        in-progress take. {% endcomment %}
+        <p class="gd-qr__notice">By posting a public quick take you agree to our <button type="button" class="gd-qr__guidelink" data-gd-guidelines-open>Community Guidelines</button>: keep it civil, spoiler-free, and useful.</p>
         <div class="gd-qr__actions">
             <button type="button" class="gd-btn gd-btn--ghost" data-gd-modal-close>Cancel</button>
             <button type="submit" class="gd-btn gd-btn--primary" data-gd-qr-submit>Submit rating</button>

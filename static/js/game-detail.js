@@ -1435,17 +1435,17 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         form.querySelectorAll('[data-gd-qr-slider]').forEach((s) => s.addEventListener('input', () => setVal(s.name)));
 
-        // Blurb: live char counter + the guidelines fine print (shown only while writing one and not yet agreed).
+        // Blurb: live char counter. (The guidelines notice is now a persistent SSR line, always shown, not a
+        // JS toggle -- posting is the agreement, recorded server-side on submit.)
         const MAX_BLURB = 140;
         const area = form.querySelector('[data-gd-qr-blurb]');
         const countEl = form.querySelector('[data-gd-qr-count]');
-        const fineEl = form.querySelector('[data-gd-qr-fine]');
         const alreadyAgreed = () => form.dataset.guidelinesAgreed === '1';
         function refreshBlurbUi() {
-            if (!area) return;
+            if (!area || !countEl) return;
             const left = MAX_BLURB - area.value.length;
-            if (countEl) { countEl.textContent = String(left); countEl.classList.toggle('is-low', left <= 20); }
-            if (fineEl) fineEl.hidden = !(area.value.trim().length > 0 && !alreadyAgreed());
+            countEl.textContent = String(left);
+            countEl.classList.toggle('is-low', left <= 20);
         }
         if (area) area.addEventListener('input', refreshBlurbUi);
 
@@ -1718,6 +1718,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 } finally {
                     if (rSubmit) { rSubmit.disabled = false; rSubmit.textContent = 'Submit report'; }
                 }
+            });
+        }
+
+        // ── Community Guidelines sheet. Opens OVER the compose modal from its notice's [data-gd-guidelines-open]
+        //    link, so reading the rules never loses the in-progress take. Read-only; agreement is recorded on
+        //    submit. Stacking a second <dialog>.showModal() puts it on top; closing returns focus to the modal. ──
+        const guidelines = document.getElementById('gd-guidelines-modal');
+        if (guidelines) {
+            const closeGuide = () => { if (guidelines.close && guidelines.open) guidelines.close(); };
+            guidelines.querySelectorAll('[data-gd-modal-close]').forEach((b) => b.addEventListener('click', closeGuide));
+            guidelines.addEventListener('click', (e) => { if (e.target === guidelines) closeGuide(); });
+            guidelines.addEventListener('cancel', (e) => { e.preventDefault(); closeGuide(); });
+            if (PlatPursuit.dismissableSheet) PlatPursuit.dismissableSheet(guidelines, { onClose: closeGuide });
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('[data-gd-guidelines-open]')) return;
+                if (guidelines.showModal && !guidelines.open) guidelines.showModal();
             });
         }
     })();
