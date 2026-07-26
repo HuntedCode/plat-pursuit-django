@@ -5,6 +5,10 @@
    everything else sits on the deepened substrate.
    ============================================================ */
 
+/* Rating stars (score + quick-take cards) use their OWN brighter, warmer gold -- distinct from the muted
+   metallic --color-trophy-gold (the site-wide trophy-tier color), which reads dull as a rating star. */
+:root { --gd-rating-gold: oklch(0.84 0.15 88); }
+
 /* ---- View panels ---- */
 .gd-view[hidden] { display: none; }
 #browse-results { transition: opacity var(--pp-dur) var(--pp-ease); }
@@ -1248,9 +1252,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* Fractional gold stars: a dim 5-star base with a gold overlay clipped to the score % (--fill). */
 .gd-cond__stars { position: relative; display: inline-block; font-size: 1.35rem; line-height: 1; letter-spacing: 3px; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
 .gd-cond__stars::before { content: "\2605\2605\2605\2605\2605"; }
-/* Rating stars use their OWN brighter, warmer gold -- distinct from the muted metallic --color-trophy-gold
-   (the site-wide trophy-tier color), which reads dull as a rating star. This one pops and invites. */
-.gd-cond__stars-on { position: absolute; top: 0; left: 0; width: var(--fill, 0%); overflow: hidden; white-space: nowrap; color: oklch(0.84 0.15 88); transition: width var(--pp-dur) var(--pp-ease); }
+.gd-cond__stars-on { position: absolute; top: 0; left: 0; width: var(--fill, 0%); overflow: hidden; white-space: nowrap; color: var(--gd-rating-gold); transition: width var(--pp-dur) var(--pp-ease); }
 .gd-cond__stars-on::before { content: "\2605\2605\2605\2605\2605"; }
 .gd-cond__scoreline { display: inline-flex; align-items: baseline; gap: 1px; }
 .gd-cond__score-n { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--pp-text); font-variant-numeric: tabular-nums; }
@@ -1445,7 +1447,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* Fractional gold stars: same two-layer technique as the conditions hero, sized down for the card. */
 .gd-blurb__stars { position: relative; display: inline-block; flex: none; margin-left: auto; font-size: 0.78rem; line-height: 1; letter-spacing: 2px; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
 .gd-blurb__stars::before { content: "\2605\2605\2605\2605\2605"; }
-.gd-blurb__stars-on { position: absolute; top: 0; left: 0; width: var(--fill, 0%); overflow: hidden; white-space: nowrap; color: var(--color-trophy-gold); }
+.gd-blurb__stars-on { position: absolute; top: 0; left: 0; width: var(--fill, 0%); overflow: hidden; white-space: nowrap; color: var(--gd-rating-gold); }
 .gd-blurb__stars-on::before { content: "\2605\2605\2605\2605\2605"; }
 .gd-blurb__text { font-size: 0.86rem; line-height: 1.42; color: var(--pp-text); overflow-wrap: anywhere; }
 .gd-blurb__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 1px; }
