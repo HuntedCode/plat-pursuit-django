@@ -299,6 +299,25 @@ def test_quick_rate_playtime_hint_and_toast_container():
     assert "don't have your playtime" in render_to_string(tpl, {})   # graceful fallback when untracked
 
 
+def test_playtime_hint_reaches_modal_from_context(client):
+    """Regression: the view must copy user_play_hours out of _build_profile_context so the modal hint shows."""
+    from datetime import timedelta
+    from trophies.models import ProfileGame
+    profile, game = ProfileFactory(is_linked=True), GameFactory(defined_trophies=_DEFINED)
+    ProfileGame.objects.create(profile=profile, game=game, play_duration=timedelta(hours=42))
+    client.force_login(profile.user)
+    content = _detail(client, game)
+    assert 'Your tracked playtime' in content and '<b>42</b>' in content
+
+
+def test_quick_takes_count_in_title():
+    """The non-hidden quick-take count sits next to the section title."""
+    concept = ConceptFactory()
+    b = _blurb_row(concept, ProfileFactory(), 'A take.')
+    html = _conditions(_AVERAGES, blurbs=[b], blurb_count=7)
+    assert 'data-blurbs-count' in html and '>7<' in html
+
+
 def test_minibar_has_per_tab_icons_and_ratings_group_slot(client):
     """The sticky minibar carries an icon per tab (matches the active one) + the Base/DLC group slot."""
     content = _detail(client, GameFactory(defined_trophies=_DEFINED))

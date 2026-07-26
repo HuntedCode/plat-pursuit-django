@@ -1687,14 +1687,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!wrap) return;
             const list = wrap.querySelector('[data-blurbs-list]');
             const existing = list && list.querySelector('[data-blurb-own]');
-            if (!text) {   // blurb cleared -> drop the card; re-empty the strip if it was the only one
-                if (existing) existing.remove();
+            const countEl = wrap.querySelector('[data-blurbs-count]');
+            const bump = (d) => { if (countEl) countEl.textContent = String(Math.max(0, (parseInt(countEl.textContent, 10) || 0) + d)); };
+            if (!text) {   // blurb cleared -> drop the card + decrement; re-empty the strip if it was the only one
+                if (existing) { existing.remove(); bump(-1); }
                 if (list && !list.children.length) wrap.classList.add('is-empty');
                 return;
             }
             const fresh = buildBlurbCard(text, overall);
-            if (existing) existing.replaceWith(fresh);
-            else if (list) list.insertBefore(fresh, list.firstChild);
+            if (existing) { existing.replaceWith(fresh); }                            // edit -> total unchanged
+            else { if (list) list.insertBefore(fresh, list.firstChild); bump(1); }    // new take -> increment
             wrap.classList.remove('is-empty');
         }
 

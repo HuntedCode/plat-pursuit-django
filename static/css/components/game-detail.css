@@ -37,7 +37,7 @@
 @media (min-width: 1024px) { .gd-minibar[data-mb-active="leaderboard"] .gd-lb__mbtitle { display: inline-block; } }
 /* Ratings tab: the current group (Base Game / DLC name) in the minibar, desktop only. JS fills it ONLY when a
    game has DLC, so :not(:empty) keeps it hidden for base-only games (nothing to disambiguate). */
-.gd-rate__mbtitle { display: none; font-size: 0.82rem; font-weight: 700; color: var(--pp-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 15rem; }
+.gd-rate__mbtitle { display: none; font-size: 0.82rem; font-weight: 700; color: var(--pp-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .gd-rate__mbtitle::before { content: "\2022"; margin: 0 9px; color: var(--pp-text-mute); font-weight: 400; }
 @media (min-width: 1024px) { .gd-minibar[data-mb-active="ratings"] .gd-rate__mbtitle:not(:empty) { display: inline-block; } }
 /* Mobile minibar is tight with the leaderboard's search + You + Filters, so drop the game title (the page
@@ -301,6 +301,11 @@
 /* position: fixed + inset:0 + margin:auto == viewport-centred. Without this the native <dialog> falls
    back to position:absolute anchored at the document top, so mobile scrolls to y=0 to reveal it. */
 .gd-modal { position: fixed; inset: 0; border: none; padding: 0; width: min(92vw, 440px); max-width: 440px; margin: auto; border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); color: var(--pp-text); box-shadow: 0 30px 90px rgba(0,0,0,0.55); overflow: hidden; }
+/* Toasts raised while a modal is open render into the dialog's own top-layer container (so they're not hidden
+   behind the backdrop). Pin them as a top-of-screen banner rather than in-flow at the modal's bottom edge,
+   where they read as jarring content inside the form. */
+.gd-modal .modal-toast-container { position: fixed; top: 1.25rem; left: 50%; transform: translateX(-50%); right: auto; bottom: auto; margin: 0; padding: 0; width: max-content; max-width: min(92vw, 30rem); display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+.gd-modal .modal-toast-container > * { pointer-events: auto; }
 .gd-modal:not([open]) { display: none; }
 .gd-modal[open] { animation: gdModalIn 0.2s var(--pp-ease) both; }
 @keyframes gdModalIn { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
@@ -1373,6 +1378,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-blurbs { display: flex; flex-direction: column; gap: 10px; }
 .gd-blurbs.is-empty { display: none; }
 .gd-blurbs__title { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }   /* matches .gd-acard__h */
+.gd-blurbs__count { margin-left: 5px; color: var(--pp-text-dim); font-weight: 700; }
 /* Wider-than-tall cards: a ~320px floor packs 2 columns on a standard panel (3 when very wide, 1 when narrow),
    so a full 140-char blurb lands in ~2-3 lines rather than a skinny 6-line column. auto-fill (not auto-fit)
    keeps a lone card at track width instead of stretching it to the full panel. */

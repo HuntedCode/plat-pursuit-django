@@ -885,8 +885,8 @@ class GameDetailView(DetailView):
 
         # Public "quick take" blurbs shown under each group's ratings. Bounded preview per group, ordered
         # newest-first (model default) and backed by the partial rating_blurb_idx, so it stays whale-safe:
-        # one [:N] query per group with the profile joined so avatars/names don't N+1.
-        BLURB_PREVIEW_LIMIT = 6
+        # one [:N] preview + one index-only COUNT query per group (the profile joined so avatars don't N+1).
+        BLURB_PREVIEW_LIMIT = 12
 
         community_tabs = []
         for ctg in ctgs:
@@ -907,6 +907,9 @@ class GameDetailView(DetailView):
                     .filter(concept=game.concept, concept_trophy_group=ctg_fk)
                     .select_related('profile')[:BLURB_PREVIEW_LIMIT]
                 ),
+                'blurb_count': UserConceptRating.visible_blurbs().filter(
+                    concept=game.concept, concept_trophy_group=ctg_fk
+                ).count(),
             }
             if profile and profile.is_linked:
                 can_rate, rate_reason = ConceptTrophyGroupService.can_rate_group(
@@ -1367,9 +1370,11 @@ class GameDetailView(DetailView):
             context['profile_trophy_totals'] = profile_context['profile_trophy_totals']
             context['profile_group_totals'] = profile_context['profile_group_totals']
             context['timeline_events'] = profile_context['timeline_events']
+            context['user_play_hours'] = profile_context.get('user_play_hours')
         else:
             context['profile'] = None
             context['profile_progress'] = None
+            context['user_play_hours'] = None
             context['profile_earned'] = {}
             context['profile_trophy_totals'] = {}
             context['profile_group_totals'] = {}
