@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ratingsRevealed = true;
         const active = panel.querySelector('.gd-rate__panel:not(.is-hidden)') || panel;
         // Fade + rise the summary headline and the condition tiles in, lightly staggered.
-        active.querySelectorAll('.gd-cond__rating, .gd-cond__summary, .gd-cond__tile, .gd-cond__hours').forEach((el, i) => {
+        active.querySelectorAll('.gd-cond__hero, .gd-cond__tile').forEach((el, i) => {
             if (!el.animate) return;
             el.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
                        { duration: 420, delay: i * 55, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });

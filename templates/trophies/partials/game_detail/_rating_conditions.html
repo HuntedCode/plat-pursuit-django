@@ -13,14 +13,24 @@ Expects: averages (dict|None), can_rate, user_rating, concept_id, group_id, hour
 The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat]/[data-cond-*] hooks are the contract. {% endcomment %}
 <div class="gd-cond{% if not averages %} gd-cond--empty{% endif %}" data-rate-grid>
 
-    {# Hero: a big score + gold star rating is the visual anchor; the synthesized summary sentence is the headline. #}
+    {# Hero: the two HARD FACTS up top -- score+stars (how good) opposite time-to-plat (how long) -- then the
+       synthesized summary sentence as the headline. The subjective 'feel' qualities are the tiles below. #}
     <div class="gd-cond__hero">
-        <div class="gd-cond__rating">
-            <span class="gd-cond__stars" data-cond-stars style="--fill: {% if averages %}{% widthratio averages.avg_rating 5 100 %}{% else %}0{% endif %}%;" role="img" aria-label="{% if averages %}{{ averages.avg_rating|floatformat:1 }} out of 5{% else %}Not rated{% endif %}"><span class="gd-cond__stars-on"></span></span>
-            <span class="gd-cond__scoreline"><b class="gd-cond__score-n" data-cond-score>{% if averages %}{{ averages.avg_rating|floatformat:1 }}{% else %}&mdash;{% endif %}</b><span class="gd-cond__of">/5</span></span>
-            <span class="gd-cond__count" data-rate-count>{% if averages %}&middot; {{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}be the first to rate{% endif %}</span>
+        <div class="gd-cond__herorow">
+            <div class="gd-cond__rating">
+                <span class="gd-cond__stars" data-cond-stars style="--fill: {% if averages %}{% widthratio averages.avg_rating 5 100 %}{% else %}0{% endif %}%;" role="img" aria-label="{% if averages %}{{ averages.avg_rating|floatformat:1 }} out of 5{% else %}Not rated{% endif %}"><span class="gd-cond__stars-on"></span></span>
+                <span class="gd-cond__scoreline"><b class="gd-cond__score-n" data-cond-score>{% if averages %}{{ averages.avg_rating|floatformat:1 }}{% else %}&mdash;{% endif %}</b><span class="gd-cond__of">/5</span></span>
+            </div>
+            <div class="gd-cond__hours">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                <span class="gd-cond__hours-txt">
+                    <span class="gd-cond__hours-num">~<b data-cond-hours>{% if averages %}{{ averages.avg_hours|floatformat:0|intcomma }}{% else %}&mdash;{% endif %}</b>h</span>
+                    <span class="gd-cond__hours-lbl">{{ hours_label_long|default:"Hours to Platinum" }}</span>
+                </span>
+            </div>
         </div>
         <p class="gd-cond__summary" data-cond-summary>{% if averages %}{{ averages|rating_summary }}{% else %}Not yet rated.{% endif %}</p>
+        <span class="gd-cond__count" data-rate-count>{% if averages %}{{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}Be the first to rate this.{% endif %}</span>
     </div>
 
     {# Conditions: one icon tile per quality; the verdict word is the headline, the number a quiet subscript. #}
@@ -43,15 +53,6 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
             <span class="gd-cond__verdict" data-cond-verdict>{% if averages %}{{ averages.avg_fun|rating_verdict:'fun' }}{% else %}&mdash;{% endif %}</span>
             <span class="gd-cond__num" data-cond-num>{% if averages %}{{ averages.avg_fun|floatformat:1 }}{% endif %}</span>
         </div>
-    </div>
-
-    {# Time callout: a duration, not a 1-10 opinion, so it stands apart from the qualities. #}
-    <div class="gd-cond__hours">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        <span class="gd-cond__hours-txt">
-            <span class="gd-cond__hours-num">~<b data-cond-hours>{% if averages %}{{ averages.avg_hours|floatformat:0|intcomma }}{% else %}&mdash;{% endif %}</b>h</span>
-            <span class="gd-cond__hours-lbl">{{ hours_label_long|default:"Hours to Platinum" }}</span>
-        </span>
     </div>
 </div>
 
