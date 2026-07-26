@@ -1181,6 +1181,10 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-rate__sel { margin-bottom: 15px; }
 .gd-rate__seg { display: inline-flex; align-self: flex-start; max-width: 100%; gap: 2px; padding: 3px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); overflow-x: auto; scrollbar-width: none; }
 .gd-rate__seg::-webkit-scrollbar { display: none; }
+/* overflow-x:auto (for the horizontal pill-scroll) forces overflow-y to auto too, which clips the absolutely-
+   positioned DLC dropdown hanging below. In dropdown mode the row is just Base + the menu button and never
+   needs to scroll, so let that variant overflow visibly instead of eating the menu. */
+.gd-rate__seg:has([data-rate-drop]) { overflow: visible; }
 .gd-rate__segchip { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; padding: 6px 13px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; cursor: pointer; color: var(--pp-text-dim); background: none; border: none; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
 .gd-rate__segchip:hover { color: var(--pp-text); }
 .gd-rate__segchip.is-active { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 15%, var(--pp-bg-1)); }
