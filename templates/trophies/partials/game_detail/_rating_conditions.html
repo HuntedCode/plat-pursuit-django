@@ -66,7 +66,7 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
         {% if averages.count >= 3 and averages.distribution %}
         <div class="gd-cond__disttile">
             <span class="gd-cond__lbl">Rating spread</span>
-            <div class="gd-dist" data-cond-dist role="img" aria-label="Rating distribution, half a star to 5 stars">
+            <div class="gd-dist" role="img" aria-label="Rating distribution across {{ averages.count|intcomma }} rating{{ averages.count|pluralize }}, half a star to 5 stars">
                 {% for row in averages.distribution %}
                 <div class="gd-dist__col{% if row.starnum %} is-whole{% endif %}" data-dist-step="{{ row.step }}" title="{{ row.value|floatformat:'-1' }} star{{ row.value|pluralize }}: {{ row.count }} rating{{ row.count|pluralize }} ({{ row.pct }}%)">
                     <span class="gd-dist__n" data-dist-n>{% if row.count %}{{ row.count }}{% endif %}</span>

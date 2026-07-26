@@ -5,7 +5,7 @@ This module handles the calculation and caching of community rating averages
 for game concepts, including difficulty, grindiness, fun, and time estimates.
 Supports both base game ratings (concept_trophy_group=NULL) and DLC group ratings.
 """
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count
 from django.core.cache import cache
 from trophies.util_modules.language import calculate_trimmed_mean
 
