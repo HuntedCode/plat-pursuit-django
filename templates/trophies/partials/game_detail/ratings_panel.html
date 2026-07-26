@@ -6,8 +6,8 @@ trophy groups, a Base Game pill + "DLC" dropdown once there are many (some games
 runs the reveal (revealRatings). Players drill-down lives in the Ranks tab now; written reviews are deferred. {% endcomment %}
 <section class="gd-rate" data-gd-rate{% if viewer_profile_id and request.user.profile %} data-viewer-name="{{ request.user.profile.display_psn_username|default:request.user.profile.psn_username }}" data-viewer-avatar="{{ request.user.profile.avatar_url|default:'' }}" data-viewer-url="{% url 'profile_detail' request.user.profile.psn_username %}"{% endif %}>
 
-    {# ── Community stats: player-count context. Denormed on Game, recomputed nightly. Carded like every other section. ── #}
-    <div class="gd-rcard gd-rate__stats">
+    {# ── Community stats: player-count context. Denormed on Game, recomputed nightly. ── #}
+    <div class="gd-rate__stats">
         <div class="gd-rate__stat">
             <span class="gd-rate__stat-n" data-gd-countup="{{ game.played_count|default:0 }}">{{ game.played_count|default:0|intcomma }}</span>
             <span class="gd-rate__stat-lbl">Players</span>

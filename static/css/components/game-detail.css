@@ -1163,21 +1163,22 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
  * RATINGS TAB (.gd-rate) -- community-stats context strip over per-group community ratings.
  * Bars are pp-horizon primitives tinted by a per-stat tone (--rate-accent, set from [data-tone]).
  * ============================================================ */
-/* The Ratings tab is a stack of cards (matching the About panel + the rest of the rebuild) -- no bare text on
-   the page substrate. Shared card frame + section rhythm: */
-.gd-rate { display: flex; flex-direction: column; gap: 16px; }
-.gd-rcard { padding: 16px 18px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-1) 70%, transparent); border: 1px solid var(--pp-border); }
-.gd-rate__panel { display: flex; flex-direction: column; gap: 16px; }
+.gd-rate { display: block; }
 
-/* Community snapshot: the four per-game numbers as a plain stat row inside the card (dividers on md+). */
-.gd-rate__stats { display: flex; flex-wrap: wrap; gap: 8px; }
-.gd-rate__stat { flex: 1 1 calc(50% - 4px); display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 10px; text-align: center; }
-@media (min-width: 768px) { .gd-rate__stat { flex: 1 1 0; } .gd-rate__stat:not(:last-child) { border-right: 1px solid var(--pp-divider); } }
+/* Community-stats context tiles (players / plats / 100%s / avg completion). 2-up on mobile, even row on md+. */
+.gd-rate__stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.gd-rate__stat {
+    flex: 1 1 calc(50% - 4px); display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 12px 10px; border-radius: var(--pp-radius-md); text-align: center;
+    background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px solid var(--pp-border);
+}
+@media (min-width: 768px) { .gd-rate__stat { flex: 1 1 0; } }
 .gd-rate__stat-n { font-size: 1.4rem; font-weight: 800; color: var(--pp-text); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .gd-rate__stat-unit { font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); margin-left: 1px; }
 .gd-rate__stat-lbl { font-size: 0.64rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
 
 /* Adaptive DLC selector: pill row (few groups) or Base pill + dropdown (many) -- mirrors the leaderboard switcher. */
+.gd-rate__sel { margin-bottom: 15px; }
 .gd-rate__seg { display: inline-flex; align-self: flex-start; max-width: 100%; gap: 2px; padding: 3px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); overflow-x: auto; scrollbar-width: none; }
 .gd-rate__seg::-webkit-scrollbar { display: none; }
 /* overflow-x:auto (for the horizontal pill-scroll) forces overflow-y to auto too, which clips the absolutely-
@@ -1203,12 +1204,11 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* ---- Ratings surface: a "conditions card" -- a plain-language summary headline over icon tiles (no chart) ---- */
 .gd-cond { display: flex; flex-direction: column; gap: 16px; }
 
-/* Metrics band: score | tiles | hours. Mobile keeps score + hours on the top row with the tiles beneath;
-   the lg block at the end reflows it to a single horizontal row that fills the desktop width. */
-.gd-cond__metrics { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "score hours" "tiles tiles"; gap: 14px 18px; align-items: center; }
-.gd-cond__score { grid-area: score; display: flex; flex-direction: column; gap: 3px; }
-.gd-cond__metrics .gd-cond__tiles { grid-area: tiles; }
-.gd-cond__metrics .gd-cond__hours { grid-area: hours; }
+/* Hero: the synthesized summary sentence IS the headline (what a hunter reads to get the whole picture in a
+   glance); the star score + count sit beneath it. */
+.gd-cond__hero { display: flex; flex-direction: column; gap: 8px; padding-bottom: 15px; border-bottom: 1px solid var(--pp-divider); }
+/* The two hard facts flank the top: score+stars (how good) left, time-to-plat (how long) right. */
+.gd-cond__herorow { display: flex; align-items: center; justify-content: space-between; gap: 14px 20px; flex-wrap: wrap; }
 .gd-cond__rating { display: flex; align-items: baseline; gap: 9px; }
 /* Fractional gold stars: a dim 5-star base with a gold overlay clipped to the score % (--fill). */
 .gd-cond__stars { position: relative; display: inline-block; font-size: 1.35rem; line-height: 1; letter-spacing: 3px; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
@@ -1257,36 +1257,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__you-scores b { font-size: 0.86rem; font-weight: 800; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
 .gd-cond__you-vs { margin: 0 5px; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
 
-/* ---- Desktop (lg+): use the width. The aggregate becomes a horizontal band and quick takes go two columns,
-   with type scaled up, so the tab reads as a desktop panel instead of a phone card. ---- */
-@media (min-width: 1024px) {
-    .gd-rcard { padding: 22px 26px; }
-    .gd-rate__stat { padding: 8px 14px; }
-    .gd-rate__stat-n { font-size: 1.9rem; }
-    .gd-rate__stat-lbl { font-size: 0.7rem; }
-
-    .gd-cond { gap: 20px; }
-    .gd-cond__summary { font-size: 1.5rem; }
-    .gd-cond__metrics { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "score tiles hours"; gap: 32px; }
-    .gd-cond__score { align-items: flex-start; gap: 5px; }
-    .gd-cond__stars { font-size: 1.8rem; letter-spacing: 4px; }
-    .gd-cond__score-n { font-size: 2.9rem; }
-    .gd-cond__of { font-size: 1.1rem; }
-    .gd-cond__count { font-size: 0.82rem; }
-    .gd-cond__tiles { gap: 12px; }
-    .gd-cond__tile { padding: 16px 16px 15px; }
-    .gd-cond__icon { width: 20px; height: 20px; }
-    .gd-cond__verdict { font-size: 1.12rem; }
-    .gd-cond__hours svg { width: 24px; height: 24px; }
-    .gd-cond__hours-num { font-size: 1.05rem; }
-    .gd-cond__hours-num b { font-size: 1.35rem; }
-    .gd-cond__you { padding: 13px 16px; }
-    .gd-cond__you-txt { font-size: 1rem; }
-
-    .gd-blurbs__list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 34px; }
-}
-
-.gd-rate__foot { display: flex; justify-content: flex-end; margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--pp-divider); }
+.gd-rate__foot { display: flex; justify-content: flex-end; margin-top: 4px; }
 .gd-rate__cta { flex-shrink: 0; }
 
 /* ---- Quick-rate modal (gd-modal--qr) ---- */
@@ -1326,18 +1297,17 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-guide__rule::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; border-radius: 50%; background: color-mix(in oklab, var(--pp-primary) 60%, transparent); }
 .gd-guide__rule b { color: var(--pp-text); font-weight: 700; }
 
-/* ---- Quick takes: individual community blurbs as an Apple-reviews-style dividered list inside the card ---- */
-.gd-blurbs { display: flex; flex-direction: column; gap: 12px; }
+/* ---- Quick takes: individual community blurbs under the aggregate (a quiet, secondary voice) ---- */
+.gd-blurbs { display: flex; flex-direction: column; gap: 11px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--pp-divider); }
 .gd-blurbs.is-empty { display: none; }
 .gd-blurbs__title { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pp-text-mute); }
-.gd-blurbs__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+/* Wider-than-tall cards: a ~320px floor packs 2 columns on a standard panel (3 when very wide, 1 when narrow),
+   so a full 140-char blurb lands in ~2-3 lines rather than a skinny 6-line column. auto-fill (not auto-fit)
+   keeps a lone card at track width instead of stretching it to the full panel. */
+.gd-blurbs__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 9px; }
 
-/* Each blurb is a row separated by a hairline, not its own card (avoids card-in-card). The You pill, not a
-   tint, marks the viewer's own. */
-.gd-blurb { display: flex; gap: 11px; padding: 13px 0; }
-.gd-blurb:first-child { padding-top: 2px; }
-.gd-blurb:last-child { padding-bottom: 0; }
-.gd-blurb:not(:last-child) { border-bottom: 1px solid var(--pp-divider); }
+.gd-blurb { display: flex; gap: 10px; padding: 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); }
+.gd-blurb--you { border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 5%, transparent); }
 .gd-blurb.is-reported { opacity: 0.45; }
 .gd-blurb.is-reported .gd-blurb__report { pointer-events: none; }
 .gd-blurb__av { flex: none; width: 34px; height: 34px; border-radius: 50%; overflow: hidden; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }
