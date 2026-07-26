@@ -125,6 +125,12 @@ class GroupRatingView(APIView):
                 concept_trophy_group=ctg_fk,
             ).first()
 
+            # The blurb is an optional field on a shared form: a rating update that omits it (e.g. a
+            # numbers-only "adjust my rating") must NOT wipe an existing quick take. Track whether the
+            # caller actually submitted a blurb, and preserve the stored one when they didn't.
+            blurb_submitted = 'blurb' in request.data
+            preserved_blurb = existing_rating.blurb if existing_rating else ''
+
             form = UserConceptRatingForm(request.data, instance=existing_rating)
             if not form.is_valid():
                 return Response(
@@ -132,10 +138,21 @@ class GroupRatingView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # Publishing a public quick take requires the same community-guidelines agreement every other
+            # UGC surface enforces (comments gate on it via can_comment). A numbers-only rating never does.
+            if blurb_submitted and form.cleaned_data.get('blurb') and not profile.guidelines_agreed:
+                return Response(
+                    {'success': False, 'needs_guidelines': True,
+                     'error': 'Please agree to the community guidelines to post a quick take.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             rating = form.save(commit=False)
             rating.profile = profile
             rating.concept = concept
             rating.concept_trophy_group = ctg_fk
+            if not blurb_submitted:
+                rating.blurb = preserved_blurb   # an omitted field must not blank an existing quick take
             rating.save()
 
             RatingService.invalidate_cache(concept)

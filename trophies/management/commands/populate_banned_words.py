@@ -45,8 +45,8 @@ BANNED_WORDS = {
         'masturbate', 'ejaculate', 'anal', 'titties', 'boobs', 'nudes',
     ],
     'Slur / hate speech': [
-        # Racial / ethnic
-        'nigger', 'nigga', 'niggers', 'coon', 'jigaboo', 'porchmonkey',
+        # Racial / ethnic (plurals listed explicitly since these are boundary-matched -- see below)
+        'nigger', 'nigga', 'niggers', 'niggas', 'coon', 'jigaboo', 'porchmonkey',
         'chink', 'gook', 'spic', 'spics', 'wetback', 'beaner', 'kike', 'kikes',
         'sandnigger', 'towelhead', 'raghead', 'jap', 'zipperhead', 'redskin', 'gyppo',
         # Homophobic / transphobic
@@ -71,9 +71,11 @@ BANNED_WORDS = {
     ],
 }
 
-# Short slurs whose plural/variant forms matter enough to justify a substring match
-# despite Scunthorpe risk (these have essentially no innocent English substrings).
-SUBSTRING_OVERRIDES = {'nigger', 'nigga', 'faggot', 'kike', 'wetback', 'sandnigger'}
+# Short slurs matched as substrings to catch concatenation-evasion (e.g. "faggot69"), limited to terms
+# with no innocent English substring. Deliberately NOT here: "nigger"/"nigga"/"sandnigger" -- substring
+# matching them false-positives legitimate words ("snigger", "niggardly"), so they stay boundary-matched
+# with their plurals ("niggers"/"niggas") listed explicitly above.
+SUBSTRING_OVERRIDES = {'faggot', 'kike', 'wetback'}
 
 
 def _use_boundaries(word):
@@ -94,9 +96,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
+        # Service account used only as the added_by FK target -- it never logs in, so no staff flag.
         system_user, _ = CustomUser.objects.get_or_create(
             username='system',
-            defaults={'email': 'system@platpursuit.com', 'is_staff': True},
+            defaults={'email': 'system@platpursuit.com', 'is_staff': False},
         )
 
         # Flatten the grouped dict into rows, de-duplicating a word if it appears in

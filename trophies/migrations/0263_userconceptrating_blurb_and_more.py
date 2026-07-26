@@ -28,14 +28,7 @@ class Migration(migrations.Migration):
                 help_text="Staff soft-hide of an inappropriate blurb; the rating itself is unaffected.",
             ),
         ),
-        migrations.AddIndex(
-            model_name="userconceptrating",
-            index=models.Index(
-                condition=models.Q(
-                    models.Q(("blurb", ""), _negated=True), ("blurb_hidden", False)
-                ),
-                fields=["concept", "concept_trophy_group", "-updated_at"],
-                name="rating_blurb_idx",
-            ),
-        ),
+        # NOTE: the partial rating_blurb_idx that backs these fields is built separately in 0265 with
+        # AddIndexConcurrently, so CREATE INDEX never write-locks UserConceptRating on deploy. Both AddFields
+        # above use constant defaults ('' / False), so they are metadata-only (non-rewriting) on PG11+.
     ]

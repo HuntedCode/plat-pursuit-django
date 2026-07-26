@@ -1529,6 +1529,20 @@ class UserConceptRating(models.Model):
         group_label = f" ({self.concept_trophy_group.display_name})" if self.concept_trophy_group else ""
         return f"{self.profile.display_psn_username}'s rating for {self.concept.unified_title}{group_label}"
 
+    @classmethod
+    def visible_blurbs(cls):
+        """The ONLY supported read path for public quick-take blurbs: present + not staff-hidden. Matches
+        the partial `rating_blurb_idx` predicate exactly, so callers get the index (chain a
+        `.filter(concept=..., concept_trophy_group=...)[:N]` on top). Route every display query through
+        this so `blurb_hidden` can never be bypassed by a forgotten filter.
+
+        SECURITY: the stored blurb is plain, UN-escaped text (sanitize_text un-escapes HTML entities before
+        storing), so it is only safe in an auto-escaped Django ``{{ }}`` HTML text context. NEVER render it
+        with ``|safe``, and never emit it into a raw JS / attribute / JSON-to-client context without
+        re-escaping there.
+        """
+        return cls.objects.filter(blurb_hidden=False).exclude(blurb='')
+
 
 class BlurbReport(models.Model):
     """A user report on a rating's public 'quick take' blurb (reactive moderation). Mirrors ReviewReport.
