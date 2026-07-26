@@ -470,13 +470,14 @@ class TrophyCaseForm(forms.Form):
 class UserConceptRatingForm(forms.ModelForm):
     class Meta:
         model = UserConceptRating
-        fields = ['difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking', 'overall_rating']
+        fields = ['difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking', 'overall_rating', 'blurb']
         widgets = {
             'difficulty': forms.NumberInput(attrs={'type': 'range', 'min': 1, 'max': 10, 'class': 'range range-primary'}),
             'grindiness': forms.NumberInput(attrs={'type': 'range', 'min': 1, 'max': 10, 'class': 'range range-success'}),
             'hours_to_platinum': forms.NumberInput(attrs={'type': 'number', 'min': 1, 'class': 'input'}),
             'fun_ranking': forms.NumberInput(attrs={'type': 'range', 'min': 1, 'max': 10, 'class': 'range range-secondary'}),
             'overall_rating': forms.NumberInput(attrs={'type': 'range', 'min': 0.5, 'max': 5.0, 'step': 0.5, 'class': 'range range-accent'}),
+            'blurb': forms.Textarea(attrs={'maxlength': 140, 'rows': 2, 'class': 'textarea'}),
         }
         labels = {
             'difficulty': 'Platinum Difficulty',
@@ -484,12 +485,29 @@ class UserConceptRatingForm(forms.ModelForm):
             'hours_to_platinum': 'Hours To Platinum',
             'fun_ranking': 'Platinum "Fun" Ranking',
             'overall_rating': 'Overall Game Rating',
+            'blurb': 'Quick take (optional)',
         }
 
     def clean_hours_to_platinum(self):
         value = self.cleaned_data.get('hours_to_platinum')
         if not value or value <= 0:
             raise forms.ValidationError('Hours to platinum must be greater than zero.')
+        return value
+
+    def clean_blurb(self):
+        """Optional. Sanitize (XSS strip) + reject banned words; enforce the 140-char cap. Reuses the shared
+        comment moderation so the banned-word blocklist is one list across all UGC."""
+        from trophies.services.comment_service import CommentService
+
+        value = (self.cleaned_data.get('blurb') or '').strip()
+        if not value:
+            return ''   # blank is fine -- the blurb never gates a rating
+        value = CommentService.sanitize_text(value)
+        if len(value) > 140:
+            raise forms.ValidationError('Keep your quick take to 140 characters or fewer.')
+        has_banned, _word = CommentService.check_banned_words(value)
+        if has_banned:
+            raise forms.ValidationError('Please remove inappropriate language from your quick take.')
         return value
 
 

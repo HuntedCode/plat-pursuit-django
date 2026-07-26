@@ -1506,6 +1506,10 @@ class UserConceptRating(models.Model):
     hours_to_platinum = models.PositiveIntegerField(help_text='Estimated hours to achieve platinum.')
     fun_ranking = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(10)], help_text='Fun ranking for the platinum (1-10)')
     overall_rating = models.FloatField(validators=[MinValueValidator(0.5), MaxValueValidator(5.0)], help_text="Overall game rating (1-5 stars)")
+    # Optional public "quick take" (community micro-review), attached to the rating. Reactive moderation:
+    # auto-filtered on submit (banned words / sanitize), reportable, staff soft-hide via blurb_hidden.
+    blurb = models.CharField(max_length=140, blank=True, default='', help_text="Optional short public quick take (<=140 chars).")
+    blurb_hidden = models.BooleanField(default=False, help_text="Staff soft-hide of an inappropriate blurb; the rating itself is unaffected.")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1514,6 +1518,10 @@ class UserConceptRating(models.Model):
         indexes = [
             models.Index(fields=['concept'], name='user_rating_concept_idx'),
             models.Index(fields=['profile', 'concept'], name='user_rating_unique_idx'),
+            # Recent VISIBLE blurbs per concept/group (the ratings-card display query), partial so it only
+            # covers rows that actually carry a shown blurb -- keeps it tiny even on heavily-rated games.
+            models.Index(fields=['concept', 'concept_trophy_group', '-updated_at'], name='rating_blurb_idx',
+                         condition=~Q(blurb='') & Q(blurb_hidden=False)),
         ]
         ordering = ['-updated_at']
 
