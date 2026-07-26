@@ -183,29 +183,32 @@ def test_verdict_group_title_shown_only_with_dlc():
 # ── star-distribution histogram ──────────────────────────────────────────────
 
 def test_rating_distribution_buckets():
-    """_compute_averages buckets overall_rating into 5 whole stars (round-half-up) with pct of total."""
+    """_compute_averages gives each 0.5 step its own bucket (10 columns, step 1..10, no rounding)."""
     from trophies.services.rating_service import RatingService
     concept = ConceptFactory()
     base = ConceptTrophyGroupFactory(concept=concept, trophy_group_id='default', display_name='Base Game')
-    for r in (5.0, 4.5, 5.0, 1.0):   # 4.5 and 5.0 both bucket to 5-star; 1.0 -> 1-star
+    for r in (5.0, 3.5, 5.0, 1.0):   # 3.5 stays its own bucket (step 7), NOT folded into 4 or 3
         UserConceptRating.objects.create(profile=ProfileFactory(), concept=concept, concept_trophy_group=None,
                                          difficulty=5, grindiness=5, hours_to_platinum=10, fun_ranking=5, overall_rating=r)
     avg = RatingService.get_community_averages_for_group(concept, base)
-    dist = {row['star']: row for row in avg['distribution']}
-    assert dist[5]['count'] == 3 and dist[5]['pct'] == 75 and dist[5]['bar'] == 100   # tallest -> full height
-    assert dist[1]['count'] == 1 and dist[1]['pct'] == 25 and dist[1]['bar'] == 33    # 1/3 of the peak
-    assert dist[4]['count'] == 0 and dist[3]['count'] == 0 and dist[2]['count'] == 0
-    assert [row['star'] for row in avg['distribution']] == [5, 4, 3, 2, 1]   # stored high -> low
+    dist = {row['step']: row for row in avg['distribution']}
+    assert len(avg['distribution']) == 10
+    assert dist[10]['count'] == 2 and dist[10]['value'] == 5.0 and dist[10]['pct'] == 50 and dist[10]['bar'] == 100
+    assert dist[7]['count'] == 1 and dist[7]['value'] == 3.5 and dist[7]['starnum'] is None   # half step, unlabeled
+    assert dist[2]['count'] == 1 and dist[2]['value'] == 1.0 and dist[2]['starnum'] == 1      # whole star, labeled
+    assert dist[10]['starnum'] == 5 and dist[9]['starnum'] is None
+    assert [row['step'] for row in avg['distribution']] == list(range(1, 11))   # stored 0.5 -> 5.0
 
 
-_DIST = [{'star': 5, 'count': 15, 'pct': 75, 'bar': 100}, {'star': 4, 'count': 1, 'pct': 5, 'bar': 7},
-         {'star': 3, 'count': 0, 'pct': 0, 'bar': 0}, {'star': 2, 'count': 1, 'pct': 5, 'bar': 7}, {'star': 1, 'count': 3, 'pct': 15, 'bar': 20}]
+_DIST = [{'step': s, 'value': s / 2, 'starnum': s // 2 if s % 2 == 0 else None,
+          'count': (5 if s == 10 else 0), 'pct': (100 if s == 10 else 0), 'bar': (100 if s == 10 else 0)}
+         for s in range(1, 11)]
 
 
 def test_distribution_histogram_shown_with_enough_ratings():
     html = _conditions({**_AVERAGES, 'count': 20, 'distribution': _DIST})
-    assert 'gd-dist' in html and 'data-dist-star="5"' in html
-    assert 'height: 100%' in html                  # the 5-star column (the tallest) fills the chart
+    assert 'gd-dist' in html and 'data-dist-step="10"' in html
+    assert 'height: 100%' in html                  # the 5.0 column (the tallest) fills the chart
 
 
 def test_distribution_histogram_shows_whenever_rated():

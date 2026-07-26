@@ -35,15 +35,16 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
         <span class="gd-cond__count" data-rate-count>{% if averages %}{{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}Be the first to rate this.{% endif %}</span>
 
         {% comment %} Star distribution: the SHAPE the average hides -- a 4.0 that's 75% 5-star + 15% 1-star is
-        polarizing, not just "above average." Whole-star buckets from RatingService; shown once there are a few
-        ratings (a 1-2 rating histogram says nothing). game-detail.js updates the bars live on submit. {% endcomment %}
+        polarizing, not just "above average." One column per exact 0.5 step (0.5 left -> 5.0 right) from
+        RatingService, so a 3.5 reads as 3.5, not rounded. Numerals sit only under whole stars; game-detail.js
+        updates the bars live on submit. {% endcomment %}
         {% if averages.distribution %}
-        <div class="gd-dist" data-cond-dist role="img" aria-label="Star rating distribution, 1 to 5 stars">
-            {% for row in averages.distribution reversed %}
-            <div class="gd-dist__col" data-dist-star="{{ row.star }}" title="{{ row.star }}-star: {{ row.count }} rating{{ row.count|pluralize }} ({{ row.pct }}%)">
-                <span class="gd-dist__n" data-dist-n>{{ row.count }}</span>
+        <div class="gd-dist gd-dist--ten" data-cond-dist role="img" aria-label="Star rating distribution, half a star to 5 stars">
+            {% for row in averages.distribution %}
+            <div class="gd-dist__col{% if row.starnum %} is-whole{% endif %}" data-dist-step="{{ row.step }}" title="{{ row.value|floatformat:'-1' }} star{{ row.value|pluralize }}: {{ row.count }} rating{{ row.count|pluralize }} ({{ row.pct }}%)">
+                <span class="gd-dist__n" data-dist-n>{% if row.count %}{{ row.count }}{% endif %}</span>
                 <span class="gd-dist__track"><span class="gd-dist__fill" data-dist-fill style="height: {{ row.bar }}%;"></span></span>
-                <span class="gd-dist__star">{{ row.star }}<span class="gd-dist__starmark">&#9733;</span></span>
+                <span class="gd-dist__star">{% if row.starnum %}{{ row.starnum }}<span class="gd-dist__starmark">&#9733;</span>{% endif %}</span>
             </div>
             {% endfor %}
         </div>

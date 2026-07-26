@@ -29,29 +29,31 @@ class RatingService:
         if not ratings_qs.exists():
             return None
 
-        # overall_rating is 0.5-5.0 in 0.5 steps; bucket into 5 whole stars (round-half-up == ceil here), so
-        # 4.5/5.0 -> 5*, 3.5/4.0 -> 4*, etc. The star DISTRIBUTION shows shape (polarizing vs. consensus) that
-        # a single average can't -- all counted in the one aggregate pass, so no extra query.
         aggregates = ratings_qs.aggregate(
             avg_difficulty=Avg('difficulty'),
             avg_grindiness=Avg('grindiness'),
             avg_fun=Avg('fun_ranking'),
             avg_rating=Avg('overall_rating'),
             count=Count('id'),
-            s5=Count('id', filter=Q(overall_rating__gte=4.5)),
-            s4=Count('id', filter=Q(overall_rating__gte=3.5, overall_rating__lt=4.5)),
-            s3=Count('id', filter=Q(overall_rating__gte=2.5, overall_rating__lt=3.5)),
-            s2=Count('id', filter=Q(overall_rating__gte=1.5, overall_rating__lt=2.5)),
-            s1=Count('id', filter=Q(overall_rating__lt=1.5)),
         )
 
-        counts = {s: aggregates.pop(f's{s}') for s in (5, 4, 3, 2, 1)}
+        # overall_rating is 0.5-5.0 on a 0.5 grid == 10 exact values; give each its own bucket (no rounding,
+        # so 3.5 is 3.5, not "4"). The DISTRIBUTION shows the SHAPE a single average hides (polarizing vs.
+        # consensus). Group-by returns <=10 rows (whale-safe); we snap any off-grid legacy value to the grid.
+        # Bucket key is the integer half-step 1..10 (0.5->1 ... 5.0->10) so the template data-* and the JSON the
+        # live-update reads match exactly (a float like 1.0 renders "1.0" in one place, "1" in the other).
+        raw = ratings_qs.values_list('overall_rating').annotate(c=Count('id')).values_list('overall_rating', 'c')
+        counts = {step: 0 for step in range(1, 11)}
+        for value, c in raw:
+            counts[min(10, max(1, round(value * 2)))] += c
         total = aggregates['count'] or 1
         peak = max(counts.values()) or 1   # scale bar heights to the tallest column so the shape reads clearly
         aggregates['distribution'] = [
-            {'star': s, 'count': counts[s], 'pct': round(counts[s] / total * 100),
-             'bar': round(counts[s] / peak * 100)}
-            for s in (5, 4, 3, 2, 1)
+            {'step': step, 'value': step / 2,
+             'starnum': step // 2 if step % 2 == 0 else None,   # labeled only under whole stars (2,4,6,8,10)
+             'count': counts[step], 'pct': round(counts[step] / total * 100),
+             'bar': round(counts[step] / peak * 100)}
+            for step in range(1, 11)   # 0.5 (left) -> 5.0 (right)
         ]
 
         hours_list = list(ratings_qs.values_list('hours_to_platinum', flat=True))

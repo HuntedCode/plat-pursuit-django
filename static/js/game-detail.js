@@ -1624,13 +1624,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         const vd = tile.querySelector('[data-cond-verdict]'); if (vd) vd.textContent = verdictOf(kind, v);
                         const nm = tile.querySelector('[data-cond-num]'); if (nm) countTo(nm, v, 1);
                     });
-                    // Live-update the star-distribution histogram bars + counts (if it's shown -- count >= 3).
+                    // Live-update the star-distribution histogram bars + counts (10 columns keyed on the
+                    // integer half-step 1..10). Empty columns render a blank count span, so we clear to ''.
                     if (avg.distribution) {
                         avg.distribution.forEach((row) => {
-                            const el = card.querySelector('.gd-dist__col[data-dist-star="' + row.star + '"]');
+                            const el = card.querySelector('.gd-dist__col[data-dist-step="' + row.step + '"]');
                             if (!el) return;
                             const fill = el.querySelector('[data-dist-fill]'); if (fill) fill.style.height = row.bar + '%';
-                            const dn = el.querySelector('[data-dist-n]'); if (dn) dn.textContent = row.count;
+                            const dn = el.querySelector('[data-dist-n]'); if (dn) dn.textContent = row.count || '';
                         });
                     }
                 }
