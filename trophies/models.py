@@ -1506,6 +1506,10 @@ class UserConceptRating(models.Model):
     hours_to_platinum = models.PositiveIntegerField(help_text='Estimated hours to achieve platinum.')
     fun_ranking = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(10)], help_text='Fun ranking for the platinum (1-10)')
     overall_rating = models.FloatField(validators=[MinValueValidator(0.5), MaxValueValidator(5.0)], help_text="Overall game rating (1-5 stars)")
+    # Optional public "quick take" (community micro-review), attached to the rating. Reactive moderation:
+    # auto-filtered on submit (banned words / sanitize), reportable, staff soft-hide via blurb_hidden.
+    blurb = models.CharField(max_length=140, blank=True, default='', help_text="Optional short public quick take (<=140 chars).")
+    blurb_hidden = models.BooleanField(default=False, help_text="Staff soft-hide of an inappropriate blurb; the rating itself is unaffected.")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1514,12 +1518,72 @@ class UserConceptRating(models.Model):
         indexes = [
             models.Index(fields=['concept'], name='user_rating_concept_idx'),
             models.Index(fields=['profile', 'concept'], name='user_rating_unique_idx'),
+            # Recent VISIBLE blurbs per concept/group (the ratings-card display query), partial so it only
+            # covers rows that actually carry a shown blurb -- keeps it tiny even on heavily-rated games.
+            models.Index(fields=['concept', 'concept_trophy_group', '-updated_at'], name='rating_blurb_idx',
+                         condition=~Q(blurb='') & Q(blurb_hidden=False)),
         ]
         ordering = ['-updated_at']
 
     def __str__(self):
         group_label = f" ({self.concept_trophy_group.display_name})" if self.concept_trophy_group else ""
         return f"{self.profile.display_psn_username}'s rating for {self.concept.unified_title}{group_label}"
+
+    @classmethod
+    def visible_blurbs(cls):
+        """The ONLY supported read path for public quick-take blurbs: present + not staff-hidden. Matches
+        the partial `rating_blurb_idx` predicate exactly, so callers get the index (chain a
+        `.filter(concept=..., concept_trophy_group=...)[:N]` on top). Route every display query through
+        this so `blurb_hidden` can never be bypassed by a forgotten filter.
+
+        SECURITY: the stored blurb is plain, UN-escaped text (sanitize_text un-escapes HTML entities before
+        storing), so it is only safe in an auto-escaped Django ``{{ }}`` HTML text context. NEVER render it
+        with ``|safe``, and never emit it into a raw JS / attribute / JSON-to-client context without
+        re-escaping there.
+        """
+        return cls.objects.filter(blurb_hidden=False).exclude(blurb='')
+
+
+class BlurbReport(models.Model):
+    """A user report on a rating's public 'quick take' blurb (reactive moderation). Mirrors ReviewReport.
+    FKs the RATING, so it follows the rating through Concept.absorb() automatically -- when absorb dedups a
+    rating the report cascades with it, when it re-points a rating the report stays attached. No absorb
+    branch needed (same reason RoadmapEditLock needs none: it hangs off a handled parent, not Concept)."""
+    REPORT_REASONS = [
+        ('spam', 'Spam'),
+        ('harassment', 'Harassment'),
+        ('inappropriate', 'Inappropriate Content'),
+        ('spoiler', 'Unmarked Spoiler'),
+        ('other', 'Other'),
+    ]
+    REPORT_STATUS = [
+        ('pending', 'Pending Review'),
+        ('reviewed', 'Reviewed'),
+        ('dismissed', 'Dismissed'),
+        ('action_taken', 'Action Taken'),
+    ]
+
+    rating = models.ForeignKey(UserConceptRating, on_delete=models.CASCADE, related_name='blurb_reports')
+    reporter = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='submitted_blurb_reports')
+    reason = models.CharField(max_length=20, choices=REPORT_REASONS)
+    details = models.TextField(max_length=500, blank=True, help_text="Additional context for the report")
+    status = models.CharField(max_length=20, choices=REPORT_STATUS, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='reviewed_blurb_reports')
+    admin_notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ['rating', 'reporter']
+        indexes = [
+            models.Index(fields=['status', '-created_at'], name='blurbreport_status_idx'),
+            models.Index(fields=['rating'], name='blurbreport_rating_idx'),
+        ]
+
+    def __str__(self):
+        return f"Blurb report on rating {self.rating_id} by {self.reporter.psn_username}"
+
 
 class ProfileGame(models.Model):
     profile = models.ForeignKey(

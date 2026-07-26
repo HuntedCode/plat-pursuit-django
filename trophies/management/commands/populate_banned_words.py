@@ -1,137 +1,164 @@
 """
-Django management command to populate the BannedWord table with common inappropriate words.
+Django management command to populate the BannedWord table for UGC moderation
+(comment bodies, and the new rating "quick take" blurbs).
 
 Usage:
     python manage.py populate_banned_words
-    python manage.py populate_banned_words --clear  # Clear existing words first
-    python manage.py populate_banned_words --dry-run  # Preview what would be added
+    python manage.py populate_banned_words --clear     # wipe existing words first
+    python manage.py populate_banned_words --dry-run   # preview, make no changes
+
+Tuning notes:
+  * This is a content-moderation BLOCKLIST for a game community's user-generated text.
+    Categories are grouped below so you can prune to taste.
+  * `MILD_PROFANITY` is a game-review-friendly grey area (a blurb like "damn hard grind"
+    is legitimate). Comment that block out if you'd rather allow casual swearing.
+  * Boundary handling avoids the "Scunthorpe problem": single tokens are matched with
+    word boundaries (\\bass\\b won't flag "class"); phrases / URLs match as substrings.
+    Some slurs also list common plurals/variants explicitly, since \\bword\\b won't catch
+    "words". Add/remove as your community needs.
+  * `check_banned_words` is a plain filter, not a severity system -- a hit blocks the text.
 """
-from django.core.management.base import BaseCommand
 from django.core.cache import cache
+from django.core.management.base import BaseCommand
+
 from trophies.models import BannedWord
 from users.models import CustomUser
 
+# Grouped for tunability. The category name becomes the stored `notes`. Boundary mode is
+# auto-derived per term (single token -> word boundaries; phrase/URL -> substring), with the
+# handful of exceptions listed in SUBSTRING_OVERRIDES (short slurs that need plural coverage).
+BANNED_WORDS = {
+    'Strong profanity': [
+        'fuck', 'fucker', 'fucking', 'fucked', 'motherfucker', 'fuckface', 'clusterfuck',
+        'shit', 'shitty', 'bullshit', 'shithead', 'dipshit', 'batshit',
+        'bitch', 'bitches', 'son of a bitch', 'bastard', 'prick', 'wanker', 'wank',
+        'bollocks', 'twat', 'douchebag', 'asshole', 'assholes', 'dumbass', 'jackass',
+        'piss', 'pissed', 'pissing',
+    ],
+    'Mild profanity (remove to allow casual swearing in reviews)': [
+        'ass', 'arse', 'damn', 'goddamn', 'crap', 'hell', 'bloody',
+    ],
+    'Sexual / explicit': [
+        'cunt', 'cock', 'dick', 'dickhead', 'pussy', 'porn', 'porno', 'pornographic',
+        'blowjob', 'handjob', 'rimjob', 'cum', 'cumming', 'jizz', 'dildo', 'boner',
+        'horny', 'gangbang', 'creampie', 'deepthroat', 'bukkake', 'nsfw', 'hentai',
+        'masturbate', 'ejaculate', 'anal', 'titties', 'boobs', 'nudes',
+    ],
+    'Slur / hate speech': [
+        # Racial / ethnic (plurals listed explicitly since these are boundary-matched -- see below)
+        'nigger', 'nigga', 'niggers', 'niggas', 'coon', 'jigaboo', 'porchmonkey',
+        'chink', 'gook', 'spic', 'spics', 'wetback', 'beaner', 'kike', 'kikes',
+        'sandnigger', 'towelhead', 'raghead', 'jap', 'zipperhead', 'redskin', 'gyppo',
+        # Homophobic / transphobic
+        'faggot', 'faggots', 'fag', 'fags', 'faggotry', 'dyke', 'dykes',
+        'tranny', 'trannies', 'shemale', 'ladyboy',
+        # Ableist
+        'retard', 'retards', 'retarded', 'spastic', 'mongoloid', 'cripple',
+    ],
+    'Spam / scam (substring match)': [
+        'click here', 'buy now', 'free money', 'free robux', 'free vbucks', 'free gift card',
+        'giveaway', 'promo code', 'discount code', 'act now', 'limited time offer',
+        'verify your account', 'confirm your account', 'nigerian prince', 'wire transfer',
+        'crypto giveaway', 'bitcoin giveaway', 'double your money', 'work from home',
+        # Link / handle shorteners frequently used to route off-site
+        'bit.ly/', 'tinyurl.com/', 'discord.gg/', 't.me/', 'cash.app/', 'paypal.me/',
+        'onlyfans.com', 'http://', 'https://', 'www.',
+    ],
+    'Evasion / leetspeak variants': [
+        'f*ck', 'fuk', 'fck', 'phuck', 'sh*t', 'sht', 'b*tch', 'a$$', 'a$$hole',
+        'n1gger', 'n1gga', 'f4ggot', 'f@ggot', 'r3tard', 'c*nt',
+        'f u c k', 's h i t',
+    ],
+}
+
+# Short slurs matched as substrings to catch concatenation-evasion (e.g. "faggot69"), limited to terms
+# with no innocent English substring. Deliberately NOT here: "nigger"/"nigga"/"sandnigger" -- substring
+# matching them false-positives legitimate words ("snigger", "niggardly"), so they stay boundary-matched
+# with their plurals ("niggers"/"niggas") listed explicitly above.
+SUBSTRING_OVERRIDES = {'faggot', 'kike', 'wetback'}
+
+
+def _use_boundaries(word):
+    """Single tokens get word boundaries; phrases / URLs / spaced evasions match as substrings."""
+    if word in SUBSTRING_OVERRIDES:
+        return False
+    return not any(c in word for c in (' ', '/', '.', '@'))
+
 
 class Command(BaseCommand):
-    help = 'Populate the BannedWord table with common inappropriate words'
+    help = 'Populate the BannedWord table with a robust UGC moderation blocklist'
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--clear',
-            action='store_true',
-            help='Clear all existing banned words before adding new ones',
-        )
-        parser.add_argument(
-            '--dry-run',
-            action='store_true',
-            help='Preview what would be added without making changes',
-        )
+        parser.add_argument('--clear', action='store_true',
+                            help='Clear all existing banned words before adding new ones')
+        parser.add_argument('--dry-run', action='store_true',
+                            help='Preview what would be added without making changes')
 
     def handle(self, *args, **options):
-        # Get the system user (or create one) for tracking who added these words
+        dry_run = options['dry_run']
+        # Service account used only as the added_by FK target -- it never logs in, so no staff flag.
         system_user, _ = CustomUser.objects.get_or_create(
             username='system',
-            defaults={'email': 'system@platpursuit.com', 'is_staff': True}
+            defaults={'email': 'system@platpursuit.com', 'is_staff': False},
         )
 
-        # Common inappropriate words to ban
-        # These are basic examples - customize this list for your community
-        banned_words_list = [
-            # Profanity (basic examples - add more as needed)
-            {'word': 'fuck', 'use_boundaries': True, 'notes': 'Common profanity'},
-            {'word': 'shit', 'use_boundaries': True, 'notes': 'Common profanity'},
-            {'word': 'ass', 'use_boundaries': True, 'notes': 'Common profanity'},
-            {'word': 'damn', 'use_boundaries': True, 'notes': 'Common profanity'},
-            {'word': 'bitch', 'use_boundaries': True, 'notes': 'Common profanity'},
-            {'word': 'bastard', 'use_boundaries': True, 'notes': 'Common profanity'},
-            {'word': 'crap', 'use_boundaries': True, 'notes': 'Common profanity'},
+        # Flatten the grouped dict into rows, de-duplicating a word if it appears in
+        # more than one category (first category wins).
+        rows, seen = [], set()
+        for category, words in BANNED_WORDS.items():
+            for word in words:
+                w = word.strip().lower()
+                if not w or w in seen:
+                    continue
+                seen.add(w)
+                rows.append({'word': w, 'use_boundaries': _use_boundaries(w), 'notes': category})
 
-            # Slurs and hate speech (add more specific ones as needed)
-            {'word': 'retard', 'use_boundaries': True, 'notes': 'Ableist slur'},
-            {'word': 'retarded', 'use_boundaries': True, 'notes': 'Ableist slur'},
-
-            # Spam-related
-            {'word': 'click here', 'use_boundaries': False, 'notes': 'Spam indicator'},
-            {'word': 'buy now', 'use_boundaries': False, 'notes': 'Spam indicator'},
-            {'word': 'free money', 'use_boundaries': False, 'notes': 'Spam indicator'},
-            {'word': 'bit.ly/', 'use_boundaries': False, 'notes': 'Link shortener spam'},
-
-            # Common leetspeak variations (examples)
-            {'word': 'f*ck', 'use_boundaries': True, 'notes': 'Profanity variation'},
-            {'word': 'sh*t', 'use_boundaries': True, 'notes': 'Profanity variation'},
-            {'word': 'a$$', 'use_boundaries': True, 'notes': 'Profanity variation'},
-        ]
-
-        if options['clear'] and not options['dry_run']:
-            count = BannedWord.objects.all().count()
+        if options['clear'] and not dry_run:
+            count = BannedWord.objects.count()
             BannedWord.objects.all().delete()
+            cache.delete('banned_words:active')
             self.stdout.write(self.style.WARNING(f'Cleared {count} existing banned words'))
-            # Clear cache
-            cache.delete('banned_words:active')
 
-        added = 0
-        skipped = 0
-        updated = 0
+        added = updated = skipped = 0
+        for row in rows:
+            word, use_boundaries, notes = row['word'], row['use_boundaries'], row['notes']
 
-        for word_data in banned_words_list:
-            word = word_data['word']
-            use_boundaries = word_data['use_boundaries']
-            notes = word_data.get('notes', '')
-
-            if options['dry_run']:
+            if dry_run:
                 exists = BannedWord.objects.filter(word=word).exists()
-                status = 'EXISTS' if exists else 'NEW'
-                boundary_status = 'with boundaries' if use_boundaries else 'substring match'
-                self.stdout.write(f'[{status}] "{word}" ({boundary_status}) - {notes}')
-                if not exists:
-                    added += 1
-                else:
-                    skipped += 1
+                mode = 'boundaries' if use_boundaries else 'substring'
+                self.stdout.write(f"[{'EXISTS' if exists else 'NEW':>6}] \"{word}\" ({mode}) - {notes}")
+                added += 0 if exists else 1
+                skipped += 1 if exists else 0
+                continue
+
+            obj, created = BannedWord.objects.get_or_create(
+                word=word,
+                defaults={'use_word_boundaries': use_boundaries, 'added_by': system_user,
+                          'notes': notes, 'is_active': True},
+            )
+            if created:
+                added += 1
+            elif obj.use_word_boundaries != use_boundaries or obj.notes != notes or not obj.is_active:
+                obj.use_word_boundaries = use_boundaries
+                obj.notes = notes
+                obj.is_active = True
+                obj.save(update_fields=['use_word_boundaries', 'notes', 'is_active'])
+                updated += 1
             else:
-                obj, created = BannedWord.objects.get_or_create(
-                    word=word,
-                    defaults={
-                        'use_word_boundaries': use_boundaries,
-                        'added_by': system_user,
-                        'notes': notes,
-                        'is_active': True,
-                    }
-                )
+                skipped += 1
 
-                if created:
-                    added += 1
-                    self.stdout.write(
-                        self.style.SUCCESS(f'✓ Added: "{word}" ({notes})')
-                    )
-                else:
-                    # Update existing word if settings changed
-                    if obj.use_word_boundaries != use_boundaries or obj.notes != notes:
-                        obj.use_word_boundaries = use_boundaries
-                        obj.notes = notes
-                        obj.save()
-                        updated += 1
-                        self.stdout.write(
-                            self.style.WARNING(f'↻ Updated: "{word}" ({notes})')
-                        )
-                    else:
-                        skipped += 1
-                        self.stdout.write(f'  Skipped (exists): "{word}"')
-
-        # Clear cache after adding words
-        if not options['dry_run']:
+        if not dry_run:
             cache.delete('banned_words:active')
-            self.stdout.write(self.style.SUCCESS('\nCleared banned words cache'))
 
-        # Summary
-        self.stdout.write('\n' + '='*60)
-        if options['dry_run']:
-            self.stdout.write(self.style.WARNING('DRY RUN - No changes made'))
-            self.stdout.write(f'Would add: {added} new banned words')
-            self.stdout.write(f'Already exist: {skipped} words')
+        self.stdout.write('\n' + '=' * 60)
+        if dry_run:
+            self.stdout.write(self.style.WARNING('DRY RUN - no changes made'))
+            self.stdout.write(f'Would add {added} new words ({skipped} already exist) '
+                              f'across {len(BANNED_WORDS)} categories.')
         else:
-            self.stdout.write(self.style.SUCCESS(f'✓ Added: {added} new banned words'))
-            if updated > 0:
-                self.stdout.write(self.style.WARNING(f'↻ Updated: {updated} existing words'))
-            self.stdout.write(f'  Skipped: {skipped} words (already exist)')
-            self.stdout.write(f'\nTotal active banned words: {BannedWord.objects.filter(is_active=True).count()}')
-        self.stdout.write('='*60)
+            self.stdout.write(self.style.SUCCESS(f'Added {added} new words'))
+            if updated:
+                self.stdout.write(self.style.WARNING(f'Updated {updated} existing words'))
+            self.stdout.write(f'Skipped {skipped} (unchanged). '
+                              f'Total active: {BannedWord.objects.filter(is_active=True).count()}')
+        self.stdout.write('=' * 60)
