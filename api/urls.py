@@ -73,7 +73,7 @@ from .mobile_badge_views import (
     MobileUserBadgesView, MobileProfileBadgesView,
 )
 from .mobile_game_views import MobileProfileGamesView, MobileGameTrophiesView
-from .rating_views import GroupRatingView, WizardQueueView, TrophyListView
+from .rating_views import GroupRatingView, WizardQueueView, TrophyListView, BlurbReportView
 from .roadmap_views import (
     RoadmapPublishView, RoadmapImageUploadView, RoadmapPreviewView,
     RoadmapHiddenAuthorsView, RoadmapTrialWritersView,
@@ -313,6 +313,7 @@ urlpatterns = [
     path('ratings/wizard/queue/', WizardQueueView.as_view(), name='rating-wizard-queue'),
     path('ratings/<int:concept_id>/group/<str:group_id>/rate/', GroupRatingView.as_view(), name='rating-group-rate'),
     path('ratings/<int:concept_id>/group/<str:group_id>/trophies/', TrophyListView.as_view(), name='rating-group-trophies'),
+    path('ratings/blurb/<int:rating_id>/report/', BlurbReportView.as_view(), name='rating-blurb-report'),
 
     # Review API endpoints ARCHIVED (2026-05) — unregistered so they 404.
     # The view classes remain dormant in api/review_views.py for a

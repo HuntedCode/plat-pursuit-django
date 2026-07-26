@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP
 
 
 # Register your models here.
@@ -4975,3 +4975,68 @@ class ProfileJobXPAdmin(admin.ModelAdmin):
     list_filter = ('job',)
     raw_id_fields = ('profile', 'job')
     search_fields = ('profile__psn_username', 'job__slug')
+
+
+class BlurbReportStatusFilter(SimpleListFilter):
+    """Filter blurb (quick-take) reports by status."""
+    title = 'Status'
+    parameter_name = 'status'
+
+    def lookups(self, request, model_admin):
+        return BlurbReport.REPORT_STATUS
+
+    def queryset(self, request, queryset):
+        return queryset.filter(status=self.value()) if self.value() else queryset
+
+
+@admin.register(BlurbReport)
+class BlurbReportAdmin(admin.ModelAdmin):
+    """Reactive moderation queue for rating 'quick take' blurbs: triage reports, hide the blurb if warranted
+    (the rating itself is never touched -- only blurb_hidden flips)."""
+    list_display = ['id', 'blurb_preview', 'rater', 'reporter', 'reason', 'status', 'created_at', 'reviewed_by']
+    list_select_related = ('rating', 'rating__profile', 'reporter', 'reviewed_by')
+    list_filter = [BlurbReportStatusFilter, 'reason', 'created_at']
+    search_fields = ['rating__blurb', 'reporter__psn_username', 'reporter__display_psn_username', 'details', 'admin_notes']
+    raw_id_fields = ['rating', 'reporter', 'reviewed_by']
+    readonly_fields = ['created_at', 'reviewed_at']
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+    actions = ['hide_blurb_and_resolve', 'mark_as_dismissed', 'unhide_blurb']
+
+    fieldsets = (
+        ('Report', {'fields': ('rating', 'reporter', 'reason', 'details')}),
+        ('Status', {'fields': ('status', 'reviewed_at', 'reviewed_by', 'admin_notes')}),
+        ('Timestamps', {'fields': ('created_at',)}),
+    )
+
+    def blurb_preview(self, obj):
+        if obj.rating.blurb_hidden:
+            return '[hidden] ' + obj.rating.blurb
+        return obj.rating.blurb
+    blurb_preview.short_description = 'Blurb'
+
+    def rater(self, obj):
+        return obj.rating.profile.display_psn_username or obj.rating.profile.psn_username
+    rater.short_description = 'Rater'
+
+    @admin.action(description='Hide the blurb + resolve report(s)')
+    def hide_blurb_and_resolve(self, request, queryset):
+        from django.utils import timezone
+        from trophies.models import UserConceptRating
+        rating_ids = list(queryset.values_list('rating_id', flat=True))
+        hidden = UserConceptRating.objects.filter(id__in=rating_ids, blurb_hidden=False).update(blurb_hidden=True)
+        resolved = queryset.update(status='action_taken', reviewed_by=request.user, reviewed_at=timezone.now())
+        self.message_user(request, f'Hid {hidden} blurb(s); resolved {resolved} report(s).')
+
+    @admin.action(description='Dismiss report(s) (blurb is fine)')
+    def mark_as_dismissed(self, request, queryset):
+        from django.utils import timezone
+        n = queryset.update(status='dismissed', reviewed_by=request.user, reviewed_at=timezone.now())
+        self.message_user(request, f'Dismissed {n} report(s).')
+
+    @admin.action(description='Un-hide the blurb (reverse a hide)')
+    def unhide_blurb(self, request, queryset):
+        from trophies.models import UserConceptRating
+        rating_ids = list(queryset.values_list('rating_id', flat=True))
+        n = UserConceptRating.objects.filter(id__in=rating_ids, blurb_hidden=True).update(blurb_hidden=False)
+        self.message_user(request, f'Un-hid {n} blurb(s).')
