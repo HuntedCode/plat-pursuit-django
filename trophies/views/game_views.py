@@ -436,6 +436,11 @@ class GameDetailView(DetailView):
                 'last_played': profile_game.last_played_date_time
             }
 
+            # PSN-tracked playtime as a whole-hours hint in the quick-rate modal (a reference when estimating
+            # hours-to-platinum). Often absent (not every game/user reports it) -- the modal has a fallback.
+            pd = profile_game.play_duration
+            context['user_play_hours'] = round(pd.total_seconds() / 3600) if pd and pd.total_seconds() >= 3600 else None
+
             if has_trophies:
                 # Get earned trophies data
                 earned_qs = EarnedTrophy.objects.filter(profile=profile, trophy__game=game).order_by('trophy__trophy_id')

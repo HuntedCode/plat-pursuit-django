@@ -23,15 +23,23 @@
 /* Sticky minibar (page-level; persists across all views). Per-view extras show only for the active view. */
 /* Defensive: the bar is position:fixed, so any control overflow would add page scroll width. Clip contains it. */
 .gd-minibar { overflow-x: clip; }
+/* Per-view elements (identity icon + per-view extras) show only when their tab is active; the natural display
+   is preserved for the active one. Each tab's icon carries data-mb-only, so the minibar icon matches the tab. */
 .gd-minibar:not([data-mb-active="trophies"]) [data-mb-only="trophies"] { display: none; }
+.gd-minibar:not([data-mb-active="roadmap"]) [data-mb-only="roadmap"] { display: none; }
+.gd-minibar:not([data-mb-active="ratings"]) [data-mb-only="ratings"] { display: none; }
 .gd-minibar:not([data-mb-active="leaderboard"]) [data-mb-only="leaderboard"] { display: none; }
-/* On the Ranks tab the identity icon is the podium, not the trophy. */
-.gd-minibar[data-mb-active="leaderboard"] .pp-minibar__ico--trophy { display: none; }
+.gd-minibar:not([data-mb-active="about"]) [data-mb-only="about"] { display: none; }
 /* The active board's title in the minibar: Ranks tab, desktop widths only (the mobile minibar is too tight
    already). Filled by lbSyncMbTitle; the middot separates it from the game name. */
 .gd-lb__mbtitle { display: none; font-size: 0.82rem; font-weight: 700; color: var(--pp-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 15rem; }
 .gd-lb__mbtitle::before { content: "\2022"; margin: 0 9px; color: var(--pp-text-mute); font-weight: 400; }
 @media (min-width: 1024px) { .gd-minibar[data-mb-active="leaderboard"] .gd-lb__mbtitle { display: inline-block; } }
+/* Ratings tab: the current group (Base Game / DLC name) in the minibar, desktop only. JS fills it ONLY when a
+   game has DLC, so :not(:empty) keeps it hidden for base-only games (nothing to disambiguate). */
+.gd-rate__mbtitle { display: none; font-size: 0.82rem; font-weight: 700; color: var(--pp-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 15rem; }
+.gd-rate__mbtitle::before { content: "\2022"; margin: 0 9px; color: var(--pp-text-mute); font-weight: 400; }
+@media (min-width: 1024px) { .gd-minibar[data-mb-active="ratings"] .gd-rate__mbtitle:not(:empty) { display: inline-block; } }
 /* Mobile minibar is tight with the leaderboard's search + You + Filters, so drop the game title (the page
    header already shows it) and the "You" word (the #N + chevron carry it). */
 @media (max-width: 767px) {
@@ -1331,6 +1339,9 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-qr__num { width: 100%; padding: 8px 11px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font-size: 0.85rem; }
 .gd-qr__num:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
 .gd-qr__scale { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--pp-text-mute); }
+.gd-qr__hint { font-size: 0.7rem; color: var(--pp-text-dim); }
+.gd-qr__hint b { color: var(--pp-primary); font-weight: 800; }
+.gd-qr__hint--muted { color: var(--pp-text-mute); }
 .gd-qr__actions { display: flex; gap: 10px; margin-top: 4px; }
 .gd-qr__actions .gd-btn { flex: 1; justify-content: center; }
 

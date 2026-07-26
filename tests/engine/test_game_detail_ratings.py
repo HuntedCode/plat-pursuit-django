@@ -289,6 +289,24 @@ def test_quick_rate_persistent_guidelines_notice_and_sheet(client):
     assert 'data-gd-qr-fine' not in content               # the old conditional fine-print is gone
 
 
+def test_quick_rate_playtime_hint_and_toast_container():
+    """The modal shows the viewer's tracked playtime as an estimate hint (with a fallback), and hosts its own
+    top-layer toast container so submit warnings aren't hidden behind the backdrop."""
+    tpl = 'trophies/partials/game_detail/quick_rate_modal.html'
+    hinted = render_to_string(tpl, {'user_play_hours': 42})
+    assert '<b>42</b>' in hinted and 'playtime' in hinted        # playtime shown as a reference
+    assert 'modal-toast-container' in hinted                     # toasts render in the dialog's top layer
+    assert "don't have your playtime" in render_to_string(tpl, {})   # graceful fallback when untracked
+
+
+def test_minibar_has_per_tab_icons_and_ratings_group_slot(client):
+    """The sticky minibar carries an icon per tab (matches the active one) + the Base/DLC group slot."""
+    content = _detail(client, GameFactory(defined_trophies=_DEFINED))
+    for tab in ('trophies', 'roadmap', 'ratings', 'leaderboard', 'about'):
+        assert 'data-mb-only="' + tab + '"' in content
+    assert 'data-rate-mb-title' in content
+
+
 # ── Quick takes: the community blurb strip under the aggregate ──────────────
 
 def _blurb_row(concept, profile, text, ctg=None, hidden=False):

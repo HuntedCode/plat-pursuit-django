@@ -21,6 +21,7 @@ fun_ranking, overall_rating) are the API contract -- do not rename. Value/label/
         <label class="gd-qr__field">
             <span class="gd-qr__lbl" data-gd-qr-hours-label>Hours to Platinum</span>
             <input type="number" name="hours_to_platinum" min="1" max="10000" class="gd-qr__num" placeholder="e.g. 40" inputmode="numeric" />
+            {% if user_play_hours %}<span class="gd-qr__hint">Your tracked playtime: about <b>{{ user_play_hours }}</b> hour{{ user_play_hours|pluralize }}.</span>{% else %}<span class="gd-qr__hint gd-qr__hint--muted">We don't have your playtime for this game this time.</span>{% endif %}
         </label>
         <label class="gd-qr__field">
             <span class="gd-qr__lbl">Fun <span class="gd-qr__val" data-gd-qr-val="fun_ranking">5</span></span>
@@ -49,4 +50,6 @@ fun_ranking, overall_rating) are the API contract -- do not rename. Value/label/
             <button type="submit" class="gd-btn gd-btn--primary" data-gd-qr-submit>Submit rating</button>
         </div>
     </form>
+    {# Submit toasts render HERE (inside the open dialog) so they sit in the dialog's top layer, not hidden behind the backdrop/dim. #}
+    <div class="modal-toast-container toast toast-bottom toast-end z-50"></div>
 </dialog>

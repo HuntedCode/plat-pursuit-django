@@ -592,6 +592,16 @@ document.addEventListener('DOMContentLoaded', () => {
         el.textContent = root ? (root.dataset.lbTitle || '') : '';
     }
 
+    // Mirror the active RATINGS group's name (Base Game / DLC) into the minibar (desktop only, via CSS). Reads
+    // the active panel's group title, which the template renders ONLY when the game has DLC -- so base-only games
+    // leave it empty and the CSS :not(:empty) keeps it hidden. Runs on ratings-tab open + group swap.
+    function rateSyncMbTitle() {
+        const el = document.querySelector('[data-rate-mb-title]');
+        if (!el) return;
+        const title = document.querySelector('.gd-rate__panel:not(.is-hidden) .gd-rate__grouptitle');
+        el.textContent = title ? title.textContent.trim() : '';
+    }
+
     // Both jumps resolve to a canonical rank, then hand off to the virtualizer's scroll-to-position.
     function lbJump(panel, rank) {
         if (rank >= 1 && panel._lbJump) panel._lbJump(rank);
@@ -641,6 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (on) activeTab = t;
             });
             if (minibar) minibar.dataset.mbActive = name;   // gates the per-view extras (sort/count/Filters)
+            if (name === 'ratings') rateSyncMbTitle();       // fill the minibar with the current group (Base/DLC)
             if (tablist) tablist.syncTabindex();
             if (changed && activeTab && PlatPursuit.igniteTab) PlatPursuit.igniteTab(activeTab);
             if (PlatPursuit.syncViewParam) {
@@ -1428,6 +1439,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                { duration: 240, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
                 });
             }
+            rateSyncMbTitle();   // keep the minibar's Base/DLC label in sync with the shown group
         }
         root.addEventListener('click', (e) => {
             const toggle = e.target.closest('[data-rate-drop-toggle]');
