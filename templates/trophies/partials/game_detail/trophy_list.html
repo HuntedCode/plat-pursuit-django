@@ -33,13 +33,13 @@
                 {# Rarity: one block. Desktop = right-hand stacked column with labels; mobile = wraps below the row, inline, labels hidden (CSS-driven, no duplicate markup). #}
                 <div class="gd-trophy__rates">
                     {% if earned.earned %}<span class="gd-trophy__got" title="Earned">{% include 'partials/icons/checkmark.html' with color='var(--pp-success)' size='w-4 h-4' %}</span>{% endif %}
-                    <div class="gd-rate gd-rate--stacked">
-                        <span class="gd-rate__val">{% include 'partials/icons/pp_logo.html' with size='w-3.5 h-3.5' %}{{ trophy.earn_rate|multiply:100|floatformat:1 }}%</span>
-                        <span class="gd-rate__lbl">PP Rate</span>
+                    <div class="gd-trate gd-trate--stacked">
+                        <span class="gd-trate__val">{% include 'partials/icons/pp_logo.html' with size='w-3.5 h-3.5' %}{{ trophy.earn_rate|multiply:100|floatformat:1 }}%</span>
+                        <span class="gd-trate__lbl">PP Rate</span>
                     </div>
-                    <div class="gd-rate gd-rate--stacked">
-                        <span class="gd-rate__val">{% include 'partials/icons/ps_logo.html' with size='w-3.5 h-3.5' %}{{ trophy.trophy_earn_rate }}%</span>
-                        <span class="gd-rate__lbl">PSN Rate</span>
+                    <div class="gd-trate gd-trate--stacked">
+                        <span class="gd-trate__val">{% include 'partials/icons/ps_logo.html' with size='w-3.5 h-3.5' %}{{ trophy.trophy_earn_rate }}%</span>
+                        <span class="gd-trate__lbl">PSN Rate</span>
                     </div>
                 </div>
             </article>

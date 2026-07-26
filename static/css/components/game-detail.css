@@ -758,16 +758,16 @@
    labels hidden, indented past the icon); desktop is the right-hand stacked column with labels. */
 .gd-trophy__rates { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-basis: 100%; padding-left: 64px; }
 .gd-trophy__got { display: inline-flex; }
-.gd-rate { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; color: var(--pp-text-dim); }
-.gd-rate--stacked { flex-direction: row; align-items: center; gap: 4px; }
-.gd-rate__val { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); }
-.gd-rate__lbl { display: none; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+.gd-trate { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; color: var(--pp-text-dim); }   /* per-trophy earn-rate readout (renamed from .gd-rate: collided with the ratings-panel block) */
+.gd-trate--stacked { flex-direction: row; align-items: center; gap: 4px; }
+.gd-trate__val { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); }
+.gd-trate__lbl { display: none; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
 @media (min-width: 768px) {
     .gd-trophy { flex-wrap: nowrap; }
     .gd-trophy__rates { flex-basis: auto; padding-left: 0; gap: 12px; }
-    .gd-rate--stacked { flex-direction: column; gap: 1px; min-width: 52px; }
-    .gd-rate__val { font-size: 0.85rem; }
-    .gd-rate__lbl { display: block; }
+    .gd-trate--stacked { flex-direction: column; gap: 1px; min-width: 52px; }
+    .gd-trate__val { font-size: 0.85rem; }
+    .gd-trate__lbl { display: block; }
     .gd-trophy__icon { width: 56px; height: 56px; }
 }
 
