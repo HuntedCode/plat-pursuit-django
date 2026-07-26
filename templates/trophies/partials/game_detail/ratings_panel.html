@@ -67,7 +67,7 @@ runs the reveal (revealRatings). Players drill-down lives in the Ranks tab now; 
     {# ── One ratings panel per group; only the first (base) shows until a selector switch. ── #}
     {% for ct in community_tabs %}
     <div class="gd-rate__panel{% if not forloop.first %} is-hidden{% endif %}" data-rate-panel="{{ ct.ctg.id }}">
-        {% include 'trophies/partials/game_detail/_rating_conditions.html' with averages=ct.averages can_rate=ct.can_rate user_rating=ct.user_rating blurbs=ct.blurbs concept_id=game.concept.id group_id=ct.ctg.trophy_group_id hours_label=ct.hours_label hours_label_long=ct.hours_label_long %}
+        {% include 'trophies/partials/game_detail/_rating_conditions.html' with averages=ct.averages can_rate=ct.can_rate user_rating=ct.user_rating blurbs=ct.blurbs concept_id=game.concept.id group_id=ct.ctg.trophy_group_id group_name=ct.ctg.display_name hours_label=ct.hours_label hours_label_long=ct.hours_label_long %}
     </div>
     {% endfor %}
 </section>

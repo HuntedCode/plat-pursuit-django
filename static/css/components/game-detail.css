@@ -1214,6 +1214,10 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* Only the active group's panel shows; the rest are hidden (no unmount -- state is cheap and SSR'd). */
 .gd-rate__panel.is-hidden { display: none; }
 
+/* Per-group title on the verdict card (only when the game has DLC, so you can tell which group you're viewing).
+   Uses the band-header treatment, a touch brighter than a plain label since it's the "you are here" indicator. */
+.gd-rate__grouptitle { color: var(--pp-text-dim); }
+
 /* ---- Ratings surface: a "conditions card" -- a plain-language summary headline over icon tiles (no chart) ---- */
 .gd-cond { display: flex; flex-direction: column; gap: 16px; }
 

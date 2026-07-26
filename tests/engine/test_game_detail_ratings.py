@@ -172,6 +172,14 @@ def test_conditions_no_button_when_cannot_rate():
     assert 'quick-rate-btn' not in _conditions(_AVERAGES, can_rate=False)
 
 
+def test_verdict_group_title_shown_only_with_dlc():
+    """A per-group title labels the verdict card only when the game has DLC (base-only is self-evident)."""
+    dlc = _conditions(_AVERAGES, has_dlc=True, group_name='The Old Hunters')
+    assert 'gd-rate__grouptitle' in dlc and 'The Old Hunters' in dlc
+    base_only = _conditions(_AVERAGES, group_name='Base Game')   # has_dlc falsy -> no title
+    assert 'gd-rate__grouptitle' not in base_only
+
+
 # ── "Your take" personal comparison band ────────────────────────────────────
 
 _YOU = type('R', (), {'difficulty': 9, 'grindiness': 8, 'fun_ranking': 9,

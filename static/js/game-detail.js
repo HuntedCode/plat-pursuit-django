@@ -1399,7 +1399,6 @@ document.addEventListener('DOMContentLoaded', () => {
         //    same panel toggle via [data-rate-ctg]; only the active group's [data-rate-panel] shows. ──
         const drop = root.querySelector('[data-rate-drop]');
         const dropBtn = root.querySelector('[data-rate-drop-toggle]');
-        const dropLbl = root.querySelector('[data-rate-drop-lbl]');
         function closeDrop() {
             if (!dropBtn) return;
             dropBtn.setAttribute('aria-expanded', 'false');
@@ -1415,12 +1414,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 c.classList.toggle('is-active', on);
                 c.setAttribute('aria-pressed', on ? 'true' : 'false');
             });
-            // In dropdown mode the base pill and the dropdown button are the two mutually exclusive actives;
-            // the dropdown surfaces the chosen DLC's name (this control has no separate title to carry it).
+            // The base pill and the dropdown button are the two mutually exclusive actives. Keep the dropdown
+            // label a stable "DLC" (the verdict card's group title now carries the current name) so the button
+            // doesn't jump width as you switch between DLCs.
             if (drop && dropBtn) {
-                const fromDrop = srcEl && srcEl.classList.contains('gd-rate__dropitem');
-                dropBtn.classList.toggle('is-active', !!fromDrop);
-                if (dropLbl) dropLbl.textContent = fromDrop ? (srcEl.textContent || 'DLC').trim() : 'DLC';
+                dropBtn.classList.toggle('is-active', !!(srcEl && srcEl.classList.contains('gd-rate__dropitem')));
             }
             // Settle the newly-shown group's bands in -- the same soft rise+fade the leaderboard uses on a
             // board switch (game-detail.js lbEntrance), for one consistent sub-switch motion across the page.

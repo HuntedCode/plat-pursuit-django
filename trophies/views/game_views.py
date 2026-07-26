@@ -917,6 +917,8 @@ class GameDetailView(DetailView):
 
             community_tabs.append(tab_data)
         context['community_tabs'] = community_tabs
+        # Show a per-group title on the verdict card only when there's DLC to disambiguate (base game only = obvious).
+        context['has_dlc'] = len(ctgs) > 1
         # Lets each blurb card mark the viewer's own (You pill, no self-report) without a per-row query.
         context['viewer_profile_id'] = profile.id if profile else None
 

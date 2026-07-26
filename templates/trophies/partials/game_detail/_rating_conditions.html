@@ -12,6 +12,7 @@ sets values -- it never builds DOM when the first rating lands.
 Expects: averages (dict|None), can_rate, user_rating, concept_id, group_id, hours_label, hours_label_long.
 The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat]/[data-cond-*] hooks are the contract. {% endcomment %}
 <section class="gd-acard gd-rate__verdict">
+{% if has_dlc %}<h3 class="gd-acard__h gd-rate__grouptitle">{{ group_name }}</h3>{% endif %}
 <div class="gd-cond{% if not averages %} gd-cond--empty{% endif %}" data-rate-grid>
 
     {% comment %} Hero: the two HARD FACTS up top -- score+stars (how good) opposite time-to-plat (how long) --
