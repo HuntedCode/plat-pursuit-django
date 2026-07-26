@@ -1158,3 +1158,74 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
     .gd-lb__spinner { animation-duration: 1.6s; }
     .gd-lb__row, .gd-lb__jump { transition: none; }
 }
+
+/* ============================================================
+ * RATINGS TAB (.gd-rate) -- community-stats context strip over per-group community ratings.
+ * Bars are pp-horizon primitives tinted by a per-stat tone (--rate-accent, set from [data-tone]).
+ * ============================================================ */
+.gd-rate { display: block; }
+
+/* Community-stats context tiles (players / plats / 100%s / avg completion). 2-up on mobile, even row on md+. */
+.gd-rate__stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.gd-rate__stat {
+    flex: 1 1 calc(50% - 4px); display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 12px 10px; border-radius: var(--pp-radius-md); text-align: center;
+    background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px solid var(--pp-border);
+}
+@media (min-width: 768px) { .gd-rate__stat { flex: 1 1 0; } }
+.gd-rate__stat-n { font-size: 1.4rem; font-weight: 800; color: var(--pp-text); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.gd-rate__stat-unit { font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); margin-left: 1px; }
+.gd-rate__stat-lbl { font-size: 0.64rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+
+/* Adaptive DLC selector: pill row (few groups) or Base pill + dropdown (many) -- mirrors the leaderboard switcher. */
+.gd-rate__sel { margin-bottom: 15px; }
+.gd-rate__seg { display: inline-flex; align-self: flex-start; max-width: 100%; gap: 2px; padding: 3px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); overflow-x: auto; scrollbar-width: none; }
+.gd-rate__seg::-webkit-scrollbar { display: none; }
+.gd-rate__segchip { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; padding: 6px 13px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; cursor: pointer; color: var(--pp-text-dim); background: none; border: none; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-rate__segchip:hover { color: var(--pp-text); }
+.gd-rate__segchip.is-active { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 15%, var(--pp-bg-1)); }
+.gd-rate__segchip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.gd-rate__drop { position: relative; display: inline-flex; }
+.gd-rate__dropbtn { gap: 4px; }
+.gd-rate__dropbtn svg { width: 12px; height: 12px; transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-rate__dropbtn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.gd-rate__dropmenu { position: absolute; z-index: 30; top: calc(100% + 5px); left: 0; min-width: max(100%, 10rem); max-height: 15rem; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px; border-radius: var(--pp-radius-md); background: var(--pp-bg-1); border: 1px solid var(--pp-border); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
+.gd-rate__dropmenu[hidden] { display: none; }
+.gd-rate__dropitem { justify-content: flex-start; width: 100%; text-align: left; border-radius: var(--pp-radius-sm); padding: 7px 11px; white-space: nowrap; }
+.gd-rate__dropitem:hover { background: color-mix(in oklab, var(--pp-primary) 10%, transparent); }
+
+/* Only the active group's panel shows; the rest are hidden (no unmount -- state is cheap and SSR'd). */
+.gd-rate__panel.is-hidden { display: none; }
+
+/* Rating rows: label + value on one line, the pp-horizon bar spanning full-width below (label-length-proof). */
+.gd-rate__bars { display: flex; flex-direction: column; gap: 13px; }
+.gd-rate__row { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 10px; --rate-accent: var(--pp-text-dim); }
+.gd-rate__row[data-tone="good"] { --rate-accent: var(--pp-success); }
+.gd-rate__row[data-tone="warn"] { --rate-accent: var(--pp-warning); }
+.gd-rate__row[data-tone="bad"]  { --rate-accent: var(--pp-error); }
+.gd-rate__row[data-tone="high"] { --rate-accent: var(--pp-accent); }
+.gd-rate__row-lbl { grid-column: 1; font-size: 0.8rem; font-weight: 600; color: var(--pp-text-dim); }
+.gd-rate__row-val { grid-column: 2; font-size: 0.92rem; font-weight: 800; color: var(--rate-accent); font-variant-numeric: tabular-nums; text-align: right; }
+.gd-rate__row-val--empty { color: var(--pp-text-mute); font-weight: 600; }
+.gd-rate__row-unit { font-size: 0.62rem; font-weight: 600; color: var(--pp-text-mute); margin-left: 1px; }
+.gd-rate__bar { grid-column: 1 / -1; display: block; width: 100%; --horizon-accent: var(--rate-accent); }
+.gd-rate__bar .pp-horizon__fill { background: var(--rate-accent); }
+
+.gd-rate__foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 17px; padding-top: 13px; border-top: 1px solid var(--pp-divider); }
+.gd-rate__count { flex: 1; min-width: 8rem; font-size: 0.76rem; font-style: italic; color: var(--pp-text-mute); }
+.gd-rate__cta { flex-shrink: 0; }
+
+/* ---- Quick-rate modal (gd-modal--qr) ---- */
+.gd-modal--qr { width: min(94vw, 460px); max-width: 460px; }
+.gd-qr { display: flex; flex-direction: column; gap: 15px; }
+.gd-qr__field { display: flex; flex-direction: column; gap: 6px; }
+.gd-qr__lbl { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 600; color: var(--pp-text); }
+.gd-qr__val { font-weight: 800; color: var(--pp-primary); font-variant-numeric: tabular-nums; }
+.gd-qr__of { font-size: 0.7rem; color: var(--pp-text-mute); font-weight: 600; }
+.gd-qr__range { width: 100%; accent-color: var(--pp-primary); cursor: pointer; }
+.gd-qr__num { width: 100%; padding: 8px 11px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font-size: 0.85rem; }
+.gd-qr__num:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+.gd-qr__scale { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--pp-text-mute); }
+.gd-qr__actions { display: flex; gap: 10px; margin-top: 4px; }
+.gd-qr__actions .gd-btn { flex: 1; justify-content: center; }
+@media (prefers-reduced-motion: reduce) { .gd-rate__dropbtn svg { transition: none; } }

@@ -179,6 +179,31 @@ def multiply(value, arg):
         return ''
 
 @register.filter
+def rating_tone(value, kind):
+    """Semantic tone suffix for a community-rating bar/value, by stat ``kind``.
+
+    Returns one of ``good`` | ``warn`` | ``bad`` | ``high`` (mapped to accent colors
+    in game-detail.css). Polarity differs by stat: a LOW difficulty/grindiness/hours
+    is ``good`` (easier/shorter); a HIGH fun/overall is ``good``. The Ratings tab's
+    live-update JS (static/js/game-detail.js) mirrors these exact thresholds -- keep
+    the two in sync.
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 'good'
+    if kind in ('difficulty', 'grindiness'):
+        return 'good' if v < 4 else 'warn' if v < 8 else 'bad'
+    if kind == 'hours':
+        return 'good' if v < 25 else 'warn' if v < 75 else 'high' if v < 100 else 'bad'
+    if kind == 'overall':  # /5 scale
+        return 'bad' if v < 2 else 'warn' if v < 4 else 'good'
+    if kind == 'fun':  # /10 scale
+        return 'bad' if v < 4 else 'warn' if v < 8 else 'good'
+    return 'good'
+
+
+@register.filter
 def psn_rarity(rarity_int):
     labels = {0: 'Ultra Rare', 1: 'Very Rare', 2: 'Rare', 3: 'Common'}
     return labels.get(rarity_int, '')

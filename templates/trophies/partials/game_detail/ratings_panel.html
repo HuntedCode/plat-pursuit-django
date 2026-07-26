@@ -1,0 +1,73 @@
+{% load humanize custom_filters %}
+{% comment %} The Ratings tab. A community-stats context strip (all four numbers denormalized on Game -> zero
+queries, whale-safe) over the per-group community ratings. DLC selector is ADAPTIVE: pills when a game has few
+trophy groups, a Base Game pill + "DLC" dropdown once there are many (some games have a TON of DLC sets). One
+`.gd-rate__panel` per group is server-rendered; game-detail.js toggles which shows (data-rate-ctg / -panel) and
+runs the reveal (revealRatings). Players drill-down lives in the Ranks tab now; written reviews are deferred. {% endcomment %}
+<section class="gd-rate" data-gd-rate>
+
+    {# ── Community stats: player-count context. Denormed on Game, recomputed nightly. ── #}
+    <div class="gd-rate__stats">
+        <div class="gd-rate__stat">
+            <span class="gd-rate__stat-n" data-gd-countup="{{ game.played_count|default:0 }}">{{ game.played_count|default:0|intcomma }}</span>
+            <span class="gd-rate__stat-lbl">Players</span>
+        </div>
+        {% if game.defined_trophies.platinum %}
+        <div class="gd-rate__stat">
+            <span class="gd-rate__stat-n" data-gd-countup="{{ game.plats_earned_count|default:0 }}">{{ game.plats_earned_count|default:0|intcomma }}</span>
+            <span class="gd-rate__stat-lbl">Platinums</span>
+        </div>
+        {% endif %}
+        <div class="gd-rate__stat">
+            <span class="gd-rate__stat-n" data-gd-countup="{{ game.full_completion_count|default:0 }}">{{ game.full_completion_count|default:0|intcomma }}</span>
+            <span class="gd-rate__stat-lbl">100% Club</span>
+        </div>
+        <div class="gd-rate__stat">
+            {# count-up target is the inner number span so the % unit survives (countUp rewrites textContent). #}
+            <span class="gd-rate__stat-n"><span data-gd-countup="{{ game.avg_completion|floatformat:0 }}">{{ game.avg_completion|floatformat:0 }}</span><span class="gd-rate__stat-unit">%</span></span>
+            <span class="gd-rate__stat-lbl">Avg completion</span>
+        </div>
+    </div>
+
+    {# ── Adaptive DLC selector (only when the game has more than the base group) ── #}
+    {% if community_tabs|length > 1 %}
+    <div class="gd-rate__sel">
+        {% if community_tabs|length <= 4 %}
+        {# Few groups: a scannable pill row of toggle buttons (matches the leaderboard group selector -- these
+           filter which group's ratings show, they are not a tab widget, so aria-pressed, not role=tab). #}
+        <div class="gd-rate__seg" role="group" aria-label="Rating group">
+            {% for ct in community_tabs %}
+            <button type="button" class="gd-rate__segchip{% if forloop.first %} is-active{% endif %}" data-rate-ctg="{{ ct.ctg.id }}" aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}">{{ ct.ctg.display_name }}</button>
+            {% endfor %}
+        </div>
+        {% else %}
+        {# Many groups: Base Game pill + a DLC dropdown so a huge DLC list stays sane. #}
+        <div class="gd-rate__seg" role="group" aria-label="Rating group">
+            {% with base=community_tabs.0 %}
+            <button type="button" class="gd-rate__segchip is-active" data-rate-ctg="{{ base.ctg.id }}" aria-pressed="true">{{ base.ctg.display_name }}</button>
+            {% endwith %}
+            <div class="gd-rate__drop" data-rate-drop>
+                <button type="button" class="gd-rate__segchip gd-rate__dropbtn" data-rate-drop-toggle aria-expanded="false" aria-haspopup="true">
+                    <span data-rate-drop-lbl>DLC</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+                <div class="gd-rate__dropmenu" role="menu" hidden>
+                    {% for ct in community_tabs %}{% if not forloop.first %}
+                    <button type="button" role="menuitem" class="gd-rate__dropitem" data-rate-ctg="{{ ct.ctg.id }}">{{ ct.ctg.display_name }}</button>
+                    {% endif %}{% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {# ── One ratings panel per group; only the first (base) shows until a selector switch. ── #}
+    {% for ct in community_tabs %}
+    <div class="gd-rate__panel{% if not forloop.first %} is-hidden{% endif %}" data-rate-panel="{{ ct.ctg.id }}">
+        {% include 'trophies/partials/game_detail/_rating_bars.html' with averages=ct.averages can_rate=ct.can_rate user_rating=ct.user_rating concept_id=game.concept.id group_id=ct.ctg.trophy_group_id hours_label=ct.hours_label hours_label_long=ct.hours_label_long %}
+    </div>
+    {% endfor %}
+</section>
+
+{% include 'trophies/partials/game_detail/quick_rate_modal.html' %}

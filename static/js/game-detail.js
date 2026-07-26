@@ -49,6 +49,29 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Ratings panel entrance, ONE-SHOT on first arrival (same shape as revealAbout). The panel is SSR'd but
+    // hidden, so load-time fillBars/count-up already ran; reset the ACTIVE group's bars to 0 and the stat
+    // tiles to 0, then re-grow/re-count so the reveal is visible. Reduced motion skips (values already final).
+    let ratingsRevealed = false;
+    function revealRatings(panel) {
+        if (ratingsRevealed || reduce) return;
+        ratingsRevealed = true;
+        const active = panel.querySelector('.gd-rate__panel:not(.is-hidden)') || panel;
+        active.querySelectorAll('[data-gd-fill]').forEach((b) => b.style.setProperty('--horizon-progress', '0%'));
+        fillBars(active);
+        if (PlatPursuit.countUp) {
+            panel.querySelectorAll('.gd-rate__stats [data-gd-countup]').forEach((el, i) => {
+                const n = parseInt(el.dataset.gdCountup, 10);
+                if (isNaN(n)) return;
+                // Zero the tile NOW (it already shows its final value from the load-time pass), so the staggered
+                // count-up doesn't flash the final number for a frame before snapping back to 0.
+                el.dataset.countup = n;
+                el.textContent = '0';
+                window.setTimeout(() => PlatPursuit.countUp(el, 650, { from: 0 }), i * 55);
+            });
+        }
+    }
+
     // Leaderboard panel. The ONLY panel not server-rendered: its cost scales with a game's popularity
     // and most visitors never open it, so it is fetched on first activation and then cached in the DOM.
     // Declared above the switcher IIFE for the same reason as revealAbout -- that IIFE honors an initial
@@ -544,7 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const viewTabs = document.querySelectorAll('#gd-switch .pp-switch__chip[data-view]');
         const views = document.querySelectorAll('.gd-view');
         if (!viewTabs.length || !views.length) return;
-        const VIEW_ORDER = ['trophies', 'roadmap', 'community', 'leaderboard', 'about'];
+        const VIEW_ORDER = ['trophies', 'roadmap', 'ratings', 'leaderboard', 'about'];
         // The minibar's per-view extras (sort / count / Filters) are gated by data-mb-active, which showView()
         // keeps in sync with the active view.
         const minibar = document.querySelector('.gd-minibar');
@@ -584,6 +607,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Decorative, so it runs LAST: tab state (panels, chips, URL) is fully synced before any
             // entrance animation, and a fault in the flourish can never strand the switcher mid-update.
             if (changed && shown && name === 'about') revealAbout(shown);
+            if (changed && shown && name === 'ratings') revealRatings(shown);
             if (shown && name === 'leaderboard') loadLeaderboard(shown);
         }
 
@@ -1302,173 +1326,208 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.removeItem(scrollKey);
     }
 
+    // Legacy DLC tab bar for the Roadmap CTA card (Phase 3 rebuild still pending). Restores the per-CTG
+    // panel switch that lived in community_tabs_section.html before the Phase 4 Ratings rebuild removed it.
+    // The Ratings tab uses its own [data-rate-ctg] selector; this only drives the roadmap card's .community-tab-*.
+    (function legacyRoadmapDlcTabs() {
+        const btns = Array.prototype.slice.call(document.querySelectorAll('.community-tab-btn'));
+        if (!btns.length) return;
+        btns.forEach((btn) => btn.addEventListener('click', () => {
+            const id = btn.dataset.ctgId;
+            btns.forEach((b) => {
+                const on = b.dataset.ctgId === id;
+                b.classList.toggle('bg-primary', on);
+                b.classList.toggle('text-primary-content', on);
+                b.classList.toggle('shadow-sm', on);
+                b.classList.toggle('text-base-content/60', !on);
+                b.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            document.querySelectorAll('.community-tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.ctgId !== id));
+        }));
+    })();
+
     // ============================================================
-    // Quick Rate Modal (carried over from the legacy ratings panel; rebuilt in Phase 4)
+    // Ratings tab: per-group (DLC) selector + quick-rate modal (rebuilt in Phase 4).
     // ============================================================
-    const quickRateModal = document.getElementById('quick-rate-modal');
-    const quickRateForm = document.getElementById('quick-rate-form');
+    (function ratingsTab() {
+        const root = document.querySelector('[data-gd-rate]');
+        if (!root) return;
 
-    if (quickRateModal && quickRateForm) {
-        var _qrConceptId = null;
-        var _qrGroupId = null;
-        var _qrSourceBtn = null;
-
-        var sliderDisplayMap = {
-            difficulty: 'qr-difficulty-val',
-            grindiness: 'qr-grindiness-val',
-            fun_ranking: 'qr-fun-val',
-            overall_rating: 'qr-overall-val'
-        };
-
-        function formatSliderValue(name, value) {
-            return name === 'overall_rating' ? parseFloat(value).toFixed(1) : value;
+        // ── Per-group selector: a pill row (few groups) OR a Base pill + DLC dropdown (many). Both drive the
+        //    same panel toggle via [data-rate-ctg]; only the active group's [data-rate-panel] shows. ──
+        const drop = root.querySelector('[data-rate-drop]');
+        const dropBtn = root.querySelector('[data-rate-drop-toggle]');
+        const dropLbl = root.querySelector('[data-rate-drop-lbl]');
+        function closeDrop() {
+            if (!dropBtn) return;
+            dropBtn.setAttribute('aria-expanded', 'false');
+            const m = drop && drop.querySelector('.gd-rate__dropmenu');
+            if (m) m.hidden = true;
         }
-
-        quickRateForm.querySelectorAll('input[type="range"]').forEach(function(slider) {
-            var valEl = document.getElementById(sliderDisplayMap[slider.name]);
-            if (valEl) {
-                valEl.textContent = formatSliderValue(slider.name, slider.value);
-                slider.addEventListener('input', function() {
-                    valEl.textContent = formatSliderValue(slider.name, slider.value);
-                });
+        function selectGroup(ctgId, srcEl) {
+            root.querySelectorAll('[data-rate-panel]').forEach((p) => p.classList.toggle('is-hidden', p.dataset.ratePanel !== ctgId));
+            root.querySelectorAll('.gd-rate__segchip[data-rate-ctg]').forEach((c) => {
+                const on = c.dataset.rateCtg === ctgId;
+                c.classList.toggle('is-active', on);
+                c.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+            // In dropdown mode the base pill and the dropdown button are the two mutually exclusive actives;
+            // the dropdown surfaces the chosen DLC's name (this control has no separate title to carry it).
+            if (drop && dropBtn) {
+                const fromDrop = srcEl && srcEl.classList.contains('gd-rate__dropitem');
+                dropBtn.classList.toggle('is-active', !!fromDrop);
+                if (dropLbl) dropLbl.textContent = fromDrop ? (srcEl.textContent || 'DLC').trim() : 'DLC';
             }
-        });
-
-        document.addEventListener('click', function(e) {
-            var btn = e.target.closest('.quick-rate-btn');
-            if (!btn) return;
-
-            _qrConceptId = btn.dataset.conceptId;
-            _qrGroupId = btn.dataset.groupId;
-            _qrSourceBtn = btn;
-
-            var hoursLabel = document.getElementById('qr-hours-label');
-            if (hoursLabel) hoursLabel.textContent = btn.dataset.hoursLabel || 'Hours to Platinum';
-
-            var existing = btn.dataset.existing ? JSON.parse(btn.dataset.existing) : null;
-            var form = quickRateForm;
-
-            form.querySelector('[name="difficulty"]').value = existing ? existing.difficulty : 5;
-            form.querySelector('[name="grindiness"]').value = existing ? existing.grindiness : 5;
-            form.querySelector('[name="hours_to_platinum"]').value = existing ? existing.hours_to_platinum : '';
-            form.querySelector('[name="fun_ranking"]').value = existing ? existing.fun_ranking : 5;
-            form.querySelector('[name="overall_rating"]').value = existing ? existing.overall_rating : 3;
-
-            for (var field in sliderDisplayMap) {
-                var el = document.getElementById(sliderDisplayMap[field]);
-                if (el) el.textContent = formatSliderValue(field, form.querySelector('[name="' + field + '"]').value);
-            }
-
-            var submitBtn = document.getElementById('quick-rate-submit');
-            if (submitBtn) submitBtn.textContent = existing ? 'Update Rating' : 'Submit Rating';
-
-            var title = document.getElementById('quick-rate-title');
-            if (title) title.textContent = existing ? 'Update Your Rating' : 'Rate This Game';
-
-            quickRateModal.showModal();
-        });
-
-        quickRateForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-
-            var hours = parseInt(quickRateForm.querySelector('[name="hours_to_platinum"]').value, 10);
-            if (!hours || hours < 1) {
-                PlatPursuit.ToastManager.show('Please enter the hours to complete.', 'warning');
+        }
+        root.addEventListener('click', (e) => {
+            const toggle = e.target.closest('[data-rate-drop-toggle]');
+            if (toggle) {
+                const open = toggle.getAttribute('aria-expanded') === 'true';
+                toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+                const menu = drop && drop.querySelector('.gd-rate__dropmenu');
+                if (menu) menu.hidden = open;
                 return;
             }
+            const chip = e.target.closest('[data-rate-ctg]');
+            if (chip) { selectGroup(chip.dataset.rateCtg, chip); closeDrop(); }
+        });
+        if (drop) {
+            document.addEventListener('click', (e) => { if (!drop.contains(e.target)) closeDrop(); });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && dropBtn && dropBtn.getAttribute('aria-expanded') === 'true') { closeDrop(); dropBtn.focus(); }
+            });
+        }
 
-            var submitBtn = document.getElementById('quick-rate-submit');
-            if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving...'; }
+        // ── Quick-rate modal. Opens from any .quick-rate-btn (SSR'd per group), prefills from data-existing,
+        //    POSTs the rating, and live-updates the source group's bars/values without a reload. The endpoint
+        //    and the form input names are the API contract (see quick_rate_modal.html). ──
+        const modal = document.getElementById('gd-qr-modal');
+        const form = document.getElementById('gd-qr-form');
+        if (!modal || !form) return;
 
-            try {
-                var data = await PlatPursuit.API.post(
-                    '/api/v1/ratings/' + _qrConceptId + '/group/' + _qrGroupId + '/rate/',
-                    {
-                        difficulty: parseInt(quickRateForm.querySelector('[name="difficulty"]').value, 10),
-                        grindiness: parseInt(quickRateForm.querySelector('[name="grindiness"]').value, 10),
-                        hours_to_platinum: hours,
-                        fun_ranking: parseInt(quickRateForm.querySelector('[name="fun_ranking"]').value, 10),
-                        overall_rating: parseFloat(quickRateForm.querySelector('[name="overall_rating"]').value)
-                    }
-                );
+        const SLIDER_KEYS = ['difficulty', 'grindiness', 'fun_ranking', 'overall_rating'];
+        const fmt = (name, v) => name === 'overall_rating' ? parseFloat(v).toFixed(1) : String(v);
+        const setVal = (name) => {
+            const o = form.querySelector('[data-gd-qr-val="' + name + '"]');
+            const inp = form.querySelector('[name="' + name + '"]');
+            if (o && inp) o.textContent = fmt(name, inp.value);
+        };
+        form.querySelectorAll('[data-gd-qr-slider]').forEach((s) => s.addEventListener('input', () => setVal(s.name)));
 
-                PlatPursuit.ToastManager.show(data.message || 'Rating saved!', 'success');
+        let srcBtn = null, conceptId = null, groupId = null;
 
-                if (data.community_averages) {
-                    var panel = _qrSourceBtn.closest('.community-tab-panel') || document.getElementById('community-tabs-section');
-                    if (panel) {
-                        var grid = panel.querySelector('[data-ratings-grid]');
-                        if (grid) {
-                            var avg = data.community_averages;
-                            var allColors = ['success', 'warning', 'error', 'accent'];
-                            var statMap = {
-                                difficulty: { val: avg.avg_difficulty, max: 10, thresholds: [4, 8], colors: ['success', 'warning', 'error'] },
-                                grindiness: { val: avg.avg_grindiness, max: 10, thresholds: [4, 8], colors: ['success', 'warning', 'error'] },
-                                hours: { val: avg.avg_hours, max: 100, thresholds: [25, 75, 100], colors: ['success', 'warning', 'accent', 'error'] },
-                                fun: { val: avg.avg_fun, max: 10, thresholds: [4, 8], colors: ['error', 'warning', 'success'] },
-                                overall: { val: avg.avg_rating, max: 5, thresholds: [2, 4], colors: ['error', 'warning', 'success'] }
-                            };
+        // gd-modal close affordances (button / backdrop / Esc / swipe) + page recede -- same as the page's
+        // other modals. Keep the scroll put: native <dialog>.showModal() jumps to the dialog on mobile.
+        function closeQr() { pageRecede(false); if (modal.close && modal.open) modal.close(); }
+        modal.querySelectorAll('[data-gd-modal-close]').forEach((b) => b.addEventListener('click', closeQr));
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeQr(); });
+        modal.addEventListener('cancel', (e) => { e.preventDefault(); closeQr(); });
+        if (PlatPursuit.dismissableSheet) PlatPursuit.dismissableSheet(modal, { onClose: closeQr });
 
-                            function getColor(val, thresholds, colors) {
-                                for (var i = 0; i < thresholds.length; i++) {
-                                    if (val < thresholds[i]) return colors[i];
-                                }
-                                return colors[colors.length - 1];
-                            }
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('.quick-rate-btn');
+            if (!btn) return;
+            srcBtn = btn;
+            conceptId = btn.dataset.conceptId;
+            groupId = btn.dataset.groupId;
 
-                            for (var stat in statMap) {
-                                var s = statMap[stat];
-                                var cell = grid.querySelector('[data-stat="' + stat + '"]');
-                                if (!cell) continue;
+            const hoursLbl = form.querySelector('[data-gd-qr-hours-label]');
+            if (hoursLbl) hoursLbl.textContent = btn.dataset.hoursLabel || 'Hours to Platinum';
 
-                                var color = getColor(s.val, s.thresholds, s.colors);
+            const ex = btn.dataset.existing ? JSON.parse(btn.dataset.existing) : null;
+            form.querySelector('[name="difficulty"]').value = ex ? ex.difficulty : 5;
+            form.querySelector('[name="grindiness"]').value = ex ? ex.grindiness : 5;
+            form.querySelector('[name="hours_to_platinum"]').value = ex ? ex.hours_to_platinum : '';
+            form.querySelector('[name="fun_ranking"]').value = ex ? ex.fun_ranking : 5;
+            form.querySelector('[name="overall_rating"]').value = ex ? ex.overall_rating : 3;
+            SLIDER_KEYS.forEach(setVal);
 
-                                var valEl = cell.querySelector('[data-stat-value]');
-                                if (valEl) {
-                                    var suffix = stat === 'hours' ? '<span class="text-[0.6rem] text-base-content/40 font-normal">h</span>' :
-                                                 stat === 'overall' ? '<span class="text-[0.6rem] text-base-content/40 font-normal">/5</span>' : '';
-                                    var display = stat === 'hours' ? Math.round(s.val).toLocaleString() : s.val.toFixed(1);
-                                    valEl.innerHTML = display + suffix;
-                                    allColors.forEach(function(c) { valEl.classList.remove('text-' + c); });
-                                    valEl.classList.add('text-' + color);
-                                    valEl.classList.remove('text-base-content/20');
-                                }
+            const title = document.getElementById('gd-qr-title');
+            if (title) title.textContent = ex ? 'Update your rating' : 'Rate this game';
+            const submit = form.querySelector('[data-gd-qr-submit]');
+            if (submit) submit.textContent = ex ? 'Update rating' : 'Submit rating';
 
-                                var progress = cell.querySelector('progress');
-                                if (progress) {
-                                    progress.value = s.val;
-                                    allColors.forEach(function(c) { progress.classList.remove('progress-' + c); });
-                                    progress.classList.add('progress-' + color);
-                                }
-                            }
-                        }
-                        var avg = data.community_averages;
-                        var countEl = panel.querySelector('[data-ratings-count]');
-                        if (countEl && avg.count !== undefined) {
-                            countEl.textContent = 'Based on ' + avg.count.toLocaleString() + ' community rating' + (avg.count === 1 ? '' : 's') + '.';
-                        }
-                    }
-                }
-
-                if (_qrSourceBtn) {
-                    _qrSourceBtn.dataset.existing = JSON.stringify({
-                        difficulty: parseInt(quickRateForm.querySelector('[name="difficulty"]').value, 10),
-                        grindiness: parseInt(quickRateForm.querySelector('[name="grindiness"]').value, 10),
-                        hours_to_platinum: hours,
-                        fun_ranking: parseInt(quickRateForm.querySelector('[name="fun_ranking"]').value, 10),
-                        overall_rating: parseFloat(quickRateForm.querySelector('[name="overall_rating"]').value)
-                    });
-                    _qrSourceBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> Update Your Rating';
-                }
-
-                quickRateModal.close();
-            } catch (error) {
-                var msg = 'Failed to save rating.';
-                try { var errData = await error.response?.json(); msg = errData?.error || msg; } catch (_) {}
-                PlatPursuit.ToastManager.show(msg, 'error');
-            } finally {
-                if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = _qrSourceBtn?.dataset.existing ? 'Update Rating' : 'Submit Rating'; }
+            if (modal.showModal && !modal.open) {
+                const y = window.scrollY;
+                modal.showModal();
+                if (window.scrollY !== y) window.scrollTo(0, y);
+                pageRecede(true);
             }
         });
-    }
+
+        // Tone + bar-fill thresholds MIRROR core/templatetags/custom_filters.py rating_tone + the SSR widthratio
+        // percentages -- keep the two in sync so a live-updated bar matches a reloaded one.
+        function toneOf(kind, v) {
+            if (kind === 'difficulty' || kind === 'grindiness') return v < 4 ? 'good' : v < 8 ? 'warn' : 'bad';
+            if (kind === 'hours') return v < 25 ? 'good' : v < 75 ? 'warn' : v < 100 ? 'high' : 'bad';
+            if (kind === 'overall') return v < 2 ? 'bad' : v < 4 ? 'warn' : 'good';
+            return v < 4 ? 'bad' : v < 8 ? 'warn' : 'good';   // fun
+        }
+        function pctOf(kind, v) {
+            if (kind === 'hours') return Math.min(100, Math.round(v));
+            if (kind === 'overall') return Math.round(v / 5 * 100);
+            return Math.round(v * 10);   // difficulty / grindiness / fun (out of 10)
+        }
+        function valHtml(kind, v) {
+            if (kind === 'hours') return Math.round(v).toLocaleString() + '<span class="gd-rate__row-unit">h</span>';
+            if (kind === 'overall') return v.toFixed(1) + '<span class="gd-rate__row-unit">/5</span>';
+            return v.toFixed(1);
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const hours = parseInt(form.querySelector('[name="hours_to_platinum"]').value, 10);
+            if (!hours || hours < 1) { PlatPursuit.ToastManager.show('Enter the hours it took you.', 'warning'); return; }
+
+            const submit = form.querySelector('[data-gd-qr-submit]');
+            if (submit) { submit.disabled = true; submit.textContent = 'Saving…'; }
+            const payload = {
+                difficulty: parseInt(form.querySelector('[name="difficulty"]').value, 10),
+                grindiness: parseInt(form.querySelector('[name="grindiness"]').value, 10),
+                hours_to_platinum: hours,
+                fun_ranking: parseInt(form.querySelector('[name="fun_ranking"]').value, 10),
+                overall_rating: parseFloat(form.querySelector('[name="overall_rating"]').value),
+            };
+            try {
+                const data = await PlatPursuit.API.post('/api/v1/ratings/' + conceptId + '/group/' + groupId + '/rate/', payload);
+                PlatPursuit.ToastManager.show(data.message || 'Rating saved!', 'success');
+
+                // Live-update the source group's panel: bars grow, values/tone/count refresh (empty -> filled too).
+                const avg = data.community_averages;
+                const panel = srcBtn && srcBtn.closest('[data-rate-panel]');
+                if (avg && panel) {
+                    const grid = panel.querySelector('[data-rate-grid]');
+                    if (grid) {
+                        grid.classList.remove('gd-rate__bars--empty');
+                        const byStat = { difficulty: avg.avg_difficulty, grindiness: avg.avg_grindiness, hours: avg.avg_hours, fun: avg.avg_fun, overall: avg.avg_rating };
+                        Object.keys(byStat).forEach((kind) => {
+                            const v = byStat[kind];
+                            const row = grid.querySelector('.gd-rate__row[data-stat="' + kind + '"]');
+                            if (!row || v == null) return;
+                            row.dataset.tone = toneOf(kind, v);
+                            const valEl = row.querySelector('[data-stat-value]');
+                            if (valEl) { valEl.classList.remove('gd-rate__row-val--empty'); valEl.innerHTML = valHtml(kind, v); }
+                            const bar = row.querySelector('[data-gd-fill]');
+                            if (bar) bar.dataset.gdFill = pctOf(kind, v);
+                        });
+                        fillBars(panel);
+                    }
+                    const count = panel.querySelector('[data-rate-count]');
+                    if (count && avg.count != null) count.textContent = 'Based on ' + avg.count.toLocaleString() + ' community rating' + (avg.count === 1 ? '' : 's') + '.';
+                }
+                if (srcBtn) {
+                    srcBtn.dataset.existing = JSON.stringify(payload);
+                    const lbl = srcBtn.querySelector('span');
+                    if (lbl) lbl.textContent = 'Update rating';
+                }
+                closeQr();
+            } catch (error) {
+                let msg = 'Failed to save rating.';
+                try { const ed = await error.response?.json(); msg = ed?.error || msg; } catch (_) { /* ignore */ }
+                PlatPursuit.ToastManager.show(msg, 'error');
+            } finally {
+                if (submit) { submit.disabled = false; submit.textContent = srcBtn?.dataset.existing ? 'Update rating' : 'Submit rating'; }
+            }
+        });
+    })();
 });

@@ -859,10 +859,7 @@ class GameDetailView(DetailView):
             or igdb_match.notable_external_urls
         ))
 
-        # Community averages (base game, for backward compat)
-        context['community_averages'] = RatingService.get_cached_community_averages(game.concept)
-
-        # Per-CTG community data for tabbed display (ratings only; the text
+        # Per-CTG community data for the Ratings tab (ratings only; the text
         # review system was archived 2026-05).
         from trophies.models import ConceptTrophyGroup, Trophy, UserConceptRating
         from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService

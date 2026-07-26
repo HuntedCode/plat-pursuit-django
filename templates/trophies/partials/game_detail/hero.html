@@ -86,7 +86,7 @@
 
                 {# Headline "X Players" -- absolute top-right corner at md+; on mobile it drops into flow here, below the flags and above progress. Jumps to Community. #}
                 {% if game.played_count %}
-                    <a href="?view=community" data-gd-goto="community" class="gd-hero__players" title="See who's played {{ game.title_name }}">
+                    <a href="?view=ratings" data-gd-goto="ratings" class="gd-hero__players" title="See who's played {{ game.title_name }}">
                         <span class="pp-tally pp-tally--lg gd-hero__players-n" data-gd-countup="{{ game.played_count }}">{{ game.played_count|intcomma }}</span>
                         <span class="gd-hero__players-lbl">Player{{ game.played_count|pluralize }} &rsaquo;</span>
                     </a>

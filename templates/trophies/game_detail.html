@@ -82,8 +82,8 @@
                 <button type="button" id="gd-tab-roadmap" aria-controls="gd-view-roadmap" class="pp-switch__chip" data-view="roadmap" role="tab" aria-selected="false">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5.764v15"/><path d="M9 3.236v15"/><path d="M18 3.236 15 5v15l6-3.764V1.236a1 1 0 0 0-1.447-.894L15 3.236"/><path d="M9 18.236 3 21V4.236a1 1 0 0 1 .553-.894L9 .764"/></svg><span class="pp-switch__lbl">Roadmap</span>
                 </button>
-                <button type="button" id="gd-tab-community" aria-controls="gd-view-community" class="pp-switch__chip" data-view="community" role="tab" aria-selected="false">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="pp-switch__lbl">Community</span>
+                <button type="button" id="gd-tab-ratings" aria-controls="gd-view-ratings" class="pp-switch__chip" data-view="ratings" role="tab" aria-selected="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.79 21.35a.53.53 0 0 1-.771-.56l.882-5.139a2.12 2.12 0 0 0-.611-1.879L2.554 10.135a.53.53 0 0 1 .294-.904l5.166-.756a2.12 2.12 0 0 0 1.596-1.16z"/></svg><span class="pp-switch__lbl">Ratings</span>
                 </button>
                 <button type="button" id="gd-tab-leaderboard" aria-controls="gd-view-leaderboard" class="pp-switch__chip" data-view="leaderboard" role="tab" aria-selected="false">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg><span class="pp-switch__lbl">Ranks</span>
@@ -106,11 +106,8 @@
             {% include 'trophies/partials/game_detail/roadmap_cta_card.html' %}
         </div>
 
-        <div class="gd-view" id="gd-view-community" role="tabpanel" aria-labelledby="gd-tab-community" data-view="community" hidden>
-            {# TODO(Phase 4): rebuilt ratings + community-stats tiles + players modal. Legacy ratings for now. #}
-            <div id="community-tabs-section">
-                {% include 'trophies/partials/game_detail/community_tabs_section.html' %}
-            </div>
+        <div class="gd-view" id="gd-view-ratings" role="tabpanel" aria-labelledby="gd-tab-ratings" data-view="ratings" hidden>
+            {% include 'trophies/partials/game_detail/ratings_panel.html' %}
         </div>
 
         {% comment %} Deliberately EMPTY at render time -- the only panel not server-rendered. It is the

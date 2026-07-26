@@ -1,0 +1,62 @@
+{% load humanize custom_filters %}
+{% comment %} One group's community ratings: five pp-horizon bars (tone by stat via `rating_tone`) + a count
+line + the quick-rate trigger. Expects: averages (dict or None), can_rate, user_rating, concept_id, group_id,
+hours_label, hours_label_long. Bars start at 0 and grow to data-gd-fill on reveal (game-detail.js fillBars /
+revealRatings). The `quick-rate-btn` + its data-* and the [data-rate-grid]/[data-stat]/[data-stat-value]/
+[data-rate-count] hooks are the contract game-detail.js live-updates after a submit. {% endcomment %}
+{% if averages %}
+<div class="gd-rate__bars" data-rate-grid>
+    <div class="gd-rate__row" data-stat="difficulty" data-tone="{{ averages.avg_difficulty|rating_tone:'difficulty' }}">
+        <span class="gd-rate__row-lbl">Difficulty</span>
+        <span class="pp-horizon pp-horizon__track gd-rate__bar" data-gd-fill="{% widthratio averages.avg_difficulty 10 100 %}" style="--horizon-h: 6px; --horizon-progress: 0%;"><span class="pp-horizon__fill"></span></span>
+        <span class="gd-rate__row-val" data-stat-value>{{ averages.avg_difficulty|floatformat:1 }}</span>
+    </div>
+    <div class="gd-rate__row" data-stat="grindiness" data-tone="{{ averages.avg_grindiness|rating_tone:'grindiness' }}">
+        <span class="gd-rate__row-lbl">Grindiness</span>
+        <span class="pp-horizon pp-horizon__track gd-rate__bar" data-gd-fill="{% widthratio averages.avg_grindiness 10 100 %}" style="--horizon-h: 6px; --horizon-progress: 0%;"><span class="pp-horizon__fill"></span></span>
+        <span class="gd-rate__row-val" data-stat-value>{{ averages.avg_grindiness|floatformat:1 }}</span>
+    </div>
+    <div class="gd-rate__row" data-stat="hours" data-tone="{{ averages.avg_hours|rating_tone:'hours' }}">
+        <span class="gd-rate__row-lbl">{{ hours_label|default:"Hours to Plat" }}</span>
+        <span class="pp-horizon pp-horizon__track gd-rate__bar" data-gd-fill="{% if averages.avg_hours >= 100 %}100{% else %}{% widthratio averages.avg_hours 100 100 %}{% endif %}" style="--horizon-h: 6px; --horizon-progress: 0%;"><span class="pp-horizon__fill"></span></span>
+        <span class="gd-rate__row-val" data-stat-value>{{ averages.avg_hours|floatformat:0|intcomma }}<span class="gd-rate__row-unit">h</span></span>
+    </div>
+    <div class="gd-rate__row" data-stat="fun" data-tone="{{ averages.avg_fun|rating_tone:'fun' }}">
+        <span class="gd-rate__row-lbl">Fun</span>
+        <span class="pp-horizon pp-horizon__track gd-rate__bar" data-gd-fill="{% widthratio averages.avg_fun 10 100 %}" style="--horizon-h: 6px; --horizon-progress: 0%;"><span class="pp-horizon__fill"></span></span>
+        <span class="gd-rate__row-val" data-stat-value>{{ averages.avg_fun|floatformat:1 }}</span>
+    </div>
+    <div class="gd-rate__row" data-stat="overall" data-tone="{{ averages.avg_rating|rating_tone:'overall' }}">
+        <span class="gd-rate__row-lbl">Overall</span>
+        <span class="pp-horizon pp-horizon__track gd-rate__bar" data-gd-fill="{% widthratio averages.avg_rating 5 100 %}" style="--horizon-h: 6px; --horizon-progress: 0%;"><span class="pp-horizon__fill"></span></span>
+        <span class="gd-rate__row-val" data-stat-value>{{ averages.avg_rating|floatformat:1 }}<span class="gd-rate__row-unit">/5</span></span>
+    </div>
+</div>
+{% else %}
+{% comment %} Empty: same five rows, neutral (no data-tone) with dim dashes + zero-width bars, so a group with
+no ratings keeps the exact layout (no jump when a rating lands and JS live-fills it). [data-stat] keys match
+the live-update JS so a first rating fills the right rows. {% endcomment %}
+<div class="gd-rate__bars gd-rate__bars--empty" data-rate-grid>
+    <div class="gd-rate__row" data-stat="difficulty"><span class="gd-rate__row-lbl">Difficulty</span><span class="pp-horizon pp-horizon__track gd-rate__bar" data-gd-fill="0" style="--horizon-h: 6px; --horizon-progress: 0%;"><span class="pp-horizon__fill"></span></span><span class="gd-rate__row-val gd-rate__row-val--empty" data-stat-value>&mdash;</span></div>
+    <div class="gd-rate__row" data-stat="grindiness"><span class="gd-rate__row-lbl">Grindiness</span><span class="pp-horizon pp-horizon__track gd-rate__bar" data-gd-fill="0" style="--horizon-h: 6px; --horizon-progress: 0%;"><span class="pp-horizon__fill"></span></span><span class="gd-rate__row-val gd-rate__row-val--empty" data-stat-value>&mdash;</span></div>
+    <div class="gd-rate__row" data-stat="hours"><span class="gd-rate__row-lbl">{{ hours_label|default:"Hours to Plat" }}</span><span class="pp-horizon pp-horizon__track gd-rate__bar" data-gd-fill="0" style="--horizon-h: 6px; --horizon-progress: 0%;"><span class="pp-horizon__fill"></span></span><span class="gd-rate__row-val gd-rate__row-val--empty" data-stat-value>&mdash;</span></div>
+    <div class="gd-rate__row" data-stat="fun"><span class="gd-rate__row-lbl">Fun</span><span class="pp-horizon pp-horizon__track gd-rate__bar" data-gd-fill="0" style="--horizon-h: 6px; --horizon-progress: 0%;"><span class="pp-horizon__fill"></span></span><span class="gd-rate__row-val gd-rate__row-val--empty" data-stat-value>&mdash;</span></div>
+    <div class="gd-rate__row" data-stat="overall"><span class="gd-rate__row-lbl">Overall</span><span class="pp-horizon pp-horizon__track gd-rate__bar" data-gd-fill="0" style="--horizon-h: 6px; --horizon-progress: 0%;"><span class="pp-horizon__fill"></span></span><span class="gd-rate__row-val gd-rate__row-val--empty" data-stat-value>&mdash;</span></div>
+</div>
+{% endif %}
+
+<div class="gd-rate__foot">
+    <p class="gd-rate__count" data-rate-count>
+        {% if averages %}Based on {{ averages.count|intcomma }} community rating{{ averages.count|pluralize }}.{% else %}No community ratings yet.{% if can_rate %} Be the first.{% endif %}{% endif %}
+    </p>
+    {% if can_rate %}
+    <button type="button" class="gd-btn gd-btn--primary gd-rate__cta quick-rate-btn"
+            data-concept-id="{{ concept_id }}"
+            data-group-id="{{ group_id }}"
+            data-hours-label="{{ hours_label_long|default:'Hours to Platinum' }}"
+            {% if user_rating %}data-existing='{"difficulty":{{ user_rating.difficulty|default:5 }},"grindiness":{{ user_rating.grindiness|default:5 }},"hours_to_platinum":{{ user_rating.hours_to_platinum|default:0 }},"fun_ranking":{{ user_rating.fun_ranking|default:5 }},"overall_rating":{{ user_rating.overall_rating|default:"3.0" }}}'{% endif %}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.79 21.35a.53.53 0 0 1-.771-.56l.882-5.139a2.12 2.12 0 0 0-.611-1.879L2.554 10.135a.53.53 0 0 1 .294-.904l5.166-.756a2.12 2.12 0 0 0 1.596-1.16z"/></svg>
+        <span>{% if user_rating %}Update rating{% else %}Rate this game{% endif %}</span>
+    </button>
+    {% endif %}
+</div>

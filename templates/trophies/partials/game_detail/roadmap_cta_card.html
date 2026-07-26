@@ -1,8 +1,7 @@
 {% load static custom_filters roadmap_tags %}
-{# Top-level Roadmap CTA card. Sits above the Community card so the roadmap is the page's #}
-{# loudest secondary action after the trophy list. Per-CTG panels reuse the .community-tab #}
-{# class names so the DLC tab bars in this card and the Community card swap together via    #}
-{# the shared JS at the bottom of community_tabs_section.html.                              #}
+{# Top-level Roadmap CTA card (legacy; Phase 3 rebuild pending). Its per-CTG DLC tab bar uses the        #}
+{# .community-tab-btn / .community-tab-panel hooks, switched by the legacyRoadmapDlcTabs() handler in     #}
+{# game-detail.js (that switch used to live in the now-removed community_tabs_section.html).              #}
 
 {% if community_tabs %}
 <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral mt-4">
