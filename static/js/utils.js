@@ -25,6 +25,11 @@ const ToastManager = {
         if (!container) {
             return;
         }
+        // A modal toast host is a top-layer popover: show it (above the modal, anchored to the viewport) so
+        // toasts rest at the screen's bottom-end instead of being trapped in the dialog's containing block.
+        if (container.matches?.('[popover]') && !container.matches(':popover-open')) {
+            try { container.showPopover(); } catch (e) { /* not connected / unsupported */ }
+        }
 
         // Create toast element
         const toast = document.createElement('div');
@@ -78,7 +83,13 @@ const ToastManager = {
             toast.style.opacity = '0';
             toast.style.transform = 'translateX(100%)';
             toast.style.transition = 'all 0.3s ease-in-out';
-            setTimeout(() => toast.remove(), 300);
+            setTimeout(() => {
+                toast.remove();
+                // Tidy the top-layer popover once its last toast clears, so it stops shadowing the modal.
+                if (container.matches?.('[popover]') && container.matches(':popover-open') && !container.children.length) {
+                    try { container.hidePopover(); } catch (e) { /* already hidden */ }
+                }
+            }, 300);
         }, autoRemoveDuration);
     },
 

@@ -304,8 +304,13 @@
 /* Toasts raised while a modal is open render into the dialog's own top-layer container (so they're not hidden
    behind the backdrop). Pin them as a top-of-screen banner rather than in-flow at the modal's bottom edge,
    where they read as jarring content inside the form. */
-.gd-modal .modal-toast-container { position: fixed; top: 1.25rem; left: 50%; transform: translateX(-50%); right: auto; bottom: auto; margin: 0; padding: 0; width: max-content; max-width: min(92vw, 30rem); display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
-.gd-modal .modal-toast-container > * { pointer-events: auto; }
+/* Modal toasts live in a top-layer popover so they rest on the viewport (bottom-end), above the modal --
+   not trapped in the dialog's box (the dialog is a containing block for `position: fixed` while its entrance
+   animation fills, so a plain fixed child would anchor to the 440px modal and clip against its overflow).
+   ToastManager promotes this popover on show and hides it when the last toast clears. */
+.modal-toast-container { position: fixed; inset: auto 1rem 1rem auto; margin: 0; padding: 0; border: none; background: transparent; overflow: visible; width: max-content; max-width: min(92vw, 26rem); pointer-events: none; }
+.modal-toast-container:popover-open { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.modal-toast-container > * { pointer-events: auto; }
 .gd-modal:not([open]) { display: none; }
 .gd-modal[open] { animation: gdModalIn 0.2s var(--pp-ease) both; }
 @keyframes gdModalIn { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }

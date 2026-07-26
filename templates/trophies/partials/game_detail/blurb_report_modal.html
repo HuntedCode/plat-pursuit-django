@@ -28,6 +28,6 @@ Classes are namespaced .gd-breport* (NOT .gd-report* -- that's the hero report m
             <button type="submit" class="gd-btn gd-btn--primary" data-gd-report-submit>Submit report</button>
         </div>
     </form>
-    {# Report toasts render inside the dialog's top layer (not behind the backdrop). #}
-    <div class="modal-toast-container toast toast-bottom toast-end z-50"></div>
+    {# Report toasts render into this popover: top layer (above the modal) + viewport-anchored bottom-end. #}
+    <div class="modal-toast-container" popover="manual"></div>
 </dialog>
