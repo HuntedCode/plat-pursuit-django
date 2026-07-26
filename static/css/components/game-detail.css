@@ -1277,7 +1277,10 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-blurbs { display: flex; flex-direction: column; gap: 11px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--pp-divider); }
 .gd-blurbs.is-empty { display: none; }
 .gd-blurbs__title { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pp-text-mute); }
-.gd-blurbs__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(238px, 1fr)); gap: 9px; }
+/* Wider-than-tall cards: a ~320px floor packs 2 columns on a standard panel (3 when very wide, 1 when narrow),
+   so a full 140-char blurb lands in ~2-3 lines rather than a skinny 6-line column. auto-fill (not auto-fit)
+   keeps a lone card at track width instead of stretching it to the full panel. */
+.gd-blurbs__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 9px; }
 
 .gd-blurb { display: flex; gap: 10px; padding: 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); }
 .gd-blurb--you { border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 5%, transparent); }
