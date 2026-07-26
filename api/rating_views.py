@@ -160,6 +160,51 @@ class GroupRatingView(APIView):
             )
 
 
+class BlurbReportView(APIView):
+    """Report a rating's public 'quick take' blurb for moderation (reactive: publish -> report -> staff hide)."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
+    def post(self, request, rating_id):
+        """POST /api/v1/ratings/blurb/<rating_id>/report/  Body: {reason, details?}"""
+        try:
+            profile, err = _get_profile_or_error(request)
+            if err:
+                return err
+
+            from trophies.models import UserConceptRating, BlurbReport
+            from trophies.services.comment_service import CommentService
+
+            can, reason_msg = CommentService.can_interact(profile)   # linked-profile gate (shared with comments)
+            if not can:
+                return Response({'error': reason_msg}, status=status.HTTP_403_FORBIDDEN)
+
+            # Only a live (present + not-already-hidden) blurb is reportable.
+            rating = (UserConceptRating.objects.filter(id=rating_id, blurb_hidden=False)
+                      .exclude(blurb='').first())
+            if not rating:
+                return Response({'error': 'Blurb not found.'}, status=status.HTTP_404_NOT_FOUND)
+            if rating.profile_id == profile.id:
+                return Response({'error': "You can't report your own quick take."},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            valid_reasons = {c[0] for c in BlurbReport.REPORT_REASONS}
+            reason_code = request.data.get('reason') if request.data.get('reason') in valid_reasons else 'other'
+            details = (request.data.get('details') or '')[:500]
+
+            _report, created = BlurbReport.objects.get_or_create(
+                rating=rating, reporter=profile,
+                defaults={'reason': reason_code, 'details': details},
+            )
+            msg = 'Thanks -- our team will take a look.' if created else "You've already reported this."
+            return Response({'success': True, 'message': msg})
+
+        except Exception as e:
+            logger.exception(f"Blurb report error: {e}")
+            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class WizardQueueView(APIView):
     """Queue of ratable games waiting to be rated for the Rate My Games wizard.
 

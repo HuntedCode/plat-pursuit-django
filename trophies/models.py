@@ -1529,6 +1529,48 @@ class UserConceptRating(models.Model):
         group_label = f" ({self.concept_trophy_group.display_name})" if self.concept_trophy_group else ""
         return f"{self.profile.display_psn_username}'s rating for {self.concept.unified_title}{group_label}"
 
+
+class BlurbReport(models.Model):
+    """A user report on a rating's public 'quick take' blurb (reactive moderation). Mirrors ReviewReport.
+    FKs the RATING, so it follows the rating through Concept.absorb() automatically -- when absorb dedups a
+    rating the report cascades with it, when it re-points a rating the report stays attached. No absorb
+    branch needed (same reason RoadmapEditLock needs none: it hangs off a handled parent, not Concept)."""
+    REPORT_REASONS = [
+        ('spam', 'Spam'),
+        ('harassment', 'Harassment'),
+        ('inappropriate', 'Inappropriate Content'),
+        ('spoiler', 'Unmarked Spoiler'),
+        ('other', 'Other'),
+    ]
+    REPORT_STATUS = [
+        ('pending', 'Pending Review'),
+        ('reviewed', 'Reviewed'),
+        ('dismissed', 'Dismissed'),
+        ('action_taken', 'Action Taken'),
+    ]
+
+    rating = models.ForeignKey(UserConceptRating, on_delete=models.CASCADE, related_name='blurb_reports')
+    reporter = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='submitted_blurb_reports')
+    reason = models.CharField(max_length=20, choices=REPORT_REASONS)
+    details = models.TextField(max_length=500, blank=True, help_text="Additional context for the report")
+    status = models.CharField(max_length=20, choices=REPORT_STATUS, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='reviewed_blurb_reports')
+    admin_notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ['rating', 'reporter']
+        indexes = [
+            models.Index(fields=['status', '-created_at'], name='blurbreport_status_idx'),
+            models.Index(fields=['rating'], name='blurbreport_rating_idx'),
+        ]
+
+    def __str__(self):
+        return f"Blurb report on rating {self.rating_id} by {self.reporter.psn_username}"
+
+
 class ProfileGame(models.Model):
     profile = models.ForeignKey(
         Profile, on_delete=models.CASCADE, related_name="played_games"
