@@ -37,7 +37,7 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
         {% comment %} Star distribution: the SHAPE the average hides -- a 4.0 that's 75% 5-star + 15% 1-star is
         polarizing, not just "above average." Whole-star buckets from RatingService; shown once there are a few
         ratings (a 1-2 rating histogram says nothing). game-detail.js updates the bars live on submit. {% endcomment %}
-        {% if averages.count >= 3 and averages.distribution %}
+        {% if averages.distribution %}
         <div class="gd-dist" data-cond-dist role="img" aria-label="Star rating distribution, 1 to 5 stars">
             {% for row in averages.distribution reversed %}
             <div class="gd-dist__col" data-dist-star="{{ row.star }}" title="{{ row.star }}-star: {{ row.count }} rating{{ row.count|pluralize }} ({{ row.pct }}%)">

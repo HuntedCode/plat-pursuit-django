@@ -208,8 +208,10 @@ def test_distribution_histogram_shown_with_enough_ratings():
     assert 'height: 100%' in html                  # the 5-star column (the tallest) fills the chart
 
 
-def test_distribution_histogram_hidden_below_threshold():
-    assert 'gd-dist' not in _conditions({**_AVERAGES, 'count': 2, 'distribution': _DIST})   # <3 ratings -> hidden
+def test_distribution_histogram_shows_whenever_rated():
+    """No count gate: the histogram renders for any rated group (only absent when there are no ratings)."""
+    assert 'gd-dist' in _conditions({**_AVERAGES, 'count': 2, 'distribution': _DIST})
+    assert 'gd-dist' not in _conditions(None)   # unrated -> no averages -> no histogram
 
 
 # ── "Your take" personal comparison band ────────────────────────────────────
