@@ -1326,15 +1326,17 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-guide__rule::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; border-radius: 50%; background: color-mix(in oklab, var(--pp-primary) 60%, transparent); }
 .gd-guide__rule b { color: var(--pp-text); font-weight: 700; }
 
-/* ---- Quick takes: individual community blurbs, in their own framed .gd-acard section ---- */
-.gd-blurbs { display: flex; flex-direction: column; gap: 12px; }
+/* ---- Quick takes: individual community blurbs as a BARE card grid (the cards are the frames, like the
+   games-list browse grid), under a section label -- no outer card so each card reads clearly. ---- */
+.gd-blurbs { display: flex; flex-direction: column; gap: 10px; }
 .gd-blurbs.is-empty { display: none; }
+.gd-blurbs__title { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
 /* Wider-than-tall cards: a ~320px floor packs 2 columns on a standard panel (3 when very wide, 1 when narrow),
    so a full 140-char blurb lands in ~2-3 lines rather than a skinny 6-line column. auto-fill (not auto-fit)
    keeps a lone card at track width instead of stretching it to the full panel. */
 .gd-blurbs__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 9px; }
 
-.gd-blurb { display: flex; gap: 10px; padding: 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); }
+.gd-blurb { display: flex; gap: 10px; padding: 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); }
 .gd-blurb--you { border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 5%, transparent); }
 .gd-blurb.is-reported { opacity: 0.45; }
 .gd-blurb.is-reported .gd-blurb__report { pointer-events: none; }

@@ -83,12 +83,12 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
 </div>
 </section>
 
-{% comment %} Quick takes: the individual human voices under the aggregate, in their own framed section (About
--style). Hidden entirely when a group has none -- no empty box. Fed by UserConceptRating.visible_blurbs()
-(bounded preview, index-backed). game-detail.js live-prepends the viewer's own card here after they post,
-un-hiding the section when it's the first blurb. {% endcomment %}
-<section class="gd-acard gd-blurbs{% if not blurbs %} is-empty{% endif %}" data-blurbs data-group-id="{{ group_id }}">
-    <h3 class="gd-acard__h">Quick takes</h3>
+{% comment %} Quick takes: the individual human voices under the aggregate. A BARE card grid (the blurb cards
+are the frames, so no outer card -- item-grid rule, same as the games list), under a section label. Hidden
+entirely when a group has none. Fed by UserConceptRating.visible_blurbs() (bounded preview, index-backed).
+game-detail.js live-prepends the viewer's own card here after they post, un-hiding when it's the first. {% endcomment %}
+<section class="gd-blurbs{% if not blurbs %} is-empty{% endif %}" data-blurbs data-group-id="{{ group_id }}">
+    <h3 class="gd-blurbs__title">Quick takes</h3>
     <ul class="gd-blurbs__list" data-blurbs-list>
         {% for b in blurbs %}{% include 'trophies/partials/game_detail/_blurb_card.html' %}{% endfor %}
     </ul>
