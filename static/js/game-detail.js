@@ -1418,6 +1418,20 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         form.querySelectorAll('[data-gd-qr-slider]').forEach((s) => s.addEventListener('input', () => setVal(s.name)));
 
+        // Blurb: live char counter + the guidelines fine print (shown only while writing one and not yet agreed).
+        const MAX_BLURB = 140;
+        const area = form.querySelector('[data-gd-qr-blurb]');
+        const countEl = form.querySelector('[data-gd-qr-count]');
+        const fineEl = form.querySelector('[data-gd-qr-fine]');
+        const alreadyAgreed = () => form.dataset.guidelinesAgreed === '1';
+        function refreshBlurbUi() {
+            if (!area) return;
+            const left = MAX_BLURB - area.value.length;
+            if (countEl) { countEl.textContent = String(left); countEl.classList.toggle('is-low', left <= 20); }
+            if (fineEl) fineEl.hidden = !(area.value.trim().length > 0 && !alreadyAgreed());
+        }
+        if (area) area.addEventListener('input', refreshBlurbUi);
+
         let srcBtn = null, conceptId = null, groupId = null;
 
         // gd-modal close affordances (button / backdrop / Esc / swipe) + page recede -- same as the page's
@@ -1445,6 +1459,7 @@ document.addEventListener('DOMContentLoaded', () => {
             form.querySelector('[name="fun_ranking"]').value = ex ? ex.fun_ranking : 5;
             form.querySelector('[name="overall_rating"]').value = ex ? ex.overall_rating : 3;
             SLIDER_KEYS.forEach(setVal);
+            if (area) { area.value = btn.dataset.existingBlurb || ''; refreshBlurbUi(); }
 
             const title = document.getElementById('gd-qr-title');
             if (title) title.textContent = ex ? 'Update your rating' : 'Rate this game';
@@ -1492,14 +1507,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const submit = form.querySelector('[data-gd-qr-submit]');
             if (submit) { submit.disabled = true; submit.textContent = 'Saving…'; }
+            const blurbVal = area ? area.value.trim() : '';
             const payload = {
                 difficulty: parseInt(form.querySelector('[name="difficulty"]').value, 10),
                 grindiness: parseInt(form.querySelector('[name="grindiness"]').value, 10),
                 hours_to_platinum: hours,
                 fun_ranking: parseInt(form.querySelector('[name="fun_ranking"]').value, 10),
                 overall_rating: parseFloat(form.querySelector('[name="overall_rating"]').value),
+                blurb: blurbVal,
             };
             try {
+                // Posting a quick take records guidelines agreement (the fine print is the notice). Idempotent,
+                // and done first so the rate call doesn't 403 with needs_guidelines.
+                if (blurbVal && !alreadyAgreed()) {
+                    try { await PlatPursuit.API.post('/api/v1/guidelines/agree/', {}); form.dataset.guidelinesAgreed = '1'; }
+                    catch (_) { /* fall through; the rate call surfaces needs_guidelines if this failed */ }
+                }
                 const data = await PlatPursuit.API.post('/api/v1/ratings/' + conceptId + '/group/' + groupId + '/rate/', payload);
                 PlatPursuit.ToastManager.show(data.message || 'Rating saved!', 'success');
 
@@ -1527,8 +1550,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         const nm = tile.querySelector('[data-cond-num]'); if (nm) nm.textContent = v.toFixed(1);
                     });
                 }
+                // Live-sync the viewer's own quick take in this group's strip (add / replace / remove).
+                syncOwnBlurb(panel, blurbVal, payload.overall_rating);
                 if (srcBtn) {
-                    srcBtn.dataset.existing = JSON.stringify(payload);
+                    // Keep data-existing purely numeric (the prefill contract); the blurb rides its own attr.
+                    srcBtn.dataset.existing = JSON.stringify({
+                        difficulty: payload.difficulty, grindiness: payload.grindiness,
+                        hours_to_platinum: payload.hours_to_platinum, fun_ranking: payload.fun_ranking,
+                        overall_rating: payload.overall_rating,
+                    });
+                    srcBtn.dataset.existingBlurb = blurbVal;
                     const lbl = srcBtn.querySelector('span');
                     if (lbl) lbl.textContent = 'Update rating';
                 }
@@ -1541,5 +1572,93 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (submit) { submit.disabled = false; submit.textContent = srcBtn?.dataset.existing ? 'Update rating' : 'Submit rating'; }
             }
         });
+
+        // Build the viewer's own quick-take card (matches _blurb_card.html, You variant, no report). Name and
+        // text go in via textContent -- never innerHTML -- so the viewer's own blurb can't inject markup.
+        function buildBlurbCard(text, overall) {
+            const li = document.createElement('li');
+            li.className = 'gd-blurb gd-blurb--you';
+            li.setAttribute('data-blurb-own', '');
+            const url = root.dataset.viewerUrl || '#';
+            const av = root.dataset.viewerAvatar || '';
+            const fill = Math.max(0, Math.min(100, (overall / 5) * 100));
+            li.innerHTML =
+                '<a class="gd-blurb__av" href="' + url + '" tabindex="-1" aria-hidden="true">' +
+                (av ? '<img alt="" loading="lazy" />' : '') + '</a>' +
+                '<div class="gd-blurb__body"><div class="gd-blurb__head">' +
+                '<a class="gd-blurb__name" href="' + url + '"></a>' +
+                '<span class="gd-blurb__you">You</span>' +
+                '<span class="gd-blurb__stars" style="--fill: ' + fill + '%;" role="img" aria-label="' + overall.toFixed(1) + ' out of 5"><span class="gd-blurb__stars-on"></span></span>' +
+                '</div><p class="gd-blurb__text"></p>' +
+                '<div class="gd-blurb__foot"><time class="gd-blurb__time">just now</time></div></div>';
+            const img = li.querySelector('.gd-blurb__av img'); if (img) img.src = av;
+            li.querySelector('.gd-blurb__name').textContent = root.dataset.viewerName || 'You';
+            li.querySelector('.gd-blurb__text').textContent = text;
+            return li;
+        }
+        // Add / replace / remove the viewer's own card in a group's Quick takes strip after they post.
+        function syncOwnBlurb(panel, text, overall) {
+            const wrap = panel && panel.querySelector('[data-blurbs]');
+            if (!wrap) return;
+            const list = wrap.querySelector('[data-blurbs-list]');
+            const existing = list && list.querySelector('[data-blurb-own]');
+            if (!text) {   // blurb cleared -> drop the card; re-empty the strip if it was the only one
+                if (existing) existing.remove();
+                if (list && !list.children.length) wrap.classList.add('is-empty');
+                return;
+            }
+            const fresh = buildBlurbCard(text, overall);
+            if (existing) existing.replaceWith(fresh);
+            else if (list) list.insertBefore(fresh, list.firstChild);
+            wrap.classList.remove('is-empty');
+        }
+
+        // ── Report a quick take. One shared modal, opened from any card's [data-blurb-report]. ──
+        const reportModal = document.getElementById('gd-blurb-report-modal');
+        const reportForm = document.getElementById('gd-blurb-report-form');
+        if (reportModal && reportForm) {
+            let reportId = null, reportCard = null;
+            function closeReport() { pageRecede(false); if (reportModal.close && reportModal.open) reportModal.close(); }
+            reportModal.querySelectorAll('[data-gd-modal-close]').forEach((b) => b.addEventListener('click', closeReport));
+            reportModal.addEventListener('click', (e) => { if (e.target === reportModal) closeReport(); });
+            reportModal.addEventListener('cancel', (e) => { e.preventDefault(); closeReport(); });
+            if (PlatPursuit.dismissableSheet) PlatPursuit.dismissableSheet(reportModal, { onClose: closeReport });
+
+            document.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-blurb-report]');
+                if (!btn) return;
+                reportId = btn.dataset.ratingId;
+                reportCard = btn.closest('.gd-blurb');
+                reportForm.reset();
+                if (reportModal.showModal && !reportModal.open) {
+                    const y = window.scrollY; reportModal.showModal();
+                    if (window.scrollY !== y) window.scrollTo(0, y);
+                    pageRecede(true);
+                }
+            });
+
+            reportForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!reportId) return;
+                const rSubmit = reportForm.querySelector('[data-gd-report-submit]');
+                if (rSubmit) { rSubmit.disabled = true; rSubmit.textContent = 'Sending…'; }
+                const payload = {
+                    reason: reportForm.querySelector('[data-gd-report-reason]').value,
+                    details: (reportForm.querySelector('[data-gd-report-details]').value || '').slice(0, 500),
+                };
+                try {
+                    const data = await PlatPursuit.API.post('/api/v1/ratings/blurb/' + reportId + '/report/', payload);
+                    PlatPursuit.ToastManager.show(data.message || 'Thanks, our team will take a look.', 'success');
+                    if (reportCard) reportCard.classList.add('is-reported');
+                    closeReport();
+                } catch (error) {
+                    let msg = 'Could not submit report.';
+                    try { const ed = await error.response?.json(); msg = ed?.error || msg; } catch (_) { /* ignore */ }
+                    PlatPursuit.ToastManager.show(msg, 'error');
+                } finally {
+                    if (rSubmit) { rSubmit.disabled = false; rSubmit.textContent = 'Submit report'; }
+                }
+            });
+        }
     })();
 });

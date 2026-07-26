@@ -7,7 +7,7 @@ fun_ranking, overall_rating) are the API contract -- do not rename. Value/label/
         <h3 id="gd-qr-title">Rate this game</h3>
         <button type="button" class="gd-modal__close" data-gd-modal-close aria-label="Close">&times;</button>
     </div>
-    <form id="gd-qr-form" class="gd-modal__body gd-qr">
+    <form id="gd-qr-form" class="gd-modal__body gd-qr" data-guidelines-agreed="{% if request.user.is_authenticated and request.user.profile.guidelines_agreed %}1{% else %}0{% endif %}">
         <label class="gd-qr__field">
             <span class="gd-qr__lbl">Difficulty <span class="gd-qr__val" data-gd-qr-val="difficulty">5</span></span>
             <input type="range" name="difficulty" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
@@ -31,6 +31,14 @@ fun_ranking, overall_rating) are the API contract -- do not rename. Value/label/
             <span class="gd-qr__lbl">Overall <span class="gd-qr__val" data-gd-qr-val="overall_rating">3.0</span><span class="gd-qr__of">/ 5</span></span>
             <input type="range" name="overall_rating" min="0.5" max="5" step="0.5" value="3" class="gd-qr__range" data-gd-qr-slider />
             <span class="gd-qr__scale"><span>0.5</span><span>5</span></span>
+        </label>
+        {% comment %} Optional public quick take. Name is "blurb" (form contract). The counter shows chars
+        remaining; the fine print is the guidelines notice and only appears (via JS) when the viewer is writing
+        one and has not agreed before -- posting then records agreement (POST guidelines/agree/ on submit). {% endcomment %}
+        <label class="gd-qr__field gd-qr__field--blurb">
+            <span class="gd-qr__lbl">Quick take <span class="gd-qr__opt">optional</span><span class="gd-qr__count" data-gd-qr-count>140</span></span>
+            <textarea name="blurb" maxlength="140" rows="2" class="gd-qr__area" data-gd-qr-blurb placeholder="How was the platinum? One line for fellow hunters."></textarea>
+            <span class="gd-qr__fine" data-gd-qr-fine hidden>By posting, you agree to our <a href="{% url 'terms' %}" target="_blank" rel="noopener">community guidelines</a>.</span>
         </label>
         <div class="gd-qr__actions">
             <button type="button" class="gd-btn gd-btn--ghost" data-gd-modal-close>Cancel</button>

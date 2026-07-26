@@ -1260,4 +1260,60 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-qr__scale { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--pp-text-mute); }
 .gd-qr__actions { display: flex; gap: 10px; margin-top: 4px; }
 .gd-qr__actions .gd-btn { flex: 1; justify-content: center; }
-@media (prefers-reduced-motion: reduce) { .gd-rate__dropbtn svg { transition: none; } }
+
+/* Blurb field inside the quick-rate modal: textarea + remaining-char counter + guidelines fine print. */
+.gd-qr__field--blurb { gap: 5px; }
+.gd-qr__opt { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+.gd-qr__count { margin-left: auto; font-size: 0.7rem; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.gd-qr__count.is-low { color: var(--pp-warning); }
+.gd-qr__area { width: 100%; padding: 9px 11px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font: inherit; font-size: 0.85rem; line-height: 1.4; resize: none; }
+.gd-qr__area::placeholder { color: var(--pp-text-mute); }
+.gd-qr__area:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+.gd-qr__fine { font-size: 0.68rem; color: var(--pp-text-mute); }
+.gd-qr__fine a { color: var(--pp-primary); text-decoration: none; }
+.gd-qr__fine a:hover { text-decoration: underline; }
+
+/* ---- Quick takes: individual community blurbs under the aggregate (a quiet, secondary voice) ---- */
+.gd-blurbs { display: flex; flex-direction: column; gap: 11px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--pp-divider); }
+.gd-blurbs.is-empty { display: none; }
+.gd-blurbs__title { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pp-text-mute); }
+.gd-blurbs__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(238px, 1fr)); gap: 9px; }
+
+.gd-blurb { display: flex; gap: 10px; padding: 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); }
+.gd-blurb--you { border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 5%, transparent); }
+.gd-blurb.is-reported { opacity: 0.45; }
+.gd-blurb.is-reported .gd-blurb__report { pointer-events: none; }
+.gd-blurb__av { flex: none; width: 34px; height: 34px; border-radius: 50%; overflow: hidden; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }
+.gd-blurb__av img { width: 100%; height: 100%; object-fit: cover; }
+.gd-blurb__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.gd-blurb__head { display: flex; align-items: center; gap: 7px; }
+.gd-blurb__name { font-size: 0.8rem; font-weight: 700; color: var(--pp-text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-blurb__name:hover { color: var(--pp-primary); }
+.gd-blurb__you { flex: none; font-size: 0.56rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 15%, transparent); padding: 1px 6px; border-radius: 999px; }
+/* Fractional gold stars: same two-layer technique as the conditions hero, sized down for the card. */
+.gd-blurb__stars { position: relative; display: inline-block; flex: none; margin-left: auto; font-size: 0.78rem; line-height: 1; letter-spacing: 2px; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
+.gd-blurb__stars::before { content: "\2605\2605\2605\2605\2605"; }
+.gd-blurb__stars-on { position: absolute; top: 0; left: 0; width: var(--fill, 0%); overflow: hidden; white-space: nowrap; color: var(--color-trophy-gold); }
+.gd-blurb__stars-on::before { content: "\2605\2605\2605\2605\2605"; }
+.gd-blurb__text { font-size: 0.86rem; line-height: 1.42; color: var(--pp-text-dim); overflow-wrap: anywhere; }
+.gd-blurb__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 1px; }
+.gd-blurb__time { font-size: 0.66rem; color: var(--pp-text-mute); }
+.gd-blurb__report { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: none; border-radius: var(--pp-radius-sm); background: none; color: var(--pp-text-mute); cursor: pointer; opacity: 0; transition: opacity var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-blurb__report svg { width: 14px; height: 14px; }
+.gd-blurb:hover .gd-blurb__report, .gd-blurb__report:focus-visible { opacity: 1; }
+.gd-blurb__report:hover { color: var(--pp-error); background: color-mix(in oklab, var(--pp-error) 12%, transparent); }
+/* Coarse pointers have no hover to reveal the report control, so keep it faintly visible there. */
+@media (hover: none) { .gd-blurb__report { opacity: 0.6; } }
+
+/* ---- Report-a-blurb modal (gd-modal--report) ---- */
+.gd-modal--report { width: min(94vw, 440px); max-width: 440px; }
+.gd-report { display: flex; flex-direction: column; gap: 14px; }
+.gd-report__lead { font-size: 0.82rem; color: var(--pp-text-dim); line-height: 1.4; }
+.gd-report__field { display: flex; flex-direction: column; gap: 6px; }
+.gd-report__lbl { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 600; color: var(--pp-text); }
+.gd-report__select, .gd-report__area { width: 100%; padding: 9px 11px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font: inherit; font-size: 0.85rem; }
+.gd-report__area { line-height: 1.4; resize: none; }
+.gd-report__select:focus, .gd-report__area:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+.gd-report__area::placeholder { color: var(--pp-text-mute); }
+
+@media (prefers-reduced-motion: reduce) { .gd-rate__dropbtn svg { transition: none; } .gd-blurb__report { transition: none; } }

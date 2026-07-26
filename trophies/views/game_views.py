@@ -878,10 +878,16 @@ class GameDetailView(DetailView):
             game__concept=game.concept, trophy_type='platinum'
         ).exists()
 
+        # Public "quick take" blurbs shown under each group's ratings. Bounded preview per group, ordered
+        # newest-first (model default) and backed by the partial rating_blurb_idx, so it stays whale-safe:
+        # one [:N] query per group with the profile joined so avatars/names don't N+1.
+        BLURB_PREVIEW_LIMIT = 6
+
         community_tabs = []
         for ctg in ctgs:
             is_base = ctg.trophy_group_id == 'default'
             has_plat = is_base and concept_has_plat
+            ctg_fk = None if is_base else ctg
 
             tab_data = {
                 'ctg': ctg,
@@ -891,6 +897,11 @@ class GameDetailView(DetailView):
                 'can_rate': False,
                 'can_rate_reason': None,
                 'user_rating': None,
+                'blurbs': list(
+                    UserConceptRating.visible_blurbs()
+                    .filter(concept=game.concept, concept_trophy_group=ctg_fk)
+                    .select_related('profile')[:BLURB_PREVIEW_LIMIT]
+                ),
             }
             if profile and profile.is_linked:
                 can_rate, rate_reason = ConceptTrophyGroupService.can_rate_group(
@@ -899,7 +910,6 @@ class GameDetailView(DetailView):
                 tab_data['can_rate'] = can_rate
                 tab_data['can_rate_reason'] = rate_reason
 
-                ctg_fk = ctg if not is_base else None
                 tab_data['user_rating'] = UserConceptRating.objects.filter(
                     profile=profile, concept=game.concept,
                     concept_trophy_group=ctg_fk,
@@ -907,6 +917,8 @@ class GameDetailView(DetailView):
 
             community_tabs.append(tab_data)
         context['community_tabs'] = community_tabs
+        # Lets each blurb card mark the viewer's own (You pill, no self-report) without a per-row query.
+        context['viewer_profile_id'] = profile.id if profile else None
 
         # Related badges — presented as shared Medallion objects. Build a showcase frame per
         # badge (profile=None -> full "as-designed" look, no per-viewer queries; include_live_stats

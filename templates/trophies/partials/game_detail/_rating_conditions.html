@@ -62,9 +62,21 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
             data-concept-id="{{ concept_id }}"
             data-group-id="{{ group_id }}"
             data-hours-label="{{ hours_label_long|default:'Hours to Platinum' }}"
-            {% if user_rating %}data-existing='{"difficulty":{{ user_rating.difficulty|default:5 }},"grindiness":{{ user_rating.grindiness|default:5 }},"hours_to_platinum":{{ user_rating.hours_to_platinum|default:0 }},"fun_ranking":{{ user_rating.fun_ranking|default:5 }},"overall_rating":{{ user_rating.overall_rating|default:"3.0" }}}'{% endif %}>
+            {% if user_rating %}data-existing='{"difficulty":{{ user_rating.difficulty|default:5 }},"grindiness":{{ user_rating.grindiness|default:5 }},"hours_to_platinum":{{ user_rating.hours_to_platinum|default:0 }},"fun_ranking":{{ user_rating.fun_ranking|default:5 }},"overall_rating":{{ user_rating.overall_rating|default:"3.0" }}}'{% endif %}
+            {% if user_rating.blurb %}data-existing-blurb="{{ user_rating.blurb }}"{% endif %}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.79 21.35a.53.53 0 0 1-.771-.56l.882-5.139a2.12 2.12 0 0 0-.611-1.879L2.554 10.135a.53.53 0 0 1 .294-.904l5.166-.756a2.12 2.12 0 0 0 1.596-1.16z"/></svg>
         <span>{% if user_rating %}Update rating{% else %}Rate this game{% endif %}</span>
     </button>
     {% endif %}
+</div>
+
+{% comment %} Quick takes: the individual human voices under the aggregate. A quiet, secondary strip (the
+conditions card above is the headline). Hidden entirely when a group has none -- no empty box. Fed by
+UserConceptRating.visible_blurbs() (bounded preview, index-backed). game-detail.js live-prepends the viewer's
+own card here after they post, creating this block if it's the first blurb. {% endcomment %}
+<div class="gd-blurbs{% if not blurbs %} is-empty{% endif %}" data-blurbs data-group-id="{{ group_id }}">
+    <h4 class="gd-blurbs__title">Quick takes</h4>
+    <ul class="gd-blurbs__list" data-blurbs-list>
+        {% for b in blurbs %}{% include 'trophies/partials/game_detail/_blurb_card.html' %}{% endfor %}
+    </ul>
 </div>

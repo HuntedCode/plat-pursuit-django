@@ -4,7 +4,7 @@ queries, whale-safe) over the per-group community ratings. DLC selector is ADAPT
 trophy groups, a Base Game pill + "DLC" dropdown once there are many (some games have a TON of DLC sets). One
 `.gd-rate__panel` per group is server-rendered; game-detail.js toggles which shows (data-rate-ctg / -panel) and
 runs the reveal (revealRatings). Players drill-down lives in the Ranks tab now; written reviews are deferred. {% endcomment %}
-<section class="gd-rate" data-gd-rate>
+<section class="gd-rate" data-gd-rate{% if viewer_profile_id and request.user.profile %} data-viewer-name="{{ request.user.profile.display_psn_username|default:request.user.profile.psn_username }}" data-viewer-avatar="{{ request.user.profile.avatar_url|default:'' }}" data-viewer-url="{% url 'profile_detail' request.user.profile.psn_username %}"{% endif %}>
 
     {# ── Community stats: player-count context. Denormed on Game, recomputed nightly. ── #}
     <div class="gd-rate__stats">
@@ -64,9 +64,10 @@ runs the reveal (revealRatings). Players drill-down lives in the Ranks tab now; 
     {# ── One ratings panel per group; only the first (base) shows until a selector switch. ── #}
     {% for ct in community_tabs %}
     <div class="gd-rate__panel{% if not forloop.first %} is-hidden{% endif %}" data-rate-panel="{{ ct.ctg.id }}">
-        {% include 'trophies/partials/game_detail/_rating_conditions.html' with averages=ct.averages can_rate=ct.can_rate user_rating=ct.user_rating concept_id=game.concept.id group_id=ct.ctg.trophy_group_id hours_label=ct.hours_label hours_label_long=ct.hours_label_long %}
+        {% include 'trophies/partials/game_detail/_rating_conditions.html' with averages=ct.averages can_rate=ct.can_rate user_rating=ct.user_rating blurbs=ct.blurbs concept_id=game.concept.id group_id=ct.ctg.trophy_group_id hours_label=ct.hours_label hours_label_long=ct.hours_label_long %}
     </div>
     {% endfor %}
 </section>
 
 {% include 'trophies/partials/game_detail/quick_rate_modal.html' %}
+{% include 'trophies/partials/game_detail/blurb_report_modal.html' %}

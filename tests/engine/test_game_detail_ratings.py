@@ -16,7 +16,8 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from core.templatetags.custom_filters import rating_tone, rating_verdict, rating_summary
-from tests.factories import ConceptFactory, ConceptTrophyGroupFactory, GameFactory
+from trophies.models import UserConceptRating
+from tests.factories import ConceptFactory, ConceptTrophyGroupFactory, GameFactory, ProfileFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -215,3 +216,49 @@ def test_quick_rate_modal_form_contract(client):
     assert 'id="gd-qr-modal"' in content
     for name in ('difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking', 'overall_rating'):
         assert f'name="{name}"' in content
+    assert 'name="blurb"' in content            # the optional quick-take field
+    assert 'data-gd-qr-count' in content        # + its char counter
+
+
+# ── Quick takes: the community blurb strip under the aggregate ──────────────
+
+def _blurb_row(concept, profile, text, ctg=None, hidden=False):
+    return UserConceptRating.objects.create(
+        profile=profile, concept=concept, concept_trophy_group=ctg,
+        difficulty=6, grindiness=4, hours_to_platinum=30, fun_ranking=8, overall_rating=4.5,
+        blurb=text, blurb_hidden=hidden,
+    )
+
+
+def test_conditions_quick_takes_empty_when_no_blurbs():
+    """No blurbs -> the strip renders muted+hidden (is-empty), so JS can fill it live, but shows no cards."""
+    html = _conditions(_AVERAGES)
+    assert 'gd-blurbs is-empty' in html
+    assert 'gd-blurb__text' not in html
+
+
+def test_conditions_quick_takes_flag_own_and_gate_report():
+    """The viewer's own blurb gets a You pill and no report control; others' cards are reportable."""
+    concept = ConceptFactory()
+    mine = ProfileFactory()
+    ours = _blurb_row(concept, mine, 'My own take.')
+    theirs = _blurb_row(concept, ProfileFactory(), 'Great combat, brutal plat.')
+    html = _conditions(_AVERAGES, blurbs=[ours, theirs], viewer_profile_id=mine.id)
+    assert 'Quick takes' in html and 'is-empty' not in html
+    assert 'My own take.' in html and 'Great combat, brutal plat.' in html
+    assert 'gd-blurb__you' in html                              # own card flagged
+    assert html.count('data-blurb-report') == 1                 # only the other card is reportable
+    assert f'data-rating-id="{theirs.id}"' in html
+    assert f'data-rating-id="{ours.id}"' not in html            # can't report yourself
+
+
+def test_ratings_page_shows_visible_blurbs_and_hides_hidden(client):
+    """The view feeds visible_blurbs(): present blurbs render; a staff-hidden one never reaches the page."""
+    concept = ConceptFactory()
+    ConceptTrophyGroupFactory(concept=concept, trophy_group_id='default', display_name='Base Game')
+    _blurb_row(concept, ProfileFactory(), 'Shown quick take.')
+    _blurb_row(concept, ProfileFactory(), 'Hidden quick take.', hidden=True)
+    content = _detail(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
+    assert 'Quick takes' in content
+    assert 'Shown quick take.' in content
+    assert 'Hidden quick take.' not in content

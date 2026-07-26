@@ -1,0 +1,27 @@
+{% load humanize %}
+{% comment %} One public "quick take" blurb. The viewer's own row (b.profile_id == viewer_profile_id) shows a
+You pill and drops the report affordance -- you can't report yourself. The blurb renders as plain, auto-escaped
+text ({{ b.blurb }}) per the visible_blurbs() security note: the stored value is UNESCAPED, HTML-text-context
+only. game-detail.js builds an identical node for the live-prepend after you post, so keep the class / data
+hooks (gd-blurb, data-blurb-id, data-blurb-own, gd-blurb__*) in sync with buildBlurbCard() there. {% endcomment %}
+<li class="gd-blurb{% if viewer_profile_id and b.profile_id == viewer_profile_id %} gd-blurb--you{% endif %}" data-blurb-id="{{ b.id }}"{% if viewer_profile_id and b.profile_id == viewer_profile_id %} data-blurb-own{% endif %}>
+    <a class="gd-blurb__av" href="{% url 'profile_detail' b.profile.psn_username %}" tabindex="-1" aria-hidden="true">
+        {% if b.profile.avatar_url %}<img src="{{ b.profile.avatar_url }}" alt="" loading="lazy" />{% endif %}
+    </a>
+    <div class="gd-blurb__body">
+        <div class="gd-blurb__head">
+            <a class="gd-blurb__name" href="{% url 'profile_detail' b.profile.psn_username %}">{{ b.profile.display_psn_username|default:b.profile.psn_username }}</a>
+            {% if viewer_profile_id and b.profile_id == viewer_profile_id %}<span class="gd-blurb__you">You</span>{% endif %}
+            <span class="gd-blurb__stars" style="--fill: {% widthratio b.overall_rating 5 100 %}%;" role="img" aria-label="{{ b.overall_rating|floatformat:1 }} out of 5"><span class="gd-blurb__stars-on"></span></span>
+        </div>
+        <p class="gd-blurb__text">{{ b.blurb }}</p>
+        <div class="gd-blurb__foot">
+            <time class="gd-blurb__time" datetime="{{ b.updated_at|date:'c' }}">{{ b.updated_at|timesince }} ago</time>
+            {% if viewer_profile_id and b.profile_id != viewer_profile_id %}
+            <button type="button" class="gd-blurb__report" data-blurb-report data-rating-id="{{ b.id }}" aria-label="Report this quick take" title="Report">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</li>
