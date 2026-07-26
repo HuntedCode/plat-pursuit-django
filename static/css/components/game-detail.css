@@ -1248,7 +1248,9 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* Fractional gold stars: a dim 5-star base with a gold overlay clipped to the score % (--fill). */
 .gd-cond__stars { position: relative; display: inline-block; font-size: 1.35rem; line-height: 1; letter-spacing: 3px; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
 .gd-cond__stars::before { content: "\2605\2605\2605\2605\2605"; }
-.gd-cond__stars-on { position: absolute; top: 0; left: 0; width: var(--fill, 0%); overflow: hidden; white-space: nowrap; color: var(--color-trophy-gold); transition: width var(--pp-dur) var(--pp-ease); }
+/* Rating stars use their OWN brighter, warmer gold -- distinct from the muted metallic --color-trophy-gold
+   (the site-wide trophy-tier color), which reads dull as a rating star. This one pops and invites. */
+.gd-cond__stars-on { position: absolute; top: 0; left: 0; width: var(--fill, 0%); overflow: hidden; white-space: nowrap; color: oklch(0.84 0.15 88); transition: width var(--pp-dur) var(--pp-ease); }
 .gd-cond__stars-on::before { content: "\2605\2605\2605\2605\2605"; }
 .gd-cond__scoreline { display: inline-flex; align-items: baseline; gap: 1px; }
 .gd-cond__score-n { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--pp-text); font-variant-numeric: tabular-nums; }
@@ -1260,14 +1262,16 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* Rating spread: a compact column chart that shares the metrics row with the quality tiles (framed like a
    fourth tile). One column per exact 0.5 step (0.5 left -> 5.0 right). Each column is a VISIBLE slot sitting
    on a baseline rule -- App Store / iOS-Health style -- so short bars read as a silhouette, not floating
-   squares. Gold fills the earned portion; whole-star slots are a touch stronger + numeral-labeled so the
-   eye anchors on 1..5, half-steps fill quietly between. */
+   squares. Cyan (brand accent) fills the earned portion; the count rides just above each bar's top; whole-
+   star slots are a touch stronger + numeral-labeled so the eye anchors on 1..5, half-steps fill between. */
 .gd-cond__disttile { display: flex; flex-direction: column; gap: 7px; padding: 13px 13px 11px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); }
-.gd-dist { display: flex; align-items: flex-end; gap: 3px; flex: 1; min-height: 52px; border-bottom: 1.5px solid var(--pp-border); }
-.gd-dist__col { position: relative; flex: 1; min-width: 0; height: 100%; display: flex; align-items: flex-end; border-radius: 2px 2px 0 0; background: color-mix(in oklab, var(--pp-bg-2) 50%, transparent); overflow: hidden; }
+.gd-dist { display: flex; align-items: flex-end; gap: 3px; flex: 1; min-height: 52px; padding-top: 15px; border-bottom: 1.5px solid var(--pp-border); }   /* padding-top reserves headroom for the peak bar's count */
+.gd-dist__col { position: relative; flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; border-radius: 2px 2px 0 0; background: color-mix(in oklab, var(--pp-bg-2) 50%, transparent); overflow: visible; }
 .gd-dist__col.is-whole { background: color-mix(in oklab, var(--pp-bg-2) 74%, transparent); }
-.gd-dist__fill { width: 100%; background: var(--color-trophy-gold); border-radius: 2px 2px 0 0; transition: height var(--pp-dur) var(--pp-ease); }
-.gd-dist__col:not(.is-whole) .gd-dist__fill { background: color-mix(in oklab, var(--color-trophy-gold) 80%, transparent); }   /* half-steps read a touch quieter */
+.gd-dist__n { flex: 0 0 auto; margin-bottom: 2px; font-size: 0.58rem; font-weight: 700; line-height: 1; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.gd-dist__n:empty { display: none; }   /* zero-count bars carry no label */
+.gd-dist__fill { flex: 0 0 auto; width: 100%; background: var(--pp-primary); border-radius: 2px 2px 0 0; transition: height var(--pp-dur) var(--pp-ease); }
+.gd-dist__col:not(.is-whole) .gd-dist__fill { background: color-mix(in oklab, var(--pp-primary) 80%, transparent); }   /* half-steps read a touch quieter */
 .gd-dist__axis { display: flex; gap: 3px; }
 .gd-dist__axis span { flex: 1; min-width: 0; text-align: center; font-size: 0.6rem; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; line-height: 1; }
 
