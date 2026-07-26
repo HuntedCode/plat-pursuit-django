@@ -1389,7 +1389,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const open = toggle.getAttribute('aria-expanded') === 'true';
                 toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
                 const menu = drop && drop.querySelector('.gd-rate__dropmenu');
-                if (menu) menu.hidden = open;
+                if (menu) {
+                    menu.hidden = open;
+                    // Move focus into the menu on open so the role=menu is keyboard-operable, not Tab-only.
+                    if (!open) { const first = menu.querySelector('.gd-rate__dropitem'); if (first) first.focus(); }
+                }
                 return;
             }
             const chip = e.target.closest('[data-rate-ctg]');
@@ -1399,6 +1403,19 @@ document.addEventListener('DOMContentLoaded', () => {
             document.addEventListener('click', (e) => { if (!drop.contains(e.target)) closeDrop(); });
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && dropBtn && dropBtn.getAttribute('aria-expanded') === 'true') { closeDrop(); dropBtn.focus(); }
+            });
+            // Arrow / Home / End roving focus between DLC items while the menu is open (menu-pattern semantics).
+            drop.addEventListener('keydown', (e) => {
+                if (!dropBtn || dropBtn.getAttribute('aria-expanded') !== 'true') return;
+                if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+                const items = Array.from(drop.querySelectorAll('.gd-rate__dropitem'));
+                if (!items.length) return;
+                e.preventDefault();
+                const i = items.indexOf(document.activeElement);
+                const next = e.key === 'ArrowDown' ? (items[i + 1] || items[0])
+                    : e.key === 'ArrowUp' ? (items[i - 1] || items[items.length - 1])
+                    : e.key === 'Home' ? items[0] : items[items.length - 1];
+                next.focus();
             });
         }
 
@@ -1552,8 +1569,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 // Live-sync the viewer's "Your take" comparison band (add / update / remove).
                 if (card && avg) syncYouTake(card, payload, avg);
-                // Live-sync the viewer's own quick take in this group's strip (add / replace / remove).
-                syncOwnBlurb(panel, blurbVal, payload.overall_rating);
+                // Live-sync the viewer's own quick take in this group's strip (add / replace / remove). Prefer
+                // the server-echoed stored blurb (sanitized) over the raw typed text so the live card matches
+                // what everyone else -- and the author on reload -- will see.
+                syncOwnBlurb(panel, data.blurb ?? blurbVal, payload.overall_rating);
                 if (srcBtn) {
                     // Keep data-existing purely numeric (the prefill contract); the blurb rides its own attr.
                     srcBtn.dataset.existing = JSON.stringify({
@@ -1568,7 +1587,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 closeQr();
             } catch (error) {
                 let msg = 'Failed to save rating.';
-                try { const ed = await error.response?.json(); msg = ed?.error || msg; } catch (_) { /* ignore */ }
+                // The rate endpoint returns field validation (e.g. a banned-word blurb) under `errors` (a
+                // {field: [msgs]} dict); every other failure uses `error`. Surface the first field message so
+                // a rejected quick take explains itself instead of showing the generic fallback.
+                try {
+                    const ed = await error.response?.json();
+                    msg = ed?.error || (ed?.errors && Object.values(ed.errors)[0]?.[0]) || msg;
+                } catch (_) { /* ignore */ }
                 PlatPursuit.ToastManager.show(msg, 'error');
             } finally {
                 if (submit) { submit.disabled = false; submit.textContent = srcBtn?.dataset.existing ? 'Update rating' : 'Submit rating'; }

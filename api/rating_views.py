@@ -167,6 +167,7 @@ class GroupRatingView(APIView):
                 'success': True,
                 'message': 'Rating updated!' if existing_rating else 'Rating submitted successfully!',
                 'community_averages': updated_averages,
+                'blurb': rating.blurb,   # sanitized/stored value, so the client's live card matches on reload
             })
 
         except Exception as e:

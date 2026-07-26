@@ -106,6 +106,16 @@ def test_numbers_only_update_keeps_existing_blurb(_can, client):
 
 
 @patch(_CAN_RATE, return_value=(True, None))
+def test_rate_response_echoes_stored_blurb(_can, client):
+    """The response returns the stored (sanitized/trimmed) blurb so the client's live card matches on reload."""
+    profile, concept = ProfileFactory(is_linked=True, guidelines_agreed=True), ConceptFactory()
+    client.force_login(profile.user)
+    resp = _rate(client, concept, **_VALID, blurb='  Tidy take.  ')
+    assert resp.status_code == 200
+    assert resp.json()['blurb'] == 'Tidy take.'   # trimmed stored value echoed, not the raw input
+
+
+@patch(_CAN_RATE, return_value=(True, None))
 def test_explicit_empty_blurb_clears_it(_can, client):
     """Explicitly sending blurb='' DOES clear it (the user removed their quick take)."""
     profile, concept = ProfileFactory(is_linked=True, guidelines_agreed=True), ConceptFactory()
