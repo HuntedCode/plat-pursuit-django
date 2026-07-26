@@ -33,6 +33,21 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
         </div>
         <p class="gd-cond__summary" data-cond-summary>{% if averages %}{{ averages|rating_summary }}{% else %}Not yet rated.{% endif %}</p>
         <span class="gd-cond__count" data-rate-count>{% if averages %}{{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}Be the first to rate this.{% endif %}</span>
+
+        {% comment %} Star distribution: the SHAPE the average hides -- a 4.0 that's 75% 5-star + 15% 1-star is
+        polarizing, not just "above average." Whole-star buckets from RatingService; shown once there are a few
+        ratings (a 1-2 rating histogram says nothing). game-detail.js updates the bars live on submit. {% endcomment %}
+        {% if averages.count >= 3 and averages.distribution %}
+        <div class="gd-dist" data-cond-dist>
+            {% for row in averages.distribution %}
+            <div class="gd-dist__row" data-dist-star="{{ row.star }}">
+                <span class="gd-dist__star">{{ row.star }}<span class="gd-dist__starmark">&#9733;</span></span>
+                <span class="pp-horizon pp-horizon__track gd-dist__bar" style="--horizon-h: 7px; --horizon-progress: {{ row.pct }}%;" role="img" aria-label="{{ row.star }} stars: {{ row.count }} rating{{ row.count|pluralize }}"><span class="pp-horizon__fill"></span></span>
+                <span class="gd-dist__n" data-dist-n>{{ row.count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
     </div>
 
     {# Conditions: one icon tile per quality; the verdict word is the headline, the number a quiet subscript. #}

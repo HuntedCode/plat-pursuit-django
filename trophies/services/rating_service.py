@@ -5,7 +5,7 @@ This module handles the calculation and caching of community rating averages
 for game concepts, including difficulty, grindiness, fun, and time estimates.
 Supports both base game ratings (concept_trophy_group=NULL) and DLC group ratings.
 """
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Q
 from django.core.cache import cache
 from trophies.util_modules.language import calculate_trimmed_mean
 
@@ -29,13 +29,28 @@ class RatingService:
         if not ratings_qs.exists():
             return None
 
+        # overall_rating is 0.5-5.0 in 0.5 steps; bucket into 5 whole stars (round-half-up == ceil here), so
+        # 4.5/5.0 -> 5*, 3.5/4.0 -> 4*, etc. The star DISTRIBUTION shows shape (polarizing vs. consensus) that
+        # a single average can't -- all counted in the one aggregate pass, so no extra query.
         aggregates = ratings_qs.aggregate(
             avg_difficulty=Avg('difficulty'),
             avg_grindiness=Avg('grindiness'),
             avg_fun=Avg('fun_ranking'),
             avg_rating=Avg('overall_rating'),
-            count=Count('id')
+            count=Count('id'),
+            s5=Count('id', filter=Q(overall_rating__gte=4.5)),
+            s4=Count('id', filter=Q(overall_rating__gte=3.5, overall_rating__lt=4.5)),
+            s3=Count('id', filter=Q(overall_rating__gte=2.5, overall_rating__lt=3.5)),
+            s2=Count('id', filter=Q(overall_rating__gte=1.5, overall_rating__lt=2.5)),
+            s1=Count('id', filter=Q(overall_rating__lt=1.5)),
         )
+
+        counts = {s: aggregates.pop(f's{s}') for s in (5, 4, 3, 2, 1)}
+        total = aggregates['count'] or 1
+        aggregates['distribution'] = [
+            {'star': s, 'count': counts[s], 'pct': round(counts[s] / total * 100)}
+            for s in (5, 4, 3, 2, 1)
+        ]
 
         hours_list = list(ratings_qs.values_list('hours_to_platinum', flat=True))
         aggregates['avg_hours'] = (

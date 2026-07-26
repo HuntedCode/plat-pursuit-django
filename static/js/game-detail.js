@@ -1624,6 +1624,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         const vd = tile.querySelector('[data-cond-verdict]'); if (vd) vd.textContent = verdictOf(kind, v);
                         const nm = tile.querySelector('[data-cond-num]'); if (nm) countTo(nm, v, 1);
                     });
+                    // Live-update the star-distribution histogram bars + counts (if it's shown -- count >= 3).
+                    if (avg.distribution) {
+                        avg.distribution.forEach((row) => {
+                            const el = card.querySelector('.gd-dist__row[data-dist-star="' + row.star + '"]');
+                            if (!el) return;
+                            const bar = el.querySelector('.pp-horizon'); if (bar) bar.style.setProperty('--horizon-progress', row.pct + '%');
+                            const dn = el.querySelector('[data-dist-n]'); if (dn) dn.textContent = row.count;
+                        });
+                    }
                 }
                 // Live-sync the viewer's "Your take" comparison band (add / update / remove).
                 if (card && avg) syncYouTake(card, payload, avg);
