@@ -1287,6 +1287,16 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
     .gd-cond__hours-num { font-size: 1.05rem; }
     .gd-cond__hours-num b { font-size: 1.3rem; }
     .gd-cond__you-txt { font-size: 1rem; }
+
+    /* Quick takes scale up too (they were the one thing left at mobile size next to the enlarged aggregate),
+       and go a touch wider so the text has room. */
+    .gd-blurbs__list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+    .gd-blurb { padding: 14px 16px; gap: 12px; }
+    .gd-blurb__av { width: 40px; height: 40px; }
+    .gd-blurb__name { font-size: 0.9rem; }
+    .gd-blurb__stars { font-size: 0.88rem; }
+    .gd-blurb__text { font-size: 0.95rem; line-height: 1.5; }
+    .gd-blurb__time { font-size: 0.72rem; }
 }
 
 /* ---- Quick-rate modal (gd-modal--qr) ---- */
