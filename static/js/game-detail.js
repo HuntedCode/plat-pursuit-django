@@ -1407,6 +1407,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (m) m.hidden = true;
         }
         function selectGroup(ctgId, srcEl) {
+            const target = root.querySelector('[data-rate-panel="' + ctgId + '"]');
+            if (target && !target.classList.contains('is-hidden')) return;   // already showing this group -- no-op
             root.querySelectorAll('[data-rate-panel]').forEach((p) => p.classList.toggle('is-hidden', p.dataset.ratePanel !== ctgId));
             root.querySelectorAll('.gd-rate__segchip[data-rate-ctg]').forEach((c) => {
                 const on = c.dataset.rateCtg === ctgId;
@@ -1419,6 +1421,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const fromDrop = srcEl && srcEl.classList.contains('gd-rate__dropitem');
                 dropBtn.classList.toggle('is-active', !!fromDrop);
                 if (dropLbl) dropLbl.textContent = fromDrop ? (srcEl.textContent || 'DLC').trim() : 'DLC';
+            }
+            // Settle the newly-shown group's bands in -- the same soft rise+fade the leaderboard uses on a
+            // board switch (game-detail.js lbEntrance), for one consistent sub-switch motion across the page.
+            if (target && !reduce) {
+                target.querySelectorAll('.gd-acard, .gd-blurbs:not(.is-empty)').forEach((el) => {
+                    el.animate([{ opacity: 0.5, transform: 'translateY(7px)' }, { opacity: 1, transform: 'none' }],
+                               { duration: 240, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
+                });
             }
         }
         root.addEventListener('click', (e) => {
