@@ -1255,6 +1255,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond--empty .gd-cond__score-n, .gd-cond--empty .gd-cond__of { color: var(--pp-text-mute); }
 .gd-cond__of { font-size: 0.9rem; font-weight: 700; color: var(--pp-text-mute); }
 .gd-cond__count { font-size: 0.76rem; color: var(--pp-text-mute); }
+.gd-cond--empty .gd-cond__count { font-size: 0.84rem; color: var(--pp-text-dim); }
 
 /* Rating spread: a compact column chart that shares the metrics row with the quality tiles (framed like a
    fourth tile). One column per exact 0.5 step (0.5 left -> 5.0 right). Each column is a VISIBLE slot sitting
@@ -1276,7 +1277,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
     .gd-cond__metrics.is-wide .gd-cond__disttile { grid-column: auto; }
 }
 .gd-cond__summary { font-size: 1.18rem; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; color: var(--pp-text); text-wrap: balance; }
-.gd-cond--empty .gd-cond__summary { color: var(--pp-text-mute); font-weight: 600; }
+.gd-cond--empty .gd-cond__summary { color: var(--pp-text-dim); font-weight: 700; }
 
 /* Conditions tiles: the number is the figure (prioritized, Tally face), the verdict word its plain-language
    descriptor (polarity lives in the WORD, so nothing reads backwards). Only the icon + verdict take the tone
@@ -1299,7 +1300,19 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__unit { font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute); }
 .gd-cond--empty .gd-cond__unit { display: none; }
 .gd-cond__verdict { font-size: 0.9rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; color: var(--rate-accent); transition: color var(--pp-dur-fast) var(--pp-ease); }
-.gd-cond--empty .gd-cond__verdict { color: var(--pp-text-mute); }
+
+/* Empty state: a calm invitation, not a skeleton of dashes. Drop the big "-/5" score, the "~-h" hours, and
+   each tile's blank figure + "-" verdict; keep the outline stars as a quiet anchor and let "Not yet rated" +
+   the CTA lead, with the three quality icons as a bare, centered preview of what a rating contributes. The
+   submit handler strips .gd-cond--empty and repopulates on the first rating, so every hidden hook returns. */
+.gd-cond--empty .gd-cond__scoreline,
+.gd-cond--empty .gd-cond__hours,
+.gd-cond--empty .gd-cond__figure,
+.gd-cond--empty .gd-cond__verdict { display: none; }
+.gd-cond--empty .gd-cond__hero { gap: 7px; padding-bottom: 16px; }
+.gd-cond--empty .gd-cond__tile { padding: 6px 8px; gap: 5px; background: transparent; border-color: transparent; align-items: center; text-align: center; }
+.gd-cond--empty .gd-cond__icon { margin-bottom: 0; }
+.gd-cond--empty .gd-cond__lbl { color: var(--pp-text-dim); }
 
 /* Hours: a labeled time value, set apart from the qualities (a duration, not a 1-10 opinion). */
 .gd-cond__hours { display: inline-flex; align-items: center; gap: 9px; }
