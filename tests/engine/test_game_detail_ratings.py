@@ -116,6 +116,7 @@ def test_conditions_render_summary_verdicts_and_score():
     assert '--fill: 90%' in html                                      # gold stars filled to 4.5/5
     assert 'gd-cond--empty' not in html
     assert 'gd-cond__tile' in html and 'pp-horizon' not in html       # tiles, not a bar chart
+    assert 'HARD FACTS' not in html                                   # template comments must not leak to the page
 
 
 def test_conditions_empty_state_keeps_structure():

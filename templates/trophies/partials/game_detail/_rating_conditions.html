@@ -13,8 +13,8 @@ Expects: averages (dict|None), can_rate, user_rating, concept_id, group_id, hour
 The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat]/[data-cond-*] hooks are the contract. {% endcomment %}
 <div class="gd-cond{% if not averages %} gd-cond--empty{% endif %}" data-rate-grid>
 
-    {# Hero: the two HARD FACTS up top -- score+stars (how good) opposite time-to-plat (how long) -- then the
-       synthesized summary sentence as the headline. The subjective 'feel' qualities are the tiles below. #}
+    {% comment %} Hero: the two HARD FACTS up top -- score+stars (how good) opposite time-to-plat (how long) --
+       then the synthesized summary sentence as the headline. The subjective 'feel' qualities are the tiles below. {% endcomment %}
     <div class="gd-cond__hero">
         <div class="gd-cond__herorow">
             <div class="gd-cond__rating">
