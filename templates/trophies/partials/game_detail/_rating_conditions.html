@@ -14,28 +14,23 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
 <div class="gd-rcard gd-rate__ratingcard">
 <div class="gd-cond{% if not averages %} gd-cond--empty{% endif %}" data-rate-grid>
 
-    {% comment %} Hero: the two HARD FACTS up top -- score+stars (how good) opposite time-to-plat (how long) --
-       then the synthesized summary sentence as the headline. The subjective 'feel' qualities are the tiles below. {% endcomment %}
-    <div class="gd-cond__hero">
-        <div class="gd-cond__herorow">
+    {% comment %} Summary headline leads (the plain-language verdict). Below it a metrics band: the score, the
+    three quality tiles, and time-to-plat. On DESKTOP the band lays out horizontally (score | tiles | hours) to
+    fill the width; on mobile the score + hours share the top row with the tiles beneath. Words come from
+    rating_summary / rating_verdict, tone from rating_tone -- game-detail.js mirrors all three. {% endcomment %}
+    <p class="gd-cond__summary" data-cond-summary>{% if averages %}{{ averages|rating_summary }}{% else %}Not yet rated.{% endif %}</p>
+
+    <div class="gd-cond__metrics">
+        <div class="gd-cond__score">
             <div class="gd-cond__rating">
                 <span class="gd-cond__stars" data-cond-stars style="--fill: {% if averages %}{% widthratio averages.avg_rating 5 100 %}{% else %}0{% endif %}%;" role="img" aria-label="{% if averages %}{{ averages.avg_rating|floatformat:1 }} out of 5{% else %}Not rated{% endif %}"><span class="gd-cond__stars-on"></span></span>
                 <span class="gd-cond__scoreline"><b class="gd-cond__score-n" data-cond-score>{% if averages %}{{ averages.avg_rating|floatformat:1 }}{% else %}&mdash;{% endif %}</b><span class="gd-cond__of">/5</span></span>
             </div>
-            <div class="gd-cond__hours">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-                <span class="gd-cond__hours-txt">
-                    <span class="gd-cond__hours-num">~<b data-cond-hours>{% if averages %}{{ averages.avg_hours|floatformat:0|intcomma }}{% else %}&mdash;{% endif %}</b>h</span>
-                    <span class="gd-cond__hours-lbl">{{ hours_label_long|default:"Hours to Platinum" }}</span>
-                </span>
-            </div>
+            <span class="gd-cond__count" data-rate-count>{% if averages %}{{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}Be the first to rate this.{% endif %}</span>
         </div>
-        <p class="gd-cond__summary" data-cond-summary>{% if averages %}{{ averages|rating_summary }}{% else %}Not yet rated.{% endif %}</p>
-        <span class="gd-cond__count" data-rate-count>{% if averages %}{{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}Be the first to rate this.{% endif %}</span>
-    </div>
 
-    {# Conditions: one icon tile per quality; the verdict word is the headline, the number a quiet subscript. #}
-    <div class="gd-cond__tiles">
+        {# Conditions: one icon tile per quality; the verdict word is the headline, the number a quiet subscript. #}
+        <div class="gd-cond__tiles">
         <div class="gd-cond__tile" data-stat="difficulty"{% if averages %} data-tone="{{ averages.avg_difficulty|rating_tone:'difficulty' }}"{% endif %}>
             <svg class="gd-cond__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
             <span class="gd-cond__lbl">Difficulty</span>
@@ -53,6 +48,15 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
             <span class="gd-cond__lbl">Fun</span>
             <span class="gd-cond__verdict" data-cond-verdict>{% if averages %}{{ averages.avg_fun|rating_verdict:'fun' }}{% else %}&mdash;{% endif %}</span>
             <span class="gd-cond__num" data-cond-num>{% if averages %}{{ averages.avg_fun|floatformat:1 }}{% endif %}</span>
+        </div>
+        </div>
+
+        <div class="gd-cond__hours">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <span class="gd-cond__hours-txt">
+                <span class="gd-cond__hours-num">~<b data-cond-hours>{% if averages %}{{ averages.avg_hours|floatformat:0|intcomma }}{% else %}&mdash;{% endif %}</b>h</span>
+                <span class="gd-cond__hours-lbl">{{ hours_label_long|default:"Hours to Platinum" }}</span>
+            </span>
         </div>
     </div>
 

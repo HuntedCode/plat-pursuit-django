@@ -1203,11 +1203,12 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* ---- Ratings surface: a "conditions card" -- a plain-language summary headline over icon tiles (no chart) ---- */
 .gd-cond { display: flex; flex-direction: column; gap: 16px; }
 
-/* Hero: the synthesized summary sentence IS the headline (what a hunter reads to get the whole picture in a
-   glance); the star score + count sit beneath it. */
-.gd-cond__hero { display: flex; flex-direction: column; gap: 8px; padding-bottom: 15px; border-bottom: 1px solid var(--pp-divider); }
-/* The two hard facts flank the top: score+stars (how good) left, time-to-plat (how long) right. */
-.gd-cond__herorow { display: flex; align-items: center; justify-content: space-between; gap: 14px 20px; flex-wrap: wrap; }
+/* Metrics band: score | tiles | hours. Mobile keeps score + hours on the top row with the tiles beneath;
+   the lg block at the end reflows it to a single horizontal row that fills the desktop width. */
+.gd-cond__metrics { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "score hours" "tiles tiles"; gap: 14px 18px; align-items: center; }
+.gd-cond__score { grid-area: score; display: flex; flex-direction: column; gap: 3px; }
+.gd-cond__metrics .gd-cond__tiles { grid-area: tiles; }
+.gd-cond__metrics .gd-cond__hours { grid-area: hours; }
 .gd-cond__rating { display: flex; align-items: baseline; gap: 9px; }
 /* Fractional gold stars: a dim 5-star base with a gold overlay clipped to the score % (--fill). */
 .gd-cond__stars { position: relative; display: inline-block; font-size: 1.35rem; line-height: 1; letter-spacing: 3px; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
@@ -1255,6 +1256,35 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__you-scores { font-size: 0.72rem; color: var(--pp-text-mute); }
 .gd-cond__you-scores b { font-size: 0.86rem; font-weight: 800; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
 .gd-cond__you-vs { margin: 0 5px; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+
+/* ---- Desktop (lg+): use the width. The aggregate becomes a horizontal band and quick takes go two columns,
+   with type scaled up, so the tab reads as a desktop panel instead of a phone card. ---- */
+@media (min-width: 1024px) {
+    .gd-rcard { padding: 22px 26px; }
+    .gd-rate__stat { padding: 8px 14px; }
+    .gd-rate__stat-n { font-size: 1.9rem; }
+    .gd-rate__stat-lbl { font-size: 0.7rem; }
+
+    .gd-cond { gap: 20px; }
+    .gd-cond__summary { font-size: 1.5rem; }
+    .gd-cond__metrics { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "score tiles hours"; gap: 32px; }
+    .gd-cond__score { align-items: flex-start; gap: 5px; }
+    .gd-cond__stars { font-size: 1.8rem; letter-spacing: 4px; }
+    .gd-cond__score-n { font-size: 2.9rem; }
+    .gd-cond__of { font-size: 1.1rem; }
+    .gd-cond__count { font-size: 0.82rem; }
+    .gd-cond__tiles { gap: 12px; }
+    .gd-cond__tile { padding: 16px 16px 15px; }
+    .gd-cond__icon { width: 20px; height: 20px; }
+    .gd-cond__verdict { font-size: 1.12rem; }
+    .gd-cond__hours svg { width: 24px; height: 24px; }
+    .gd-cond__hours-num { font-size: 1.05rem; }
+    .gd-cond__hours-num b { font-size: 1.35rem; }
+    .gd-cond__you { padding: 13px 16px; }
+    .gd-cond__you-txt { font-size: 1rem; }
+
+    .gd-blurbs__list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 34px; }
+}
 
 .gd-rate__foot { display: flex; justify-content: flex-end; margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--pp-divider); }
 .gd-rate__cta { flex-shrink: 0; }

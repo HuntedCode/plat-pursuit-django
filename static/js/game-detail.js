@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ratingsRevealed = true;
         const active = panel.querySelector('.gd-rate__panel:not(.is-hidden)') || panel;
         // Fade + rise the summary headline and the condition tiles in, lightly staggered.
-        active.querySelectorAll('.gd-cond__hero, .gd-cond__tile').forEach((el, i) => {
+        active.querySelectorAll('.gd-cond__summary, .gd-cond__tile').forEach((el, i) => {
             if (!el.animate) return;
             el.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
                        { duration: 420, delay: i * 55, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
@@ -1663,8 +1663,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 band.innerHTML = '<span class="gd-cond__you-lbl">Your take</span>' +
                     '<p class="gd-cond__you-txt" data-cond-you-txt></p>' +
                     '<span class="gd-cond__you-scores" data-cond-you-scores></span>';
-                const tiles = card.querySelector('.gd-cond__tiles');
-                if (tiles) tiles.insertAdjacentElement('afterend', band); else card.appendChild(band);
+                const metrics = card.querySelector('.gd-cond__metrics');
+                if (metrics) metrics.insertAdjacentElement('afterend', band); else card.appendChild(band);
             }
             const txt = band.querySelector('[data-cond-you-txt]'); if (txt) txt.textContent = comparisonOf(u, a);
             const sc = band.querySelector('[data-cond-you-scores]');
