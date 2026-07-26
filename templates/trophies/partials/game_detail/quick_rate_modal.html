@@ -50,8 +50,8 @@ fun_ranking, overall_rating) are the API contract -- do not rename. Value/label/
             <button type="submit" class="gd-btn gd-btn--primary" data-gd-qr-submit>Submit rating</button>
         </div>
     </form>
-    {# Modal toasts render into this popover: promoted to the TOP LAYER (above the modal, not behind the dim)
-       AND positioned against the viewport, so they rest at the screen's bottom-end rather than being trapped
-       in the dialog's box. ToastManager shows/hides the popover as toasts come and go. #}
+    {% comment %} Modal toasts render into this popover: promoted to the TOP LAYER (above the modal, not behind
+       the dim) AND positioned against the viewport, so they rest at the screen's bottom-end rather than being
+       trapped in the dialog's box. ToastManager shows/hides the popover as toasts come and go. {% endcomment %}
     <div class="modal-toast-container" popover="manual"></div>
 </dialog>
