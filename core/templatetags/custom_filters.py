@@ -226,6 +226,28 @@ def rating_verdict(value, kind):
 
 
 @register.filter
+def rating_summary(averages):
+    """One synthesized, human sentence describing the platinum experience, from the difficulty / grindiness /
+    fun averages (the Ratings tab's headline -- what a hunter reads to 'get it' in two seconds). A serial
+    clause list with a final conjunction that flips to 'but' when the game is hard/grindy yet still fun.
+    game-detail.js summaryOf mirrors this -- keep in sync. Returns '' if the three inputs aren't all present.
+    """
+    if not averages:
+        return ''
+    try:
+        d = float(averages.get('avg_difficulty'))
+        g = float(averages.get('avg_grindiness'))
+        f = float(averages.get('avg_fun'))
+    except (TypeError, ValueError, AttributeError):
+        return ''
+    diff = 'A breeze' if d < 2.5 else 'Fairly easy' if d < 5 else 'Tough' if d < 7.5 else 'Brutally hard'
+    grind = 'not grindy' if g < 2.5 else 'a little grindy' if g < 5 else 'a real grind' if g < 7.5 else 'a serious slog'
+    fun = 'a chore' if f < 2.5 else 'just okay' if f < 5 else 'good fun' if f < 7.5 else 'a blast to platinum'
+    conj = 'but' if (f >= 5 and (d >= 5 or g >= 5)) else 'and'   # hard/grindy YET fun -> contrast
+    return f'{diff}, {grind}, {conj} {fun}.'
+
+
+@register.filter
 def psn_rarity(rarity_int):
     labels = {0: 'Ultra Rare', 1: 'Very Rare', 2: 'Rare', 3: 'Common'}
     return labels.get(rarity_int, '')

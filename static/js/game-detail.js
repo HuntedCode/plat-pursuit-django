@@ -57,12 +57,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (ratingsRevealed || reduce) return;
         ratingsRevealed = true;
         const active = panel.querySelector('.gd-rate__panel:not(.is-hidden)') || panel;
-        // Spectrum markers slide from centre to their community position (transition:left in CSS).
-        const markers = active.querySelectorAll('.gd-spec__marker');
-        markers.forEach((m) => { m.dataset.pos = (m.style.getPropertyValue('--pos') || '50%').trim(); m.style.setProperty('--pos', '50%'); });
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-            markers.forEach((m) => m.style.setProperty('--pos', m.dataset.pos || '50%'));
-        }));
+        // Fade + rise the summary headline and the condition tiles in, lightly staggered.
+        active.querySelectorAll('.gd-cond__summary, .gd-cond__tile, .gd-cond__hours').forEach((el, i) => {
+            if (!el.animate) return;
+            el.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
+                       { duration: 420, delay: i * 55, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
+        });
         if (PlatPursuit.countUp) {
             panel.querySelectorAll('.gd-rate__stats [data-gd-countup]').forEach((el, i) => {
                 const n = parseInt(el.dataset.gdCountup, 10);
@@ -1475,7 +1475,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (kind === 'overall') return v < 2 ? 'Rough' : v < 3 ? 'Mixed' : v < 4 ? 'Solid' : v < 4.5 ? 'Great' : 'Beloved';
             return '';
         }
-        function posOf(v) { return Math.max(0, Math.min(100, Math.round(v * 10))); }   // marker on a /10 axis
+        // Synthesized summary sentence -- mirrors core/templatetags/custom_filters.py rating_summary.
+        function summaryOf(a) {
+            const d = a.avg_difficulty, g = a.avg_grindiness, f = a.avg_fun;
+            const diff = d < 2.5 ? 'A breeze' : d < 5 ? 'Fairly easy' : d < 7.5 ? 'Tough' : 'Brutally hard';
+            const grind = g < 2.5 ? 'not grindy' : g < 5 ? 'a little grindy' : g < 7.5 ? 'a real grind' : 'a serious slog';
+            const fun = f < 2.5 ? 'a chore' : f < 5 ? 'just okay' : f < 7.5 ? 'good fun' : 'a blast to platinum';
+            const conj = (f >= 5 && (d >= 5 || g >= 5)) ? 'but' : 'and';
+            return diff + ', ' + grind + ', ' + conj + ' ' + fun + '.';
+        }
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -1499,27 +1507,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 // hours callout, and each quality's marker + verdict. Handles empty -> filled (drop --empty).
                 const avg = data.community_averages;
                 const panel = srcBtn && srcBtn.closest('[data-rate-panel]');
-                const spec = panel && panel.querySelector('[data-rate-grid]');
-                if (avg && spec) {
-                    spec.classList.remove('gd-spec--empty');
-                    const overall = spec.querySelector('.gd-spec__overall');
-                    if (overall) {
-                        overall.dataset.tone = toneOf('overall', avg.avg_rating);
-                        const ov = overall.querySelector('[data-spec-verdict]'); if (ov) ov.textContent = verdictOf('overall', avg.avg_rating);
-                        const sc = overall.querySelector('[data-spec-score]'); if (sc) sc.textContent = avg.avg_rating.toFixed(1);
-                        const ct = overall.querySelector('[data-rate-count]');
-                        if (ct && avg.count != null) ct.textContent = '· ' + avg.count.toLocaleString() + ' rating' + (avg.count === 1 ? '' : 's');
-                    }
-                    const hrs = spec.querySelector('[data-spec-hours]');
-                    if (hrs && avg.avg_hours != null) hrs.textContent = Math.round(avg.avg_hours).toLocaleString();
+                const card = panel && panel.querySelector('[data-rate-grid]');
+                if (avg && card) {
+                    card.classList.remove('gd-cond--empty');
+                    const summary = card.querySelector('[data-cond-summary]'); if (summary) summary.textContent = summaryOf(avg);
+                    const sc = card.querySelector('[data-cond-score]'); if (sc) sc.textContent = avg.avg_rating.toFixed(1);
+                    const ct = card.querySelector('[data-rate-count]');
+                    if (ct && avg.count != null) ct.textContent = '· ' + avg.count.toLocaleString() + ' rating' + (avg.count === 1 ? '' : 's');
+                    const hrs = card.querySelector('[data-cond-hours]'); if (hrs && avg.avg_hours != null) hrs.textContent = Math.round(avg.avg_hours).toLocaleString();
                     const byStat = { difficulty: avg.avg_difficulty, grindiness: avg.avg_grindiness, fun: avg.avg_fun };
                     Object.keys(byStat).forEach((kind) => {
                         const v = byStat[kind];
-                        const row = spec.querySelector('.gd-spec__row[data-stat="' + kind + '"]');
-                        if (!row || v == null) return;
-                        row.dataset.tone = toneOf(kind, v);
-                        const rv = row.querySelector('[data-spec-verdict]'); if (rv) rv.textContent = verdictOf(kind, v);
-                        const mk = row.querySelector('[data-spec-marker]'); if (mk) mk.style.setProperty('--pos', posOf(v) + '%');
+                        const tile = card.querySelector('.gd-cond__tile[data-stat="' + kind + '"]');
+                        if (!tile || v == null) return;
+                        tile.dataset.tone = toneOf(kind, v);
+                        const vd = tile.querySelector('[data-cond-verdict]'); if (vd) vd.textContent = verdictOf(kind, v);
+                        const nm = tile.querySelector('[data-cond-num]'); if (nm) nm.textContent = v.toFixed(1);
                     });
                 }
                 if (srcBtn) {

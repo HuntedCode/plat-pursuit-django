@@ -3,9 +3,10 @@
 Pins:
   - `rating_tone` filter: the per-stat tone thresholds (shared verbatim with the live-update JS in
     game-detail.js -- if these move, the two must move together).
-  - `rating_verdict` filter: the plain-language word per stat (mirrored by game-detail.js verdictOf).
-  - `_rating_spectrum.html`: the Overall hero verdict + score, the subjective-quality markers on their
-    named axis (position + tone + verdict), the empty state, and the preserved quick-rate data-* contract.
+  - `rating_verdict` / `rating_summary` filters: the per-stat word and the synthesized one-line sentence
+    (both mirrored by game-detail.js verdictOf / summaryOf).
+  - `_rating_conditions.html`: the summary headline + star score, the icon word-tiles (verdict + tone +
+    number), the empty state, and the preserved quick-rate data-* contract.
   - The Ratings tab render: the tab was renamed from Community, the stats strip surfaces the four denormed
     Game numbers (with the platinum tile gated on the game actually having a platinum), and the DLC selector
     is adaptive (pills for a few groups, a dropdown once there are many).
@@ -14,7 +15,7 @@ import pytest
 from django.template.loader import render_to_string
 from django.urls import reverse
 
-from core.templatetags.custom_filters import rating_tone, rating_verdict
+from core.templatetags.custom_filters import rating_tone, rating_verdict, rating_summary
 from tests.factories import ConceptFactory, ConceptTrophyGroupFactory, GameFactory
 
 pytestmark = pytest.mark.django_db
@@ -61,7 +62,30 @@ def test_rating_verdict_non_numeric_is_blank():
     assert rating_verdict(None, 'overall') == ''
 
 
-# ── _rating_spectrum.html (hero + spectrum rows) ────────────────────────────
+# ── rating_summary (the synthesized one-line sentence; mirrored by game-detail.js summaryOf) ──
+
+def test_rating_summary_hard_but_fun_uses_but():
+    """Hard/grindy YET fun flips the final conjunction to 'but' (the contrast is the whole point)."""
+    s = rating_summary({'avg_difficulty': 8.0, 'avg_grindiness': 6.5, 'avg_fun': 9.0})
+    assert s == 'Brutally hard, a real grind, but a blast to platinum.'
+
+
+def test_rating_summary_easy_and_fun_uses_and():
+    s = rating_summary({'avg_difficulty': 2.0, 'avg_grindiness': 2.0, 'avg_fun': 8.0})
+    assert s == 'A breeze, not grindy, and a blast to platinum.'
+
+
+def test_rating_summary_hard_and_unfun_uses_and():
+    s = rating_summary({'avg_difficulty': 8.0, 'avg_grindiness': 8.0, 'avg_fun': 2.0})
+    assert s == 'Brutally hard, a serious slog, and a chore.'
+
+
+def test_rating_summary_blank_without_data():
+    assert rating_summary(None) == ''
+    assert rating_summary({'avg_difficulty': 5.0}) == ''   # missing grind/fun
+
+
+# ── _rating_conditions.html (summary headline + icon word-tiles) ────────────
 
 _AVERAGES = {
     'avg_difficulty': 7.0, 'avg_grindiness': 2.0, 'avg_hours': 40.0,
@@ -69,42 +93,42 @@ _AVERAGES = {
 }
 
 
-def _spectrum(averages, **kw):
+def _conditions(averages, **kw):
     ctx = {
         'averages': averages, 'concept_id': 1, 'group_id': 'default',
         'hours_label': 'Hours to Plat', 'hours_label_long': 'Hours to Platinum',
     }
     ctx.update(kw)
-    return render_to_string('trophies/partials/game_detail/_rating_spectrum.html', ctx)
+    return render_to_string('trophies/partials/game_detail/_rating_conditions.html', ctx)
 
 
-def test_spectrum_render_verdict_tone_and_marker():
-    html = _spectrum(_AVERAGES)
-    # Overall 4.5 -> Beloved (good tone). Difficulty 7.0 -> Tough (warn), marker at 70%. Grindiness 2.0 -> Breezy.
-    assert 'Beloved' in html
+def test_conditions_render_summary_verdicts_and_score():
+    html = _conditions(_AVERAGES)
+    # Summary from difficulty 7.0 (Tough) / grind 2.0 (not grindy) / fun 9.0 (a blast); fun despite hard -> "but".
+    assert 'Tough, not grindy, but a blast to platinum.' in html
+    # Tiles: verdict word is the headline, tone tints, number is the subscript.
     assert 'data-stat="difficulty" data-tone="warn"' in html
-    assert 'Tough' in html and 'Breezy' in html and 'A blast' in html
-    assert '--pos: 70%' in html                 # difficulty marker (7/10)
-    assert '--pos: 20%' in html                 # grindiness marker (2/10)
-    assert '12 rating' in html                  # hero count
-    assert '>40<' in html or '40</b>' in html    # hours callout number
-    assert 'gd-spec--empty' not in html
+    assert 'data-stat="grindiness" data-tone="good"' in html
+    assert '>Tough<' in html and '>Breezy<' in html and '>A blast<' in html
+    assert '>7.0<' in html and '>2.0<' in html and '>9.0<' in html   # quiet number subscripts
+    assert '4.5' in html and '12 rating' in html                      # star score + count
+    assert 'gd-cond--empty' not in html
+    assert 'gd-cond__tile' in html and 'pp-horizon' not in html       # tiles, not a bar chart
 
 
-def test_spectrum_empty_state_keeps_structure():
-    html = _spectrum(None)
-    assert 'gd-spec--empty' in html
+def test_conditions_empty_state_keeps_structure():
+    html = _conditions(None)
+    assert 'gd-cond--empty' in html
     assert 'Not yet rated' in html
-    assert html.count('gd-spec__marker') == 3   # all three markers present (centred)...
-    assert html.count('--pos: 50%') == 3        # ...at centre, no community position yet
+    assert html.count('gd-cond__verdict') == 3  # all three tiles present, muted
     assert 'data-tone=' not in html             # neutral until rated
 
 
-def test_spectrum_quick_rate_button_contract():
+def test_conditions_quick_rate_button_contract():
     """The quick-rate button preserves the data-* game-detail.js reads (concept/group/hours + existing JSON)."""
     user_rating = type('R', (), {'difficulty': 8, 'grindiness': 3, 'hours_to_platinum': 55, 'fun_ranking': 9, 'overall_rating': 4.5})()
-    html = _spectrum(_AVERAGES, can_rate=True, user_rating=user_rating, concept_id=42, group_id='001',
-                     hours_label_long='Hours to 100%')
+    html = _conditions(_AVERAGES, can_rate=True, user_rating=user_rating, concept_id=42, group_id='001',
+                       hours_label_long='Hours to 100%')
     assert 'quick-rate-btn' in html
     assert 'data-concept-id="42"' in html
     assert 'data-group-id="001"' in html
@@ -113,8 +137,8 @@ def test_spectrum_quick_rate_button_contract():
     assert 'Update rating' in html
 
 
-def test_spectrum_no_button_when_cannot_rate():
-    assert 'quick-rate-btn' not in _spectrum(_AVERAGES, can_rate=False)
+def test_conditions_no_button_when_cannot_rate():
+    assert 'quick-rate-btn' not in _conditions(_AVERAGES, can_rate=False)
 
 
 # ── Full page: tab rename + stats strip + adaptive selector ─────────────────

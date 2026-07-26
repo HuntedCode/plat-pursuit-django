@@ -1,0 +1,70 @@
+{% load humanize custom_filters %}
+{% comment %} One group's community ratings, "conditions card" treatment (the Apple-Weather model: a plain-
+language headline over a grid of self-describing tiles -- no chart). The synthesized summary sentence is what
+a hunter reads to get the whole picture in two seconds; each subjective quality is an icon tile whose HEADLINE
+is the verdict word (polarity lives in the word, so nothing can be misread the way a bar length can), with the
+number as a quiet subscript; hours-to-plat is a separate time callout. Words come from rating_summary /
+rating_verdict, tone from rating_tone -- game-detail.js mirrors all three for the live-update.
+
+Structure is IDENTICAL rated or not (all tiles present, muted via .gd-cond--empty), so the live-update only
+sets values -- it never builds DOM when the first rating lands.
+
+Expects: averages (dict|None), can_rate, user_rating, concept_id, group_id, hours_label, hours_label_long.
+The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat]/[data-cond-*] hooks are the contract. {% endcomment %}
+<div class="gd-cond{% if not averages %} gd-cond--empty{% endif %}" data-rate-grid>
+
+    {# Hero: the synthesized summary sentence is the headline; the star score + count sit beneath it. #}
+    <div class="gd-cond__hero">
+        <p class="gd-cond__summary" data-cond-summary>{% if averages %}{{ averages|rating_summary }}{% else %}Not yet rated.{% endif %}</p>
+        <div class="gd-cond__score">
+            <svg class="gd-cond__star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.2l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3-5.8 3 1.1-6.5L2.1 9l6.5-.9z"/></svg>
+            <b data-cond-score>{% if averages %}{{ averages.avg_rating|floatformat:1 }}{% else %}&mdash;{% endif %}</b><span class="gd-cond__of">/ 5</span>
+            <span class="gd-cond__count" data-rate-count>{% if averages %}&middot; {{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}&middot; be the first{% endif %}</span>
+        </div>
+    </div>
+
+    {# Conditions: one icon tile per subjective quality. The verdict word is the tile's headline; the number
+       is a quiet subscript for the curious. data-tone tints the icon + word; absent = neutral (empty). #}
+    <div class="gd-cond__tiles">
+        <div class="gd-cond__tile" data-stat="difficulty"{% if averages %} data-tone="{{ averages.avg_difficulty|rating_tone:'difficulty' }}"{% endif %}>
+            <svg class="gd-cond__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+            <span class="gd-cond__lbl">Difficulty</span>
+            <span class="gd-cond__verdict" data-cond-verdict>{% if averages %}{{ averages.avg_difficulty|rating_verdict:'difficulty' }}{% else %}&mdash;{% endif %}</span>
+            <span class="gd-cond__num" data-cond-num>{% if averages %}{{ averages.avg_difficulty|floatformat:1 }}{% endif %}</span>
+        </div>
+        <div class="gd-cond__tile" data-stat="grindiness"{% if averages %} data-tone="{{ averages.avg_grindiness|rating_tone:'grindiness' }}"{% endif %}>
+            <svg class="gd-cond__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+            <span class="gd-cond__lbl">Grindiness</span>
+            <span class="gd-cond__verdict" data-cond-verdict>{% if averages %}{{ averages.avg_grindiness|rating_verdict:'grindiness' }}{% else %}&mdash;{% endif %}</span>
+            <span class="gd-cond__num" data-cond-num>{% if averages %}{{ averages.avg_grindiness|floatformat:1 }}{% endif %}</span>
+        </div>
+        <div class="gd-cond__tile" data-stat="fun"{% if averages %} data-tone="{{ averages.avg_fun|rating_tone:'fun' }}"{% endif %}>
+            <svg class="gd-cond__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="10" y1="11" y2="11"/><line x1="8" x2="8" y1="9" y2="13"/><line x1="15" x2="15.01" y1="12" y2="12"/><line x1="18" x2="18.01" y1="10" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg>
+            <span class="gd-cond__lbl">Fun</span>
+            <span class="gd-cond__verdict" data-cond-verdict>{% if averages %}{{ averages.avg_fun|rating_verdict:'fun' }}{% else %}&mdash;{% endif %}</span>
+            <span class="gd-cond__num" data-cond-num>{% if averages %}{{ averages.avg_fun|floatformat:1 }}{% endif %}</span>
+        </div>
+    </div>
+
+    {# Time callout: a duration, not a 1-10 opinion, so it stands apart from the qualities. #}
+    <div class="gd-cond__hours">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span class="gd-cond__hours-txt">
+            <span class="gd-cond__hours-num">~<b data-cond-hours>{% if averages %}{{ averages.avg_hours|floatformat:0|intcomma }}{% else %}&mdash;{% endif %}</b>h</span>
+            <span class="gd-cond__hours-lbl">{{ hours_label_long|default:"Hours to Platinum" }}</span>
+        </span>
+    </div>
+</div>
+
+<div class="gd-rate__foot">
+    {% if can_rate %}
+    <button type="button" class="gd-btn gd-btn--primary gd-rate__cta quick-rate-btn"
+            data-concept-id="{{ concept_id }}"
+            data-group-id="{{ group_id }}"
+            data-hours-label="{{ hours_label_long|default:'Hours to Platinum' }}"
+            {% if user_rating %}data-existing='{"difficulty":{{ user_rating.difficulty|default:5 }},"grindiness":{{ user_rating.grindiness|default:5 }},"hours_to_platinum":{{ user_rating.hours_to_platinum|default:0 }},"fun_ranking":{{ user_rating.fun_ranking|default:5 }},"overall_rating":{{ user_rating.overall_rating|default:"3.0" }}}'{% endif %}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.79 21.35a.53.53 0 0 1-.771-.56l.882-5.139a2.12 2.12 0 0 0-.611-1.879L2.554 10.135a.53.53 0 0 1 .294-.904l5.166-.756a2.12 2.12 0 0 0 1.596-1.16z"/></svg>
+        <span>{% if user_rating %}Update rating{% else %}Rate this game{% endif %}</span>
+    </button>
+    {% endif %}
+</div>

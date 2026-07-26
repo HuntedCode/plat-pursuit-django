@@ -1197,56 +1197,49 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* Only the active group's panel shows; the rest are hidden (no unmount -- state is cheap and SSR'd). */
 .gd-rate__panel.is-hidden { display: none; }
 
-/* ---- Ratings surface: Overall hero + subjective-quality spectrum rows + an hours callout ---- */
-.gd-spec { display: flex; flex-direction: column; gap: 20px; }
+/* ---- Ratings surface: a "conditions card" -- a plain-language summary headline over icon tiles (no chart) ---- */
+.gd-cond { display: flex; flex-direction: column; gap: 16px; }
 
-/* Hero: the Overall VERDICT is the headline (a word reads faster + more human than a bare number and is
-   honest that this is a vote average); score + count sit under it, the hours callout alongside. */
-.gd-spec__hero { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding: 15px 18px; border-radius: var(--pp-radius-lg); background: color-mix(in oklab, var(--pp-bg-2) 40%, transparent); border: 1px solid var(--pp-border); }
-.gd-spec__overall { display: flex; flex-direction: column; gap: 3px; --rate-accent: var(--pp-text); }
-.gd-spec__overall[data-tone="good"] { --rate-accent: var(--pp-success); }
-.gd-spec__overall[data-tone="warn"] { --rate-accent: var(--pp-warning); }
-.gd-spec__overall[data-tone="bad"]  { --rate-accent: var(--pp-error); }
-.gd-spec__overall[data-tone="high"] { --rate-accent: var(--pp-accent); }
-.gd-spec__verdict { font-size: 1.55rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.04; color: var(--rate-accent); }
-/* Not-yet-rated: same structure, muted. The live-update drops .gd-spec--empty and sets values in place. */
-.gd-spec--empty .gd-spec__verdict { font-size: 1.2rem; color: var(--pp-text-mute); }
-.gd-spec--empty .gd-spec__score, .gd-spec--empty .gd-spec__of { color: var(--pp-text-mute); }
-.gd-spec--empty .gd-spec__star { color: var(--pp-text-mute); opacity: 0.5; }
-.gd-spec--empty .gd-spec__hours-num b { color: var(--pp-text-dim); }
-.gd-spec--empty .gd-spec__rowverdict { color: var(--pp-text-mute); }
-.gd-spec--empty .gd-spec__marker { background: var(--pp-text-mute); opacity: 0.3; box-shadow: none; }
-.gd-spec__score { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 0.82rem; color: var(--pp-text-dim); }
-.gd-spec__star { width: 15px; height: 15px; color: var(--color-trophy-gold); }
-.gd-spec__score b { font-size: 1rem; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; }
-.gd-spec__of { color: var(--pp-text-mute); }
-.gd-spec__count { color: var(--pp-text-mute); }
-.gd-spec__hours { display: inline-flex; align-items: center; gap: 9px; }
-.gd-spec__hours svg { width: 21px; height: 21px; color: var(--pp-text-mute); flex-shrink: 0; }
-.gd-spec__hours-txt { display: flex; flex-direction: column; line-height: 1.1; }
-.gd-spec__hours-num { font-size: 1.02rem; color: var(--pp-text-dim); }
-.gd-spec__hours-num b { font-size: 1.15rem; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; }
-.gd-spec__hours-lbl { font-size: 0.58rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); margin-top: 1px; }
+/* Hero: the synthesized summary sentence IS the headline (what a hunter reads to get the whole picture in a
+   glance); the star score + count sit beneath it. */
+.gd-cond__hero { display: flex; flex-direction: column; gap: 8px; }
+.gd-cond__summary { font-size: 1.15rem; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; color: var(--pp-text); text-wrap: balance; }
+.gd-cond--empty .gd-cond__summary { color: var(--pp-text-mute); font-weight: 600; }
+.gd-cond__score { display: inline-flex; align-items: center; gap: 5px; font-size: 0.85rem; color: var(--pp-text-dim); }
+.gd-cond__star { width: 16px; height: 16px; color: var(--color-trophy-gold); }
+.gd-cond--empty .gd-cond__star { color: var(--pp-text-mute); opacity: 0.5; }
+.gd-cond__score b { font-size: 1.05rem; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.gd-cond--empty .gd-cond__score b, .gd-cond--empty .gd-cond__of { color: var(--pp-text-mute); }
+.gd-cond__of { color: var(--pp-text-mute); }
+.gd-cond__count { color: var(--pp-text-mute); }
 
-/* Subjective qualities: a marker on a NAMED axis. ONLY the marker carries the accent (restraint) and the
-   track stays neutral -- so a marker toward "Brutal" and one toward "A blast" never read as the same fill. */
-.gd-spec__rows { display: flex; flex-direction: column; gap: 17px; }
-.gd-spec__row { --rate-accent: var(--pp-text-dim); }
-.gd-spec__row[data-tone="good"] { --rate-accent: var(--pp-success); }
-.gd-spec__row[data-tone="warn"] { --rate-accent: var(--pp-warning); }
-.gd-spec__row[data-tone="bad"]  { --rate-accent: var(--pp-error); }
-.gd-spec__row[data-tone="high"] { --rate-accent: var(--pp-accent); }
-.gd-spec__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
-.gd-spec__name { font-size: 0.8rem; font-weight: 600; color: var(--pp-text-dim); }
-.gd-spec__rowverdict { font-size: 0.9rem; font-weight: 800; color: var(--rate-accent); }
-.gd-spec__axis { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
-.gd-spec__end { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); white-space: nowrap; }
-.gd-spec__track { position: relative; height: 4px; border-radius: 999px; background: color-mix(in oklab, var(--pp-text-mute) 22%, transparent); }
-.gd-spec__marker { position: absolute; top: 50%; left: var(--pos, 50%); width: 14px; height: 14px; border-radius: 50%; background: var(--rate-accent); transform: translate(-50%, -50%); box-shadow: 0 0 0 3px color-mix(in oklab, var(--rate-accent) 22%, transparent), 0 1px 5px rgba(0, 0, 0, 0.45); transition: left var(--pp-dur) var(--pp-ease); }
+/* Conditions tiles: word-forward. The verdict is the tile headline (polarity lives in the WORD, so nothing
+   reads backwards the way a bar length can); the number is a quiet subscript. Only the icon + word carry the
+   subtle tone accent -- the tile surface stays neutral. */
+.gd-cond__tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.gd-cond__tile { display: flex; flex-direction: column; gap: 3px; padding: 13px 13px 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); --rate-accent: var(--pp-text-dim); }
+.gd-cond__tile[data-tone="good"] { --rate-accent: var(--pp-success); }
+.gd-cond__tile[data-tone="warn"] { --rate-accent: var(--pp-warning); }
+.gd-cond__tile[data-tone="bad"]  { --rate-accent: var(--pp-error); }
+.gd-cond__tile[data-tone="high"] { --rate-accent: var(--pp-accent); }
+.gd-cond__icon { width: 18px; height: 18px; color: var(--rate-accent); margin-bottom: 3px; }
+.gd-cond--empty .gd-cond__icon { color: var(--pp-text-mute); opacity: 0.6; }
+.gd-cond__lbl { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
+.gd-cond__verdict { font-size: 1.02rem; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; color: var(--rate-accent); }
+.gd-cond--empty .gd-cond__verdict { color: var(--pp-text-mute); }
+.gd-cond__num { font-size: 0.68rem; font-weight: 600; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+
+/* Hours: a labeled time value, set apart from the qualities (a duration, not a 1-10 opinion). */
+.gd-cond__hours { display: inline-flex; align-items: center; gap: 9px; }
+.gd-cond__hours svg { width: 20px; height: 20px; color: var(--pp-text-mute); flex-shrink: 0; }
+.gd-cond__hours-txt { display: flex; flex-direction: column; line-height: 1.1; }
+.gd-cond__hours-num { font-size: 0.95rem; color: var(--pp-text-dim); }
+.gd-cond__hours-num b { font-size: 1.1rem; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.gd-cond--empty .gd-cond__hours-num b { color: var(--pp-text-dim); }
+.gd-cond__hours-lbl { font-size: 0.58rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); margin-top: 1px; }
 
 .gd-rate__foot { display: flex; justify-content: flex-end; margin-top: 4px; }
 .gd-rate__cta { flex-shrink: 0; }
-@media (prefers-reduced-motion: reduce) { .gd-spec__marker { transition: none; } }
 
 /* ---- Quick-rate modal (gd-modal--qr) ---- */
 .gd-modal--qr { width: min(94vw, 460px); max-width: 460px; }
