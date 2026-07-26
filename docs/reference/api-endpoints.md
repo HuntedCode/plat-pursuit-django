@@ -258,6 +258,18 @@ Review responses include a `body_html` field containing server-rendered markdown
 | PUT | `/api/v1/reviews/replies/<reply_id>/` | Login | Edit own reply |
 | DELETE | `/api/v1/reviews/replies/<reply_id>/` | Login | Delete own reply |
 
+### Ratings & Quick Takes
+
+> The structured rating system now mounts under the `/api/v1/ratings/` prefix; the `/reviews/` rows above are legacy (the text-review system was archived 2026-05). Ratings power the game-detail Ratings tab, dashboard, and share cards.
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/v1/ratings/<concept_id>/group/<group_id>/rate/` | Login (linked) | Submit/update a rating. Optional `blurb` (<=140 char public "quick take"), sanitized + banned-word filtered. A non-empty blurb requires guidelines agreement (403 `needs_guidelines` if not). Omitting `blurb` preserves an existing one; sending `""` clears it. |
+| POST | `/api/v1/ratings/blurb/<rating_id>/report/` | Login (linked) | Report a rating's quick take for moderation (reactive: publish -> report -> staff soft-hide via `blurb_hidden`). Body `{reason, details?}`; rate-limited 10/m; can't report your own; deduped per reporter. |
+| POST | `/api/v1/guidelines/agree/` | Login | Record community-guidelines agreement (idempotent). The blurb write path calls this on submit (the modal's fine print is the notice). |
+
+Blurbs are read only through `UserConceptRating.visible_blurbs()` (present + not staff-hidden, backed by the partial `rating_blurb_idx`); the game-detail view previews the newest few per group with `select_related('profile')` (whale-safe). Reports are stored on `BlurbReport` (mirrors `ReviewReport`, triaged in Django admin; FKs the rating, so it follows the rating through `Concept.absorb()` with no absorb branch). The stored blurb is plain, **unescaped** text -- render it only in an auto-escaped HTML text context, never `|safe` or a JS/attribute/JSON context.
+
 ### Tutorial System
 
 | Method | Path | Auth | Purpose |
