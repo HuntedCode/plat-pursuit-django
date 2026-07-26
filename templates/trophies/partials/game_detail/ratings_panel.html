@@ -33,8 +33,7 @@ runs the reveal (revealRatings). Players drill-down lives in the Ranks tab now; 
     {% if community_tabs|length > 1 %}
     <div class="gd-rate__sel">
         {% if community_tabs|length <= 4 %}
-        {# Few groups: a scannable pill row of toggle buttons (matches the leaderboard group selector -- these
-           filter which group's ratings show, they are not a tab widget, so aria-pressed, not role=tab). #}
+        {# Few groups: a scannable pill row of toggle buttons (aria-pressed; they filter, not a tab widget). #}
         <div class="gd-rate__seg" role="group" aria-label="Rating group">
             {% for ct in community_tabs %}
             <button type="button" class="gd-rate__segchip{% if forloop.first %} is-active{% endif %}" data-rate-ctg="{{ ct.ctg.id }}" aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}">{{ ct.ctg.display_name }}</button>

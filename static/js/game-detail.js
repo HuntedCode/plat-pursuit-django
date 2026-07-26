@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ratingsRevealed = true;
         const active = panel.querySelector('.gd-rate__panel:not(.is-hidden)') || panel;
         // Fade + rise the summary headline and the condition tiles in, lightly staggered.
-        active.querySelectorAll('.gd-cond__summary, .gd-cond__tile, .gd-cond__hours').forEach((el, i) => {
+        active.querySelectorAll('.gd-cond__rating, .gd-cond__summary, .gd-cond__tile, .gd-cond__hours').forEach((el, i) => {
             if (!el.animate) return;
             el.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
                        { duration: 420, delay: i * 55, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
@@ -1512,6 +1512,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     card.classList.remove('gd-cond--empty');
                     const summary = card.querySelector('[data-cond-summary]'); if (summary) summary.textContent = summaryOf(avg);
                     const sc = card.querySelector('[data-cond-score]'); if (sc) sc.textContent = avg.avg_rating.toFixed(1);
+                    const st = card.querySelector('[data-cond-stars]');
+                    if (st) { st.style.setProperty('--fill', (avg.avg_rating / 5 * 100) + '%'); st.setAttribute('aria-label', avg.avg_rating.toFixed(1) + ' out of 5'); }
                     const ct = card.querySelector('[data-rate-count]');
                     if (ct && avg.count != null) ct.textContent = '· ' + avg.count.toLocaleString() + ' rating' + (avg.count === 1 ? '' : 's');
                     const hrs = card.querySelector('[data-cond-hours]'); if (hrs && avg.avg_hours != null) hrs.textContent = Math.round(avg.avg_hours).toLocaleString();

@@ -112,6 +112,7 @@ def test_conditions_render_summary_verdicts_and_score():
     assert '>Tough<' in html and '>Breezy<' in html and '>A blast<' in html
     assert '>7.0<' in html and '>2.0<' in html and '>9.0<' in html   # quiet number subscripts
     assert '4.5' in html and '12 rating' in html                      # star score + count
+    assert '--fill: 90%' in html                                      # gold stars filled to 4.5/5
     assert 'gd-cond--empty' not in html
     assert 'gd-cond__tile' in html and 'pp-horizon' not in html       # tiles, not a bar chart
 

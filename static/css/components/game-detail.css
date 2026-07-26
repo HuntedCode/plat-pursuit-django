@@ -1202,16 +1202,20 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 
 /* Hero: the synthesized summary sentence IS the headline (what a hunter reads to get the whole picture in a
    glance); the star score + count sit beneath it. */
-.gd-cond__hero { display: flex; flex-direction: column; gap: 8px; }
-.gd-cond__summary { font-size: 1.15rem; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; color: var(--pp-text); text-wrap: balance; }
+.gd-cond__hero { display: flex; flex-direction: column; gap: 9px; padding-bottom: 15px; border-bottom: 1px solid var(--pp-divider); }
+.gd-cond__rating { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+/* Fractional gold stars: a dim 5-star base with a gold overlay clipped to the score % (--fill). */
+.gd-cond__stars { position: relative; display: inline-block; font-size: 1.35rem; line-height: 1; letter-spacing: 3px; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
+.gd-cond__stars::before { content: "\2605\2605\2605\2605\2605"; }
+.gd-cond__stars-on { position: absolute; top: 0; left: 0; width: var(--fill, 0%); overflow: hidden; white-space: nowrap; color: var(--color-trophy-gold); transition: width var(--pp-dur) var(--pp-ease); }
+.gd-cond__stars-on::before { content: "\2605\2605\2605\2605\2605"; }
+.gd-cond__scoreline { display: inline-flex; align-items: baseline; gap: 1px; }
+.gd-cond__score-n { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.gd-cond--empty .gd-cond__score-n, .gd-cond--empty .gd-cond__of { color: var(--pp-text-mute); }
+.gd-cond__of { font-size: 0.9rem; font-weight: 700; color: var(--pp-text-mute); }
+.gd-cond__count { font-size: 0.78rem; color: var(--pp-text-mute); align-self: center; }
+.gd-cond__summary { font-size: 1.18rem; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; color: var(--pp-text); text-wrap: balance; }
 .gd-cond--empty .gd-cond__summary { color: var(--pp-text-mute); font-weight: 600; }
-.gd-cond__score { display: inline-flex; align-items: center; gap: 5px; font-size: 0.85rem; color: var(--pp-text-dim); }
-.gd-cond__star { width: 16px; height: 16px; color: var(--color-trophy-gold); }
-.gd-cond--empty .gd-cond__star { color: var(--pp-text-mute); opacity: 0.5; }
-.gd-cond__score b { font-size: 1.05rem; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; }
-.gd-cond--empty .gd-cond__score b, .gd-cond--empty .gd-cond__of { color: var(--pp-text-mute); }
-.gd-cond__of { color: var(--pp-text-mute); }
-.gd-cond__count { color: var(--pp-text-mute); }
 
 /* Conditions tiles: word-forward. The verdict is the tile headline (polarity lives in the WORD, so nothing
    reads backwards the way a bar length can); the number is a quiet subscript. Only the icon + word carry the

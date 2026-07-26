@@ -13,18 +13,17 @@ Expects: averages (dict|None), can_rate, user_rating, concept_id, group_id, hour
 The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat]/[data-cond-*] hooks are the contract. {% endcomment %}
 <div class="gd-cond{% if not averages %} gd-cond--empty{% endif %}" data-rate-grid>
 
-    {# Hero: the synthesized summary sentence is the headline; the star score + count sit beneath it. #}
+    {# Hero: a big score + gold star rating is the visual anchor; the synthesized summary sentence is the headline. #}
     <div class="gd-cond__hero">
-        <p class="gd-cond__summary" data-cond-summary>{% if averages %}{{ averages|rating_summary }}{% else %}Not yet rated.{% endif %}</p>
-        <div class="gd-cond__score">
-            <svg class="gd-cond__star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.2l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3-5.8 3 1.1-6.5L2.1 9l6.5-.9z"/></svg>
-            <b data-cond-score>{% if averages %}{{ averages.avg_rating|floatformat:1 }}{% else %}&mdash;{% endif %}</b><span class="gd-cond__of">/ 5</span>
-            <span class="gd-cond__count" data-rate-count>{% if averages %}&middot; {{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}&middot; be the first{% endif %}</span>
+        <div class="gd-cond__rating">
+            <span class="gd-cond__stars" data-cond-stars style="--fill: {% if averages %}{% widthratio averages.avg_rating 5 100 %}{% else %}0{% endif %}%;" role="img" aria-label="{% if averages %}{{ averages.avg_rating|floatformat:1 }} out of 5{% else %}Not rated{% endif %}"><span class="gd-cond__stars-on"></span></span>
+            <span class="gd-cond__scoreline"><b class="gd-cond__score-n" data-cond-score>{% if averages %}{{ averages.avg_rating|floatformat:1 }}{% else %}&mdash;{% endif %}</b><span class="gd-cond__of">/5</span></span>
+            <span class="gd-cond__count" data-rate-count>{% if averages %}&middot; {{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}be the first to rate{% endif %}</span>
         </div>
+        <p class="gd-cond__summary" data-cond-summary>{% if averages %}{{ averages|rating_summary }}{% else %}Not yet rated.{% endif %}</p>
     </div>
 
-    {# Conditions: one icon tile per subjective quality. The verdict word is the tile's headline; the number
-       is a quiet subscript for the curious. data-tone tints the icon + word; absent = neutral (empty). #}
+    {# Conditions: one icon tile per quality; the verdict word is the headline, the number a quiet subscript. #}
     <div class="gd-cond__tiles">
         <div class="gd-cond__tile" data-stat="difficulty"{% if averages %} data-tone="{{ averages.avg_difficulty|rating_tone:'difficulty' }}"{% endif %}>
             <svg class="gd-cond__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
