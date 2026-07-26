@@ -138,6 +138,9 @@
   --pp-warning: oklch(0.86 0.17 90);
   --pp-error: oklch(0.70 0.21 22);
   --pp-info: oklch(0.74 0.16 245);
+  /* Rating star: the bright, inviting yellow-gold for USER-RATING stars (game-card, game-detail score +
+     quick-take cards) -- distinct from the muted metallic --color-trophy-gold used for gold TROPHIES. */
+  --pp-rating-star: oklch(0.86 0.17 90);
   /* Maintenance (held-but-lapsed badge): the site-wide "needs re-earning" red -- Gallery "M", Case niche,
      Series tile + badge-detail rungs all key off this so the signal reads the same everywhere. */
   --pp-maint: #e23026;

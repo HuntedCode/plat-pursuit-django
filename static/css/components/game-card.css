@@ -90,7 +90,7 @@
 .pp-gcard__facts > :first-child { justify-self: start; }
 .pp-gcard__facts > :last-child { justify-self: end; }
 .pp-gcard__fact { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; color: var(--pp-text); }
-.pp-gcard__star { width: 12px; height: 12px; color: var(--pp-warning); }
+.pp-gcard__star { width: 12px; height: 12px; color: var(--pp-rating-star); }
 .pp-gcard__fact--none { color: var(--pp-text-mute); font-weight: 400; }
 .pp-gcard__fact--none .pp-gcard__star { color: var(--pp-text-mute); }
 .pp-gcard__tro { display: inline-flex; align-items: center; font-weight: 800; letter-spacing: -0.01em; }
