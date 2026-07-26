@@ -47,8 +47,10 @@ class RatingService:
 
         counts = {s: aggregates.pop(f's{s}') for s in (5, 4, 3, 2, 1)}
         total = aggregates['count'] or 1
+        peak = max(counts.values()) or 1   # scale bar heights to the tallest column so the shape reads clearly
         aggregates['distribution'] = [
-            {'star': s, 'count': counts[s], 'pct': round(counts[s] / total * 100)}
+            {'star': s, 'count': counts[s], 'pct': round(counts[s] / total * 100),
+             'bar': round(counts[s] / peak * 100)}
             for s in (5, 4, 3, 2, 1)
         ]
 

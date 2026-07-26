@@ -38,12 +38,12 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
         polarizing, not just "above average." Whole-star buckets from RatingService; shown once there are a few
         ratings (a 1-2 rating histogram says nothing). game-detail.js updates the bars live on submit. {% endcomment %}
         {% if averages.count >= 3 and averages.distribution %}
-        <div class="gd-dist" data-cond-dist>
-            {% for row in averages.distribution %}
-            <div class="gd-dist__row" data-dist-star="{{ row.star }}">
-                <span class="gd-dist__star">{{ row.star }}<span class="gd-dist__starmark">&#9733;</span></span>
-                <span class="pp-horizon pp-horizon__track gd-dist__bar" style="--horizon-h: 7px; --horizon-progress: {{ row.pct }}%;" role="img" aria-label="{{ row.star }} stars: {{ row.count }} rating{{ row.count|pluralize }}"><span class="pp-horizon__fill"></span></span>
+        <div class="gd-dist" data-cond-dist role="img" aria-label="Star rating distribution, 1 to 5 stars">
+            {% for row in averages.distribution reversed %}
+            <div class="gd-dist__col" data-dist-star="{{ row.star }}" title="{{ row.star }}-star: {{ row.count }} rating{{ row.count|pluralize }} ({{ row.pct }}%)">
                 <span class="gd-dist__n" data-dist-n>{{ row.count }}</span>
+                <span class="gd-dist__track"><span class="gd-dist__fill" data-dist-fill style="height: {{ row.bar }}%;"></span></span>
+                <span class="gd-dist__star">{{ row.star }}<span class="gd-dist__starmark">&#9733;</span></span>
             </div>
             {% endfor %}
         </div>

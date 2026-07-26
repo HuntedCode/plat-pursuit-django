@@ -192,20 +192,20 @@ def test_rating_distribution_buckets():
                                          difficulty=5, grindiness=5, hours_to_platinum=10, fun_ranking=5, overall_rating=r)
     avg = RatingService.get_community_averages_for_group(concept, base)
     dist = {row['star']: row for row in avg['distribution']}
-    assert dist[5]['count'] == 3 and dist[5]['pct'] == 75
-    assert dist[1]['count'] == 1 and dist[1]['pct'] == 25
+    assert dist[5]['count'] == 3 and dist[5]['pct'] == 75 and dist[5]['bar'] == 100   # tallest -> full height
+    assert dist[1]['count'] == 1 and dist[1]['pct'] == 25 and dist[1]['bar'] == 33    # 1/3 of the peak
     assert dist[4]['count'] == 0 and dist[3]['count'] == 0 and dist[2]['count'] == 0
-    assert [row['star'] for row in avg['distribution']] == [5, 4, 3, 2, 1]   # ordered high -> low
+    assert [row['star'] for row in avg['distribution']] == [5, 4, 3, 2, 1]   # stored high -> low
 
 
-_DIST = [{'star': 5, 'count': 15, 'pct': 75}, {'star': 4, 'count': 1, 'pct': 5},
-         {'star': 3, 'count': 0, 'pct': 0}, {'star': 2, 'count': 1, 'pct': 5}, {'star': 1, 'count': 3, 'pct': 15}]
+_DIST = [{'star': 5, 'count': 15, 'pct': 75, 'bar': 100}, {'star': 4, 'count': 1, 'pct': 5, 'bar': 7},
+         {'star': 3, 'count': 0, 'pct': 0, 'bar': 0}, {'star': 2, 'count': 1, 'pct': 5, 'bar': 7}, {'star': 1, 'count': 3, 'pct': 15, 'bar': 20}]
 
 
 def test_distribution_histogram_shown_with_enough_ratings():
     html = _conditions({**_AVERAGES, 'count': 20, 'distribution': _DIST})
     assert 'gd-dist' in html and 'data-dist-star="5"' in html
-    assert '--horizon-progress: 75%' in html       # the 5-star bar fills to 75%
+    assert 'height: 100%' in html                  # the 5-star column (the tallest) fills the chart
 
 
 def test_distribution_histogram_hidden_below_threshold():

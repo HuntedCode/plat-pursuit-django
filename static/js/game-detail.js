@@ -1627,9 +1627,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Live-update the star-distribution histogram bars + counts (if it's shown -- count >= 3).
                     if (avg.distribution) {
                         avg.distribution.forEach((row) => {
-                            const el = card.querySelector('.gd-dist__row[data-dist-star="' + row.star + '"]');
+                            const el = card.querySelector('.gd-dist__col[data-dist-star="' + row.star + '"]');
                             if (!el) return;
-                            const bar = el.querySelector('.pp-horizon'); if (bar) bar.style.setProperty('--horizon-progress', row.pct + '%');
+                            const fill = el.querySelector('[data-dist-fill]'); if (fill) fill.style.height = row.bar + '%';
                             const dn = el.querySelector('[data-dist-n]'); if (dn) dn.textContent = row.count;
                         });
                     }

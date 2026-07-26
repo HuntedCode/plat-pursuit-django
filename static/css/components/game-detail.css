@@ -1251,14 +1251,16 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__of { font-size: 0.9rem; font-weight: 700; color: var(--pp-text-mute); }
 .gd-cond__count { font-size: 0.76rem; color: var(--pp-text-mute); }
 
-/* Star distribution histogram: 5 rows (5..1), each a gold Horizon bar (% of total) + the raw count. Shows the
-   SHAPE an average hides -- polarizing vs. consensus. The count keeps it honest at low volume. */
-.gd-dist { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
-.gd-dist__row { display: grid; grid-template-columns: 1.7rem 1fr auto; align-items: center; gap: 8px; }
-.gd-dist__star { display: inline-flex; align-items: center; gap: 1px; font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-.gd-dist__starmark { color: var(--color-trophy-gold); font-size: 0.66rem; }
-.gd-dist__bar { --horizon-accent: var(--color-trophy-gold); }
-.gd-dist__n { font-size: 0.7rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; min-width: 1.4rem; text-align: right; }
+/* Star distribution as a mini bar GRAPH (columns, 1..5 stars L->R): the SHAPE reads as a silhouette --
+   polarizing = a U, consensus = a single peak. Bars scale to the tallest column; the count above keeps it
+   honest at low volume. */
+.gd-dist { display: flex; align-items: flex-end; gap: 6px; margin-top: 8px; }
+.gd-dist__col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.gd-dist__n { font-size: 0.62rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; line-height: 1; }
+.gd-dist__track { width: 100%; height: 44px; display: flex; align-items: flex-end; border-radius: 3px; background: color-mix(in oklab, var(--pp-bg-2) 40%, transparent); overflow: hidden; }
+.gd-dist__fill { width: 100%; background: var(--color-trophy-gold); border-radius: 3px 3px 0 0; transition: height var(--pp-dur) var(--pp-ease); }
+.gd-dist__star { display: inline-flex; align-items: center; gap: 1px; font-size: 0.62rem; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.gd-dist__starmark { color: var(--color-trophy-gold); font-size: 0.56rem; }
 .gd-cond__summary { font-size: 1.18rem; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; color: var(--pp-text); text-wrap: balance; }
 .gd-cond--empty .gd-cond__summary { color: var(--pp-text-mute); font-weight: 600; }
 
