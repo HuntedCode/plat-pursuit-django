@@ -33,26 +33,11 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
         </div>
         <p class="gd-cond__summary" data-cond-summary>{% if averages %}{{ averages|rating_summary }}{% else %}Not yet rated.{% endif %}</p>
         <span class="gd-cond__count" data-rate-count>{% if averages %}{{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}Be the first to rate this.{% endif %}</span>
-
-        {% comment %} Star distribution: the SHAPE the average hides -- a 4.0 that's 75% 5-star + 15% 1-star is
-        polarizing, not just "above average." One column per exact 0.5 step (0.5 left -> 5.0 right) from
-        RatingService, so a 3.5 reads as 3.5, not rounded. Numerals sit only under whole stars; game-detail.js
-        updates the bars live on submit. {% endcomment %}
-        {% if averages.distribution %}
-        <div class="gd-dist gd-dist--ten" data-cond-dist role="img" aria-label="Star rating distribution, half a star to 5 stars">
-            {% for row in averages.distribution %}
-            <div class="gd-dist__col{% if row.starnum %} is-whole{% endif %}" data-dist-step="{{ row.step }}" title="{{ row.value|floatformat:'-1' }} star{{ row.value|pluralize }}: {{ row.count }} rating{{ row.count|pluralize }} ({{ row.pct }}%)">
-                <span class="gd-dist__n" data-dist-n>{% if row.count %}{{ row.count }}{% endif %}</span>
-                <span class="gd-dist__track"><span class="gd-dist__fill" data-dist-fill style="height: {{ row.bar }}%;"></span></span>
-                <span class="gd-dist__star">{% if row.starnum %}{{ row.starnum }}<span class="gd-dist__starmark">&#9733;</span>{% endif %}</span>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
     </div>
 
-    {# Conditions: one icon tile per quality; the verdict word is the headline, the number a quiet subscript. #}
-    <div class="gd-cond__tiles">
+    {# Conditions: one icon tile per quality; the verdict word is the headline, the number a quiet subscript.
+       The rating-spread column chart shares this row as a fourth framed cell (full-width below on mobile). #}
+    <div class="gd-cond__metrics{% if averages.distribution %} is-wide{% endif %}">
         <div class="gd-cond__tile" data-stat="difficulty"{% if averages %} data-tone="{{ averages.avg_difficulty|rating_tone:'difficulty' }}"{% endif %}>
             <svg class="gd-cond__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
             <span class="gd-cond__lbl">Difficulty</span>
@@ -71,6 +56,26 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
             <span class="gd-cond__figure"><b class="gd-cond__num pp-tally" data-cond-num>{% if averages %}{{ averages.avg_fun|floatformat:1 }}{% endif %}</b><span class="gd-cond__unit">/10</span></span>
             <span class="gd-cond__verdict" data-cond-verdict>{% if averages %}{{ averages.avg_fun|rating_verdict:'fun' }}{% else %}&mdash;{% endif %}</span>
         </div>
+
+        {% comment %} Rating spread: the SHAPE the average hides -- a 4.0 that's mostly 5s and a few 1s is
+        polarizing, not just "above average." One column per exact 0.5 step (0.5 left -> 5.0 right), grounded on
+        a baseline with visible slots so short bars read as a silhouette, not floating squares. Numerals anchor
+        the whole stars; exact counts live in each column's tooltip. game-detail.js updates the bars live. {% endcomment %}
+        {% if averages.distribution %}
+        <div class="gd-cond__disttile">
+            <span class="gd-cond__lbl">Rating spread</span>
+            <div class="gd-dist" data-cond-dist role="img" aria-label="Rating distribution, half a star to 5 stars">
+                {% for row in averages.distribution %}
+                <div class="gd-dist__col{% if row.starnum %} is-whole{% endif %}" data-dist-step="{{ row.step }}" title="{{ row.value|floatformat:'-1' }} star{{ row.value|pluralize }}: {{ row.count }} rating{{ row.count|pluralize }} ({{ row.pct }}%)">
+                    <span class="gd-dist__fill" data-dist-fill style="height: {{ row.bar }}%;"></span>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="gd-dist__axis" aria-hidden="true">
+                {% for row in averages.distribution %}<span>{% if row.starnum %}{{ row.starnum }}{% endif %}</span>{% endfor %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     {% comment %} Your take: a quiet personal layer comparing the viewer's own scores to the community. Shown

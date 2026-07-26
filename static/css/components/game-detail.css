@@ -1251,27 +1251,35 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__of { font-size: 0.9rem; font-weight: 700; color: var(--pp-text-mute); }
 .gd-cond__count { font-size: 0.76rem; color: var(--pp-text-mute); }
 
-/* Star distribution as a mini bar GRAPH: the SHAPE reads as a silhouette -- polarizing = a U, consensus = a
-   single peak. Bars scale to the tallest column; the count above keeps it honest at low volume. The --ten
-   variant is one column per exact 0.5 step (0.5 left -> 5.0 right); numerals sit only under whole stars, so
-   the eye anchors on 1..5 while the half-steps fill in between. */
-.gd-dist { display: flex; align-items: flex-end; gap: 6px; margin-top: 8px; }
-.gd-dist--ten { gap: 4px; }
-.gd-dist__col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.gd-dist__n { font-size: 0.62rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; line-height: 1; min-height: 0.62rem; }
-.gd-dist__track { width: 100%; height: 44px; display: flex; align-items: flex-end; border-radius: 3px; background: color-mix(in oklab, var(--pp-bg-2) 40%, transparent); overflow: hidden; }
-.gd-dist--ten .is-whole .gd-dist__track { background: color-mix(in oklab, var(--pp-bg-2) 62%, transparent); }   /* anchor the whole-star columns */
-.gd-dist__fill { width: 100%; background: var(--color-trophy-gold); border-radius: 3px 3px 0 0; transition: height var(--pp-dur) var(--pp-ease); }
-.gd-dist--ten .gd-dist__col:not(.is-whole) .gd-dist__fill { background: color-mix(in oklab, var(--color-trophy-gold) 74%, transparent); }   /* half-steps read a touch quieter */
-.gd-dist__star { display: inline-flex; align-items: center; gap: 1px; min-height: 0.8rem; font-size: 0.62rem; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-.gd-dist__starmark { color: var(--color-trophy-gold); font-size: 0.56rem; }
+/* Rating spread: a compact column chart that shares the metrics row with the quality tiles (framed like a
+   fourth tile). One column per exact 0.5 step (0.5 left -> 5.0 right). Each column is a VISIBLE slot sitting
+   on a baseline rule -- App Store / iOS-Health style -- so short bars read as a silhouette, not floating
+   squares. Gold fills the earned portion; whole-star slots are a touch stronger + numeral-labeled so the
+   eye anchors on 1..5, half-steps fill quietly between. */
+.gd-cond__disttile { display: flex; flex-direction: column; gap: 7px; padding: 13px 13px 11px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); }
+.gd-dist { display: flex; align-items: flex-end; gap: 3px; flex: 1; min-height: 52px; border-bottom: 1.5px solid var(--pp-border); }
+.gd-dist__col { position: relative; flex: 1; min-width: 0; height: 100%; display: flex; align-items: flex-end; border-radius: 2px 2px 0 0; background: color-mix(in oklab, var(--pp-bg-2) 50%, transparent); overflow: hidden; }
+.gd-dist__col.is-whole { background: color-mix(in oklab, var(--pp-bg-2) 74%, transparent); }
+.gd-dist__fill { width: 100%; background: var(--color-trophy-gold); border-radius: 2px 2px 0 0; transition: height var(--pp-dur) var(--pp-ease); }
+.gd-dist__col:not(.is-whole) .gd-dist__fill { background: color-mix(in oklab, var(--color-trophy-gold) 80%, transparent); }   /* half-steps read a touch quieter */
+.gd-dist__axis { display: flex; gap: 3px; }
+.gd-dist__axis span { flex: 1; min-width: 0; text-align: center; font-size: 0.6rem; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; line-height: 1; }
+
+/* md+: the chart joins the tiles inline as a wider fourth column (only when a rating exists). */
+@media (min-width: 768px) {
+    .gd-cond__metrics.is-wide { grid-template-columns: repeat(3, 1fr) 1.55fr; }
+    .gd-cond__metrics.is-wide .gd-cond__disttile { grid-column: auto; }
+}
 .gd-cond__summary { font-size: 1.18rem; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; color: var(--pp-text); text-wrap: balance; }
 .gd-cond--empty .gd-cond__summary { color: var(--pp-text-mute); font-weight: 600; }
 
 /* Conditions tiles: the number is the figure (prioritized, Tally face), the verdict word its plain-language
    descriptor (polarity lives in the WORD, so nothing reads backwards). Only the icon + verdict take the tone
    accent -- the tile surface stays neutral. */
-.gd-cond__tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+/* Metrics row: the three quality tiles, plus the rating-spread chart as a fourth framed cell (.is-wide adds
+   the extra track when a rating exists). On mobile the chart drops to its own full-width row under the tiles. */
+.gd-cond__metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.gd-cond__metrics .gd-cond__disttile { grid-column: 1 / -1; }
 .gd-cond__tile { display: flex; flex-direction: column; gap: 3px; padding: 13px 13px 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); --rate-accent: var(--pp-text-dim); }
 .gd-cond__tile[data-tone="good"] { --rate-accent: var(--pp-success); }
 .gd-cond__tile[data-tone="warn"] { --rate-accent: var(--pp-warning); }
@@ -1326,8 +1334,10 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
     .gd-cond__score-n { font-size: 2.75rem; }
     .gd-cond__of { font-size: 1.05rem; }
     .gd-cond__summary { font-size: 1.42rem; }
-    .gd-cond__tiles { gap: 12px; }
+    .gd-cond__metrics { gap: 12px; }
+    .gd-cond__metrics.is-wide { grid-template-columns: repeat(3, 1fr) 1.5fr; }
     .gd-cond__tile { padding: 18px 16px 16px; }
+    .gd-cond__disttile { padding: 16px 16px 14px; }
     .gd-cond__icon { width: 22px; height: 22px; }
     .gd-cond__num { font-size: 2.1rem; }
     .gd-cond__unit { font-size: 0.82rem; }

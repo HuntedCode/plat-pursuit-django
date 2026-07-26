@@ -1624,14 +1624,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         const vd = tile.querySelector('[data-cond-verdict]'); if (vd) vd.textContent = verdictOf(kind, v);
                         const nm = tile.querySelector('[data-cond-num]'); if (nm) countTo(nm, v, 1);
                     });
-                    // Live-update the star-distribution histogram bars + counts (10 columns keyed on the
-                    // integer half-step 1..10). Empty columns render a blank count span, so we clear to ''.
+                    // Live-update the rating-spread chart bars (10 columns keyed on the integer half-step 1..10).
                     if (avg.distribution) {
                         avg.distribution.forEach((row) => {
                             const el = card.querySelector('.gd-dist__col[data-dist-step="' + row.step + '"]');
                             if (!el) return;
                             const fill = el.querySelector('[data-dist-fill]'); if (fill) fill.style.height = row.bar + '%';
-                            const dn = el.querySelector('[data-dist-n]'); if (dn) dn.textContent = row.count || '';
                         });
                     }
                 }
@@ -1733,7 +1731,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 band.innerHTML = '<span class="gd-cond__you-lbl">Your take</span>' +
                     '<p class="gd-cond__you-txt" data-cond-you-txt></p>' +
                     '<span class="gd-cond__you-scores" data-cond-you-scores></span>';
-                const tiles = card.querySelector('.gd-cond__tiles');
+                const tiles = card.querySelector('.gd-cond__metrics');
                 if (tiles) tiles.insertAdjacentElement('afterend', band); else card.appendChild(band);
             }
             const txt = band.querySelector('[data-cond-you-txt]'); if (txt) txt.textContent = comparisonOf(u, a);
