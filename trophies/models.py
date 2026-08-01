@@ -3090,6 +3090,20 @@ class UserGroupBadge(models.Model):
         return f"{self.profile.psn_username} - {self.group_badge}"
 
 
+class ProfileBadgeStanding(models.Model):
+    """Sealed per-profile badge-XP standing for the new grouping-badge subsystem. Recomputed from scratch on
+    every evaluation (a pure function of the DesiredState -- see services/badge_xp.py), so it can't drift.
+    Deliberately isolated from the legacy ProfileGamification.total_badge_xp (tier-based; repointed at cutover).
+    total_xp is the leaderboard sort key; series_xp is the {series_slug: xp} breakdown for per-series boards."""
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='badge_standing')
+    total_xp = models.PositiveIntegerField(default=0, db_index=True)   # leaderboard sort key
+    series_xp = models.JSONField(default=dict, blank=True, help_text='Per-series XP: {"god-of-war": 1500, ...}')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - badge XP {self.total_xp}"
+
+
 class TitleManager(models.Manager):
     """Fetch titles earned by a user, ordered alphabetically. Usage: Title.objects.earned_by_user(profile)"""
     def earned_by_user(self, profile):

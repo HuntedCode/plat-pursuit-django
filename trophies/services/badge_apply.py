@@ -23,6 +23,7 @@ from trophies.services.badge_orchestrator import (
 from trophies.services.badge_adapters import (
     grant_series_title, revoke_series_title_if_orphaned, emit_badge_earned,
 )
+from trophies.services.badge_xp import recompute_standing
 
 
 @dataclass(frozen=True)
@@ -96,35 +97,44 @@ def apply_changes(profile, changes, gb_map: dict) -> dict:
     return result
 
 
-def _plan_with_catalog(profile, catalog) -> list:
-    """Diff one profile against a PRE-BUILT catalog (no catalog re-fetch). The per-profile DB cost is the two
-    completion reads (in evaluate_with_catalog) + one current-state read here."""
+def _plan_with_catalog(profile, catalog):
+    """Diff one profile against a PRE-BUILT catalog (no catalog re-fetch). Returns (changes, desired) -- the
+    desired state is also fed to the XP recompute. Per-profile DB cost: the two completion reads (in
+    evaluate_with_catalog) + one current-state read here."""
     desired = evaluate_with_catalog(profile, catalog)
     gb_ids = [gb.id for gb in catalog['group_badges']]
     current = {
         ugb.group_badge_id: CurrentBadge(ugb.status, ugb.is_holo)
         for ugb in UserGroupBadge.objects.filter(profile=profile, group_badge_id__in=gb_ids)
     }
-    return diff(desired, current)
+    return diff(desired, current), desired
 
 
 def plan(profile, group_badges=None):
-    """Evaluate + diff WITHOUT writing. Returns (changes, gb_map). Public so a --dry-run runner (and the
-    reconciliation harness) can preview what apply would do."""
+    """Evaluate + diff WITHOUT writing (no XP recompute either). Returns (changes, gb_map). Public so a
+    --dry-run runner can preview what apply would do."""
     group_badges = resolve_group_badges(group_badges)
     if not group_badges:
         return [], {}
     catalog = build_catalog(group_badges)
     gb_map = {gb.id: gb for gb in group_badges}
-    return _plan_with_catalog(profile, catalog), gb_map
+    changes, _ = _plan_with_catalog(profile, catalog)
+    return changes, gb_map
 
 
 def evaluate_and_apply(profile, group_badges=None) -> dict:
-    """Single-profile entry point: evaluate, diff, apply. Returns the apply summary. Awards append (rank =
-    existing earners + 1) -- correct for a genuine live earn. For processing MANY existing users, use
+    """Single-profile entry point: evaluate, diff, apply, recompute XP. Returns the apply summary. Awards append
+    (rank = existing earners + 1) -- correct for a genuine live earn. For processing MANY existing users, use
     evaluate_and_apply_batch, which orders ranks by completion date."""
-    changes, gb_map = plan(profile, group_badges)
-    return apply_changes(profile, changes, gb_map)
+    group_badges = resolve_group_badges(group_badges)
+    if not group_badges:
+        return {'awarded': [], 'reactivated': [], 'lapsed': [], 'holo_changed': []}
+    catalog = build_catalog(group_badges)
+    gb_map = {gb.id: gb for gb in group_badges}
+    changes, desired = _plan_with_catalog(profile, catalog)
+    result = apply_changes(profile, changes, gb_map)
+    recompute_standing(profile.id, desired, group_badges)   # XP tracks current progress, not just earns
+    return result
 
 
 def evaluate_and_apply_batch(profiles, group_badges=None) -> Counter:
@@ -142,7 +152,7 @@ def evaluate_and_apply_batch(profiles, group_badges=None) -> Counter:
 
     dated, undated = [], []   # lean records: (gb_id, profile_id, holo, earned_date) -- no Profile refs held
     for profile in profiles:
-        changes = _plan_with_catalog(profile, catalog)
+        changes, desired = _plan_with_catalog(profile, catalog)
         non_awards = [c for c in changes if c.action != 'award']
         if non_awards:
             for key, ids in apply_changes(profile, non_awards, gb_map).items():
@@ -151,6 +161,7 @@ def evaluate_and_apply_batch(profiles, group_badges=None) -> Counter:
             if c.action == 'award':
                 rec = (c.group_badge_id, profile.id, c.holo, c.earned_date)
                 (dated if c.earned_date is not None else undated).append(rec)
+        recompute_standing(profile.id, desired, group_badges)   # XP recompute is independent of the earn writes
 
     dated.sort(key=lambda r: (r[3], r[1]))   # by completion date, then profile id (stable tie-break)
     _apply_awards_ranked(dated + undated, gb_map, totals)   # undated (no date) append last

@@ -195,6 +195,14 @@ bonuses) is a **single-function edit with all inputs already present**, not a ne
 NOT build a speculative plugin/registry now (YAGNI); centralization plus a rich input is what makes it cheap to
 evolve.
 
+**Implemented (Phase 4, Lane A).** `services/badge_xp.py`: `compute_badge_xp({series_slug: [GroupBadgeResult]})`
+is pure (XP accrues per group badge via `base_satisfied_count`, summed per series); `recompute_standing` upserts
+the sealed `ProfileBadgeStanding` (OneToOne profile, `total_xp` indexed for leaderboards, `series_xp` JSON),
+recomputed from scratch off the DesiredState on every write (evaluate_and_apply + batch), so it can't drift and
+a scoped `--series` run never clobbers other series. Isolated from the legacy tier-based
+`ProfileGamification.total_badge_xp`. Constants (`XP_PER_STAGE=100`, `XP_BADGE_COMPLETION_BONUS=500`) are
+placeholders pending calibration. **Next (Lane B):** badge leaderboards off `total_xp` / `series_xp` + `earn_rank`.
+
 ---
 
 ## 6. Migration, reconciliation & cutover
