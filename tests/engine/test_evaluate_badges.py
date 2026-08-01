@@ -10,6 +10,7 @@ from trophies.models import UserGroupBadge, ProfileGame, TrophyGroup, ProfileTro
 from tests.factories import (
     ProfileFactory, ConceptFactory, GameFactory, StageFactory,
     PlatformGroupFactory, BadgeSeriesFactory, GroupBadgeFactory,
+    BadgeFactory, UserBadgeFactory,
 )
 
 pytestmark = pytest.mark.django_db
@@ -138,3 +139,25 @@ def test_batch_catalog_fetched_once_flat_per_profile():
     q4 = _batch_query_count(4, 'qb')
     per_profile = (q4 - q1) / 3
     assert per_profile <= 8, f"~{per_profile:.1f} queries/profile (N1={q1}, N4={q4}) -- catalog likely re-fetched"
+
+
+def test_compare_legacy_reports_kept_lost_gained():
+    gb, game = _series_badge('gow')
+    # kept: held a legacy tier AND completes under the new engine.
+    kept = ProfileFactory(psn_username='kept1')
+    UserBadgeFactory(profile=kept, badge=BadgeFactory(series_slug='gow', tier=2))
+    _complete(kept, game)
+    # lost: held a legacy tier but does NOT complete under the new engine (played, not finished).
+    lost = ProfileFactory(psn_username='lost1')
+    UserBadgeFactory(profile=lost, badge=BadgeFactory(series_slug='gow', tier=1))
+    ProfileGame.objects.create(profile=lost, game=game, progress=40)
+    # gained: no legacy badge, but completes under the new engine.
+    gained = ProfileFactory(psn_username='gain1')
+    _complete(gained, game)
+
+    out = StringIO()
+    call_command('evaluate_badges', '--series', 'gow', '--compare-legacy', stdout=out)
+    text = out.getvalue()
+    assert 'old 2' in text and 'kept 1' in text and 'lost 1' in text and 'gained 1' in text
+    assert 'lost1' in text                       # the lost profile is sampled with its username + old tier
+    assert not UserGroupBadge.objects.exists()   # read-only: writes nothing

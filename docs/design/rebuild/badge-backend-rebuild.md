@@ -202,10 +202,14 @@ evolve.
 Standard parallel-change / expand–contract with a separate schema:
 
 1. **Build** the new tables + engine beside the old; old system runs untouched.
-2. **Reconciliation harness** — a command that (a) asserts `evaluate` is idempotent (run twice → identical),
-   and (b) produces a human-readable **"who gains / loses recognition"** report vs the old tier earns, mapped
-   through the reframe, so we can eyeball that every loss is *intentional* (e.g., someone who held old Silver
-   but never met the platinum bar) and no one is wrongly stripped. This is the safety net; it stays lightweight.
+2. **Old-vs-new glance (`evaluate_badges --compare-legacy`)** — a read-only, SERIES-level report of
+   kept / lost / gained recognition vs the legacy tier earns (held any old tier vs earns any new group), plus a
+   sample of the lost to eyeball. This REPLACES the originally-planned full reconciliation harness: with the
+   engine exhaustively unit-tested, any profile inspectable via `--dry-run`, and cutover per-badge + reversible
+   (old `UserBadge` retained), a dedicated full-population harness was over-built. Idempotency ("evaluate twice
+   → identical") is true by construction (pure engine, no randomness) and already covered by the deterministic
+   tests, so it needs no runtime assertion. Losses are EXPECTED where the reframe raised the bar (old low tier
+   → full platform group); the glance surfaces them per series before flipping so each can be confirmed intended.
 3. **Author dormant badges + art on prod** — in the new tables, invisible with zero guarding (nothing on prod
    reads them yet).
 4. **`earn_rank` backfill** from completion dates (§4).
@@ -222,8 +226,8 @@ Old `UserBadge` history is never deleted at cutover — retained for rollback an
 1. **XP model** — DECIDED: flat XP per gating stage + a badge-completion bonus, no holo XP, in one swappable
    `compute_badge_xp` function (§5).
 2. **`earn_rank` semantics** — DECIDED: first-to-complete via completion dates (§4).
-3. **Reconciliation depth** — default: a sample + **all current earners**; go full-population if the harness is
-   cheap enough to run it. (revisit during Phase 5.)
+3. **Reconciliation depth** — DECIDED: descoped to the read-only `evaluate_badges --compare-legacy` series-level
+   glance (kept/lost/gained + a lost sample), in place of a full-population harness. See §6.2.
 4. **Denorm** — DECIDED: fully service-owned recompute in `apply()`, no scattered signals.
 5. **`earned_count` semantic** — DECIDED: active earners only (`status='earned'`); rarity uses the same count.
 
@@ -235,7 +239,8 @@ Old `UserBadge` history is never deleted at cutover — retained for rollback an
 2. The pure **evaluate** engine + tests (single-source completion, gate/satisfy, base/holo, whale query-count).
 3. **diff/apply** + service-owned denorm + the three adapters.
 4. XP + leaderboards (sealed).
-5. `earn_rank` completion-date backfill + reconciliation harness.
+5. Authoring + processing tools: `convert_series_to_groups`, `evaluate_badges` (its completion-ordered batch IS
+   the `earn_rank` backfill), `--compare-legacy` glance. [DONE — Phase 3 complete]
 6. Author dormant badges + art on prod.
 7. Cutover flag + soak + decommission.
 
@@ -243,8 +248,9 @@ Old `UserBadge` history is never deleted at cutover — retained for rollback an
 
 ## 9. Gotchas & risks
 
-- **A from-scratch earn engine can silently mis-award.** The reconciliation harness (§6.2) is the mitigation —
-  build it early, not at the end.
+- **A from-scratch earn engine can silently mis-award.** Mitigated by the exhaustive engine unit tests, the
+  `--dry-run` inspectability of any profile, per-badge reversible cutover, and the `--compare-legacy` glance
+  (§6.2) — in place of a heavyweight reconciliation harness.
 - **Milestones read badge counts.** Preserve `total_badges_earned` / `unique_badges_earned` as a stable query,
   or the two milestone criteria break.
 - **Holo XP is a trap.** Live + lapsing + XP = fluctuating totals. Keep holo cosmetic.

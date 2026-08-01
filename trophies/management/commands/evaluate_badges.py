@@ -11,14 +11,21 @@ wiring, backfill, and reconciliation harness build on.
     python manage.py evaluate_badges --series god-of-war --dry-run                    # process a badge for
     python manage.py evaluate_badges --series god-of-war                              #   everyone who played it
     python manage.py evaluate_badges --all                                             # batch (all live badges)
+    python manage.py evaluate_badges --series god-of-war --compare-legacy             # old-vs-new sanity glance
+
+`--compare-legacy` is the lightweight pre-cutover check (in place of a full reconciliation harness): read-only,
+it reports how many profiles KEPT / LOST / GAINED recognition for a series under the new engine vs the old tier
+badges, at the SERIES level (held any old tier vs earns any new group). Losses are expected where the reframe
+raised the bar (old low tier -> full platform group); the glance just surfaces them to eyeball before flipping.
 """
 from collections import Counter
 
 from django.core.management.base import BaseCommand
-from django.db.models import Q
+from django.db.models import Q, Max
 
-from trophies.models import Profile, GroupBadge, Game, ProfileGame
+from trophies.models import Profile, GroupBadge, BadgeSeries, Game, ProfileGame, UserBadge
 from trophies.services.badge_apply import plan, evaluate_and_apply_batch
+from trophies.services.badge_orchestrator import build_catalog, evaluate_with_catalog
 
 # diff action -> the apply-summary key, so dry-run and write share one totals dict.
 _ACTION_TOTAL = {'award': 'awarded', 'reactivate': 'reactivated', 'lapse': 'lapsed', 'holo': 'holo_changed'}
@@ -32,8 +39,14 @@ class Command(BaseCommand):
         parser.add_argument('--all', action='store_true', help="Evaluate every linked profile (batch).")
         parser.add_argument('--series', help="Scope to one series_slug's group badges, INCLUDING dormant (for testing).")
         parser.add_argument('--dry-run', action='store_true', help="Preview the changes; write nothing.")
+        parser.add_argument('--compare-legacy', action='store_true',
+                            help="Read-only: report kept/lost/gained recognition vs legacy tier badges. Pair with --series or --all.")
 
     def handle(self, *args, **opts):
+        if opts['compare_legacy']:
+            self._compare_legacy(opts)
+            return
+
         dry = opts['dry_run']
 
         # Resolve which group badges to evaluate: a specific series (incl. dormant), or the default live set.
@@ -59,11 +72,10 @@ class Command(BaseCommand):
         elif opts['series']:
             # Process this badge for everyone who has PLAYED a game in the series (the "may have progress"
             # set) -- bounded by the series' players, not the whole user base.
-            game_ids = Game.objects.filter(
-                Q(concept__stages__series_slug=opts['series']) | Q(concept__bundles__stage__series_slug=opts['series'])
-            ).values_list('id', flat=True)
-            player_ids = ProfileGame.objects.filter(game_id__in=game_ids).values_list('profile_id', flat=True).distinct()
-            profiles = Profile.objects.filter(id__in=player_ids).only('id', 'psn_username').order_by('psn_username')
+            profiles = (
+                Profile.objects.filter(id__in=self._series_player_ids(opts['series']))
+                .only('id', 'psn_username').order_by('psn_username')
+            )
         else:
             self.stderr.write("Provide a psn_username, --series <slug>, or --all.")
             return
@@ -91,3 +103,57 @@ class Command(BaseCommand):
             f"\n{verb}: {totals['awarded']} awarded, {totals['reactivated']} reactivated, "
             f"{totals['lapsed']} lapsed, {totals['holo_changed']} holo."
         ))
+
+    @staticmethod
+    def _series_player_ids(slug):
+        """Distinct profile ids that have PLAYED any game in the series (standalone or bundle member)."""
+        game_ids = Game.objects.filter(
+            Q(concept__stages__series_slug=slug) | Q(concept__bundles__stage__series_slug=slug)
+        ).values_list('id', flat=True)
+        return ProfileGame.objects.filter(game_id__in=game_ids).values_list('profile_id', flat=True).distinct()
+
+    def _compare_legacy(self, opts):
+        """Read-only pre-cutover glance: per series, old-vs-new recognition at the series level."""
+        if opts['series']:
+            slugs = [opts['series']]
+        elif opts['all']:
+            slugs = list(BadgeSeries.objects.values_list('series_slug', flat=True))
+        else:
+            self.stderr.write("--compare-legacy needs --series <slug> or --all.")
+            return
+        for slug in slugs:
+            self._compare_series(slug)
+
+    def _compare_series(self, slug):
+        group_badges = list(
+            GroupBadge.objects.filter(series__series_slug=slug).select_related('series', 'platform_group')
+        )
+        if not group_badges:
+            self.stdout.write(f"  {slug}: skip (no group badges; run convert_series_to_groups first)")
+            return
+        catalog = build_catalog(group_badges)
+
+        # Old recognition (series-level): held ANY earned legacy tier. Keep each profile's MAX tier for context.
+        old = dict(
+            UserBadge.objects.filter(badge__series_slug=slug, status='earned')
+            .values('profile_id').annotate(t=Max('badge__tier')).values_list('profile_id', 't')
+        )
+        old_ids = set(old)
+
+        # Evaluate old earners (only they can LOSE) UNION series players (to catch GAINS). Losses are the point.
+        population = old_ids | set(self._series_player_ids(slug))
+        new_ids = {
+            p.id for p in Profile.objects.filter(id__in=population).only('id')
+            if any(r.base_earned for r in evaluate_with_catalog(p, catalog).values())
+        }
+
+        lost, gained, kept = old_ids - new_ids, new_ids - old_ids, old_ids & new_ids
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            f"  {slug}: old {len(old_ids)} | new {len(new_ids)} | kept {len(kept)} | lost {len(lost)} | gained {len(gained)}"
+        ))
+        if lost:
+            sample = list(lost)[:15]
+            names = dict(Profile.objects.filter(id__in=sample).values_list('id', 'psn_username'))
+            self.stdout.write(self.style.WARNING(f"    lost {len(lost)} (showing {len(sample)}); confirm each is an intended bar-raise:"))
+            for pid in sample:
+                self.stdout.write(f"      {names.get(pid, pid)} (held legacy tier {old.get(pid)})")
