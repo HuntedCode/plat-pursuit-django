@@ -22,7 +22,8 @@ badge-system architecture doc for the *current* system being replaced.
 
 **The sealing contract (ports & adapters):**
 
-- **Inputs (read-only):** `ProfileGame` completion facts (`has_plat`, `progress`), the `Stage`/`Concept`/`Game`
+- **Inputs (read-only):** the two completion signals — `ProfileTrophyGroup` default-group progress (base) and
+  `ProfileGame.progress` (full/holo) — plus the `Stage`/`Concept`/`Game`
   graph, and the badge/group definitions.
 - **Outputs:** a queryable earn/holo/progress result, plus a single **"badge earned" event**.
 - **Badge XP + leaderboards live inside the box.** They never read/write the jobs/contracts economy.
@@ -120,10 +121,15 @@ Per grouping badge (`series_slug` + `platform_group`), for each `Stage` of the s
 - **Qualifying games** = games under the stage's concepts whose `title_platform` ∩ `group.platforms`.
 - **Gates** (stage is *required*): qualifying game that is `is_obtainable` **and** (group includes delisted, or
   `not is_delisted`).
-- **Satisfies** (counts if the user earned it): *any* qualifying game the user hit the bar on.
-- **Bar per game:** platinum (`has_plat`) if the game has a platinum, else 100% (`progress=100`).
-- **Base** = every gating stage satisfied at its bar. **Holo** = every gating stage at 100% (live, cosmetic,
-  no XP — flips both ways, no maintenance).
+- **Satisfies** (counts if the user earned it): *any* qualifying game the user reached a bar on.
+- **Base bar (per game) = the default trophy group at 100%** (`ProfileTrophyGroup.progress == 100`, floored,
+  the base list). This IS the platinum for plat games and the main list for no-plat games — DLC-independent —
+  so the engine reads a single `base_complete` boolean with **no platinum-specific branching**, and it fixes
+  the old wart where no-plat games needed DLC to earn base. (`ProfileTrophyGroup` is a denormalized, indexed
+  per-group completion written every sync, so this is a cheap bounded lookup, not a trophy aggregation.)
+- **Holo bar (per game) = the whole game at 100%** incl DLC (`ProfileGame.progress == 100`) -> `full_complete`.
+- **Base** = every gating stage has a qualifying game at `base_complete`. **Holo** = ...at `full_complete`
+  (live, cosmetic, no XP — flips both ways, no maintenance). The base->holo gap is exactly "did the DLC too."
 - `ConceptBundle` keeps its "all members at 100% = synthesized platinum" semantics.
 
 ### 3.4 Denormalization: service-owned, not signal-scattered
@@ -158,9 +164,10 @@ input contract, not a coupling.
 
 **Decided:** rank means **first-to-complete**, not first-to-be-awarded. Define a user's
 "earned-when" for a grouping badge = the date they satisfied their **last gating stage** in that group (the max
-over gating stages of that stage's satisfaction date, from `StageCompletionEvent.completed_at` /
-`ProfileGame.most_recent_trophy_date`). Assign `earn_rank` deterministically by ordering qualifying profiles on
-that date (tie-break: earliest contributing trophy date, then profile id — no live COUNT, so no tie hazard).
+over gating stages of that stage's earliest satisfying-game base-completion date — cleanly available as the
+game's **default `ProfileTrophyGroup.last_trophy_at`**, the moment the base list was finished). Assign
+`earn_rank` deterministically by ordering qualifying profiles on that date (tie-break: earliest contributing
+trophy date, then profile id — no live COUNT, so no tie hazard).
 
 - **At cutover:** seed `1..N` per grouping badge from historical completion dates, so "you were the 47th to
   complete God of War — Ultra HD" is true even though the badge is new.

@@ -27,6 +27,7 @@ from trophies.models import (
     IGDBMatch,
     Profile,
     ProfileGame,
+    ProfileTrophyGroup,
     Review,
     Stage,
     Trophy,
@@ -34,6 +35,9 @@ from trophies.models import (
     UserBadge,
     UserBadgeProgress,
     UserConceptRating,
+    PlatformGroup,
+    BadgeSeries,
+    GroupBadge,
 )
 from users.models import CustomUser
 
@@ -291,3 +295,53 @@ class EarnedTrophyFactory(factory.django.DjangoModelFactory):
     trophy = factory.SubFactory(TrophyFactory)
     earned = True
     earned_date_time = factory.LazyFunction(timezone.now)
+
+
+# ── Badge rebuild (grouping-badge subsystem) ─────────────────────────────────
+class PlatformGroupFactory(factory.django.DjangoModelFactory):
+    """A platform-compatibility group. Defaults to a PS4/PS5 'Ultra HD'-style group."""
+
+    class Meta:
+        model = PlatformGroup
+        django_get_or_create = ('key',)
+
+    key = factory.Sequence(lambda n: f"group-{n}")
+    name = factory.Sequence(lambda n: f"Group {n}")
+    platforms = factory.LazyFunction(lambda: ['PS4', 'PS5'])
+    exclude_delisted = False
+
+
+class BadgeSeriesFactory(factory.django.DjangoModelFactory):
+    """A series definition (the abstract layer). completion_policy='all' by default."""
+
+    class Meta:
+        model = BadgeSeries
+        django_get_or_create = ('series_slug',)
+
+    series_slug = factory.Sequence(lambda n: f"bseries-{n}")
+    name = factory.Sequence(lambda n: f"Badge Series {n}")
+    badge_type = 'series'
+    completion_policy = 'all'
+
+
+class GroupBadgeFactory(factory.django.DjangoModelFactory):
+    """An earnable per-group badge (BadgeSeries x PlatformGroup). Live by default so eval picks it up."""
+
+    class Meta:
+        model = GroupBadge
+
+    series = factory.SubFactory(BadgeSeriesFactory)
+    platform_group = factory.SubFactory(PlatformGroupFactory)
+    is_live = True
+
+
+class ProfileTrophyGroupFactory(factory.django.DjangoModelFactory):
+    """A profile's standing in a game trophy group. progress=100 = base list finished (the base bar)."""
+
+    class Meta:
+        model = ProfileTrophyGroup
+
+    profile = factory.SubFactory(ProfileFactory)
+    trophy_group = factory.SubFactory(TrophyGroupFactory)
+    progress = 100
+    last_trophy_at = factory.LazyFunction(timezone.now)
