@@ -3076,7 +3076,7 @@ class UserGroupBadge(models.Model):
     )
     is_holo = models.BooleanField(default=False, help_text="LIVE mastery flag: currently 100% on every gating stage. Flips both ways; cosmetic; no XP.")
     is_displayed = models.BooleanField(default=False, help_text="Profile's selected display badge.")
-    earned_at = models.DateTimeField(auto_now_add=True)
+    earned_at = models.DateTimeField(default=timezone.now, help_text="When the base list was completed (the engine's completion date), NOT the sync time. Settable so the backfill can seed historical dates; defaults to now for a fresh earn.")
 
     class Meta:
         unique_together = ['profile', 'group_badge']
@@ -3115,7 +3115,8 @@ class Title(models.Model):
 class UserTitle(models.Model):
     SOURCE_CHOICES = [
         ('badge', 'Badge'),
-        ('milestone', 'Milestone')
+        ('milestone', 'Milestone'),
+        ('badge_series', 'Badge Series'),   # grouping-badge rebuild: series-level title, kept distinct from legacy 'badge'
     ]
 
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='user_titles')
