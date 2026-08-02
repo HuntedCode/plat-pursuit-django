@@ -57,7 +57,7 @@ def test_write_applies_the_earn():
     profile = ProfileFactory(psn_username='hunter02')
     _complete(profile, game)
     call_command('evaluate_badges', 'hunter02')
-    assert UserGroupBadge.objects.filter(profile=profile, group_badge=gb, status='earned').exists()
+    assert UserGroupBadge.objects.filter(profile=profile, group_badge=gb).exists()
 
 
 def test_series_flag_evaluates_a_dormant_badge():
@@ -91,7 +91,7 @@ def test_all_flag_evaluates_every_profile():
     p2 = ProfileFactory(psn_username='hunterB')
     _complete(p2, game)
     call_command('evaluate_badges', '--all')
-    assert UserGroupBadge.objects.filter(group_badge=gb, status='earned').count() == 2
+    assert UserGroupBadge.objects.filter(group_badge=gb).count() == 2
 
 
 def test_series_alone_processes_only_players():
@@ -100,21 +100,21 @@ def test_series_alone_processes_only_players():
     _complete(player, game)
     ProfileFactory(psn_username='bystand')             # never touched the series
     call_command('evaluate_badges', '--series', 'gow')
-    assert UserGroupBadge.objects.filter(profile=player, group_badge=gb, status='earned').exists()
+    assert UserGroupBadge.objects.filter(profile=player, group_badge=gb).exists()
     assert not UserGroupBadge.objects.filter(profile__psn_username='bystand').exists()   # not a player -> skipped
 
 
-def test_batch_ranks_by_completion_date_not_alphabetical():
+def test_batch_earned_at_reflects_completion_date():
     gb, game = _series_badge('gow')
-    # 'zoe' finished FIRST (2019); 'amy' finished LATER (2023). Alphabetically 'amy' sorts before 'zoe'.
+    # 'zoe' finished FIRST (2019); 'amy' finished LATER (2023). earned_at (the derived-rank sort key) must
+    # reflect completion date, NOT username order.
     zoe = ProfileFactory(psn_username='zoe')
     _complete(zoe, game, when=_dt(2019))
     amy = ProfileFactory(psn_username='amy')
     _complete(amy, game, when=_dt(2023))
     call_command('evaluate_badges', '--series', 'gow')
-    # Rank by who finished first, NOT username order.
-    assert UserGroupBadge.objects.get(profile=zoe, group_badge=gb).earn_rank == 1
-    assert UserGroupBadge.objects.get(profile=amy, group_badge=gb).earn_rank == 2
+    assert (UserGroupBadge.objects.get(profile=zoe, group_badge=gb).earned_at
+            < UserGroupBadge.objects.get(profile=amy, group_badge=gb).earned_at)
 
 
 def _batch_query_count(n, slug):
@@ -132,13 +132,14 @@ def _batch_query_count(n, slug):
 
 
 def test_batch_catalog_fetched_once_flat_per_profile():
-    # The per-profile marginal query cost must be small + CONSTANT (the two completion reads + one current-state
-    # read + the award writes), NOT the ~6 catalog-prefetch queries. A per-profile slope near the re-fetch cost
-    # would mean build_catalog is running per profile -- the exact regression this guards.
+    # Per-profile marginal cost must be small + CONSTANT: the two completion reads + current-state read + the
+    # inline apply (txn + create + earned_count) + the standing recompute (~9). It must NOT include the ~6
+    # catalog-prefetch queries -- a slope near the re-fetch cost (~15) means build_catalog runs per profile,
+    # the exact regression this guards.
     q1 = _batch_query_count(1, 'qa')
     q4 = _batch_query_count(4, 'qb')
     per_profile = (q4 - q1) / 3
-    assert per_profile <= 8, f"~{per_profile:.1f} queries/profile (N1={q1}, N4={q4}) -- catalog likely re-fetched"
+    assert per_profile <= 12, f"~{per_profile:.1f} queries/profile (N1={q1}, N4={q4}) -- catalog likely re-fetched"
 
 
 def test_compare_legacy_reports_kept_lost_gained():

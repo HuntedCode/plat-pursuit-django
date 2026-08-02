@@ -1,7 +1,8 @@
 """Unit tests for the PURE diff (trophies/services/badge_apply.diff).
 
-diff compares the engine's DesiredState against the profile's current earns and yields the minimal change set.
-No DB — DesiredState entries only need base_earned/holo/earned_date, so we stand them in with SimpleNamespace.
+diff compares the engine's DesiredState against the profile's currently-held rows and yields the minimal change
+set. Binary model: award / revoke / update. No DB -- DesiredState entries only need base_earned/holo/earned_date,
+so we stand them in with SimpleNamespace; a held row is a CurrentBadge(is_holo, earned_at).
 """
 from datetime import date
 from types import SimpleNamespace
@@ -23,31 +24,30 @@ def test_award_carries_holo():
     assert changes[0].action == 'award' and changes[0].holo is True
 
 
-def test_reactivate_from_maintenance():
-    changes = diff({1: _desired(True, holo=False)}, {1: CurrentBadge('maintenance', False)})
-    assert [c.action for c in changes] == ['reactivate']
+def test_revoke_when_not_earned_but_currently_held():
+    changes = diff({1: _desired(False)}, {1: CurrentBadge(True, date(2026, 1, 1))})
+    assert changes == [BadgeChange(1, 'revoke', False)]
 
 
-def test_lapse_when_not_earned_but_currently_earned():
-    changes = diff({1: _desired(False)}, {1: CurrentBadge('earned', True)})
-    assert changes == [BadgeChange(1, 'lapse', False)]
+def test_update_when_holo_flips():
+    d = date(2026, 1, 1)
+    up = diff({1: _desired(True, holo=True, earned_date=d)}, {1: CurrentBadge(False, d)})
+    assert up == [BadgeChange(1, 'update', True, d)]
+    down = diff({1: _desired(True, holo=False, earned_date=d)}, {1: CurrentBadge(True, d)})
+    assert down == [BadgeChange(1, 'update', False, d)]
 
 
-def test_holo_flips_both_ways():
-    up = diff({1: _desired(True, holo=True)}, {1: CurrentBadge('earned', False)})
-    assert up == [BadgeChange(1, 'holo', True)]
-    down = diff({1: _desired(True, holo=False)}, {1: CurrentBadge('earned', True)})
-    assert down == [BadgeChange(1, 'holo', False)]
+def test_update_when_earned_date_shifts():
+    # Badge iteration changed -> the held row's completion date must resync (keeps the leaderboard honest).
+    old, new = date(2026, 1, 1), date(2026, 6, 1)
+    changes = diff({1: _desired(True, holo=False, earned_date=new)}, {1: CurrentBadge(False, old)})
+    assert changes == [BadgeChange(1, 'update', False, new)]
 
 
-def test_no_change_when_earned_and_holo_match():
-    assert diff({1: _desired(True, holo=True)}, {1: CurrentBadge('earned', True)}) == []
+def test_no_change_when_held_holo_and_date_match():
+    d = date(2026, 1, 1)
+    assert diff({1: _desired(True, holo=True, earned_date=d)}, {1: CurrentBadge(True, d)}) == []
 
 
 def test_no_change_when_not_earned_and_no_row():
     assert diff({1: _desired(False)}, {}) == []
-
-
-def test_no_relapse_when_already_maintenance():
-    # No-delete / no-re-lapse: an already-lapsed badge that's still not earned stays put.
-    assert diff({1: _desired(False)}, {1: CurrentBadge('maintenance', False)}) == []

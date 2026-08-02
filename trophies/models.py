@@ -3057,33 +3057,28 @@ class GroupBadge(models.Model):
 
 
 class UserGroupBadge(models.Model):
-    """A profile's earn of a GroupBadge. The base earn is permanent (earn_rank stamped once, never revoked —
-    it lapses to 'maintenance' instead). is_holo is a LIVE flag the evaluator flips both ways (currently 100%
-    on every gating stage) — cosmetic, no permanence, no XP."""
-    STATUS_CHOICES = [('earned', 'Earned'), ('maintenance', 'Maintenance')]
-
+    """A profile's CURRENT hold on a GroupBadge -- binary: the row exists iff the profile currently meets the
+    badge's bar (revoked = row deleted; no 'maintenance' state). There is no permanent earn_rank: rank is the
+    profile's LIVE position in the earners leaderboard (current holders ordered by earned_at), so if a series
+    grows, whoever first clears the new, harder iteration takes #1. is_holo is a LIVE mastery flag the evaluator
+    flips both ways (100% incl DLC) -- cosmetic, no XP. See docs/design/rebuild/badge-backend-rebuild.md."""
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='group_badges')
     group_badge = models.ForeignKey(GroupBadge, on_delete=models.CASCADE, related_name='earned_by')
-    status = models.CharField(
-        max_length=12, default='earned', choices=STATUS_CHOICES,
-        help_text="Earned badges are NEVER deleted. If the series grows and the profile lapses, the badge enters "
-                  "'maintenance' (repair) instead of being revoked, so earn_rank stays permanent.",
-    )
-    earn_rank = models.PositiveIntegerField(
-        null=True, blank=True,
-        help_text="Permanent completion-ordered rank (the Nth profile to COMPLETE this group badge). Seeded from "
-                  "historical completion dates at cutover; stamped once, never recomputed.",
-    )
     is_holo = models.BooleanField(default=False, help_text="LIVE mastery flag: currently 100% on every gating stage. Flips both ways; cosmetic; no XP.")
     is_displayed = models.BooleanField(default=False, help_text="Profile's selected display badge.")
-    earned_at = models.DateTimeField(default=timezone.now, help_text="When the base list was completed (the engine's completion date), NOT the sync time. Settable so the backfill can seed historical dates; defaults to now for a fresh earn.")
+    earned_at = models.DateTimeField(
+        default=timezone.now,
+        help_text="CURRENT-iteration completion date (the engine's earned_date) -- the leaderboard sort key, "
+                  "resynced on re-evaluation if the badge changes. NOT the sync time.",
+    )
 
     class Meta:
         unique_together = ['profile', 'group_badge']
         indexes = [
             models.Index(fields=['profile', 'is_displayed'], name='ugb_display_idx'),
-            models.Index(fields=['group_badge', 'status'], name='ugb_badge_status_idx'),
-            models.Index(fields=['earned_at'], name='ugb_earned_at_idx'),
+            # Serves the per-badge earners leaderboard (ORDER BY earned_at) AND a profile's live rank
+            # (COUNT earned_at < mine) -- the value shown on the medallion back.
+            models.Index(fields=['group_badge', 'earned_at'], name='ugb_badge_earned_idx'),
         ]
 
     def __str__(self):

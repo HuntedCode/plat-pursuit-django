@@ -13,8 +13,8 @@ badge-system architecture doc for the *current* system being replaced.
 
 **Charter: rebuild the badge earn/eval/XP subsystem as a sealed unit.** Touch only what we must.
 
-- **In:** the evaluation engine, the earn model (grouping badges, base/holo, maintenance), `earn_rank`,
-  badge XP, and badge leaderboards (all confirmed closed-circuit).
+- **In:** the evaluation engine, the earn model (grouping badges, base/holo, binary hold — no maintenance),
+  derived earners rank, badge XP, and badge leaderboards (all confirmed closed-circuit).
 - **Out:** the Milestone system (may be archived pre-release; do not build for it), the Notification system
   (needs its own rework; we emit to it, we don't own it), and the jobs/contracts economy (already decoupled).
 - **Reuse as read-only inputs:** `Stage` / `ConceptBundle` / `Concept` / `Game` / `ProfileGame`. The engine
@@ -90,8 +90,10 @@ overrides). Live in `trophies/models.py` (marked "BADGE REBUILD" section); migra
   `set_number`, per-group denorm (`earned_count`, `required_stages`, `rarity_*`), and **nullable overrides**
   (`badge_image_override`, `holo_badge_image_override`, `funded_by_override`) with `effective_funded_by` /
   `effective_holo_image` / `art_layers()` accessors. **No `tier` field** — the `tier=1` collision disappears.
-- **`UserGroupBadge`** — the earn: `profile`, `group_badge`, `status` (earned/maintenance), `earn_rank`,
-  `is_holo`, `earned_at`, `is_displayed`.
+- **`UserGroupBadge`** — a CURRENT hold (binary; the row exists iff the profile meets the bar): `profile`,
+  `group_badge`, `is_holo`, `is_displayed`, `earned_at` (current-iteration completion = the leaderboard sort
+  key). No `status`/`maintenance`, no `earn_rank` — rank is derived live (§4).
+- **`ProfileBadgeStanding`** — sealed per-profile XP standing: `total_xp` (indexed), `series_xp` JSON (§5).
 
 **Art composition (single source of truth in `GroupBadge.art_layers()`):** group `background_image` +
 `backing_key` + `medallion_shape`, with the subject art resolved *per-group override → series default → (for
@@ -160,21 +162,26 @@ input contract, not a coupling.
 
 ---
 
-## 4. `earn_rank` — completion-ordered (the history checker)
+## 4. Rank — a DERIVED live leaderboard position (no stored `earn_rank`)
 
-**Decided:** rank means **first-to-complete**, not first-to-be-awarded. Define a user's
-"earned-when" for a grouping badge = the date they satisfied their **last gating stage** in that group (the max
-over gating stages of that stage's earliest satisfying-game base-completion date — cleanly available as the
-game's **default `ProfileTrophyGroup.last_trophy_at`**, the moment the base list was finished). Assign
-`earn_rank` deterministically by ordering qualifying profiles on that date (tie-break: earliest contributing
-trophy date, then profile id — no live COUNT, so no tie hazard).
+**Decided (revised):** there is **no permanent `earn_rank` field** and **no `maintenance` state**. The model is
+**binary** — you currently hold a badge (row exists) or you don't (revoked = row deleted). Rank is the profile's
+**live position in the earners leaderboard**: current holders ordered by `earned_at`, where `earned_at` is the
+**current-iteration** completion date (the engine's `earned_date` = when the *last currently-gating* stage was
+met, resynced on re-evaluation if the badge changes).
 
-- **At cutover:** seed `1..N` per grouping badge from historical completion dates, so "you were the 47th to
-  complete God of War — Ultra HD" is true even though the badge is new.
-- **Go-forward:** new earners get a rank continuing the sequence, stamped at their completion moment.
+Why this over a permanent stamp: when a series grows (say 2 → 10 stages), whoever first clears the *harder,
+current* iteration deserves #1 — a permanent "I was first when it was 2 stages" claim is staler and less fair.
+Tying rank to the current definition keeps the prestige honest as the badge evolves. Ranks can shift ("even if
+only temporarily") — that's the intended trade of permanence for current-meaning.
 
-This fixes pain point 4 and makes the migrated serial genuinely prestigious rather than an artifact of when we
-happened to create the row.
+- **Consequence:** rank collapses INTO the earners leaderboard — `held rows WHERE group_badge=X ORDER BY
+  earned_at`, and a profile's rank is `COUNT(earned_at < mine) + 1` (served by the `(group_badge, earned_at)`
+  index). No stamp-once bookkeeping, no completion-date backfill to preserve, no live-COUNT tie hazard.
+- **Medallion display:** the value shown on the back of a badge medallion is this **live position**, not a
+  stored ordinal — the display calls the leaderboard's `rank_of(profile, group_badge)`.
+- **Trade-offs accepted:** losing a badge when a series grows has no "maintenance" cushion (binary), and there
+  is no permanent "first-ever" flex. Deliberate — simpler model, honest current meaning.
 
 ---
 
@@ -201,7 +208,8 @@ the sealed `ProfileBadgeStanding` (OneToOne profile, `total_xp` indexed for lead
 recomputed from scratch off the DesiredState on every write (evaluate_and_apply + batch), so it can't drift and
 a scoped `--series` run never clobbers other series. Isolated from the legacy tier-based
 `ProfileGamification.total_badge_xp`. Constants (`XP_PER_STAGE=100`, `XP_BADGE_COMPLETION_BONUS=500`) are
-placeholders pending calibration. **Next (Lane B):** badge leaderboards off `total_xp` / `series_xp` + `earn_rank`.
+placeholders pending calibration. **Next (Lane B):** badge leaderboards off `total_xp` / `series_xp` + the
+derived earners rank (`held ORDER BY earned_at`), incl. a `rank_of(profile, group_badge)` for the medallion back.
 
 ---
 
@@ -220,7 +228,8 @@ Standard parallel-change / expand–contract with a separate schema:
    → full platform group); the glance surfaces them per series before flipping so each can be confirmed intended.
 3. **Author dormant badges + art on prod** — in the new tables, invisible with zero guarding (nothing on prod
    reads them yet).
-4. **`earn_rank` backfill** from completion dates (§4).
+4. **Seed holds** by running `evaluate_badges --series`/`--all` (writes current holders + `earned_at`; rank is
+   derived, so there's no separate rank backfill — §4).
 5. **Cutover behind a flag:** rebuild display reads the new store; sync calls the new engine; the old
    `badge_service` stops; XP/titles/notifications source from the new adapters. Reversible.
 6. **Soak**, then **decommission** the old `Badge`/`UserBadge`/`badge_service` once stable.
@@ -233,7 +242,8 @@ Old `UserBadge` history is never deleted at cutover — retained for rollback an
 
 1. **XP model** — DECIDED: flat XP per gating stage + a badge-completion bonus, no holo XP, in one swappable
    `compute_badge_xp` function (§5).
-2. **`earn_rank` semantics** — DECIDED: first-to-complete via completion dates (§4).
+2. **Rank semantics** — DECIDED (revised): NO stored `earn_rank` and NO `maintenance`. Binary hold; rank is a
+   derived live leaderboard position (current holders by `earned_at`). The medallion shows that live position (§4).
 3. **Reconciliation depth** — DECIDED: descoped to the read-only `evaluate_badges --compare-legacy` series-level
    glance (kept/lost/gained + a lost sample), in place of a full-population harness. See §6.2.
 4. **Denorm** — DECIDED: fully service-owned recompute in `apply()`, no scattered signals.
@@ -262,7 +272,9 @@ Old `UserBadge` history is never deleted at cutover — retained for rollback an
 - **Milestones read badge counts.** Preserve `total_badges_earned` / `unique_badges_earned` as a stable query,
   or the two milestone criteria break.
 - **Holo XP is a trap.** Live + lapsing + XP = fluctuating totals. Keep holo cosmetic.
-- **Completion-date data must be trustworthy** for `earn_rank` — it leans on `StageCompletionEvent.completed_at`
-  and `ProfileGame` dates, which are exactly the least-tested paths today. Backfill coverage first.
+- **Completion-date data must be trustworthy** for `earned_at` (the derived earners rank) — it leans on the
+  default `ProfileTrophyGroup.last_trophy_at` / `ProfileGame` dates, the least-tested paths today. Backfill coverage first.
+- **Binary hold means users LOSE badges when a series grows** (no maintenance cushion). Acceptable + intended,
+  but if badge definitions change often it reads as churn — grow series deliberately, ideally announced.
 - **Don't let the sealed core regrow tendrils.** Every new outbound need goes through an adapter, or the "closed
   off" property erodes.

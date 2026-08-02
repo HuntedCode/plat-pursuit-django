@@ -5152,8 +5152,8 @@ class GroupBadgeAdmin(admin.ModelAdmin):
 @admin.register(UserGroupBadge)
 class UserGroupBadgeAdmin(admin.ModelAdmin):
     """Earns are engine-owned; this is mostly for inspection + the occasional manual fix."""
-    list_display = ['profile', 'group_badge', 'status', 'is_holo', 'earn_rank', 'earned_at']
-    list_filter = ['status', 'is_holo', 'group_badge__platform_group']
+    list_display = ['profile', 'group_badge', 'is_holo', 'earned_at']
+    list_filter = ['is_holo', 'group_badge__platform_group']
     list_select_related = ['profile', 'group_badge', 'group_badge__series', 'group_badge__platform_group']
     search_fields = ['profile__psn_username', 'group_badge__series__name', 'group_badge__series__series_slug']
     raw_id_fields = ['profile', 'group_badge']

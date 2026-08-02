@@ -1,7 +1,7 @@
 """Evaluate a profile's grouping badges and apply earns -- the manual trigger + verifier.
 
 Since the new engine isn't wired to sync yet, this is how you exercise it: author a badge, run this against a
-real profile, and confirm the right UserGroupBadge rows / earn_rank / holo / title appear. `--dry-run` previews
+real profile, and confirm the right UserGroupBadge rows / holo / title appear. `--dry-run` previews
 without writing; `--series <slug>` scopes to one series' group badges INCLUDING dormant ones, so you can test a
 badge before flipping it live. It reuses badge_apply.plan/evaluate_and_apply -- the same code the eventual sync
 wiring, backfill, and reconciliation harness build on.
@@ -28,7 +28,7 @@ from trophies.services.badge_apply import plan, evaluate_and_apply_batch
 from trophies.services.badge_orchestrator import build_catalog, evaluate_with_catalog
 
 # diff action -> the apply-summary key, so dry-run and write share one totals dict.
-_ACTION_TOTAL = {'award': 'awarded', 'reactivate': 'reactivated', 'lapse': 'lapsed', 'holo': 'holo_changed'}
+_ACTION_TOTAL = {'award': 'awarded', 'revoke': 'revoked', 'update': 'updated'}
 
 
 class Command(BaseCommand):
@@ -100,8 +100,7 @@ class Command(BaseCommand):
 
         verb = "Would" if dry else "Did"
         self.stdout.write(self.style.SUCCESS(
-            f"\n{verb}: {totals['awarded']} awarded, {totals['reactivated']} reactivated, "
-            f"{totals['lapsed']} lapsed, {totals['holo_changed']} holo."
+            f"\n{verb}: {totals['awarded']} awarded, {totals['revoked']} revoked, {totals['updated']} updated."
         ))
 
     @staticmethod

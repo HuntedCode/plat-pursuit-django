@@ -1,8 +1,9 @@
 """Integration tests for the badge apply layer (trophies/services/badge_apply.evaluate_and_apply).
 
-Hit the DB and assert the full earn lifecycle: award (writes UserGroupBadge + earn_rank + earned_count denorm
-+ series title), lapse -> maintenance (no delete, earn_rank kept, denorm --, title revoked when orphaned),
-reactivate (earn_rank preserved), holo, the one-title-per-series rule, and idempotency.
+Hit the DB and assert the full binary lifecycle: award (writes UserGroupBadge + earned_count denorm + series
+title), revoke (row deleted when the bar is no longer met, denorm --, title revoked when orphaned), update
+(holo flip / earned_at resync), the one-title-per-series rule, and idempotency. There is no earn_rank or
+maintenance -- the earners rank is derived live from earned_at (see the leaderboard layer).
 """
 import datetime as dt
 
@@ -46,58 +47,53 @@ def _one_stage_series(slug):
     return series, _game(concept), title
 
 
-def test_award_writes_earn_rank_denorm_and_title():
-    ultra = _ultra()
+def test_award_writes_denorm_and_title():
     series, game, title = _one_stage_series('gow')
-    gb = GroupBadgeFactory(series=series, platform_group=ultra)
+    gb = GroupBadgeFactory(series=series, platform_group=_ultra())
     profile = ProfileFactory()
     _complete(profile, game)
 
     res = evaluate_and_apply(profile, [gb])
     assert res['awarded'] == [gb.id]
     ugb = UserGroupBadge.objects.get(profile=profile, group_badge=gb)
-    assert ugb.status == 'earned' and ugb.earn_rank == 1 and ugb.is_holo is False
+    assert ugb.is_holo is False
     gb.refresh_from_db()
     assert gb.earned_count == 1
     assert UserTitle.objects.filter(profile=profile, title=title, source_type='badge_series').exists()
 
 
 def test_holo_true_when_fully_complete():
-    ultra = _ultra()
     series, game, _ = _one_stage_series('holo')
-    gb = GroupBadgeFactory(series=series, platform_group=ultra)
+    gb = GroupBadgeFactory(series=series, platform_group=_ultra())
     profile = ProfileFactory()
     _complete(profile, game, full=True)
     evaluate_and_apply(profile, [gb])
     assert UserGroupBadge.objects.get(profile=profile, group_badge=gb).is_holo is True
 
 
-def test_lapse_to_maintenance_revokes_title_keeps_rank():
-    ultra = _ultra()
-    series, game, title = _one_stage_series('lap')
-    gb = GroupBadgeFactory(series=series, platform_group=ultra)
+def test_revoke_deletes_row_and_revokes_title_when_bar_no_longer_met():
+    series, game, title = _one_stage_series('rev')
+    gb = GroupBadgeFactory(series=series, platform_group=_ultra())
     profile = ProfileFactory()
     _complete(profile, game)
     evaluate_and_apply(profile, [gb])                      # earned
 
-    # Series grows: a new gating stage the profile hasn't done -> lapse.
-    s2 = StageFactory(series_slug='lap', stage_number=2)
+    # Series grows: a new gating stage the profile hasn't done -> no longer meets the bar -> revoke.
+    s2 = StageFactory(series_slug='rev', stage_number=2)
     c2 = ConceptFactory()
     s2.concepts.add(c2)
     _game(c2)
     res = evaluate_and_apply(profile, [gb])
-    assert res['lapsed'] == [gb.id]
-    ugb = UserGroupBadge.objects.get(profile=profile, group_badge=gb)
-    assert ugb.status == 'maintenance' and ugb.earn_rank == 1 and ugb.is_holo is False   # rank permanent
+    assert res['revoked'] == [gb.id]
+    assert not UserGroupBadge.objects.filter(profile=profile, group_badge=gb).exists()   # binary: row gone
     gb.refresh_from_db()
     assert gb.earned_count == 0
     assert not UserTitle.objects.filter(profile=profile, title=title, source_type='badge_series').exists()
 
 
-def test_reactivate_from_maintenance_keeps_rank():
-    ultra = _ultra()
+def test_re_earn_after_revoke_recreates_the_row():
     series, game, title = _one_stage_series('re')
-    gb = GroupBadgeFactory(series=series, platform_group=ultra)
+    gb = GroupBadgeFactory(series=series, platform_group=_ultra())
     profile = ProfileFactory()
     _complete(profile, game)
     evaluate_and_apply(profile, [gb])
@@ -105,18 +101,18 @@ def test_reactivate_from_maintenance_keeps_rank():
     c2 = ConceptFactory()
     s2.concepts.add(c2)
     g2 = _game(c2)
-    evaluate_and_apply(profile, [gb])                      # lapse
+    evaluate_and_apply(profile, [gb])                      # revoke (stage 2 undone)
+    assert not UserGroupBadge.objects.filter(profile=profile, group_badge=gb).exists()
     _complete(profile, g2)                                 # now finish stage 2
     res = evaluate_and_apply(profile, [gb])
-    assert res['reactivated'] == [gb.id]
-    ugb = UserGroupBadge.objects.get(profile=profile, group_badge=gb)
-    assert ugb.status == 'earned' and ugb.earn_rank == 1   # same permanent rank
+    assert res['awarded'] == [gb.id]                       # fresh hold
+    assert UserGroupBadge.objects.filter(profile=profile, group_badge=gb).exists()
     gb.refresh_from_db()
     assert gb.earned_count == 1
     assert UserTitle.objects.filter(profile=profile, title=title, source_type='badge_series').exists()
 
 
-def test_series_title_survives_until_all_group_badges_lapse():
+def test_series_title_survives_until_all_group_badges_revoked():
     legacy = PlatformGroupFactory(key='legacy-hd', name='Legacy HD', platforms=['PS3', 'PSVITA'], exclude_delisted=False)
     ultra = _ultra()
     title = Title.objects.create(name='Slayer')
@@ -131,38 +127,36 @@ def test_series_title_survives_until_all_group_badges_lapse():
     profile = ProfileFactory()
     _complete(profile, ps3)
     _complete(profile, ps5)
-    evaluate_and_apply(profile, [gb_l, gb_u])              # both earned -> title granted once
-    assert UserGroupBadge.objects.filter(profile=profile, status='earned').count() == 2
+    evaluate_and_apply(profile, [gb_l, gb_u])              # both held -> title granted once
+    assert UserGroupBadge.objects.filter(profile=profile).count() == 2
     assert UserTitle.objects.filter(profile=profile, title=title).exists()
 
-    # Grow ONLY the Ultra reach (a PS5 stage) -> Ultra lapses, Legacy still holds (its stage 2 has no PS3 game).
+    # Grow ONLY the Ultra reach (a PS5 stage) -> Ultra revoked, Legacy still held (its stage 2 has no PS3 game).
     s2 = StageFactory(series_slug='dual', stage_number=2)
     c2 = ConceptFactory()
     s2.concepts.add(c2)
     _game(c2, ('PS5',))
     evaluate_and_apply(profile, [gb_l, gb_u])
-    assert UserGroupBadge.objects.get(profile=profile, group_badge=gb_u).status == 'maintenance'
-    assert UserGroupBadge.objects.get(profile=profile, group_badge=gb_l).status == 'earned'
-    assert UserTitle.objects.filter(profile=profile, title=title).exists()   # survives: Legacy still earned
+    assert not UserGroupBadge.objects.filter(profile=profile, group_badge=gb_u).exists()
+    assert UserGroupBadge.objects.filter(profile=profile, group_badge=gb_l).exists()
+    assert UserTitle.objects.filter(profile=profile, title=title).exists()   # survives: Legacy still held
 
 
 def test_second_run_is_a_noop():
-    ultra = _ultra()
     series, game, _ = _one_stage_series('idem')
-    gb = GroupBadgeFactory(series=series, platform_group=ultra)
+    gb = GroupBadgeFactory(series=series, platform_group=_ultra())
     profile = ProfileFactory()
     _complete(profile, game)
     evaluate_and_apply(profile, [gb])
     res2 = evaluate_and_apply(profile, [gb])
-    assert res2 == {'awarded': [], 'reactivated': [], 'lapsed': [], 'holo_changed': []}
+    assert res2 == {'awarded': [], 'revoked': [], 'updated': []}
     gb.refresh_from_db()
     assert gb.earned_count == 1                            # not double-counted
 
 
 def test_earned_at_uses_completion_date_not_sync_time():
-    ultra = _ultra()
     series, game, _ = _one_stage_series('date')
-    gb = GroupBadgeFactory(series=series, platform_group=ultra)
+    gb = GroupBadgeFactory(series=series, platform_group=_ultra())
     profile = ProfileFactory()
     when = timezone.make_aware(dt.datetime(2024, 6, 1, 12, 0))   # completed long before "now"
     _complete(profile, game, when=when)
@@ -170,68 +164,66 @@ def test_earned_at_uses_completion_date_not_sync_time():
     assert UserGroupBadge.objects.get(profile=profile, group_badge=gb).earned_at == when
 
 
-def test_second_earner_gets_rank_two():
-    ultra = _ultra()
-    series, game, _ = _one_stage_series('rank')
-    gb = GroupBadgeFactory(series=series, platform_group=ultra)
-    p1, p2 = ProfileFactory(), ProfileFactory()
-    _complete(p1, game)
-    evaluate_and_apply(p1, [gb])
-    _complete(p2, game)
-    evaluate_and_apply(p2, [gb])
-    assert UserGroupBadge.objects.get(profile=p1, group_badge=gb).earn_rank == 1
-    assert UserGroupBadge.objects.get(profile=p2, group_badge=gb).earn_rank == 2
+def test_earners_ordered_by_completion_date():
+    # The leaderboard sort key: whoever completed EARLIER has the earlier earned_at (derived rank #1).
+    series, game, _ = _one_stage_series('order')
+    gb = GroupBadgeFactory(series=series, platform_group=_ultra())
+    early, late = ProfileFactory(), ProfileFactory()
+    _complete(early, game, when=timezone.make_aware(dt.datetime(2020, 1, 1)))
+    evaluate_and_apply(early, [gb])
+    _complete(late, game, when=timezone.make_aware(dt.datetime(2023, 1, 1)))
+    evaluate_and_apply(late, [gb])
+    e = UserGroupBadge.objects.get(profile=early, group_badge=gb)
+    l = UserGroupBadge.objects.get(profile=late, group_badge=gb)
+    assert e.earned_at < l.earned_at
     gb.refresh_from_db()
     assert gb.earned_count == 2
 
 
-def test_reactivate_preserves_non_one_rank():
-    ultra = _ultra()
-    series, game, _ = _one_stage_series('r2')
-    gb = GroupBadgeFactory(series=series, platform_group=ultra)
-    p1, p2 = ProfileFactory(), ProfileFactory()
-    _complete(p1, game)
-    evaluate_and_apply(p1, [gb])                            # rank 1
-    _complete(p2, game)
-    evaluate_and_apply(p2, [gb])                            # rank 2
-    # Grow the series so p2 lapses, then let p2 re-qualify -> rank must stay 2, not re-COUNT.
-    s2 = StageFactory(series_slug='r2', stage_number=2)
+def test_earned_at_resyncs_when_iteration_changes():
+    # A still-held badge whose completion date shifts (series grew, profile had already done the new stage) must
+    # resync earned_at so the leaderboard reflects the current iteration.
+    series, game, _ = _one_stage_series('resync')
+    gb = GroupBadgeFactory(series=series, platform_group=_ultra())
+    profile = ProfileFactory()
+    _complete(profile, game, when=timezone.make_aware(dt.datetime(2020, 1, 1)))
+    evaluate_and_apply(profile, [gb])
+    # Grow the series with a stage the profile ALSO already completed, but LATER -> becomes the last required.
+    s2 = StageFactory(series_slug='resync', stage_number=2)
     c2 = ConceptFactory()
     s2.concepts.add(c2)
     g2 = _game(c2)
-    evaluate_and_apply(p2, [gb])                            # p2 lapses
-    assert UserGroupBadge.objects.get(profile=p2, group_badge=gb).status == 'maintenance'
-    _complete(p2, g2)
-    evaluate_and_apply(p2, [gb])                            # reactivate
-    ugb = UserGroupBadge.objects.get(profile=p2, group_badge=gb)
-    assert ugb.status == 'earned' and ugb.earn_rank == 2
+    later = timezone.make_aware(dt.datetime(2022, 6, 1))
+    _complete(profile, g2, when=later)
+    res = evaluate_and_apply(profile, [gb])
+    assert res['updated'] == [gb.id]
+    assert UserGroupBadge.objects.get(profile=profile, group_badge=gb).earned_at == later
 
 
-def test_holo_flips_off_when_series_grows():
-    ultra = _ultra()
+def test_holo_flips_off_via_update_when_series_grows():
     series, game, _ = _one_stage_series('hoff')
-    gb = GroupBadgeFactory(series=series, platform_group=ultra)
+    gb = GroupBadgeFactory(series=series, platform_group=_ultra())
     profile = ProfileFactory()
     _complete(profile, game, full=True)
     evaluate_and_apply(profile, [gb])
     assert UserGroupBadge.objects.get(profile=profile, group_badge=gb).is_holo is True
     gb.refresh_from_db()
     count_before = gb.earned_count
-    # New gating stage: base-complete but NOT full -> holo drops, base stays, denorm untouched.
+    # New gating stage: base-complete but NOT full -> still held (base), holo drops -> update, denorm untouched.
     s2 = StageFactory(series_slug='hoff', stage_number=2)
     c2 = ConceptFactory()
     s2.concepts.add(c2)
     g2 = _game(c2)
     _complete(profile, g2, full=False)
     res = evaluate_and_apply(profile, [gb])
-    assert res['holo_changed'] == [gb.id]
+    assert res['updated'] == [gb.id]
     ugb = UserGroupBadge.objects.get(profile=profile, group_badge=gb)
-    assert ugb.status == 'earned' and ugb.is_holo is False
+    assert ugb.is_holo is False
     gb.refresh_from_db()
-    assert gb.earned_count == count_before                 # holo change never touches the denorm
+    assert gb.earned_count == count_before                # update never touches the denorm
 
 
-def test_out_of_scope_badge_is_never_lapsed():
+def test_out_of_scope_badge_is_never_revoked():
     ultra = _ultra()
     series1, game1, _ = _one_stage_series('scope1')
     gb1 = GroupBadgeFactory(series=series1, platform_group=ultra)
@@ -239,8 +231,8 @@ def test_out_of_scope_badge_is_never_lapsed():
     gb2 = GroupBadgeFactory(series=series2, platform_group=ultra)
     profile = ProfileFactory()
     _complete(profile, game1)
-    evaluate_and_apply(profile, [gb1])                     # gb1 earned
-    # Evaluate ONLY gb2 (undone) -> gb1 is out of scope and must stay earned.
+    evaluate_and_apply(profile, [gb1])                     # gb1 held
+    # Evaluate ONLY gb2 (undone) -> gb1 is out of scope and must stay held.
     evaluate_and_apply(profile, [gb2])
-    assert UserGroupBadge.objects.get(profile=profile, group_badge=gb1).status == 'earned'
+    assert UserGroupBadge.objects.filter(profile=profile, group_badge=gb1).exists()
     assert not UserGroupBadge.objects.filter(profile=profile, group_badge=gb2).exists()

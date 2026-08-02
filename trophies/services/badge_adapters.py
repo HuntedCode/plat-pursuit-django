@@ -36,8 +36,8 @@ def revoke_series_title_if_orphaned(profile_id, series):
     if not series.title_id:
         return
     still_earned = UserGroupBadge.objects.filter(
-        profile_id=profile_id, group_badge__series=series, status='earned',
-    ).exists()
+        profile_id=profile_id, group_badge__series=series,
+    ).exists()   # any held row in the series (binary model: a row IS a current hold)
     if not still_earned:
         UserTitle.objects.filter(
             profile_id=profile_id, title_id=series.title_id, source_type=TITLE_SOURCE,
