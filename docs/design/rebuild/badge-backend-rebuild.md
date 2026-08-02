@@ -202,14 +202,20 @@ bonuses) is a **single-function edit with all inputs already present**, not a ne
 NOT build a speculative plugin/registry now (YAGNI); centralization plus a rich input is what makes it cheap to
 evolve.
 
-**Implemented (Phase 4, Lane A).** `services/badge_xp.py`: `compute_badge_xp({series_slug: [GroupBadgeResult]})`
-is pure (XP accrues per group badge via `base_satisfied_count`, summed per series); `recompute_standing` upserts
-the sealed `ProfileBadgeStanding` (OneToOne profile, `total_xp` indexed for leaderboards, `series_xp` JSON),
-recomputed from scratch off the DesiredState on every write (evaluate_and_apply + batch), so it can't drift and
-a scoped `--series` run never clobbers other series. Isolated from the legacy tier-based
-`ProfileGamification.total_badge_xp`. Constants (`XP_PER_STAGE=100`, `XP_BADGE_COMPLETION_BONUS=500`) are
-placeholders pending calibration. **Next (Lane B):** badge leaderboards off `total_xp` / `series_xp` + the
-derived earners rank (`held ORDER BY earned_at`), incl. a `rank_of(profile, group_badge)` for the medallion back.
+**Implemented (Phase 4, Lane A + B).** `services/badge_xp.py`: `compute_series_standings({series_slug:
+[GroupBadgeResult]})` is pure -- per series it computes XP (per group badge via `base_satisfied_count`, summed)
+AND progress (the furthest-along `base_satisfied/gating` fraction, basis points). `recompute_standing` upserts,
+from scratch off the DesiredState on every write, two sealed stores: `ProfileBadgeStanding` (`total_xp` indexed
+= global board) and `SeriesBadgeStanding` (one row per (profile, series) while they have progress; indexed
+`(series_slug, -xp)` and `(series_slug, -progress_bp)`). Can't drift; a scoped `--series` run only touches its
+own series (grand total re-summed from all rows). Isolated from the legacy `ProfileGamification.total_badge_xp`.
+Constants (`XP_PER_STAGE=100`, `XP_BADGE_COMPLETION_BONUS=500`) are placeholders pending calibration.
+
+**Lane B leaderboards** (`services/badge_leaderboards.py`, DB reads over the stores -- no Redis/rebuild cron):
+global XP (`xp_rows`/`xp_rank`), per-series XP (`series_xp_rows`/`series_rank`), per-series progress/chasers
+(`series_progress_rows`), and per-badge earners (`earners_rows` + `earners_rank`/`earners_ranks` -- the LIVE
+position shown on the medallion back, a bounded indexed COUNT). The earners board IS the derived rank (`held
+ORDER BY earned_at`), so no separate rank store. **Next:** cutover (sync wiring behind a flag, main-branch PR).
 
 ---
 

@@ -3086,17 +3086,40 @@ class UserGroupBadge(models.Model):
 
 
 class ProfileBadgeStanding(models.Model):
-    """Sealed per-profile badge-XP standing for the new grouping-badge subsystem. Recomputed from scratch on
-    every evaluation (a pure function of the DesiredState -- see services/badge_xp.py), so it can't drift.
-    Deliberately isolated from the legacy ProfileGamification.total_badge_xp (tier-based; repointed at cutover).
-    total_xp is the leaderboard sort key; series_xp is the {series_slug: xp} breakdown for per-series boards."""
+    """Sealed per-profile GRAND badge-XP total for the new subsystem -- the global XP leaderboard sort key (and
+    a profile's overall total). Per-series XP + progress live in SeriesBadgeStanding. Recomputed from scratch on
+    every evaluation (see services/badge_xp.py), so it can't drift. Isolated from the legacy tier-based
+    ProfileGamification.total_badge_xp (repointed at cutover)."""
     profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='badge_standing')
-    total_xp = models.PositiveIntegerField(default=0, db_index=True)   # leaderboard sort key
-    series_xp = models.JSONField(default=dict, blank=True, help_text='Per-series XP: {"god-of-war": 1500, ...}')
+    total_xp = models.PositiveIntegerField(default=0, db_index=True)   # global leaderboard sort key
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.profile.psn_username} - badge XP {self.total_xp}"
+
+
+class SeriesBadgeStanding(models.Model):
+    """Sealed per-(profile, series) standing -- backs the per-series XP + progress ("chasers") leaderboards and a
+    profile's per-series breakdown. Recomputed from scratch on every evaluation; a row exists only while the
+    profile has progress in the series. progress_bp is the furthest-along fraction (basis points, 0-10000) over
+    the series' group badges; stages_cleared/total describe that best group for display."""
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='series_badge_standings')
+    series_slug = models.SlugField(max_length=100)
+    xp = models.PositiveIntegerField(default=0)
+    progress_bp = models.PositiveIntegerField(default=0, help_text="Furthest-along fraction, basis points (0-10000).")
+    stages_cleared = models.PositiveIntegerField(default=0)
+    stages_total = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['profile', 'series_slug']
+        indexes = [
+            models.Index(fields=['series_slug', '-xp'], name='sbs_series_xp_idx'),            # per-series XP board
+            models.Index(fields=['series_slug', '-progress_bp'], name='sbs_series_prog_idx'),  # per-series chasers
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - {self.series_slug} xp {self.xp}"
 
 
 class TitleManager(models.Manager):

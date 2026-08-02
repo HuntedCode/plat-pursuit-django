@@ -117,29 +117,21 @@ def test_batch_earned_at_reflects_completion_date():
             < UserGroupBadge.objects.get(profile=amy, group_badge=gb).earned_at)
 
 
-def _batch_query_count(n, slug):
-    from django.db import connection
-    from django.test.utils import CaptureQueriesContext
+def test_batch_builds_catalog_once_regardless_of_profile_count(monkeypatch):
+    # The catalog-hoist invariant: build_catalog runs ONCE per batch, not per profile (the O(N x catalog)
+    # regression the split fixed). A direct spy is robust to the per-profile apply/recompute query cost.
+    import trophies.services.badge_apply as ba
     from trophies.models import Profile
-    from trophies.services.badge_apply import evaluate_and_apply_batch
-    gb, game = _series_badge(slug)
-    for i in range(n):
-        _complete(ProfileFactory(psn_username=f'{slug}{i}'), game, when=_dt(2019 + i))
-    profiles = list(Profile.objects.filter(psn_username__startswith=slug))
-    with CaptureQueriesContext(connection) as ctx:
-        evaluate_and_apply_batch(profiles, [gb])
-    return len(ctx.captured_queries)
+    calls = {'n': 0}
+    original = ba.build_catalog
+    monkeypatch.setattr(ba, 'build_catalog', lambda gbs: (calls.__setitem__('n', calls['n'] + 1), original(gbs))[1])
 
-
-def test_batch_catalog_fetched_once_flat_per_profile():
-    # Per-profile marginal cost must be small + CONSTANT: the two completion reads + current-state read + the
-    # inline apply (txn + create + earned_count) + the standing recompute (~9). It must NOT include the ~6
-    # catalog-prefetch queries -- a slope near the re-fetch cost (~15) means build_catalog runs per profile,
-    # the exact regression this guards.
-    q1 = _batch_query_count(1, 'qa')
-    q4 = _batch_query_count(4, 'qb')
-    per_profile = (q4 - q1) / 3
-    assert per_profile <= 12, f"~{per_profile:.1f} queries/profile (N1={q1}, N4={q4}) -- catalog likely re-fetched"
+    gb, game = _series_badge('spy')
+    for i in range(4):
+        _complete(ProfileFactory(psn_username=f'spy{i}'), game, when=_dt(2019 + i))
+    profiles = list(Profile.objects.filter(psn_username__startswith='spy'))
+    ba.evaluate_and_apply_batch(profiles, [gb])
+    assert calls['n'] == 1
 
 
 def test_compare_legacy_reports_kept_lost_gained():

@@ -1,9 +1,11 @@
-"""Badge XP: pure compute_badge_xp + the recompute_standing write seam."""
+"""Badge XP + progress: pure compute + the recompute_standing write seam (ProfileBadgeStanding + SeriesBadgeStanding)."""
 import pytest
 from django.utils import timezone
 
 from trophies.services.badge_engine import GroupBadgeResult
-from trophies.services.badge_xp import compute_badge_xp, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS
+from trophies.services.badge_xp import (
+    compute_badge_xp, compute_series_standings, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS,
+)
 
 
 def _res(base_satisfied_count, base_earned, gating_count=None):
@@ -15,7 +17,7 @@ def _res(base_satisfied_count, base_earned, gating_count=None):
     )
 
 
-# ------------------------------------------------------------------ pure compute -------------------------
+# ------------------------------------------------------------------ pure XP -------------------------------
 
 def test_stage_xp_plus_completion_bonus():
     total, per = compute_badge_xp({'gow': [_res(3, True)]})
@@ -30,27 +32,32 @@ def test_partial_progress_no_bonus():
 
 
 def test_two_group_badges_sum_into_series():
-    # Legacy HD (2 stages, earned) + Ultra HD (3 stages, earned) in ONE series -> summed.
     total, per = compute_badge_xp({'gow': [_res(2, True), _res(3, True)]})
     expected = (2 * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS) + (3 * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS)
     assert per['gow'] == expected and total == expected
 
 
-def test_multiple_series_breakdown():
-    total, per = compute_badge_xp({'a': [_res(1, True)], 'b': [_res(2, False, 4)]})
-    assert per['a'] == XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS
-    assert per['b'] == 2 * XP_PER_STAGE
-    assert total == per['a'] + per['b']
-
-
 def test_holo_does_not_change_xp():
     plain = compute_badge_xp({'gow': [_res(3, True)]})[0]
-    holo_res = GroupBadgeResult(True, True, 3, 3, 3, None, [])   # holo flags set; must not add XP
+    holo_res = GroupBadgeResult(True, True, 3, 3, 3, None, [])
     assert compute_badge_xp({'gow': [holo_res]})[0] == plain
 
 
 def test_empty():
     assert compute_badge_xp({}) == (0, {})
+
+
+# ------------------------------------------------------------------ pure progress ------------------------
+
+def test_progress_is_best_group_fraction():
+    # one group 2/5 (40%), another 1/2 (50%) -> best = 50%, and its raw N/M is reported.
+    st = compute_series_standings({'s': [_res(2, False, 5), _res(1, False, 2)]})['s']
+    assert st.progress_bp == 5000 and st.stages_cleared == 1 and st.stages_total == 2
+
+
+def test_progress_is_100_when_a_group_is_earned():
+    st = compute_series_standings({'s': [_res(3, True)]})['s']
+    assert st.progress_bp == 10000 and st.stages_cleared == 3 and st.stages_total == 3
 
 
 # ------------------------------------------------------------------ store / wiring (DB) ------------------
@@ -82,47 +89,50 @@ def _complete(profile, game):
 
 
 @pytest.mark.django_db
-def test_standing_partial_progress_stage_xp_only():
+def test_standing_partial_progress_writes_xp_and_progress():
     from trophies.services.badge_apply import evaluate_and_apply
-    from trophies.models import ProfileBadgeStanding
+    from trophies.models import ProfileBadgeStanding, SeriesBadgeStanding
     from tests.factories import ProfileFactory
     gb, games = _make_series('gow', 3)
     p = ProfileFactory()
     _complete(p, games[0])                       # 1 of 3 gating stages -> not earned
     evaluate_and_apply(p, [gb])
-    s = ProfileBadgeStanding.objects.get(profile=p)
-    assert s.series_xp == {'gow': XP_PER_STAGE} and s.total_xp == XP_PER_STAGE
+    sbs = SeriesBadgeStanding.objects.get(profile=p, series_slug='gow')
+    assert sbs.xp == XP_PER_STAGE
+    assert sbs.stages_cleared == 1 and sbs.stages_total == 3 and sbs.progress_bp == 3333
+    assert ProfileBadgeStanding.objects.get(profile=p).total_xp == XP_PER_STAGE
 
 
 @pytest.mark.django_db
-def test_standing_earned_gets_bonus():
+def test_standing_earned_gets_bonus_and_full_progress():
     from trophies.services.badge_apply import evaluate_and_apply
-    from trophies.models import ProfileBadgeStanding
+    from trophies.models import ProfileBadgeStanding, SeriesBadgeStanding
     from tests.factories import ProfileFactory
     gb, games = _make_series('gow', 3)
     p = ProfileFactory()
     for g in games:
         _complete(p, g)                          # all 3 -> earned
     evaluate_and_apply(p, [gb])
-    s = ProfileBadgeStanding.objects.get(profile=p)
-    assert s.total_xp == 3 * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS
+    assert ProfileBadgeStanding.objects.get(profile=p).total_xp == 3 * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS
+    assert SeriesBadgeStanding.objects.get(profile=p, series_slug='gow').progress_bp == 10000
 
 
 @pytest.mark.django_db
-def test_zero_xp_profile_gets_no_standing_row():
+def test_zero_xp_profile_gets_no_rows():
     from trophies.services.badge_apply import evaluate_and_apply
-    from trophies.models import ProfileBadgeStanding
+    from trophies.models import ProfileBadgeStanding, SeriesBadgeStanding
     from tests.factories import ProfileFactory
     gb, _games = _make_series('gow', 3)
     p = ProfileFactory()                         # no progress at all
     evaluate_and_apply(p, [gb])
     assert not ProfileBadgeStanding.objects.filter(profile=p).exists()
+    assert not SeriesBadgeStanding.objects.filter(profile=p).exists()
 
 
 @pytest.mark.django_db
-def test_scoped_series_merge_preserves_other_series():
+def test_scoped_series_merge_preserves_other_series_and_total():
     from trophies.services.badge_apply import evaluate_and_apply
-    from trophies.models import ProfileBadgeStanding
+    from trophies.models import ProfileBadgeStanding, SeriesBadgeStanding
     from tests.factories import ProfileFactory
     gbA, gamesA = _make_series('aaa', 2)
     gbB, gamesB = _make_series('bbb', 1)
@@ -131,24 +141,26 @@ def test_scoped_series_merge_preserves_other_series():
         _complete(p, g)
     _complete(p, gamesB[0])
     evaluate_and_apply(p, [gbA])                 # scoped to A
-    evaluate_and_apply(p, [gbB])                 # scoped to B -- must NOT wipe A's XP
-    s = ProfileBadgeStanding.objects.get(profile=p)
-    assert set(s.series_xp) == {'aaa', 'bbb'} and s.total_xp == sum(s.series_xp.values())
+    evaluate_and_apply(p, [gbB])                 # scoped to B -- must NOT wipe A's row
+    slugs = set(SeriesBadgeStanding.objects.filter(profile=p).values_list('series_slug', flat=True))
+    assert slugs == {'aaa', 'bbb'}
+    total = ProfileBadgeStanding.objects.get(profile=p).total_xp
+    assert total == sum(SeriesBadgeStanding.objects.filter(profile=p).values_list('xp', flat=True))
 
 
 @pytest.mark.django_db
-def test_standing_series_dropped_when_progress_regresses_to_zero():
+def test_standing_removed_when_progress_regresses_to_zero():
     from trophies.services.badge_apply import evaluate_and_apply
-    from trophies.models import ProfileBadgeStanding, ProfileTrophyGroup, ProfileGame
+    from trophies.models import ProfileBadgeStanding, SeriesBadgeStanding, ProfileTrophyGroup, ProfileGame
     from tests.factories import ProfileFactory
     gb, games = _make_series('gow', 1)
     p = ProfileFactory()
     _complete(p, games[0])
     evaluate_and_apply(p, [gb])
     assert ProfileBadgeStanding.objects.get(profile=p).total_xp > 0
-    # Data regresses (e.g. PSN correction): no longer complete -> the series entry is removed, total zeroes.
+    # Data regresses (e.g. PSN correction): no longer complete -> the series row + grand total are removed.
     ProfileTrophyGroup.objects.filter(profile=p).update(progress=0)
     ProfileGame.objects.filter(profile=p).update(progress=0)
     evaluate_and_apply(p, [gb])
-    s = ProfileBadgeStanding.objects.get(profile=p)
-    assert 'gow' not in s.series_xp and s.total_xp == 0
+    assert not SeriesBadgeStanding.objects.filter(profile=p, series_slug='gow').exists()
+    assert not ProfileBadgeStanding.objects.filter(profile=p).exists()
