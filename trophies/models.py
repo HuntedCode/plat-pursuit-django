@@ -2805,6 +2805,225 @@ class ConceptBundle(models.Model):
         return f"{self.stage} - {self.label}"
 
 
+class PlatformGroup(models.Model):
+    """A backward-compatibility platform grouping that a series' games route into (e.g. Legacy HD = PS3/Vita,
+    Ultra HD = PS4/PS5). Each group is its own earnable badge per series. The group owns the shared medallion
+    look (shape + backing + background) across every series, plus the delisted policy. Config-driven/extensible:
+    adding a group (e.g. a future PS6 tier) is a row, not a schema change."""
+    key = models.SlugField(max_length=40, unique=True, help_text="Stable key, e.g. 'legacy-hd', 'ultra-hd'.")
+    name = models.CharField(max_length=60, help_text="Display name, e.g. 'Legacy HD'.")
+    platforms = ArrayField(
+        models.CharField(max_length=20), default=list,
+        help_text="PSN title_platform values in this group, e.g. ['PS3','PSVITA']. A Game joins the group when "
+                  "its title_platform list intersects this.",
+    )
+    exclude_delisted = models.BooleanField(
+        default=False,
+        help_text="If True, delisted games do NOT gate this group's badges (they still SATISFY if earned). "
+                  "Legacy HD=False (delisting is a no-op, immunizing it against the store closure); Ultra HD=True.",
+    )
+    medallion_shape = models.CharField(max_length=40, blank=True, help_text="Visual key for the group's medallion shape (shared across all series).")
+    backing_key = models.CharField(max_length=40, blank=True, help_text="Visual key for the group's medallion backing (shared across all series).")
+    background_image = models.ImageField(upload_to='badges/group_bg/', null=True, blank=True, help_text="Default backdrop shared by every badge in this group (bg1 for Legacy, bg2 for Ultra, ...).")
+    holo_background_image = models.ImageField(upload_to='badges/group_bg/', null=True, blank=True, help_text="Optional upgraded backdrop shown when a badge in this group is holo.")
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['sort_order', 'name']
+
+    def __str__(self):
+        return self.name
+
+    def matches_platforms(self, title_platform):
+        """True if a Game's title_platform list intersects this group's platforms."""
+        return bool(set(title_platform or []) & set(self.platforms))
+
+
+class BadgeSeries(models.Model):
+    """The abstract series-level definition (one row per series_slug). Holds the shared identity, subject
+    attribution, and the DEFAULTS (title, artwork, funder) that each GroupBadge inherits unless it overrides
+    them. Replaces the old tier-1 `base_badge` self-FK inheritance hack with an explicit parent."""
+    BADGE_TYPES = [
+        ('series', 'Series'), ('franchise', 'Franchise'), ('collection', 'Collection'),
+        ('developer', 'Developer'), ('user', 'User'), ('event', 'Event'), ('megamix', 'Megamix'),
+    ]
+    COMPLETION_POLICIES = [
+        ('all', 'All gating stages'),
+        ('min_count', 'N of M gating stages (megamix)'),
+    ]
+
+    series_slug = models.SlugField(max_length=100, unique=True, help_text="Stable series identity; shared by this series' group badges.")
+    name = models.CharField(max_length=255)
+    badge_type = models.CharField(max_length=12, choices=BADGE_TYPES, default='series', help_text="Attribution/flavor (drives subject name, set-numbering group, display label). All types share one earn engine.")
+    completion_policy = models.CharField(max_length=12, choices=COMPLETION_POLICIES, default='all', help_text="How a group badge is earned: 'all' gating stages, or 'min_count' (megamix).")
+    min_required = models.PositiveIntegerField(default=0, help_text="For completion_policy='min_count' (megamix): stages needed. Interpretation under the per-group split is resolved by the evaluator.")
+    description = models.TextField(blank=True)
+    display_series = models.CharField(max_length=100, blank=True)
+
+    # Subject attribution (which of these is relevant depends on badge_type).
+    franchise = models.ForeignKey('Franchise', on_delete=models.SET_NULL, null=True, blank=True, related_name='badge_series')
+    collection = models.ForeignKey('Franchise', on_delete=models.SET_NULL, null=True, blank=True, related_name='collection_badge_series')
+    developer = models.ForeignKey('Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='developed_badge_series')
+    submitted_by = models.ForeignKey('Profile', on_delete=models.SET_NULL, null=True, blank=True, related_name='submitted_badge_series', help_text="Credited submitter for 'user' badges; also the source of the badge art (their avatar) when no image is set.")
+
+    # Series-level defaults (each overrideable per GroupBadge).
+    title = models.ForeignKey('Title', on_delete=models.SET_NULL, null=True, blank=True, related_name='badge_series', help_text="One title per series; granted when the profile earns ANY of the series' group badges.")
+    badge_image = models.ImageField(upload_to='badges/series/', null=True, blank=True, help_text="Default subject artwork for the series (sits on the group background).")
+    holo_badge_image = models.ImageField(upload_to='badges/series/', null=True, blank=True, help_text="Default upgraded subject artwork shown when a badge is holo.")
+    funded_by = models.ForeignKey('Profile', on_delete=models.SET_NULL, null=True, blank=True, related_name='funded_badge_series', help_text="Donor credited for the default artwork.")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['series_slug'], name='badgeseries_slug_idx'),
+            models.Index(fields=['badge_type'], name='badgeseries_type_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_badge_type_display()})"
+
+
+class GroupBadge(models.Model):
+    """The earnable per-group badge: one row per (BadgeSeries x PlatformGroup). Carries group-specific state and
+    denorm, plus optional overrides of the series defaults (art + funder). No `tier` field."""
+    RARITY_CLASSES = [('common', 'Common'), ('uncommon', 'Uncommon'), ('rare', 'Rare'), ('mythic', 'Mythic')]
+
+    series = models.ForeignKey(BadgeSeries, on_delete=models.CASCADE, related_name='group_badges')
+    platform_group = models.ForeignKey(PlatformGroup, on_delete=models.PROTECT, related_name='group_badges')
+    is_live = models.BooleanField(default=False, help_text="Hidden until released. Dormant grouping badges stay False until the cutover flip.")
+    set_number = models.PositiveIntegerField(null=True, blank=True, help_text="Edition/print-run number engraved on the medallion. Assigned by the new numbering scheme (see rebuild doc).")
+
+    # Per-group denormalization (owned by the evaluator's apply() step, not signals).
+    earned_count = models.PositiveIntegerField(default=0, help_text="Active earners (status='earned'). Rarity uses the same count.")
+    required_stages = models.PositiveIntegerField(default=0, help_text="Count of gating stages for THIS group (recomputed from the group's platform routing).")
+    rarity_pct = models.FloatField(null=True, blank=True)
+    rarity_rank = models.PositiveIntegerField(null=True, blank=True)
+    rarity_class = models.CharField(max_length=10, blank=True, default='', choices=RARITY_CLASSES)
+
+    # Overrides (null => inherit the series default).
+    badge_image_override = models.ImageField(upload_to='badges/group/', null=True, blank=True, help_text="Per-group subject artwork; null inherits BadgeSeries.badge_image.")
+    holo_badge_image_override = models.ImageField(upload_to='badges/group/', null=True, blank=True, help_text="Per-group holo artwork; null inherits BadgeSeries.holo_badge_image.")
+    funded_by_override = models.ForeignKey('Profile', on_delete=models.SET_NULL, null=True, blank=True, related_name='funded_group_badges', help_text="Per-group art funder; null inherits BadgeSeries.funded_by. Travels with badge_image_override.")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['series', 'platform_group']
+        unique_together = ['series', 'platform_group']
+        indexes = [
+            models.Index(fields=['series', 'platform_group'], name='groupbadge_series_group_idx'),
+            models.Index(fields=['is_live'], name='groupbadge_is_live_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.series.name} - {self.platform_group.name}"
+
+    @property
+    def effective_funded_by(self):
+        """Art funder credited on the badge page: per-group override, else the series default."""
+        return self.funded_by_override or self.series.funded_by
+
+    @property
+    def effective_holo_image(self):
+        """Holo subject artwork: per-group override, else series default (an ImageField or None)."""
+        return self.holo_badge_image_override or self.series.holo_badge_image
+
+    def art_layers(self):
+        """Single source of truth for the medallion's art composition (group backdrop/backing/shape + the
+        resolved subject art). Subject art resolves: per-group override -> series default -> (user badge:
+        submitter avatar) -> static default. Mirrors the legacy Badge.get_badge_layers behavior."""
+        grp = self.platform_group
+        main_url, is_avatar = None, False
+        if self.badge_image_override:
+            main_url = self.badge_image_override.url
+        elif self.series.badge_image:
+            main_url = self.series.badge_image.url
+        elif self.series.badge_type == 'user':
+            submitter = self.series.submitted_by
+            if submitter and submitter.avatar_url:
+                main_url, is_avatar = submitter.avatar_url, True
+        has_custom = main_url is not None
+        if not main_url:
+            main_url = 'images/badges/default.png'
+        return {
+            'backdrop': grp.background_image.url if grp.background_image else None,
+            'main': main_url,
+            'backing_key': grp.backing_key,
+            'shape': grp.medallion_shape,
+            'has_custom_image': has_custom,
+            'is_avatar': is_avatar,
+        }
+
+
+class UserGroupBadge(models.Model):
+    """A profile's CURRENT hold on a GroupBadge -- binary: the row exists iff the profile currently meets the
+    badge's bar (revoked = row deleted; no 'maintenance' state). There is no permanent earn_rank: rank is the
+    profile's LIVE position in the earners leaderboard (current holders ordered by earned_at), so if a series
+    grows, whoever first clears the new, harder iteration takes #1. is_holo is a LIVE mastery flag the evaluator
+    flips both ways (100% incl DLC) -- cosmetic, no XP. See docs/design/rebuild/badge-backend-rebuild.md."""
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='group_badges')
+    group_badge = models.ForeignKey(GroupBadge, on_delete=models.CASCADE, related_name='earned_by')
+    is_holo = models.BooleanField(default=False, help_text="LIVE mastery flag: currently 100% on every gating stage. Flips both ways; cosmetic; no XP.")
+    is_displayed = models.BooleanField(default=False, help_text="Profile's selected display badge.")
+    earned_at = models.DateTimeField(
+        default=timezone.now,
+        help_text="CURRENT-iteration completion date (the engine's earned_date) -- the leaderboard sort key, "
+                  "resynced on re-evaluation if the badge changes. NOT the sync time.",
+    )
+
+    class Meta:
+        unique_together = ['profile', 'group_badge']
+        indexes = [
+            models.Index(fields=['profile', 'is_displayed'], name='ugb_display_idx'),
+            # Serves the per-badge earners leaderboard (ORDER BY earned_at) AND a profile's live rank
+            # (COUNT earned_at < mine) -- the value shown on the medallion back.
+            models.Index(fields=['group_badge', 'earned_at'], name='ugb_badge_earned_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - {self.group_badge}"
+
+
+class ProfileBadgeStanding(models.Model):
+    """Sealed per-profile GRAND badge-XP total for the new subsystem -- the global XP leaderboard sort key (and
+    a profile's overall total). Per-series XP + progress live in SeriesBadgeStanding. Recomputed from scratch on
+    every evaluation (see services/badge_xp.py), so it can't drift. Isolated from the legacy tier-based
+    ProfileGamification.total_badge_xp (repointed at cutover)."""
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='badge_standing')
+    total_xp = models.PositiveIntegerField(default=0, db_index=True)   # global leaderboard sort key
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - badge XP {self.total_xp}"
+
+
+class SeriesBadgeStanding(models.Model):
+    """Sealed per-(profile, series) standing -- backs the per-series XP + progress ("chasers") leaderboards and a
+    profile's per-series breakdown. Recomputed from scratch on every evaluation; a row exists only while the
+    profile has progress in the series. progress_bp is the furthest-along fraction (basis points, 0-10000) over
+    the series' group badges; stages_cleared/total describe that best group for display."""
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='series_badge_standings')
+    series_slug = models.SlugField(max_length=100)
+    xp = models.PositiveIntegerField(default=0)
+    progress_bp = models.PositiveIntegerField(default=0, help_text="Furthest-along fraction, basis points (0-10000).")
+    stages_cleared = models.PositiveIntegerField(default=0)
+    stages_total = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['profile', 'series_slug']
+        indexes = [
+            models.Index(fields=['series_slug', '-xp'], name='sbs_series_xp_idx'),            # per-series XP board
+            models.Index(fields=['series_slug', '-progress_bp'], name='sbs_series_prog_idx'),  # per-series chasers
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - {self.series_slug} xp {self.xp}"
+
+
 class TitleManager(models.Manager):
     """Fetch titles earned by a user, ordered alphabetically. Usage: Title.objects.earned_by_user(profile)"""
     def earned_by_user(self, profile):
@@ -2830,7 +3049,8 @@ class Title(models.Model):
 class UserTitle(models.Model):
     SOURCE_CHOICES = [
         ('badge', 'Badge'),
-        ('milestone', 'Milestone')
+        ('milestone', 'Milestone'),
+        ('badge_series', 'Badge Series'),   # grouping-badge rebuild: series-level title, kept distinct from legacy 'badge'
     ]
 
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='user_titles')

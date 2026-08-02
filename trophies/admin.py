@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge
 
 
 # Register your models here.
@@ -5040,3 +5040,125 @@ class BlurbReportAdmin(admin.ModelAdmin):
         rating_ids = list(queryset.values_list('rating_id', flat=True))
         n = UserConceptRating.objects.filter(id__in=rating_ids, blurb_hidden=True).update(blurb_hidden=False)
         self.message_user(request, f'Un-hid {n} blurb(s).')
+
+
+# =====================================================================================================
+#  BADGE REBUILD admin — purpose-built for the grouping-badge subsystem (PlatformGroup / BadgeSeries /
+#  GroupBadge / UserGroupBadge). Deliberately NOT modeled on the legacy BadgeAdmin: no tiers, no
+#  base_badge, no set-of-4 numbering, no by-slug live toggle. See
+#  docs/design/rebuild/badge-backend-rebuild.md.
+# =====================================================================================================
+
+@admin.register(PlatformGroup)
+class PlatformGroupAdmin(admin.ModelAdmin):
+    list_display = ['name', 'key', 'platforms_display', 'exclude_delisted', 'sort_order', 'is_active']
+    list_editable = ['sort_order', 'is_active']
+    search_fields = ['name', 'key']
+    fields = ['key', 'name', 'platforms', 'exclude_delisted', 'medallion_shape', 'backing_key',
+              'background_image', 'holo_background_image', 'sort_order', 'is_active']
+
+    @admin.display(description='Platforms')
+    def platforms_display(self, obj):
+        return ', '.join(obj.platforms or []) or '—'
+
+
+class GroupBadgeInline(admin.TabularInline):
+    """Manage a series' group badges (Legacy HD / Ultra HD / ...) right on the BadgeSeries page."""
+    model = GroupBadge
+    extra = 0
+    fields = ['platform_group', 'is_live', 'set_number',
+              'badge_image_override', 'holo_badge_image_override', 'funded_by_override',
+              'earned_count', 'required_stages']
+    readonly_fields = ['earned_count', 'required_stages']
+    raw_id_fields = ['funded_by_override']
+
+
+@admin.register(BadgeSeries)
+class BadgeSeriesAdmin(admin.ModelAdmin):
+    list_display = ['name', 'badge_type', 'completion_policy', 'series_slug', 'group_count',
+                    'title', 'has_art', 'funded_by', 'submitted_by']
+    list_filter = ['badge_type', 'completion_policy']
+    search_fields = ['name', 'series_slug', 'description']
+    autocomplete_fields = ['franchise', 'collection', 'developer']
+    raw_id_fields = ['title', 'funded_by', 'submitted_by']
+    readonly_fields = ['created_at']
+    inlines = [GroupBadgeInline]
+    fieldsets = [
+        ('Identity', {'fields': ['name', 'series_slug', 'badge_type', 'description', 'display_series']}),
+        ('Completion policy', {
+            'fields': ['completion_policy', 'min_required'],
+            'description': "min_required applies only to Megamix (completion_policy='min_count'); ignored otherwise.",
+        }),
+        ('Subject attribution', {'fields': ['franchise', 'collection', 'developer', 'submitted_by']}),
+        ('Series defaults (inherited by every group badge unless it overrides them)', {
+            'fields': ['title', 'badge_image', 'holo_badge_image', 'funded_by'],
+        }),
+        ('Meta', {'fields': ['created_at']}),
+    ]
+
+    @admin.display(description='Groups')
+    def group_count(self, obj):
+        return obj.group_badges.count()
+
+    @admin.display(boolean=True, description='Art?')
+    def has_art(self, obj):
+        return bool(obj.badge_image)
+
+
+@admin.register(GroupBadge)
+class GroupBadgeAdmin(admin.ModelAdmin):
+    list_display = ['__str__', 'is_live', 'platform_group', 'series_type', 'set_number',
+                    'earned_count', 'required_stages', 'rarity_class', 'art_preview']
+    list_filter = ['is_live', 'platform_group', 'series__badge_type']
+    list_editable = ['is_live']
+    list_select_related = ['series', 'platform_group', 'funded_by_override', 'series__funded_by', 'series__submitted_by']
+    search_fields = ['series__name', 'series__series_slug']
+    raw_id_fields = ['series', 'funded_by_override']
+    readonly_fields = ['created_at', 'earned_count', 'required_stages',
+                       'rarity_pct', 'rarity_rank', 'rarity_class', 'art_preview']
+    actions = ['mark_live', 'mark_hidden']
+    fieldsets = [
+        ('Badge', {'fields': ['series', 'platform_group', 'is_live', 'set_number']}),
+        ('Artwork overrides (blank = inherit the series default)', {
+            'fields': ['badge_image_override', 'holo_badge_image_override', 'funded_by_override', 'art_preview'],
+        }),
+        ('Denormalized (engine-owned; read-only)', {
+            'fields': ['earned_count', 'required_stages', 'rarity_pct', 'rarity_rank', 'rarity_class', 'created_at'],
+        }),
+    ]
+
+    @admin.display(description='Type')
+    def series_type(self, obj):
+        return obj.series.get_badge_type_display()
+
+    @admin.display(description='Effective art')
+    def art_preview(self, obj):
+        img = obj.badge_image_override or obj.series.badge_image
+        if img:
+            return format_html('<img src="{}" style="height:52px;border-radius:6px;" />', img.url)
+        submitter = obj.series.submitted_by
+        if obj.series.badge_type == 'user' and submitter and submitter.avatar_url:
+            return format_html('<img src="{}" style="height:52px;border-radius:50%;" /> submitter', submitter.avatar_url)
+        return format_html('<span style="color:#999;">— default</span>')
+
+    @admin.action(description='Mark selected group badges LIVE')
+    def mark_live(self, request, queryset):
+        n = queryset.update(is_live=True)
+        self.message_user(request, f'Marked {n} group badge(s) live.')
+
+    @admin.action(description='Mark selected group badges HIDDEN')
+    def mark_hidden(self, request, queryset):
+        n = queryset.update(is_live=False)
+        self.message_user(request, f'Marked {n} group badge(s) hidden.')
+
+
+@admin.register(UserGroupBadge)
+class UserGroupBadgeAdmin(admin.ModelAdmin):
+    """Earns are engine-owned; this is mostly for inspection + the occasional manual fix."""
+    list_display = ['profile', 'group_badge', 'is_holo', 'earned_at']
+    list_filter = ['is_holo', 'group_badge__platform_group']
+    list_select_related = ['profile', 'group_badge', 'group_badge__series', 'group_badge__platform_group']
+    search_fields = ['profile__psn_username', 'group_badge__series__name', 'group_badge__series__series_slug']
+    raw_id_fields = ['profile', 'group_badge']
+    readonly_fields = ['earned_at']
+    date_hierarchy = 'earned_at'
