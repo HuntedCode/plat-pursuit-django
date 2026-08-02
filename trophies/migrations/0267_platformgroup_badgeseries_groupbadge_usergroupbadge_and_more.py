@@ -8,7 +8,10 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("trophies", "0266_merge_0265_merge_20260724_2106_0265_rating_blurb_idx"),
+        # Re-rooted onto main's tip (0266_merge is an empty graph artifact; the badge tables only need
+        # Profile/Concept/Title, all present at 0265) so this chain is portable to main unchanged. rebuild
+        # rejoins the dangling 0266_merge leaf via 0274_merge_badge_reroot.
+        ("trophies", "0265_rating_blurb_idx"),
     ]
 
     operations = [
