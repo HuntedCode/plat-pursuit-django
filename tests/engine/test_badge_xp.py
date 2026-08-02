@@ -47,6 +47,24 @@ def test_empty():
     assert compute_badge_xp({}) == (0, {})
 
 
+def test_million_club_calibration():
+    # The "1,000,000 Club" target. Over the projected mature catalog (~400 group badges, ~5 gating stages each),
+    # a completionist should land ~1.24M so 1M is reachable-but-hard (~80% of the catalog), with headroom above
+    # for two-version + holo elites. Pins the XP constants against silent drift -- if you retune them, retune
+    # this target too (and confirm the catalog assumption still holds).
+    PROJECTED_BADGES, AVG_STAGES = 400, 5
+    per_badge = AVG_STAGES * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS
+    assert per_badge == 3100
+
+    completionist = {f's{i}': [_res(AVG_STAGES, True)] for i in range(PROJECTED_BADGES)}
+    total, _ = compute_badge_xp(completionist)
+    assert total == 1_240_000                       # completionist max, headroom above 1M
+    assert total > 1_000_000
+
+    badges_for_million = 1_000_000 / per_badge
+    assert 300 <= badges_for_million <= 340         # ~323 badges -> ~81% of the catalog: hard but doable
+
+
 # ------------------------------------------------------------------ pure progress ------------------------
 
 def test_progress_is_best_group_fraction():

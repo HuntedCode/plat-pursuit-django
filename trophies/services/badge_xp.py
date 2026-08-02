@@ -13,8 +13,12 @@ from dataclasses import dataclass
 from collections import defaultdict
 
 # Calibratable constants -- keep all XP magnitudes here so the model is a one-file swap.
-XP_PER_STAGE = 100                # per gating stage cleared (base-satisfied), a drip as you work a group
-XP_BADGE_COMPLETION_BONUS = 500   # flat, once, when the base badge is earned
+# Calibrated to the "1,000,000 Club": over a projected mature catalog of ~400 group badges (~5 gating stages
+# each -> ~3,100 XP/badge), a completionist lands ~1.24M, so 1M is reachable but hard (~80% of the catalog),
+# with headroom above for two-version + holo elites. See test_million_club_calibration. Revisit if the catalog
+# trajectory changes materially.
+XP_PER_STAGE = 500                # per gating stage cleared (base-satisfied), a drip as you work a group
+XP_BADGE_COMPLETION_BONUS = 600   # flat, once, when the base badge is earned
 
 
 @dataclass(frozen=True)

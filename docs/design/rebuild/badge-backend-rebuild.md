@@ -209,7 +209,10 @@ from scratch off the DesiredState on every write, two sealed stores: `ProfileBad
 = global board) and `SeriesBadgeStanding` (one row per (profile, series) while they have progress; indexed
 `(series_slug, -xp)` and `(series_slug, -progress_bp)`). Can't drift; a scoped `--series` run only touches its
 own series (grand total re-summed from all rows). Isolated from the legacy `ProfileGamification.total_badge_xp`.
-Constants (`XP_PER_STAGE=100`, `XP_BADGE_COMPLETION_BONUS=500`) are placeholders pending calibration.
+Constants (`XP_PER_STAGE=500`, `XP_BADGE_COMPLETION_BONUS=600` -> ~3,100 XP/badge) are calibrated to the
+**"1,000,000 Club"**: a completionist over a projected ~400-group-badge mature catalog lands ~1.24M, so 1M is
+~80% of the catalog (hard but doable), with headroom above for two-version + holo elites. Pinned by
+`test_million_club_calibration`; the Club milestone itself is future work.
 
 **Lane B leaderboards** (`services/badge_leaderboards.py`, DB reads over the stores -- no Redis/rebuild cron):
 global XP (`xp_rows`/`xp_rank`), per-series XP (`series_xp_rows`/`series_rank`), per-series progress/chasers
