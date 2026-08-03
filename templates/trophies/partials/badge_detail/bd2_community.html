@@ -1,0 +1,63 @@
+{% load humanize %}
+{% comment %}
+Rarity & Community band (series-level, shows ALL groups side by side -- does NOT swap with the switcher). Leads
+with rarity (the prestige signal missing elsewhere on the page): per-group rarity class + Top X% + rank among
+live badges, then the earners scale (a proportional bar per group), the viewer's series standing, and a
+leaderboard CTA. Reads `detail` (BadgeDetail) + `series`. Rarity fields come from a recompute pass, so the
+"pending" branch covers a fresh badge with no rarity yet.
+{% endcomment %}
+<section class="bd-card bd2-comm mb-3">
+    <div class="p-4 md:p-5 lg:p-6">
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
+            <h2 class="bd2-comm__title">Rarity &amp; Community</h2>
+            <div class="bd2-comm__actions">
+                {% if detail.target_profile %}
+                <button type="button" data-stats-open aria-haspopup="dialog" class="bd2-comm__action">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 9l-5 5-3-3-3 3"/></svg>
+                    {% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s stats{% else %}My Stats{% endif %}
+                </button>
+                {% endif %}
+                <a href="{% url 'badge_leaderboards' series.series_slug %}" class="bd2-comm__lb">
+                    See the full leaderboard
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                </a>
+            </div>
+        </div>
+
+        <div class="bd2-comm__grid">
+            {% for g in detail.groups %}
+            <div class="bd2-comm__group" data-tier="{{ g.frame.tier }}">
+                <div class="bd2-comm__group-head">
+                    <span class="bd2-comm__group-name">{{ g.platform_group.name }}</span>
+                    {% if g.rarity_class %}<span class="bd2-comm__rar bd2-comm__rar--{{ g.rarity_class }}">{{ g.rarity_class|title }}</span>{% endif %}
+                </div>
+
+                {% if g.rarity_pct is not None %}
+                <div class="bd2-comm__rarity">
+                    <span class="pp-tally bd2-comm__pct">Top {{ g.rarity_pct }}%</span>
+                    {% if g.rarity_rank %}<span class="bd2-comm__rrank">#{{ g.rarity_rank|intcomma }} rarest</span>{% endif %}
+                </div>
+                {% else %}
+                <div class="bd2-comm__rarity bd2-comm__rarity--pending">New badge &middot; rarity pending</div>
+                {% endif %}
+
+                {# Earners scale: the count + a bar proportional to the biggest group (a quick cross-platform read). #}
+                <div class="bd2-comm__earnrow">
+                    <span class="bd2-comm__earners"><b class="pp-tally">{{ g.earned_count|intcomma }}</b> earner{{ g.earned_count|pluralize }}</span>
+                    {% if g.earners_rank %}<span class="bd2-comm__you">You: <b>#{{ g.earners_rank|intcomma }}</b></span>{% endif %}
+                </div>
+                <div class="pp-horizon bd2-comm__bar" style="--horizon-h: 5px; --horizon-accent: var(--comm-metal);" role="presentation">
+                    <span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-progress: {% widthratio g.earned_count detail.community_max_earned 100 %}%;"></span></span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if detail.target_profile and detail.series_rank %}
+        <div class="bd2-comm__standing">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+            <span>{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s{% else %}Your{% endif %} series standing: <b class="pp-tally">#{{ detail.series_rank|intcomma }}</b>{% if detail.series_size %} of {{ detail.series_size|intcomma }}{% endif %}</span>
+        </div>
+        {% endif %}
+    </div>
+</section>

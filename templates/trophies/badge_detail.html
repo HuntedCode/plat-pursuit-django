@@ -9,8 +9,9 @@ Ultra HD), not a tier ladder. ONE unified hero card, two rows: [medallion | iden
 .pp-switch selector. Reads `detail` (BadgeDetail). Stage journey (Phase 2) + My Stats (Phase 3) land below.
 {% endcomment %}
 
+{% comment %} Content sits directly in base.html's #main-content (container mx-auto px-4 py-2) -- like Career /
+Collection. No extra wrapper container: a nested one would double the horizontal padding and read narrower. {% endcomment %}
 {% block content %}
-<div class="container mx-auto px-3 md:px-5 lg:px-7 py-4 md:py-6">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
     {% firstof series.franchise.name series.collection.name series.developer.name '' as subject %}
 
@@ -51,19 +52,11 @@ Ultra HD), not a tier ladder. ONE unified hero card, two rows: [medallion | iden
                     {% comment %} Row 2: state | segmented progress | badge stat cells. Stacks vertically until lg:,
                     where it lines up on one row (mirrors the old header's substance strip). {% endcomment %}
                     <div class="mt-4 md:mt-5 pt-4 md:pt-5 border-t border-base-content/10 flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-6">
-                        <div class="flex items-center justify-center sm:justify-start gap-3 shrink-0">
-                            <div class="text-sm font-semibold">
-                                {% if g.state == 'holo' %}<span class="text-secondary">&#10022; Holographic{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
-                                {% elif g.state == 'earned' %}<span class="text-success">&#10003; Earned{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
-                                {% elif g.state == 'in_progress' %}<span class="text-primary">In progress</span>
-                                {% else %}<span class="text-base-content/50 font-medium">Not yet earned</span>{% endif %}
-                            </div>
-                            {% if detail.target_profile %}
-                            <button type="button" data-stats-open aria-haspopup="dialog" class="inline-flex items-center gap-0.5 text-xs font-semibold text-primary hover:text-primary/70 transition-colors">
-                                My Stats
-                                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-                            </button>
-                            {% endif %}
+                        <div class="shrink-0 text-sm font-semibold text-center sm:text-left">
+                            {% if g.state == 'holo' %}<span class="text-secondary">&#10022; Holographic{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
+                            {% elif g.state == 'earned' %}<span class="text-success">&#10003; Earned{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
+                            {% elif g.state == 'in_progress' %}<span class="text-primary">In progress</span>
+                            {% else %}<span class="text-base-content/50 font-medium">Not yet earned</span>{% endif %}
                         </div>
 
                         <div class="lg:flex-1 lg:min-w-[140px] w-full">
@@ -127,15 +120,31 @@ Ultra HD), not a tier ladder. ONE unified hero card, two rows: [medallion | iden
     </div>
     {% endif %}
 
+    {% comment %} Rarity & Community band -- series-level (both groups side by side), sits between the group
+    selector and the per-group journey. Leads with rarity (the prestige signal not shown elsewhere). {% endcomment %}
+    {% include 'trophies/partials/badge_detail/bd2_community.html' %}
+
     {% comment %} Stage journey -- per group, swaps with the selector alongside the hero. Free content below
-    the chrome (each stage is its own bd-card). Phase 3 (My Stats modal) lands below. {% endcomment %}
+    the chrome (each stage is its own bd-card). {% endcomment %}
     <div data-bd2-journey>
         {% for g in detail.groups %}
         <div class="bd2-panel{% if not forloop.first %} is-hidden{% endif %}" data-bd2-view="{{ g.platform_group.key }}">
             {% if g.stages %}
+            {% comment %} Requirements preview: the compact stage-tile checklist (checked when cleared), each
+            tile jumping to its stage in the journey below. {% endcomment %}
+            {% include 'trophies/partials/badge_detail/bd2_requirements.html' with g=g %}
+            {% comment %} Bulk expand/collapse for this group's stage ladder (one per journey panel). {% endcomment %}
+            <div class="flex justify-end mt-2 mb-1">
+                {% comment %} No aria-label -- the toggling "Expand all" / "Collapse all" text IS the accessible
+                name, so screen readers hear the current state (a static aria-label would mask it). {% endcomment %}
+                <button type="button" class="bd-collapse-all" data-stages-toggle-all>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <span data-bulk-label>Expand all</span>
+                </button>
+            </div>
             <div class="bd-stages">
                 {% for s in g.stages %}
-                {% include 'trophies/partials/badge_detail/bd2_stage.html' %}
+                {% include 'trophies/partials/badge_detail/bd2_stage.html' with group_key=g.platform_group.key %}
                 {% endfor %}
             </div>
             {% else %}
@@ -144,7 +153,6 @@ Ultra HD), not a tier ladder. ONE unified hero card, two rows: [medallion | iden
         </div>
         {% endfor %}
     </div>
-</div>
 {% endblock %}
 
 {% comment %} Modals live in fixed_overlays -- OUTSIDE #page-recede (base.html) -- so the modal pull-back
@@ -243,23 +251,76 @@ Ultra HD), not a tier ladder. ONE unified hero card, two rows: [medallion | iden
 })();
 
 (function () {
-    // Stage collapse: each stage header toggles its collapse body (grid-template-rows 1fr<->0fr). Body +
-    // chevron are found relative to the header (stage numbers repeat across groups, so no global id lookup).
+    // ── Stage ladder: per-stage collapse + bulk expand/collapse-all + requirements-tile jump. ──
+    // Each stage's collapse body toggles grid-template-rows 1fr<->0fr; body/chevron are found relative to the
+    // stage (stage numbers repeat across groups, so no global id lookup for the toggle).
+    function bodyOf(section) { return section.querySelector('[data-stage-games]'); }
+    function isOpen(section) { var b = bodyOf(section); return !!b && b.style.gridTemplateRows !== '0fr'; }
+    function setStage(section, open) {
+        var body = bodyOf(section);
+        if (!body) { return; }
+        var chev = section.querySelector('.bd-stage__chevron');
+        var head = section.querySelector('.bd-stage__head[data-stage-toggle]');
+        body.style.gridTemplateRows = open ? '1fr' : '0fr';
+        if (chev) { chev.style.transform = open ? '' : 'rotate(-90deg)'; }
+        if (head) { head.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+    }
+    function panelOf(el) { return el.closest('[data-bd2-view]') || document; }
+    // Keep a panel's bulk button label + chevron in sync with its stages.
+    function refreshBulk(scope) {
+        var btn = scope && scope.querySelector('[data-stages-toggle-all]');
+        if (!btn) { return; }
+        var sections = scope.querySelectorAll('.bd-stage');
+        var allOpen = sections.length > 0 && Array.prototype.every.call(sections, isOpen);
+        var label = btn.querySelector('[data-bulk-label]');
+        var icon = btn.querySelector('svg');
+        if (label) { label.textContent = allOpen ? 'Collapse all' : 'Expand all'; }
+        if (icon) { icon.style.transform = allOpen ? 'rotate(180deg)' : ''; }
+    }
+
+    // Per-stage header toggle.
     document.querySelectorAll('.bd-stage__head[data-stage-toggle]').forEach(function (head) {
         function toggle() {
             var section = head.closest('.bd-stage');
-            var body = section && section.querySelector('[data-stage-games]');
-            var chev = head.querySelector('.bd-stage__chevron');
-            if (!body) return;
-            var collapsed = body.style.gridTemplateRows !== '0fr';
-            body.style.gridTemplateRows = collapsed ? '0fr' : '1fr';
-            if (chev) { chev.style.transform = collapsed ? 'rotate(-90deg)' : ''; }
-            head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            if (!section) { return; }
+            setStage(section, !isOpen(section));
+            refreshBulk(panelOf(head));
         }
         head.addEventListener('click', toggle);
         head.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
         });
+    });
+
+    // Bulk expand/collapse all -- one button per journey panel. Transitions are killed for the bulk change
+    // (animating every stage's grid-template-rows at once janks tall mobile), then restored after two frames.
+    document.querySelectorAll('[data-stages-toggle-all]').forEach(function (btn) {
+        var scope = panelOf(btn);
+        btn.addEventListener('click', function () {
+            var sections = scope.querySelectorAll('.bd-stage');
+            var bodies = scope.querySelectorAll('[data-stage-games]');
+            var expand = !(sections.length > 0 && Array.prototype.every.call(sections, isOpen));
+            bodies.forEach(function (b) { b.style.transition = 'none'; });
+            sections.forEach(function (s) { setStage(s, expand); });
+            requestAnimationFrame(function () { requestAnimationFrame(function () {
+                bodies.forEach(function (b) { b.style.transition = ''; });
+            }); });
+            refreshBulk(scope);
+        });
+        refreshBulk(scope);   // initial label (the "up next" stage may start open)
+    });
+
+    // Requirements-tile jump: a tile (data-stage-jump, href="#bd2-stage-<group>-<n>") scrolls to its stage in
+    // the journey (native smooth #anchor) and EXPANDS it, so you land on open content, not a collapsed head.
+    // Delegated so it survives group swaps; expanding grows the section downward, so the anchor still lands right.
+    document.addEventListener('click', function (e) {
+        var tile = e.target.closest('[data-stage-jump]');
+        if (!tile) { return; }
+        var id = (tile.getAttribute('href') || '').replace(/^#/, '');
+        var section = id && document.getElementById(id);
+        if (!section) { return; }
+        setStage(section, true);
+        refreshBulk(panelOf(section));
     });
 })();
 

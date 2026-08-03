@@ -5,7 +5,7 @@ fed by badge_detail_service._group_journey. `s` = a stage dict (stage, obtainabl
 completion_state, is_next); `target_profile` from the page context. Always-expanded for now (no collapse JS).
 {% endcomment %}
 {% with stage=s.stage %}
-<section class="bd-card bd-stage mt-3{% if s.completion_state == 'complete' %} bd-stage--done{% endif %}">
+<section{% if group_key %} id="bd2-stage-{{ group_key }}-{{ stage.stage_number }}"{% endif %} class="bd-card bd-stage mt-3{% if s.completion_state == 'complete' %} bd-stage--done{% endif %}">
     {% comment %} Journey-spine node -- done check / up-next pulse / plain to-do number (stages finish in any order). {% endcomment %}
     <span class="bd-node bd-node--{% if s.completion_state == 'complete' %}done{% elif s.is_next %}next{% else %}todo{% endif %}" aria-hidden="true">
         {% if s.completion_state == 'complete' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" pathLength="1"></polyline></svg>{% else %}{{ stage.stage_number }}{% endif %}

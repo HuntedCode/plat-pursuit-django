@@ -184,6 +184,7 @@
 .bd-req__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; font-size: 0.78rem; color: var(--pp-text-mute); }
 .bd-req__meta .pp-tally { font-weight: 700; color: var(--pp-text-dim); }
 .bd-req__count b { color: var(--pp-text); }
+.bd-req__plats { font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-dim); }
 .bd-req__xp { cursor: help; }
 /* The stages: compact tile grid (replaced the full-width rows -- art fills the space, names stay visible). */
 /* Wider min (200 vs a cramped 150) so the game name gets ~60% more room (2 lines hold long titles like
@@ -870,13 +871,20 @@
    fill stays). Scoped to badge detail so the shared component is untouched for Collection. */
 .bd2-med .pp-med__count, .bd2-med .pp-med__meter { display: none; }
 
-/* ── Platform-group switcher: prominent, header-spanning, one substantial button per group. ────────────── */
+/* ── Platform-group switcher: the shared segmented-switcher pattern (a bordered shelf of chips) scaled up to
+   substantial per-group segments (medallion + name + platforms + metal identity). Framing the buttons as ONE
+   control makes it obvious they're pressable to swap, and the radii sit at the page's --pp-radius-lg rather
+   than a rounder one. Mirrors .pp-switch: shelf bg/border + transparent segments + tinted-flat active. ─── */
 .bd2-groupswitch {
     display: grid;
     grid-auto-flow: column;
     grid-auto-columns: 1fr;            /* equal segments that span the full width */
-    gap: 10px;
+    gap: 6px;
+    padding: 6px;
     margin: 2px 0 16px;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent);
 }
 .bd2-gbtn {
     position: relative;
@@ -884,43 +892,35 @@
     align-items: center;
     gap: 12px;
     min-width: 0;
-    padding: 10px 14px;
+    padding: 9px 13px;
     text-align: left;
-    color: var(--pp-text);
-    background: var(--pp-bg-2);
-    border: 1px solid var(--pp-divider);
-    border-radius: 14px;
+    color: var(--pp-text-dim);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: calc(var(--pp-radius-lg) - 2px);   /* nests inside the shelf, like .pp-switch chips */
     cursor: pointer;
     overflow: hidden;
-    transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+    transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
 }
+.bd2-gbtn:active { transform: translateY(1px); }                 /* tactile press, matching .pp-switch__chip */
 /* Metal tint per group backing -- same source-of-truth hexes as the medallion (.pp-med[data-tier]). */
 .bd2-gbtn[data-tier="bronze"]   { --gbtn-metal: #cf9160; }
 .bd2-gbtn[data-tier="silver"]   { --gbtn-metal: #b9c6d6; }
 .bd2-gbtn[data-tier="gold"]     { --gbtn-metal: #e7c25c; }
 .bd2-gbtn[data-tier="platinum"] { --gbtn-metal: #8fd2ea; }
-.bd2-gbtn:not(.is-active) { color: var(--pp-text-dim); }
 .bd2-gbtn:not(.is-active) .bd2-gbtn__med { opacity: 0.7; }        /* the active group's medallion pops */
-.bd2-gbtn:hover {
-    transform: translateY(-1px);
-    border-color: color-mix(in oklab, var(--gbtn-metal) 45%, var(--pp-divider));
-}
-.bd2-gbtn.is-active {
+.bd2-gbtn:hover:not(.is-active) {                                 /* clear "this is pressable" affordance */
     color: var(--pp-text);
-    border-color: color-mix(in oklab, var(--gbtn-metal) 65%, transparent);
-    background: linear-gradient(180deg, color-mix(in oklab, var(--gbtn-metal) 15%, var(--pp-bg-2)), var(--pp-bg-2));
-    box-shadow: 0 0 0 1px color-mix(in oklab, var(--gbtn-metal) 40%, transparent),
-                0 8px 20px -12px color-mix(in oklab, var(--gbtn-metal) 65%, transparent);
+    background: color-mix(in oklab, var(--gbtn-metal) 8%, transparent);
 }
-.bd2-gbtn.is-active::before {                                     /* a thin metal accent across the top */
-    content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 3px;
-    background: linear-gradient(90deg, transparent, var(--gbtn-metal), transparent);
+.bd2-gbtn.is-active {                                             /* the selected segment: tinted-flat in metal */
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--gbtn-metal) 16%, transparent);
+    border-color: color-mix(in oklab, var(--gbtn-metal) 55%, var(--pp-border));
 }
+.bd2-gbtn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .bd2-gbtn__med { flex: none; }
-.bd2-gbtn__med .pp-med { --sz: 46px; }
+.bd2-gbtn__med .pp-med { --sz: 44px; }
 .bd2-gbtn__med .pp-med__count, .bd2-gbtn__med .pp-med__meter { display: none; }
 .bd2-gbtn__body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .bd2-gbtn__name { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.95rem; line-height: 1.12; }
@@ -934,12 +934,58 @@
 .bd2-gbtn.is-active .bd2-gbtn__check { opacity: 1; transform: scale(1); }
 /* Mobile: keep both side by side (fast switch) but tighter. */
 @media (max-width: 480px) {
-    .bd2-gbtn { padding: 8px 10px; gap: 9px; border-radius: 12px; }
+    .bd2-groupswitch { padding: 4px; gap: 4px; }
+    .bd2-gbtn { padding: 7px 9px; gap: 9px; }
     .bd2-gbtn__med .pp-med { --sz: 38px; }
     .bd2-gbtn__name { font-size: 0.82rem; }
     .bd2-gbtn__check { width: 15px; height: 15px; }
 }
 @media (prefers-reduced-motion: reduce) {
     .bd2-gbtn, .bd2-gbtn__check { transition: none; }
-    .bd2-gbtn:hover { transform: none; }
+    .bd2-gbtn:active { transform: none; }
+}
+
+/* ── Rarity & Community band: series-level, both groups side by side. Clads on .bd-card (the page's matted
+   board) + the same depth pass as .bd-req, with a series-level primary left accent -- one material with the
+   rest of the page, not a flat DaisyUI box. ──────────────────────────────────────────────────────────── */
+/* .bd-card::before already draws the top-edge highlight, so this only adds the ambient depth shadow (matching
+   .bd-req) + the series-level primary accent -- no redundant inset top-light. */
+.bd2-comm { border-left: 3px solid var(--pp-primary); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.30); }
+.bd2-comm__title { font-family: var(--pp-font-display); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); }
+.bd2-comm__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.bd2-comm__lb { display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; font-weight: 700; color: var(--pp-primary); transition: color 0.2s ease; }
+.bd2-comm__lb:hover { color: color-mix(in oklab, var(--pp-primary) 75%, var(--pp-text)); }
+.bd2-comm__lb svg { width: 13px; height: 13px; }
+/* My Stats: the personal action, a small pill so it reads as the primary "go deeper" affordance. */
+.bd2-comm__action { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; font-size: 0.72rem; font-weight: 700; color: var(--pp-text); background: var(--pp-bg-2); border: 1px solid var(--pp-divider); border-radius: 999px; transition: border-color 0.2s ease, background 0.2s ease; }
+.bd2-comm__action:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-divider)); background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)); }
+.bd2-comm__action svg { width: 13px; height: 13px; color: var(--pp-primary); }
+.bd2-comm__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.bd2-comm__group { --comm-metal: var(--pp-primary); padding: 12px 14px; background: var(--pp-bg-2); border: 1px solid var(--pp-divider); border-left: 3px solid var(--comm-metal); border-radius: var(--pp-radius-lg); }
+.bd2-comm__group[data-tier="bronze"]   { --comm-metal: #cf9160; }
+.bd2-comm__group[data-tier="silver"]   { --comm-metal: #b9c6d6; }
+.bd2-comm__group[data-tier="gold"]     { --comm-metal: #e7c25c; }
+.bd2-comm__group[data-tier="platinum"] { --comm-metal: #8fd2ea; }
+.bd2-comm__group-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bd2-comm__group-name { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.9rem; color: var(--pp-text); }
+.bd2-comm__rar { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+/* Rarity colours use the shared --pp-rarity-* tokens (same source as frame.css), so a recolor stays in one place. */
+.bd2-comm__rar--common   { color: var(--pp-rarity-common); font-weight: 700; }
+.bd2-comm__rar--uncommon { color: var(--pp-rarity-uncommon); }
+.bd2-comm__rar--rare     { color: var(--pp-rarity-rare); text-shadow: 0 0 5px var(--pp-rarity-rare-glow); }
+.bd2-comm__rar--mythic   { color: var(--pp-rarity-mythic); text-shadow: 0 0 6px var(--pp-rarity-mythic-glow); animation: pp-mythic-pulse 2.6s ease-in-out infinite; }
+.bd2-comm__rarity { margin-top: 4px; display: flex; align-items: baseline; gap: 8px; }
+.bd2-comm__pct { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.05rem; color: var(--pp-text); }
+.bd2-comm__rrank { font-size: 0.68rem; font-weight: 700; color: var(--pp-text-mute); }
+.bd2-comm__rarity--pending { font-size: 0.72rem; font-style: italic; color: var(--pp-text-mute); }
+.bd2-comm__earnrow { margin-top: 8px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 0.74rem; color: var(--pp-text-mute); }
+.bd2-comm__earners b { color: var(--pp-text-dim); }
+.bd2-comm__you { font-weight: 700; color: var(--comm-metal); }
+.bd2-comm__bar { margin-top: 5px; }   /* the shared Horizon primitive provides the track/fill; this is spacing only */
+.bd2-comm__standing { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-divider); display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--pp-text-dim); }
+.bd2-comm__standing svg { width: 15px; height: 15px; color: var(--pp-primary); flex-shrink: 0; }
+.bd2-comm__standing b { font-family: var(--pp-font-display); color: var(--pp-text); }
+@media (prefers-reduced-motion: reduce) {
+    .bd2-comm__rar--mythic { animation: none; }
+    .bd2-comm__lb, .bd2-comm__action { transition: none; }
 }

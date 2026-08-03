@@ -56,6 +56,7 @@ def test_service_earned_group_has_state_rank_and_xp():
     assert detail.series_xp > 0 and detail.viewer_state == 'earned'
     # Series standing (fed by recompute_standing in apply): rank #1 of the 1 profile with a standing.
     assert detail.series_rank == 1 and detail.series_size == 1
+    assert detail.community_max_earned == 1                       # one earner across the group(s)
     assert grp.frame['state'] == 'earned' and grp.frame['art_layers']   # medallion frame is built
     # Badge-specific stats: 2 PS5 games route to this Ultra HD group; XP = 2 gating stages + completion bonus.
     assert grp.games_count == 2 and grp.xp_on_offer == 2 * 500 + 600
@@ -313,6 +314,7 @@ def test_view_authed_uses_progress_peek_and_renders_stats(client):
     assert '/group-badge-progress-peek/' + profile.psn_username + '/0/' in body
     assert '/group-badge-peek/0/' not in body       # authed uses the profile-aware peek, not the anon showcase
     assert 'id="badge-stats-modal"' in body and 'bd-mystats' in body   # My Stats renders (no owned games -> zeros)
+    assert 'class="bd2-comm__action"' in body       # the My Stats opener renders (the pill in the community band)
 
 
 def test_view_renders_stylized_group_switcher(client):
@@ -326,3 +328,68 @@ def test_view_renders_stylized_group_switcher(client):
     assert 'id="bd2-tab-legacy-hd"' in body and 'id="bd2-tab-ultra-hd"' in body   # a button per group
     assert 'bd2-gbtn__name' in body and 'bd2-gbtn__plats' in body                 # name + platforms per button
     assert 'Legacy HD' in body and 'Ultra HD' in body
+    # Anon requirements preview: the checklist renders but nothing is marked done (no known progress).
+    assert 'bd-req__grid' in body and 'bd-req__tile-check' not in body
+
+
+def test_view_renders_requirements_preview_with_completion(client):
+    # The per-group requirements preview: a stage-tile checklist, the cleared stage marked done, and each tile
+    # links to its journey stage's jump anchor.
+    series = BadgeSeriesFactory(series_slug='rq', name='Reqs')
+    s1 = _stage(series, 1, ['PS5'])
+    _stage(series, 2, ['PS5'])
+    _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
+    profile = ProfileFactory()
+    _complete(profile, s1['PS5'], full=True)                       # clear stage 1's base bar
+    client.force_login(profile.user)
+    body = client.get(reverse('badge_detail', kwargs={'series_slug': 'rq'})).content.decode()
+    assert 'bd-req__grid' in body and 'bd-req__tile' in body       # the preview checklist renders
+    assert 'Platinum every stage' in body                          # the Ask headline
+    assert 'bd-req__plats' in body and 'PS5' in body               # the platforms are listed
+    assert body.count('bd-req__tile-check') == 1                   # ONLY stage 1 is cleared -> exactly one check
+    assert 'id="bd2-stage-ultra-hd-1"' in body                     # the journey stage carries its jump anchor
+    assert 'href="#bd2-stage-ultra-hd-1"' in body                  # ... and the tile links to it
+    assert 'data-stages-toggle-all' in body                        # the bulk expand/collapse control renders
+
+
+def test_view_renders_community_band(client):
+    # The series-level Rarity & Community band (anon): both groups side by side, rarity class + exact Top X%,
+    # the Horizon earners bars scaled off community_max_earned, and the null-rarity "pending" branch. Anon gets
+    # no personal affordances (My Stats button / standing row).
+    from trophies.models import GroupBadge
+    series = BadgeSeriesFactory(series_slug='comm', name='Comm')
+    _stage(series, 1, ['PS3', 'PS5'])
+    _group(series, 'legacy-hd', 'Legacy HD', ['PS3', 'PSVITA'])   # left default -> null rarity, 0 earners
+    ultra = _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
+    GroupBadge.objects.filter(id=ultra.id).update(rarity_pct=2.0, rarity_class='mythic', rarity_rank=1, earned_count=5)
+
+    # Service: the earners denominator is the max across groups (the field the bars scale off).
+    assert get_badge_detail(series, None).community_max_earned == 5
+
+    body = client.get(reverse('badge_detail', kwargs={'series_slug': 'comm'})).content.decode()
+    assert 'bd2-comm' in body and 'Rarity &amp; Community' in body   # the band renders
+    assert body.count('bd2-comm__group') >= 2                        # one cell per group
+    assert 'bd2-comm__rar--mythic' in body and 'Mythic' in body      # rarity class label + colour
+    assert 'Top 2.0%' in body and '#1 rarest' in body                # exact rarity % + rank
+    assert 'rarity pending' in body                                  # legacy group has null rarity -> pending
+    # Earners bars = the shared Horizon primitive, scaled off community_max_earned (ultra 5/5=100%, legacy 0%).
+    assert 'pp-horizon bd2-comm__bar' in body
+    assert '--horizon-progress: 100%' in body and '--horizon-progress: 0%' in body
+    assert 'See the full leaderboard' in body                        # the CTA into the full board
+    # Anon: no personal My Stats pill (bd2-comm__action only renders for target_profile), no standing row.
+    # (The bare "data-stats-open" string appears in a JS comment regardless, so assert on the rendered pill.)
+    assert 'class="bd2-comm__action"' not in body and 'bd2-comm__standing' not in body
+
+
+def test_view_community_band_standing_for_ranked_viewer(client):
+    # A signed-in, ranked viewer sees the standing row + the My Stats pill inside the band.
+    series = BadgeSeriesFactory(series_slug='cs', name='CommStand')
+    s1 = _stage(series, 1, ['PS5'])
+    gb = _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
+    profile = ProfileFactory()
+    _complete(profile, s1['PS5'], full=True)
+    evaluate_and_apply(profile, [gb])                # earns -> a series standing exists
+    client.force_login(profile.user)
+    body = client.get(reverse('badge_detail', kwargs={'series_slug': 'cs'})).content.decode()
+    assert 'bd2-comm__standing' in body              # the standing row shows for a ranked viewer
+    assert 'class="bd2-comm__action"' in body       # ... and the My Stats pill lives in the band

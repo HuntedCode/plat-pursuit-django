@@ -62,6 +62,7 @@ class BadgeDetail:
     series_progress_pct: int     # live, furthest-along across groups
     series_rank: Optional[int]   # stored (relative to all earners), or None
     series_size: Optional[int]   # total profiles with a standing in this series (the rank's denominator)
+    community_max_earned: int    # max earned_count across groups (scales the community band's earners bars)
     target_profile: object       # whose state is shown (may be None for anon)
 
 
@@ -389,5 +390,7 @@ def get_badge_detail(series, target_profile) -> BadgeDetail:
     return BadgeDetail(
         series=series, groups=groups, has_multiple_groups=len(groups) > 1,
         viewer_state=viewer_state, series_xp=series_xp, series_progress_pct=series_progress_pct,
-        series_rank=series_rank, series_size=series_size, target_profile=target_profile,
+        series_rank=series_rank, series_size=series_size,
+        community_max_earned=max((g.earned_count for g in groups), default=0),
+        target_profile=target_profile,
     )

@@ -279,15 +279,15 @@
     letter-spacing: 0.02em;
 }
 .pp-frame__rarity svg { width: 12px; height: 12px; flex-shrink: 0; }
-.pp-frame__rarity--common   { color: rgba(255, 255, 255, 0.5); font-weight: 600; }
-.pp-frame__rarity--uncommon { color: rgba(170, 220, 195, 0.9); }
+.pp-frame__rarity--common   { color: var(--pp-rarity-common); font-weight: 600; }
+.pp-frame__rarity--uncommon { color: var(--pp-rarity-uncommon); }
 .pp-frame__rarity--rare {
-    color: rgba(245, 205, 105, 1);
-    text-shadow: 0 0 5px rgba(240, 200, 100, 0.35);
+    color: var(--pp-rarity-rare);
+    text-shadow: 0 0 5px var(--pp-rarity-rare-glow);
 }
 .pp-frame__rarity--mythic {
-    color: rgba(225, 245, 255, 1);
-    text-shadow: 0 0 6px rgba(180, 220, 255, 0.55);
+    color: var(--pp-rarity-mythic);
+    text-shadow: 0 0 6px var(--pp-rarity-mythic-glow);
     animation: pp-mythic-pulse 2.6s ease-in-out infinite;
 }
 @keyframes pp-mythic-pulse {

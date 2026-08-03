@@ -138,6 +138,14 @@
   --pp-warning: oklch(0.86 0.17 90);
   --pp-error: oklch(0.70 0.21 22);
   --pp-info: oklch(0.74 0.16 245);
+  /* Badge rarity (shared by the Frame primitive + the badge-detail community band, so a recolor stays in one
+     place). Mirrors the frame.css scale: common dim -> mythic glow. */
+  --pp-rarity-common: rgba(255, 255, 255, 0.5);
+  --pp-rarity-uncommon: rgba(170, 220, 195, 0.9);
+  --pp-rarity-rare: rgba(245, 205, 105, 1);
+  --pp-rarity-rare-glow: rgba(240, 200, 100, 0.35);
+  --pp-rarity-mythic: rgba(225, 245, 255, 1);
+  --pp-rarity-mythic-glow: rgba(180, 220, 255, 0.55);
   /* Rating star: the bright, inviting yellow-gold for USER-RATING stars (game-card, game-detail score +
      quick-take cards) -- distinct from the muted metallic --color-trophy-gold used for gold TROPHIES. */
   --pp-rating-star: oklch(0.86 0.17 90);
