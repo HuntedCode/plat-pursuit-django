@@ -1,10 +1,11 @@
 {% load humanize %}
 {% comment %}
 Rarity & Community band (series-level, shows ALL groups side by side -- does NOT swap with the switcher). Leads
-with rarity (the prestige signal missing elsewhere on the page): per-group rarity class + Top X% + rank among
-live badges, then the earners scale (a proportional bar per group), the viewer's series standing, and a
-leaderboard CTA. Reads `detail` (BadgeDetail) + `series`. Rarity fields come from a recompute pass, so the
-"pending" branch covers a fresh badge with no rarity yet.
+with rarity (the prestige signal missing elsewhere on the page): per-group rarity class + the pursuer-relative
+completion % (of the series' pursuers, how many earned this group's badge -- live-derived, see badge_rarity),
+then the earners scale (a proportional bar per group), the viewer's series standing, and a leaderboard CTA.
+Reads `detail` (BadgeDetail) + `series`. Rarity is derived live; the "pending" branch shows only when a series
+has no pursuers yet (a group with pursuers but zero earners shows an honest 0%, no class chip).
 {% endcomment %}
 <section class="bd-card bd2-comm mb-3">
     <div class="p-4 md:p-5 lg:p-6">
@@ -32,13 +33,15 @@ leaderboard CTA. Reads `detail` (BadgeDetail) + `series`. Rarity fields come fro
                     {% if g.rarity_class %}<span class="bd2-comm__rar bd2-comm__rar--{{ g.rarity_class }}">{{ g.rarity_class|title }}</span>{% endif %}
                 </div>
 
+                {% comment %} Rarity is pursuer-relative: of everyone who's made progress on the series, the % who
+                earned THIS group's badge (lower = rarer). Pending until the series has any pursuers. {% endcomment %}
                 {% if g.rarity_pct is not None %}
                 <div class="bd2-comm__rarity">
-                    <span class="pp-tally bd2-comm__pct">Top {{ g.rarity_pct }}%</span>
-                    {% if g.rarity_rank %}<span class="bd2-comm__rrank">#{{ g.rarity_rank|intcomma }} rarest</span>{% endif %}
+                    <span class="pp-tally bd2-comm__pct">{{ g.rarity_pct|floatformat:"-1" }}%</span>
+                    <span class="bd2-comm__rrank">of pursuers earned it</span>
                 </div>
                 {% else %}
-                <div class="bd2-comm__rarity bd2-comm__rarity--pending">New badge &middot; rarity pending</div>
+                <div class="bd2-comm__rarity bd2-comm__rarity--pending">No pursuers yet &middot; rarity pending</div>
                 {% endif %}
 
                 {# Earners scale: the count + a bar proportional to the biggest group (a quick cross-platform read). #}

@@ -24,7 +24,7 @@ flips to its engraved base. Expects: gv (GroupView), series, detail (BadgeDetail
         <div class="pp-bdetail__stats">
             {% if gv.group_badge.set_number %}<div class="pp-bdetail__stat"><div class="k">Set number</div><div class="v">#{{ gv.group_badge.set_number|stringformat:"04d" }}</div></div>{% endif %}
             {% if gv.gating_count %}<div class="pp-bdetail__stat"><div class="k">Stages</div><div class="v">{% if showcase %}{{ gv.gating_count }} to earn{% else %}{{ gv.stages_cleared }} / {{ gv.gating_count }}{% endif %}</div></div>{% endif %}
-            {% if gv.rarity_pct is not None %}<div class="pp-bdetail__stat"><div class="k">Rarity</div><div class="v">Top {{ gv.rarity_pct }}%{% if gv.rarity_rank %} &middot; #{{ gv.rarity_rank|intcomma }}{% endif %}</div></div>{% endif %}
+            {% if gv.rarity_pct is not None %}<div class="pp-bdetail__stat"><div class="k">Rarity</div><div class="v">{% if gv.rarity_class %}{{ gv.rarity_class|title }} &middot; {% endif %}{{ gv.rarity_pct|floatformat:"-1" }}%</div></div>{% endif %}
             {% if gv.earners_rank %}<div class="pp-bdetail__stat"><div class="k">Earn rank</div><div class="v">#{{ gv.earners_rank|intcomma }}</div></div>{% endif %}
             {% if gv.xp_on_offer %}<div class="pp-bdetail__stat"><div class="k">XP on offer</div><div class="v">{{ gv.xp_on_offer|intcomma }}</div></div>{% endif %}
             {% if not showcase and detail.series_xp %}<div class="pp-bdetail__stat"><div class="k">Series XP</div><div class="v">{{ detail.series_xp|intcomma }}</div></div>{% endif %}

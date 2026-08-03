@@ -352,32 +352,72 @@ def test_view_renders_requirements_preview_with_completion(client):
     assert 'data-stages-toggle-all' in body                        # the bulk expand/collapse control renders
 
 
+def _pursuers(series_slug, n):
+    """n profiles with a real SeriesBadgeStanding (xp>0) -> the series' pursuer base for rarity."""
+    from trophies.models import SeriesBadgeStanding
+    for _ in range(n):
+        SeriesBadgeStanding.objects.create(
+            profile=ProfileFactory(), series_slug=series_slug,
+            xp=100, progress_bp=1000, stages_cleared=1, stages_total=1,
+        )
+
+
+def test_service_rarity_is_pursuer_relative():
+    # Rarity is derived LIVE: earned_count / pursuers (SeriesBadgeStanding count), bucketed. No stored fields.
+    from trophies.models import GroupBadge
+    series = BadgeSeriesFactory(series_slug='rar', name='Rarity')
+    _stage(series, 1, ['PS5'])
+    ultra = _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
+    GroupBadge.objects.filter(id=ultra.id).update(earned_count=1)
+    _pursuers('rar', 20)                              # 1 of 20 pursuers earned it -> 5.0% -> rare (< 15)
+    grp = get_badge_detail(series, None).groups[0]
+    assert grp.rarity_pct == 5.0 and grp.rarity_class == 'rare'
+
+
+def test_service_rarity_pending_without_pursuers():
+    series = BadgeSeriesFactory(series_slug='rp', name='RarPend')
+    _stage(series, 1, ['PS5'])
+    _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
+    grp = get_badge_detail(series, None).groups[0]   # no SeriesBadgeStanding rows -> no pursuer base
+    assert grp.rarity_pct is None and grp.rarity_class == ''
+
+
+def test_group_rarity_buckets_clamp_and_zero_earners():
+    # Pure derivation across every branch (a Mythic prestige chip must never sit on a zero-earner badge).
+    from trophies.services.badge_rarity import group_rarity
+    assert group_rarity(0, 0) == (None, '')            # no pursuers -> pending
+    assert group_rarity(0, 5) == (0.0, '')             # pursuers but 0 earners -> honest 0%, NO class (not Mythic)
+    assert group_rarity(1, 100) == (1.0, 'mythic')     # 1% -> mythic
+    assert group_rarity(5, 20) == (25.0, 'uncommon')   # 25% -> uncommon
+    assert group_rarity(1, 20) == (5.0, 'rare')        # boundary: exactly 5% is rare, not mythic
+    assert group_rarity(5, 2) == (100.0, 'common')     # clamp: earned>pursuers (stale denorm) -> 100% common
+
+
 def test_view_renders_community_band(client):
-    # The series-level Rarity & Community band (anon): both groups side by side, rarity class + exact Top X%,
-    # the Horizon earners bars scaled off community_max_earned, and the null-rarity "pending" branch. Anon gets
-    # no personal affordances (My Stats button / standing row).
+    # The series-level Rarity & Community band (anon): both groups side by side, live pursuer-relative rarity,
+    # the Horizon earners bars scaled off community_max_earned. Anon gets no personal affordances.
     from trophies.models import GroupBadge
     series = BadgeSeriesFactory(series_slug='comm', name='Comm')
     _stage(series, 1, ['PS3', 'PS5'])
-    _group(series, 'legacy-hd', 'Legacy HD', ['PS3', 'PSVITA'])   # left default -> null rarity, 0 earners
+    legacy = _group(series, 'legacy-hd', 'Legacy HD', ['PS3', 'PSVITA'])
     ultra = _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
-    GroupBadge.objects.filter(id=ultra.id).update(rarity_pct=2.0, rarity_class='mythic', rarity_rank=1, earned_count=5)
+    GroupBadge.objects.filter(id=legacy.id).update(earned_count=1)
+    GroupBadge.objects.filter(id=ultra.id).update(earned_count=5)
+    _pursuers('comm', 10)                             # legacy 1/10=10% -> rare; ultra 5/10=50% -> common
 
-    # Service: the earners denominator is the max across groups (the field the bars scale off).
-    assert get_badge_detail(series, None).community_max_earned == 5
+    detail = get_badge_detail(series, None)
+    assert detail.series_size == 10 and detail.community_max_earned == 5
 
     body = client.get(reverse('badge_detail', kwargs={'series_slug': 'comm'})).content.decode()
     assert 'bd2-comm' in body and 'Rarity &amp; Community' in body   # the band renders
     assert body.count('bd2-comm__group') >= 2                        # one cell per group
-    assert 'bd2-comm__rar--mythic' in body and 'Mythic' in body      # rarity class label + colour
-    assert 'Top 2.0%' in body and '#1 rarest' in body                # exact rarity % + rank
-    assert 'rarity pending' in body                                  # legacy group has null rarity -> pending
-    # Earners bars = the shared Horizon primitive, scaled off community_max_earned (ultra 5/5=100%, legacy 0%).
-    assert 'pp-horizon bd2-comm__bar' in body
-    assert '--horizon-progress: 100%' in body and '--horizon-progress: 0%' in body
+    assert 'of pursuers earned it' in body                           # pursuer-relative phrasing (not "Top X%")
+    assert 'bd2-comm__rar--rare' in body and 'bd2-comm__rar--common' in body   # legacy 10% -> rare, ultra 50% -> common
+    assert '50%' in body                                             # ultra 5/10 pursuer-completion
+    # Earners bars = the shared Horizon primitive, scaled off community_max_earned (ultra 5/5 = 100%).
+    assert 'pp-horizon bd2-comm__bar' in body and '--horizon-progress: 100%' in body
     assert 'See the full leaderboard' in body                        # the CTA into the full board
     # Anon: no personal My Stats pill (bd2-comm__action only renders for target_profile), no standing row.
-    # (The bare "data-stats-open" string appears in a JS comment regardless, so assert on the rendered pill.)
     assert 'class="bd2-comm__action"' not in body and 'bd2-comm__standing' not in body
 
 

@@ -13,6 +13,7 @@ from django.templatetags.static import static
 from trophies.models import UserGroupBadge, SeriesBadgeStanding, Game, ProfileGame
 from trophies.services.badge_orchestrator import build_catalog, evaluate_with_catalog
 from trophies.services.badge_xp import compute_series_standings, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS
+from trophies.services.badge_rarity import group_rarity
 from trophies.services.rating_service import RatingService
 from trophies.services import badge_leaderboards as lb
 
@@ -34,9 +35,8 @@ class GroupView:
     earned_at: object            # datetime or None
     earners_rank: Optional[int]  # LIVE earners position (the medallion-back value), or None if not held
     earned_count: int
-    rarity_pct: Optional[float]
-    rarity_class: str
-    rarity_rank: Optional[int]
+    rarity_pct: Optional[float]  # % of the series' pursuers who earned this group's badge (live-derived), or None
+    rarity_class: str            # bucket of rarity_pct: common | uncommon | rare | mythic (or '' when pending)
     stages_cleared: int          # viewer's base-satisfied gating stages
     gating_count: int            # required gating stages for this group
     holo_satisfied_count: int
@@ -303,7 +303,7 @@ def _group_user_stats(gb, catalog, profile_games, journey, target_profile) -> Op
 
 
 def _group_view(gb, result, hold, target_profile, series, catalog, games_map, profile_games,
-                ratings_map, contract_map) -> GroupView:
+                ratings_map, contract_map, participants) -> GroupView:
     is_holo = bool(hold and hold.is_holo)
     if hold:
         state = 'holo' if is_holo else 'earned'
@@ -319,11 +319,14 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
     rank = lb.earners_rank(target_profile.id, gb.id) if (hold and target_profile) else None
     stats = _group_stats(gb, result, catalog, ratings_map)
     journey = _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map)
+    # Rarity is derived LIVE from the maintained earned_count over the series' pursuer base -- no stored fields,
+    # no cron (the gb.rarity_* columns are dead scaffolding, pending removal). See badge_rarity.
+    rarity_pct, rarity_class = group_rarity(gb.earned_count, participants)
     gv = GroupView(
         group_badge=gb, platform_group=gb.platform_group, art=gb.art_layers(),
         state=state, is_holo=is_holo, earned_at=(hold.earned_at if hold else None),
         earners_rank=rank, earned_count=gb.earned_count,
-        rarity_pct=gb.rarity_pct, rarity_class=gb.rarity_class, rarity_rank=gb.rarity_rank,
+        rarity_pct=rarity_pct, rarity_class=rarity_class,
         stages_cleared=cleared, gating_count=gating, holo_satisfied_count=holo_cnt,
         progress_pct=(round(100 * cleared / gating) if gating else 0),
         segments=[i < cleared for i in range(gating)],
@@ -369,13 +372,18 @@ def get_badge_detail(series, target_profile) -> BadgeDetail:
                 for pg in ProfileGame.objects.filter(profile=target_profile, game_id__in=catalog['game_ids'])
             }
 
+    # The series' PURSUER base: profiles with a SeriesBadgeStanding (recompute_standing keeps only xp>0 rows,
+    # so this is "made real progress", not "synced once"). One bounded indexed count -- the live rarity
+    # denominator AND the series-rank's "of N". Computed always (cheap), including for anon.
+    participants = SeriesBadgeStanding.objects.filter(series_slug=series.series_slug).count()
+
     groups = [_group_view(gb, desired.get(gb.id), holds.get(gb.id), target_profile, series, catalog,
-                          games_map, profile_games, ratings_map, contract_map)
+                          games_map, profile_games, ratings_map, contract_map, participants)
               for gb in group_badges]
     viewer_state = max((g.state for g in groups), key=lambda s: _STATE_ORDER[s], default='none')
 
     # Series XP + progress LIVE from this pass (matches the per-group numbers); rank is stored (relative).
-    series_xp, series_progress_pct, series_rank, series_size = 0, 0, None, None
+    series_xp, series_progress_pct, series_rank = 0, 0, None
     if desired:
         results_by_series = {series.series_slug: [desired[gb.id] for gb in group_badges if gb.id in desired]}
         standing = compute_series_standings(results_by_series).get(series.series_slug)
@@ -384,13 +392,11 @@ def get_badge_detail(series, target_profile) -> BadgeDetail:
             series_progress_pct = round(standing.progress_bp / 100)
         if target_profile and series_xp > 0:
             series_rank = lb.series_rank(series.series_slug, target_profile.id)
-            # The rank's denominator: everyone with a standing in this series (one bounded indexed count).
-            series_size = SeriesBadgeStanding.objects.filter(series_slug=series.series_slug).count()
 
     return BadgeDetail(
         series=series, groups=groups, has_multiple_groups=len(groups) > 1,
         viewer_state=viewer_state, series_xp=series_xp, series_progress_pct=series_progress_pct,
-        series_rank=series_rank, series_size=series_size,
+        series_rank=series_rank, series_size=participants,
         community_max_earned=max((g.earned_count for g in groups), default=0),
         target_profile=target_profile,
     )
