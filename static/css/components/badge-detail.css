@@ -473,8 +473,9 @@
 .bd-stage__collapse-inner { overflow: hidden; }
 .bd-stage__grid {
     display: grid; gap: 10px; padding: 14px;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;                              /* one card per row on phones */
 }
+@media (min-width: 640px)  { .bd-stage__grid { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 768px)  { .bd-stage__grid { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 1024px) { .bd-stage__grid { grid-template-columns: repeat(4, 1fr); } }
 @media (min-width: 1280px) { .bd-stage__grid { grid-template-columns: repeat(5, 1fr); } }
@@ -548,8 +549,9 @@
 .bd-qual__req { font-size: 0.65rem; font-style: italic; color: var(--pp-text-mute); margin-left: auto; padding-right: 0.25rem; }
 .bd-qual__grid {
     display: grid; gap: 10px; padding: 0 12px 12px;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;                              /* one card per row on phones */
 }
+@media (min-width: 640px)  { .bd-qual__grid { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 768px)  { .bd-qual__grid { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 1024px) { .bd-qual__grid { grid-template-columns: repeat(4, 1fr); } }
 @media (min-width: 1280px) { .bd-qual__grid { grid-template-columns: repeat(5, 1fr); } }
@@ -841,3 +843,18 @@
     .bd-minihead.is-pinned { transition: opacity 0.2s linear; transform: none; }
     .bd-minitier, .bd-minijump__chev { transition: none; }
 }
+
+/* =====================================================================================================
+   BADGE DETAIL (rebuild, Phase 1) -- platform-group model. The page composes entirely from standard
+   utilities + shared primitives (card / badge / .pp-switch / .pp-med / .pp-horizon / .scard / pp-tally);
+   the only bespoke rule left is the client-side panel-swap visibility hook.
+   ===================================================================================================== */
+.bd2-panel.is-hidden { display: none; }
+/* Size the hero medallion via --sz (the .pp-med contract), like .pp-case__slot -- NOT width/height utilities,
+   which the component ignores (it would render at its 160px default and overflow). */
+.bd2-med .pp-med { --sz: 116px; }                                   /* detail-page hero size, not a list tile */
+@media (min-width: 768px) { .bd2-med .pp-med { --sz: 152px; } }
+@media (min-width: 1024px) { .bd2-med .pp-med { --sz: 180px; } }
+/* The row-2 segmented progress bar replaces the medallion's own count + meter here (the rising-colour art
+   fill stays). Scoped to badge detail so the shared component is untouched for Collection. */
+.bd2-med .pp-med__count, .bd2-med .pp-med__meter { display: none; }

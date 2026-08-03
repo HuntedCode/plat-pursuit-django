@@ -1,590 +1,192 @@
 {% extends 'base.html' %}
-{% load static custom_filters %}
-{% block title %}{{ badge.effective_display_series }}{% endblock %}
-{% block og_image %}{% if image_urls.recent_concept_icon_url %}{{ image_urls.recent_concept_icon_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
-{% block twitter_image %}{% if image_urls.recent_concept_icon_url %}{{ image_urls.recent_concept_icon_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
+{% load static humanize %}
+{% block title %}{{ series.name }}{% endblock %}
+
+{% comment %}
+Badge series detail (rebuild, Phase 1 core). A series is N PARALLEL platform-group badges (Legacy HD /
+Ultra HD), not a tier ladder. ONE unified hero card, two rows: [medallion | identity + EARN# | EARNERS] and
+[state | segmented progress | series stat cells], echoing the beta header. The per-group parts swap with the
+.pp-switch selector. Reads `detail` (BadgeDetail). Stage journey (Phase 2) + My Stats (Phase 3) land below.
+{% endcomment %}
 
 {% block content %}
-    {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
+<div class="container mx-auto px-3 md:px-5 lg:px-7 py-4 md:py-6">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+    {% firstof series.franchise.name series.collection.name series.developer.name '' as subject %}
 
-    {% comment %} Everything tier-scoped lives in this island; the tier chips HTMX-swap its innerHTML (no
-    full reload). The view returns badge_detail_tier_view.html alone for those requests (get_template_names). {% endcomment %}
-    <div id="badge-tier-view">
-        {% include 'trophies/partials/badge_detail/badge_detail_tier_view.html' %}
-    </div>
-{% endblock %}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-5 lg:p-7 pp-head-cascade">
 
-{% comment %} The modals live in fixed_overlays -- OUTSIDE #page-recede (base.html) -- so the modal pull-back
-(.pp-receded scales #page-recede to 0.95) never scales/displaces the fixed modals themselves. They also sit
-outside the #badge-tier-view swap island, so they persist across tier switches. {% endcomment %}
-{% block fixed_overlays %}
-    {% comment %} Medallion inspect (pick-up / put-down): tapping the hero medallion grows a peek into this
-    shared dialog. When a profile is on display it fetches the profile-aware modal keyed to THAT profile
-    (badge_progress_peek) -- so the medallion shows the DISPLAYED Pursuer's real earned state + personalised
-    base, per the selected tier, correct on your own page AND another Pursuer's. Anonymous visitors get the
-    generic showcase peek. {% endcomment %}
-    <div class="pp-detail-modal" id="badge-peek"
-         data-peek-url="{% if target_profile %}{% url 'badge_progress_peek' target_profile.psn_username 0 %}{% else %}{% url 'badge_quick_peek' 0 %}{% endif %}" hidden>
-        <div class="pp-detail-modal__scrim" data-peek-close></div>
-        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
-            <button type="button" class="pp-detail-modal__close" data-peek-close aria-label="Close badge detail">&times;</button>
-            <div class="pp-detail-modal__body" data-peek-body></div>
-        </div>
-    </div>
+            <div data-bd2-panels>
+                {% for g in detail.groups %}
+                <div id="bd2-panel-{{ g.platform_group.key }}" class="bd2-panel{% if not forloop.first %} is-hidden{% endif %}"
+                     role="tabpanel" aria-labelledby="bd2-tab-{{ g.platform_group.key }}" data-bd2-view="{{ g.platform_group.key }}">
 
-    {% comment %} My Stats modal: the deep per-user breakdown the context band's "My Stats" button opens.
-    Rendered inline (the stats are series-scoped + already computed), only when a profile is on display. {% endcomment %}
-    {% if target_profile %}
-    <div class="pp-detail-modal" id="badge-stats-modal" hidden>
-        <div class="pp-detail-modal__scrim" data-stats-close></div>
-        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s{% else %}Your{% endif %} badge stats" tabindex="-1">
-            <button type="button" class="pp-detail-modal__close" data-stats-close aria-label="Close stats">&times;</button>
-            <div class="pp-detail-modal__body">
-                {% include 'trophies/partials/badge_detail/_stats_modal.html' %}
+                    {% comment %} Row 1: medallion | eyebrow + title + description + meta | EARNERS. Stacks to a
+                    centered column on phones (mirrors the old header's mobile treatment), rows out at sm:. {% endcomment %}
+                    <div class="flex flex-col sm:flex-row sm:items-start gap-4 md:gap-6">
+                        <div class="bd2-med shrink-0 mx-auto sm:mx-0">
+                            {% include 'components/badge_medallion.html' with frame=g.frame no_id=True %}
+                        </div>
+
+                        <div class="min-w-0 flex-1 text-center sm:text-left">
+                            {% if subject %}<p class="text-[0.7rem] md:text-xs font-semibold uppercase tracking-[0.14em] text-base-content/50">{{ subject }}</p>{% endif %}
+                            <h1 class="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight mt-1">{{ series.name }}</h1>
+                            {% if series.description %}<p class="text-sm text-base-content/60 italic mt-2 max-w-2xl mx-auto sm:mx-0 pr-1">{{ series.description }}</p>{% endif %}
+                            <div class="flex items-center justify-center sm:justify-start gap-x-2 gap-y-0.5 flex-wrap mt-3 text-[0.65rem] uppercase tracking-wider text-base-content/40">
+                                <span class="font-semibold text-base-content/60">{{ g.platform_group.name }}</span>
+                                <span>&middot; {{ g.platform_group.platforms|join:" &middot; " }}</span>
+                                {% if g.earners_rank %}<span>&middot; Earn <span class="text-primary font-bold">#{{ g.earners_rank }}</span></span>{% endif %}
+                                {% if viewing_other_profile %}<span class="normal-case tracking-normal">&middot; {{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s progress</span>{% endif %}
+                            </div>
+                        </div>
+
+                        <a href="{% url 'badge_leaderboards' series.series_slug %}" class="shrink-0 mx-auto sm:mx-0 text-center sm:text-right group/earn">
+                            <div class="leading-none"><span class="pp-tally text-2xl md:text-3xl text-primary">{{ g.earned_count|intcomma }}</span></div>
+                            <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/40 mt-1 group-hover/earn:text-primary transition-colors">Earners &rsaquo;</div>
+                        </a>
+                    </div>
+
+                    {% comment %} Row 2: state | segmented progress | badge stat cells. Stacks vertically until lg:,
+                    where it lines up on one row (mirrors the old header's substance strip). {% endcomment %}
+                    <div class="mt-4 md:mt-5 pt-4 md:pt-5 border-t border-base-content/10 flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-6">
+                        <div class="shrink-0 text-sm font-semibold text-center sm:text-left">
+                            {% if g.state == 'holo' %}<span class="text-secondary">&#10022; Holographic{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
+                            {% elif g.state == 'earned' %}<span class="text-success">&#10003; Earned{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
+                            {% elif g.state == 'in_progress' %}<span class="text-primary">In progress</span>
+                            {% else %}<span class="text-base-content/50 font-medium">Not yet earned</span>{% endif %}
+                        </div>
+
+                        <div class="lg:flex-1 lg:min-w-[140px] w-full">
+                            <div class="pp-horizon pp-horizon--segmented" role="progressbar" aria-valuenow="{{ g.progress_pct }}" aria-valuemin="0" aria-valuemax="100" aria-label="{{ g.stages_cleared }} of {{ g.gating_count }} stages" style="--horizon-h: 8px;">
+                                {% for on in g.segments %}<span class="pp-horizon__seg"{% if on %} data-state="done"{% endif %}></span>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-center lg:justify-end gap-5 md:gap-6 shrink-0 flex-wrap">
+                            <div class="text-center leading-tight">
+                                <div class="text-base md:text-lg font-black">{{ g.games_count }}</div>
+                                <div class="text-[0.6rem] uppercase tracking-wider text-base-content/40">Games</div>
+                            </div>
+                            {% if g.avg_difficulty %}
+                            <div class="text-center leading-tight">
+                                <div class="text-base md:text-lg font-black text-warning">{{ g.avg_difficulty }}<span class="text-xs text-base-content/40">/10</span></div>
+                                <div class="text-[0.6rem] uppercase tracking-wider text-base-content/40">Difficulty</div>
+                            </div>
+                            {% endif %}
+                            {% if g.avg_hours %}
+                            <div class="text-center leading-tight">
+                                <div class="text-base md:text-lg font-black text-warning">{{ g.avg_hours }}<span class="text-xs text-base-content/40">h</span></div>
+                                <div class="text-[0.6rem] uppercase tracking-wider text-base-content/40">Avg hours</div>
+                            </div>
+                            {% endif %}
+                            <div class="text-center leading-tight">
+                                <div class="text-base md:text-lg font-black">{{ g.xp_on_offer|intcomma }}</div>
+                                <div class="text-[0.6rem] uppercase tracking-wider text-base-content/40">XP on offer</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-base-content/50 text-center py-4">No platform-group badges are live for this series yet.</p>
+                {% endfor %}
             </div>
+        </div>
+    </section>
+
+    {% comment %} Group selector -- below the header, right-aligned in its own row (the sanctioned .pp-switch
+    placement). Swaps the per-group hero above + the per-group content below. {% endcomment %}
+    {% if detail.has_multiple_groups %}
+    <div class="flex items-center justify-end mt-1 mb-4">
+        <div class="pp-switch bd2-groupswitch" role="tablist" aria-label="Platform group">
+            {% for g in detail.groups %}
+            <button type="button" id="bd2-tab-{{ g.platform_group.key }}"
+                    class="pp-switch__chip{% if forloop.first %} is-active{% endif %}"
+                    data-bd2-group="{{ g.platform_group.key }}" role="tab"
+                    aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+                    aria-controls="bd2-panel-{{ g.platform_group.key }}">
+                <span class="pp-switch__lbl">{{ g.platform_group.name }}</span>
+            </button>
+            {% endfor %}
         </div>
     </div>
     {% endif %}
 
-    {% comment %} Contract modal: a game card's contract band opens THAT contract in place. Linked viewers
-    fetch the real card (ContractModalView); anon / unlinked fetch the anonymized preview
-    (ContractModalPreviewView) -- same modal, trophies instead of progress, CTA footer. Rendered for all
-    viewers so nobody hits the linked-only login wall. {% endcomment %}
-    <div class="pp-detail-modal pp-detail-modal--contract" id="badge-contract-modal" hidden>
-        <div class="pp-detail-modal__scrim" data-contract-close></div>
-        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Contract" tabindex="-1">
-            <button type="button" class="pp-detail-modal__close" data-contract-close aria-label="Close contract">&times;</button>
-            <div class="pp-detail-modal__body" data-contract-body></div>
-            {% if user.is_authenticated and user.profile.is_linked %}
-                {% comment %} Onward hook: from one game's Contract into the whole board. {% endcomment %}
-                <a class="bd-ctrmodal__more" href="{% url 'career' %}?view=contracts#career-panel-contracts">
-                    Browse all Contracts
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-                </a>
+    {% comment %} Stage journey -- per group, swaps with the selector alongside the hero. Free content below
+    the chrome (each stage is its own bd-card). Phase 3 (My Stats modal) lands below. {% endcomment %}
+    <div data-bd2-journey>
+        {% for g in detail.groups %}
+        <div class="bd2-panel{% if not forloop.first %} is-hidden{% endif %}" data-bd2-view="{{ g.platform_group.key }}">
+            {% if g.stages %}
+            <div class="bd-stages">
+                {% for s in g.stages %}
+                {% include 'trophies/partials/badge_detail/bd2_stage.html' %}
+                {% endfor %}
+            </div>
             {% else %}
-                {# Sign-up hook: the Job Board sells itself here. #}
-                <div class="bd-ctrmodal__cta">
-                    {% if user.is_authenticated %}
-                        <p>Link your PSN to pursue this Contract, level its Jobs, and bank XP as you play.</p>
-                        <a href="{% url 'link_psn' %}" class="gd-btn gd-btn--primary">Link your PSN</a>
-                    {% else %}
-                        <p>The Job Board turns trophy hunting into a career. Pursue Contracts, level Jobs, and bank XP.</p>
-                        <a href="{% url 'account_signup' %}" class="gd-btn gd-btn--primary">Start your Job Board</a>
-                        <span class="bd-ctrmodal__alt">Already a member? <a href="{% url 'account_login' %}">Sign in</a></span>
-                    {% endif %}
-                </div>
+            <p class="text-base-content/50 text-center py-6">No stages are defined for this badge yet.</p>
             {% endif %}
         </div>
+        {% endfor %}
     </div>
+</div>
 {% endblock %}
 
 {% block js_scripts %}
+{{ block.super }}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // ── Header count-up (initial load only; countUp honours reduced motion) ──
-    document.querySelectorAll('#badge-header-card [data-countup]').forEach(function(el) {
-        if (window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(el); }
-    });
+(function () {
+    // Group selector: swaps EVERY .bd2-panel (the header hero AND the journey below) by data-bd2-view.
+    var root = document.querySelector('.bd2-groupswitch');
+    if (!root || !window.PlatPursuit) return;
+    var chips = Array.prototype.slice.call(root.querySelectorAll('.pp-switch__chip'));
+    var ORDER = chips.map(function (c) { return c.getAttribute('data-bd2-group'); });
 
-    // ── Shared modal a11y: trap Tab within the dialog + restore focus to the opener on close. ──
-    // The peek modal gets this from PlatPursuit.Medallion.detailModal already; the stats + contract modals
-    // are hand-rolled, so give them the same guarantees. (Refactor candidate: hoist this + the detailModal
-    // copy into a single PlatPursuit.FocusTrap util.)
-    function modalA11y(modal, dialogSel) {
-        var opener = null;
-        function focusables() {
-            var dlg = modal.querySelector(dialogSel);
-            if (!dlg) { return []; }
-            return Array.prototype.slice.call(dlg.querySelectorAll(
-                'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-            )).filter(function (el) { return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement; });
-        }
-        document.addEventListener('keydown', function (e) {
-            if (e.key !== 'Tab' || modal.hidden) { return; }
-            var dlg = modal.querySelector(dialogSel);
-            var f = focusables();
-            if (!f.length) { if (dlg) { e.preventDefault(); dlg.focus(); } return; }
-            var first = f[0], last = f[f.length - 1];
-            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-        }, true);
-        return {
-            opened: function (el) { opener = el || document.activeElement; },
-            closed: function () { if (opener && opener.focus) { try { opener.focus(); } catch (err) { /* gone */ } } opener = null; }
-        };
-    }
-
-    // The career-style "page pushes back": scale #page-recede down while a modal is open (shared mechanism --
-    // .pp-receded on #zoom-container; CSS owns the transition + reduced-motion gate). NOT used for the peek
-    // modal (its pick-up/put-down grow reads as the depth already).
-    var zoomEl = document.getElementById('zoom-container');
-    function pageRecede(on) {
-        // Pivot the recede scale on the CURRENT viewport centre (not the tall #page-recede's own centre),
-        // so it's a gentle scale-in-place regardless of scroll position / page height. Measure first.
-        var pr = document.getElementById('page-recede');
-        if (on && pr) { pr.style.transformOrigin = '50% ' + (window.innerHeight / 2 - pr.getBoundingClientRect().top) + 'px'; }
-        if (zoomEl) { zoomEl.classList.toggle('pp-receded', on); }
-    }
-
-    // Choreographed modal EXIT: add .is-closing to reverse the entrance (CSS bdModalOut + scrim fade),
-    // then hide + run cleanup on animationend (with a timeout fallback). Reduced motion -> hide instantly.
-    function closeModalAnimated(modal, cleanup) {
-        pageRecede(false);   // the page steps back forward as the modal leaves
-        var dlg = modal.querySelector('.pp-detail-modal__dialog');
-        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        function finish() {
-            modal.hidden = true; modal.classList.remove('is-closing'); document.body.style.overflow = '';
-            if (cleanup) { cleanup(); }
-        }
-        if (reduce || !dlg) { finish(); return; }
-        modal.classList.add('is-closing');
-        var done = false;
-        var onEnd = function (e) { if (e.target !== dlg) { return; } done = true; dlg.removeEventListener('animationend', onEnd); finish(); };
-        dlg.addEventListener('animationend', onEnd);
-        setTimeout(function () { if (!done) { dlg.removeEventListener('animationend', onEnd); finish(); } }, 320);
-    }
-
-    // ── Medallion inspect (pick-up / put-down) ──
-    // Tapping OR keyboard-activating the hero medallion (a role=button, see _header.html) grows the public
-    // badge_quick_peek into the shared #badge-peek dialog (the collection's pick-up/put-down controller).
-    // Delegated so it survives tier swaps; the badge id is read from the current hero medallion (per tier).
-    var peekEl = document.getElementById('badge-peek');
-    var peek = (peekEl && window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)
-        ? PlatPursuit.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
-        : null;
-    function openMedallionPeek(host) {
-        if (!peek || !host) { return; }
-        var med = host.querySelector('.pp-med[data-badge-id]');
-        var badgeId = med && med.getAttribute('data-badge-id');
-        if (!badgeId) { return; }
-        var tmpl = peekEl.getAttribute('data-peek-url') || '';
-        var url = tmpl.replace(/0\/$/, badgeId + '/');
-        // Pass the CONTAINER (not the .pp-med): detailModal.open does sourceEl.querySelector('.pp-med'), so it
-        // needs an ancestor to find the disc and GROW from it -- the pick-up/put-down every other page uses.
-        if (url && url !== tmpl) { peek.open(url, host); }
-    }
-    document.addEventListener('click', function(e) {
-        if (!peek || !e.target.closest) { return; }
-        if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }
-        var host = e.target.closest('.bdh-med');
-        if (!host || !host.querySelector('.pp-med[data-badge-id]')) { return; }
-        e.preventDefault();
-        openMedallionPeek(host);
-    });
-    document.addEventListener('keydown', function(e) {
-        if (e.key !== 'Enter' && e.key !== ' ') { return; }
-        var host = e.target.closest && e.target.closest('.bdh-med[role="button"]');
-        if (!host) { return; }
-        e.preventDefault();
-        openMedallionPeek(host);
-    });
-
-    // ── Earned-badge specular sheen (once per page load) ──
-    // A calm "this one is yours" reward beat on an EARNED hero medallion -- the Frame's sheen gesture, NOT
-    // the full Earn ceremony. Fires once each page load (not on tier swaps), skipped for reduced motion.
-    (function () {
-        var med = document.querySelector('.bdh-med[data-earned]');
-        if (!med) { return; }
-        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
-        setTimeout(function () { med.classList.add('is-sheen'); }, 420);
-    })();
-
-    // ── Header progress Horizon: fill from 0 ──
-    // Matches the career page: the bar is server-rendered at its real value (no-JS safe), and on load / tier
-    // swap we reset it to 0, force a reflow to commit that as the transition start, then set it back so the
-    // fill animates up. Smooth bars use --horizon-progress; the segmented variant wipes in via scaleX.
-    // Reduced motion leaves the real value in place.
-    function fillHeaderHorizon() {
-        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
-        document.querySelectorAll('.bdh-progress').forEach(function (hz) {
-            var fill = hz.querySelector('.pp-horizon__fill');
-            if (fill) {
-                var target = (fill.style.getPropertyValue('--horizon-progress') || '').trim() || '0%';
-                fill.style.setProperty('--horizon-progress', '0%');
-                void fill.offsetWidth;                                   // commit 0 as the transition start
-                fill.style.setProperty('--horizon-progress', target);   // ... then fill up to the real value
-            } else if (hz.classList.contains('pp-horizon--segmented')) {
-                hz.style.transformOrigin = 'left';
-                hz.style.transition = 'none';
-                hz.style.transform = 'scaleX(0)';
-                void hz.offsetWidth;
-                hz.style.transition = 'transform 0.55s var(--pp-ease, ease)';
-                hz.style.transform = 'scaleX(1)';
-            }
+    function show(key, animate) {
+        var from = null;
+        document.querySelectorAll('.bd2-panel').forEach(function (p) {
+            var k = p.getAttribute('data-bd2-view');
+            if (!p.classList.contains('is-hidden')) from = k;
+            p.classList.toggle('is-hidden', k !== key);
         });
-    }
-    fillHeaderHorizon();
-
-    // ── My Stats modal ──
-    // The opener ([data-stats-open]) lives in the context band INSIDE the swap island (re-rendered on a tier
-    // switch), so the handler is delegated on document; the modal itself lives outside the island and
-    // persists. Toggling [hidden] both shows/hides and triggers the shared pp-detail-modal entrance.
-    var statsModal = document.getElementById('badge-stats-modal');
-    if (statsModal) {
-        var statsA11y = modalA11y(statsModal, '.pp-detail-modal__dialog');
-        var closeStats = function () { closeModalAnimated(statsModal, function () { statsA11y.closed(); }); };
-        // Swipe down to close (touch). The helper slides the sheet off, so onClose hides instantly (no re-run
-        // of the choreographed exit) + does the same cleanup the close button does.
-        var statsDlg = statsModal.querySelector('.pp-detail-modal__dialog');
-        if (statsDlg && window.PlatPursuit && PlatPursuit.dismissableSheet) {
-            PlatPursuit.dismissableSheet(statsDlg, {
-                scrim: statsModal.querySelector('.pp-detail-modal__scrim'),
-                onClose: function () { pageRecede(false); statsModal.hidden = true; statsModal.classList.remove('is-closing'); document.body.style.overflow = ''; statsA11y.closed(); }
+        chips.forEach(function (c) {
+            var on = c.getAttribute('data-bd2-group') === key;
+            c.classList.toggle('is-active', on);
+            c.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        if (animate && from && from !== key) {
+            document.querySelectorAll('.bd2-panel[data-bd2-view="' + key + '"]').forEach(function (shown) {
+                PlatPursuit.slideViewIn(shown, from, key, ORDER);
             });
         }
-        document.addEventListener('click', function (e) {
-            if (!e.target.closest) { return; }
-            var opener = e.target.closest('[data-stats-open]');
-            if (opener) {
-                e.preventDefault();
-                statsA11y.opened(opener);
-                statsModal.hidden = false;
-                pageRecede(true);
-                document.body.style.overflow = 'hidden';
-                // Reveal-on-open: the numbers count up + the Horizons wipe in, so the modal TELLS the journey.
-                var mystats = statsModal.querySelector('.bd-mystats');
-                if (mystats) {
-                    mystats.classList.remove('is-revealing'); void mystats.offsetWidth; mystats.classList.add('is-revealing');
-                    mystats.querySelectorAll('[data-countup]').forEach(function (n, i) {
-                        setTimeout(function () { if (window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(n); } }, i * 60);
-                    });
-                }
-                var dlg = statsModal.querySelector('.pp-detail-modal__dialog');
-                if (dlg) { dlg.focus(); }
-            } else if (e.target.closest('[data-stats-close]')) {
-                closeStats();
-            }
+    }
+    if (PlatPursuit.wireTablist) {
+        PlatPursuit.wireTablist(chips, { onSelect: function (c) {
+            if (PlatPursuit.igniteTab) { PlatPursuit.igniteTab(c); }
+            show(c.getAttribute('data-bd2-group'), true);
+        } });
+    }
+})();
+
+(function () {
+    // Stage collapse: each stage header toggles its collapse body (grid-template-rows 1fr<->0fr). Body +
+    // chevron are found relative to the header (stage numbers repeat across groups, so no global id lookup).
+    document.querySelectorAll('.bd-stage__head[data-stage-toggle]').forEach(function (head) {
+        function toggle() {
+            var section = head.closest('.bd-stage');
+            var body = section && section.querySelector('[data-stage-games]');
+            var chev = head.querySelector('.bd-stage__chevron');
+            if (!body) return;
+            var collapsed = body.style.gridTemplateRows !== '0fr';
+            body.style.gridTemplateRows = collapsed ? '0fr' : '1fr';
+            if (chev) { chev.style.transform = collapsed ? 'rotate(-90deg)' : ''; }
+            head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        }
+        head.addEventListener('click', toggle);
+        head.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
         });
-        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !statsModal.hidden) { closeStats(); } });
-    }
-
-    // ── Contract modal ──
-    // A game card's contract band opens THAT contract in place: lazily fetch the ContractModalView partial and
-    // inject it. Delegated (the bands re-render on tier swaps); the modal lives outside the island. On a
-    // non-200 (logged-in-but-not-linked -> 404) or a network error, fall back to the band's href (career board).
-    var contractModal = document.getElementById('badge-contract-modal');
-    if (contractModal) {
-        var contractBody = contractModal.querySelector('[data-contract-body]');
-        var contractA11y = modalA11y(contractModal, '.pp-detail-modal__dialog');
-        var closeContract = function () { closeModalAnimated(contractModal, function () { contractBody.innerHTML = ''; contractA11y.closed(); }); };
-        // Swipe down to close (touch) -- slide off, then hide instantly + clear the fetched body.
-        var contractDlg = contractModal.querySelector('.pp-detail-modal__dialog');
-        if (contractDlg && window.PlatPursuit && PlatPursuit.dismissableSheet) {
-            PlatPursuit.dismissableSheet(contractDlg, {
-                scrim: contractModal.querySelector('.pp-detail-modal__scrim'),
-                onClose: function () { pageRecede(false); contractModal.hidden = true; contractModal.classList.remove('is-closing'); document.body.style.overflow = ''; contractBody.innerHTML = ''; contractA11y.closed(); }
-            });
-        }
-        document.addEventListener('click', function (e) {
-            if (!e.target.closest) { return; }
-            var link = e.target.closest('[data-contract-url]');
-            if (link) {
-                if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }   // let modified clicks open normally
-                e.preventDefault();
-                contractA11y.opened(link);
-                // Loading affordance: shimmer the tapped band while the modal is fetched, after a 150ms grace
-                // so instant loads don't flash it.
-                var loadTimer = setTimeout(function () { link.classList.add('is-loading'); }, 150);
-                function clearLoading() { clearTimeout(loadTimer); link.classList.remove('is-loading'); }
-                fetch(link.getAttribute('data-contract-url'), { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
-                    .then(function (r) { return r.ok ? r.text() : null; })
-                    .then(function (html) {
-                        if (html == null) { clearLoading(); window.location.href = link.getAttribute('href'); return; }   // not linked -> career board
-                        contractBody.innerHTML = html;
-                        // The rpm job pills + game cards ship at opacity:0 (the career page reveals them via
-                        // .rpm-in); do the same here, plus set each game's progress-bar width from data-fill.
-                        var i = 0;
-                        contractBody.querySelectorAll('.rpm-job, .rpg').forEach(function (el) { el.style.animationDelay = (i++ * 45) + 'ms'; el.classList.add('rpm-in'); });
-                        contractBody.querySelectorAll('.rpg__prog-fill').forEach(function (f) { if (f.dataset.fill) { f.style.width = f.dataset.fill; } });
-                        contractModal.hidden = false;
-                        pageRecede(true);
-                        document.body.style.overflow = 'hidden';
-                        clearLoading();
-                        var d = contractModal.querySelector('.pp-detail-modal__dialog'); if (d) { d.focus(); }
-                    })
-                    .catch(function () { clearLoading(); window.location.href = link.getAttribute('href'); });
-                return;
-            }
-            if (e.target.closest('[data-contract-close]')) { closeContract(); }
-        });
-        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !contractModal.hidden) { closeContract(); } });
-    }
-
-    // ── Stage collapse / expand ──
-    // The stage journey re-renders on a tier swap, so init is a re-runnable function. The collapse state is
-    // per (series, tier); the tier is read from the DOM (the active tier step) so the key stays correct after
-    // a swap. Per-element handlers (bulk button, stage-requirement links) are (re)wired here with a guard;
-    // the individual toggle + keyboard handlers are delegated on document (attached once, survive swaps).
-    var SLUG = '{{ badge.series_slug|escapejs }}';
-    function storageKey() {
-        var active = document.querySelector('.bd-tierstep.is-active');
-        // Stores the stages the user has explicitly OPENED (default is all-collapsed), per (series, tier).
-        // Distinct key name from the old collapsed-set model so stale data is cleanly ignored.
-        return 'badge_stage_open_' + SLUG + '_' + (active ? (active.getAttribute('data-tier') || '') : '');
-    }
-    function loadOpen() {
-        try { return JSON.parse(localStorage.getItem(storageKey())) || {}; } catch (e) { return {}; }
-    }
-    function saveOpen(state) {
-        try { localStorage.setItem(storageKey(), JSON.stringify(state)); } catch (e) { /* quota / private */ }
-    }
-    function setStageCollapsed(stageNum, collapsed) {
-        var gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
-        var chevron = document.querySelector('[data-stage-chevron="' + stageNum + '"]');
-        var toggle = document.querySelector('[data-stage-toggle="' + stageNum + '"]');
-        if (!gamesContainer) return;
-        if (collapsed) {
-            gamesContainer.style.gridTemplateRows = '0fr';
-            if (chevron) chevron.style.transform = 'rotate(-90deg)';
-            if (toggle) toggle.setAttribute('aria-expanded', 'false');
-        } else {
-            gamesContainer.style.gridTemplateRows = '1fr';
-            if (chevron) chevron.style.transform = '';
-            if (toggle) toggle.setAttribute('aria-expanded', 'true');
-        }
-    }
-    function updateBulkButton() {
-        var bulkBtn = document.getElementById('badge-stage-toggle-all');
-        if (!bulkBtn) return;
-        var anyOpen = Object.keys(loadOpen()).length > 0;
-        var label = bulkBtn.querySelector('span');
-        var icon = bulkBtn.querySelector('svg');
-        if (label) label.textContent = anyOpen ? 'Collapse All' : 'Expand All';
-        if (icon) icon.style.transform = anyOpen ? '' : 'rotate(-90deg)';
-    }
-
-    function initStages() {
-        // Default: EVERY stage collapsed (cleaner scanning + navigation). localStorage remembers only the
-        // stages the user has explicitly OPENED, per (series, tier); a fresh visit collapses them all.
-        var openState = loadOpen();
-        document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
-            var stageNum = toggle.dataset.stageToggle;
-            var open = !!openState[stageNum];
-            var gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
-            if (gamesContainer) {
-                gamesContainer.style.transition = 'none';
-                setStageCollapsed(stageNum, !open);
-                requestAnimationFrame(function() { requestAnimationFrame(function() { gamesContainer.style.transition = ''; }); });
-            }
-        });
-        updateBulkButton();
-
-        // Bulk toggle (swap-local; wire once per element).
-        var bulkBtn = document.getElementById('badge-stage-toggle-all');
-        if (bulkBtn && !bulkBtn._wired) {
-            bulkBtn._wired = true;
-            bulkBtn.addEventListener('click', function() {
-                var anyOpen = Object.keys(loadOpen()).length > 0;
-                var newState = {};
-                // Bulk = INSTANT: animating every stage's grid-template-rows at once forces layout of the
-                // whole card grid each frame -- brutal on tall mobile. Kill transitions for the bulk change,
-                // restore after two frames so subsequent single toggles still animate.
-                var containers = document.querySelectorAll('[data-stage-games]');
-                containers.forEach(function(c) { c.style.transition = 'none'; });
-                document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
-                    var stageNum = toggle.dataset.stageToggle;
-                    if (anyOpen) { setStageCollapsed(stageNum, true); }               // collapse all
-                    else { setStageCollapsed(stageNum, false); newState[stageNum] = true; }   // expand all
-                });
-                requestAnimationFrame(function() { requestAnimationFrame(function() {
-                    containers.forEach(function(c) { c.style.transition = ''; });
-                }); });
-                saveOpen(newState);
-                updateBulkButton();
-            });
-        }
-
-        // Stage-requirement links: scroll to the stage, then open it once the scroll settles.
-        document.querySelectorAll('[data-stage-link]').forEach(function(link) {
-            if (link._wired) return;
-            link._wired = true;
-            link.addEventListener('click', function(e) {
-                var stageNum = link.dataset.stageLink;
-                var target = document.getElementById('stage-' + stageNum);
-                if (!target) return;
-                // Landing flash: glow the whole stage CARD border, fired AFTER it's revealed + expanded, so
-                // it reads as "you are here". box-shadow TRANSITION (not a keyframe) to dodge the section's
-                // lingering reveal animation; bloom in, hold, then fade out on class removal.
-                function flashSection() {
-                    target.classList.remove('is-landing'); void target.offsetWidth; target.classList.add('is-landing');
-                    setTimeout(function () { target.classList.remove('is-landing'); }, 340);
-                }
-                var openState = loadOpen();
-                if (openState[stageNum]) {
-                    setTimeout(flashSection, 400);   // already open: after the native #stage-N jump settles
-                    return;
-                }
-                e.preventDefault();
-                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                function openNow() {
-                    setStageCollapsed(stageNum, false);
-                    openState[stageNum] = true; saveOpen(openState); updateBulkButton();
-                    setTimeout(flashSection, 450);   // wait for the reveal + expand to finish, then flash
-                }
-                var scrollTimer;
-                function onScrollEnd() {
-                    clearTimeout(scrollTimer);
-                    scrollTimer = setTimeout(function() {
-                        window.removeEventListener('scroll', onScrollEnd);
-                        openNow();
-                    }, 100);
-                }
-                window.addEventListener('scroll', onScrollEnd);
-                scrollTimer = setTimeout(function() {
-                    window.removeEventListener('scroll', onScrollEnd);
-                    openNow();
-                }, 600);
-            });
-        });
-    }
-
-    // Delegated handlers — attached ONCE; they survive the tier-swap re-render.
-    document.addEventListener('click', function(e) {
-        var toggle = e.target.closest('[data-stage-toggle]');
-        if (!toggle) return;
-        if (e.target.closest('a')) return;
-        var stageNum = toggle.dataset.stageToggle;
-        var openState = loadOpen();
-        var isOpen = !!openState[stageNum];
-        setStageCollapsed(stageNum, isOpen);   // open -> collapse; collapsed -> open
-        if (isOpen) { delete openState[stageNum]; } else { openState[stageNum] = true; }
-        saveOpen(openState);
-        updateBulkButton();
     });
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-            var tag = e.target.tagName;
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-            var toggle = e.target.closest('[data-stage-toggle]');
-            if (toggle) { e.preventDefault(); toggle.click(); }
-        }
-    });
-
-    // ── Stage-stack reveal on scroll-in ──
-    // Fire the reveal when the journey scrolls into view (it's usually below the fold, so a load-time reveal
-    // is missed). Armed by JS so no-JS keeps the stages visible; reduced motion skips it (the CSS is gated).
-    var stageReveal = ('IntersectionObserver' in window) ? new IntersectionObserver(function (entries) {
-        entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('is-inview'); stageReveal.unobserve(en.target); } });
-    }, { rootMargin: '0px 0px -12% 0px' }) : null;
-    function armStageReveal() {
-        if (!stageReveal) { return; }
-        document.querySelectorAll('.bd-stages').forEach(function (s) {
-            if (s.classList.contains('bd-stages--armed')) { return; }
-            s.classList.add('bd-stages--armed');
-            stageReveal.observe(s);
-        });
-    }
-
-    // ── Tier-switch ignite ──
-    // A one-shot tier-tinted glow bloom on the step that just became active (selection acknowledgment). The
-    // CSS animation is reduced-motion gated, so adding the class is harmless there.
-    function igniteActiveTier() {
-        var active = document.querySelector('#badge-tier-view .bd-tierstep.is-active');
-        if (!active) { return; }
-        active.classList.remove('is-igniting'); void active.offsetWidth; active.classList.add('is-igniting');
-    }
-
-    // ── Directional tier-content slide ──
-    // Switching tiers HTMX-swaps the island; slide the tier REQUIREMENTS card in from the side you moved on
-    // the ladder (a higher tier enters from the right), so the swap reads as motion, not a static repaint.
-    // Scoped to .bd-req -- NOT the whole island: the island holds the position:fixed sticky mini-header, and
-    // a transform on it would break that during the slide. The stages keep their own scroll-reveal.
-    var TIER_ORDER = Array.prototype.map.call(document.querySelectorAll('.bd-tierstep'), function (s) { return s.getAttribute('data-tier'); });
-    function activeTier() { var a = document.querySelector('#badge-tier-view .bd-tierstep.is-active'); return a ? a.getAttribute('data-tier') : null; }
-    var lastTier = activeTier();
-    function slideTierContent() {
-        var to = activeTier();
-        var req = document.querySelector('#badge-tier-view .bd-req');
-        if (req && window.PlatPursuit && PlatPursuit.slideViewIn) { PlatPursuit.slideViewIn(req, lastTier, to, TIER_ORDER); }
-        lastTier = to;
-    }
-
-    // The sticky mini-header is position:fixed but is re-rendered per tier INSIDE the #badge-tier-view
-    // swap island (which lives in #page-recede). A modal's recede transforms #page-recede, and a transform
-    // makes it the containing block for its fixed descendants -- so the mini-header would scale/clip away
-    // with the receding content. It's chrome, so hoist it out to #zoom-wrapper (sibling of the nav, which
-    // the recede never touches). Re-run after each tier swap; drop the previously-hoisted copy first so a
-    // swap can't leave two behind.
-    function hoistMinihead() {
-        var host = document.getElementById('zoom-wrapper');
-        if (!host) return;
-        var fresh = document.querySelector('#badge-tier-view .bd-minihead');
-        host.querySelectorAll(':scope > .bd-minihead').forEach(function (old) { if (old !== fresh) { old.remove(); } });
-        if (fresh) { host.appendChild(fresh); }
-    }
-
-    initStages();
-    armStageReveal();
-    setTimeout(igniteActiveTier, 250);   // the initial tier "comes alive" a beat after load
-    if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }   // sticky mini-header
-    hoistMinihead();
-
-    // ── Mini-header stage jumper: delegated open/close (survives the tier-view swaps) ──
-    // The menu items themselves jump via the shared data-stage-link handler (bound in initStages); this
-    // just toggles the dropdown and closes it on any outside click / item click / Escape.
-    function closeMinijump() {
-        var menu = document.querySelector('[data-minijump-menu]');
-        if (!menu || menu.hidden) { return; }
-        menu.hidden = true;
-        var btn = document.querySelector('[data-minijump-btn]');
-        if (btn) { btn.setAttribute('aria-expanded', 'false'); }
-    }
-    document.addEventListener('click', function(e) {
-        var btn = e.target.closest('[data-minijump-btn]');
-        var menu = document.querySelector('[data-minijump-menu]');
-        if (!menu) { return; }
-        if (btn) {
-            var willOpen = menu.hidden;
-            menu.hidden = !willOpen;
-            btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-            return;
-        }
-        closeMinijump();   // outside click, or a stage item (which jumps via its own handler)
-    });
-    document.addEventListener('keydown', function(e) {
-        if (e.key !== 'Escape') { return; }
-        var menu = document.querySelector('[data-minijump-menu]');
-        if (menu && !menu.hidden) { var btn = document.querySelector('[data-minijump-btn]'); closeMinijump(); if (btn) { btn.focus(); } }
-    });
-
-    // ── Tier swap: re-init stages + hold the scroll position steady ──
-    // #badge-tier-view is most of the page; replacing its innerHTML wholesale makes the browser lose its
-    // scroll anchor and jump (typically to the bottom) unless you were already at the top. Snapshot scrollY
-    // before the swap and re-assert it after (afterSwap catches the pre-paint jump; afterSettle catches any
-    // deferred scroll-anchoring), so switching tiers updates the content in place wherever you're scrolled.
-    // behavior:'instant' overrides the global `scroll-behavior: smooth` so the restore is a jump, not a
-    // (jarring) animated scroll back to place.
-    var tierScrollY = null;
-    function restoreTierScroll() {
-        if (tierScrollY !== null) { window.scrollTo({ top: tierScrollY, left: 0, behavior: 'instant' }); }
-    }
-    document.body.addEventListener('htmx:beforeSwap', function(e) {
-        var t = (e.detail && e.detail.target) || e.target;
-        if (t && t.id === 'badge-tier-view') { tierScrollY = window.scrollY; }
-    });
-    document.body.addEventListener('htmx:afterSwap', function(e) {
-        var t = (e.detail && e.detail.target) || e.target;
-        if (t && t.id === 'badge-tier-view') {
-            initStages();
-            armStageReveal();   // the fresh stack re-reveals when in view (e.g. swapping tiers while scrolled to it)
-            igniteActiveTier(); // the newly-active step blooms
-            slideTierContent(); // the tier's requirements slide in from the direction you moved
-            fillHeaderHorizon(); // the new tier's progress fills from 0
-            restoreTierScroll();
-            // Re-wire the fresh mini-header AFTER the scroll is restored, so it reads the right position and
-            // adopts its pinned state instantly (no reveal-slide replay on tier switch).
-            if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }
-            hoistMinihead();   // re-hoist the freshly-swapped mini-header out of the recede wrapper
-            // The activated tier step was replaced by the swap; keyboard focus fell to <body>. Move it to
-            // the now-active step (preventScroll so it doesn't fight the scroll restore above).
-            var active = document.querySelector('#badge-tier-view .bd-tierstep.is-active');
-            if (active && active.focus) { try { active.focus({ preventScroll: true }); } catch (err) { active.focus(); } }
-        }
-    });
-    document.body.addEventListener('htmx:afterSettle', function(e) {
-        var t = (e.detail && e.detail.target) || e.target;
-        if (t && t.id === 'badge-tier-view') { restoreTierScroll(); tierScrollY = null; }
-    });
-});
+})();
 </script>
 {% endblock %}

@@ -60,9 +60,10 @@ from django.views.generic import ListView, DetailView, TemplateView
 from ..models import (
     Game, Profile, ProfileGame, Badge, UserBadge, UserBadgeProgress,
     Concept, Stage, Milestone, UserMilestone, UserMilestoneProgress,
-    UserTitle, ProfileGamification,
+    UserTitle, ProfileGamification, BadgeSeries,
 )
 from ..forms import BadgeSearchForm
+from trophies.services.badge_detail_service import get_badge_detail
 from trophies.services.frame_service import build_badge_frame
 from trophies.services.redis_leaderboard_service import (
     RedisPaginator, RedisPage,
@@ -819,24 +820,18 @@ class BadgeProgressPeekView(View):
 
 
 class BadgeDetailView(DetailView):
-    """
-    Display detailed badge series information with progress tracking.
-
-    Shows all tiers in a badge series, user's progress (if authenticated),
-    required games organized by stages, and completion statistics.
-    Dynamically displays highest earned tier or next tier to unlock.
-    """
-    model = Badge
+    """Badge series detail: a series' parallel platform-group badges (Legacy HD / Ultra HD), the viewer's
+    per-group state + live progress, live earners rank, per-group rarity, and series XP. Reads the NEW
+    grouping-badge models via badge_detail_service -- no tiers. See docs/design/rebuild/badge-backend-rebuild.md."""
+    model = BadgeSeries
     template_name = 'trophies/badge_detail.html'
     slug_field = 'series_slug'
     slug_url_kwarg = 'series_slug'
-    context_object_name = 'series_badges'
+    context_object_name = 'series'
 
     def dispatch(self, request, *args, **kwargs):
-        # Profile-scoped variant (/badges/<slug>/<username>/) requires auth — see
-        # GameDetailView.dispatch for the full rationale. Anonymous visitors
-        # are redirected to the canonical badge series page with a
-        # from_profile hint that drives a sign-up banner.
+        # Profile-scoped variant (/badges/<slug>/<username>/) requires auth; anon -> canonical page with a
+        # from_profile hint that drives the sign-up banner. (Mirrors GameDetailView.dispatch.)
         psn_username = kwargs.get('psn_username')
         if psn_username and not request.user.is_authenticated:
             canonical = reverse('badge_detail', kwargs={'series_slug': kwargs['series_slug']})
@@ -847,40 +842,20 @@ class BadgeDetailView(DetailView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_object(self, queryset=None):
-        series_slug = self.kwargs[self.slug_url_kwarg]
-        return Badge.objects.by_series(series_slug).select_related(
-            'funded_by', 'base_badge__funded_by', 'submitted_by', 'base_badge__submitted_by',
-            'title', 'base_badge__title',
-            # effective_franchise/developer read badge.<fk> then base_badge.<fk>.
-            'franchise', 'base_badge__franchise', 'developer', 'base_badge__developer',
-            # cover_url on most_recent_concept reads igdb_match; prefetch to avoid N+1.
-            'most_recent_concept', 'most_recent_concept__igdb_match',
-        ).defer('most_recent_concept__igdb_match__raw_response')   # never drag the ~30KB IGDB blob
-
-    def get_template_names(self):
-        # A tier switch HTMX-swaps the #badge-tier-view island: return just that partial (no base.html), so
-        # switching tiers re-renders the tier-scoped content in place instead of a full page reload.
-        if getattr(self.request, 'htmx', False) and self.request.htmx.target == 'badge-tier-view':
-            return ['trophies/partials/badge_detail/badge_detail_tier_view.html']
-        return [self.template_name]
+        series = get_object_or_404(
+            BadgeSeries.objects.select_related(
+                'franchise', 'collection', 'developer', 'submitted_by', 'funded_by', 'title',
+            ),
+            series_slug=self.kwargs[self.slug_url_kwarg],
+        )
+        # Staff preview gate: a series with no LIVE group badge is dormant (pre-cutover) -> staff-only.
+        if not self.request.user.is_staff and not series.group_badges.filter(is_live=True).exists():
+            raise Http404("Series not found")
+        return series
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        series_badges = context['object']
-
-        # A tier switch re-renders the #badge-tier-view island (which contains the header). The header's
-        # entrance animation (.pp-head-cascade) should play on the FIRST load only, not replay on every
-        # tier chip tap -- flag the swap so the header partial can skip the class on an HTMX re-render.
-        context['is_tier_swap'] = getattr(self.request, 'htmx', False) and self.request.htmx.target == 'badge-tier-view'
-
-        if not series_badges.exists():
-            raise Http404("Series not found")
-
-        # Staff preview gate: non-live badges are staff-only
-        first_badge = series_badges.first()
-        if first_badge and not first_badge.is_live:
-            if not self.request.user.is_staff:
-                raise Http404("Series not found")
+        series = context['series']
 
         psn_username = self.kwargs.get('psn_username')
         if psn_username:
@@ -890,666 +865,26 @@ class BadgeDetailView(DetailView):
         else:
             target_profile = None
 
+        viewer_profile = (
+            self.request.user.profile
+            if (self.request.user.is_authenticated and hasattr(self.request.user, 'profile')) else None
+        )
         context['target_profile'] = target_profile
-        # When the page is showing SOMEONE ELSE'S progress (the /<slug>/<username>/ variant), surface whose
-        # -- the header + inspect modal make it unmistakable you're not looking at your own.
-        viewer_profile = self.request.user.profile if (self.request.user.is_authenticated and hasattr(self.request.user, 'profile')) else None
+        # When showing SOMEONE ELSE'S progress (the /<slug>/<username>/ variant), surface whose.
         context['viewing_other_profile'] = target_profile if (target_profile and target_profile != viewer_profile) else None
 
-        badge = None
-        is_earned = False
-        highest_tier_earned = 0
-        # Tiers are independent (a higher tier can be held without a lower one),
-        # so the earned SET — not just the max — drives per-tab "earned" marks.
-        earned_tiers = set()
-        maint_tiers = set()   # held-but-lapsed tiers -> need re-earning (drive the default-tier pick)
-        max_tier = series_badges.aggregate(max_tier=Max('tier'))['max_tier'] or 0
-
-        # Bulk-fetch progress for all badges in this series (single query, reused below)
-        badge_progress_dict = {}
-        if target_profile:
-            badge_progress_dict = {
-                p.badge_id: p for p in
-                UserBadgeProgress.objects.filter(
-                    profile=target_profile, badge__series_slug=self.kwargs['series_slug']
-                )
-            }
-
-        if target_profile:
-            # Tiers are independent, so we need the full earned-tier SET (not just
-            # the max) to default-select the right tab below.
-            earned_rows = list(
-                UserBadge.objects.filter(
-                    profile=target_profile, badge__series_slug=self.kwargs['series_slug']
-                ).values_list('badge__tier', 'status')
-            )
-            earned_tiers = {t for t, _ in earned_rows}
-            maint_tiers = {t for t, s in earned_rows if s == 'maintenance'}
-            highest_tier_earned = max(earned_tiers) if earned_tiers else 0
-            badge = series_badges.filter(tier=highest_tier_earned).first()
-            if badge and highest_tier_earned > 0:
-                is_earned = True
-            else:
-                badge = series_badges.order_by('tier').first()
-
-            context['badge'] = badge
-
-            progress = badge_progress_dict.get(badge.id)
-            context['progress'] = progress
-            context['progress_percent'] = progress.completed_concepts / badge.required_stages * 100 if progress and badge.required_stages > 0 else 0
-        else:
-            badge = series_badges.filter(tier=1).first()
-            context['badge'] = badge
-
-        # Tier selector: determine which tier tab to show
-        tier_param = self.request.GET.get('tier')
-        try:
-            selected_tier = int(tier_param)
-            if selected_tier < 1 or selected_tier > max_tier:
-                selected_tier = None
-        except (TypeError, ValueError):
-            selected_tier = None
-
-        if selected_tier is None:
-            if target_profile:
-                if maint_tiers:
-                    # A lapsed (maintenance) tier needs re-earning -> default to the lowest such tier, ahead
-                    # of the next clean win (mirrors the Series tile's resting face).
-                    selected_tier = min(maint_tiers)
-                else:
-                    # Tiers are independent: default to the lowest tier NOT yet earned
-                    # (the next available win), or the highest tier if all are earned.
-                    unearned = [t for t in range(1, max_tier + 1) if t not in earned_tiers]
-                    selected_tier = unearned[0] if unearned else (max_tier or 1)
-            else:
-                selected_tier = 1
-        context['selected_tier'] = selected_tier
-        context['max_tier'] = max_tier
-        # Whether selected tier requires platinum (tiers 1/3) or 100% (tiers 2/4)
-        context['selected_tier_is_plat'] = selected_tier in [1, 3]
-
-        # Hero frame: the medallion for the tier the viewer is looking at.
-        hero_badge = series_badges.filter(tier=selected_tier).first() or badge
-        context['hero_frame'] = build_badge_frame(hero_badge, target_profile)
-        context['hero_frame']['badge_id'] = hero_badge.id   # enables the medallion inspect peek
-
-        # Same Game queryset is reused for both the standalone concepts prefetch
-        # and the bundle members prefetch. raw_response is the full IGDB API blob
-        # (~30 KB per row); the badge detail page only reads cover-art fields, so
-        # loading raw_response inflates each game by ~30 KB for nothing —
-        # multiplied across all stages + concurrent requests, it was the trigger
-        # for the May 2026 web-server OOM.
-        # concept__igdb_match: each game's IGDB id, which derives its home Contract (built into a
-        # batch concept->contract map below, since contract membership is no longer a stored relation).
-        _badge_game_qs = Game.objects.select_related(
-            'concept', 'concept__igdb_match',
-        ).defer(
-            'concept__igdb_match__raw_response',
-        )
-        stages = list(Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
-            Prefetch('concepts__games', queryset=_badge_game_qs),
-            Prefetch('concept_bundles__concepts__games', queryset=_badge_game_qs),
-            'concept_bundles__concepts',
-        ))
-        context['stage_count'] = len(stages)
-
-        # Collect all games across all stages (standalone + bundle members).
-        # Sort by newest platform (PS5 > PS4 > VRs > PS3 > Vita), then alphabetical.
-        stage_games_map = {}  # stage.id -> sorted list of standalone-concept games
-        stage_bundle_games_map = {}  # stage.id -> {bundle.id: {concept.id: [games]}}
-        all_games_set = set()
-        for stage in stages:
-            standalone_games = set()
-            for concept in stage.concepts.all():
-                standalone_games.update(concept.games.all())
-            stage_games_map[stage.id] = sorted(
-                standalone_games,
-                key=lambda g: (platform_display_rank(g.title_platform), g.title_name.lower()),
-            )
-            all_games_set.update(standalone_games)
-
-            # Bundle games (separate from standalone so they render as their own row)
-            bundle_map = {}
-            for bundle in stage.concept_bundles.all():
-                member_map = {}
-                for concept in bundle.concepts.all():
-                    games_list = list(concept.games.all())
-                    member_map[concept.id] = games_list
-                    all_games_set.update(games_list)
-                bundle_map[bundle.id] = member_map
-            stage_bundle_games_map[stage.id] = bundle_map
-
-        # Static per-concept fact: does this bundle-member concept have a real
-        # platinum trophy available? Drives the "earn the platinum" wording on
-        # plat-tier badge views for ESO-style bundles. Bundles whose members
-        # have no platinum trophies (BttF-style) fall back to the synth-plat
-        # messaging.
-        bundle_member_concept_ids = {
-            cid
-            for bundles_for_stage in stage_bundle_games_map.values()
-            for member_map in bundles_for_stage.values()
-            for cid in member_map.keys()
-        }
-        concepts_with_real_plat = set()
-        if bundle_member_concept_ids:
-            from trophies.models import Trophy
-            concepts_with_real_plat = set(
-                Trophy.objects
-                .filter(trophy_type='platinum', game__concept_id__in=bundle_member_concept_ids)
-                .values_list('game__concept_id', flat=True)
-                .distinct()
-            )
-
-        # Single bulk ProfileGame query instead of one per stage
-        profile_games = {}
-        if target_profile and all_games_set:
-            profile_games_qs = ProfileGame.objects.filter(
-                profile=target_profile, game__in=all_games_set
-            ).select_related('game')
-            profile_games = {pg.game_id: pg for pg in profile_games_qs}
-
-        from trophies.services.rating_service import RatingService
-        from trophies.services.contract_service import contract_by_concept_map
-
-        # Batch: concept_id -> live Contract (igdb-derived), one pair of queries for all the badge's
-        # games, replacing the old per-game contract_membership prefetch.
-        _contract_by_cid = contract_by_concept_map(
-            {g.concept_id for g in all_games_set if g.concept_id is not None}, live_only=True,
-        )
-
-        def _game_contract(game):
-            # The game's home Contract (igdb-derived, live only). A compact dict for the card's contract
-            # hook, or None (games without a live contract omit it).
-            contract = _contract_by_cid.get(game.concept_id)
-            if contract is None:
-                return None
-            jobs = list(contract.jobs.all())
-            # Family mix: the band's accent blends the distinct disciplines of the contract's jobs (their
-            # --disc-* family colours), so the band SAYS what kind of contract it is at a glance. Per-job
-            # `color` isn't populated yet, so we key off discipline. First discipline drives the solid accent
-            # (XP / arrow / border); the gradient tints across all of them.
-            disc_slugs = list(dict.fromkeys(j.discipline for j in jobs if j.discipline))
-            band_bg, accent = '', ''
-            if disc_slugs:
-                stops = [f'color-mix(in oklab, var(--disc-{d}) 15%, var(--pp-bg-1))' for d in disc_slugs]
-                if len(stops) == 1:
-                    stops *= 2   # a gradient needs >=2 stops; repeat -> a clean solid
-                band_bg = f'linear-gradient(105deg, {", ".join(stops)})'
-                accent = f'var(--disc-{disc_slugs[0]})'
-            return {
-                'name': contract.name,
-                'slug': contract.slug,
-                'xp': contract.xp_total_override or CONTRACT_XP_TOTAL,
-                'jobs': jobs,
-                'band_bg': band_bg,
-                'accent': accent,
-            }
-
-        def _build_game_entry(game, community_ratings_cache):
-            if game not in community_ratings_cache:
-                community_ratings_cache[game] = RatingService.get_cached_community_averages(game.concept)
-            return {
-                'game': game,
-                'profile_game': profile_games.get(game.id),
-                'community_ratings': community_ratings_cache[game],
-                'has_guide': bool(game.concept.guide_slug),
-                'contract': _game_contract(game),
-            }
-
-        structured_data = []
-        for stage in stages:
-            games = stage_games_map[stage.id]
-
-            community_ratings = {}
-
-            all_game_entries = [_build_game_entry(game, community_ratings) for game in games]
-
-            unobtainable = [g for g in all_game_entries if not g['game'].is_obtainable or g['game'].is_delisted]
-            unobtainable_completed = sum(
-                1 for g in unobtainable
-                if g['profile_game'] and (g['profile_game'].progress == 100 or g['profile_game'].has_plat)
-            )
-
-            # Bundle qualifiers: each renders as a single row showing aggregate
-            # progress across all member concepts. Two satisfaction paths:
-            #   - Real platinum on any member (plat-check tiers 1/3 only): models
-            #     ESO-style bundles where one member carries the platinum trophy.
-            #   - Synthesized platinum (every member at progress=100): models
-            #     BttF-style bundles where no member has a platinum trophy.
-            # Members sort by release_date (nulls last, title tiebreaker) so
-            # episodic chapters appear in natural release order.
-            bundles = []
-            bundle_games_for_stage = stage_bundle_games_map.get(stage.id, {})
-            is_plat_tier = selected_tier in [1, 3] or badge.badge_type == 'megamix'
-            for bundle in stage.concept_bundles.all():
-                member_games_by_concept = bundle_games_for_stage.get(bundle.id, {})
-                sorted_members = sorted(
-                    bundle.concepts.all(),
-                    key=lambda c: (
-                        c.release_date is None,
-                        c.release_date,
-                        (c.unified_title or '').lower(),
-                    ),
-                )
-                members = []
-                any_member_platted = False
-                for concept in sorted_members:
-                    concept_games = member_games_by_concept.get(concept.id, [])
-                    member_game_entries = [_build_game_entry(g, community_ratings) for g in concept_games]
-                    is_fully_earned = any(
-                        e['profile_game'] and e['profile_game'].progress == 100
-                        for e in member_game_entries
-                    )
-                    has_platted = any(
-                        e['profile_game'] and e['profile_game'].has_plat
-                        for e in member_game_entries
-                    )
-                    if has_platted:
-                        any_member_platted = True
-                    members.append({
-                        'concept': concept,
-                        'games': member_game_entries,
-                        'is_fully_earned': is_fully_earned,
-                    })
-                completed_members = sum(1 for m in members if m['is_fully_earned'])
-                total_members = len(members)
-                all_members_100 = total_members > 0 and completed_members == total_members
-                has_real_plat = any(
-                    m['concept'].id in concepts_with_real_plat for m in members
-                )
-                # Tier-aware satisfaction: plat-check tiers accept either path,
-                # progress-check tiers only accept the synth path.
-                if is_plat_tier:
-                    is_satisfied = any_member_platted or all_members_100
-                else:
-                    is_satisfied = all_members_100
-                bundles.append({
-                    'bundle': bundle,
-                    'label': bundle.label,
-                    'members': members,
-                    'is_satisfied': is_satisfied,
-                    'all_members_100': all_members_100,
-                    'any_member_platted': any_member_platted,
-                    'has_real_plat': has_real_plat,
-                    'completed_members': completed_members,
-                    'total_members': total_members,
-                })
-
-            structured_data.append({
-                'stage': stage,
-                'games': all_game_entries,
-                'obtainable_games': [g for g in all_game_entries if g['game'].is_obtainable and not g['game'].is_delisted],
-                'unobtainable_games': unobtainable,
-                'unobtainable_completed': unobtainable_completed,
-                'bundles': bundles,
-            })
-
-        all_badges = Badge.objects.by_series(badge.series_slug)
-        all_badges_list = list(all_badges)
-        badge_completion = {b.tier: b.get_stage_completion(target_profile, b.badge_type) for b in all_badges_list}
-
-
-        # Add required_stages for each tier (useful for megamix badges)
-        badge_requirements = {b.tier: b.required_stages for b in all_badges_list}
-
-        # Tier selector context
-        context['all_tier_badges'] = sorted(all_badges_list, key=lambda b: b.tier)
-        selected_tier_badge = next((b for b in all_badges_list if b.tier == selected_tier), None)
-        context['selected_tier_badge'] = selected_tier_badge
-        context['selected_tier_completion'] = badge_completion.get(selected_tier, {})
-        context['selected_tier_requirements'] = badge_requirements.get(selected_tier, 0)
-
-        # Badge series stats (computed from existing data, no new DB queries)
-        tier_earner_counts = {b.tier: b.earned_count for b in all_badges_list}
-
-        total_games = sum(len(data['games']) for data in structured_data)
-
-        user_series_xp = 0
-        user_lb_rank = None
-        user_lb_progress_rank = None
-        user_total_playtime = None
-        user_games_played = 0
-        user_platinums = 0
-        series_slug = self.kwargs['series_slug']
-        if target_profile:
-            try:
-                xp_data = target_profile.gamification.series_badge_xp
-                user_series_xp = (xp_data or {}).get(series_slug, 0)
-            except Exception:
-                pass
-
-            earners_rank = get_earners_rank(series_slug, target_profile.id)
-            if earners_rank:
-                user_lb_rank = earners_rank
-            progress_rank = get_progress_rank(series_slug, target_profile.id)
-            if progress_rank:
-                user_lb_progress_rank = progress_rank
-
-            # User playtime stats from already-fetched profile_games
-            total_duration = timedelta()
-            for pg in profile_games.values():
-                user_games_played += 1
-                if pg.play_duration:
-                    total_duration += pg.play_duration
-                if pg.has_plat:
-                    user_platinums += 1
-            user_total_playtime = total_duration if total_duration.total_seconds() > 0 else None
-
-            # Per-stage user stats and progress
-            # For stage progress: tiers 1/3 and megamix check has_plat, tiers 2/4 check 100%
-            is_plat_tier = selected_tier in [1, 3] or badge.badge_type == 'megamix'
-            for data in structured_data:
-                standalone_game_ids = {g['game'].id for g in data['games']}
-                bundle_game_ids = {
-                    e['game'].id
-                    for bundle in data['bundles']
-                    for member in bundle['members']
-                    for e in member['games']
-                }
-                # All games on the stage (standalone + bundle members) for user-facing stats
-                stage_game_ids = standalone_game_ids | bundle_game_ids
-                stage_duration = timedelta()
-                stage_played = 0
-                stage_plats = 0
-                stage_hundreds = 0
-                stage_completed = 0
-                for game_id in stage_game_ids:
-                    pg = profile_games.get(game_id)
-                    if pg:
-                        stage_played += 1
-                        if pg.play_duration:
-                            stage_duration += pg.play_duration
-                        if pg.has_plat:
-                            stage_plats += 1
-                        if pg.progress == 100:
-                            stage_hundreds += 1
-                        if (is_plat_tier and pg.has_plat) or (not is_plat_tier and pg.progress == 100):
-                            stage_completed += 1
-                total_stage_games = len(stage_game_ids)
-                data['user_stage_stats'] = {
-                    'total_playtime': stage_duration if stage_duration.total_seconds() > 0 else None,
-                    'games_played': stage_played,
-                    'total_games': total_stage_games,
-                    'platinums': stage_plats,
-                    'hundreds': stage_hundreds,
-                }
-                data['stage_progress'] = {
-                    'completed': stage_completed,
-                    'total': total_stage_games,
-                    'percentage': round(stage_completed / total_stage_games * 100, 1) if total_stage_games else 0,
-                }
-                # Standalone path: tier-aware "any game qualifies" check
-                has_any_100 = any(
-                    profile_games.get(gid) and profile_games[gid].progress == 100
-                    for gid in standalone_game_ids
-                )
-                has_any_plat = any(
-                    profile_games.get(gid) and profile_games[gid].has_plat
-                    for gid in standalone_game_ids
-                )
-                standalone_req_met = has_any_plat if is_plat_tier else has_any_100
-                # Bundle path: any bundle whose every member is at progress=100
-                # synthesizes a platinum (counts for both plat-tier and 100%-tier).
-                bundle_req_met = any(b['is_satisfied'] for b in data['bundles'])
-                if standalone_req_met or bundle_req_met:
-                    data['stage_completion_state'] = 'complete'
-                elif stage_played > 0:
-                    data['stage_completion_state'] = 'partial'
-                else:
-                    data['stage_completion_state'] = 'incomplete'
-
-        # Aggregated stats from already-fetched profile_games (no new queries)
-        avg_progress = 0
-        total_trophies_earned = 0
-        user_trophy_breakdown = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
-        first_played = None
-        most_recent_trophy = None
-        if target_profile and profile_games:
-            total_progress = sum(pg.progress for pg in profile_games.values())
-            avg_progress = round(total_progress / len(profile_games), 1)
-            total_trophies_earned = sum(pg.earned_trophies_count for pg in profile_games.values())
-            for pg in profile_games.values():
-                et = pg.earned_trophies or {}
-                user_trophy_breakdown['bronze'] += et.get('bronze', 0)
-                user_trophy_breakdown['silver'] += et.get('silver', 0)
-                user_trophy_breakdown['gold'] += et.get('gold', 0)
-                user_trophy_breakdown['platinum'] += et.get('platinum', 0)
-                if pg.first_played_date_time:
-                    if first_played is None or pg.first_played_date_time < first_played:
-                        first_played = pg.first_played_date_time
-                if pg.most_recent_trophy_date:
-                    if most_recent_trophy is None or pg.most_recent_trophy_date > most_recent_trophy:
-                        most_recent_trophy = pg.most_recent_trophy_date
-
-        # Avg community difficulty / hours across all series games
-        total_difficulty = 0
-        total_hours = 0
-        rated_games_count = 0
-        for data in structured_data:
-            for game_entry in data['games']:
-                ratings = game_entry.get('community_ratings')
-                if ratings:
-                    total_difficulty += ratings.get('avg_difficulty', 0)
-                    total_hours += ratings.get('avg_hours', 0)
-                    rated_games_count += 1
-        series_avg_difficulty = round(total_difficulty / rated_games_count, 1) if rated_games_count else None
-        series_avg_hours = round(total_hours / rated_games_count, 1) if rated_games_count else None
-
-        # Tier-1 earner count -- exposed as total_unique_earners below. (The old peak-tier distribution
-        # derived from t1-t4 was removed with the rarity rebuild: tiers are independent, so the bar counts
-        # every tier earned, not a nesting partition.)
-        t1 = tier_earner_counts.get(1, 0)
-
-        # Community total XP for this series
-        community_total_xp = get_community_xp(series_slug)
-
-        # Total series XP available (sum across all tiers, no new queries)
-        # Uses actual stage counts from structured_data instead of badge.required_stages,
-        # which stores min_required for megamix badges (not the real stage count)
-        tier_xp_map = {1: BRONZE_STAGE_XP, 2: SILVER_STAGE_XP, 3: GOLD_STAGE_XP, 4: PLAT_STAGE_XP}
-        total_series_xp_available = 0
-        for b in all_badges_list:
-            per_stage_xp = tier_xp_map.get(b.tier, 0)
-            tier_stage_count = sum(
-                1 for data in structured_data
-                if data['stage'].stage_number != 0 and data['stage'].applies_to_tier(b.tier)
-            )
-            total_series_xp_available += BADGE_TIER_XP + (tier_stage_count * per_stage_xp)
-
-        # Selected tier total XP (for tier selector display)
-        selected_tier_stage_xp = tier_xp_map.get(selected_tier, 0)
-        selected_tier_stage_count = sum(
-            1 for data in structured_data
-            if data['stage'].stage_number != 0 and data['stage'].applies_to_tier(selected_tier)
-        )
-        selected_tier_total_xp = BADGE_TIER_XP + (selected_tier_stage_count * selected_tier_stage_xp)
-        context['selected_tier_total_xp'] = selected_tier_total_xp
-        context['badge_tier_xp_bonus'] = BADGE_TIER_XP
-
-        # User's earned XP for the selected tier
-        selected_tier_user_xp = 0
-        if target_profile and selected_tier_badge:
-            sel_progress = badge_progress_dict.get(selected_tier_badge.id)
-            sel_completed = sel_progress.completed_concepts if sel_progress else 0
-            selected_tier_user_xp = sel_completed * tier_xp_map.get(selected_tier, 0)
-            if highest_tier_earned >= selected_tier:
-                selected_tier_user_xp += BADGE_TIER_XP
-        context['selected_tier_user_xp'] = selected_tier_user_xp
-
-        # Series completion for radial progress
-        series_stages_completed = 0
-        series_stages_total = 0
-        if target_profile and selected_tier in badge_completion:
-            tier_comp = badge_completion[selected_tier]
-            for stage_num, is_complete in tier_comp.items():
-                if stage_num != 0:  # Skip optional stages
-                    series_stages_total += 1
-                    if is_complete:
-                        series_stages_completed += 1
-
-        # Stage-level user stats (excluding stage 0). Platted vs 100%'d are tracked separately: the badge's
-        # plat tiers (1/3) need every stage platted, the 100% tiers (2/4) need every stage at 100% -- both
-        # are meaningful progress, so the My Stats modal shows a bar for each.
-        user_stages_played = 0
-        user_stages_platinumed = 0
-        user_stages_hundred_percented = 0
-        total_required_stages = 0
-        if target_profile:
-            for data in structured_data:
-                if data['stage'].stage_number == 0:
-                    continue
-                total_required_stages += 1
-                stage_stats = data.get('user_stage_stats')
-                if stage_stats:
-                    if stage_stats['games_played'] > 0:
-                        user_stages_played += 1
-                    if stage_stats['platinums'] > 0:
-                        user_stages_platinumed += 1
-                    if stage_stats['hundreds'] > 0:
-                        user_stages_hundred_percented += 1
-        else:
-            total_required_stages = sum(1 for d in structured_data if d['stage'].stage_number != 0)
-
-        context['badge_series_stats'] = {
-            'tier_earner_counts': tier_earner_counts,
-            'total_games': total_games,
-            'user_series_xp': user_series_xp,
-            'user_lb_rank': user_lb_rank,
-            'user_lb_progress_rank': user_lb_progress_rank,
-            'total_earners_count': get_earners_count(series_slug),
-            'total_progressers_count': get_progress_count(series_slug),
-            'user_total_playtime': user_total_playtime,
-            'user_playtime_hours': round(user_total_playtime.total_seconds() / 3600) if user_total_playtime else 0,
-            'user_stages_played': user_stages_played,
-            'user_stages_platinumed': user_stages_platinumed,
-            'user_stages_hundred_percented': user_stages_hundred_percented,
-            'total_required_stages': total_required_stages,
-            'avg_progress': avg_progress,
-            'total_trophies_earned': total_trophies_earned,
-            'series_stages_completed': series_stages_completed,
-            'series_stages_total': series_stages_total,
-            'series_completion_pct': round(series_stages_completed / series_stages_total * 100) if series_stages_total else 0,
-            'series_avg_difficulty': series_avg_difficulty,
-            'series_avg_hours': series_avg_hours,
-            'rated_games_count': rated_games_count,
-            'user_trophy_breakdown': user_trophy_breakdown,
-            'total_unique_earners': t1,
-            'first_played': first_played,
-            'most_recent_trophy': most_recent_trophy,
-            'total_series_xp_available': total_series_xp_available,
-            'community_total_xp': community_total_xp,
-        }
-
-        # Standing insight for the My Stats modal: the viewer's earner percentile ("Top N%"). Integer
-        # ceil-division, floored at 1 (rank 1 of a huge field shouldn't read "Top 0%"). Reuses the already-
-        # computed rank + earner count -- no extra query.
-        _earners = context['badge_series_stats']['total_earners_count']
-        if user_lb_rank and _earners:
-            context['user_percentile'] = max(1, (user_lb_rank * 100 + _earners - 1) // _earners)
-
-        # Rarity bar for the context band: ONE stacked bar segmented by how many earned EACH tier. Tiers are
-        # INDEPENDENT (a higher tier doesn't require the lower ones), so we count every tier earned -- NOT a
-        # "peak tier" partition, which would falsely assume nesting. Each segment's width is that tier's share
-        # of all tier-earns (a user who holds several tiers counts in each); Platinum still reads as a thin
-        # sliver = the rarity story. The legend shows the raw per-tier earner counts.
-        _tier_names = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
-        _tier_counts = {t: tier_earner_counts.get(t, 0) for t in (1, 2, 3, 4)}
-        _rarity_total = sum(_tier_counts.values()) or 1
-        context['rarity_segments'] = [
-            {
-                'tier': t, 'name': _tier_names[t], 'key': _tier_names[t].lower(),
-                'count': _tier_counts[t],
-                'pct': round(_tier_counts[t] / _rarity_total * 100, 1),
-            }
-            for t in (1, 2, 3, 4)
-        ]
-
-        # Segmented "stages platted" + "stages 100%'d" meters for the My Stats modal (<= the medallion's
-        # 12-segment cap; above it the template falls back to a smooth bar off avg_progress).
-        if target_profile and 0 < total_required_stages <= 12:
-            context['stages_platted_segments'] = [
-                i < user_stages_platinumed for i in range(total_required_stages)
-            ]
-            context['stages_hundred_segments'] = [
-                i < user_stages_hundred_percented for i in range(total_required_stages)
-            ]
-
-        # Build tier requirements stage list (for the tier selector panel)
-        # Uses structured_data to avoid re-querying stages
-        tier_req_stages = []
-        tier_comp = badge_completion.get(selected_tier, {})
-        for data in structured_data:
-            stage = data['stage']
-            if stage.stage_number == 0:
-                continue
-            if not stage.applies_to_tier(selected_tier):
-                continue
-            tier_req_stages.append({
-                'stage': stage,
-                'is_complete': tier_comp.get(stage.stage_number, False),
-            })
-        context['tier_req_stages'] = tier_req_stages
-        # Completed count among this tier's required stages -- drives the "X of N stages" progress line.
-        context['tier_req_done'] = sum(1 for r in tier_req_stages if r['is_complete'])
-
-        logger.debug(f"Badge detail loaded {len(structured_data)} stage data entries for {series_slug}")
-
-        # Split stages by whether they apply to the selected tier so the template
-        # can foreground the current tier's requirements and tuck the rest into
-        # a collapsed disclosure. Bonus stages (no required_tiers) always apply.
-        applicable_stages = []
-        other_tier_stages = []
-        for data in structured_data:
-            if data['stage'].applies_to_tier(selected_tier):
-                applicable_stages.append(data)
-            else:
-                other_tier_stages.append(data)
-        # "Up next" nudge on the stage journey: the lowest-numbered non-bonus applicable stage not yet
-        # complete for this tier. Stages complete in ANY order, so this is a suggested entry point (the
-        # spine node pulses), never a lock. Only meaningful when we know the viewer's progress.
-        if target_profile:
-            open_stages = [
-                d for d in applicable_stages
-                if d['stage'].stage_number != 0 and d.get('stage_completion_state') != 'complete'
-            ]
-            if open_stages:
-                nxt = min(open_stages, key=lambda d: d['stage'].stage_number)
-                nxt['is_next'] = True
-        context['stage_data'] = applicable_stages
-        context['other_tier_stages'] = other_tier_stages
-        context['completion'] = badge_completion
-        context['badge_requirements'] = badge_requirements
-        context['is_earned'] = is_earned
-        context['highest_tier_earned'] = highest_tier_earned
-        # Exposed so the tier tabs mark each tier by actual earned-set membership
-        # (tiers are independent — see earned_tiers init above). maint_tiers is the held-but-lapsed subset,
-        # so the ladder can show a repair mark instead of a clean earned check on those rungs.
-        context['earned_tiers'] = earned_tiers
-        context['maint_tiers'] = maint_tiers
-
-        # image_urls drives the og:image / twitter:image meta blocks. The old
-        # blurred-bg header (header_bg_image, recent_concept_name) was removed in
-        # the Frame-hero rebuild, so only the social-share icon remains.
-        if badge.most_recent_concept:
-            context['image_urls'] = {'recent_concept_icon_url': badge.most_recent_concept.cover_url}
-        else:
-            context['image_urls'] = {'recent_concept_icon_url': ''}
+        context['detail'] = get_badge_detail(series, target_profile)
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},
-            {'text': context['badge'].effective_display_series},
+            {'text': series.name},
         ]
-
         context['seo_description'] = (
-            f"{context['badge'].effective_display_series} badge series on Platinum Pursuit. "
-            f"Track your progress across stages and compete on leaderboards."
+            f"{series.name} badge series on Platinum Pursuit. Earn the badge on each platform, "
+            f"track your progress, and climb the leaderboards."
         )
-
-        track_page_view('badge', series_slug, self.request)
-        tier1_badge = series_badges.filter(tier=1).first()
-        context['view_count'] = tier1_badge.view_count if tier1_badge else 0
-
+        track_page_view('badge', series.series_slug, self.request)
         return context
 
 
