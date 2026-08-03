@@ -1,0 +1,35 @@
+{% load humanize %}
+{% comment %}
+Grouping-badge inspect ("pick it up") -- the medallion big + its facts for ONE platform-group badge
+(Legacy HD / Ultra HD). Rendered by GroupBadgeInspectView, fetched on tap into the badge detail page's
+#badge-peek dialog. Reuses the collection modal's .pp-bdetail layout; the medallion is `with_back` so it
+flips to its engraved base. Expects: gv (GroupView), series, detail (BadgeDetail), viewing_other, showcase.
+{% endcomment %}
+<div class="pp-bdetail" data-tier="{{ gv.frame.tier }}" data-state="{{ gv.frame.state }}">
+    <div class="pp-bdetail__stage">
+        {% include 'components/badge_medallion.html' with frame=gv.frame no_id=True with_back=True %}
+    </div>
+    <div class="pp-bdetail__info">
+        {% if viewing_other %}<div class="pp-bdetail__viewing">{{ viewing_other }}'s progress</div>{% endif %}
+        <div class="pp-bdetail__eyebrow">{{ series.name }}</div>
+        <h2 class="pp-bdetail__title">{{ gv.platform_group.name }}</h2>
+        <div class="pp-bdetail__state">
+            {% if showcase %}Showcase
+            {% elif gv.state == 'holo' %}Holographic{% if gv.earned_at %} &middot; {{ gv.earned_at|date:"M j, Y" }}{% endif %}
+            {% elif gv.state == 'earned' %}Earned{% if gv.earned_at %} &middot; {{ gv.earned_at|date:"M j, Y" }}{% endif %}
+            {% elif gv.state == 'in_progress' %}In progress &middot; {{ gv.stages_cleared }} / {{ gv.gating_count }} stages
+            {% else %}Unearned{% endif %}
+            &middot; {{ gv.platform_group.platforms|join:" &middot; " }}
+        </div>
+        <div class="pp-bdetail__stats">
+            {% if gv.group_badge.set_number %}<div class="pp-bdetail__stat"><div class="k">Set number</div><div class="v">#{{ gv.group_badge.set_number|stringformat:"04d" }}</div></div>{% endif %}
+            {% if gv.gating_count %}<div class="pp-bdetail__stat"><div class="k">Stages</div><div class="v">{% if showcase %}{{ gv.gating_count }} to earn{% else %}{{ gv.stages_cleared }} / {{ gv.gating_count }}{% endif %}</div></div>{% endif %}
+            {% if gv.rarity_pct is not None %}<div class="pp-bdetail__stat"><div class="k">Rarity</div><div class="v">Top {{ gv.rarity_pct }}%{% if gv.rarity_rank %} &middot; #{{ gv.rarity_rank|intcomma }}{% endif %}</div></div>{% endif %}
+            {% if gv.earners_rank %}<div class="pp-bdetail__stat"><div class="k">Earn rank</div><div class="v">#{{ gv.earners_rank|intcomma }}</div></div>{% endif %}
+            {% if gv.xp_on_offer %}<div class="pp-bdetail__stat"><div class="k">XP on offer</div><div class="v">{{ gv.xp_on_offer|intcomma }}</div></div>{% endif %}
+            {% if not showcase and detail.series_xp %}<div class="pp-bdetail__stat"><div class="k">Series XP</div><div class="v">{{ detail.series_xp|intcomma }}</div></div>{% endif %}
+            {% if gv.earned_count %}<div class="pp-bdetail__stat"><div class="k">Earned by</div><div class="v">{{ gv.earned_count|intcomma }}</div></div>{% endif %}
+        </div>
+        {% if gv.group_badge.effective_funded_by %}<div class="pp-bdetail__funder">Artwork funded by <span>{{ gv.group_badge.effective_funded_by.display_psn_username|default:gv.group_badge.effective_funded_by.psn_username }}</span></div>{% endif %}
+    </div>
+</div>

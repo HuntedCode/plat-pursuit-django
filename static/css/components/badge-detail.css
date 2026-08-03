@@ -239,7 +239,7 @@
 .bd-mystats__loot { display: inline-flex; align-items: center; gap: 6px; font-family: var(--pp-font-display); font-weight: 800; font-size: 0.95rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
 .bd-mystats__pip { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 /* Timeline: the viewer's span with the series. */
-.bd-mystats__timeline { display: flex; align-items: center; gap: 12px; padding-top: 14px; border-top: 1px solid var(--pp-divider); }
+.bd-mystats__timeline { display: flex; align-items: center; gap: 12px; padding: 16px 0 12px; border-top: 1px solid var(--pp-divider); }
 .bd-mystats__tl-pt { display: flex; flex-direction: column; gap: 1px; }
 .bd-mystats__tl-pt--end { text-align: right; }
 .bd-mystats__tl-date { font-size: 0.82rem; font-weight: 700; color: var(--pp-text-dim); }
@@ -852,6 +852,17 @@
 .bd2-panel.is-hidden { display: none; }
 /* Size the hero medallion via --sz (the .pp-med contract), like .pp-case__slot -- NOT width/height utilities,
    which the component ignores (it would render at its 160px default and overflow). */
+.bd2-med[role="button"] { cursor: pointer; }                        /* the hero medallion is tap-to-inspect */
+/* My Stats modal: the per-badge (Legacy HD / Ultra HD) stat panels swap under their own toggle. */
+.bd2ms-switch { justify-content: center; margin: 0.35rem 0 0.75rem; }
+/* Both panels share ONE grid cell: the container sizes to the taller panel, so switching badges never resizes
+   the modal (the shorter panel just leaves empty space below -- no reflow). */
+.bd2ms-panels { display: grid; }
+/* The panel restages the same flex-column rhythm .bd-mystats uses (its rows are nested a level deeper now,
+   so the parent's gap no longer reaches them). */
+.bd2ms-panel { grid-area: 1 / 1; align-self: start; display: flex; flex-direction: column; gap: 18px; }
+/* Hidden panel keeps its grid space (so the cell stays the max height); it's just not painted / interactive. */
+.bd2ms-panel.is-hidden { visibility: hidden; }
 .bd2-med .pp-med { --sz: 116px; }                                   /* detail-page hero size, not a list tile */
 @media (min-width: 768px) { .bd2-med .pp-med { --sz: 152px; } }
 @media (min-width: 1024px) { .bd2-med .pp-med { --sz: 180px; } }

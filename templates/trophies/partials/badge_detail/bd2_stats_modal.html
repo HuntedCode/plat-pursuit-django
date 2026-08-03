@@ -1,0 +1,125 @@
+{% load humanize %}
+{% comment %}
+My Stats modal (rebuild): the viewer's standing in this series. A series-level hero (Series XP + rank), then
+a PER-GROUP breakdown that swaps between the platform-group badges (Legacy HD / Ultra HD) via the toggle --
+each group replicates the old modal's rich readout (play time, trophy haul, games platted / 100%'d, the
+stage-progress split, first-played / last-trophy span), scoped to THAT badge's games. All values come from
+`detail` (BadgeDetail) already built for the page (per-group stats from denormalized ProfileGame fields, so
+whale-safe). Rendered only when a profile is on display.
+{% endcomment %}
+<div class="bd-mystats pp-head-cascade">
+    <h2 class="bd-mystats__title">{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s{% else %}Your{% endif %} {{ series.name }} standing</h2>
+
+    {# Series-level hero: total investment across both badges -- Series XP in the accent + the series rank. #}
+    <div class="bd-mystats__hero">
+        <div class="bd-mystats__big">
+            <span class="pp-tally bd-mystats__big-v bd-mystats__big-v--xp" data-countup="{{ detail.series_xp }}">{{ detail.series_xp|intcomma }}</span>
+            <span class="bd-mystats__big-k">Series XP</span>
+        </div>
+        {% if detail.series_rank %}
+        <div class="bd-mystats__big">
+            <span class="pp-tally bd-mystats__big-v">#<span data-countup="{{ detail.series_rank }}">{{ detail.series_rank|intcomma }}</span></span>
+            <span class="bd-mystats__big-k">Series rank{% if detail.series_size %} of {{ detail.series_size|intcomma }}{% endif %}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    {% comment %} Per-badge toggle: the stats below swap between the platform groups (each badge covers a
+    different game set, so its haul / play time / stage progress differ). {% endcomment %}
+    {% if detail.has_multiple_groups %}
+    <div class="pp-switch bd2ms-switch" role="tablist" aria-label="Platform group stats">
+        {% for g in detail.groups %}
+        <button type="button" class="pp-switch__chip{% if forloop.first %} is-active{% endif %}"
+                id="bd2ms-tab-{{ g.platform_group.key }}" data-ms-group="{{ g.platform_group.key }}" role="tab"
+                aria-controls="bd2ms-panel-{{ g.platform_group.key }}"
+                aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
+            <span class="pp-switch__lbl">{{ g.platform_group.name }}</span>
+        </button>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% comment %} The per-badge panels are grid-STACKED in one cell (see .bd2ms-panels): the container sizes to
+    the taller panel, so switching badges never resizes the modal. Only the active panel is visible. {% endcomment %}
+    <div class="bd2ms-panels">
+    {% for g in detail.groups %}
+    {% with us=g.user_stats %}
+    <div class="bd2ms-panel{% if not forloop.first %} is-hidden{% endif %}" data-ms-group="{{ g.platform_group.key }}"
+         id="bd2ms-panel-{{ g.platform_group.key }}"{% if detail.has_multiple_groups %} role="tabpanel" aria-labelledby="bd2ms-tab-{{ g.platform_group.key }}"{% endif %}>
+        {# The badge's investment: play time, trophies pulled, and platted games out of its set. #}
+        <div class="bd-mystats__hero">
+            <div class="bd-mystats__big">
+                <span class="pp-tally bd-mystats__big-v"><span data-countup="{{ us.playtime_hours|default:0 }}">{{ us.playtime_hours|default:0|intcomma }}</span><span class="bd-mystats__big-u">h</span></span>
+                <span class="bd-mystats__big-k">Play time</span>
+            </div>
+            <div class="bd-mystats__big">
+                <span class="pp-tally bd-mystats__big-v" data-countup="{{ us.trophies_total|default:0 }}">{{ us.trophies_total|default:0|intcomma }}</span>
+                <span class="bd-mystats__big-k">Trophies</span>
+            </div>
+            <div class="bd-mystats__big">
+                <span class="pp-tally bd-mystats__big-v"><span data-countup="{{ us.games_platted|default:0 }}">{{ us.games_platted|default:0 }}</span><span class="bd-mystats__big-u">/{{ us.games_total|default:0 }}</span></span>
+                <span class="bd-mystats__big-k">Games platted</span>
+            </div>
+        </div>
+
+        {% comment %} Stage progress, two bars: platted (a game platted in the stage) + 100%'d (a game at 100%).
+        Both meaningful -- the badge holds when every gating stage clears, and these show how you got there. {% endcomment %}
+        <div class="bd-mystats__row">
+            <div class="bd-mystats__row-head">
+                <span class="bd-mystats__row-label">Stages platted</span>
+                <span class="bd-mystats__row-val"><b>{{ us.stages_platted|default:0 }}</b> of {{ g.gating_count }}</span>
+            </div>
+            <span class="pp-horizon pp-horizon--segmented" role="progressbar" aria-valuenow="{{ us.stages_platted|default:0 }}" aria-valuemin="0" aria-valuemax="{{ g.gating_count }}" style="--horizon-h: 8px;">
+                {% for i in g.segments %}<span class="pp-horizon__seg"{% if forloop.counter <= us.stages_platted %} data-state="done"{% endif %}></span>{% endfor %}
+            </span>
+        </div>
+        <div class="bd-mystats__row">
+            <div class="bd-mystats__row-head">
+                <span class="bd-mystats__row-label">Stages 100%'d</span>
+                <span class="bd-mystats__row-val"><b>{{ us.stages_hundred|default:0 }}</b> of {{ g.gating_count }}</span>
+            </div>
+            <span class="pp-horizon pp-horizon--segmented" role="progressbar" aria-valuenow="{{ us.stages_hundred|default:0 }}" aria-valuemin="0" aria-valuemax="{{ g.gating_count }}" style="--horizon-h: 8px; --horizon-accent: var(--pp-success);">
+                {% for i in g.segments %}<span class="pp-horizon__seg"{% if forloop.counter <= us.stages_hundred %} data-state="done"{% endif %}></span>{% endfor %}
+            </span>
+        </div>
+
+        {# Trophy haul from this badge's games, real trophy colours. #}
+        <div class="bd-mystats__row">
+            <div class="bd-mystats__row-head"><span class="bd-mystats__row-label">Your haul</span></div>
+            <div class="bd-mystats__haul">
+                <span class="bd-mystats__loot"><span class="bd-mystats__pip" style="background: var(--color-trophy-bronze)"></span>{{ us.haul.bronze|default:0|intcomma }}</span>
+                <span class="bd-mystats__loot"><span class="bd-mystats__pip" style="background: var(--color-trophy-silver)"></span>{{ us.haul.silver|default:0|intcomma }}</span>
+                <span class="bd-mystats__loot"><span class="bd-mystats__pip" style="background: var(--color-trophy-gold)"></span>{{ us.haul.gold|default:0|intcomma }}</span>
+                <span class="bd-mystats__loot"><span class="bd-mystats__pip" style="background: var(--color-trophy-platinum)"></span>{{ us.haul.platinum|default:0|intcomma }}</span>
+            </div>
+        </div>
+
+        {% comment %} The viewer's span with this badge's games. Always rendered (dash placeholders when empty)
+        so both badge panels keep the same height -- no jump when you switch. {% endcomment %}
+        <div class="bd-mystats__timeline">
+            <div class="bd-mystats__tl-pt">
+                <span class="bd-mystats__tl-date">{% if us.first_played %}{{ us.first_played|date:"M Y" }}{% else %}&ndash;{% endif %}</span>
+                <span class="bd-mystats__tl-cap">First played</span>
+            </div>
+            <span class="bd-mystats__tl-line" aria-hidden="true"></span>
+            <div class="bd-mystats__tl-pt bd-mystats__tl-pt--end">
+                <span class="bd-mystats__tl-date">{% if us.last_trophy %}{{ us.last_trophy|date:"M j, Y" }}{% else %}&ndash;{% endif %}</span>
+                <span class="bd-mystats__tl-cap">Last trophy</span>
+            </div>
+        </div>
+
+        {# Quiet per-badge context footer. #}
+        <div class="bd-mystats__context">
+            <span class="bd-mystats__ctx-label">{{ g.platform_group.name }}</span>
+            <span class="bd-mystats__ctx-items">
+                <span>{{ us.games_hundred|default:0 }} 100%'d</span>
+                <span>{{ g.stages_cleared }}/{{ g.gating_count }} stages cleared</span>
+                {% if g.earners_rank %}<span>Earn #{{ g.earners_rank|intcomma }}</span>{% endif %}
+                <span>{{ g.xp_on_offer|intcomma }} XP on offer</span>
+            </span>
+        </div>
+    </div>
+    {% endwith %}
+    {% endfor %}
+    </div>
+</div>

@@ -48,6 +48,7 @@ class GroupView:
     avg_hours: Optional[float]
     xp_on_offer: int
     stages: list                 # the group's stage journey (list of stage dicts) -- see _group_journey
+    user_stats: Optional[dict]   # the viewer's per-group My Stats (haul/play/games/stages); None for anon
     frame: dict                  # medallion frame dict for components/badge_medallion.html
 
 
@@ -60,6 +61,7 @@ class BadgeDetail:
     series_xp: int               # live from this pass
     series_progress_pct: int     # live, furthest-along across groups
     series_rank: Optional[int]   # stored (relative to all earners), or None
+    series_size: Optional[int]   # total profiles with a standing in this series (the rank's denominator)
     target_profile: object       # whose state is shown (may be None for anon)
 
 
@@ -229,11 +231,74 @@ def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, c
             'bundles': bundles, 'completion_state': state, 'is_next': False,
         })
 
-    for s in out:                             # mark the first unfinished stage as "up next"
-        if s['completion_state'] != 'complete':
-            s['is_next'] = True
-            break
+    # "Up next" is a suggestion grounded in the viewer's OWN progress, so only mark it when a profile is on
+    # display (result present). Anon has no known progress -> no up-next (every stage would falsely be "next").
+    if result:
+        for s in out:                         # mark the first unfinished stage as "up next"
+            if s['completion_state'] != 'complete':
+                s['is_next'] = True
+                break
     return out
+
+
+def _group_user_stats(gb, catalog, profile_games, journey, target_profile) -> Optional[dict]:
+    """The viewer's My Stats for THIS group's badge: trophy haul, play time, games platted / 100%'d, the
+    stage-progress split (platted vs 100%'d), and the first-played / last-trophy span. Everything is read from
+    DENORMALIZED ProfileGame fields over the group's OWN games (a bounded set -- so this is whale-safe, NOT a
+    scan of the viewer's whole library). Returns None ONLY for anon (no profile on display); a signed-in viewer
+    who owns none of this badge's games gets an all-zeros dict, so the My Stats panel always renders."""
+    if target_profile is None:
+        return None
+    platforms = set(gb.platform_group.platforms)
+    game_ids = set()
+    for st in catalog['stages']:
+        for c in st.concepts.all():
+            for g in c.games.all():
+                if set(g.title_platform or []) & platforms:
+                    game_ids.add(g.id)
+        for b in st.concept_bundles.all():
+            for c in b.concepts.all():
+                for g in c.games.all():
+                    if set(g.title_platform or []) & platforms:
+                        game_ids.add(g.id)
+
+    pgs = [profile_games[gid] for gid in game_ids if gid in profile_games]
+    haul = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
+    trophies_total = games_platted = games_hundred = 0
+    playtime = first_played = last_trophy = None
+    for pg in pgs:
+        et = pg.earned_trophies or {}
+        for k in haul:
+            haul[k] += et.get(k, 0)
+        trophies_total += pg.earned_trophies_count
+        if pg.has_plat:
+            games_platted += 1
+        if pg.progress == 100:
+            games_hundred += 1
+        if pg.play_duration:
+            playtime = pg.play_duration if playtime is None else playtime + pg.play_duration
+        if pg.first_played_date_time and (first_played is None or pg.first_played_date_time < first_played):
+            first_played = pg.first_played_date_time
+        if pg.most_recent_trophy_date and (last_trophy is None or pg.most_recent_trophy_date > last_trophy):
+            last_trophy = pg.most_recent_trophy_date
+
+    # Stage split: a gating stage counts as platted / 100%'d when ANY of its games clears that bar.
+    stages_platted = stages_hundred = 0
+    for s in journey:
+        entries = s['obtainable_games'] + s['delisted_games']
+        if any(e['pgame'] and e['pgame'].has_plat for e in entries):
+            stages_platted += 1
+        if any(e['pgame'] and e['pgame'].progress == 100 for e in entries):
+            stages_hundred += 1
+
+    return {
+        'haul': haul, 'trophies_total': trophies_total,
+        'games_total': len(game_ids), 'games_played': len(pgs),
+        'games_platted': games_platted, 'games_hundred': games_hundred,
+        'playtime_hours': round(playtime.total_seconds() / 3600) if playtime else 0,
+        'first_played': first_played, 'last_trophy': last_trophy,
+        'stages_platted': stages_platted, 'stages_hundred': stages_hundred,
+    }
 
 
 def _group_view(gb, result, hold, target_profile, series, catalog, games_map, profile_games,
@@ -252,6 +317,7 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
     # A live earners position only exists while the viewer currently holds the badge.
     rank = lb.earners_rank(target_profile.id, gb.id) if (hold and target_profile) else None
     stats = _group_stats(gb, result, catalog, ratings_map)
+    journey = _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map)
     gv = GroupView(
         group_badge=gb, platform_group=gb.platform_group, art=gb.art_layers(),
         state=state, is_holo=is_holo, earned_at=(hold.earned_at if hold else None),
@@ -262,7 +328,8 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
         segments=[i < cleared for i in range(gating)],
         games_count=stats['games_count'], avg_difficulty=stats['avg_difficulty'],
         avg_hours=stats['avg_hours'], xp_on_offer=stats['xp_on_offer'],
-        stages=_group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map),
+        stages=journey,
+        user_stats=_group_user_stats(gb, catalog, profile_games, journey, target_profile),
         frame={},
     )
     gv.frame = _medallion_frame(gv, series, target_profile)
@@ -307,7 +374,7 @@ def get_badge_detail(series, target_profile) -> BadgeDetail:
     viewer_state = max((g.state for g in groups), key=lambda s: _STATE_ORDER[s], default='none')
 
     # Series XP + progress LIVE from this pass (matches the per-group numbers); rank is stored (relative).
-    series_xp, series_progress_pct, series_rank = 0, 0, None
+    series_xp, series_progress_pct, series_rank, series_size = 0, 0, None, None
     if desired:
         results_by_series = {series.series_slug: [desired[gb.id] for gb in group_badges if gb.id in desired]}
         standing = compute_series_standings(results_by_series).get(series.series_slug)
@@ -316,9 +383,11 @@ def get_badge_detail(series, target_profile) -> BadgeDetail:
             series_progress_pct = round(standing.progress_bp / 100)
         if target_profile and series_xp > 0:
             series_rank = lb.series_rank(series.series_slug, target_profile.id)
+            # The rank's denominator: everyone with a standing in this series (one bounded indexed count).
+            series_size = SeriesBadgeStanding.objects.filter(series_slug=series.series_slug).count()
 
     return BadgeDetail(
         series=series, groups=groups, has_multiple_groups=len(groups) > 1,
         viewer_state=viewer_state, series_xp=series_xp, series_progress_pct=series_progress_pct,
-        series_rank=series_rank, target_profile=target_profile,
+        series_rank=series_rank, series_size=series_size, target_profile=target_profile,
     )

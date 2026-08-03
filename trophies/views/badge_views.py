@@ -60,7 +60,7 @@ from django.views.generic import ListView, DetailView, TemplateView
 from ..models import (
     Game, Profile, ProfileGame, Badge, UserBadge, UserBadgeProgress,
     Concept, Stage, Milestone, UserMilestone, UserMilestoneProgress,
-    UserTitle, ProfileGamification, BadgeSeries,
+    UserTitle, ProfileGamification, BadgeSeries, GroupBadge,
 )
 from ..forms import BadgeSearchForm
 from trophies.services.badge_detail_service import get_badge_detail
@@ -817,6 +817,52 @@ class BadgeProgressPeekView(View):
         if profile != getattr(request.user, 'profile', None):
             frame['viewing_other_name'] = profile.display_psn_username or profile.psn_username
         return render(request, 'components/collection_badge_modal.html', {'frame': frame})
+
+
+class GroupBadgeInspectView(View):
+    """Medallion "pick it up" for the NEW grouping badges (Legacy HD / Ultra HD): the badge big + its facts,
+    fetched on tap into the badge detail page's #badge-peek dialog. One view, two entry points mirroring the
+    old tier peek:
+      - group_badge_quick_peek (anon / no profile): the GENERIC full-colour showcase -- a display piece, no
+        personal state or owner engraving.
+      - group_badge_progress_peek (auth + a profile on display): that Pursuer's REAL state (earned / in
+        progress / unearned) + live earners rank + owner engraving, correct on your own page AND another's.
+    Reuses badge_detail_service so the frame + facts match the page exactly (a rare on-tap fetch, not a hot
+    path)."""
+
+    def get(self, request, group_badge_id, psn_username=None):
+        gb = (
+            GroupBadge.objects
+            .select_related('series', 'series__franchise', 'series__collection', 'series__developer',
+                            'series__funded_by', 'platform_group')
+            .filter(id=group_badge_id, is_live=True).first()
+        )
+        if gb is None:
+            return HttpResponseNotFound()   # explicit 404 (the project's handler404 renders at 200)
+
+        profile, viewing_other = None, None
+        if psn_username:
+            if not request.user.is_authenticated:
+                return HttpResponseNotFound()   # a specific Pursuer's progress is signed-in-only
+            profile = get_object_or_404(Profile, psn_username__iexact=psn_username)
+            if profile != getattr(request.user, 'profile', None):
+                viewing_other = profile.display_psn_username or profile.psn_username
+
+        detail = get_badge_detail(gb.series, profile)
+        gv = next((g for g in detail.groups if g.group_badge.id == gb.id), None)
+        if gv is None:
+            return HttpResponseNotFound()
+
+        showcase = profile is None
+        if showcase:
+            # Anon peek = full-colour display piece (the tier system's showcase), never the greyed unearned art.
+            gv.frame['state'] = 'earned'
+            gv.frame['owner_name'] = None
+
+        return render(request, 'components/group_badge_modal.html', {
+            'gv': gv, 'series': gb.series, 'detail': detail,
+            'viewing_other': viewing_other, 'showcase': showcase,
+        })
 
 
 class BadgeDetailView(DetailView):
