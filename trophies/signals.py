@@ -1,8 +1,11 @@
 import logging
-from django.db.models.signals import post_save, post_delete, m2m_changed, pre_save
+from django.db.models.signals import post_save, post_delete, m2m_changed, pre_save, pre_delete
 from django.dispatch import receiver
 from django.db.models import F
-from trophies.models import UserBadge, UserBadgeProgress, Stage, ConceptBundle, Profile, EarnedTrophy, ProfileGame
+from trophies.models import (
+    UserBadge, UserBadgeProgress, Stage, ConceptBundle, Profile, EarnedTrophy, ProfileGame,
+    GroupBadge, UserGroupBadge,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +237,20 @@ def decrement_badge_earned_count_on_delete(sender, instance, **kwargs):
     Badge.objects.filter(pk=instance.badge_id, earned_count__gt=0).update(
         earned_count=F('earned_count') - 1
     )
+
+
+@receiver(pre_delete, sender=Profile, dispatch_uid="reconcile_group_badge_earned_counts_on_profile_delete")
+def reconcile_group_badge_earned_counts_on_profile_delete(sender, instance, **kwargs):
+    """GroupBadge.earned_count is a manual denorm owned by badge_apply's award/revoke path (no signals there).
+    A Profile deletion cascade-drops the profile's UserGroupBadge holds WITHOUT going through apply, which would
+    leave earned_count inflated. Reconcile here on pre_delete -- while the holds still exist -- decrementing each
+    held group badge by one (guarded > 0 so a already-drifted count can't go negative). Fires only on profile
+    deletion, so it never double-counts the normal revoke (which deletes the hold without deleting the profile)."""
+    gb_ids = list(
+        UserGroupBadge.objects.filter(profile=instance).values_list('group_badge_id', flat=True)
+    )
+    if gb_ids:
+        GroupBadge.objects.filter(pk__in=gb_ids, earned_count__gt=0).update(earned_count=F('earned_count') - 1)
 
 
 

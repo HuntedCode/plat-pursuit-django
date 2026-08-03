@@ -62,6 +62,23 @@ def test_award_writes_denorm_and_title():
     assert UserTitle.objects.filter(profile=profile, title=title, source_type='badge_series').exists()
 
 
+def test_earned_count_reconciled_on_profile_delete():
+    # A Profile deletion cascade-drops the UserGroupBadge hold WITHOUT going through apply's revoke, so the
+    # pre_delete reconcile signal must decrement earned_count (else the denorm inflates and rarity / the
+    # earners tally read high forever). Guards the sibling-of-Badge drift the old UserBadge signals avoided.
+    series, game, _ = _one_stage_series('del')
+    gb = GroupBadgeFactory(series=series, platform_group=_ultra())
+    profile = ProfileFactory()
+    _complete(profile, game)
+    evaluate_and_apply(profile, [gb])
+    gb.refresh_from_db()
+    assert gb.earned_count == 1
+
+    profile.delete()                                       # cascade drops the hold, bypassing apply
+    gb.refresh_from_db()
+    assert gb.earned_count == 0                            # reconciled, not left inflated
+
+
 def test_holo_true_when_fully_complete():
     series, game, _ = _one_stage_series('holo')
     gb = GroupBadgeFactory(series=series, platform_group=_ultra())
