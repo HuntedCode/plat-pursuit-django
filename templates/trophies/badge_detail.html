@@ -103,21 +103,27 @@ Ultra HD), not a tier ladder. ONE unified hero card, two rows: [medallion | iden
         </div>
     </section>
 
-    {% comment %} Group selector -- below the header, right-aligned in its own row (the sanctioned .pp-switch
-    placement). Swaps the per-group hero above + the per-group content below. {% endcomment %}
+    {% comment %} Platform-group switcher -- a prominent, header-SPANNING control: one substantial button per
+    group carrying its mini medallion (in the group's metal), name, and platforms, tinted to match the
+    medallion so picking your platform badge is a fast, recognizable, spine-level choice. A deliberate,
+    documented exception to the site-wide segmented-switcher standard (the platform group is an identity-level
+    pick, like the old tier ladder), grounded in the Medallion primitive. Swaps the hero above + content below. {% endcomment %}
     {% if detail.has_multiple_groups %}
-    <div class="flex items-center justify-end mt-1 mb-4">
-        <div class="pp-switch bd2-groupswitch" role="tablist" aria-label="Platform group">
-            {% for g in detail.groups %}
-            <button type="button" id="bd2-tab-{{ g.platform_group.key }}"
-                    class="pp-switch__chip{% if forloop.first %} is-active{% endif %}"
-                    data-bd2-group="{{ g.platform_group.key }}" role="tab"
-                    aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
-                    aria-controls="bd2-panel-{{ g.platform_group.key }}">
-                <span class="pp-switch__lbl">{{ g.platform_group.name }}</span>
-            </button>
-            {% endfor %}
-        </div>
+    <div class="bd2-groupswitch" role="tablist" aria-label="Platform group">
+        {% for g in detail.groups %}
+        <button type="button" id="bd2-tab-{{ g.platform_group.key }}"
+                class="bd2-gbtn{% if forloop.first %} is-active{% endif %}" data-tier="{{ g.frame.tier }}"
+                data-bd2-group="{{ g.platform_group.key }}" role="tab"
+                aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+                aria-controls="bd2-panel-{{ g.platform_group.key }}">
+            <span class="bd2-gbtn__med" aria-hidden="true">{% include 'components/badge_medallion.html' with frame=g.frame no_id=True %}</span>
+            <span class="bd2-gbtn__body">
+                <span class="bd2-gbtn__name">{{ g.platform_group.name }}</span>
+                <span class="bd2-gbtn__plats">{{ g.platform_group.platforms|join:" &middot; " }}</span>
+            </span>
+            <svg class="bd2-gbtn__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+        </button>
+        {% endfor %}
     </div>
     {% endif %}
 
@@ -207,7 +213,7 @@ Ultra HD), not a tier ladder. ONE unified hero card, two rows: [medallion | iden
     // Group selector: swaps EVERY .bd2-panel (the header hero AND the journey below) by data-bd2-view.
     var root = document.querySelector('.bd2-groupswitch');
     if (!root || !window.PlatPursuit) return;
-    var chips = Array.prototype.slice.call(root.querySelectorAll('.pp-switch__chip'));
+    var chips = Array.prototype.slice.call(root.querySelectorAll('.bd2-gbtn'));
     var ORDER = chips.map(function (c) { return c.getAttribute('data-bd2-group'); });
 
     function show(key, animate) {
@@ -373,7 +379,7 @@ Ultra HD), not a tier ladder. ONE unified hero card, two rows: [medallion | iden
                 p.classList.toggle('is-hidden', p.getAttribute('data-ms-group') !== key);
             });
             if (msSwitch) {
-                msSwitch.querySelectorAll('.pp-switch__chip').forEach(function (x) {
+                msSwitch.querySelectorAll('.bd2-gbtn').forEach(function (x) {
                     var on = x.getAttribute('data-ms-group') === key;
                     x.classList.toggle('is-active', on); x.setAttribute('aria-selected', on ? 'true' : 'false');
                 });
@@ -389,7 +395,7 @@ Ultra HD), not a tier ladder. ONE unified hero card, two rows: [medallion | iden
             }
         }
         if (msSwitch && PlatPursuit.wireTablist) {
-            var msChips = Array.prototype.slice.call(msSwitch.querySelectorAll('.pp-switch__chip'));
+            var msChips = Array.prototype.slice.call(msSwitch.querySelectorAll('.bd2-gbtn'));
             msTablist = PlatPursuit.wireTablist(msChips, { onSelect: function (c) {
                 if (PlatPursuit.igniteTab) { PlatPursuit.igniteTab(c); }
                 showStatsGroup(c.getAttribute('data-ms-group'), true);
@@ -398,7 +404,7 @@ Ultra HD), not a tier ladder. ONE unified hero card, two rows: [medallion | iden
         // The group the page is currently showing (the active header switcher chip), so the modal opens to the
         // badge you were looking at -- not always the first.
         function activeHeaderGroup() {
-            var chip = document.querySelector('.bd2-groupswitch .pp-switch__chip.is-active');
+            var chip = document.querySelector('.bd2-groupswitch .bd2-gbtn.is-active');
             return chip ? chip.getAttribute('data-bd2-group') : null;
         }
 

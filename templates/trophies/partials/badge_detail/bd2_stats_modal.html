@@ -24,16 +24,22 @@ whale-safe). Rendered only when a profile is on display.
         {% endif %}
     </div>
 
-    {% comment %} Per-badge toggle: the stats below swap between the platform groups (each badge covers a
-    different game set, so its haul / play time / stage progress differ). {% endcomment %}
+    {% comment %} Per-badge toggle: the SAME stylized platform-group bar as the page header (.bd2-gbtn), for
+    consistency. Swaps the stat panels below (each badge covers a different game set, so its haul / play time
+    / stage progress differ). Its own id/data hooks (bd2ms-*) so it doesn't collide with the page switcher. {% endcomment %}
     {% if detail.has_multiple_groups %}
-    <div class="pp-switch bd2ms-switch" role="tablist" aria-label="Platform group stats">
+    <div class="bd2-groupswitch bd2ms-switch" role="tablist" aria-label="Platform group stats">
         {% for g in detail.groups %}
-        <button type="button" class="pp-switch__chip{% if forloop.first %} is-active{% endif %}"
+        <button type="button" class="bd2-gbtn{% if forloop.first %} is-active{% endif %}" data-tier="{{ g.frame.tier }}"
                 id="bd2ms-tab-{{ g.platform_group.key }}" data-ms-group="{{ g.platform_group.key }}" role="tab"
                 aria-controls="bd2ms-panel-{{ g.platform_group.key }}"
                 aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
-            <span class="pp-switch__lbl">{{ g.platform_group.name }}</span>
+            <span class="bd2-gbtn__med" aria-hidden="true">{% include 'components/badge_medallion.html' with frame=g.frame no_id=True %}</span>
+            <span class="bd2-gbtn__body">
+                <span class="bd2-gbtn__name">{{ g.platform_group.name }}</span>
+                <span class="bd2-gbtn__plats">{{ g.platform_group.platforms|join:" &middot; " }}</span>
+            </span>
+            <svg class="bd2-gbtn__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
         </button>
         {% endfor %}
     </div>

@@ -313,3 +313,16 @@ def test_view_authed_uses_progress_peek_and_renders_stats(client):
     assert '/group-badge-progress-peek/' + profile.psn_username + '/0/' in body
     assert '/group-badge-peek/0/' not in body       # authed uses the profile-aware peek, not the anon showcase
     assert 'id="badge-stats-modal"' in body and 'bd-mystats' in body   # My Stats renders (no owned games -> zeros)
+
+
+def test_view_renders_stylized_group_switcher(client):
+    # A multi-group series renders the header-spanning platform-group switcher: one metal-tinted .bd2-gbtn
+    # button per group, each carrying its name + platforms.
+    series = BadgeSeriesFactory(series_slug='multi', name='Multi')
+    _stage(series, 1, ['PS3', 'PS5'])
+    _group(series, 'legacy-hd', 'Legacy HD', ['PS3', 'PSVITA'])
+    _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
+    body = client.get(reverse('badge_detail', kwargs={'series_slug': 'multi'})).content.decode()
+    assert 'id="bd2-tab-legacy-hd"' in body and 'id="bd2-tab-ultra-hd"' in body   # a button per group
+    assert 'bd2-gbtn__name' in body and 'bd2-gbtn__plats' in body                 # name + platforms per button
+    assert 'Legacy HD' in body and 'Ultra HD' in body
