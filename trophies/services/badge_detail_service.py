@@ -128,18 +128,23 @@ _STATE_ORDER = {'none': 0, 'in_progress': 1, 'earned': 2, 'holo': 3}
 _MED_STATE = {'holo': 'earned', 'earned': 'earned', 'in_progress': 'in_progress', 'none': 'unearned'}
 
 
-def _medallion_frame(gv: GroupView, series, target_profile) -> dict:
-    """Map a GroupView onto the frame dict components/badge_medallion.html reads (reused unchanged, so the
-    Collection/Case pages that still pass legacy frames keep working)."""
-    art = gv.art
-    pg = gv.platform_group
+def group_medallion_layers(gb) -> tuple:
+    """(tier, art_layers) for a group badge's medallion -- the backing metal + the composed layers with a
+    backdrop-plate fallback (without a plate the subject's white rim-light traces the bare art). Shared by the
+    detail hero frame and the batched list-card frames (badge_list_service), so they compose identically."""
+    art = gb.art_layers()
+    pg = gb.platform_group
     tier = pg.backing_key or _GROUP_BACKING.get(pg.key, 'gold')   # data-tier drives the medallion coloring
-    # Fall back to the tier backdrop plate when the group has no background_image set -- without a plate the
-    # subject's white rim-light traces the bare art (the "white border"); the plate also gives the tier metal.
     backdrop = art['backdrop']
     if not backdrop and tier in _TIER_BACKDROP:
         backdrop = static(f"images/badges/backdrops/{_TIER_BACKDROP[tier]}_backdrop.png")
-    layers = [url for url in (backdrop, art['main']) if url]
+    return tier, [url for url in (backdrop, art['main']) if url]
+
+
+def _medallion_frame(gv: GroupView, series, target_profile) -> dict:
+    """Map a GroupView onto the frame dict components/badge_medallion.html reads (reused unchanged, so the
+    Collection/Case pages that still pass legacy frames keep working)."""
+    tier, layers = group_medallion_layers(gv.group_badge)
     owner = None
     if target_profile and gv.state in ('earned', 'holo'):
         owner = target_profile.display_psn_username or target_profile.psn_username

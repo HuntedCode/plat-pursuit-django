@@ -19,8 +19,10 @@ def _badge_xp(badge):
 
 # Browse badge Gallery (the per-TIER medallion wall, ?view=gallery) -- the catalog-discovery cousin of the
 # Series view. Every filter/sort below maps to a real Badge column so it stays DB-side + paginated at scale.
-_TIER_NAME_TO_INT = {'bronze': 1, 'silver': 2, 'gold': 3, 'platinum': 4}
-_GALLERY_STATES = ('earned', 'in_progress', 'maintenance', 'unearned')  # multi-select personal-state chips
+_TIER_NAME_TO_INT = {'bronze': 1, 'silver': 2, 'gold': 3, 'platinum': 4}   # (legacy Series view, pending rebuild)
+# Personal-state chips on the group-badge Gallery: binary hold only (per-badge in-progress is engine-derived,
+# not whale-safe across a catalog -- it lives on the badge detail page).
+_GALLERY_STATES = ('earned', 'unearned')
 # Badge-type display order (matches the Collection's sets) -- used to group the set-number sort by type,
 # since set numbers restart per type (Series #1 and Franchise #1 both exist).
 _TYPE_ORDER = ('series', 'franchise', 'collection', 'megamix', 'developer', 'user', 'event')
@@ -36,7 +38,6 @@ GALLERY_SORTS = [
     ('set_number', 'Set order'),
     ('name', 'Name (A-Z)'),
     ('rarity', 'Rarest first'),
-    ('tier', 'Tier (Platinum first)'),
     ('popular', 'Most earned'),
     ('newest', 'Newest'),
 ]
@@ -60,10 +61,11 @@ from django.views.generic import ListView, DetailView, TemplateView
 from ..models import (
     Game, Profile, ProfileGame, Badge, UserBadge, UserBadgeProgress,
     Concept, Stage, Milestone, UserMilestone, UserMilestoneProgress,
-    UserTitle, ProfileGamification, BadgeSeries, GroupBadge,
+    UserTitle, ProfileGamification, BadgeSeries, GroupBadge, UserGroupBadge, PlatformGroup,
 )
 from ..forms import BadgeSearchForm
 from trophies.services.badge_detail_service import get_badge_detail
+from trophies.services.badge_list_service import build_list_cards
 from trophies.services.frame_service import build_badge_frame
 from trophies.services.redis_leaderboard_service import (
     RedisPaginator, RedisPage,
@@ -101,6 +103,12 @@ class BadgeListView(ListView):
     def _profile(self):
         user = self.request.user
         return user.profile if user.is_authenticated and hasattr(user, 'profile') else None
+
+    def _live_platform_groups(self):
+        """Platform groups with at least one live group badge -- the Gallery's group filter chips."""
+        return list(
+            PlatformGroup.objects.filter(group_badges__is_live=True).distinct().order_by('sort_order', 'name')
+        )
 
     def get_template_names(self):
         gallery = self._view_mode() == 'gallery'
@@ -153,88 +161,55 @@ class BadgeListView(ListView):
         return qs
 
     def _gallery_queryset(self):
-        """The Browse Gallery's per-TIER queryset: one row per individual badge tier (not per series),
-        every filter + sort DB-side so it paginates at catalog scale. Mirrors the game-browse pattern
-        (Exists subqueries for personal state, real-column order_by). select_related covers every FK
-        build_badge_frame reads so the batched frame build issues no per-badge FK queries."""
-        qs = Badge.objects.live().select_related(
-            'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
-            'base_badge__franchise', 'base_badge__collection',
-            'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
+        """The Browse Gallery's per-GROUP-BADGE queryset: one row per live GroupBadge (series x platform group),
+        every filter + sort DB-side so it paginates at catalog scale. select_related covers the series +
+        platform_group FKs the batched card builder (badge_list_service) reads, so it issues no per-card FK
+        queries. Personal state is a binary hold Exists (earned / not) -- whale-safe; per-badge in-progress is
+        engine-derived and lives on the detail page."""
+        qs = GroupBadge.objects.filter(is_live=True).select_related(
+            'series', 'series__franchise', 'series__collection', 'series__developer', 'platform_group',
         )
         g = self.request.GET
 
-        # All filters are MULTI-select (chips): tier and type are `__in`; several selected = OR.
-        tiers = [_TIER_NAME_TO_INT[t] for t in g.getlist('tier') if t in _TIER_NAME_TO_INT]
-        if tiers:
-            qs = qs.filter(tier__in=tiers)
+        # MULTI-select chips (OR'd): platform group (Legacy HD / Ultra HD ...) + badge type (on the series).
+        groups = [k for k in g.getlist('group') if k]
+        if groups:
+            qs = qs.filter(platform_group__key__in=groups)
         types = [t for t in g.getlist('badge_type') if t]
         if types:
-            qs = qs.filter(badge_type__in=types)
+            qs = qs.filter(series__badge_type__in=types)
         q = (g.get('q') or '').strip()
         if q:
-            search_q = (
-                Q(series_slug__icontains=slugify(q)) | Q(name__icontains=q) | Q(display_title__icontains=q)
-            )
+            search_q = Q(series__series_slug__icontains=slugify(q)) | Q(series__name__icontains=q)
             # A numeric query (optionally "#0042") also matches the badge's edition/set number.
             numeric = q.lstrip('#')
             if numeric.isdigit() and len(numeric) <= 9:   # fits a PositiveIntegerField; guards absurd input
                 search_q |= Q(set_number=int(numeric))
             qs = qs.filter(search_q)
 
-        # Personal-state multi-select (auth only): pick any of earned / in-progress / maintenance / unearned;
-        # the chosen states are OR'd. Derived from EXISTS probes annotated once, then a Q per selected state
-        # (this also subsumes the old "hide" toggles -- to hide a state, just don't select it). Anonymous
-        # viewers get the pure catalog (the state chips aren't shown).
+        # Personal-state multi-select (auth only): Earned / Not-earned, OR'd. One binary-hold EXISTS probe.
         profile = self._profile()
         states = [s for s in g.getlist('state') if s in _GALLERY_STATES] if profile else []
-        if states:
-            held = UserBadge.objects.filter(profile=profile, badge=OuterRef('pk'))
-            started = UserBadgeProgress.objects.filter(
-                profile=profile, badge=OuterRef('pk'), completed_concepts__gt=0,
-            )
-            qs = qs.annotate(
-                _earned=Exists(held.filter(status='earned')),
-                _maint=Exists(held.filter(status='maintenance')),
-                _started=Exists(started),
-            )
-            state_q = {
-                'earned': Q(_earned=True),
-                'maintenance': Q(_maint=True),
-                'in_progress': Q(_started=True, _earned=False, _maint=False),
-                'unearned': Q(_earned=False, _maint=False, _started=False),
-            }
-            combined = Q()
-            for s in states:
-                combined |= state_q[s]
-            qs = qs.filter(combined)
+        if states and not ('earned' in states and 'unearned' in states):   # both selected = no filter
+            held = Exists(UserGroupBadge.objects.filter(profile=profile, group_badge=OuterRef('pk')))
+            qs = qs.annotate(_earned=held).filter(_earned=('earned' in states))
 
-        # Every order_by ends on 'pk' -- a unique final tiebreaker so ties (same earned_count / name / date)
-        # get a DEFINED, stable order across the page-1 render and the ?page=N infinite-scroll fetches
-        # (otherwise Postgres could reorder ties between pages -> a duplicated or skipped medallion).
-        name_key = Lower('name')
-        # SET ORDER is the catalog's canonical ordering (default sort) AND the tiebreaker within every other
-        # sort, so cards always fall back into set order on a tie. Set numbers restart per badge type, so
-        # group by type first, then edition order (unnumbered last), then tier -- keeping each type's numbered
-        # run contiguous. ('pk' still ends every order_by as the unique final tiebreak for stable pagination.)
-        type_order = Case(
-            *[When(badge_type=t, then=Value(i)) for i, t in enumerate(_TYPE_ORDER)],
-            default=Value(len(_TYPE_ORDER)), output_field=IntegerField(),
-        )
-        set_order = (type_order, F('set_number').asc(nulls_last=True), 'tier')
+        # SET ORDER is the canonical default + the tiebreaker within every other sort (so cards fall back to a
+        # stable order on ties). Every order_by ends on 'pk' -- a unique final tiebreak so infinite-scroll
+        # pages don't reorder ties (duplicated / skipped medallions).
+        name_key = Lower('series__name')
+        set_order = (F('set_number').asc(nulls_last=True), name_key)
         sort = g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else GALLERY_SORT_DEFAULT
-        if sort == 'set_number':
-            qs = qs.order_by(*set_order, 'pk')
+        if sort == 'name':
+            qs = qs.order_by(name_key, *set_order, 'pk')
         elif sort == 'rarity':
             qs = qs.order_by('earned_count', *set_order, 'pk')    # fewest earners = rarest first
         elif sort == 'popular':
             qs = qs.order_by('-earned_count', *set_order, 'pk')
         elif sort == 'newest':
             qs = qs.order_by('-created_at', *set_order, 'pk')
-        elif sort == 'tier':
-            qs = qs.order_by('-tier', *set_order, 'pk')           # platinum first (matches the Collection)
-        else:
-            qs = qs.order_by(name_key, *set_order, 'pk')          # A-Z, set order on ties
+        else:                                                      # set_number (default)
+            qs = qs.order_by(*set_order, 'pk')
         return qs
 
     def _gallery_context_data(self, **kwargs):
@@ -258,41 +233,22 @@ class BadgeListView(ListView):
             or (getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results')
         )
         page_badges = [] if (is_xhr and requested_page > paginator.num_pages) else list(page_obj)
-        badge_ids = [b.id for b in page_badges]
-        earned_map, progress_map = {}, {}
-        if profile:
-            earned_map = {
-                ub.badge_id: ub
-                for ub in UserBadge.objects.filter(profile=profile, badge_id__in=badge_ids)
-            }
-            progress_map = {
-                pr.badge_id: pr
-                for pr in UserBadgeProgress.objects.filter(profile=profile, badge_id__in=badge_ids)
-            }
 
-        frames = []
-        for b in page_badges:
-            if profile:
-                frame = build_badge_frame(
-                    b, profile, earned=earned_map.get(b.id), progress=progress_map.get(b.id),
-                    include_live_stats=False, showcase=True,
-                )
-            else:
-                frame = build_badge_frame(b, None, include_live_stats=False, showcase=True)
-            frame['series_slug'] = b.series_slug
-            frame['badge_id'] = b.id
-            frames.append(frame)
+        # Batched, whale-safe: two bulk queries (pursuer counts + the viewer's holds) for the whole page, not
+        # per card. Live rarity + binary hold + the showcase medallion frame come back on each card dict.
+        cards = build_list_cards(page_badges, profile)
 
         g = self.request.GET
         context.update({
             'view': 'gallery',
-            'gallery_frames': frames,
+            'gallery_cards': cards,
             'page_obj': page_obj,
             'paginator': paginator,
             'is_paginated': page_obj.has_other_pages(),
             'form': self.get_filter_form(),                 # supplies the badge_type choices for the chips
             'gallery_authed': profile is not None,
-            'gallery_tiers': g.getlist('tier'),             # selected chip values (multi-select)
+            'gallery_groups': self._live_platform_groups(),  # platform-group filter chips (Legacy HD / Ultra HD)
+            'gallery_groups_selected': g.getlist('group'),
             'gallery_states': g.getlist('state'),
             'gallery_types': g.getlist('badge_type'),
             'gallery_sort': g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else GALLERY_SORT_DEFAULT,
@@ -305,7 +261,7 @@ class BadgeListView(ListView):
                 {'text': 'Badges'},
             ],
             'seo_description': (
-                "Browse every badge on Platinum Pursuit -- filter by tier, rarity, and type to find "
+                "Browse every badge on Platinum Pursuit -- filter by platform, rarity, and type to find "
                 "your next platinum to chase."
             ),
         })

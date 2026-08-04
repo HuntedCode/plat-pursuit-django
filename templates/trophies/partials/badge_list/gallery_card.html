@@ -1,32 +1,25 @@
-{% comment %} One Browse Gallery cell: the SHOWCASE medallion (full earned colour for everyone) + a
-card-corner ownership marker derived from owned_state (logged-in only -- earned/held gets a green check,
-in-progress a hollow ring, unearned nothing). Tapping opens the public quick-peek modal (JS, via
-data-badge-id); the href to the full badge_detail series page is the no-JS / middle-click fallback.
-Expects `frame` (a showcase build_badge_frame dict + series_slug/badge_id). {% endcomment %}
-<a class="pp-bgal__card" data-bgal-cell data-tier="{{ frame.tier }}" data-badge-id="{{ frame.badge_id }}"
-   {% if frame.series_slug %}href="{% url 'badge_detail' frame.series_slug %}"{% endif %}>
-    {% if frame.owned_state == 'earned' %}
-    <span class="pp-bgal__owned pp-bgal__owned--earned" title="You've earned this">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-        <span class="sr-only">You've earned this</span>
+{% load humanize %}
+{% comment %} One Browse Gallery cell (grouping-badge system): the SHOWCASE medallion (full earned colour for
+everyone) + a card-corner earned marker (logged-in; a green check, holo variant when mastered), the badge's
+platform group + set number, and its LIVE rarity grade + earner count. Tapping opens the group-badge quick-peek
+(JS, via data-badge-id); the href to the full badge_detail series page is the no-JS / middle-click fallback.
+Expects a `card` dict from badge_list_service.build_list_cards. {% endcomment %}
+<a class="pp-bgal__card" data-bgal-cell data-tier="{{ card.frame.tier }}" data-badge-id="{{ card.group_badge.id }}"
+   href="{% url 'badge_detail' card.series.series_slug %}">
+    {% if card.earned %}
+    <span class="pp-bgal__owned pp-bgal__owned--earned{% if card.is_holo %} pp-bgal__owned--holo{% endif %}" title="{% if card.is_holo %}Mastered (holographic){% else %}You've earned this{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        <span class="sr-only">{% if card.is_holo %}Mastered{% else %}You've earned this{% endif %}</span>
     </span>
-    {% elif frame.owned_state == 'maintenance' %}
-    <span class="pp-bgal__owned pp-bgal__owned--maintenance" title="Earned, now lapsed"><span class="sr-only">Earned, now lapsed</span></span>
-    {% elif frame.owned_state == 'in_progress' %}
-    <span class="pp-bgal__owned pp-bgal__owned--progress" title="In progress"><span class="sr-only">In progress</span></span>
     {% endif %}
-    {% include 'components/badge_medallion.html' with frame=frame no_id=True %}
+    {% include 'components/badge_medallion.html' with frame=card.frame no_id=True %}
     <span class="pp-bgal__caption">
-        {% comment %} Name: the broadest meaningful grouping this badge belongs to -- franchise, else
-        collection, else developer, else the series name fallback. series_name is always populated so it's the
-        guaranteed final fallback, keeping every tier above it reachable. Mirrors the medallion back-sub
-        (components/badge_medallion.html) so the card and its flip read the same subject. {% endcomment %}
-        <span class="pp-bgal__name">{% firstof frame.franchise frame.collection frame.developer frame.series_name %}</span>
-        {% comment %} First meta line: catalog identity -- tier (in text, since the medallion colour alone
-        isn't enough) + the edition/set number (restarts per type, so it reads alongside the type below). {% endcomment %}
-        <span class="pp-bgal__meta">{{ frame.tier|title }}{% if frame.set_number %} &middot; #{{ frame.set_number|stringformat:"04d" }}{% endif %}</span>
-        {% comment %} Second meta line: badge type + stage progress, e.g. "Series - 2/3 Stages" (or "3 Stages"
-        when not yet in progress). {% endcomment %}
-        <span class="pp-bgal__meta">{{ frame.badge_type|title }} &middot; {% if frame.owned_state == 'in_progress' or frame.owned_state == 'maintenance' %}{{ frame.owned_stages_done|default:0 }}/{{ frame.stages_total }} Stages{% else %}{{ frame.stages_total }} Stage{{ frame.stages_total|pluralize }}{% endif %}</span>
+        {% comment %} Name: the broadest meaningful grouping -- franchise > collection > developer > series name
+        (always populated, the guaranteed final fallback). Mirrors the medallion back-sub. {% endcomment %}
+        <span class="pp-bgal__name">{% firstof card.frame.franchise card.frame.collection card.frame.developer card.frame.series_name %}</span>
+        {# Catalog identity: the platform group (tinted in its medallion metal, matching the detail page) + set #. #}
+        <span class="pp-bgal__meta"><span class="pp-bgal__pg">{{ card.platform_group.name }}</span>{% if card.group_badge.set_number %} &middot; #{{ card.group_badge.set_number|stringformat:"04d" }}{% endif %}</span>
+        {# Live rarity grade (coloured) + the community scale. Just the earner count until the series has pursuers. #}
+        <span class="pp-bgal__meta">{% if card.rarity_class %}<span class="pp-bgal__grade pp-bgal__grade--{{ card.rarity_class }}">{{ card.rarity_class|title }}</span> &middot; {% endif %}{{ card.earned_count|intcomma }} earned</span>
     </span>
 </a>

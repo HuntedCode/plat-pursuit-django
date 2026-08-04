@@ -41,23 +41,20 @@ Degrades to a plain GET (Enter) without JS. {% endcomment %}
             <div class="pp-bgal__advanced" id="bgal-advanced">
               <div class="pp-bgal__advanced-in">
                 <div class="pp-bgal__filters">
-                    {% comment %} Tier + State share a row (wraps to stacked at small widths). {% endcomment %}
+                    {% comment %} Platform + State share a row (wraps to stacked at small widths). {% endcomment %}
                     <div class="pp-bgal__crow">
                         <div class="pp-bgal__cgroup">
-                            <span class="pp-bgal__clabel">Tier</span>
-                            <label class="pp-bgal__chip"><input type="checkbox" name="tier" value="bronze"{% if 'bronze' in gallery_tiers %} checked{% endif %}>Bronze</label>
-                            <label class="pp-bgal__chip"><input type="checkbox" name="tier" value="silver"{% if 'silver' in gallery_tiers %} checked{% endif %}>Silver</label>
-                            <label class="pp-bgal__chip"><input type="checkbox" name="tier" value="gold"{% if 'gold' in gallery_tiers %} checked{% endif %}>Gold</label>
-                            <label class="pp-bgal__chip"><input type="checkbox" name="tier" value="platinum"{% if 'platinum' in gallery_tiers %} checked{% endif %}>Platinum</label>
+                            <span class="pp-bgal__clabel">Platform</span>
+                            {% for pg in gallery_groups %}
+                            <label class="pp-bgal__chip"><input type="checkbox" name="group" value="{{ pg.key }}"{% if pg.key in gallery_groups_selected %} checked{% endif %}>{{ pg.name }}</label>
+                            {% endfor %}
                         </div>
 
                         {% if gallery_authed %}
                         <div class="pp-bgal__cgroup">
                             <span class="pp-bgal__clabel">State</span>
                             <label class="pp-bgal__chip"><input type="checkbox" name="state" value="earned"{% if 'earned' in gallery_states %} checked{% endif %}>Earned</label>
-                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="in_progress"{% if 'in_progress' in gallery_states %} checked{% endif %}>In Progress</label>
-                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="maintenance"{% if 'maintenance' in gallery_states %} checked{% endif %}>Maintenance</label>
-                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="unearned"{% if 'unearned' in gallery_states %} checked{% endif %}>Unearned</label>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="unearned"{% if 'unearned' in gallery_states %} checked{% endif %}>Not earned</label>
                         </div>
                         {% endif %}
                     </div>

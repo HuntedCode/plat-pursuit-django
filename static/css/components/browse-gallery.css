@@ -213,6 +213,11 @@
     border: 2px solid #e23026;
     box-shadow: 0 0 8px -2px color-mix(in oklab, #e23026 70%, transparent);
 }
+/* Mastered (holo) hold: the earned check on a holographic wash, a step up from the flat green. */
+.pp-bgal__owned--holo {
+    background: linear-gradient(135deg, #8fd2ea, #c9a0ff 55%, #ffd08a);
+    box-shadow: 0 0 9px -1px color-mix(in oklab, #a9c9ff 75%, transparent);
+}
 
 /* Caption: the card name (frame.card_name) + two dim meta lines -- tier/set number, then type/stage progress. */
 .pp-bgal__caption { display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 100%; margin-top: auto; padding-top: 4px; }
@@ -224,6 +229,19 @@
     font-size: 10.5px; color: var(--pp-text-dim); text-align: center; font-variant-numeric: tabular-nums;
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* Platform-group name tinted in the group's medallion metal (matches the detail page's group colouring). */
+.pp-bgal__card[data-tier="bronze"]   { --card-metal: #cf9160; }
+.pp-bgal__card[data-tier="silver"]   { --card-metal: #b9c6d6; }
+.pp-bgal__card[data-tier="gold"]     { --card-metal: #e7c25c; }
+.pp-bgal__card[data-tier="platinum"] { --card-metal: #8fd2ea; }
+.pp-bgal__pg { color: var(--card-metal, var(--pp-text-dim)); font-weight: 700; }
+/* Live rarity grade on the card -- coloured by the shared --pp-rarity-* tokens (same source as the detail
+   gem). Static glow: a wall of cards must not all pulse. */
+.pp-bgal__grade { font-weight: 800; letter-spacing: 0.02em; }
+.pp-bgal__grade--common   { color: var(--pp-rarity-common); }
+.pp-bgal__grade--uncommon { color: var(--pp-rarity-uncommon); }
+.pp-bgal__grade--rare     { color: var(--pp-rarity-rare); text-shadow: 0 0 4px var(--pp-rarity-rare-glow); }
+.pp-bgal__grade--mythic   { color: var(--pp-rarity-mythic); text-shadow: 0 0 5px var(--pp-rarity-mythic-glow); }
 
 /* Empty state. */
 .pp-bgal__empty { text-align: center; color: var(--pp-text-mute); padding: 48px 16px; }
