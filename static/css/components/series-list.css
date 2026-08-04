@@ -1,86 +1,202 @@
 /* ============================================================
  * BADGES BROWSE -- the /badges/ Series view + shared page chrome, rebuilt to the --pp-* house style so
  * the page reads as one piece next to the Browse Gallery. Reuses the Gallery's .pp-bgal__ toolbar (bar +
- * Filters toggle + advanced panel) verbatim; adds the per-series tier-ladder TILE (.pp-scard).
+ * Filters toggle + advanced panel) verbatim; the per-series TILE (.pp-scard) shows the series' live GROUP
+ * medallions (grouping-badge system).
  * ============================================================ */
 
 /* View toggle (Series | Gallery) is now the shared .pp-switch component (components/switcher.css). */
 
-/* ── "How badges work": shown by default in the page header (new-user teaching). A short intro over a
- * four-rung tier ladder; each rung carries its requirement (platinum vs 100%) and platform scope. ── */
-.pp-btiers { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pp-border); }
-.pp-btiers__summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
-.pp-btiers__summary::-webkit-details-marker { display: none; }
-.pp-btiers__summary:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 4px; }
-.pp-btiers__icon { width: 17px; height: 17px; flex: 0 0 auto; color: var(--pp-primary); }
-.pp-btiers__title { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text); }
-.pp-btiers__chev { margin-left: auto; width: 15px; height: 15px; flex: 0 0 auto; color: var(--pp-text-mute); transition: transform 0.2s ease; }
-.pp-btiers[open] .pp-btiers__chev { transform: rotate(180deg); }
-.pp-btiers__summary:hover .pp-btiers__chev { color: var(--pp-text); }
-@media (prefers-reduced-motion: reduce) { .pp-btiers__chev { transition: none; } }
-.pp-btiers__body { padding-top: 14px; }
-.pp-btiers__lede { font-size: 13.5px; line-height: 1.55; color: var(--pp-text-dim); max-width: 72ch; margin-bottom: 14px; }
-.pp-btiers__ladder { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-@media (min-width: 768px) { .pp-btiers__ladder { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-.pp-btiers__rung {
-    --tier-c: var(--pp-primary);
-    display: flex; flex-direction: column; align-items: center; text-align: center; gap: 5px;
-    padding: 12px 8px; border-radius: 12px;
-    border: 1px solid color-mix(in oklab, var(--tier-c) 25%, var(--pp-border));
-    /* Depth pass: step the nested rungs UP to --pp-bg-2 (they sit inside the base-200 header card and used
-       to dissolve into it) and give them a soft lift so they read as raised tiles, not flat outlines. */
-    background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 9%, var(--pp-bg-2)), var(--pp-bg-2));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 3px 10px rgba(0, 0, 0, 0.20);
-}
-.pp-btiers__rung[data-btier="bronze"]   { --tier-c: #cf9160; }
-.pp-btiers__rung[data-btier="silver"]   { --tier-c: #b9c6d6; }
-.pp-btiers__rung[data-btier="gold"]     { --tier-c: #e7c25c; }
-.pp-btiers__rung[data-btier="platinum"] { --tier-c: #8fd2ea; }
-.pp-btiers__art { width: 60px; height: 60px; }
-@media (min-width: 768px) { .pp-btiers__art { width: 76px; height: 76px; } }
-.pp-btiers__art img { width: 100%; height: 100%; object-fit: contain; }
-.pp-btiers__name { font-size: 13px; font-weight: 800; font-style: italic; letter-spacing: 0.02em; color: var(--tier-c); }
-.pp-btiers__req { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--pp-text); }
-.pp-btiers__req img { width: 14px; height: 14px; }
-.pp-btiers__scope { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
-.pp-btiers__foot { font-size: 12px; line-height: 1.55; color: var(--pp-text-dim); margin-top: 12px; }
+/* ── "How badges work" -> the FORGE JOURNEY, in a first-run MODAL (badge_howto.html): it auto-opens once on a
+ * first visit and is recalled by the header + mini-bar buttons. This block styles the recall buttons + the modal
+ * shell; the .pp-forge body + its choreography (shared, below) render inside the dialog. ── */
 
-/* ── Header premium motion. Rung hover glow (tier-tinted lift, not scale) is always on; the entrance
- * cascade + Platinum sheen are gated by prefers-reduced-motion. `backwards` fill (not forwards) so the
- * reveal never locks the transform and hover keeps working. ── */
-.pp-btiers__rung { transition: transform 0.18s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
-.pp-btiers__rung:hover {
-    transform: translateY(-2px);
-    border-color: color-mix(in oklab, var(--tier-c) 55%, var(--pp-border));
-    box-shadow: 0 8px 20px -10px color-mix(in oklab, var(--tier-c) 45%, transparent);
+/* Recall button in the header: a subtle primary-tinted pill (prominent enough to find, quiet enough to ignore). */
+.pp-howto-btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px;
+    font-size: 12px; font-weight: 700; color: var(--pp-primary); cursor: pointer;
+    background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 34%, transparent);
+    transition: background var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
 }
-.pp-btiers__rung[data-btier="platinum"] { position: relative; overflow: hidden; }
-.pp-btiers__rung[data-btier="platinum"]::after {
-    content: ""; position: absolute; inset: 0; pointer-events: none; transform: translateX(-130%);
-    background: linear-gradient(105deg, transparent 34%, color-mix(in oklab, #8fd2ea 40%, transparent) 50%, transparent 66%);
+.pp-howto-btn__icon { width: 14px; height: 14px; flex: 0 0 auto; }
+@media (hover: hover) {
+    .pp-howto-btn:hover { background: color-mix(in oklab, var(--pp-primary) 18%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); color: color-mix(in oklab, var(--pp-primary) 82%, var(--pp-text)); }
 }
-/* Header entrance primitives (ppHeadIn / .pp-head-in family) now live in components/motion.css --
- * shared site-wide. ppRungIn / ppPlatSheen below stay here: they're specific to the tier-ladder tile. */
-@keyframes ppRungIn { from { opacity: 0; transform: translateY(11px); } to { opacity: 1; transform: none; } }
-@keyframes ppPlatSheen { from { transform: translateX(-130%); } to { transform: translateX(130%); } }
+.pp-howto-btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* Recall button in the mini-bar: matches the sibling .pp-minibar__filters (icon + a label that hides on phones). */
+.pp-minibar__howto {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px;
+    font-size: 12px; font-weight: 700; color: var(--pp-text-dim); cursor: pointer;
+    background: transparent; border: 1px solid var(--pp-border);
+    transition: color var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease);
+}
+.pp-minibar__howto svg { width: 15px; height: 15px; flex: 0 0 auto; }
+@media (hover: hover) { .pp-minibar__howto:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); } }
+.pp-minibar__howto:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (max-width: 640px) { .pp-minibar__howto .pp-minibar__flbl { display: none; } }
+
+/* The how-to modal shell: a wide, scrollable dialog over the shared .pp-detail-modal scrim/entrance
+ * (collection-case.css). Wide enough that the forge journey goes horizontal on desktop. */
+.pp-howto__dialog { width: min(940px, 100%); max-height: 88vh; overflow-y: auto; text-align: left; }
+.pp-howto__body { padding: 4px 2px; }
+.pp-howto__title { display: flex; align-items: center; gap: 9px; font-family: var(--pp-font-display); font-weight: 800; font-size: 18px; color: var(--pp-text); margin-bottom: 12px; }
+.pp-howto__title-icon { width: 20px; height: 20px; flex: 0 0 auto; color: var(--pp-primary); }
+.pp-howto__actions { display: flex; justify-content: center; margin-top: 18px; }
+.pp-howto__got {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 128px; padding: 9px 22px; border-radius: 999px;
+    font-size: 13.5px; font-weight: 800; letter-spacing: 0.02em; color: #06140d; cursor: pointer; border: 0;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 92%, white), var(--pp-primary));
+    box-shadow: 0 6px 18px -8px color-mix(in oklab, var(--pp-primary) 70%, transparent);
+    transition: transform var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) { .pp-howto__got:hover { transform: translateY(-1px); box-shadow: 0 10px 24px -8px color-mix(in oklab, var(--pp-primary) 70%, transparent); } }
+.pp-howto__got:focus-visible { outline: 2px solid var(--pp-text); outline-offset: 2px; }
+
+/* Close (out) animation. Fade the whole modal ROOT as one group (scrim + dialog + content together) so nothing
+ * lingers or "pops" out after the rest; the dialog adds a subtle settle on top. The id selector beats the shared
+ * .pp-detail-modal entrance rule -- equal-specificity class selectors tie and lose by source order (the same
+ * gotcha the badge-detail modals solve with #id). */
+#badge-howto.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }   /* opacity crossfade -- always on */
+/* The dialog's settle is transform MOTION, so it's reduced-motion-gated (the id also overrides collection-case's
+   reduced-motion `animation: none`, which would otherwise leak the motion back in for those users). */
 @media (prefers-reduced-motion: no-preference) {
-    .pp-btiers[open] .pp-btiers__rung { animation: ppRungIn 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
-    .pp-btiers[open] .pp-btiers__rung:nth-child(1) { animation-delay: 0.16s; }
-    .pp-btiers[open] .pp-btiers__rung:nth-child(2) { animation-delay: 0.22s; }
-    .pp-btiers[open] .pp-btiers__rung:nth-child(3) { animation-delay: 0.28s; }
-    .pp-btiers[open] .pp-btiers__rung:nth-child(4) { animation-delay: 0.34s; }
-    .pp-btiers[open] .pp-btiers__rung[data-btier="platinum"]::after { animation: ppPlatSheen 1.15s ease-in-out 0.85s 1; }
+    #badge-howto.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+}
+@keyframes ppHowtoFadeOut { to { opacity: 0; } }
+@keyframes ppHowtoDialogOut { to { transform: translateY(8px) scale(0.985); } }
+
+/* ── The forge journey body (shared: renders inside the how-to modal) ── */
+.pp-forge__lede { font-size: 13.5px; line-height: 1.55; color: var(--pp-text-dim); max-width: 72ch; margin-bottom: 16px; }
+
+/* The flow: mobile + tablet = a vertical stack (beats + short vertical connectors); lg+ = a horizontal row
+ * (four beats + three connectors need the desktop width to breathe). */
+.pp-forge__flow { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+@media (min-width: 1024px) { .pp-forge__flow { flex-direction: row; align-items: flex-start; justify-content: center; gap: 4px; margin-bottom: 10px; } }
+.pp-forge__beat { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 7px; padding: 6px 4px; }
+@media (min-width: 1024px) { .pp-forge__beat { flex: 1 1 0; max-width: 192px; } }
+/* A fixed-height art stage so the beats' captions line up regardless of the art's size. */
+.pp-forge__art { display: grid; place-items: center; height: 88px; }
+@media (min-width: 768px) { .pp-forge__art { height: 104px; } }
+.pp-forge__cap { display: inline-flex; align-items: center; gap: 6px; font-family: var(--pp-font-display); font-weight: 800; font-size: 13.5px; color: var(--pp-text); }
+.pp-forge__n {
+    display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; flex: 0 0 auto;
+    font-size: 11px; font-weight: 800; color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 40%, transparent);
+}
+.pp-forge__desc { font-size: 11.5px; line-height: 1.4; color: var(--pp-text-mute); max-width: 26ch; }
+
+/* Beat 1 -- the themed SET: a small fan of three game covers (pure CSS, no assets). */
+.pp-forge__fan { position: relative; width: 66px; height: 74px; }
+.pp-forge__cover {
+    position: absolute; left: 50%; top: 50%; width: 44px; height: 60px; margin: -30px 0 0 -22px; border-radius: 5px;
+    background: linear-gradient(150deg, color-mix(in oklab, var(--pp-text) 12%, var(--pp-bg-2)), var(--pp-bg-2));
+    border: 1px solid var(--pp-border); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.30);
+    transform-origin: bottom center;
+}
+.pp-forge__cover:nth-child(1) { transform: rotate(-15deg) translateY(2px); }
+.pp-forge__cover:nth-child(2) { z-index: 2; background: linear-gradient(150deg, color-mix(in oklab, var(--pp-primary) 24%, var(--pp-bg-2)), var(--pp-bg-2)); }
+.pp-forge__cover:nth-child(3) { transform: rotate(15deg) translateY(2px); }
+
+/* Beat 2 -- platinum EVERY game: a cluster of platinum trophies (centre one larger). */
+.pp-forge__plats { display: inline-flex; align-items: flex-end; gap: 5px; }
+.pp-forge__plats img { width: 30px; height: 30px; object-fit: contain; filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.35)); }
+.pp-forge__plats img:nth-child(2) { width: 40px; height: 40px; }
+
+/* Beats 3 + 4 -- the forged medallions (the real .pp-med object, sized for the header). */
+.pp-forge__art--med .pp-med { --sz: 84px; }
+@media (min-width: 768px) { .pp-forge__art--med .pp-med { --sz: 96px; } }
+
+/* Interactive forge medallions (tap -> the source badge's quick-peek). The hover lift/shine comes from the
+   .pp-med--earned component styles; here we just make the role=button wrapper feel tappable + keyboard-clear. */
+.pp-forge-peek { cursor: pointer; border-radius: 14px; }
+.pp-forge-peek:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
+
+/* Connector between beats: a line that draws in + a flow chevron. Vertical run on mobile/tablet, horizontal
+ * on lg+. The final leg (--master, beat 3 -> 4) is holo-tinted, since it is the mastery transformation. */
+.pp-forge__link { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 2px 0; color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-text-mute)); }
+.pp-forge__line { display: block; width: 2px; height: 16px; border-radius: 2px; transform-origin: top; background: linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 55%, transparent), color-mix(in oklab, var(--pp-primary) 18%, transparent)); }
+.pp-forge__chev { width: 15px; height: 15px; flex: 0 0 auto; transform: rotate(90deg); }
+.pp-forge__link--master { color: #c9a7ff; }
+.pp-forge__link--master .pp-forge__line { background: linear-gradient(180deg, #8fd2ea, #c9a7ff 55%, #ffd36e); }
+@media (min-width: 1024px) {
+    .pp-forge__link { flex-direction: row; align-self: flex-start; margin-top: 42px; padding: 0 2px; }   /* align to the art row */
+    .pp-forge__line { width: 26px; height: 2px; transform-origin: left; background: linear-gradient(90deg, color-mix(in oklab, var(--pp-primary) 55%, transparent), color-mix(in oklab, var(--pp-primary) 18%, transparent)); }
+    .pp-forge__link--master .pp-forge__line { background: linear-gradient(90deg, #8fd2ea, #c9a7ff 55%, #ffd36e); }
+    .pp-forge__chev { transform: none; }
 }
 
-/* Series toolbar: the Series view now uses the Gallery's compact toolbar verbatim -- .pp-bgal__bar + a
- * Filters toggle + a collapsible .pp-bgal__advanced panel (all styled in browse-gallery.css). No Series-
- * specific toolbar CSS is needed anymore; the old inline .pp-sbar layout was removed. */
+/* Editions legend: the two real edition medallions, labelled + platform-scoped, name tinted in its metal. */
+.pp-forge__editions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 22px; margin-top: 14px; padding-top: 16px; border-top: 1px solid var(--pp-border); }
+.pp-forge__ed { --card-metal: var(--pp-text-dim); display: inline-flex; align-items: center; gap: 10px; }
+.pp-forge__ed[data-tier="gold"]     { --card-metal: #e7c25c; }
+.pp-forge__ed[data-tier="platinum"] { --card-metal: #8fd2ea; }
+.pp-forge__ed-med .pp-med { --sz: 42px; }
+.pp-forge__ed-med .pp-med__count { display: none; }
+.pp-forge__ed-text { display: flex; flex-direction: column; line-height: 1.2; }
+.pp-forge__ed-name { font-family: var(--pp-font-display); font-weight: 800; font-size: 13px; color: var(--card-metal); }
+.pp-forge__ed-scope { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+
+.pp-forge__foot { font-size: 12px; line-height: 1.55; color: var(--pp-text-dim); margin-top: 14px; }
+/* "holographic" is set in an iridescent gradient text, so the word demonstrates the payoff it names. */
+.pp-forge__holo {
+    font-weight: 800;
+    background: linear-gradient(92deg, #8fd2ea, #c9a7ff 42%, #ffd36e 74%, #8fd2ea);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+/* ── Forge choreography. JS arms the section (.is-armed, added pre-paint only when motion is allowed) to hold
+ * the hidden start states, then lights it on reveal (.is-lit) -> beats rise + settle staggered, connectors
+ * draw, the payoff medallion mints (real .is-minting ceremony, added by JS) + its foil sweeps once, and the
+ * legend + foot fade in last. Without JS / under reduced motion, nothing is armed, so it all shows statically.
+ * `both` fill holds each element's end state after its animation. ── */
+.pp-forge.is-armed .pp-forge__beat,
+.pp-forge.is-armed .pp-forge__link,
+.pp-forge.is-armed .pp-forge__editions,
+.pp-forge.is-armed .pp-forge__foot { opacity: 0; }
+.pp-forge.is-armed .pp-forge__line { transform: scaleY(0); }
+@media (min-width: 1024px) { .pp-forge.is-armed .pp-forge__line { transform: scaleX(0); } }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-forge.is-lit .pp-forge__beat { animation: ppForgeBeat 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+    .pp-forge.is-lit [data-beat="1"] { animation-delay: 0.05s; }
+    .pp-forge.is-lit [data-beat="2"] { animation-delay: 0.28s; }
+    .pp-forge.is-lit [data-beat="3"] { animation-delay: 0.51s; }
+    .pp-forge.is-lit [data-beat="4"] { animation-delay: 0.74s; }
+    /* Connectors (flow children 2, 4, 6) draw in just after their preceding beat. */
+    .pp-forge.is-lit .pp-forge__link { animation: ppForgeFade 0.4s ease both; }
+    .pp-forge.is-lit .pp-forge__link:nth-child(2) { animation-delay: 0.20s; }   /* after beat 1 */
+    .pp-forge.is-lit .pp-forge__link:nth-child(4) { animation-delay: 0.43s; }   /* after beat 2 */
+    .pp-forge.is-lit .pp-forge__link:nth-child(6) { animation-delay: 0.66s; }   /* after beat 3 (mastery leg) */
+    .pp-forge.is-lit .pp-forge__line { animation: ppForgeDrawY 0.42s ease both; }
+    .pp-forge.is-lit .pp-forge__link:nth-child(2) .pp-forge__line { animation-delay: 0.20s; }
+    .pp-forge.is-lit .pp-forge__link:nth-child(4) .pp-forge__line { animation-delay: 0.43s; }
+    .pp-forge.is-lit .pp-forge__link:nth-child(6) .pp-forge__line { animation-delay: 0.66s; }
+    .pp-forge.is-lit .pp-forge__editions { animation: ppForgeFade 0.5s ease 0.98s both; }
+    .pp-forge.is-lit .pp-forge__foot { animation: ppForgeFade 0.5s ease 1.12s both; }
+    /* The mastered medallion's foil sweeps once as beat 4 lands -- the holographic payoff (diagonal wipe, no
+       color-mix in the keyframe). Only beat 4 is .pp-med--holographic, so this targets it alone. */
+    .pp-forge.is-lit .pp-forge__art--med .pp-med--holographic .pp-med__foil { animation: ppForgeFoil 1.15s ease 0.9s 1; }
+}
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+    .pp-forge.is-lit .pp-forge__line { animation-name: ppForgeDrawX; }
+}
+@keyframes ppForgeBeat { from { opacity: 0; transform: translateY(12px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes ppForgeFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes ppForgeDrawX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ppForgeDrawY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes ppForgeFoil { 0% { background-position: 100% 0%; opacity: 0.15; } 45% { opacity: 0.62; } 100% { background-position: 0% 100%; opacity: 0.3; } }
+
+/* Series toolbar: the Series view uses the Gallery's compact toolbar verbatim -- .pp-bgal__bar + a Filters
+ * toggle + a collapsible .pp-bgal__advanced panel (all styled in browse-gallery.css). No Series-specific
+ * toolbar CSS is needed. */
 
 /* ============================================================
- * SERIES VIEW -- the per-series ROW list. Each row is one badge SERIES: next-tier medallion, cover, reward
- * title, the four trophy-type counts, and (auth) next-tier progress. `--pp-list-accent` (the cyan focus
- * ring) is declared on .pp-slist here for the Series view; the Gallery view declares its own on .pp-bgal
- * (browse-gallery.css) since it doesn't nest inside .pp-slist.
+ * SERIES VIEW -- the per-series TILE grid. Each tile is one badge SERIES: its identity (affiliation name +
+ * type + total earners) over a ROW of its live GROUP medallions (one per platform group). `--pp-list-accent`
+ * (the cyan focus ring) is declared on .pp-slist here for the Series view; the Gallery view declares its own
+ * on .pp-bgal (browse-gallery.css) since it doesn't nest inside .pp-slist.
  * ============================================================ */
 .pp-slist { --pp-list-accent: rgba(63, 205, 220, 1); display: flex; flex-direction: column; gap: 12px; }
 /* The tile grid: compact cards, denser as the viewport grows. */
@@ -89,94 +205,76 @@
 @media (min-width: 1024px) { .pp-slist__rows { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (min-width: 1440px) { .pp-slist__rows { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 
-/* ── The Series card (.pp-scard): a compact tile whose centrepiece is the TIER LADDER. ───────────────────
- * A badge series is one stage pool with four tier thresholds, so the card shows the whole ladder, not one
- * rung. Four nodes (earned / active / locked) sit under the medallion and double as a FACE SELECTOR --
- * clicking a node re-tints the single medallion (the tiers share art; only the tier tint + cached backdrop/
- * foreground swap) + swaps the stat pane to that tier + re-tints the tile to its family colour (--tier-c).
- * The resting face is the tier you're working on (server-chosen `default_tier`; Bronze if unstarted, top
- * tier if finished, Bronze for anon). Numbers use the shared Tally primitive, the selected tier's progress
- * the shared Horizon. No refetch on swap: one medallion renders + retints client-side, and each tier's stat
- * pane renders once, hidden, and toggles. Badge art stays full-colour (greyscale-unearned is an anti-pattern
- * -- "reads disabled"); state lives in the ladder + the earned seal, not the art. */
-.pp-scard {
-    --tier-c: var(--pp-primary);
-    position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px;
-    padding: 14px 12px 12px; border-radius: var(--pp-radius-lg); scroll-margin-top: 96px; cursor: pointer;
-    background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 8%, var(--pp-bg-1)), var(--pp-bg-1));
-    border: 1px solid color-mix(in oklab, var(--tier-c) 22%, var(--pp-border));
-    /* Depth pass: stronger top-highlight + deeper ambient shadow so the tile rises off the substrate. */
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
-    transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease),
-                background var(--pp-dur) var(--pp-ease);
-}
-.pp-scard[data-tier="bronze"]   { --tier-c: #cf9160; }
-.pp-scard[data-tier="silver"]   { --tier-c: #b9c6d6; }
-.pp-scard[data-tier="gold"]     { --tier-c: #e7c25c; }
-.pp-scard[data-tier="platinum"] { --tier-c: #8fd2ea; }
-@media (hover: hover) {
-    .pp-scard:hover {
-        border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border));
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
-                    0 0 0 1px color-mix(in oklab, var(--tier-c) 28%, transparent),
-                    0 12px 30px -14px color-mix(in oklab, var(--tier-c) 45%, #000);
-    }
-}
-
-/* Maintenance tile: a held rung has lapsed. Warm the whole card red/amber (mirrors the Case group's
-   maintenance niche) so "needs re-earning" reads at a glance -- the repair signal owns the card over the
-   tier accent while it's lapsed. The corner "M" (same mark as the Gallery/Case) is the explicit badge. */
-.pp-scard.is-maintenance {
-    border-color: color-mix(in oklab, var(--pp-maint, #e23026) 42%, var(--pp-border));
-    background: linear-gradient(to bottom, color-mix(in oklab, #eeae42 14%, var(--pp-bg-1)), var(--pp-bg-1));
-}
-@media (hover: hover) {
-    .pp-scard.is-maintenance:hover {
-        border-color: color-mix(in oklab, var(--pp-maint, #e23026) 60%, var(--pp-border));
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
-                    0 0 0 1px color-mix(in oklab, var(--pp-maint, #e23026) 30%, transparent),
-                    0 12px 30px -14px color-mix(in oklab, var(--pp-maint, #e23026) 48%, #000);
-    }
-}
-/* Red "M" disc, top-left -- the explicit maintenance mark (geometry mirrors the Gallery's .pp-gallery__badge-m). */
-.pp-scard__m {
-    position: absolute; top: 8px; left: 8px; z-index: 4;
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 18px; height: 18px; border-radius: 50%;
-    background: var(--pp-maint, #e23026); color: #fff;
-    font-size: 11px; font-weight: 800; line-height: 1; letter-spacing: -0.02em;
-    box-shadow: 0 0 8px -1px color-mix(in oklab, var(--pp-maint, #e23026) 70%, transparent);
-}
-
-/* Scroll-reveal: JS adds .pp-reveal to the grid to HIDE the cards, then reveals each (.is-revealed) and
-   plays the arrival via the Web Animations API (el.animate) -- reliable on first load AND an HTMX view swap,
-   where a CSS-class animation on freshly-swapped nodes silently won't restart. These rules only hold the
-   hidden base + revealed final states; the motion lives in the JS (shared by the Series tiles here and the
-   Gallery cells in browse-gallery.css). Gated by prefers-reduced-motion; without JS the class is never
-   added, so cards show normally. */
+/* Scroll-reveal: JS adds .pp-reveal to the grid to HIDE the tiles, then reveals each (.is-revealed) and plays
+   the arrival via the Web Animations API -- reliable on first load AND an HTMX view swap (a CSS-class
+   animation on freshly-swapped nodes silently won't restart). These rules only hold the hidden base + revealed
+   final states; the motion lives in the JS (shared with the Gallery cells). Gated by prefers-reduced-motion;
+   without JS the class is never added, so tiles show normally. */
 @media (prefers-reduced-motion: no-preference) {
     .pp-reveal .pp-scard { opacity: 0; }
     .pp-reveal .pp-scard.is-revealed { opacity: 1; }
-    .pp-reveal .pp-scard .pp-horizon__fill { transform: scaleX(0); transform-origin: left; }
-    .pp-reveal .pp-scard.is-revealed .pp-horizon__fill { transform: scaleX(1); }
-    .pp-reveal .pp-scard .pp-horizon__seg[data-state] { opacity: 0; transform: scale(0.55); }
-    .pp-reveal .pp-scard.is-revealed .pp-horizon__seg[data-state] { opacity: 1; transform: none; }
 }
 
-/* Open link (medallion + name) -> the detail page. The ladder nodes below are separate buttons. */
-.pp-scard__open { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%; text-decoration: none; color: inherit; }
-.pp-scard__open:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; border-radius: 6px; }
+/* ── The Series card (.pp-scard): the series identity (name + type + total earners) over a ROW of its live
+ * GROUP medallions -- one per platform group (Legacy HD / Ultra HD). Each group cell is a showcase medallion
+ * with an owned seal (holo when mastered), its platform name tinted in the medallion metal (--card-metal,
+ * matching the detail-page switcher), and its LIVE rarity grade. The heading links to the badge detail page;
+ * each medallion opens the group quick-peek. Badge art stays full-colour (greyscale-unearned reads
+ * "disabled"); ownership lives in the seal, not the art. */
+.pp-scard {
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 14px 12px 13px; border-radius: var(--pp-radius-lg); scroll-margin-top: 96px;
+    background: linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
+    border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 6px 20px rgba(0, 0, 0, 0.28);
+    transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) {
+    .pp-scard:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06),
+                    0 0 0 1px color-mix(in oklab, var(--pp-primary) 20%, transparent),
+                    0 12px 30px -14px color-mix(in oklab, var(--pp-primary) 40%, #000);
+    }
+}
 
-/* Art: ONE medallion (the shared .pp-med OBJECT, matching the Collection Case + Browse Gallery), sized down
-   for the tile and retinted in place on a face swap. Showcase 'earned' look = full colour on every tier
-   (state lives in the ladder + seal, not the art). */
-.pp-scard__art { display: grid; place-items: center; min-height: 60px; }
-@media (min-width: 768px) { .pp-scard__art { min-height: 68px; } }
-.pp-scard__med { position: relative; }
-.pp-scard__med .pp-med { --sz: 54px; }
-@media (min-width: 768px) { .pp-scard__med .pp-med { --sz: 62px; } }
-/* The medallion's own count + earned-aura blur are noise here (the face carries the numbers; the aura is
-   the Browse Gallery's scroll-lag culprit) -- suppress both, matching browse-gallery.css. */
+/* Open link (name + type) -> the detail page. The group medallions below are separate links. */
+.pp-scard__open { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%; text-decoration: none; color: inherit; }
+.pp-scard__open:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; border-radius: 6px; }
+.pp-scard__name {
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 13.5px; line-height: 1.15; text-align: center;
+    color: var(--pp-text); max-width: 100%; padding: 0 2px;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    transition: color var(--pp-dur) var(--pp-ease);
+}
+.pp-scard:hover .pp-scard__name { color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-text)); }
+/* Type + community earned count, on one line ("Series . 3,412 earned"). */
+.pp-scard__type { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-mute); }
+.pp-scard__type .pp-tally { font-size: 10.5px; color: var(--pp-text-dim); letter-spacing: 0; }
+
+/* Group row: one cell per platform group. 1 centres; 2 sit side by side; wraps on the narrowest tiles. */
+.pp-scard__groups { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center; gap: 6px 12px; width: 100%; margin-top: 2px; }
+.pp-scard__group {
+    --card-metal: var(--pp-text-dim);
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    flex: 0 1 auto; min-width: 0; padding: 4px 2px; border-radius: 10px;
+    text-decoration: none; color: inherit;
+    transition: transform 0.15s var(--pp-ease);
+}
+.pp-scard__group[data-tier="bronze"]   { --card-metal: #cf9160; }
+.pp-scard__group[data-tier="silver"]   { --card-metal: #b9c6d6; }
+.pp-scard__group[data-tier="gold"]     { --card-metal: #e7c25c; }
+.pp-scard__group[data-tier="platinum"] { --card-metal: #8fd2ea; }
+@media (hover: hover) { .pp-scard__group:hover { transform: translateY(-2px); } }
+.pp-scard__group:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; border-radius: 10px; }
+
+/* Art: ONE medallion per group (the shared .pp-med OBJECT, matching the Collection Case + Browse Gallery),
+   sized down for the tile. Showcase 'earned' look = full colour for everyone (state lives in the seal). */
+.pp-scard__med { position: relative; display: grid; place-items: center; }
+.pp-scard__med .pp-med { --sz: 52px; }
+@media (min-width: 768px) { .pp-scard__med .pp-med { --sz: 58px; } }
+/* The medallion's own count + earned-aura blur are noise here (the aura is the Gallery's scroll-lag culprit)
+   -- suppress both, matching browse-gallery.css. */
 .pp-scard__med .pp-med__count { display: none; }
 .pp-scard__med .pp-med__stage::before { display: none; }
 .pp-scard__seal {
@@ -185,85 +283,17 @@
     border: 2px solid var(--pp-bg-1); box-shadow: 0 0 8px -1px color-mix(in oklab, var(--pp-success) 70%, transparent);
 }
 .pp-scard__seal svg { width: 10px; height: 10px; }
+/* Holo (mastered) seal: shift the disc to the holographic sweep so a mastered hold reads as special. */
+.pp-scard__seal--holo { background: linear-gradient(135deg, #8fd2ea, #c9a7ff 45%, #ffd36e); color: #17123a; border-color: var(--pp-bg-1); }
 
-.pp-scard__name {
-    font-family: var(--pp-font-display); font-weight: 800; font-size: 13px; line-height: 1.15; text-align: center;
-    color: var(--pp-text); max-width: 100%; padding: 0 2px;
-    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-    transition: color var(--pp-dur) var(--pp-ease);
-}
-.pp-scard:hover .pp-scard__name { color: color-mix(in oklab, var(--tier-c) 55%, var(--pp-text)); }
-/* Type + community earned count, on one line ("Series . 3,412 earned"). */
-.pp-scard__type { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-mute); }
-.pp-scard__type .pp-tally { font-size: 10.5px; color: var(--pp-text-dim); letter-spacing: 0; }
-
-/* Ladder row: prev/next arrows flanking the tier nodes, to step faces sequentially. Sized to fit a 2-col
-   375px card (2 arrows + 4 nodes + gaps must clear ~140px of inner width). */
-.pp-scard__ladder-row { display: flex; align-items: center; justify-content: center; gap: 2px; margin-top: 1px; max-width: 100%; }
-.pp-scard__arrow {
-    display: grid; place-items: center; width: 18px; height: 18px; flex: 0 0 auto; padding: 0;
-    border: 0; background: none; border-radius: 5px; cursor: pointer; color: var(--pp-text-mute);
-    transition: color 0.15s ease, background 0.15s ease;
-}
-@media (hover: hover) { .pp-scard__arrow:hover:not(:disabled) { color: var(--pp-text); background: color-mix(in oklab, var(--pp-text) 9%, transparent); } }
-.pp-scard__arrow:disabled { opacity: 0.3; cursor: default; }
-.pp-scard__arrow:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 1px; }
-.pp-scard__arrow svg { width: 13px; height: 13px; }
-
-/* The tier ladder = 4 state nodes that double as the face selector. */
-.pp-scard__ladder { display: flex; align-items: center; justify-content: center; gap: 4px; }
-.pp-scard__node {
-    --nc: var(--pp-text-mute);
-    display: grid; place-items: center; width: 20px; height: 20px; padding: 0;
-    border: 0; background: none; cursor: pointer; border-radius: 50%;
-}
-.pp-scard__node[data-tier-key="bronze"]   { --nc: #cf9160; }
-.pp-scard__node[data-tier-key="silver"]   { --nc: #b9c6d6; }
-.pp-scard__node[data-tier-key="gold"]     { --nc: #e7c25c; }
-.pp-scard__node[data-tier-key="platinum"] { --nc: #8fd2ea; }
-.pp-scard__node:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 1px; }
-.pp-scard__dot {
-    width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--nc);
-    transition: transform 0.15s var(--pp-ease), background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
-}
-.pp-scard__node.is-earned .pp-scard__dot { background: var(--nc); box-shadow: 0 0 6px color-mix(in oklab, var(--nc) 55%, transparent); }
-.pp-scard__node.is-active .pp-scard__dot { background: transparent; box-shadow: 0 0 7px color-mix(in oklab, var(--nc) 55%, transparent); }
-/* Maintenance (held but lapsed -> needs re-earning): a RED "attention" dot, distinct from the tier-filled
-   earned dot and the hollow active dot. Red is the site-wide maintenance colour (Gallery "M", Case niche). */
-.pp-scard__node.is-maintenance .pp-scard__dot { background: var(--pp-maint, #e23026); border-color: var(--pp-maint, #e23026); box-shadow: 0 0 7px color-mix(in oklab, var(--pp-maint, #e23026) 60%, transparent); }
-.pp-scard__node.is-locked .pp-scard__dot { border-color: color-mix(in oklab, var(--nc) 45%, var(--pp-border)); opacity: 0.55; }
-/* Catalog (anon / no-profile): neutral tier dots -- no earned/active/locked emphasis, since there's no
-   personal progress to imply. Just the four tier colours, so the ladder reads as a clean catalog. */
-.pp-scard__node.is-catalog .pp-scard__dot { background: transparent; opacity: 1; }
-/* Selected node (the shown face): a ring around the dot, whatever its state. */
-.pp-scard__node.is-selected .pp-scard__dot { transform: scale(1.25); box-shadow: 0 0 0 2px color-mix(in oklab, var(--nc) 60%, transparent), 0 0 8px color-mix(in oklab, var(--nc) 45%, transparent); }
-@media (hover: hover) { .pp-scard__node:hover .pp-scard__dot { transform: scale(1.2); } }
-
-/* Face panes: the selected tier's grade + progress. Only the selected one shows. */
-.pp-scard__faces { width: 100%; }
-.pp-scard__face { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.pp-scard__face[hidden] { display: none; }
-.pp-scard__face-top { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 5px; }
-.pp-scard__grade {
-    display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px;
-    font-size: 9.5px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: var(--tier-c);
-    background: color-mix(in oklab, var(--tier-c) 14%, transparent);
-    border: 1px solid color-mix(in oklab, var(--tier-c) 45%, transparent);
-}
-.pp-scard__state { font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--pp-text-mute); }
-.pp-scard__state[data-state="maintenance"] { color: color-mix(in oklab, var(--pp-maint, #e23026) 82%, var(--pp-text)); }
-.pp-scard__prog-row { display: flex; align-items: center; gap: 7px; width: 100%; }
-.pp-scard__prog-row .pp-horizon { flex: 1 1 auto; }
-.pp-scard__rem { flex: 0 0 auto; font-size: 9.5px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-/* XP broken out (not a pill): earned-so-far / total on offer for this tier. */
-.pp-scard__xp { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-.pp-scard__xp svg { width: 11px; height: 11px; color: color-mix(in oklab, var(--pp-primary) 70%, var(--pp-text-mute)); }
-.pp-scard__xp .pp-tally { font-size: 11px; color: var(--pp-text-dim); }
-/* Per-tier trophy spread: a tier-trophy-coloured dot + count for each of the four PSN types. Wraps rather
-   than overflowing when a big franchise pushes the counts into the thousands on a narrow tile. */
-.pp-scard__trophies { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 9px; }
-.pp-scard__t { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
-.pp-scard__t::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--tc); flex: 0 0 auto; }
+/* Platform group, tinted in its medallion metal (matches the detail-page switcher labels). */
+.pp-scard__pg { font-size: 10px; font-weight: 800; letter-spacing: 0.02em; color: var(--card-metal); text-align: center; }
+/* Live rarity grade (coloured) or the plain earner count until the series has pursuers. */
+.pp-scard__grade { font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.pp-scard__grade--common   { color: var(--pp-rarity-common); }
+.pp-scard__grade--uncommon { color: var(--pp-rarity-uncommon); }
+.pp-scard__grade--rare     { color: var(--pp-rarity-rare); }
+.pp-scard__grade--mythic   { color: var(--pp-rarity-mythic); }
 
 /* Empty state (no series match the filters). Spans the whole tile grid. Its fade+rise entrance animation
    (ppResultsEmptyIn) is shared with the Gallery's empty panel and lives in browse-gallery.css. */
@@ -277,6 +307,6 @@
 .pp-slist__empty-title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
 
 /* ── User badge stats: the shared .scard grid, flush inside the page header (auth only). ── */
-/* A divider rule over the stat cards (mirrors .pp-btiers' flush treatment); the cards themselves are the
-   site-wide .scard component (elements.css), so no bespoke tile styling lives here. */
+/* A flush divider rule over the stat cards; the cards themselves are the site-wide .scard component
+   (elements.css), so no bespoke tile styling lives here. */
 .pp-bhead__stats { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pp-border); }

@@ -53,7 +53,8 @@ def _serialize_badge_tier(badge, is_earned=False, completed_concepts=0, progress
 def _bulk_series_stats(series_slugs):
     """
     Single-query bulk fetch of total_games and trophy_type counts per series.
-    Mirrors BadgeListView._calculate_all_series_stats().
+    Self-contained mobile-API helper (the web view's per-tier series builder was removed in the
+    grouping-badge rebuild).
     """
     from trophies.models import Game
     games_qs = Game.objects.filter(

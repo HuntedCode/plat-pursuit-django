@@ -10,8 +10,8 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from trophies.models import GroupBadge, SeriesBadgeStanding, UserGroupBadge
-from trophies.services.badge_list_service import build_list_cards
+from trophies.models import BadgeSeries, GroupBadge, SeriesBadgeStanding, UserGroupBadge
+from trophies.services.badge_list_service import build_list_cards, build_series_items
 from tests.factories import (
     ProfileFactory, PlatformGroupFactory, BadgeSeriesFactory, GroupBadgeFactory,
 )
@@ -19,6 +19,7 @@ from tests.factories import (
 pytestmark = pytest.mark.django_db
 
 GALLERY = reverse('badges_list')
+SERIES = reverse('badges_list')   # the default (no ?view) view is the per-series tile grid
 # select_related the batched builder + Gallery rely on to stay query-flat.
 _SR = ('series', 'series__franchise', 'series__collection', 'series__developer', 'platform_group')
 
@@ -245,3 +246,293 @@ def test_gallery_query_count_constant_regardless_of_catalog_size(client):
         client.get(GALLERY, {'view': 'gallery'})
     assert len(large) == len(small)   # no growth with catalog size (batched, no per-card N+1)
     assert len(small) < 20            # absolute ceiling: a per-card N+1 (a page is 48 cards) can't hide
+
+
+# ================================================================= SERIES VIEW ===========================
+# The default view: one TILE per badge series, carrying a row of its live GROUP medallions (one per platform
+# group). Reuses build_list_cards via build_series_items, so it inherits the same batched/whale-safe path.
+
+# ------------------------------------------------------------------ service ------------------------------
+
+def test_build_series_items_groups_cards_by_series():
+    _series_groups('gow', 'God of War', [('legacy-hd', 'Legacy HD'), ('ultra-hd', 'Ultra HD')])
+    _series_groups('tlou', 'The Last of Us', [('ultra-hd', 'Ultra HD')])
+    items = build_series_items(list(BadgeSeries.objects.order_by('name')), None)
+    by_slug = {it['series'].series_slug: it for it in items}
+    assert len(by_slug['gow']['cards']) == 2       # both platform groups become cells
+    assert len(by_slug['tlou']['cards']) == 1
+    assert by_slug['gow']['card_name'] == 'God of War' and by_slug['gow']['badge_type'] == 'series'
+
+
+def test_build_series_items_total_earned_sums_its_groups():
+    legacy, ultra = _series_groups('e', 'Earned', [('legacy-hd', 'Legacy HD'), ('ultra-hd', 'Ultra HD')])
+    GroupBadge.objects.filter(id=legacy.id).update(earned_count=3)
+    GroupBadge.objects.filter(id=ultra.id).update(earned_count=5)
+    item = build_series_items(list(BadgeSeries.objects.filter(series_slug='e')), None)[0]
+    assert item['total_earned'] == 8
+
+
+def test_build_series_items_query_count_is_flat():
+    # One group-badge fetch for the whole page + build_list_cards' two bulk maps -- independent of series count.
+    for i in range(6):
+        _series_groups(f's{i}', f'S{i}', [('ultra-hd', 'Ultra HD')])
+    profile = ProfileFactory()
+    series = list(BadgeSeries.objects.all())
+    with CaptureQueriesContext(connection) as ctx:
+        items = build_series_items(series, profile)
+    assert len(items) == 6
+    assert len(ctx.captured_queries) <= 3   # gbs fetch + pursuer counts + holds
+
+
+# ------------------------------------------------------------------ render + links -----------------------
+
+def test_series_view_renders_group_medallions(client):
+    _series_groups('gow', 'God of War', [('legacy-hd', 'Legacy HD'), ('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()                 # no ?view -> the Series tiles
+    assert 'pp-med' in html
+    assert html.count('class="pp-scard"') == 1                 # one tile per series
+    assert html.count('class="pp-scard__group"') == 2          # one medallion cell per platform group
+    assert 'Legacy HD' in html and 'Ultra HD' in html          # each cell names its platform group
+    assert '/badges/gow/' in html                              # heading + cells link to the detail page
+
+
+def test_series_view_hides_series_without_a_live_group(client):
+    # The _live_groups > 0 gate: a series whose only group badges are dormant (is_live=False) is excluded.
+    _series_groups('live', 'Live One', [('ultra-hd', 'Ultra HD')])           # a live group -> shows
+    dormant = BadgeSeriesFactory(series_slug='dorm', name='Dormant Only')
+    pg = PlatformGroupFactory(key='legacy-hd', name='Legacy HD', platforms=['PS3'])
+    GroupBadgeFactory(series=dormant, platform_group=pg, is_live=False)      # only dormant -> hidden
+    html = client.get(SERIES).content.decode()
+    assert '/badges/live/' in html and '/badges/dorm/' not in html
+    # And the service agrees when handed both series directly.
+    items = build_series_items(list(BadgeSeries.objects.order_by('name')), None)
+    assert {it['series'].series_slug for it in items if it['cards']} == {'live'}
+
+
+def test_series_view_shows_empty_state_when_no_match(client):
+    _series_groups('exists', 'Exists', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES, {'series_slug': 'zzz-nothing-here'}).content.decode()
+    assert 'pp-slist__empty' in html and 'No badges found' in html
+    assert 'class="pp-scard"' not in html   # no tiles rendered
+
+
+def test_series_peek_targets_group_badge_endpoint(client):
+    _series_groups('pk', 'Peek', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()
+    assert 'data-badge-id=' in html and 'id="badge-peek"' in html   # each cell + the shared modal container
+    assert '/group-badge-peek/' in html                            # the peek resolves to the GROUP endpoint
+    assert '/badges/pk/' in html                                   # detail href fallback
+
+
+def test_series_tile_shows_owned_seal_and_holo(client):
+    profile = ProfileFactory()
+    ultra = _series_groups('own', 'Owned', [('ultra-hd', 'Ultra HD')])[0]
+    UserGroupBadge.objects.create(profile=profile, group_badge=ultra, is_holo=True)
+    client.force_login(profile.user)
+    html = client.get(SERIES).content.decode()
+    assert 'pp-scard__seal' in html            # the held cell shows the earned seal
+    assert 'pp-scard__seal--holo' in html      # ... mastered -> the holo variant
+
+
+def test_series_card_name_resolution_chain(client):
+    from trophies.models import Franchise, Company
+    fr = Franchise.objects.create(igdb_id=414, name='Resident Evil', slug='re-s', source_type='franchise')
+    dev = Company.objects.create(igdb_id=717, name='Naughty Dog', slug='nd-s')
+    _series_groups('rs-fr', 'RE Village', [('ultra-hd', 'Ultra HD')], franchise=fr)
+    _series_groups('rs-dev', 'Uncharted', [('ultra-hd', 'Ultra HD')], developer=dev)
+    _series_groups('rs-plain', 'Solo Series Name', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()
+    assert 'pp-scard__name">Resident Evil<' in html      # franchise wins
+    assert 'pp-scard__name">Naughty Dog<' in html        # developer wins over its series name
+    assert 'pp-scard__name">Solo Series Name<' in html   # series name is the final fallback
+
+
+# ------------------------------------------------------------------ filters ------------------------------
+
+def test_series_search_matches_name(client):
+    _series_groups('elden-ring', 'Elden Ring', [('ultra-hd', 'Ultra HD')])
+    _series_groups('dark-souls', 'Dark Souls', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES, {'series_slug': 'elden'}).content.decode()
+    assert '/badges/elden-ring/' in html and '/badges/dark-souls/' not in html
+
+
+def test_series_type_filter_is_db_side(client):
+    _series_groups('rs', 'RS', [('ultra-hd', 'Ultra HD')], badge_type='series')
+    _series_groups('fr', 'FR', [('ultra-hd', 'Ultra HD')], badge_type='franchise')
+    html = client.get(SERIES, {'badge_type': 'franchise'}).content.decode()
+    assert '/badges/fr/' in html and '/badges/rs/' not in html
+
+
+def test_series_badge_type_filter_ORs(client):
+    _series_groups('rs-a', 'RS A', [('ultra-hd', 'Ultra HD')], badge_type='series')
+    _series_groups('dev-b', 'Dev B', [('ultra-hd', 'Ultra HD')], badge_type='developer')
+    _series_groups('fr-c', 'FR C', [('ultra-hd', 'Ultra HD')], badge_type='franchise')
+    html = client.get(SERIES, {'badge_type': ['series', 'developer']}).content.decode()
+    assert '/badges/rs-a/' in html and '/badges/dev-b/' in html   # both selected types (badge_type__in)
+    assert '/badges/fr-c/' not in html                            # franchise excluded
+
+
+# ------------------------------------------------------------------ shared chrome ------------------------
+
+def test_series_page_renders_sticky_mini_bar(client):
+    _series_groups('mb', 'Mini', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()
+    assert 'class="pp-minibar"' in html                # identity + Series/Gallery switch, persistent
+    assert 'id="badges-minibar-sentinel"' in html
+    assert 'data-minibar-badge-filters' in html        # the Filters reach button
+
+
+def test_series_toolbar_is_the_shared_collapsible(client):
+    _series_groups('tb', 'Toolbar', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()
+    assert 'pp-bgal__bar' in html and 'id="bgal-filters-toggle"' in html   # the shared Gallery toolbar
+    assert 'id="bgal-advanced"' in html and 'id="bgal-filter-count"' in html
+    assert 'name="badge_type"' in html                 # the Type chips live in the advanced panel
+    assert 'pp-sbar' not in html                        # the old inline toolbar is gone
+
+
+def test_series_state_chips_are_auth_only(client):
+    _series_groups('a', 'Anon', [('ultra-hd', 'Ultra HD')])
+    assert 'name="state"' not in client.get(SERIES).content.decode()   # anon -> no owned chips
+    p = ProfileFactory()
+    client.force_login(p.user)
+    assert 'name="state"' in client.get(SERIES).content.decode()       # authed -> Earned / Not earned
+
+
+def test_series_owned_filter_is_db_side(client):
+    profile = ProfileFactory()
+    has = _series_groups('has', 'Has', [('ultra-hd', 'Ultra HD')])[0]
+    _series_groups('none', 'None', [('ultra-hd', 'Ultra HD')])
+    UserGroupBadge.objects.create(profile=profile, group_badge=has)   # hold a group in 'has' only
+    client.force_login(profile.user)
+    earned = client.get(SERIES, {'state': 'earned'}).content.decode()
+    assert '/badges/has/' in earned and '/badges/none/' not in earned      # holds >=1 group
+    unearned = client.get(SERIES, {'state': 'unearned'}).content.decode()
+    assert '/badges/none/' in unearned and '/badges/has/' not in unearned  # holds none
+
+
+# ------------------------------------------------------------------ sorts --------------------------------
+
+def test_series_default_sort_is_name(client):
+    _series_groups('z', 'Zed', [('ultra-hd', 'Ultra HD')])
+    _series_groups('a', 'Alpha', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()
+    assert html.index('/badges/a/') < html.index('/badges/z/')
+
+
+def test_series_popular_and_rarity_sort_by_total_earners(client):
+    hi = _series_groups('hi', 'Hi', [('ultra-hd', 'Ultra HD')])[0]
+    lo = _series_groups('lo', 'Lo', [('ultra-hd', 'Ultra HD')])[0]
+    GroupBadge.objects.filter(id=hi.id).update(earned_count=100)
+    GroupBadge.objects.filter(id=lo.id).update(earned_count=1)
+    popular = client.get(SERIES, {'sort': 'popular'}).content.decode()
+    assert popular.index('/badges/hi/') < popular.index('/badges/lo/')   # most earned first
+    rare = client.get(SERIES, {'sort': 'rarity'}).content.decode()
+    assert rare.index('/badges/lo/') < rare.index('/badges/hi/')         # fewest earners = rarest first
+
+
+def test_series_newest_sort_by_created_at(client):
+    from datetime import timedelta
+    from django.utils import timezone
+    _series_groups('old', 'Old', [('ultra-hd', 'Ultra HD')])
+    _series_groups('new', 'New', [('ultra-hd', 'Ultra HD')])
+    now = timezone.now()
+    BadgeSeries.objects.filter(series_slug='old').update(created_at=now - timedelta(days=5))
+    BadgeSeries.objects.filter(series_slug='new').update(created_at=now)
+    html = client.get(SERIES, {'sort': 'newest'}).content.decode()
+    assert html.index('/badges/new/') < html.index('/badges/old/')
+
+
+# ------------------------------------------------------------------ pagination / whale-safe --------------
+
+def test_series_full_page_carries_infinite_scroll_hooks(client):
+    _series_groups('inf', 'Inf', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()
+    assert 'id="items-grid"' in html and 'id="bgal-sentinel"' in html and 'id="bgal-loading"' in html
+
+
+def test_series_xhr_page_returns_bare_tile_grid(client):
+    _series_groups('xhr', 'Xhr', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES, {'page': 1}, HTTP_X_REQUESTED_WITH='XMLHttpRequest').content.decode()
+    assert 'class="pp-scard"' in html          # the tiles are there to append
+    assert 'id="filter-form"' not in html      # ... but not the toolbar / full-page shell
+
+
+def test_series_xhr_past_the_end_returns_no_tiles(client):
+    _series_groups('end', 'End', [('ultra-hd', 'Ultra HD')])   # one series -> a single page
+    html = client.get(SERIES, {'page': 2}, HTTP_X_REQUESTED_WITH='XMLHttpRequest').content.decode()
+    assert 'class="pp-scard"' not in html   # past the end -> nothing to append -> the scroller stops
+
+
+def test_series_query_count_constant_regardless_of_catalog_size(client):
+    _series_groups('base-a', 'Base A', [('ultra-hd', 'Ultra HD')])
+    _series_groups('base-b', 'Base B', [('ultra-hd', 'Ultra HD')])
+    client.get(SERIES)   # warm caches
+    with CaptureQueriesContext(connection) as small:
+        client.get(SERIES)
+    for i in range(20):
+        _series_groups(f'more-{i}', f'More {i}', [('ultra-hd', 'Ultra HD')])
+    with CaptureQueriesContext(connection) as large:
+        client.get(SERIES)
+    assert len(large) == len(small)   # no growth with catalog size (batched, no per-series N+1)
+    assert len(small) < 20
+
+
+# ------------------------------------------------------------------ header: forge explainer --------------
+# "How badges work" is staged as the forge journey: 3 beats + the two-editions legend, with real .pp-med
+# medallions (forge_meds) as the payoff. It lives in the shared header, so it teaches on both views.
+
+def test_forge_explainer_renders_the_journey(client):
+    _series_groups('x', 'X', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()
+    assert 'pp-forge' in html
+    assert html.count('data-beat=') == 4                # four beats: set -> platinum -> claim -> master
+    assert 'data-forge-mint' in html                    # the claim medallion (beat 3) is struck/minted
+    assert 'pp-med--holographic' in html                # beat 4: the mastered medallion is holographic
+    assert 'pp-forge__editions' in html                 # the two-editions reward legend
+    assert 'Legacy HD' in html                          # the legend names both editions (only Ultra HD tiles exist)
+    assert 'PS3 &amp; PS Vita' in html                  # the Legacy HD platform scope
+
+
+def test_forge_explainer_states_the_mastery_mechanic(client):
+    _series_groups('x', 'X', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()
+    assert 'Master it' in html                          # the mastery beat
+    # Mastery = 100% (incl. DLC) on every stage -- NOT the inverse; the copy must say so.
+    assert '100% every stage, DLC and all' in html and 'holographic' in html
+
+
+def test_forge_uses_real_badge_art_and_wires_the_peek(client):
+    # A live badge WITH custom subject art -> the forge composes that real art onto the metal plates AND the
+    # illustrations become interactive: tapping any opens that real badge's quick-peek (like the page's tiles).
+    series = BadgeSeriesFactory(series_slug='art', name='Arty', badge_image='badges/series/arty.png')
+    pg = PlatformGroupFactory(key='ultra-hd', name='Ultra HD', platforms=['PS5'])
+    gb = GroupBadgeFactory(series=series, platform_group=pg, is_live=True, earned_count=999)
+    html = client.get(SERIES).content.decode()
+    assert 'badges/series/arty.png' in html          # the real subject rides the medallion plates, not a plate
+    assert 'pp-forge-peek"' in html                  # the illustrations carry the interactive class (attr, not JS)
+    assert 'data-badge-id="%d"' % gb.id in html      # ... wired to that real badge's quick-peek
+
+
+def test_forge_medallions_not_interactive_without_a_source_badge(client):
+    # No badge has custom art -> no example to inspect, so the illustrations render but stay non-interactive
+    # (no false click affordance). Match the class ATTRIBUTE (double-quote) so the JS selector doesn't count.
+    _series_groups('x', 'X', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()
+    assert 'pp-forge' in html and 'pp-forge-peek"' not in html
+
+
+def test_forge_explainer_renders_on_gallery_too(client):
+    _series_groups('x', 'X', [('ultra-hd', 'Ultra HD')])
+    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+    assert 'pp-forge' in html and 'data-forge-mint' in html   # the shared modal teaches on both views
+
+
+def test_howto_modal_and_recall_buttons_present(client):
+    # The journey lives in a first-run modal (hidden by default; JS auto-opens it once) with two recall buttons.
+    _series_groups('x', 'X', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()
+    assert 'id="badge-howto" hidden' in html      # the modal, hidden until the JS opens it (first visit / recall)
+    assert 'pp-howto__got' in html                # the "Got it" dismiss inside it
+    assert 'class="pp-howto-btn' in html          # header recall button
+    assert 'pp-minibar__howto' in html            # mini-bar recall button (persists when the header scrolls away)

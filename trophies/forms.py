@@ -513,47 +513,19 @@ class UserConceptRatingForm(forms.ModelForm):
 
 
 class BadgeSearchForm(forms.Form):
+    """Filter form for the Browse Badges list (grouping-badge system). Only carries the fields the rebuilt
+    toolbar renders: the name search + the badge-type chip choices. Sort + personal state are handled by the
+    view directly (series_sorts / gallery_sorts + the binary-hold `state` chips), not by this form."""
     series_slug = forms.CharField(required=False, label='Search by Series')
-    sort = forms.ChoiceField(
-        choices=[
-            ('name', 'Alphabetical'),
-            ('earned', 'Most Earned (Tier 1)'),
-            ('earned_inv', 'Least Earned (Tier 1)'),
-            ('my_tier', 'My Progress Ascending'),
-            ('my_tier_desc', 'My Progress Descending'),
-            ('stages', 'Most Stages'),
-            ('stages_inv', 'Fewest Stages'),
-            ('newest', 'Newest Added'),
-            ('oldest_added', 'Oldest Added'),
-            ('xp', 'Most XP'),
-            ('xp_inv', 'Least XP'),
-            ('closest', 'Closest to Next Tier'),
-            ('games_owned', 'Most Games Owned'),
-            ('games_owned_inv', 'Fewest Games Owned'),
-            ('recently_progressed', 'Recently Progressed'),
-        ],
-        required=False,
-        label='Sort By',
-    )
     badge_type = forms.ChoiceField(
         required=False,
         label='Badge Type',  # choices sourced from the model in __init__
     )
-    completion_status = forms.ChoiceField(
-        choices=[
-            ('', 'All'),
-            ('not_started', 'Not Started'),
-            ('in_progress', 'In Progress'),
-            ('completed', 'Completed'),
-        ],
-        required=False,
-        label='Status',
-    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from trophies.models import Badge
-        self.fields['badge_type'].choices = [('', 'All Types')] + list(Badge.BADGE_TYPES)
+        from trophies.models import BadgeSeries
+        self.fields['badge_type'].choices = [('', 'All Types')] + list(BadgeSeries.BADGE_TYPES)
 
 
 class GuideSearchForm(forms.Form):

@@ -8,9 +8,11 @@ shared group_medallion_layers helper. Zero per-card queries, no engine pass; the
 the number of cards. Rarity is derived live (see badge_rarity); state on the list is binary (earned / not),
 since per-badge in-progress is engine-derived and not whale-safe across a catalog.
 """
+from collections import defaultdict
+
 from django.db.models import Count
 
-from trophies.models import SeriesBadgeStanding, UserGroupBadge
+from trophies.models import GroupBadge, SeriesBadgeStanding, UserGroupBadge
 from trophies.services.badge_detail_service import group_medallion_layers
 from trophies.services.badge_rarity import group_rarity
 
@@ -78,3 +80,42 @@ def build_list_cards(group_badges, profile) -> list:
             'earned_count': gb.earned_count,
         })
     return cards
+
+
+def _series_card_name(series) -> str:
+    """The series' broadest affiliation for the tile heading: franchise > collection > developer > name."""
+    fr = series.franchise.name if series.franchise_id else None
+    co = series.collection.name if series.collection_id else None
+    dv = series.developer.name if series.developer_id else None
+    return fr or co or dv or series.name
+
+
+def build_series_items(series_list, profile) -> list:
+    """Per-SERIES tiles for the Series view: each series' live group badges as cards, grouped by series. Reuses
+    build_list_cards, so it's the same batched/whale-safe path -- one group-badge fetch for the page + the two
+    bulk maps. Returns items in the input series order:
+    {series, card_name, badge_type, total_earned, cards}."""
+    series_list = list(series_list)
+    if not series_list:
+        return []
+    slugs = [s.series_slug for s in series_list]
+    gbs = list(
+        GroupBadge.objects.filter(is_live=True, series__series_slug__in=slugs)
+        .select_related('series', 'series__franchise', 'series__collection', 'series__developer', 'platform_group')
+        .order_by('platform_group__sort_order', 'id')
+    )
+    by_series = defaultdict(list)
+    for card in build_list_cards(gbs, profile):
+        by_series[card['series'].series_slug].append(card)
+
+    items = []
+    for s in series_list:
+        s_cards = by_series.get(s.series_slug, [])
+        items.append({
+            'series': s,
+            'card_name': _series_card_name(s),
+            'badge_type': s.badge_type,
+            'total_earned': sum(c['earned_count'] for c in s_cards),
+            'cards': s_cards,
+        })
+    return items

@@ -20,7 +20,7 @@ appends tiles on scroll. Reuses the Gallery's .pp-bgal__ toolbar classes so the 
                     <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
                 </span>
                 <select class="pp-gallery__select" name="sort" aria-label="Sort series">
-                    {% for value, display in form.sort.field.choices %}
+                    {% for value, display in series_sorts %}
                     <option value="{{ value }}"{% if series_sort == value %} selected{% endif %}>{{ display }}</option>
                     {% endfor %}
                 </select>
@@ -44,12 +44,13 @@ appends tiles on scroll. Reuses the Gallery's .pp-bgal__ toolbar classes so the 
                             {% endif %}{% endfor %}
                         </div>
 
-                        {% if user.is_authenticated %}
+                        {% if series_authed %}
+                        {% comment %} Binary hold (matches the Gallery + the whale-safe model): Earned = holds
+                        >=1 live group badge in the series; Not earned = holds none. {% endcomment %}
                         <div class="pp-bgal__cgroup">
-                            <span class="pp-bgal__clabel">Status</span>
-                            {% for value, display in form.completion_status.field.choices %}{% if value %}
-                            <label class="pp-bgal__chip"><input type="checkbox" name="completion_status" value="{{ value }}"{% if value in selected_completion_statuses %} checked{% endif %}>{{ display }}</label>
-                            {% endif %}{% endfor %}
+                            <span class="pp-bgal__clabel">Owned</span>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="earned"{% if 'earned' in series_states %} checked{% endif %}>Earned</label>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="unearned"{% if 'unearned' in series_states %} checked{% endif %}>Not earned</label>
                         </div>
                         {% endif %}
                     </div>

@@ -1,101 +1,42 @@
-{% load custom_filters humanize %}
+{% load humanize %}
 {% for item in display_data %}
-{% with badge=item.badge %}
-{% with last_tier=item.tiers|last %}
-    {% comment %} Series tile (.pp-scard): the whole tier LADDER, not one rung. One medallion (the default
-    tier) is retinted in place on a swap (tiers share art); each tier's stat face renders once, hidden, and
-    the ladder nodes / flanking arrows toggle them client-side (delegated handler in badge_list.html). The
-    resting face is item.default_tier (the tier you're working on). See series-list.css for the rationale. {% endcomment %}
-    <div class="pp-scard{% if item.has_maintenance %} is-maintenance{% endif %}" data-tier="{{ item.default_tier|badge_tier|lower }}">
-
-        {% if item.has_maintenance %}
-        {% comment %} A lapsed rung -> a red "M" in the top-left corner (mirrors the Gallery/Case maintenance
-        mark), so the "needs re-earning" signal reads before you scroll the ladder. {% endcomment %}
-        <span class="pp-scard__m" title="Maintenance -- a held tier has lapsed and needs re-earning"><span aria-hidden="true">M</span><span class="sr-only">Maintenance needed</span></span>
-        {% endif %}
-
-        {# Medallion (selected face) + name + type - earned. The whole tile navigates to detail (JS). #}
-        <a class="pp-scard__open" href="{% url 'badge_detail' badge.series_slug %}" aria-label="{{ item.card_name }} detail">
-            <span class="pp-scard__art">
-                {% comment %} One medallion, retinted client-side on a face swap (tiers share art; only the
-                tint + the cached tier backdrop/foreground swap). The seal toggles with the selected tier. {% endcomment %}
-                <span class="pp-scard__med">
-                    {% include 'components/badge_medallion.html' with frame=item.default_frame no_id=True %}
-                    <span class="pp-scard__seal" title="Earned"{% if not item.default_earned %} hidden{% endif %}>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    </span>
-                </span>
-            </span>
+    {% comment %} Series tile (.pp-scard, grouping-badge system): the series' identity + a row of its live group
+    medallions (one per platform group -- Legacy HD / Ultra HD). Each medallion is a SHOWCASE piece carrying an
+    owned seal (holo when mastered), its platform group tinted in the medallion metal (matching the detail
+    page), and its LIVE rarity grade. The heading links to the badge detail (series) page; each medallion opens
+    the group quick-peek (JS, via data-badge-id) with the series detail as the no-JS / middle-click fallback.
+    Expects `item` dicts from badge_list_service.build_series_items. {% endcomment %}
+    <div class="pp-scard" data-series="{{ item.series.series_slug }}">
+        {# Series identity: the affiliation name + type and the series' total earners (summed across groups). #}
+        <a class="pp-scard__open" href="{% url 'badge_detail' item.series.series_slug %}" aria-label="{{ item.card_name }} detail">
             <span class="pp-scard__name">{{ item.card_name }}</span>
-            {% comment %} Series-level popularity (tier-1 earners) -- static across faces by design, unlike the
-            per-tier stats below. {% endcomment %}
-            <span class="pp-scard__type">{{ badge.badge_type|capfirst }} &middot; <span class="pp-tally">{{ item.tier1_earned_count|intcomma }}</span> earned</span>
+            <span class="pp-scard__type">{{ item.badge_type|capfirst }} &middot; <span class="pp-tally">{{ item.total_earned|intcomma }}</span> earned</span>
         </a>
 
-        {# Tier ladder (with prev/next arrows) = the face selector; each node shows its state #}
-        <div class="pp-scard__ladder-row">
-            <button type="button" class="pp-scard__arrow" data-face-step="-1" aria-label="Previous tier"{% if item.default_tier == item.tiers.0.tier %} disabled{% endif %}>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            </button>
-            <div class="pp-scard__ladder" role="group" aria-label="Tier ladder: select a tier to view">
-                {% for t in item.tiers %}
-                <button type="button" class="pp-scard__node {% if user.is_authenticated and user.profile %}is-{{ t.state }}{% else %}is-catalog{% endif %}{% if t.tier == item.default_tier %} is-selected{% endif %}"
-                        data-face-node="{{ t.tier }}" data-tier-key="{{ t.tier|badge_tier|lower }}"
-                        data-badge-id="{{ t.badge_id }}"
-                        data-earned="{% if user.is_authenticated and user.profile and t.state == 'earned' %}1{% else %}0{% endif %}"
-                        aria-pressed="{% if t.tier == item.default_tier %}true{% else %}false{% endif %}"
-                        aria-label="{{ t.tier|badge_tier }} tier{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %}, earned{% elif t.state == 'maintenance' %}, lapsed - needs re-earning{% elif t.state == 'active' %}, in progress{% else %}, locked{% endif %}{% endif %}"
-                        title="{{ t.tier|badge_tier }}{% if user.is_authenticated and user.profile %}{% if t.state == 'earned' %} - earned{% elif t.state == 'maintenance' %} - lapsed, needs re-earning{% elif t.state == 'active' %} - in progress{% else %} - locked{% endif %}{% endif %}">
-                    <span class="pp-scard__dot"></span>
-                </button>
-                {% endfor %}
-            </div>
-            <button type="button" class="pp-scard__arrow" data-face-step="1" aria-label="Next tier"{% if item.default_tier == last_tier.tier %} disabled{% endif %}>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-        </div>
-
-        {# Per-tier face panes -- only the selected tier shows #}
-        <div class="pp-scard__faces">
-            {% for t in item.tiers %}
-            <div class="pp-scard__face" data-face="{{ t.tier }}"{% if t.tier != item.default_tier %} hidden{% endif %}>
-                <div class="pp-scard__face-top">
-                    <span class="pp-scard__grade">{{ t.tier|badge_tier }}</span>
-                    {% if user.is_authenticated and user.profile %}
-                        <span class="pp-scard__state" data-state="{{ t.state }}">{% if t.state == 'earned' %}Earned{% elif t.state == 'maintenance' %}Lapsed{% elif t.state == 'active' %}Working{% else %}Locked{% endif %}</span>
-                    {% endif %}
-                </div>
-
-                {% if user.is_authenticated and user.profile %}
-                <div class="pp-scard__prog-row">
-                    {% if t.segments %}
-                    <span class="pp-horizon pp-horizon--segmented" role="progressbar" aria-valuenow="{{ t.progress_pct }}" aria-valuemin="0" aria-valuemax="100" style="--horizon-accent: var(--tier-c); --horizon-h: 6px;">
-                        {% for s in t.segments %}<span class="pp-horizon__seg"{% if s %} data-state="{{ s }}"{% endif %}></span>{% endfor %}
+        <div class="pp-scard__groups">
+            {% for card in item.cards %}
+            <a class="pp-scard__group" data-tier="{{ card.frame.tier }}" data-badge-id="{{ card.group_badge.id }}"
+               href="{% url 'badge_detail' item.series.series_slug %}"
+               aria-label="{{ card.platform_group.name }}{% if card.earned %}{% if card.is_holo %}, mastered{% else %}, earned{% endif %}{% endif %}">
+                <span class="pp-scard__med">
+                    {% include 'components/badge_medallion.html' with frame=card.frame no_id=True %}
+                    {% if card.earned %}
+                    <span class="pp-scard__seal{% if card.is_holo %} pp-scard__seal--holo{% endif %}" title="{% if card.is_holo %}Mastered (holographic){% else %}You've earned this{% endif %}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                        <span class="sr-only">{% if card.is_holo %}Mastered{% else %}Earned{% endif %}</span>
                     </span>
-                    {% else %}
-                    {% include 'components/horizon.html' with progress=t.progress_pct accent='var(--tier-c)' height='6px' %}
                     {% endif %}
-                    {% if t.state == 'earned' %}<span class="pp-scard__rem">Done</span>{% elif t.remaining %}<span class="pp-scard__rem">{{ t.remaining }} left</span>{% endif %}
-                </div>
-                {% endif %}
-
-                <div class="pp-scard__xp" title="XP earned so far / total XP on offer for this tier">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                    {% if user.is_authenticated and user.profile %}<span class="pp-tally">{{ t.xp_earned|intcomma }}</span> / {% endif %}<span class="pp-tally">{{ t.xp_total|intcomma }}</span> XP
-                </div>
-
-                <div class="pp-scard__trophies" aria-label="Trophies this tier spans">
-                    <span class="pp-scard__t" style="--tc: var(--color-trophy-bronze)">{{ t.trophies.bronze|intcomma }}</span>
-                    <span class="pp-scard__t" style="--tc: var(--color-trophy-silver)">{{ t.trophies.silver|intcomma }}</span>
-                    <span class="pp-scard__t" style="--tc: var(--color-trophy-gold)">{{ t.trophies.gold|intcomma }}</span>
-                    <span class="pp-scard__t" style="--tc: var(--color-trophy-platinum)">{{ t.trophies.platinum|intcomma }}</span>
-                </div>
-            </div>
+                </span>
+                {# Platform group, tinted in its medallion metal (matches the detail-page switcher). #}
+                <span class="pp-scard__pg">{{ card.platform_group.name }}</span>
+                {# Live rarity grade (coloured) once the series has pursuers; the earner count until then. #}
+                <span class="pp-scard__grade{% if card.rarity_class %} pp-scard__grade--{{ card.rarity_class }}{% endif %}">
+                    {% if card.rarity_class %}{{ card.rarity_class|title }}{% else %}{{ card.earned_count|intcomma }}{% endif %}
+                </span>
+            </a>
             {% endfor %}
         </div>
     </div>
-{% endwith %}
-{% endwith %}
 {% empty %}
     <div class="pp-slist__empty">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

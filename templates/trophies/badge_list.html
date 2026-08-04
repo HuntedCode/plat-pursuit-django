@@ -1,8 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
-{% load query_tags %}
 {% load humanize %}
-{% load custom_filters %}
 {% block title %}Browse Badges{% endblock %}
 
 {% block content %}
@@ -22,15 +20,18 @@
                     </div>
                     <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                         {% if view == 'gallery' %}
-                            Every badge tier in the catalog. Filter by tier, set, and more.
+                            Every badge in the catalog. Filter by platform, set, and more.
                         {% elif request.GET.series_slug %}
                             Searching for "{{ request.GET.series_slug }}".
-                        {% elif selected_badge_type %}
-                            Every {{ selected_badge_type }} badge series, ready to conquer.
                         {% else %}
                             Every badge series to conquer. Collect them all.
                         {% endif %}
                     </p>
+                    {# Recall affordance for the "How badges work" modal (auto-shown once on a first visit). #}
+                    <button type="button" class="pp-howto-btn mt-2.5" data-howto-open>
+                        <svg class="pp-howto-btn__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"></circle><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path></svg>
+                        <span>How badges work</span>
+                    </button>
                 </div>
 
                 {# Catalog size as a Tally stat (mirrors the Collection header's headline number). #}
@@ -40,11 +41,10 @@
                 </div>
             </div>
 
-            {% comment %} Merged into the header, mirroring the browse-header "substance in the header"
-            pattern: generalized catalogue stats (what the collection offers) + the collapsible tier
-            explainer -- NOT the viewer's own progress, since this is a browse page. {% endcomment %}
+            {% comment %} Generalized catalogue stats (what the collection OFFERS) -- NOT the viewer's own
+            progress, since this is a browse page. The "how badges work" teaching lives in a first-run modal
+            (badge_howto.html, opened by the header/mini-bar buttons), not inline. {% endcomment %}
             {% include 'trophies/partials/badge_list/badge_catalog_stats.html' %}
-            {% include 'trophies/partials/badge_list/badge_list_header.html' %}
         </div>
     </section>
 
@@ -67,6 +67,10 @@
                     <a href="{% url 'badges_list' %}?view=gallery" hx-get="{% url 'badges_list' %}?view=gallery" hx-target="#badge-view" hx-swap="innerHTML" hx-push-url="true"
                        class="pp-switch__chip{% if view == 'gallery' %} is-active{% endif %}" data-view="gallery" aria-label="Gallery view"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg><span class="pp-switch__lbl">Gallery</span></a>
                 </div>
+                <button type="button" class="pp-minibar__howto" data-howto-open aria-label="How badges work">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+                    <span class="pp-minibar__flbl">How it works</span>
+                </button>
                 <button type="button" class="pp-minibar__filters" data-minibar-badge-filters aria-label="Open filters">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                     <span class="pp-minibar__flbl">Filters</span>
@@ -109,10 +113,15 @@
         {% endif %}
     </div>
 
+    {% comment %} "How badges work" first-run modal (auto-opens once, then recalled by the header/mini-bar
+    buttons). Placed BEFORE the quick-peek modal so a medallion tap inside it opens the peek stacked on top. {% endcomment %}
+    {% include 'trophies/partials/badge_list/badge_howto.html' %}
+
     {% comment %} Quick-peek modal (shared by both views): a medallion tap fetches the public
-    badge_quick_peek partial into the body. Reuses the collection's .pp-detail-modal chrome (global CSS).
-    data-peek-url is the reverse with a 0 placeholder the JS swaps for the badge id. {% endcomment %}
-    <div class="pp-detail-modal" id="badge-peek" data-peek-url="{% url 'badge_quick_peek' 0 %}" hidden>
+    group_badge_quick_peek partial (the grouping-badge showcase) into the body. Reuses the collection's
+    .pp-detail-modal chrome (global CSS). data-peek-url is the reverse with a 0 placeholder the JS swaps for
+    the tapped GroupBadge id. {% endcomment %}
+    <div class="pp-detail-modal" id="badge-peek" data-peek-url="{% url 'group_badge_quick_peek' 0 %}" hidden>
         <div class="pp-detail-modal__scrim" data-peek-close></div>
         <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
             <button type="button" class="pp-detail-modal__close" data-peek-close aria-label="Close badge detail">&times;</button>
@@ -151,14 +160,12 @@
         }
         // The view showing before the next swap, for the directional slide (Series -> Gallery = forward).
         var lastView = (viewConfig() || {}).view || 'series';
-        // Cards reveal (staggered) as they scroll into view -- Series TILES rise + fill their bars, Gallery
-        // MEDALLIONS materialize onto the wall. Skipped under reduced motion / no IO. The .pp-reveal class is
-        // added ONLY when we're going to observe, so cards never stick hidden. Uses the Web Animations API
-        // (not a CSS-class animation) so the arrival restarts RELIABLY on freshly HTMX-swapped nodes.
-        // Cards reveal (staggered) via the shared PlatPursuit.staggerReveal engine (batch + observer +
-        // reduced-motion gate); we supply just the per-card WAAPI animation: Series TILES rise + fill their
-        // bars, Gallery MEDALLIONS materialize onto the wall. revealHandle.observe() is called for
-        // infinite-scroll-appended cards (see initScroller's onAppend).
+        // Cards reveal (staggered) as they scroll into view -- Series TILES rise, Gallery MEDALLIONS
+        // materialize onto the wall. Skipped under reduced motion / no IO. The .pp-reveal class is added ONLY
+        // when we're going to observe, so cards never stick hidden. Uses the Web Animations API (not a CSS-
+        // class animation) so the arrival restarts RELIABLY on freshly HTMX-swapped nodes, via the shared
+        // PlatPursuit.staggerReveal engine (batch + observer + reduced-motion gate); we supply just the
+        // per-card WAAPI animation. revealHandle.observe() runs for infinite-scroll-appended cards too.
         function initReveal() {
             if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }   // tear down the prior grid's observer
             var cfg = viewConfig();
@@ -176,13 +183,9 @@
                                    { duration: 480, delay: delayMs, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)', fill: 'backwards' });
                         return;
                     }
+                    // Series tile: a clean fade + rise (its group medallions ride in with the tile).
                     el.animate([{ opacity: 0, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none' }],
                                { duration: 500, delay: delayMs, easing: ease, fill: 'backwards' });
-                    var fill = el.querySelector('.pp-horizon__fill');   // linear horizon: fill grows from the left
-                    if (fill) { fill.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: 700, delay: delayMs + 250, easing: ease, fill: 'backwards' }); }
-                    el.querySelectorAll('.pp-horizon__seg[data-state]').forEach(function (seg) {   // segmented: filled segs pop in
-                        seg.animate([{ opacity: 0, transform: 'scale(0.55)' }, { opacity: 1, transform: 'none' }], { duration: 380, delay: delayMs + 250, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'backwards' });
-                    });
                 },
             });
         }
@@ -198,91 +201,15 @@
             });
         }
 
-        // Series tile interactions: the ladder nodes / flanking arrows swap which tier face a tile shows;
-        // clicking anywhere else on the tile opens its detail page. All delegated on document so infinite-
-        // scroll-appended tiles work with no re-wiring (a no-op on the Gallery, which has no tiles).
-        // The tier backdrop/foreground are four site-wide, tier-keyed STATIC images (already cached); we
-        // render ONE medallion per tile and just repoint these on a swap (the subject art is shared).
-        var TIER_BACKDROP = {
-            1: "{% static 'images/badges/backdrops/1_backdrop.png' %}",
-            2: "{% static 'images/badges/backdrops/2_backdrop.png' %}",
-            3: "{% static 'images/badges/backdrops/3_backdrop.png' %}",
-            4: "{% static 'images/badges/backdrops/4_backdrop.png' %}"
-        };
-        var TIER_FOREGROUND = {
-            1: "{% static 'images/badges/foregrounds/1_foreground.png' %}",
-            2: "{% static 'images/badges/foregrounds/2_foreground.png' %}",
-            3: "{% static 'images/badges/foregrounds/3_foreground.png' %}",
-            4: "{% static 'images/badges/foregrounds/4_foreground.png' %}"
-        };
-        function scardSelect(card, node) {
-            if (!card || !node) { return; }
-            var face = node.getAttribute('data-face-node');
-            // Stat panes swap (cheap text). The single medallion retints in place.
-            card.querySelectorAll('.pp-scard__face').forEach(function (el) {
-                if (el.getAttribute('data-face') === face) { el.removeAttribute('hidden'); }
-                else { el.setAttribute('hidden', ''); }
-            });
-            var key = node.getAttribute('data-tier-key');
-            var med = card.querySelector('.pp-scard__med .pp-med');
-            if (med && key) {
-                med.className = med.className.replace(/pp-med--(bronze|silver|gold|platinum)/, 'pp-med--' + key);
-                med.setAttribute('data-tier', key);
-                var layers = med.querySelectorAll('.pp-med__art .pp-med__l');
-                if (layers[0] && TIER_BACKDROP[face]) { layers[0].src = TIER_BACKDROP[face]; }          // backdrop
-                if (layers.length >= 3 && TIER_FOREGROUND[face]) { layers[2].src = TIER_FOREGROUND[face]; }  // foreground (custom-art only)
-                // Holographic foil is a platinum-earned flourish: toggle the class, injecting the foil span
-                // once if it wasn't rendered (default tier wasn't platinum).
-                var isPlat = (face === '4');
-                med.classList.toggle('pp-med--holographic', isPlat);
-                var foil = med.querySelector('.pp-med__foil');
-                if (isPlat && !foil) {
-                    var art = med.querySelector('.pp-med__art');
-                    if (art) { foil = document.createElement('span'); foil.className = 'pp-med__foil'; foil.setAttribute('aria-hidden', 'true'); art.appendChild(foil); }
-                } else if (!isPlat && foil) {
-                    foil.remove();   // .pp-med__foil is visible (opacity .3) on its own -- must be removed, not just declassed
-                }
-            }
-            var seal = card.querySelector('.pp-scard__seal');
-            if (seal) { seal.hidden = (node.getAttribute('data-earned') !== '1'); }
-            var nodes = card.querySelectorAll('.pp-scard__node');
-            var idx = 0;
-            nodes.forEach(function (n, i) {
-                var on = (n === node);
-                n.classList.toggle('is-selected', on);
-                n.setAttribute('aria-pressed', on ? 'true' : 'false');
-                if (on) { idx = i; }
-            });
-            if (key) { card.setAttribute('data-tier', key); }
-            var prev = card.querySelector('.pp-scard__arrow[data-face-step="-1"]');
-            var next = card.querySelector('.pp-scard__arrow[data-face-step="1"]');
-            if (prev) { prev.disabled = (idx === 0); }
-            if (next) { next.disabled = (idx === nodes.length - 1); }
-            // Physical face-swap: a quick spring scale-dip on the medallion so a tier change reads as a
-            // tactile settle rather than a hard cut (reduced-motion-safe; a rapid re-swap cancels the prior).
-            if (window.PlatPursuit && PlatPursuit.Medallion && !PlatPursuit.Medallion.prefersReducedMotion()) {
-                var medWrap = card.querySelector('.pp-scard__med');
-                if (medWrap && medWrap.animate) {
-                    if (medWrap._swapAnim) { medWrap._swapAnim.cancel(); }
-                    medWrap._swapAnim = medWrap.animate([
-                        { transform: 'scale(1)' },
-                        { transform: 'scale(0.9)', offset: 0.35 },
-                        { transform: 'scale(1.05)', offset: 0.68 },
-                        { transform: 'scale(1)' }
-                    ], { duration: 440, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' });
-                }
-            }
-        }
-
-        // Quick-peek modal: a medallion tap GROWS the PUBLIC badge_quick_peek partial into the shared
+        // Quick-peek modal: a medallion tap GROWS the PUBLIC group_badge_quick_peek partial into the shared
         // #badge-peek dialog -- the collection's .pp-detail-modal chrome + the shared pick-up/put-down
         // controller (PlatPursuit.Medallion.detailModal). data-peek-url is the reverse with a 0 placeholder.
         var peekEl = document.getElementById('badge-peek');
         var peek = (peekEl && window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)
             ? PlatPursuit.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
             : null;
-        // Grow the peek from the tapped source medallion. sourceEl is the tile's .pp-scard__med or the
-        // Gallery .pp-bgal__card -- both hold the .pp-med the controller measures + hides during the peek.
+        // Grow the peek from the tapped source cell. sourceEl is the Series group cell (.pp-scard__group) or
+        // the Gallery cell (.pp-bgal__card) -- both hold the .pp-med the controller measures + hides.
         function openPeek(badgeId, sourceEl) {
             if (!peek || !badgeId) { return; }
             var tmpl = peekEl.getAttribute('data-peek-url') || '';
@@ -293,42 +220,30 @@
 
         document.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
-            // Let modified clicks (open-in-new-tab/window) fall through to native anchor navigation instead
-            // of being hijacked into the modal / card-nav -- the medallion + Gallery cell keep their hrefs.
+            // Let modified clicks (open-in-new-tab/window) fall through to native anchor navigation instead of
+            // being hijacked into the modal -- every tile element is a real anchor with an href.
             if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }
-            // Medallion -> quick-peek modal. Series: the SELECTED tier's badge; Gallery: the whole cell.
-            var medEl = e.target.closest('.pp-scard__med');
-            if (medEl) {
-                e.preventDefault();
-                var mcard = medEl.closest('.pp-scard');
-                var msel = mcard && mcard.querySelector('.pp-scard__node.is-selected');
-                openPeek(msel && msel.getAttribute('data-badge-id'), medEl);   // grow from the tile's medallion
-                return;
-            }
-            var cell = e.target.closest('.pp-bgal__card');
+            // Medallion tap -> quick-peek modal. The Series group cell (.pp-scard__group), the Gallery cell
+            // (.pp-bgal__card), and the header forge illustrations (.pp-forge-peek) all carry data-badge-id +
+            // the .pp-med the peek grows from.
+            var cell = e.target.closest('.pp-scard__group, .pp-bgal__card, .pp-forge-peek');
             if (cell && cell.getAttribute('data-badge-id')) {
                 e.preventDefault();
-                openPeek(cell.getAttribute('data-badge-id'), cell);   // grow from the Gallery cell's medallion
+                openPeek(cell.getAttribute('data-badge-id'), cell);
                 return;
             }
-            var node = e.target.closest('.pp-scard__node');
-            if (node) { scardSelect(node.closest('.pp-scard'), node); return; }
-            var arrow = e.target.closest('.pp-scard__arrow');
-            if (arrow) {
-                if (arrow.disabled) { return; }
-                var acard = arrow.closest('.pp-scard');
-                var anodes = acard ? acard.querySelectorAll('.pp-scard__node') : [];
-                var cur = 0;
-                for (var i = 0; i < anodes.length; i++) { if (anodes[i].classList.contains('is-selected')) { cur = i; } }
-                var step = parseInt(arrow.getAttribute('data-face-step'), 10) || 0;
-                scardSelect(acard, anodes[Math.min(anodes.length - 1, Math.max(0, cur + step))]);
-                return;
-            }
-            if (e.target.closest('a')) { return; }   // the medallion/name link navigates natively
-            var tile = e.target.closest('.pp-scard');
-            if (tile) {
-                var link = tile.querySelector('.pp-scard__open');
-                if (link && link.href) { window.location.href = link.href; }
+            // Everything else on a tile (the series name/type heading) is a plain anchor -> navigates natively.
+        });
+
+        // Keyboard activation for the forge illustrations (role=button spans, not native anchors): Enter/Space
+        // opens the same peek. The Series/Gallery cells are real anchors, so they already activate by keyboard.
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') { return; }
+            if (!e.target.closest) { return; }
+            var pk = e.target.closest('.pp-forge-peek');
+            if (pk && pk.getAttribute('data-badge-id')) {
+                e.preventDefault();
+                openPeek(pk.getAttribute('data-badge-id'), pk);
             }
         });
 
