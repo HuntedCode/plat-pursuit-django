@@ -307,7 +307,9 @@ def test_series_tile_shows_the_count_once_earned(client):
     gb = _series_groups('pop', 'Popular', [('ultra-hd', 'Ultra HD')])[0]
     GroupBadge.objects.filter(id=gb.id).update(earned_count=1200)
     html = client.get(SERIES).content.decode()
-    assert '1,200' in html and 'Be the first' not in html   # earners -> the count (or rarity), no CTA
+    # earners -> the count (or rarity); no CTA in the tile's grade slot ("Be the first" is also a filter chip
+    # label now, so assert on the tile's cta class, not the raw text).
+    assert '1,200' in html and 'pp-scard__grade--cta' not in html
 
 
 def test_default_art_resolves_to_a_static_url(client):
@@ -431,6 +433,69 @@ def test_series_toolbar_is_the_shared_collapsible(client):
     assert 'id="bgal-advanced"' in html and 'id="bgal-filter-count"' in html
     assert 'name="badge_type"' in html                 # the Type chips live in the advanced panel
     assert 'pp-sbar' not in html                        # the old inline toolbar is gone
+
+
+# ------------------------------------------------------------------ rarity filter ------------------------
+# Rarity is live-derived (pct of the series' pursuers who earned the badge). The filter reproduces that in the
+# DB so it stays whale-safe + paginated. participants=21 + earned=1 -> ~4.8% -> mythic; earned=15 -> ~71% ->
+# common (see badge_rarity.RARITY_THRESHOLDS).
+
+def _rarity_pair():
+    myth = _series_groups('myth', 'Myth', [('ultra-hd', 'Ultra HD')])[0]
+    comm = _series_groups('comm', 'Comm', [('ultra-hd', 'Ultra HD')])[0]
+    _pursuers('myth', 21)
+    _pursuers('comm', 21)
+    GroupBadge.objects.filter(id=myth.id).update(earned_count=1)    # ~4.8% -> mythic
+    GroupBadge.objects.filter(id=comm.id).update(earned_count=15)   # ~71% -> common
+
+
+def test_gallery_rarity_filter_is_db_side(client):
+    _rarity_pair()
+    myth = client.get(GALLERY, {'view': 'gallery', 'rarity': 'mythic'}).content.decode()
+    assert '/badges/myth/' in myth and '/badges/comm/' not in myth
+    comm = client.get(GALLERY, {'view': 'gallery', 'rarity': 'common'}).content.decode()
+    assert '/badges/comm/' in comm and '/badges/myth/' not in comm
+
+
+def test_series_rarity_filter_keeps_series_with_a_group_of_that_class(client):
+    _rarity_pair()
+    html = client.get(SERIES, {'rarity': 'mythic'}).content.decode()
+    assert '/badges/myth/' in html and '/badges/comm/' not in html
+
+
+def test_rarity_filter_excludes_badges_with_no_rarity(client):
+    # No pursuers + no earners -> no rarity class -> excluded from the earned-tier filters (not silently "common").
+    _series_groups('none', 'None', [('ultra-hd', 'Ultra HD')])
+    html = client.get(GALLERY, {'view': 'gallery', 'rarity': 'common'}).content.decode()
+    assert '/badges/none/' not in html
+
+
+def test_be_the_first_chip_selects_only_unearned(client):
+    # "Be the first" (rarity=unearned) surfaces the not-yet-earned badges the earned tiers exclude.
+    _rarity_pair()                                             # myth (earned) + comm (earned)
+    _series_groups('fresh', 'Fresh', [('ultra-hd', 'Ultra HD')])   # earned_count 0 -> not yet earned
+    for view in ((GALLERY, {'view': 'gallery', 'rarity': 'unearned'}), (SERIES, {'rarity': 'unearned'})):
+        html = client.get(view[0], view[1]).content.decode()
+        assert '/badges/fresh/' in html                       # the un-earned badge shows
+        assert '/badges/myth/' not in html and '/badges/comm/' not in html   # earned ones don't
+
+
+def test_be_the_first_combines_with_a_rarity_tier(client):
+    # Selecting a tier AND "Be the first" unions them (earned mythic + not-yet-earned).
+    _rarity_pair()
+    _series_groups('fresh', 'Fresh', [('ultra-hd', 'Ultra HD')])
+    html = client.get(GALLERY, {'view': 'gallery', 'rarity': ['mythic', 'unearned']}).content.decode()
+    assert '/badges/myth/' in html and '/badges/fresh/' in html   # both
+    assert '/badges/comm/' not in html                            # common excluded
+
+
+def test_rarity_chips_render_on_both_views(client):
+    _series_groups('x', 'X', [('ultra-hd', 'Ultra HD')])
+    for html in (client.get(SERIES).content.decode(),
+                 client.get(GALLERY, {'view': 'gallery'}).content.decode()):
+        assert 'name="rarity"' in html and 'pp-bgal__chip--rarity' in html
+        assert 'value="mythic"' in html and 'value="common"' in html
+        assert 'value="unearned"' in html and 'Be the first' in html   # the not-yet-earned chip
 
 
 def test_series_state_chips_are_auth_only(client):

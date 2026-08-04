@@ -58,6 +58,9 @@ from ..models import (
 from ..forms import BadgeSearchForm
 from trophies.services.badge_detail_service import get_badge_detail
 from trophies.services.badge_list_service import build_list_cards, build_series_items
+from trophies.services.badge_rarity import (
+    annotate_group_rarity, RARITY_CLASSES, RARITY_FILTER_CHOICES, RARITY_UNEARNED,
+)
 from trophies.services.frame_service import build_badge_frame
 from trophies.services.redis_leaderboard_service import (
     RedisPaginator, RedisPage,
@@ -164,6 +167,22 @@ class BadgeListView(ListView):
             ))
             qs = qs.annotate(_held=held).filter(_held=('earned' in states))
 
+        # Live-rarity multi-select (OR'd): keep series that ship at least one live group badge in a selected
+        # class (or, for "Be the first", a not-yet-earned one). Reuses the SAME rarity annotation on the group
+        # badges (so it agrees with the displayed grade), wrapped in an EXISTS -- no per-series Python work.
+        raw_rarity = g.getlist('rarity')
+        rarities = [r for r in raw_rarity if r in RARITY_CLASSES]
+        want_unearned = RARITY_UNEARNED in raw_rarity
+        if rarities or want_unearned:
+            inner = GroupBadge.objects.filter(series=OuterRef('pk'), is_live=True)
+            cond = Q()
+            if rarities:
+                inner = annotate_group_rarity(inner)
+                cond |= Q(_rarity__in=rarities)
+            if want_unearned:
+                cond |= Q(earned_count=0)
+            qs = qs.filter(Exists(inner.filter(cond)))
+
         # Every order_by ends on 'pk' -- a unique final tiebreak so infinite-scroll pages don't reorder ties.
         name_key = Lower('name')
         sort = g.get('sort') if g.get('sort') in SERIES_SORT_KEYS else SERIES_SORT_DEFAULT
@@ -210,6 +229,21 @@ class BadgeListView(ListView):
         if states and not ('earned' in states and 'unearned' in states):   # both selected = no filter
             held = Exists(UserGroupBadge.objects.filter(profile=profile, group_badge=OuterRef('pk')))
             qs = qs.annotate(_earned=held).filter(_earned=('earned' in states))
+
+        # Live-rarity multi-select (OR'd): keep badges whose derived class is selected, plus a "Be the first"
+        # option for the not-yet-earned (earned_count == 0, exactly like the card nudge). The pursuer subquery is
+        # added ONLY when a real rarity class is picked, so "Be the first" alone stays a plain indexed filter.
+        raw_rarity = g.getlist('rarity')
+        rarities = [r for r in raw_rarity if r in RARITY_CLASSES]
+        want_unearned = RARITY_UNEARNED in raw_rarity
+        if rarities or want_unearned:
+            cond = Q()
+            if rarities:
+                qs = annotate_group_rarity(qs)
+                cond |= Q(_rarity__in=rarities)
+            if want_unearned:
+                cond |= Q(earned_count=0)
+            qs = qs.filter(cond)
 
         # SET ORDER is the canonical default + the tiebreaker within every other sort (so cards fall back to a
         # stable order on ties). Every order_by ends on 'pk' -- a unique final tiebreak so infinite-scroll
@@ -268,6 +302,8 @@ class BadgeListView(ListView):
             'gallery_groups_selected': g.getlist('group'),
             'gallery_states': g.getlist('state'),
             'gallery_types': g.getlist('badge_type'),
+            'rarity_choices': RARITY_FILTER_CHOICES,           # shared rarity filter chips (both views)
+            'selected_rarities': g.getlist('rarity'),
             'gallery_sort': g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else GALLERY_SORT_DEFAULT,
             'gallery_q': g.get('q', ''),
             'gallery_sorts': GALLERY_SORTS,
@@ -394,6 +430,8 @@ class BadgeListView(ListView):
             'series_authed': profile is not None,
             'series_states': [s for s in g.getlist('state') if s in _GALLERY_STATES],
             'selected_badge_types': g.getlist('badge_type'),
+            'rarity_choices': RARITY_FILTER_CHOICES,           # shared rarity filter chips (both views)
+            'selected_rarities': g.getlist('rarity'),
             'series_sort': g.get('sort') if g.get('sort') in SERIES_SORT_KEYS else SERIES_SORT_DEFAULT,
             'series_sorts': SERIES_SORTS,
             'series_q': g.get('series_slug', ''),

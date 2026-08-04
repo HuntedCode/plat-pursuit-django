@@ -53,6 +53,14 @@ appends tiles on scroll. Reuses the Gallery's .pp-bgal__ toolbar classes so the 
                             <label class="pp-bgal__chip"><input type="checkbox" name="state" value="unearned"{% if 'unearned' in series_states %} checked{% endif %}>Not earned</label>
                         </div>
                         {% endif %}
+
+                        {% comment %} Rarity: keeps series that ship a group badge of the selected class. {% endcomment %}
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">Rarity</span>
+                            {% for value, display in rarity_choices %}
+                            <label class="pp-bgal__chip pp-bgal__chip--rarity" data-rarity="{{ value }}"><input type="checkbox" name="rarity" value="{{ value }}"{% if value in selected_rarities %} checked{% endif %}>{{ display }}</label>
+                            {% endfor %}
+                        </div>
                     </div>
                 </div>
                 <button type="button" class="pp-bgal__clear" id="bgal-clear" hidden>Clear filters</button>

@@ -59,11 +59,20 @@ Degrades to a plain GET (Enter) without JS. {% endcomment %}
                         {% endif %}
                     </div>
 
-                    <div class="pp-bgal__cgroup">
-                        <span class="pp-bgal__clabel">Set</span>
-                        {% for value, display in form.badge_type.field.choices %}{% if value %}
-                        <label class="pp-bgal__chip"><input type="checkbox" name="badge_type" value="{{ value }}"{% if value in gallery_types %} checked{% endif %}>{{ display }}</label>
-                        {% endif %}{% endfor %}
+                    <div class="pp-bgal__crow">
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">Set</span>
+                            {% for value, display in form.badge_type.field.choices %}{% if value %}
+                            <label class="pp-bgal__chip"><input type="checkbox" name="badge_type" value="{{ value }}"{% if value in gallery_types %} checked{% endif %}>{{ display }}</label>
+                            {% endif %}{% endfor %}
+                        </div>
+
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">Rarity</span>
+                            {% for value, display in rarity_choices %}
+                            <label class="pp-bgal__chip pp-bgal__chip--rarity" data-rarity="{{ value }}"><input type="checkbox" name="rarity" value="{{ value }}"{% if value in selected_rarities %} checked{% endif %}>{{ display }}</label>
+                            {% endfor %}
+                        </div>
                     </div>
                 </div>
                 <button type="button" class="pp-bgal__clear" id="bgal-clear" hidden>Clear filters</button>
