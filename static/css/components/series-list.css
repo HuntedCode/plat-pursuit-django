@@ -222,7 +222,7 @@
  * each medallion opens the group quick-peek. Badge art stays full-colour (greyscale-unearned reads
  * "disabled"); ownership lives in the seal, not the art. */
 .pp-scard {
-    position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px;
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer;
     padding: 14px 12px 13px; border-radius: var(--pp-radius-lg); scroll-margin-top: 96px;
     background: linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
     border: 1px solid var(--pp-border);

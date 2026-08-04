@@ -320,13 +320,13 @@ class BadgeListView(ListView):
             n = 4 if metal == 'platinum' else 3   # 4_backdrop = platinum plate, 3_backdrop = gold plate
             return static(f'images/badges/backdrops/{n}_backdrop.png')
 
-        subject, name, source_id = None, 'Platinum Pursuit', None
+        subject, name, source_id, is_avatar = None, 'Platinum Pursuit', None, False
         for cand in (GroupBadge.objects.filter(is_live=True)
                      .select_related('series', 'series__submitted_by', 'platform_group')
                      .order_by('-earned_count', 'id')[:12]):
             art = cand.art_layers()
             if art.get('has_custom_image'):      # a real subject (override / series / avatar), not default.png
-                subject, name, source_id = art['main'], cand.series.name, cand.id
+                subject, name, source_id, is_avatar = art['main'], cand.series.name, cand.id, art['is_avatar']
                 break
 
         def frame(metal, holo=False):
@@ -336,6 +336,7 @@ class BadgeListView(ListView):
                 'tier': metal,
                 'state': 'earned',
                 'art_layers': [plate(metal)] + ([subject] if subject else []),
+                'is_avatar': is_avatar,          # a user-badge avatar subject -> circle-masked + shrunk
                 'is_holographic': holo,
                 'series_name': name,
             }

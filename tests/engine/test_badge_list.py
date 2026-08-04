@@ -310,6 +310,34 @@ def test_series_tile_shows_the_count_once_earned(client):
     assert '1,200' in html and 'Be the first' not in html   # earners -> the count (or rarity), no CTA
 
 
+def test_default_art_resolves_to_a_static_url(client):
+    # A badge with no custom art falls back to default.png -- which must render as a resolved STATIC url, not a
+    # bare relative path (the broken-default-art bug).
+    from django.templatetags.static import static
+    _series_groups('nomed', 'No Art', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()
+    assert static('images/badges/default.png') in html
+    assert 'src="images/badges/default.png"' not in html
+
+
+def test_user_badge_avatar_subject_is_flagged_for_the_circle_mask(client):
+    # A user badge with no custom art uses the submitter's avatar (often square / 4:3 from PSN); the medallion
+    # marks it .pp-med--avatar so the CSS circle-masks + shrinks it onto the plate.
+    author = ProfileFactory(avatar_url='https://example.test/av.png')
+    series = BadgeSeriesFactory(series_slug='ub', name='User Badge', badge_type='user', submitted_by=author)
+    pg = PlatformGroupFactory(key='ultra-hd', name='Ultra HD', platforms=['PS5'])
+    GroupBadgeFactory(series=series, platform_group=pg, is_live=True)
+    html = client.get(SERIES).content.decode()
+    assert 'pp-med--avatar' in html                     # flagged for the circle treatment
+    assert 'https://example.test/av.png' in html        # ... showing the avatar art
+
+
+def test_non_avatar_badge_is_not_flagged_for_the_circle_mask(client):
+    _series_groups('reg', 'Regular', [('ultra-hd', 'Ultra HD')], badge_image='badges/series/reg.png')
+    html = client.get(SERIES).content.decode()
+    assert 'pp-med--avatar' not in html                 # a normal subject keeps the full-plate art
+
+
 def test_series_view_hides_series_without_a_live_group(client):
     # The _live_groups > 0 gate: a series whose only group badges are dormant (is_live=False) is excluded.
     _series_groups('live', 'Live One', [('ultra-hd', 'Ultra HD')])           # a live group -> shows

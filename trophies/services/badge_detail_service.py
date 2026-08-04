@@ -129,22 +129,23 @@ _MED_STATE = {'holo': 'earned', 'earned': 'earned', 'in_progress': 'in_progress'
 
 
 def group_medallion_layers(gb) -> tuple:
-    """(tier, art_layers) for a group badge's medallion -- the backing metal + the composed layers with a
-    backdrop-plate fallback (without a plate the subject's white rim-light traces the bare art). Shared by the
-    detail hero frame and the batched list-card frames (badge_list_service), so they compose identically."""
+    """(tier, art_layers, is_avatar) for a group badge's medallion -- the backing metal + the composed layers
+    with a backdrop-plate fallback (without a plate the subject's white rim-light traces the bare art), plus
+    whether the subject is a user's avatar (a square/4:3 PSN image -> the template circle-masks + shrinks it).
+    Shared by the detail hero frame and the batched list-card frames, so they compose identically."""
     art = gb.art_layers()
     pg = gb.platform_group
     tier = pg.backing_key or _GROUP_BACKING.get(pg.key, 'gold')   # data-tier drives the medallion coloring
     backdrop = art['backdrop']
     if not backdrop and tier in _TIER_BACKDROP:
         backdrop = static(f"images/badges/backdrops/{_TIER_BACKDROP[tier]}_backdrop.png")
-    return tier, [url for url in (backdrop, art['main']) if url]
+    return tier, [url for url in (backdrop, art['main']) if url], art['is_avatar']
 
 
 def _medallion_frame(gv: GroupView, series, target_profile) -> dict:
     """Map a GroupView onto the frame dict components/badge_medallion.html reads (reused unchanged, so the
     Collection/Case pages that still pass legacy frames keep working)."""
-    tier, layers = group_medallion_layers(gv.group_badge)
+    tier, layers, is_avatar = group_medallion_layers(gv.group_badge)
     owner = None
     if target_profile and gv.state in ('earned', 'holo'):
         owner = target_profile.display_psn_username or target_profile.psn_username
@@ -152,6 +153,7 @@ def _medallion_frame(gv: GroupView, series, target_profile) -> dict:
         'tier': tier,
         'state': _MED_STATE[gv.state],
         'art_layers': layers,
+        'is_avatar': is_avatar,
         'is_holographic': gv.is_holo,
         'series_name': series.name,
         'franchise': series.franchise.name if series.franchise_id else None,

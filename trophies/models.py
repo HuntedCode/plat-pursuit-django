@@ -3033,6 +3033,7 @@ class GroupBadge(models.Model):
         """Single source of truth for the medallion's art composition (group backdrop/backing/shape + the
         resolved subject art). Subject art resolves: per-group override -> series default -> (user badge:
         submitter avatar) -> static default. Mirrors the legacy Badge.get_badge_layers behavior."""
+        from django.templatetags.static import static
         grp = self.platform_group
         main_url, is_avatar = None, False
         if self.badge_image_override:
@@ -3045,7 +3046,9 @@ class GroupBadge(models.Model):
                 main_url, is_avatar = submitter.avatar_url, True
         has_custom = main_url is not None
         if not main_url:
-            main_url = 'images/badges/default.png'
+            # Resolve the placeholder to a real static URL -- the branches above return `.url`s, so a raw path
+            # here would render as a broken relative <img src> (the default-art bug).
+            main_url = static('images/badges/default.png')
         return {
             'backdrop': grp.background_image.url if grp.background_image else None,
             'main': main_url,

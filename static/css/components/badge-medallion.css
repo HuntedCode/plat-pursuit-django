@@ -36,6 +36,17 @@
 }
 .pp-med__l { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; user-select: none; }
 .pp-med__art .pp-med__l:nth-child(3) { display: none; }   /* foreground overlay permanently hidden -- the back-plate + main art read cleaner as an object; the decorative front layer muddied it */
+/* User-badge subject = a PSN avatar (often square / 4:3). Circle-mask it and pull it IN off the plate edges so
+   the backing reads as the medallion and the avatar sits ON it rather than covering it. Subject = nth-child(2).
+   Centre it with inset:0 + margin:auto (NOT transform: the detail-modal drives a translateZ parallax on these
+   layers, which would override a transform-based centre and offset the avatar). Explicit size, since an <img>
+   with width:auto would fall back to its intrinsic pixels and overflow. */
+.pp-med--avatar .pp-med__l:nth-child(2) {
+    /* inset:0 + margin:auto centres it (transform-free, so the modal's translateZ parallax leaves it put). */
+    inset: 0; margin: auto; width: 70%; height: 70%;
+    border-radius: 50%; object-fit: cover;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.14), 0 3px 8px rgba(0, 0, 0, 0.45);
+}
 
 /* rising-colour fill (in_progress + maintenance) -- a full-colour copy of ONLY the subject, revealed
    from the bottom up to --fill (progress_pct). The base subject stays darkened/tarnished behind it. */

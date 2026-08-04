@@ -17,7 +17,7 @@ from trophies.services.badge_detail_service import group_medallion_layers
 from trophies.services.badge_rarity import group_rarity
 
 
-def _list_frame(gb, tier, layers, held, is_holo) -> dict:
+def _list_frame(gb, tier, layers, is_avatar, held, is_holo) -> dict:
     """A SHOWCASE medallion frame for a list card: the full-colour display piece (ownership is shown by a
     separate card marker, not by desaturating the art). No progress meter / engraving rank -- those need the
     engine / Redis and stay off the catalog wall. A mastered (holo) hold shimmers, as a personal flourish."""
@@ -26,6 +26,7 @@ def _list_frame(gb, tier, layers, held, is_holo) -> dict:
         'tier': tier,
         'state': 'earned',                          # showcase full-colour; the card carries the owned marker
         'art_layers': layers,
+        'is_avatar': is_avatar,                     # user-badge avatar subject -> circle-masked + shrunk
         'is_holographic': bool(held and is_holo),
         'series_name': series.name,
         'franchise': series.franchise.name if series.franchise_id else None,
@@ -66,13 +67,13 @@ def build_list_cards(group_badges, profile) -> list:
     for gb in group_badges:
         held = gb.id in holds
         is_holo = bool(holds.get(gb.id, False))
-        tier, layers = group_medallion_layers(gb)
+        tier, layers, is_avatar = group_medallion_layers(gb)
         pct, cls = group_rarity(gb.earned_count, participants.get(gb.series.series_slug, 0))
         cards.append({
             'group_badge': gb,
             'series': gb.series,
             'platform_group': gb.platform_group,
-            'frame': _list_frame(gb, tier, layers, held, is_holo),
+            'frame': _list_frame(gb, tier, layers, is_avatar, held, is_holo),
             'rarity_pct': pct,
             'rarity_class': cls,
             'earned': held,

@@ -232,7 +232,15 @@
                 openPeek(cell.getAttribute('data-badge-id'), cell);
                 return;
             }
-            // Everything else on a tile (the series name/type heading) is a plain anchor -> navigates natively.
+            // Whole-tile click: a Series tile's real anchors (the name heading, the group cells) navigate/peek
+            // themselves; a click anywhere ELSE on the tile (its padding + the gaps around those links) still
+            // goes to the series detail, so the whole card is clickable rather than just the links.
+            if (e.target.closest('a')) { return; }
+            var tile = e.target.closest('.pp-scard');
+            if (tile) {
+                var open = tile.querySelector('.pp-scard__open');
+                if (open && open.href) { window.location.href = open.href; }
+            }
         });
 
         // Keyboard activation for the forge illustrations (role=button spans, not native anchors): Enter/Space

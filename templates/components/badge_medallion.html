@@ -8,7 +8,7 @@ platinum/100%, filled to stages_done; a smooth bar off progress_pct above the ca
 page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medallion.md.
 {% endcomment %}
 {% with tier=frame.tier|default:"gold" state=frame.state|default:"earned" total=frame.stages_total|default:0 %}
-<div class="pp-med pp-med--{{ tier }} pp-med--{{ state }}{% if frame.is_holographic and state == 'earned' %} pp-med--holographic{% endif %}{% if show_repair and state == 'maintenance' %} pp-med--repair{% endif %}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
+<div class="pp-med pp-med--{{ tier }} pp-med--{{ state }}{% if frame.is_holographic and state == 'earned' %} pp-med--holographic{% endif %}{% if frame.is_avatar %} pp-med--avatar{% endif %}{% if show_repair and state == 'maintenance' %} pp-med--repair{% endif %}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
      data-tier="{{ tier }}" data-state="{{ state }}"{% if frame.badge_id %} data-badge-id="{{ frame.badge_id }}"{% endif %}
      {% if frame.dom_id and not no_id %}id="{{ frame.dom_id }}"{% endif %}>
     <div class="pp-med__stage">
