@@ -411,8 +411,9 @@ def test_view_renders_community_band(client):
     body = client.get(reverse('badge_detail', kwargs={'series_slug': 'comm'})).content.decode()
     assert 'bd2-comm' in body and 'Rarity &amp; Community' in body   # the band renders
     assert body.count('bd2-comm__group') >= 2                        # one cell per group
-    assert 'of pursuers earned it' in body                           # pursuer-relative phrasing (not "Top X%")
-    assert 'bd2-comm__rar--rare' in body and 'bd2-comm__rar--common' in body   # legacy 10% -> rare, ultra 50% -> common
+    assert 'of pursuers' in body                                     # pursuer-relative phrasing (not "Top X%")
+    assert 'bd2-comm__gem--rare' in body and 'bd2-comm__gem--common' in body    # the rarity GEM per grade
+    assert 'bd2-comm__rar--rare' in body and 'bd2-comm__rar--common' in body    # legacy 10% -> rare, ultra 50% -> common
     assert '50%' in body                                             # ultra 5/10 pursuer-completion
     # Earners bars = the shared Horizon primitive, scaled off community_max_earned (ultra 5/5 = 100%).
     assert 'pp-horizon bd2-comm__bar' in body and '--horizon-progress: 100%' in body

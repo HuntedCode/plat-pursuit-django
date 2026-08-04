@@ -115,6 +115,9 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                 <span class="bd2-gbtn__plats">{{ g.platform_group.platforms|join:" &middot; " }}</span>
             </span>
             <svg class="bd2-gbtn__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+            {% comment %} Per-group completion bar along the base of the segment (your % for that platform) --
+            back like the old tier switcher, but showing progress. Only for a viewer whose progress it is. {% endcomment %}
+            {% if detail.target_profile %}<span class="bd2-gbtn__prog" style="--p: {{ g.progress_pct }}%;" aria-hidden="true"></span>{% endif %}
         </button>
         {% endfor %}
     </div>
@@ -548,6 +551,47 @@ Collection. No extra wrapper container: a nested one would double the horizontal
         });
         document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !contractModal.hidden) { closeContract(); } });
     }
+})();
+
+(function () {
+    // ── Rarity & Community band: a one-shot premium reveal when it scrolls into view -- the group cells stagger
+    // up, then (a beat later, once they've landed) the earner numbers count up and the earners bars fill from 0.
+    var band = document.querySelector('.bd2-comm');
+    if (!band || !window.PlatPursuit) { return; }
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function countUps() {
+        band.querySelectorAll('[data-countup]').forEach(function (n, i) {
+            setTimeout(function () { if (PlatPursuit.countUp) { PlatPursuit.countUp(n); } }, i * 80);
+        });
+    }
+    function fillBars() {
+        band.querySelectorAll('.bd2-comm__bar .pp-horizon__fill').forEach(function (f) {
+            var target = f.getAttribute('data-fill') || f.style.getPropertyValue('--horizon-progress') || '0%';
+            f.style.setProperty('--horizon-progress', '0%');
+            void f.offsetWidth;                                    // commit 0 as the transition start
+            f.style.setProperty('--horizon-progress', target);     // ... then fill up to the real value
+        });
+    }
+
+    // Guard BEFORE arming: reduced motion / no IntersectionObserver -> never hide the cells, just count up in
+    // place (countUp self-jumps under reduced motion; the bars keep their server value).
+    if (reduce || !('IntersectionObserver' in window)) {
+        countUps();
+        return;
+    }
+
+    band.classList.add('bd2-comm--anim');   // arm the initial hidden state only when we'll actually animate
+    var obs = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+            if (!e.isIntersecting) { return; }
+            obs.disconnect();
+            band.classList.add('is-revealed');   // cells stagger up
+            // Fire the content beat AFTER the cells have landed, so numbers/bars don't animate over a moving cell.
+            setTimeout(function () { countUps(); fillBars(); }, 400);
+        });
+    }, { rootMargin: '0px 0px -12% 0px' });
+    obs.observe(band);
 })();
 </script>
 {% endblock %}

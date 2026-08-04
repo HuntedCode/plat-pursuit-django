@@ -932,6 +932,13 @@
     transition: opacity 0.2s ease, transform 0.2s ease;
 }
 .bd2-gbtn.is-active .bd2-gbtn__check { opacity: 1; transform: scale(1); }
+/* Per-group completion bar along the base of the segment -- your % for that platform, in the group metal. */
+.bd2-gbtn__prog { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; overflow: hidden; background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent); }
+.bd2-gbtn__prog::after {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: var(--p, 0%);
+    background: var(--gbtn-metal); box-shadow: 0 0 7px -1px var(--gbtn-metal);
+    transition: width 0.55s var(--pp-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
 /* Mobile: keep both side by side (fast switch) but tighter. */
 @media (max-width: 480px) {
     .bd2-groupswitch { padding: 4px; gap: 4px; }
@@ -941,7 +948,7 @@
     .bd2-gbtn__check { width: 15px; height: 15px; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .bd2-gbtn, .bd2-gbtn__check { transition: none; }
+    .bd2-gbtn, .bd2-gbtn__check, .bd2-gbtn__prog::after { transition: none; }
     .bd2-gbtn:active { transform: none; }
 }
 
@@ -968,24 +975,51 @@
 .bd2-comm__group[data-tier="platinum"] { --comm-metal: #8fd2ea; }
 .bd2-comm__group-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bd2-comm__group-name { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.9rem; color: var(--pp-text); }
-.bd2-comm__rar { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.bd2-comm__you { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--comm-metal); white-space: nowrap; }
+.bd2-comm__you b { font-family: var(--pp-font-display); }
+
+/* Rarity GRADE -- the prestige hero: a gem that glows by grade (mythic shimmers) + the class headline + the
+   pursuer-completion caption. */
+.bd2-comm__grade { margin-top: 10px; display: flex; align-items: center; gap: 11px; }
+.bd2-comm__gem { --gem-c: var(--pp-text-mute); flex: none; width: 34px; height: 34px; color: var(--gem-c); }
+.bd2-comm__gem svg { width: 100%; height: 100%; }
+.bd2-comm__gem--uncommon { --gem-c: var(--pp-rarity-uncommon); filter: drop-shadow(0 0 5px color-mix(in oklab, var(--pp-rarity-uncommon) 55%, transparent)); }
+.bd2-comm__gem--rare     { --gem-c: var(--pp-rarity-rare); filter: drop-shadow(0 0 6px var(--pp-rarity-rare-glow)); }
+/* The mythic gem breathes its GLOW (a filter keyframe) -- pp-mythic-pulse animates text-shadow, a no-op on an
+   SVG, so the gem needs its own drop-shadow pulse. The gem is the sole pulsing element in the cell (the
+   headline keeps a static glow), so the mythic cell reads as one calm beat, not two. */
+@keyframes pp-gem-mythic {
+    0%, 100% { filter: drop-shadow(0 0 5px var(--pp-rarity-mythic-glow)); }
+    50%      { filter: drop-shadow(0 0 11px var(--pp-rarity-mythic-glow)); }
+}
+.bd2-comm__gem--mythic   { --gem-c: var(--pp-rarity-mythic); filter: drop-shadow(0 0 9px var(--pp-rarity-mythic-glow)); animation: pp-gem-mythic 2.6s ease-in-out infinite; }
+.bd2-comm__gem--common   { --gem-c: var(--pp-rarity-common); }
+.bd2-comm__gem--none     { --gem-c: var(--pp-text-mute); opacity: 0.45; }
+.bd2-comm__grade-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.bd2-comm__grade-sub { font-size: 0.66rem; font-weight: 600; color: var(--pp-text-mute); }
 /* Rarity colours use the shared --pp-rarity-* tokens (same source as frame.css), so a recolor stays in one place. */
+.bd2-comm__rar { font-size: 0.86rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1; }
 .bd2-comm__rar--common   { color: var(--pp-rarity-common); font-weight: 700; }
 .bd2-comm__rar--uncommon { color: var(--pp-rarity-uncommon); }
 .bd2-comm__rar--rare     { color: var(--pp-rarity-rare); text-shadow: 0 0 5px var(--pp-rarity-rare-glow); }
-.bd2-comm__rar--mythic   { color: var(--pp-rarity-mythic); text-shadow: 0 0 6px var(--pp-rarity-mythic-glow); animation: pp-mythic-pulse 2.6s ease-in-out infinite; }
-.bd2-comm__rarity { margin-top: 4px; display: flex; align-items: baseline; gap: 8px; }
-.bd2-comm__pct { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.05rem; color: var(--pp-text); }
-.bd2-comm__rrank { font-size: 0.68rem; font-weight: 700; color: var(--pp-text-mute); }
-.bd2-comm__rarity--pending { font-size: 0.72rem; font-style: italic; color: var(--pp-text-mute); }
-.bd2-comm__earnrow { margin-top: 8px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 0.74rem; color: var(--pp-text-mute); }
+.bd2-comm__rar--mythic   { color: var(--pp-rarity-mythic); text-shadow: 0 0 7px var(--pp-rarity-mythic-glow); }   /* static glow; the gem carries the pulse */
+.bd2-comm__rar--none     { color: var(--pp-text-mute); }
+
+.bd2-comm__earnrow { margin-top: 11px; display: flex; align-items: baseline; gap: 8px; font-size: 0.74rem; color: var(--pp-text-mute); }
 .bd2-comm__earners b { color: var(--pp-text-dim); }
-.bd2-comm__you { font-weight: 700; color: var(--comm-metal); }
 .bd2-comm__bar { margin-top: 5px; }   /* the shared Horizon primitive provides the track/fill; this is spacing only */
+.bd2-comm__bar .pp-horizon__fill { transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1); }   /* fill-from-0 on reveal */
 .bd2-comm__standing { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-divider); display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--pp-text-dim); }
 .bd2-comm__standing svg { width: 15px; height: 15px; color: var(--pp-primary); flex-shrink: 0; }
 .bd2-comm__standing b { font-family: var(--pp-font-display); color: var(--pp-text); }
+
+/* Scroll-in reveal: JS arms .bd2-comm--anim (initial hidden state) then adds .is-revealed to stagger the group
+   cells up (staggered by --reveal-i) while the numbers count up + the bars fill. No-JS keeps the cells visible. */
+.bd2-comm--anim .bd2-comm__group { opacity: 0; transform: translateY(10px); transition: opacity 0.5s ease, transform 0.55s cubic-bezier(0.34, 1.2, 0.64, 1); transition-delay: calc(var(--reveal-i, 0) * 90ms); }   /* damped spring settle (slight overshoot), not a flat decel */
+.bd2-comm--anim.is-revealed .bd2-comm__group { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
-    .bd2-comm__rar--mythic { animation: none; }
+    .bd2-comm__gem--mythic, .bd2-comm__rar--mythic { animation: none; }
     .bd2-comm__lb, .bd2-comm__action { transition: none; }
+    .bd2-comm__bar .pp-horizon__fill { transition: none; }
+    .bd2-comm--anim .bd2-comm__group { opacity: 1; transform: none; transition: none; }
 }
