@@ -19,7 +19,7 @@ Expects a `card` dict from badge_list_service.build_list_cards. {% endcomment %}
         <span class="pp-bgal__name">{% firstof card.frame.franchise card.frame.collection card.frame.developer card.frame.series_name %}</span>
         {# Catalog identity: the platform group (tinted in its medallion metal, matching the detail page) + set #. #}
         <span class="pp-bgal__meta"><span class="pp-bgal__pg">{{ card.platform_group.name }}</span>{% if card.group_badge.set_number %} &middot; #{{ card.group_badge.set_number|stringformat:"04d" }}{% endif %}</span>
-        {# Live rarity grade (coloured) + the community scale. Just the earner count until the series has pursuers. #}
-        <span class="pp-bgal__meta">{% if card.rarity_class %}<span class="pp-bgal__grade pp-bgal__grade--{{ card.rarity_class }}">{{ card.rarity_class|title }}</span> &middot; {% endif %}{{ card.earned_count|intcomma }} earned</span>
+        {# Live rarity grade (coloured) + the earner count; a "be the first" nudge while no one has earned it yet. #}
+        <span class="pp-bgal__meta">{% if card.rarity_class %}<span class="pp-bgal__grade pp-bgal__grade--{{ card.rarity_class }}">{{ card.rarity_class|title }}</span> &middot; {% endif %}{% if card.earned_count %}{{ card.earned_count|intcomma }} earned{% else %}<span class="pp-bgal__cta">Be the first</span>{% endif %}</span>
     </span>
 </a>

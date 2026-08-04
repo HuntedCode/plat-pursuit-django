@@ -296,6 +296,20 @@ def test_series_view_renders_group_medallions(client):
     assert '/badges/gow/' in html                              # heading + cells link to the detail page
 
 
+def test_series_tile_shows_cta_instead_of_a_lonely_zero(client):
+    # A live badge no one has earned yet -> a "Be the first" nudge in the rarity slot, not a bare "0".
+    _series_groups('new', 'Brand New', [('ultra-hd', 'Ultra HD')])   # earned_count defaults to 0
+    html = client.get(SERIES).content.decode()
+    assert 'Be the first' in html and 'pp-scard__grade--cta' in html
+
+
+def test_series_tile_shows_the_count_once_earned(client):
+    gb = _series_groups('pop', 'Popular', [('ultra-hd', 'Ultra HD')])[0]
+    GroupBadge.objects.filter(id=gb.id).update(earned_count=1200)
+    html = client.get(SERIES).content.decode()
+    assert '1,200' in html and 'Be the first' not in html   # earners -> the count (or rarity), no CTA
+
+
 def test_series_view_hides_series_without_a_live_group(client):
     # The _live_groups > 0 gate: a series whose only group badges are dormant (is_live=False) is excluded.
     _series_groups('live', 'Live One', [('ultra-hd', 'Ultra HD')])           # a live group -> shows

@@ -238,6 +238,8 @@
 /* Live rarity grade on the card -- coloured by the shared --pp-rarity-* tokens (same source as the detail
    gem). Static glow: a wall of cards must not all pulse. */
 .pp-bgal__grade { font-weight: 800; letter-spacing: 0.02em; }
+/* "Be the first" (no earners yet): an inviting primary-tinted italic, not the muted count grey. */
+.pp-bgal__cta { color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-text-mute)); font-style: italic; font-weight: 700; }
 .pp-bgal__grade--common   { color: var(--pp-rarity-common); }
 .pp-bgal__grade--uncommon { color: var(--pp-rarity-uncommon); }
 .pp-bgal__grade--rare     { color: var(--pp-rarity-rare); text-shadow: 0 0 4px var(--pp-rarity-rare-glow); }
