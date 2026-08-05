@@ -223,16 +223,16 @@
             // Let modified clicks (open-in-new-tab/window) fall through to native anchor navigation instead of
             // being hijacked into the modal -- every tile element is a real anchor with an href.
             if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }
-            // Medallion tap -> quick-peek modal. The Series group cell (.pp-scard__group), the Gallery cell
-            // (.pp-bgal__card), and the header forge illustrations (.pp-forge-peek) all carry data-badge-id +
-            // the .pp-med the peek grows from.
-            var cell = e.target.closest('.pp-scard__group, .pp-bgal__card, .pp-forge-peek');
+            // Medallion tap -> quick-peek modal, now ONLY for the header forge illustrations (.pp-forge-peek).
+            // The Series/Gallery cards are plain anchors that link straight to the badge detail page with the
+            // right edition tab open (?group=<key>), so they navigate natively -- no modal.
+            var cell = e.target.closest('.pp-forge-peek');
             if (cell && cell.getAttribute('data-badge-id')) {
                 e.preventDefault();
                 openPeek(cell.getAttribute('data-badge-id'), cell);
                 return;
             }
-            // Whole-tile click: a Series tile's real anchors (the name heading, the group cells) navigate/peek
+            // Whole-tile click: a Series tile's real anchors (the name heading, the group cells) navigate
             // themselves; a click anywhere ELSE on the tile (its padding + the gaps around those links) still
             // goes to the series detail, so the whole card is clickable rather than just the links.
             if (e.target.closest('a')) { return; }

@@ -102,11 +102,11 @@ def test_gallery_defaults_to_series_view(client):
     assert 'pp-bgal__grid' not in html and 'pp-scard' in html   # the Series tile, not the medallion wall
 
 
-def test_gallery_cell_wires_the_peek_and_detail_fallback(client):
-    _series_groups('pk', 'Peek', [('ultra-hd', 'Ultra HD')])
+def test_gallery_cell_links_to_the_group_tab(client):
+    _series_groups('pk', 'Linky', [('legacy-hd', 'Legacy HD'), ('ultra-hd', 'Ultra HD')])
     html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
-    assert 'data-badge-id=' in html and 'id="badge-peek"' in html   # cell id + the shared modal container
-    assert '/badges/pk/' in html                                    # detail href fallback
+    # the whole cell links straight to the badge detail page with THIS edition's tab open (no inspect modal)
+    assert '/badges/pk/?group=legacy-hd' in html and '/badges/pk/?group=ultra-hd' in html
 
 
 def test_gallery_card_name_resolution_chain(client):
@@ -360,12 +360,11 @@ def test_series_view_shows_empty_state_when_no_match(client):
     assert 'class="pp-scard"' not in html   # no tiles rendered
 
 
-def test_series_peek_targets_group_badge_endpoint(client):
-    _series_groups('pk', 'Peek', [('ultra-hd', 'Ultra HD')])
+def test_series_medallion_links_to_the_group_tab(client):
+    _series_groups('pk', 'Linky', [('legacy-hd', 'Legacy HD'), ('ultra-hd', 'Ultra HD')])
     html = client.get(SERIES).content.decode()
-    assert 'data-badge-id=' in html and 'id="badge-peek"' in html   # each cell + the shared modal container
-    assert '/group-badge-peek/' in html                            # the peek resolves to the GROUP endpoint
-    assert '/badges/pk/' in html                                   # detail href fallback
+    # each medallion links straight to the badge detail page with ITS edition tab open (no inspect modal)
+    assert '/badges/pk/?group=legacy-hd' in html and '/badges/pk/?group=ultra-hd' in html
 
 
 def test_series_tile_shows_owned_seal_and_holo(client):

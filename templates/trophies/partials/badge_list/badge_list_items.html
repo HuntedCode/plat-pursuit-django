@@ -3,9 +3,8 @@
     {% comment %} Series tile (.pp-scard, grouping-badge system): the series' identity + a row of its live group
     medallions (one per platform group -- Legacy HD / Ultra HD). Each medallion is a SHOWCASE piece carrying an
     owned seal (holo when mastered), its platform group tinted in the medallion metal (matching the detail
-    page), and its LIVE rarity grade. The heading links to the badge detail (series) page; each medallion opens
-    the group quick-peek (JS, via data-badge-id) with the series detail as the no-JS / middle-click fallback.
-    Expects `item` dicts from badge_list_service.build_series_items. {% endcomment %}
+    page), and its LIVE rarity grade. The heading links to the badge detail page; each medallion links straight
+    to that page with its edition tab open (?group=<key>). Expects `item` dicts from build_series_items. {% endcomment %}
     <div class="pp-scard" data-series="{{ item.series.series_slug }}">
         {# Series identity: the affiliation name + type and the series' total earners (summed across groups). #}
         <a class="pp-scard__open" href="{% url 'badge_detail' item.series.series_slug %}" aria-label="{{ item.card_name }} detail">
@@ -15,8 +14,8 @@
 
         <div class="pp-scard__groups">
             {% for card in item.cards %}
-            <a class="pp-scard__group" data-tier="{{ card.frame.tier }}" data-badge-id="{{ card.group_badge.id }}"
-               href="{% url 'badge_detail' item.series.series_slug %}"
+            <a class="pp-scard__group" data-tier="{{ card.frame.tier }}"
+               href="{% url 'badge_detail' item.series.series_slug %}?group={{ card.platform_group.key }}"
                aria-label="{{ card.platform_group.name }}{% if card.earned %}{% if card.is_holo %}, mastered{% else %}, earned{% endif %}{% endif %}">
                 <span class="pp-scard__med">
                     {% include 'components/badge_medallion.html' with frame=card.frame no_id=True %}

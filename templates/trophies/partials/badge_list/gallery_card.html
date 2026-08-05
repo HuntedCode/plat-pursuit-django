@@ -1,11 +1,10 @@
 {% load humanize %}
 {% comment %} One Browse Gallery cell (grouping-badge system): the SHOWCASE medallion (full earned colour for
 everyone) + a card-corner earned marker (logged-in; a green check, holo variant when mastered), the badge's
-platform group + set number, and its LIVE rarity grade + earner count. Tapping opens the group-badge quick-peek
-(JS, via data-badge-id); the href to the full badge_detail series page is the no-JS / middle-click fallback.
-Expects a `card` dict from badge_list_service.build_list_cards. {% endcomment %}
-<a class="pp-bgal__card" data-bgal-cell data-tier="{{ card.frame.tier }}" data-badge-id="{{ card.group_badge.id }}"
-   href="{% url 'badge_detail' card.series.series_slug %}">
+platform group + set number, and its LIVE rarity grade + earner count. The whole cell links straight to the
+badge detail page with this edition's tab open (?group=<key>). Expects a `card` dict from build_list_cards. {% endcomment %}
+<a class="pp-bgal__card" data-bgal-cell data-tier="{{ card.frame.tier }}"
+   href="{% url 'badge_detail' card.series.series_slug %}?group={{ card.platform_group.key }}">
     {% if card.earned %}
     <span class="pp-bgal__owned pp-bgal__owned--earned{% if card.is_holo %} pp-bgal__owned--holo{% endif %}" title="{% if card.is_holo %}Mastered (holographic){% else %}You've earned this{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>

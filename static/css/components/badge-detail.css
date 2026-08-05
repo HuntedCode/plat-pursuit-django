@@ -964,7 +964,7 @@
 .bd2-comm__lb:hover { color: color-mix(in oklab, var(--pp-primary) 75%, var(--pp-text)); }
 .bd2-comm__lb svg { width: 13px; height: 13px; }
 /* My Stats: the personal action, a small pill so it reads as the primary "go deeper" affordance. */
-.bd2-comm__action { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; font-size: 0.72rem; font-weight: 700; color: var(--pp-text); background: var(--pp-bg-2); border: 1px solid var(--pp-divider); border-radius: 999px; transition: border-color 0.2s ease, background 0.2s ease; }
+.bd2-comm__action { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; font-size: 0.72rem; font-weight: 700; color: var(--pp-text); background: var(--pp-bg-2); border: 1px solid var(--pp-divider); border-radius: 999px; cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; }
 .bd2-comm__action:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-divider)); background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)); }
 .bd2-comm__action svg { width: 13px; height: 13px; color: var(--pp-primary); }
 .bd2-comm__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }

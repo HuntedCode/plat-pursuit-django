@@ -234,6 +234,27 @@ def test_view_renders_for_anon(client):
     assert '/group-badge-peek/0/' in body                             # anon peek points at the showcase endpoint
 
 
+def test_view_deep_links_to_the_requested_group_tab(client):
+    # ?group=<key> (from the list page's medallions/cells) opens that edition's tab server-side -- no flash.
+    series = BadgeSeriesFactory(series_slug='gow', name='God of War')
+    _stage(series, 1, ['PS5'])
+    _group(series, 'legacy-hd', 'Legacy HD', ['PS3'])
+    _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
+    url = reverse('badge_detail', kwargs={'series_slug': 'gow'})
+
+    ultra = client.get(url + '?group=ultra-hd').content.decode()
+    assert 'id="bd2-panel-ultra-hd" class="bd2-panel"' in ultra            # Ultra HD shown
+    assert 'id="bd2-panel-legacy-hd" class="bd2-panel is-hidden"' in ultra  # Legacy HD hidden
+
+    legacy = client.get(url + '?group=legacy-hd').content.decode()
+    assert 'id="bd2-panel-legacy-hd" class="bd2-panel"' in legacy           # the reverse
+    assert 'id="bd2-panel-ultra-hd" class="bd2-panel is-hidden"' in legacy
+
+    # An unknown / missing ?group falls back to a valid group (no crash, exactly one panel shown).
+    bogus = client.get(url + '?group=nope').content.decode()
+    assert bogus.count('class="bd2-panel"') == 2   # 2 groups x (header + journey) panels, one group shown = 2
+
+
 def test_view_dormant_series_404_for_anon(client):
     series = BadgeSeriesFactory(series_slug='dorm', name='Dormant')
     pg = PlatformGroupFactory(key='ultra-hd', name='Ultra HD', platforms=['PS4', 'PS5'])

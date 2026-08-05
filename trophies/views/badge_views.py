@@ -609,7 +609,13 @@ class BadgeDetailView(DetailView):
         # When showing SOMEONE ELSE'S progress (the /<slug>/<username>/ variant), surface whose.
         context['viewing_other_profile'] = target_profile if (target_profile and target_profile != viewer_profile) else None
 
-        context['detail'] = get_badge_detail(series, target_profile)
+        detail = context['detail'] = get_badge_detail(series, target_profile)
+
+        # Deep-link the platform-group tab: the list page's medallions/cells link to ?group=<key> so a click
+        # lands on that edition directly. Validate against the series' live groups; default to the first.
+        group_keys = [gv.platform_group.key for gv in detail.groups]
+        requested = self.request.GET.get('group')
+        context['active_group_key'] = requested if requested in group_keys else (group_keys[0] if group_keys else None)
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},

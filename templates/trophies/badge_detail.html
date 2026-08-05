@@ -20,7 +20,7 @@ Collection. No extra wrapper container: a nested one would double the horizontal
 
             <div data-bd2-panels>
                 {% for g in detail.groups %}
-                <div id="bd2-panel-{{ g.platform_group.key }}" class="bd2-panel{% if not forloop.first %} is-hidden{% endif %}"
+                <div id="bd2-panel-{{ g.platform_group.key }}" class="bd2-panel{% if g.platform_group.key != active_group_key %} is-hidden{% endif %}"
                      role="tabpanel" aria-labelledby="bd2-tab-{{ g.platform_group.key }}" data-bd2-view="{{ g.platform_group.key }}">
 
                     {% comment %} Row 1: medallion | eyebrow + title + description + meta | EARNERS. Stacks to a
@@ -105,9 +105,9 @@ Collection. No extra wrapper container: a nested one would double the horizontal
     <div class="bd2-groupswitch" role="tablist" aria-label="Platform group">
         {% for g in detail.groups %}
         <button type="button" id="bd2-tab-{{ g.platform_group.key }}"
-                class="bd2-gbtn{% if forloop.first %} is-active{% endif %}" data-tier="{{ g.frame.tier }}"
+                class="bd2-gbtn{% if g.platform_group.key == active_group_key %} is-active{% endif %}" data-tier="{{ g.frame.tier }}"
                 data-bd2-group="{{ g.platform_group.key }}" role="tab"
-                aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+                aria-selected="{% if g.platform_group.key == active_group_key %}true{% else %}false{% endif %}"
                 aria-controls="bd2-panel-{{ g.platform_group.key }}">
             <span class="bd2-gbtn__med" aria-hidden="true">{% include 'components/badge_medallion.html' with frame=g.frame no_id=True %}</span>
             <span class="bd2-gbtn__body">
@@ -131,7 +131,7 @@ Collection. No extra wrapper container: a nested one would double the horizontal
     the chrome (each stage is its own bd-card). {% endcomment %}
     <div data-bd2-journey>
         {% for g in detail.groups %}
-        <div class="bd2-panel{% if not forloop.first %} is-hidden{% endif %}" data-bd2-view="{{ g.platform_group.key }}">
+        <div class="bd2-panel{% if g.platform_group.key != active_group_key %} is-hidden{% endif %}" data-bd2-view="{{ g.platform_group.key }}">
             {% if g.stages %}
             {% comment %} Requirements preview: the compact stage-tile checklist (checked when cleared), each
             tile jumping to its stage in the journey below. {% endcomment %}
