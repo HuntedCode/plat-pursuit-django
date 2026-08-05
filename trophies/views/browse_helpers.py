@@ -10,7 +10,7 @@ from django.db.models.functions import Coalesce, Lower, Cast
 from django.utils import timezone
 
 from trophies.models import (
-    Badge, Trophy, UserConceptRating, Stage, ConceptGenre, ConceptTheme,
+    BadgeSeries, Trophy, UserConceptRating, Stage, ConceptGenre, ConceptTheme,
     ConceptEngine, Contract, IGDBMatch,
 )
 
@@ -204,9 +204,11 @@ def apply_game_browse_filters(qs, form, sort_val=''):
         qs = qs.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
 
     if form.cleaned_data.get('in_badge'):
-        live_slugs = Badge.objects.filter(
-            is_live=True,
-        ).values_list('series_slug', flat=True)
+        # Series that ship a live GROUP badge (grouping-badge system); a game is "in a badge" if its concept
+        # has a stage in one of those series.
+        live_slugs = BadgeSeries.objects.filter(
+            group_badges__is_live=True,
+        ).values_list('series_slug', flat=True).distinct()
         qs = qs.filter(Exists(
             Stage.objects.filter(
                 concepts=OuterRef('concept_id'),

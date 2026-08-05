@@ -310,6 +310,62 @@ def _concept_ctx(game):
     return view._build_concept_context(game)
 
 
+def test_concept_badges_are_the_editions_the_game_is_in(client):
+    # Related badges = the grouping-badge EDITIONS a game is part of (via its stages), each a dict with a
+    # showcase frame + the group it links to. (The old tier-1 Badge reference was retired with the swap.)
+    from tests.factories import StageFactory, BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+    concept = ConceptFactory()
+    game = GameFactory(concept=concept, title_platform=['PS5'])
+    series = BadgeSeriesFactory(series_slug='gow', name='God of War', badge_type='franchise')
+    pg = PlatformGroupFactory(key='ultra-hd', name='Ultra HD', platforms=['PS4', 'PS5'])
+    GroupBadgeFactory(series=series, platform_group=pg, is_live=True)
+    StageFactory(series_slug='gow', stage_number=1).concepts.add(concept)
+
+    badges = _concept_ctx(game)['badges']
+    assert len(badges) == 1
+    b = badges[0]
+    assert b['series_slug'] == 'gow' and b['frame']          # the series + its showcase medallion frame
+    assert b['type_display'] == 'Franchise' and b['group_key'] == 'ultra-hd'   # the specific edition
+
+
+def test_concept_badges_only_the_editions_the_game_routes_to(client):
+    # Two editions; a PS5-only game routes ONLY to Ultra HD (its platform is not in Legacy HD).
+    from tests.factories import StageFactory, BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+    concept = ConceptFactory()
+    game = GameFactory(concept=concept, title_platform=['PS5'])
+    series = BadgeSeriesFactory(series_slug='gow', name='God of War')
+    GroupBadgeFactory(series=series, is_live=True,
+                      platform_group=PlatformGroupFactory(key='legacy-hd', name='Legacy HD', platforms=['PS3']))
+    GroupBadgeFactory(series=series, is_live=True,
+                      platform_group=PlatformGroupFactory(key='ultra-hd', name='Ultra HD', platforms=['PS4', 'PS5']))
+    StageFactory(series_slug='gow', stage_number=1).concepts.add(concept)
+    assert [b['group_key'] for b in _concept_ctx(game)['badges']] == ['ultra-hd']
+
+
+def test_concept_badges_cross_gen_game_is_in_both_editions(client):
+    from tests.factories import StageFactory, BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+    concept = ConceptFactory()
+    game = GameFactory(concept=concept, title_platform=['PS3', 'PS5'])   # spans both editions
+    series = BadgeSeriesFactory(series_slug='tlou', name='The Last of Us')
+    GroupBadgeFactory(series=series, is_live=True,
+                      platform_group=PlatformGroupFactory(key='legacy-hd', name='Legacy HD', platforms=['PS3']))
+    GroupBadgeFactory(series=series, is_live=True,
+                      platform_group=PlatformGroupFactory(key='ultra-hd', name='Ultra HD', platforms=['PS4', 'PS5']))
+    StageFactory(series_slug='tlou', stage_number=1).concepts.add(concept)
+    assert sorted(b['group_key'] for b in _concept_ctx(game)['badges']) == ['legacy-hd', 'ultra-hd']
+
+
+def test_concept_badges_exclude_series_without_a_live_group(client):
+    from tests.factories import StageFactory, BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+    concept = ConceptFactory()
+    game = GameFactory(concept=concept, title_platform=['PS5'])
+    series = BadgeSeriesFactory(series_slug='dorm', name='Dormant')
+    pg = PlatformGroupFactory(key='ultra-hd', name='Ultra HD', platforms=['PS5'])
+    GroupBadgeFactory(series=series, platform_group=pg, is_live=False)   # dormant -> not live
+    StageFactory(series_slug='dorm', stage_number=1).concepts.add(concept)
+    assert _concept_ctx(game)['badges'] == []                # a series with no live group isn't shown
+
+
 def test_about_has_info_false_without_trusted_igdb():
     """No trusted IGDB match -> no About sections, so the panel falls back to its empty state."""
     ctx = _concept_ctx(GameFactory(concept=ConceptFactory()))
@@ -490,6 +546,24 @@ _DEFINED = {'bronze': 10, 'silver': 5, 'gold': 2, 'platinum': 1}
 def _detail(client, game):
     url = reverse('game_detail', kwargs={'np_communication_id': game.np_communication_id})
     return client.get(url).content.decode()
+
+
+def test_game_detail_renders_related_badge_editions(client):
+    # The badges spine + modal render the specific EDITIONS this game is part of, each linking to its edition
+    # tab (?group=<key>). Guards the template's dict fields (name / type_display / group_key / group_name).
+    concept = ConceptFactory()
+    game = GameFactory(concept=concept, title_platform=['PS5'])
+    from tests.factories import StageFactory, BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+    series = BadgeSeriesFactory(series_slug='gow', name='God of War', badge_type='franchise')
+    pg = PlatformGroupFactory(key='ultra-hd', name='Ultra HD', platforms=['PS4', 'PS5'])
+    GroupBadgeFactory(series=series, platform_group=pg, is_live=True)
+    StageFactory(series_slug='gow', stage_number=1).concepts.add(concept)
+
+    content = _detail(client, game)
+    assert 'gd-spine__row--badges' in content                        # the badge spine row (game is in a badge)
+    assert '/badges/gow/?group=ultra-hd' in content                  # the card links to the SPECIFIC edition tab
+    assert 'gd-badgecard' in content and 'Ultra HD' in content       # modal card + the edition label
+    assert 'Franchise' in content                                    # the badge type
 
 
 def test_game_detail_renders_about_panel(client):

@@ -193,17 +193,19 @@
 {% if badges %}
 <dialog id="gd-badges-modal" class="gd-modal gd-modal--badges" aria-label="Badges this game is in">
     <div class="gd-modal__head">
-        <h3>{{ badges|length }} Badge Series</h3>
+        <h3>{{ badges|length }} Badge{{ badges|length|pluralize }}</h3>
         <button type="button" class="gd-modal__close" data-gd-modal-close aria-label="Close">&times;</button>
     </div>
     <div class="gd-modal__body">
-        {# Showcase: each series as its medallion object (as-designed look) + name + type. Per-badge progress lives on the badge detail page each card links to. #}
+        {% comment %} Showcase: each EDITION this game is part of, as its medallion object (in that edition's
+        metal) + series name + type . edition. The card links to that edition's tab on the badge detail page
+        (?group=<key>). {% endcomment %}
         <div class="gd-badgegrid" data-gd-badgegrid>
             {% for badge in badges %}
-                <a href="{% if profile %}{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}{% else %}{% url 'badge_detail' badge.series_slug %}{% endif %}" class="gd-badgecard" title="{{ badge.display_series|default:badge.name }}">
+                <a href="{% if profile %}{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}{% else %}{% url 'badge_detail' badge.series_slug %}{% endif %}?group={{ badge.group_key }}" class="gd-badgecard" title="{{ badge.name }} &middot; {{ badge.group_name }}">
                     <span class="gd-badgecard__art">{% include 'components/badge_medallion.html' with frame=badge.frame no_id=True %}</span>
-                    <span class="gd-badgecard__name">{{ badge.display_series|default:badge.name }}</span>
-                    <span class="gd-badgecard__type">{{ badge.get_badge_type_display }}</span>
+                    <span class="gd-badgecard__name">{{ badge.name }}</span>
+                    <span class="gd-badgecard__type">{{ badge.type_display }} &middot; {{ badge.group_name }}</span>
                 </a>
             {% endfor %}
         </div>

@@ -14,7 +14,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from tests.factories import (
-    BadgeFactory,
+    BadgeSeriesFactory,
+    GroupBadgeFactory,
+    PlatformGroupFactory,
     GameFactory,
     IGDBMatchFactory,
     ProfileFactory,
@@ -29,6 +31,14 @@ GRID_PARTIAL = 'trophies/partials/game_list/browse_results.html'
 FULL_PAGE = 'trophies/game_list.html'
 
 _igdb_seq = itertools.count(10001)
+
+
+def _live_badge_series(slug, name, badge_type='series'):
+    """A badge SERIES with one live group badge (grouping-badge system) -- the shape the card badge-band + the
+    ?in_badge filter now read."""
+    series = BadgeSeriesFactory(series_slug=slug, name=name, badge_type=badge_type)
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
+    return series
 
 
 def _make_member(concept, contract):
@@ -79,8 +89,7 @@ def test_card_shows_badges_and_contract(client):
     game = GameFactory(title_name='Hooked Game', title_platform=['PS5'])
     stage = StageFactory(series_slug='hooked-series')
     stage.concepts.add(game.concept)
-    BadgeFactory(name='Hooked Franchise', series_slug='hooked-series', tier=1,
-                 is_live=True, badge_type='franchise')
+    _live_badge_series('hooked-series', 'Hooked Franchise', 'franchise')
     job = Job.objects.first() or Job.objects.create(slug='test-job', name='Test Job', discipline='combat')
     contract = Contract.objects.create(name='Hooked Contract', slug='hooked-contract', is_live=True)
     contract.jobs.add(job)
@@ -245,13 +254,11 @@ def test_platinum_only_filter(client):
 def test_in_badge_filter(client):
     """?in_badge=on narrows to games whose concept is in a live badge series (the toggle that replaced the
     removed 'Pick a Badge' modal)."""
-    from trophies.models import Badge
-
     with_b = GameFactory(title_name='Has Badge', title_platform=['PS5'])
     GameFactory(title_name='No Badge', title_platform=['PS5'])
     stage = StageFactory(series_slug='in-badge-series')
     stage.concepts.add(with_b.concept)
-    BadgeFactory(name='In Badge', series_slug='in-badge-series', tier=1, is_live=True)
+    _live_badge_series('in-badge-series', 'In Badge')
 
     content = client.get(reverse('games_list'), {'platform': 'PS5', 'in_badge': 'on'}).content.decode()
 
@@ -451,7 +458,7 @@ def test_query_count_is_whale_safe(client, django_assert_max_num_queries):
     games = GameFactory.create_batch(60, title_platform=['PS5'], played_count=100)
     # Put a few games in badge series so the badge-map queries actually run (still bounded).
     stage = StageFactory(series_slug='whale-series')
-    BadgeFactory(name='Whale Badge', series_slug='whale-series', tier=1, is_live=True)
+    _live_badge_series('whale-series', 'Whale Badge')
     for g in games[:5]:
         stage.concepts.add(g.concept)
     url, params = _url()

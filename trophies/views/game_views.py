@@ -20,7 +20,7 @@ from django.views.generic import ListView, DetailView
 from urllib.parse import urlencode
 from trophies.mixins import HtmxListMixin
 from ..constants import CACHE_TIMEOUT_IMAGES
-from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, UserConceptRating, ConceptFranchise
+from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Concept, FeaturedGuide, Stage, UserConceptRating, ConceptFranchise
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 from .browse_helpers import (
@@ -200,7 +200,7 @@ class GamesListView(HtmxListMixin, ListView):
         if concept_ids:
             from collections import defaultdict
             from trophies.constants import BADGE_TYPE_DISPLAY_PRIORITY
-            from trophies.models import Stage, Badge
+            from trophies.models import Stage, BadgeSeries
             from trophies.services.contract_service import contract_by_concept_map
             from trophies.util_modules.constants import CONTRACT_XP_TOTAL
 
@@ -220,18 +220,18 @@ class GamesListView(HtmxListMixin, ListView):
                 if cid in concept_id_set:
                     concept_series[cid].add(slug)
 
-            # series_slug -> {name, badge_type} for its live tier-1 badge (1 query). Counting distinct
-            # series (one tier-1 badge each), NEVER tiers.
+            # series_slug -> {label, badge_type} for each SERIES that ships a live group badge (1 query,
+            # grouping-badge system). Per-series (not per-edition): the card lists the badge SERIES a game
+            # belongs to, and both editions share one series identity.
             all_slugs = {s for slugs in concept_series.values() for s in slugs}
             series_badge = {}
             if all_slugs:
-                # display_series is the clean SERIES name ("God of War"); fall back to name only if unset --
-                # the same series_name derivation frame_service uses, so we never show the per-tier badge
-                # name ("God of War Bronze") on the card.
+                # display_series is the clean SERIES name ("God of War"); fall back to name only if unset.
+                # .distinct() collapses the group_badges join (a series with 2 live editions -> 1 row).
                 series_badge = {
                     b['series_slug']: {**b, 'label': b['display_series'] or b['name']}
-                    for b in Badge.objects.filter(series_slug__in=all_slugs, tier=1, is_live=True)
-                    .values('series_slug', 'name', 'display_series', 'badge_type')
+                    for b in BadgeSeries.objects.filter(series_slug__in=all_slugs, group_badges__is_live=True)
+                    .values('series_slug', 'name', 'display_series', 'badge_type').distinct()
                 }
 
             badge_map = {}
@@ -930,23 +930,41 @@ class GameDetailView(DetailView):
         # Lets each blurb card mark the viewer's own (You pill, no self-report) without a per-row query.
         context['viewer_profile_id'] = profile.id if profile else None
 
-        # Related badges — presented as shared Medallion objects. Build a showcase frame per
-        # badge (profile=None -> full "as-designed" look, no per-viewer queries; include_live_stats
-        # off skips the back-of-card Redis/DB lookups). FKs select_related per build_badge_frame's
-        # batch guidance so it issues ~0 extra queries per badge.
-        from trophies.services.frame_service import build_badge_frame
-        series_slugs = Stage.objects.filter(concepts__games=game).values_list('series_slug', flat=True).distinct()
-        badges = list(
-            Badge.objects.live()
-            .filter(series_slug__in=Subquery(series_slugs), tier=1)
-            .select_related(
-                'franchise', 'developer', 'funded_by',
-                'base_badge__franchise', 'base_badge__developer', 'base_badge__funded_by',
-            )
-            .distinct().order_by('tier')
+        # Related badges (grouping-badge system) — the specific badge EDITIONS this game is part of. A game only
+        # gates for the platform groups its own platforms match (the exact routing the engine uses:
+        # title_platform overlaps the group's platforms -- badge_detail_service._group_journey), so show exactly
+        # those editions: usually one per series, both for a cross-generation game. Each links to its edition tab
+        # (?group=<key>). build_list_cards gives the SAME whale-safe showcase frame the badge list uses.
+        from trophies.models import GroupBadge
+        from trophies.services.badge_list_service import build_list_cards
+        series_slugs = (
+            Stage.objects.filter(concepts__games=game)
+            .exclude(series_slug__isnull=True).exclude(series_slug='')
+            .values_list('series_slug', flat=True).distinct()
         )
-        for b in badges:
-            b.frame = build_badge_frame(b, None, include_live_stats=False)
+        game_platforms = set(game.title_platform or [])
+        badges = []
+        if game_platforms:
+            gbs = [
+                gb for gb in (
+                    GroupBadge.objects.filter(series__series_slug__in=Subquery(series_slugs), is_live=True)
+                    .select_related('series', 'series__franchise', 'series__collection', 'series__developer',
+                                    'series__submitted_by', 'platform_group')
+                    .order_by('series__name', 'platform_group__sort_order', 'id')
+                )
+                if game_platforms & set(gb.platform_group.platforms)   # the game routes to this edition
+            ]
+            badges = [
+                {
+                    'frame': c['frame'],
+                    'series_slug': c['series'].series_slug,
+                    'name': c['series'].display_series or c['series'].name,
+                    'type_display': c['series'].get_badge_type_display(),
+                    'group_key': c['platform_group'].key,
+                    'group_name': c['platform_group'].name,
+                }
+                for c in build_list_cards(gbs, None)
+            ]
         context['badges'] = badges
 
         # "Other platforms" + "In the same family" cross-links (rendered in the versions modal).

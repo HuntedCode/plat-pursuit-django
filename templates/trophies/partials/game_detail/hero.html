@@ -210,10 +210,10 @@
                             <span class="gd-spine__disc" aria-hidden="true"></span>
                             <div class="gd-spine__main">
                                 <div class="gd-spine__peek">
-                                    {% for badge in badges|slice:":3" %}<span class="gd-spine__obj gd-spine__obj--badge" title="{{ badge.display_series|default:badge.name }}">{% include 'components/badge_medallion.html' with frame=badge.frame no_id=True %}</span>{% endfor %}
+                                    {% for badge in badges|slice:":3" %}<span class="gd-spine__obj gd-spine__obj--badge" title="{{ badge.name }} &middot; {{ badge.group_name }}">{% include 'components/badge_medallion.html' with frame=badge.frame no_id=True %}</span>{% endfor %}
                                     {% if badges|length > 3 %}<span class="gd-spine__more">+{{ badges|length|add:"-3" }} more</span>{% endif %}
                                 </div>
-                                <span class="gd-spine__cap">{{ badges|length }} Badge Series</span>
+                                <span class="gd-spine__cap">{{ badges|length }} Badge{{ badges|length|pluralize }}</span>
                             </div>
                             <svg class="gd-spine__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                         </button>
