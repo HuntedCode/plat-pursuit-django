@@ -8,7 +8,10 @@
  * ============================================================ */
 .pp-detail-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
 .pp-detail-modal[hidden] { display: none; }
-.pp-detail-modal__scrim { position: absolute; inset: 0; background: rgba(2, 4, 8, 0.62); backdrop-filter: blur(4px); }
+/* A SOLID dim, not a live backdrop-filter blur: the blur had to re-sample the whole receded page every frame
+   the 3D medallion tilts/flips (worst on the Collection, where the full medallion wall sits behind it), which
+   tanked the inspector's frame rate. The recede-scale already gives depth; a darker scrim reads the same. */
+.pp-detail-modal__scrim { position: absolute; inset: 0; background: rgba(2, 4, 8, 0.8); }
 .pp-detail-modal__dialog {
     position: relative; z-index: 1; will-change: transform;   /* own layer -- keeps the backdrop blur from re-sampling on repaint */
     width: min(720px, 100%); max-height: 88vh; overflow: auto;

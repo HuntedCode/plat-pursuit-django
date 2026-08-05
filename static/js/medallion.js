@@ -119,12 +119,16 @@
         }
 
         if (canTilt()) {
-            // FINE pointer: track the cursor. Rect read off the (untransformed) scene so tilt doesn't feed back.
+            // FINE pointer: track the cursor. Cache the scene's box on enter (it's static while you tilt -- the
+            // CARD rotates, not the scene) so we don't force a layout read on every pointermove frame. Rect read
+            // off the (untransformed) scene so tilt doesn't feed back.
+            var sceneRect = null;
+            scene.addEventListener('pointerenter', function () { sceneRect = scene.getBoundingClientRect(); });
             scene.addEventListener('pointermove', function (e) {
-                var r = scene.getBoundingClientRect();
+                var r = sceneRect || (sceneRect = scene.getBoundingClientRect());
                 applyTilt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
             });
-            scene.addEventListener('pointerleave', releaseTilt);
+            scene.addEventListener('pointerleave', function () { sceneRect = null; releaseTilt(); });
         } else {
             // COARSE pointer (phone): tilt the object by tilting the DEVICE. Calibrate to the orientation when
             // it starts, map +-GYRO_RANGE degrees of device tilt onto the full swing, rAF-coalesced to 1/frame.
