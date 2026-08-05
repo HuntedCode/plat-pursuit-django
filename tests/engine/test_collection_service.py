@@ -437,7 +437,11 @@ def test_collection_badge_modal_renders_group_modal(client):
     resp = client.get(reverse('collection_badge_modal', args=[groups['ultra-hd'].id]))
 
     assert resp.status_code == 200
-    assert 'pp-med' in resp.content.decode()   # the group medallion detail rendered
+    html = resp.content.decode()
+    assert 'pp-med' in html   # the group medallion detail rendered
+    # The collection modal offers a jump to the badge detail page, deep-linked to THIS edition's tab.
+    assert f'href="{reverse("badge_detail", args=["rs-modal"])}?group=ultra-hd"' in html
+    assert 'pp-bdetail__link' in html
 
 
 def test_collection_badge_modal_404_for_unknown(client):

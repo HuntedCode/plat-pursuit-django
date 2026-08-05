@@ -69,5 +69,8 @@ class CollectionBadgeModalView(LoginRequiredMixin, View):
         if gv is None:
             return HttpResponseNotFound()
         return render(request, 'components/group_badge_modal.html', {
+            # show_detail_link: only the COLLECTION modal offers a jump to the badge detail page (deep-linked
+            # to this edition's tab). The badge-detail peek omits it -- you're already on that page.
             'gv': gv, 'series': gb.series, 'detail': detail, 'viewing_other': None, 'showcase': False,
+            'show_detail_link': True,
         })

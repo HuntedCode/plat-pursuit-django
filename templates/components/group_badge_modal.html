@@ -1,9 +1,11 @@
 {% load humanize %}
 {% comment %}
 Grouping-badge inspect ("pick it up") -- the medallion big + its facts for ONE platform-group badge
-(Legacy HD / Ultra HD). Rendered by GroupBadgeInspectView, fetched on tap into the badge detail page's
-#badge-peek dialog. Reuses the collection modal's .pp-bdetail layout; the medallion is `with_back` so it
-flips to its engraved base. Expects: gv (GroupView), series, detail (BadgeDetail), viewing_other, showcase.
+(Legacy HD / Ultra HD). Rendered by GroupBadgeInspectView (badge detail page's #badge-peek dialog) AND
+CollectionBadgeModalView (the Collection wall). Reuses the collection modal's .pp-bdetail layout; the
+medallion is `with_back` so it flips to its engraved base. Expects: gv (GroupView), series, detail
+(BadgeDetail), viewing_other, showcase. Optional: show_detail_link (Collection only -> a link to the badge
+detail page, deep-linked to this edition's tab; omitted on the badge-detail peek, where you're already there).
 {% endcomment %}
 <div class="pp-bdetail" data-tier="{{ gv.frame.tier }}" data-state="{{ gv.frame.state }}">
     <div class="pp-bdetail__stage">
@@ -31,5 +33,13 @@ flips to its engraved base. Expects: gv (GroupView), series, detail (BadgeDetail
             {% if gv.earned_count %}<div class="pp-bdetail__stat"><div class="k">Earned by</div><div class="v">{{ gv.earned_count|intcomma }}</div></div>{% endif %}
         </div>
         {% if gv.group_badge.effective_funded_by %}<div class="pp-bdetail__funder">Artwork funded by <span>{{ gv.group_badge.effective_funded_by.display_psn_username|default:gv.group_badge.effective_funded_by.psn_username }}</span></div>{% endif %}
+        {% comment %} Collection only: jump to the full badge detail page, deep-linked to THIS edition's tab
+        (?group=<key>). The badge-detail peek omits this -- you're already on that page. {% endcomment %}
+        {% if show_detail_link and series.series_slug %}
+        <a class="pp-bdetail__link" href="{% url 'badge_detail' series.series_slug %}?group={{ gv.platform_group.key }}">
+            <span>View full badge</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+        {% endif %}
     </div>
 </div>

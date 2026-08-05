@@ -223,7 +223,11 @@
 .pp-bdetail__stat .v { font-size: 16px; font-weight: 800; margin-top: 2px; }
 .pp-bdetail__funder { font-size: 12px; color: var(--pp-text-mute); margin-top: 14px; }
 .pp-bdetail__funder span { color: var(--pp-text); font-weight: 700; }
-.pp-bdetail__link { display: inline-block; margin-top: 16px; font-size: 14px; font-weight: 700; color: var(--pp-primary); text-decoration: none; }
+.pp-bdetail__link { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; font-size: 14px; font-weight: 700; color: var(--pp-primary); text-decoration: none; transition: gap 0.16s ease; }
+.pp-bdetail__link svg { width: 15px; height: 15px; }
+.pp-bdetail__link:hover { gap: 10px; }   /* arrow slides forward */
+.pp-bdetail__link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { .pp-bdetail__link { transition: none; } }
 .pp-bdetail__link:hover { text-decoration: underline; }
 
 @media (max-width: 640px) {

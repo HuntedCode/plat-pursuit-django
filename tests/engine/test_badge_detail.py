@@ -308,6 +308,7 @@ def test_inspect_progress_peek_reflects_real_state(client):
     assert 'data-state="earned"' in body            # the DISPLAYED profile's real state, not the showcase
     assert 'Showcase' not in body
     assert 'pp-bdetail__viewing' not in body        # own progress -> no "viewing other" chip
+    assert 'pp-bdetail__link' not in body           # you're already ON the badge detail page -> no jump link
 
 
 def test_inspect_progress_peek_flags_viewing_another(client):
