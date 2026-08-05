@@ -320,7 +320,7 @@
 @keyframes gdModalOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(6px) scale(0.985); } }
 .gd-modal.is-closing::backdrop { animation: gdModalScrimOut 0.18s ease both; }
 @keyframes gdModalScrimOut { from { opacity: 1; } to { opacity: 0; } }
-.gd-modal::backdrop { background: rgba(2, 4, 8, 0.6); backdrop-filter: blur(3px); }
+.gd-modal::backdrop { background: rgba(2, 4, 8, 0.78); }   /* solid dim, no backdrop-blur (re-blurred the page on every modal repaint -- see motion-patterns.md) */
 /* Swipe-to-close grabber shows on touch (dismissableSheet adds .pp-dismissable + the shared
    .pp-dismissable::before pill). Nudge the header down so the pill sits clear above the title. */
 @media (hover: none) and (pointer: coarse) { .gd-modal.pp-dismissable .gd-modal__head { padding-top: 18px; } }
@@ -610,7 +610,7 @@
 .gd-shotmodal { border: none; padding: 0; background: transparent; width: min(92vw, 1100px); max-width: 1100px; margin: auto; color: #fff; }
 .gd-shotmodal:not([open]) { display: none; }
 .gd-shotmodal[open] { display: flex; flex-direction: column; gap: 8px; }
-.gd-shotmodal::backdrop { background: rgba(2, 4, 8, 0.66); backdrop-filter: blur(4px); }
+.gd-shotmodal::backdrop { background: rgba(2, 4, 8, 0.85); }   /* solid dim, no backdrop-blur (see motion-patterns.md) */
 .gd-shotmodal[open]::backdrop { animation: gdScrimIn 0.28s ease both; }
 .gd-shotmodal.is-closing::backdrop { animation: gdScrimOut 0.22s ease both; }
 @keyframes gdScrimIn { from { opacity: 0; } to { opacity: 1; } }

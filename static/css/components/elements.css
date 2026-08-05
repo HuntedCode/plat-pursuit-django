@@ -318,7 +318,7 @@
 .jsheet__row.ptile { border-radius: 8px; }  /* the tighter row radius wins over .ptile's card radius */
 .emodal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
 .emodal[hidden] { display: none; }
-.emodal__backdrop { position: absolute; inset: 0; background: rgba(2, 4, 8, 0.55); backdrop-filter: blur(3px); }
+.emodal__backdrop { position: absolute; inset: 0; background: rgba(2, 4, 8, 0.72); }   /* solid dim, no backdrop-blur (re-blurs the page every repaint -- see motion-patterns.md) */
 /* will-change promotes the dialog to its own compositor layer, so its per-frame content animations (the
    glyph draw, the count-ups) repaint on THAT layer instead of dirtying the backdrop -- which otherwise
    forces the backdrop's blur to re-sample the (tall, on mobile) page every frame and stutters them. */

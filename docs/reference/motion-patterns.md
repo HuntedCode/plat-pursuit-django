@@ -204,11 +204,19 @@ and `pointerenter` covers mouse hover *and* touch tap.
   behind a static one) stutters — brutal on tall mobile layouts. Dim via a translucent overlay (the
   scrim/backdrop you already have), not a page-level filter. (Career's `.pp-receded` recede: scale the
   content, let the overlay do the dim.)
-- **`backdrop-filter: blur` re-samples on *any* repaint in its stacking context.** Per-frame
-  animations near it (count-ups rewriting text, SVG glyph draws) force a full re-blur of the page
-  behind it each frame — so *only the animating elements* stutter, and only on tall mobile pages.
-  Promote the animating element's container to its own compositor layer (`will-change: transform`) so
-  its repaints don't dirty the backdrop. (See [career-reference-standard](../design/rebuild/career-reference-standard.md)
+- **`backdrop-filter: blur` re-samples on *any* repaint in its stacking context — so on a MODAL SCRIM,
+  default to a SOLID dim, not a live blur.** A blurred scrim re-blurs the *entire page behind it* every
+  frame anything back there (a count-up, an auto-rotating carousel) — or the modal itself — repaints. The
+  usual fix is to promote the animating element to its own compositor layer (`will-change: transform`) so
+  its repaints don't dirty the backdrop — but that **fails for modal scrims** when (a) the modal animates in
+  3D (the medallion inspector's tilt/flip needs `preserve-3d`, which `will-change` would flatten, so it
+  *can't* be isolated), or (b) the receded page behind is heavy (the Collection wall of 100+ medallions).
+  So the **default for a modal scrim / `::backdrop` is a solid darker fill** (`rgba(2,4,8,~0.75–0.85)`) with
+  **no `backdrop-filter`** — the recede-scale already supplies the depth. This is what `.pp-detail-modal__scrim`,
+  `.gd-modal::backdrop`, `.gd-shotmodal::backdrop`, and `.emodal__backdrop` do. Reserve `backdrop-filter` for
+  small **static chrome** where the trade is bounded and worth it: the frosted sticky nav / sub-nav / mini-bars
+  (a bar-sized strip that only re-blurs on scroll) keep it. And **never *transition* it** (that re-blurs on
+  every frame of the transition). (See [career-reference-standard](../design/rebuild/career-reference-standard.md)
   and the memory on mobile GPU jank.)
 - **Confetti is off-brand.** `canvas-confetti` / `static/js/celebrations.js` violate anti-reference
   #4 — do **not** reuse them. Draw from the Frame's fabrication vocabulary (weld / scan-beam /

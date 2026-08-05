@@ -420,11 +420,8 @@
   transform: none;
 }
 
-/* ===== Modal Backdrop Blur ===== */
-.modal[open] {
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
-}
+/* Legacy DaisyUI modals dim via their own .modal-backdrop; NO backdrop-filter blur here -- a live blur over
+   the page re-samples on every repaint behind it (jank). See docs/reference/motion-patterns.md. */
 
 /* ===== Global modal mobile sizing ===== */
 /* DaisyUI 5 modal-box defaults to padding: 1.5rem and no max-height cap.
