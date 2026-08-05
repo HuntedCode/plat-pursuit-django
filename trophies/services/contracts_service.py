@@ -138,10 +138,12 @@ def _disc_rankings(disc_levels):
     return relevance, strength
 
 
-def annotated_contracts(profile, disc_levels=None):
+def annotated_contracts(profile, disc_levels=None, with_ranking=True):
     """Live Contracts annotated IN SQL with the viewer's per-contract status/progress and a
     relevance score -- so the board filters/sorts/paginates in the database, never by iterating
-    the catalog. Read-only (reads existing EarnedContract rows + a ProfileGame aggregate)."""
+    the catalog. Read-only (reads existing EarnedContract rows + a ProfileGame aggregate).
+    `with_ranking=False` skips the relevance/strength discipline subqueries for callers that only
+    count/aggregate (claimable_count/summary) and never sort -- shaves two correlated subqueries."""
     weights, strengths = _disc_rankings(disc_levels)
     if profile is not None:
         member_pg = ProfileGame.objects.filter(
@@ -190,8 +192,8 @@ def annotated_contracts(profile, disc_levels=None):
             max_progress=max_progress, any_plat=any_plat,
             plat_reached=plat_reached, plat_accepted=plat_accepted,
             full_reached=full_reached, full_accepted=full_accepted, ec_has_platinum=ec_has_platinum,
-            relevance=_disc_score(weights),      # weakest-discipline weight ("relevant to you")
-            strength=_disc_score(strengths),     # strongest-discipline weight ("keep pushing")
+            relevance=_disc_score(weights) if with_ranking else Value(0),   # weakest-discipline weight ("relevant to you")
+            strength=_disc_score(strengths) if with_ranking else Value(0),  # strongest-discipline weight ("keep pushing")
             job_count=job_count,                 # number of jobs the contract levels
             xp_eff=Coalesce('xp_total_override', Value(CONTRACT_XP_TOTAL)),
         )
@@ -508,13 +510,13 @@ def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplin
 
 def claimable_count(profile):
     """Cheap DB count of claimable contracts (for the 'Claim all' button)."""
-    return annotated_contracts(profile).filter(status='claimable').count()
+    return annotated_contracts(profile, with_ranking=False).filter(status='claimable').count()
 
 
 def claimable_summary(profile):
     """{count, total_xp} across ALL claimable contracts (the pending-rewards rail), independent of
     the board's paging/filters, via one DB aggregate."""
-    agg = (annotated_contracts(profile).filter(status='claimable')
+    agg = (annotated_contracts(profile, with_ranking=False).filter(status='claimable')
            .aggregate(count=Count('id'), xp=Sum('xp_eff')))
     return {'count': agg['count'] or 0, 'total_xp': agg['xp'] or 0}
 
@@ -540,12 +542,15 @@ def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, j
         all=Count('id', distinct=True),
     )
     # Platform chips: ignore the platform filter, respect status/discipline/job/search + scope -- so a
-    # legacy platform shows its true total even while the board is defaulted to current-gen.
+    # legacy platform shows its true total even while the board is defaulted to current-gen. ONE aggregate:
+    # alias each platform's member-game EXISTS, then a count-with-FILTER per platform (was a COUNT per
+    # platform -- 6 round-trips collapsed to 1; same numbers, EXISTS doesn't multiply rows so distinct holds).
     p_base = _filter_contracts(base, q=q, status=status, disciplines=disciplines, jobs=jobs, scope=scope)
-    platform_counts = {
-        p: p_base.filter(_platform_exists([p])).distinct().count()
-        for p in ALL_PLATFORMS
-    }
+    platform_counts = p_base.annotate(**{
+        f'_plat_{p}': _platform_exists([p]) for p in ALL_PLATFORMS   # resolve the correlated EXISTS per contract row
+    }).aggregate(**{
+        p: Count('id', filter=Q(**{f'_plat_{p}': True}), distinct=True) for p in ALL_PLATFORMS
+    })
     # Discipline + job popovers: REFINEMENT counts. Jobs/disciplines are ANDed, so unlike the OR-based
     # platform chips these respect the FULL current filter (including the other selected jobs/disciplines)
     # -- each count is "how many of your current results also level this job", so it narrows as you pick.
