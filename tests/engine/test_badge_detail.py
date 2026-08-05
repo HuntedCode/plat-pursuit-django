@@ -78,6 +78,7 @@ def test_service_partial_progress_is_in_progress_without_a_hold():
     grp = get_badge_detail(series, profile).groups[0]
     assert grp.state == 'in_progress' and grp.earners_rank is None
     assert grp.stages_cleared == 1 and grp.gating_count == 3
+    assert grp.progress_pct == 33   # 1/3 via the shared edition_display_state -- same pct the wall reads
 
 
 def test_service_bundle_renders_in_journey():

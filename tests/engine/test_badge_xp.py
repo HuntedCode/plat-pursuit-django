@@ -4,7 +4,7 @@ from django.utils import timezone
 
 from trophies.services.badge_engine import GroupBadgeResult
 from trophies.services.badge_xp import (
-    compute_badge_xp, compute_series_standings, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS,
+    compute_badge_xp, compute_series_standings, edition_display_state, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS,
 )
 
 
@@ -35,6 +35,19 @@ def test_two_group_badges_sum_into_series():
     total, per = compute_badge_xp({'gow': [_res(2, True), _res(3, True)]})
     expected = (2 * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS) + (3 * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS)
     assert per['gow'] == expected and total == expected
+
+
+def test_edition_display_state():
+    """The shared per-edition derivation both the Collection wall (read-model) and the badge-detail live view
+    run, so they can't disagree. Held wins regardless of counts; cleared>0 -> in_progress at cleared/gating;
+    else unearned; gating==0 is div-guarded."""
+    assert edition_display_state(True, 0, 0) == ('earned', 100)         # held -> earned/100 regardless of counts
+    assert edition_display_state(True, 3, 5) == ('earned', 100)
+    assert edition_display_state(False, 3, 5) == ('in_progress', 60)
+    assert edition_display_state(False, 1, 3) == ('in_progress', 33)
+    assert edition_display_state(False, 0, 5) == ('unearned', 0)        # no gating stage cleared -> waiting mount
+    assert edition_display_state(False, 5, 5) == ('in_progress', 100)   # fully cleared but not held (transient)
+    assert edition_display_state(False, 2, 0) == ('in_progress', 0)     # gating==0 guard -> no ZeroDivisionError
 
 
 def test_holo_does_not_change_xp():

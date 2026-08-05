@@ -82,7 +82,10 @@ def _badge_frame(gb, holds, standings, participants):
     tier, layers, is_avatar = group_medallion_layers(gb)
     held = gb.id in holds
     st = standings.get(series.series_slug)
-    cleared, gating = (st.group_progress.get(pg.key) or (0, 0)) if st else (0, 0)   # THIS edition's progress
+    # THIS edition's [cleared, gating] from the read-model. Shape-guard the value: a malformed row must fall
+    # back to "no progress" for THIS badge, never raise (a raise here degrades the WHOLE wall, not one cell).
+    raw = st.group_progress.get(pg.key) if st else None
+    cleared, gating = raw if isinstance(raw, (list, tuple)) and len(raw) == 2 else (0, 0)
 
     state, progress_pct = edition_display_state(held, cleared, gating)
     is_holo = bool(holds.get(gb.id)) if held else False

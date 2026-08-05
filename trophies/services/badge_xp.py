@@ -98,7 +98,14 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     """Write seam: recompute the EVALUATED series' standings from the current DesiredState and upsert them.
     Only touches series present in `group_badges` (a scoped --series run leaves other series intact); a series
     that drops to 0 XP is removed. The grand total is re-summed from ALL the profile's series rows, so scoped
-    runs keep it correct. Recompute-from-scratch, so it can't drift."""
+    runs keep it correct. Recompute-from-scratch, so it can't drift.
+
+    INVARIANT (load-bearing -- scope by SERIES, never by individual edition): `group_badges` MUST contain EVERY
+    live edition of any series it touches. Each series' standing is a full REPLACE computed only from the passed
+    editions -- xp is SUMMED over them, progress_bp is the MAX, and group_progress is keyed per edition -- so a
+    partial-series call (e.g. a future incremental sync scoped to one changed edition) would undercount xp and
+    drop the sibling editions' group_progress. All current callers (evaluate_badges --all / --series / a
+    username) resolve full series, which honors this."""
     from django.db.models import Sum
     from trophies.models import ProfileBadgeStanding, SeriesBadgeStanding
 
