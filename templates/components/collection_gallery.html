@@ -20,12 +20,13 @@ collection-gallery.css, wired by collection.js (initGallery).
             </span>
             <label class="pp-gallery__sort-label">
                 <span class="sr-only">Sort badges</span>
+                {# Progress-forward by default (first option) -- "what am I close on" is the first answer. #}
                 <select class="pp-gallery__select" data-gallery-sort>
-                    <option value="series:asc">Series (A&ndash;Z)</option>
-                    <option value="rarity:asc">Rarest first</option>
-                    <option value="tier:desc">Tier (Platinum first)</option>
                     <option value="progress:desc">Closest to complete</option>
                     <option value="earned:desc">Recently earned</option>
+                    <option value="rarity:asc">Rarest first</option>
+                    <option value="series:asc">Series (A&ndash;Z)</option>
+                    <option value="edition:asc">Edition</option>
                     <option value="set_number:asc">Set order</option>
                 </select>
             </label>
@@ -39,22 +40,19 @@ collection-gallery.css, wired by collection.js (initGallery).
         <div class="pp-gallery__advanced" id="gallery-advanced" hidden>
           <div class="pp-gallery__advanced-in">
             <div class="pp-gallery__fgroup">
-                <span>Tier</span>
-                <button type="button" class="pp-gallery__chip is-active" data-filter-tier="all">All</button>
-                <button type="button" class="pp-gallery__chip" data-filter-tier="bronze">Bronze</button>
-                <button type="button" class="pp-gallery__chip" data-filter-tier="silver">Silver</button>
-                <button type="button" class="pp-gallery__chip" data-filter-tier="gold">Gold</button>
-                <button type="button" class="pp-gallery__chip" data-filter-tier="platinum">Platinum</button>
+                <span>Edition</span>
+                <button type="button" class="pp-gallery__chip is-active" data-filter-edition="all">All</button>
+                <button type="button" class="pp-gallery__chip" data-filter-edition="legacy-hd">Legacy HD</button>
+                <button type="button" class="pp-gallery__chip" data-filter-edition="ultra-hd">Ultra HD</button>
             </div>
-            {% comment %} No "Unearned" chip: the Collection is scoped to ENGAGED series, and every tier of an
-            engaged series carries progress (the badge engine writes a UserBadgeProgress row per tier, and shared
-            stages give the higher rungs non-zero progress), so nothing here is unearned -- only Earned / In Progress.
-            The JS still handles a stray unearned data-state under "All". {% endcomment %}
+            {% comment %} State: Earned (held) / In Progress (the series has standing progress, not yet held) /
+            Not earned (a waiting edition). "In Progress" is the answer to "what am I close on". {% endcomment %}
             <div class="pp-gallery__fgroup">
                 <span>State</span>
                 <button type="button" class="pp-gallery__chip is-active" data-filter-state="all">All</button>
                 <button type="button" class="pp-gallery__chip" data-filter-state="earned">Earned</button>
                 <button type="button" class="pp-gallery__chip" data-filter-state="in_progress">In Progress</button>
+                <button type="button" class="pp-gallery__chip" data-filter-state="unearned">Not earned</button>
             </div>
             {% if themes|length > 1 %}
             {% comment %} Set filter is a dropdown (not chips): the set types keep growing -- series, franchise,
@@ -88,14 +86,15 @@ collection-gallery.css, wired by collection.js (initGallery).
     <div class="pp-gallery__grid" data-gallery-grid>
         {% for badge in list_badges %}
         <a class="pp-gallery__card" data-gallery-cell data-tier="{{ badge.tier }}"
+           data-edition="{{ badge.group_key }}"
            data-state="{{ badge.state }}"
            data-theme="{{ badge.theme|slugify }}"
            data-series="{{ badge.series_name|lower }}"
            data-badge="{{ badge.badge_name|lower }}"
            data-set-number="{{ badge.set_number|default:0 }}"
            data-rarity-pct="{{ badge.rarity_pct|default:0 }}"
-           data-rank="{{ badge.engraving_rank|default:0 }}"
            data-progress="{{ badge.progress_pct|default:0 }}"
+           data-stages="{% if badge.stages_total %}{{ badge.stages_done }} / {{ badge.stages_total }}{% endif %}"
            data-earned="{{ badge.earned_ts|default:0 }}"
            data-earned-label="{{ badge.earned_date|default:'' }}"
            {% if badge.series_slug %}href="{% url 'badge_detail' badge.series_slug %}"{% endif %}
@@ -106,11 +105,8 @@ collection-gallery.css, wired by collection.js (initGallery).
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
                 <span class="sr-only">{% if badge.is_new %}Earned this week{% else %}Earned{% endif %}</span>
             </span>
-            {% elif badge.state == 'maintenance' %}
-            {# Held-but-lapsed: a red "M" in the same slot the earned tick uses. #}
-            <span class="pp-gallery__badge-m" title="Maintenance -- earned, now lapsed"><span aria-hidden="true">M</span><span class="sr-only">Maintenance needed</span></span>
             {% endif %}
-            {% include 'components/badge_medallion.html' with frame=badge no_id=True %}
+            {% include 'components/badge_medallion.html' with frame=badge no_id=True no_count=True %}
             <span class="pp-gallery__caption">
                 <span class="pp-gallery__name">{{ badge.series_name }}</span>
                 <span class="pp-gallery__stat" data-gallery-stat></span>

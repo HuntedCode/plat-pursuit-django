@@ -36,8 +36,8 @@ almost always a specific detail that question surfaces:
 - **Pages are STACKED surfaces, and the CONTENT flows FREE** (site-wide rule, 2026-07). The chrome is
   carded -- an accented page-header card, then optional stat/education/toolbar cards, each `mb-3`/`mb-4`
   apart. The main content (grids, lists, tab panels -- even a tabbed widget's panels) is **NOT wrapped in
-  an outer card**; it flows free below the chrome, exactly like the Collection (header card -> free toggle
-  -> free Case/Gallery panels). NEVER a single bordered box that swallows the header + every section, and
+  an outer card**; it flows free below the chrome, exactly like the Collection (header card -> free Gallery
+  wall). NEVER a single bordered box that swallows the header + every section, and
   never an outer card around the content grid -- both trap the many long / paginated (infinite-scroll)
   pages in an ever-growing border. (Item-level cards inside the content -- game cards, job tiles, the empty
   state -- are fine; it's the *outer content wrapper* that must not be a card.) NB: Career's original

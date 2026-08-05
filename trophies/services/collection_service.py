@@ -1,284 +1,231 @@
-"""Collection album page context builder.
+"""Collection Gallery page context builder (grouping-badge system).
 
-The Collection (`/my-pursuit/collection/`) is the Pursuer's badge album -- the product
-mount of the **Binder Surface** (see docs/design/binder-surface.md). It shows the badges from
-every series the viewer has ENGAGED with (holds or is in-progress on any tier): earned ones
-framed, the remaining tiers of those series shown as named slots (the rungs left to climb).
-Grouped into binder pages by badge type. This is the personal album, scoped to what you've
-started -- full-catalog discovery lives on the Browse badge Gallery, not here.
+The Collection (`/my-pursuit/collection/`) is the Pursuer's badge Gallery -- a single filter / sort / search
+wall of the badges they've ENGAGED with: the live group badges (editions -- Legacy HD / Ultra HD) of every
+series they either HOLD an edition of (a UserGroupBadge) or have STARTED (a SeriesBadgeStanding with progress).
+Earned editions gleam; in-progress ones show that EDITION's own progress; the rest are waiting mounts. Full-catalog
+discovery lives on the Browse badge Gallery, not here.
 
-Whale-safe: the per-viewer UserBadge / UserBadgeProgress reads are bulk-fetched ONCE and
-passed into `build_badge_frame(..., earned=, progress=, include_live_stats=False)`, so
-building hundreds of frames issues no per-badge queries/Redis (the Frame docstring's
-prescribed batch path). Read-only.
+Grouping-badge model: no tiers. The medallion frames reuse group_medallion_layers (so metals / avatars / holo
+match the rest of the site) + group_rarity, with per-viewer state layered on: earned = held; in_progress = THIS
+edition (per-group) has partial progress; else unearned. Progress is derived LIVE from the badge engine's
+DesiredState -- the SAME source the detail modal uses -- so the wall and the modal can't disagree, and nothing
+is denormed (per-edition progress has no leaderboard, so it's never stored; see badge-backend-rebuild.md).
+Whale-BOUNDED, not read-fixed: the catalog + eval are scoped to the ENGAGED series' games (catalog game-ids),
+never the profile's whole trophy library. Read-only.
 """
 import logging
 from collections import defaultdict
 from datetime import timedelta
 
-from django.db.models import Q
+from django.db.models import Count
 from django.utils import timezone
 
-from trophies.models import Badge, UserBadge, UserBadgeProgress
-from trophies.services.frame_service import build_badge_frame
-from trophies.services.redis_leaderboard_service import get_earners_ranks
+from trophies.models import GroupBadge, UserGroupBadge, SeriesBadgeStanding
+from trophies.services.badge_detail_service import group_medallion_layers
+from trophies.services.badge_orchestrator import build_catalog, evaluate_with_catalog
+from trophies.services.badge_rarity import group_rarity
 
 logger = logging.getLogger(__name__)
 
-_RECENT_DAYS = 7  # window for the header's "+N this week" momentum pill
+_RECENT_DAYS = 7   # window for the header's "+N this week" pill + the per-badge "new" ping
 
-# Section order (badge types) + the binder page palettes that cycle per section. Each badge
-# type is its own "set" (its own page run + independent set numbering).
+# Badge-type sections (for the Set filter) + the palettes that cycle per section.
 _SECTION_ORDER = ['series', 'franchise', 'collection', 'megamix', 'developer', 'user', 'event']
 _SECTION_LABELS = {
     'series': 'Series', 'franchise': 'Franchises', 'collection': 'Collections',
     'megamix': 'Mega Mixes', 'developer': 'Developers', 'user': 'Community', 'event': 'Events',
 }
 _PALETTES = ['cobalt', 'amber', 'emerald', 'violet']
-_TIER_NAME = {1: 'bronze', 2: 'silver', 3: 'gold', 4: 'platinum'}
-PAGE_SIZE = 16  # frames per binder page = 4 series x 4 tiers (a new badge type starts a fresh page)
 
-# Binder sort options (applied WITHIN each set). Both keep a series' four tiers
-# contiguous so a series still reads as one row. (key, label) -- order = dropdown order.
+# Gallery sort options (client-side, applied by collection.js). Progress-forward by default so "what am I close
+# on" is the first answer. (key, label) -- order = dropdown order.
 COLLECTION_SORTS = [
-    ('set_number', 'Set number'),
-    ('series', 'Series name'),
+    ('progress', 'Closest to complete'),
+    ('earned', 'Recently earned'),
+    ('rarity', 'Rarest first'),
+    ('series', 'Series (A-Z)'),
+    ('edition', 'Edition'),
+    ('set_number', 'Set order'),
 ]
-DEFAULT_SORT = 'set_number'
+DEFAULT_SORT = 'progress'
 
 
-def _sort_key(sort):
-    if sort == 'series':
-        return lambda b: ((b.effective_display_series or b.series_slug or '').lower(), b.tier)
-    # set_number: the admin-assigned edition order (a series is a contiguous block of 4,
-    # blocks run in numbering order). Not-yet-numbered badges fall to the end (alpha, tier).
-    return lambda b: (
-        b.set_number is None, b.set_number or 0,
-        (b.effective_display_series or b.series_slug or '').lower(), b.tier,
+def _engaged_series(profile):
+    """The series the viewer is engaged with: they HOLD an edition (a UserGroupBadge) or have STARTED it (a
+    SeriesBadgeStanding row exists only while xp>0, i.e. real progress). ONE bounded read of the held editions
+    (with every field the wall needs off them) + one of the started slugs -- both catalog-bounded, not
+    trophy-bounded; this scopes the live eval to only the series worth evaluating. Returns
+    (engaged_slugs, holds, earned_at) where holds = {group_badge_id: is_holo}, earned_at = {group_badge_id: dt}."""
+    held_rows = list(
+        UserGroupBadge.objects.filter(profile=profile)
+        .values_list('group_badge_id', 'is_holo', 'group_badge__series__series_slug', 'earned_at')
     )
-
-
-def _engaged_scope(profile):
-    """The viewer's ENGAGED badge scope for the album: the set of series_slugs they hold any tier of
-    (a UserBadge, any status incl maintenance) or are in-progress on (a UserBadgeProgress with
-    completed_concepts > 0), PLUS the ids of any held/started badge that has NO series_slug -- a
-    standalone badge can't be captured by slug, so it's kept by id and never silently dropped from an
-    album you hold it in. Two bounded reads (one row per held / started badge -- bounded by the catalog,
-    not the trophy count), split in Python. Zero-progress rows are skipped (functionally unearned,
-    matching frame_service's state logic). Returns (series_slugs, extra_badge_ids)."""
-    rows = list(
-        UserBadge.objects.filter(profile=profile)
-        .values_list('badge__series_slug', 'badge_id')
-    ) + list(
-        UserBadgeProgress.objects.filter(profile=profile, completed_concepts__gt=0)
-        .values_list('badge__series_slug', 'badge_id')
+    holds = {gid: is_holo for gid, is_holo, _slug, _ea in held_rows}
+    earned_at = {gid: ea for gid, _holo, _slug, ea in held_rows}
+    held_slugs = {slug for _gid, _holo, slug, _ea in held_rows}
+    started_slugs = set(
+        SeriesBadgeStanding.objects.filter(profile=profile).values_list('series_slug', flat=True)
     )
-    slugs = {slug for slug, _ in rows if slug}
-    extra_ids = {bid for slug, bid in rows if not slug}
-    return slugs, extra_ids
+    return (held_slugs | started_slugs), holds, earned_at
 
 
-def _live_badges(series_slugs=None, extra_ids=None):
-    """Live badges with every FK build_badge_frame touches select_related, so the batched frame
-    build issues zero per-badge FK queries. When `series_slugs` is given (the Collection's engaged
-    scope), only those series' badges are returned, plus any `extra_ids` (held standalone badges with
-    no slug). An empty scope (no slugs, no ids) -> no badges, i.e. an empty album."""
-    qs = Badge.objects.filter(is_live=True).select_related(
-        'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
-        'base_badge__franchise', 'base_badge__collection',
-        'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
-    )
-    if series_slugs is not None:
-        scope = Q(series_slug__in=series_slugs)
-        if extra_ids:
-            scope |= Q(id__in=extra_ids)
-        qs = qs.filter(scope)
-    return list(qs)
+def _badge_frame(gb, holds, desired, participants):
+    """A collection Gallery frame for one group badge (edition), with the viewer's PER-EDITION state layered on
+    (live from the badge engine's DesiredState -- the SAME source the inspect modal uses, so the wall and modal
+    can't disagree):
+      - held                                    -> 'earned' (holo when mastered),
+      - not held, THIS edition has partial progress (0 < base_satisfied < gating) -> 'in_progress' + its progress,
+      - else                                    -> 'unearned' (a waiting mount -- incl. an edition the viewer has
+                                                   0% on, which the series furthest-along would wrongly paint).
+    Reuses group_medallion_layers (art) + group_rarity (live rarity), so it matches the browse pages exactly."""
+    series, pg = gb.series, gb.platform_group
+    tier, layers, is_avatar = group_medallion_layers(gb)
+    held = gb.id in holds
+    result = desired.get(gb.id)
 
+    stages_done = stages_total = 0   # only the in-progress meter carries the "X / Y stages" count
+    if held:
+        state, progress_pct, is_holo = 'earned', 100, bool(holds.get(gb.id))
+    elif result and result.base_satisfied_count > 0:
+        # THIS edition's own live progress (per-group), not the series furthest-along. Matches _group_view.
+        is_holo = False
+        cleared, gating = result.base_satisfied_count, result.gating_count
+        state = 'in_progress'
+        progress_pct = round(100 * cleared / gating) if gating else 0
+        stages_done, stages_total = cleared, gating
+    else:
+        state, progress_pct, is_holo = 'unearned', 0, False
 
-def _build_sets(profile, sort=DEFAULT_SORT):
-    """Group live badges into binder SETS (one per badge type). Each set is its own
-    sub-binder: its pages are numbered within the set, and the page (Series / Developers /
-    ...) is selected as a distinct binder view on the page. Returns (binder_sets, summary).
-
-    Scoped to the viewer's ENGAGED badges (see _engaged_scope) -- the album shows only series
-    you've started (plus any held standalone badge), never the full catalog.
-    """
-    badges = _live_badges(*_engaged_scope(profile))
-    if not badges:
-        return [], {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}, 'recent': 0, 'tiers': []}
-
-    # Bulk per-viewer state (one query each), keyed by badge id.
-    badge_ids = [b.id for b in badges]
-    earned_map = {
-        ub.badge_id: ub
-        for ub in UserBadge.objects.filter(profile=profile, badge_id__in=badge_ids)
+    pct, cls = group_rarity(gb.earned_count, participants.get(series.series_slug, 0))
+    return {
+        'tier': tier,
+        'state': state,
+        'art_layers': layers,
+        'is_avatar': is_avatar,
+        'is_holographic': held and is_holo,
+        'series_name': series.name,
+        'franchise': series.franchise.name if series.franchise_id else None,
+        'collection': series.collection.name if series.collection_id else None,
+        'developer': series.developer.name if series.developer_id else None,
+        'set_number': gb.set_number,
+        'badge_id': gb.id,
+        'dom_id': f'card-{gb.id}',
+        'series_slug': series.series_slug,
+        'group_key': pg.key,
+        'group_name': pg.name,          # "Legacy HD" / "Ultra HD" -- the edition, for search + the caption stat
+        'badge_name': pg.name,
+        'progress_pct': progress_pct,
+        'stages_done': stages_done,
+        'stages_total': stages_total,   # medallion renders "stages_done / stages_total" below the meter when > 0
+        'rarity_pct': pct or 0,
+        'rarity_class': cls,
     }
-    recent_cutoff = timezone.now() - timedelta(days=_RECENT_DAYS)   # "+N this week" pill + per-badge "new" flag
-    progress_map = {
-        pr.badge_id: pr
-        for pr in UserBadgeProgress.objects.filter(profile=profile, badge_id__in=badge_ids)
-    }
-
-    # Back-of-card live stats, batched once (not per badge): series XP from the denormalized
-    # ProfileGamification.series_badge_xp (one read), and current earners rank from a single
-    # pipelined Redis round-trip over the EARNED series only.
-    gam = getattr(profile, 'gamification', None)
-    series_xp_map = (getattr(gam, 'series_badge_xp', None) or {}) if gam else {}
-    earned_series = {b.series_slug for b in badges if b.id in earned_map and b.series_slug}
-    rank_map = get_earners_ranks(earned_series, profile.id)
-
-    by_type = defaultdict(list)
-    for b in badges:
-        by_type[b.badge_type].append(b)
-    ordered_types = (
-        [t for t in _SECTION_ORDER if t in by_type]
-        + [t for t in by_type if t not in _SECTION_ORDER]
-    )
-
-    earned_ids = set(earned_map.keys())
-    sort_key = _sort_key(sort)
-    binder_sets, palette_i = [], 0
-    for btype in ordered_types:
-        section = sorted(by_type[btype], key=sort_key)
-        palette = _PALETTES[palette_i % len(_PALETTES)]
-        palette_i += 1
-        label = _SECTION_LABELS.get(btype, btype.title())
-
-        frames = []
-        for b in section:
-            frame = build_badge_frame(
-                b, profile,
-                earned=earned_map.get(b.id), progress=progress_map.get(b.id),
-                include_live_stats=False, allow_flip=True,
-                current_rank=rank_map.get(b.series_slug), series_xp=series_xp_map.get(b.series_slug),
-            )
-            # Use the badge id (globally unique) for the binder card's DOM anchor, since
-            # set_number is now only unique WITHIN a badge type (Series #1 and Franchise #1
-            # both exist). The list "View ->" deep-links to it. series_slug powers the
-            # per-series badge-detail link in both views.
-            frame['dom_id'] = f"card-{b.id}"
-            frame['series_slug'] = b.series_slug
-            frame['badge_id'] = b.id   # the collection detail modal fetches by id
-            # Epoch of the earn (0 when not held) -- powers the Gallery's "Recently earned" sort.
-            ub = earned_map.get(b.id)
-            frame['earned_ts'] = int(ub.earned_at.timestamp()) if ub and ub.earned_at else 0
-            # "New" flag: earned within the recent window -- the Gallery's per-badge spark, matching the
-            # header's "+N this week" pill.
-            frame['is_new'] = bool(ub and ub.earned_at and ub.earned_at >= recent_cutoff)
-            frames.append(frame)
-
-        # Each set is its own binder view; pages are numbered WITHIN the set.
-        pages = [
-            {'number': i, 'frames': frames[start:start + PAGE_SIZE]}
-            for i, start in enumerate(range(0, len(frames), PAGE_SIZE), start=1)
-        ]
-        # Spreads pair facing pages for the flipbook (desktop) view: left + right,
-        # with an empty right on an odd final page. Single view uses `pages` directly.
-        spreads = [
-            {'number': i // 2 + 1, 'left': pages[i], 'right': pages[i + 1] if i + 1 < len(pages) else None}
-            for i in range(0, len(pages), 2)
-        ]
-        # Series groups: the 4 tiers (bronze -> platinum) of a series stay together as one unit, never
-        # split across a row. Frames are already sorted series-then-tier, and series_slug groups the tiers.
-        groups = []
-        for fr in frames:
-            slug = fr.get('series_slug') or ''
-            if slug and groups and groups[-1]['slug'] == slug:
-                groups[-1]['tiers'].append(fr)
-            else:
-                groups.append({'name': fr.get('series_name'), 'slug': slug, 'tiers': [fr]})
-        set_total = len(section)
-        set_earned = sum(1 for b in section if b.id in earned_ids)
-        # Per-series progress for the group headers (a series = 4 tiers, bronze -> platinum). "Held" =
-        # earned or maintenance (you earned it, it may have lapsed) so the completion ring counts it.
-        for g in groups:
-            g['total'] = len(g['tiers'])
-            g['earned'] = sum(1 for t in g['tiers'] if t.get('state') in ('earned', 'maintenance'))
-            g['complete'] = g['total'] > 0 and g['earned'] >= g['total']
-            # A held badge that has lapsed puts the whole series into a "needs maintenance" state -- the Case
-            # warms the group niche red/amber + flags the header, so a single lapsed rung is easy to spot.
-            g['has_maintenance'] = any(t.get('state') == 'maintenance' for t in g['tiers'])
-            # Aspirational "next": glow the next rung to climb -- the first tier you don't yet HOLD,
-            # whether you've started it (in_progress) or not (unearned). A fully-held series has none.
-            # Tiers are bronze -> platinum order, so the first non-held one is the lowest rung left.
-            for t in g['tiers']:
-                if t.get('state') not in ('earned', 'maintenance'):
-                    t['is_next'] = True
-                    break
-        binder_sets.append({
-            'key': btype,
-            'label': label,
-            'palette': palette,
-            'groups': groups,
-            'pages': pages,
-            'spreads': spreads,
-            'total': set_total,
-            'earned': set_earned,
-            'pct': round(set_earned / set_total * 100) if set_total else 0,
-            'complete': set_total > 0 and set_earned >= set_total,
-        })
-
-    by_tier = defaultdict(int)
-    for b in badges:
-        if b.id in earned_ids:
-            by_tier[_TIER_NAME.get(b.tier, 'gold')] += 1
-    earned = len(earned_ids)
-    total = len(badges)
-    # "+N this week" momentum: earns within the recent window (recent_cutoff, computed once above).
-    # Counts off the already-fetched earned_map (bounded by live-badge count, not the user's trophy
-    # count) -- whale-safe, no new query.
-    recent = sum(1 for ub in earned_map.values() if ub.earned_at and ub.earned_at >= recent_cutoff)
-    summary = {
-        'total': total,
-        'earned': earned,
-        'pct': round(earned / total * 100) if total else 0,
-        'by_tier': dict(by_tier),
-        'recent': recent,
-        # Ordered bronze->platinum breakdown for the header's at-a-glance composition row.
-        'tiers': [
-            {'key': name, 'label': name.title(), 'count': by_tier.get(name, 0)}
-            for name in ('bronze', 'silver', 'gold', 'platinum')
-        ],
-    }
-    return binder_sets, summary
-
-
-def _flatten_for_list(binder_sets):
-    """Flatten the binder sets into the row list + theme set the sibling list view needs.
-
-    Same data, different presentation (the Binder is the display piece, the list is the
-    hunting tool). Each row carries its set's label/palette, the frame's binder `dom_id`
-    (the list "View ->" deep-links to it), and `series_slug` for the detail link.
-    """
-    list_badges, themes = [], {}
-    for s in binder_sets:
-        themes.setdefault(s['label'], s['palette'])
-        for page in s['pages']:
-            for frame in page['frames']:
-                # series_slug already rides along on the frame (set in _build_sets).
-                list_badges.append({**frame, 'theme': s['label'], 'palette': s['palette']})
-    return list_badges, [{'name': name, 'palette': palette} for name, palette in themes.items()]
 
 
 def build_collection_context(profile, sort=DEFAULT_SORT):
-    """Assemble the Collection album context. Read-only + whale-safe (see module docstring).
-
-    `sort` orders the badges within each set; unknown values fall back to the default.
-    """
+    """Assemble the Collection Gallery context: a flat `list_badges` of the viewer's engaged editions + a
+    summary (held / in-progress / per-edition composition) + the Set themes. Read-only; whale-BOUNDED (the live
+    per-edition eval is scoped to the engaged series' catalog, not the whole trophy library).
+    `sort` picks the initial dropdown value (the wall is sorted client-side); unknown values fall back."""
     if sort not in dict(COLLECTION_SORTS):
         sort = DEFAULT_SORT
     context = {
-        'binder_sets': [], 'summary': {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}, 'recent': 0, 'tiers': []},
-        'list_badges': [], 'themes': [], 'total_pages': 0,
+        'list_badges': [], 'themes': [],
+        'summary': {'total': 0, 'catalog_total': 0, 'earned': 0, 'in_progress': 0, 'holo': 0,
+                    'pct': 0, 'recent': 0, 'editions': []},
         'sort': sort, 'sort_options': COLLECTION_SORTS,
     }
     try:
-        binder_sets, summary = _build_sets(profile, sort)
-        context['binder_sets'] = binder_sets
-        context['summary'] = summary
-        context['total_pages'] = sum(len(s['pages']) for s in binder_sets)
-        context['list_badges'], context['themes'] = _flatten_for_list(binder_sets)
+        engaged, holds, earned_at = _engaged_series(profile)
+        if not engaged:
+            return context
+
+        group_badges = list(
+            GroupBadge.objects.filter(is_live=True, series__series_slug__in=engaged)
+            .select_related('series', 'series__franchise', 'series__collection', 'series__developer',
+                            'series__submitted_by', 'platform_group')
+            .order_by('series__name', 'platform_group__sort_order', 'id')
+        )
+        if not group_badges:
+            return context
+
+        # Live per-edition progress from the badge engine (the SAME DesiredState the detail modal reads, so the
+        # wall and the modal agree). Bounded: build_catalog + the eval touch only the ENGAGED series' games
+        # (catalog game-ids), never the profile's whole trophy library. Progress is derived, never denormed.
+        catalog = build_catalog(group_badges)
+        desired = evaluate_with_catalog(profile, catalog) if catalog else {}
+
+        # Live rarity denominator: the series' pursuer base (one indexed count over all engaged series' slugs).
+        slugs = {gb.series.series_slug for gb in group_badges}
+        participants = dict(
+            SeriesBadgeStanding.objects.filter(series_slug__in=slugs)
+            .values('series_slug').annotate(n=Count('id')).values_list('series_slug', 'n')
+        )
+        recent_cutoff = timezone.now() - timedelta(days=_RECENT_DAYS)
+
+        # Palette per badge type (for the Set filter theme swatches), in section order.
+        by_type = defaultdict(list)
+        for gb in group_badges:
+            by_type[gb.series.badge_type].append(gb)
+        ordered_types = ([t for t in _SECTION_ORDER if t in by_type]
+                         + [t for t in by_type if t not in _SECTION_ORDER])
+        palette_of = {t: _PALETTES[i % len(_PALETTES)] for i, t in enumerate(ordered_types)}
+
+        catalog_total = GroupBadge.objects.filter(is_live=True).count()   # the whole earnable catalog (denominator)
+
+        list_badges, edition_counts = [], {}
+        earned = in_progress = recent = holo = 0
+        for gb in group_badges:
+            fr = _badge_frame(gb, holds, desired, participants)
+            btype = gb.series.badge_type
+            fr['theme'] = _SECTION_LABELS.get(btype, btype.title())
+            fr['palette'] = palette_of.get(btype, _PALETTES[0])
+            ea = earned_at.get(gb.id)
+            fr['earned_ts'] = int(ea.timestamp()) if ea else 0
+            fr['earned_date'] = ea.strftime('%b %d, %Y') if ea else ''
+            fr['is_new'] = bool(ea and ea >= recent_cutoff)
+            list_badges.append(fr)
+
+            # Edition composition: EVERY engaged edition appears (held count, 0 allowed) so the header stat
+            # grid is stable -- a series you've only started still contributes its Legacy HD / Ultra HD cards.
+            ec = edition_counts.get(gb.platform_group.key)
+            if ec is None:
+                ec = edition_counts[gb.platform_group.key] = {
+                    'key': gb.platform_group.key, 'label': gb.platform_group.name,
+                    'count': 0, 'sort': gb.platform_group.sort_order, 'tier': fr['tier'],
+                }
+
+            if fr['state'] == 'earned':
+                earned += 1
+                ec['count'] += 1
+                if fr['is_new']:
+                    recent += 1
+                if fr['is_holographic']:
+                    holo += 1
+            elif fr['state'] == 'in_progress':
+                in_progress += 1
+
+        total = len(list_badges)
+        themes = [{'name': _SECTION_LABELS.get(t, t.title()), 'palette': palette_of[t]} for t in ordered_types]
+        context.update({
+            'list_badges': list_badges,
+            'themes': themes,
+            'summary': {
+                'total': total,                     # engaged editions (gates the header's stat grid + tally)
+                'catalog_total': catalog_total,     # ALL live group badges -- the "N of M collected" denominator
+                'earned': earned,
+                'in_progress': in_progress,
+                'holo': holo,
+                'pct': round(earned / catalog_total * 100) if catalog_total else 0,
+                'recent': recent,
+                # Held-badge composition by EDITION (Legacy HD / Ultra HD); every engaged edition present.
+                'editions': [
+                    {'key': v['key'], 'label': v['label'], 'count': v['count'], 'tier': v['tier']}
+                    for v in sorted(edition_counts.values(), key=lambda e: e['sort'])
+                ],
+            },
+        })
     except Exception:
-        logger.exception("Collection album build failed for profile %s", getattr(profile, 'id', '?'))
+        logger.exception("Collection Gallery build failed for profile %s", getattr(profile, 'id', '?'))
     return context

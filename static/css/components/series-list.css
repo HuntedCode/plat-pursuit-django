@@ -38,7 +38,7 @@
 @media (max-width: 640px) { .pp-minibar__howto .pp-minibar__flbl { display: none; } }
 
 /* The how-to modal shell: a wide, scrollable dialog over the shared .pp-detail-modal scrim/entrance
- * (collection-case.css). Wide enough that the forge journey goes horizontal on desktop. */
+ * (badge-inspect.css). Wide enough that the forge journey goes horizontal on desktop. */
 .pp-howto__dialog { width: min(940px, 100%); max-height: 88vh; overflow-y: auto; text-align: left; }
 .pp-howto__body { padding: 4px 2px; }
 .pp-howto__title { display: flex; align-items: center; gap: 9px; font-family: var(--pp-font-display); font-weight: 800; font-size: 18px; color: var(--pp-text); margin-bottom: 12px; }
@@ -59,7 +59,7 @@
  * .pp-detail-modal entrance rule -- equal-specificity class selectors tie and lose by source order (the same
  * gotcha the badge-detail modals solve with #id). */
 #badge-howto.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }   /* opacity crossfade -- always on */
-/* The dialog's settle is transform MOTION, so it's reduced-motion-gated (the id also overrides collection-case's
+/* The dialog's settle is transform MOTION, so it's reduced-motion-gated (the id also overrides badge-inspect.css's
    reduced-motion `animation: none`, which would otherwise leak the motion back in for those users). */
 @media (prefers-reduced-motion: no-preference) {
     #badge-howto.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }

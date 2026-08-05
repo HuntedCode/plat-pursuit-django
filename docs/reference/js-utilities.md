@@ -190,7 +190,7 @@ Applies the shared `.pp-view-in-right` / `.pp-view-in-left` class (`components/m
 `panel`, picking the direction from `order` (forward in the list slides in from the right, backward from
 the left). No-ops when `fromName === toName` or under `prefers-reduced-motion`. Works for JS toggles (call
 on the now-shown panel) and HTMX island swaps (call on the swapped-in root in `htmx:afterSwap`). Used by
-Career tabs, Collection Case/Gallery/List, and the Badges Series/Gallery swap. → [motion-patterns.md](../reference/motion-patterns.md) (Directional view switch).
+Career tabs and the Badges Series/Gallery swap. → [motion-patterns.md](../reference/motion-patterns.md) (Directional view switch).
 
 ### PlatPursuit.wireTablist / igniteTab / syncViewParam
 
@@ -204,7 +204,7 @@ each page keeps its own switch logic and just hands the tabs to these.
 | `syncViewParam(view, opts)` | string, `{default, paramView, params}` | Reflect the active view in `?view=` (default view stays clean) + strip view-scoped params on leave |
 
 `wireTablist` **automatic** activation (default) activates on click OR arrow — for cheap client-side
-switches (Career tabs, Collection Case/Gallery/List + set shelves). **Manual** (`opts.manual`) moves focus
+switches (Career tabs, Badges Series/Gallery). **Manual** (`opts.manual`) moves focus
 only, letting the tab's own click/Enter activate — for expensive swaps (the Badges Series/Gallery HTMX
 `<a>` chips, where auto-activating per arrow would fire a request each keypress). Call the returned
 `syncTabindex()` after the active tab changes elsewhere (e.g. an HTMX `afterSwap`). → [motion-patterns.md](../reference/motion-patterns.md) (tab ignite).
@@ -236,7 +236,7 @@ for rebuilt browse grids** (Badges; the pending Challenges/Franchise/Company/Gam
 only starts from the top of the dialog's scroll (mid-content scroll isn't hijacked). The helper adds
 `.pp-dismissable` to the dialog, surfacing the shared touch-only grabber handle (`.pp-dismissable::before`):
 it fades in a beat after the sheet opens (`ppGrabIn`), rides the sheet off on a swipe, and fades out on a
-non-drag close (`ppGrabOut`, keyed on the modal's `.is-closing`) — all in `collection-case.css`, reduced-motion gated.
+non-drag close (`ppGrabOut`, keyed on the modal's `.is-closing`) — all in `badge-inspect.css`, reduced-motion gated.
 Live on the badge-detail stats + contract modals, the Career job/contract modal, and (via
 `Medallion.detailModal`) every medallion **peek** across collection / badge list / badge detail. The peek
 can't FLIP its disc back from a dragged-off position, so on swipe it instead **returns the object home** --

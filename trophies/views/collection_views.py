@@ -1,9 +1,11 @@
-"""The Collection view: the Pursuer's badge album (the Binder Surface mount).
+"""The Collection view: the Pursuer's badge Gallery.
 
-`/my-pursuit/collection/` renders the viewer's own badge collection as framed cards in a
-binder -- earned badges framed, earnable ones as named slots. Requires a linked profile.
-Page data is assembled by `collection_service.build_collection_context` (read-only,
-whale-safe). This is the personal album, NOT the all-badges browse or a badge detail page.
+`/collection/` renders a single filter / sort / search wall of the badge editions (Legacy HD /
+Ultra HD) the viewer has ENGAGED with -- held or in-progress -- with per-edition state derived
+live (earned / in_progress / unearned). Requires a linked profile. Page data is assembled by
+`collection_service.build_collection_context` (read-only, whale-BOUNDED -- the live per-edition
+eval is scoped to the engaged series' catalog). This is the personal Gallery, NOT the all-badges
+browse or a badge detail page.
 """
 from django.conf import settings
 from django.contrib import messages
@@ -14,13 +16,13 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import TemplateView
 
-from trophies.models import Badge
+from trophies.models import GroupBadge
+from trophies.services.badge_detail_service import get_badge_detail
 from trophies.services.collection_service import build_collection_context
-from trophies.services.frame_service import build_badge_frame
 
 
 class CollectionView(LoginRequiredMixin, TemplateView):
-    """The Pursuer's badge collection album. Linked-profile gated; renders the viewer's own."""
+    """The Pursuer's badge Collection Gallery. Linked-profile gated; renders the viewer's own."""
     template_name = 'trophies/collection.html'
 
     def dispatch(self, request, *args, **kwargs):
@@ -46,26 +48,26 @@ class CollectionView(LoginRequiredMixin, TemplateView):
 
 
 class CollectionBadgeModalView(LoginRequiredMixin, View):
-    """Detail modal for one badge (the Case's 'pick it up'): the medallion big + its full stats.
-    Fetched on tap so the grid stays light -- one badge, single-hero stats. Linked-profile gated."""
+    """Detail modal for one collection badge (the Gallery's 'pick it up'): the GROUP badge's medallion + the
+    viewer's REAL per-group state, via badge_detail_service (same modal the badge pages use). `badge_id` is a
+    GroupBadge id. Linked-profile gated."""
 
     def get(self, request, badge_id):
         profile = getattr(request.user, 'profile', None)
         if not profile or not profile.is_linked:
             return HttpResponseNotFound()   # explicit 404 (the project's handler404 renders at 200)
-        badge = (
-            Badge.objects.filter(id=badge_id, is_live=True)
-            .select_related(
-                'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
-                'base_badge__franchise', 'base_badge__collection',
-                'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
-            ).first()
+        gb = (
+            GroupBadge.objects
+            .select_related('series', 'series__franchise', 'series__collection', 'series__developer',
+                            'series__funded_by', 'platform_group')
+            .filter(id=badge_id, is_live=True).first()
         )
-        if badge is None:
+        if gb is None:
             return HttpResponseNotFound()
-        frame = build_badge_frame(badge, profile)   # single hero: full stats + live rank/XP
-        frame['dom_id'] = f'card-{badge.id}'
-        frame['series_slug'] = badge.series_slug
-        frame['badge_id'] = badge.id
-        frame['owner_name'] = profile.display_psn_username or profile.psn_username   # engraved on the earned base
-        return render(request, 'components/collection_badge_modal.html', {'frame': frame})
+        detail = get_badge_detail(gb.series, profile)
+        gv = next((g for g in detail.groups if g.group_badge.id == gb.id), None)
+        if gv is None:
+            return HttpResponseNotFound()
+        return render(request, 'components/group_badge_modal.html', {
+            'gv': gv, 'series': gb.series, 'detail': detail, 'viewing_other': None, 'showcase': False,
+        })

@@ -1,135 +1,14 @@
 /* Collection page controller.
- * Drives the Case/Gallery view toggle, the medallion physicality (flip/tilt/gyro), the first-earn
- * mint ceremony, the badge detail modal, the header count-ups + tappable tier stats, and the Gallery's
- * client-side filter / sort / search. Namespaced under window.PlatPursuit.Collection. */
+ * Drives the medallion physicality (flip/tilt/gyro), the first-earn mint ceremony, the badge detail
+ * modal, the header stat count-ups, and the Gallery's client-side filter / sort / search.
+ * Namespaced under window.PlatPursuit.Collection. */
 (function () {
     'use strict';
-
-    var STORAGE_KEY = 'pp-collection-view';
 
     // Medallion physicality (flip/tilt/gyro) now lives in the shared PlatPursuit.Medallion module
     // (static/js/medallion.js, loaded globally before this). Alias its motion gates so the grow/wiggle
     // checks below stay in sync with the tilt's -- one source of truth.
     var prefersReducedMotion = PlatPursuit.Medallion.prefersReducedMotion;
-
-    function initViewToggle(root) {
-        var views = Array.prototype.slice.call(root.querySelectorAll('.pp-collection__view'));
-        var chips = Array.prototype.slice.call(root.querySelectorAll('.pp-switch__chip'));
-        if (!views.length || !chips.length) return;
-
-        // The Gallery's URL params -- mirrored in the URL only while the Gallery is active, and stripped
-        // when you leave it (so a shared Case link stays clean). Kept in sync with initGallery.
-        var GALLERY_PARAMS = ['tier', 'state', 'set', 'q', 'sort'];
-        // View order (Case / Gallery / List) taken from the chip order, for the directional slide.
-        var VIEW_ORDER = chips.map(function (c) { return c.getAttribute('data-collection-view'); });
-        function currentView() {
-            var cur = null;
-            views.forEach(function (v) { if (!v.hidden) { cur = v.getAttribute('data-collection-view'); } });
-            return cur;
-        }
-        var tablist;
-        function setView(name, userAction) {
-            var from = currentView();
-            var changed = from !== name;
-            var shown = null;
-            views.forEach(function (v) {
-                var on = v.getAttribute('data-collection-view') === name;
-                v.hidden = !on;
-                if (on) { shown = v; }
-            });
-            // Directional cross-fade: the incoming view slides in from the side it lives on (shared with Career).
-            if (changed) { PlatPursuit.slideViewIn(shown, from, name, VIEW_ORDER); }
-            var activeChip = null;
-            chips.forEach(function (c) {
-                var on = c.getAttribute('data-collection-view') === name;
-                c.classList.toggle('is-active', on);
-                c.setAttribute('aria-selected', on ? 'true' : 'false');
-                if (on) { activeChip = c; }
-            });
-            if (tablist) { tablist.syncTabindex(); }                       // roving tabindex
-            if (userAction && changed) { PlatPursuit.igniteTab(activeChip); }  // the newly-active chip blooms once
-            try { localStorage.setItem(STORAGE_KEY, name); } catch (e) { /* private mode */ }
-            // Reflect the active view in the URL (shareable + reload-safe); Case is the default so its URL
-            // stays clean, and leaving the Gallery strips its filter params (a shared Case link stays clean).
-            PlatPursuit.syncViewParam(name, { default: 'case', paramView: 'gallery', params: GALLERY_PARAMS });
-        }
-        // Click + Arrow/Home/End keyboard nav + roving tabindex via the shared tablist helper.
-        tablist = PlatPursuit.wireTablist(chips, { onSelect: function (c) { setView(c.getAttribute('data-collection-view'), true); } });
-
-        // Initial view: a #card-<id> deep-link lands in the Case; else an explicit ?view= wins (shared /
-        // reloaded link); else the stored preference; else the Case. (legacy 'binder'->case, 'list'->gallery)
-        var initial = 'case';
-        var urlView = new URLSearchParams(location.search).get('view');
-        if (window.location.hash.indexOf('#card-') === 0) {
-            initial = 'case';
-        } else if (urlView === 'gallery' || urlView === 'case') {
-            initial = urlView;
-        } else {
-            try { initial = localStorage.getItem(STORAGE_KEY) || 'case'; } catch (e) { /* noop */ }
-        }
-        if (initial === 'binder') initial = 'case';       // legacy binder view -> Case
-        if (initial === 'list') initial = 'gallery';       // the List was retired; its data lives in the Gallery
-        setView(initial);
-
-        // Row "View ->" cross-link: show the Case first; initCase's hashchange handler then activates
-        // the badge's set + scrolls to it. If the hash is ALREADY this card, nudge a hashchange manually.
-        root.querySelectorAll('[data-binder-link]').forEach(function (a) {
-            a.addEventListener('click', function () {
-                setView('case');
-                if (window.location.hash === a.getAttribute('href')) {
-                    window.dispatchEvent(new Event('hashchange'));
-                }
-            });
-        });
-    }
-
-    // The Case: set tabs switch shelves; a #card-<id> deep-link (or list "View ->") lands on the
-    // badge's set and scrolls to it.
-    function initCase(root) {
-        var caseEl = root.querySelector('.pp-case');
-        if (!caseEl) return;
-        var tabs = Array.prototype.slice.call(caseEl.querySelectorAll('[data-set-tab]'));
-        var shelves = Array.prototype.slice.call(caseEl.querySelectorAll('.pp-case__shelf[data-set]'));
-        if (!shelves.length) return;
-        // The set the case is currently showing (template marks the first tab active). Guards
-        // activateSet against redundant re-activation -- and against a haptic tick when you tap the
-        // set you're already on.
-        var currentKey = tabs.length ? tabs[0].getAttribute('data-set-tab') : null;
-
-        var setTablist;
-        function activateSet(key, userAction) {
-            if (key === currentKey) return;
-            currentKey = key;
-            shelves.forEach(function (s) { s.hidden = s.getAttribute('data-set') !== key; });
-            var activeTab = null;
-            tabs.forEach(function (t) {
-                var on = t.getAttribute('data-set-tab') === key;
-                t.classList.toggle('is-active', on);
-                t.setAttribute('aria-selected', on ? 'true' : 'false');
-                if (on) { activeTab = t; }
-            });
-            if (setTablist) { setTablist.syncTabindex(); }   // roving tabindex
-            if (userAction) {
-                PlatPursuit.igniteTab(activeTab);            // the newly-active set tab blooms once
-                // A light tick confirms the switch on touch devices (desktop has no vibrate -- a no-op there).
-                if (navigator.vibrate) { try { navigator.vibrate(5); } catch (e) {} }
-            }
-        }
-        // Click + Arrow/Home/End keyboard nav + roving tabindex via the shared tablist helper.
-        setTablist = PlatPursuit.wireTablist(tabs, { onSelect: function (t) { activateSet(t.getAttribute('data-set-tab'), true); } });
-
-        function jumpToCard() {
-            if (window.location.hash.indexOf('#card-') !== 0) return;
-            var target = caseEl.querySelector(window.location.hash);
-            if (!target) return;
-            var shelf = target.closest('.pp-case__shelf[data-set]');
-            if (shelf) activateSet(shelf.getAttribute('data-set'));
-            (target.closest('.pp-case__slot') || target).scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        jumpToCard();
-        window.addEventListener('hashchange', jumpToCard);
-    }
-
 
     // Badge detail ("pick it up" / "put it down"): tap a medallion -> the shared detail-modal controller
     // grows its detail partial into the modal and shrinks it back on close. The slot keeps its href to the
@@ -138,8 +17,7 @@
         var modal = document.getElementById('collection-detail');
         if (!modal || !(window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)) return;
         var dm = PlatPursuit.Medallion.detailModal({ modal: modal });
-        // Delegate across the page: any medallion with a data-modal-url (Case slots, Showcase, Chase,
-        // Gallery cells) opens the detail modal. The List table's "View ->" uses a #card hash instead.
+        // Delegate across the page: any medallion with a data-modal-url (a Gallery cell) opens the modal.
         root.addEventListener('click', function (e) {
             var slot = e.target.closest('[data-modal-url]');
             if (!slot) return;
@@ -148,25 +26,17 @@
         });
     }
 
-    // --- Shared filter/sort primitives (the List table + the Gallery wall filter the SAME flat badge
-    // set on the SAME data-* attributes; only the presentation and the sort UI differ). ---
-    var TIER_ORDER = ['bronze', 'silver', 'gold', 'platinum'];
-    var STATE_ORDER = ['earned', 'maintenance', 'in_progress', 'unearned'];
+    // --- Gallery filter/sort primitives (the wall filters/sorts its flat badge set on data-* attributes). ---
+    var STATE_ORDER = ['earned', 'in_progress', 'unearned'];   // the grouping-badge states (no maintenance)
 
     function stateMatches(elState, want) {
-        if (want === 'all' || elState === want) return true;
-        // A "maintenance" badge is still held -> it counts as earned for filtering
-        // (it has no dedicated chip; the lapse only matters on the shelf).
-        if (want === 'earned' && elState === 'maintenance') return true;
-        // The Collection is scoped to ENGAGED series, so every badge here belongs to a series you're
-        // working on. An "unearned" tier (0 progress -- a rung not yet started) therefore counts as
-        // In Progress for FILTERING, so you can find those chase-rungs without dropping to "All". The
-        // medallion still renders unearned (data-state is untouched); only the filter is widened.
-        return want === 'in_progress' && elState === 'unearned';
+        // Grouping-badge collection state is exact: earned (held) / in_progress (this edition has live
+        // progress) / unearned (a waiting edition).
+        return want === 'all' || elState === want;
     }
 
     function elMatches(el, filters, term) {
-        if (filters.tier !== 'all' && el.getAttribute('data-tier') !== filters.tier) return false;
+        if (filters.edition !== 'all' && el.getAttribute('data-edition') !== filters.edition) return false;
         if (!stateMatches(el.getAttribute('data-state'), filters.state)) return false;
         if (filters.theme !== 'all' && el.getAttribute('data-theme') !== filters.theme) return false;
         if (term === '') return true;
@@ -183,12 +53,13 @@
         switch (key) {
             case 'set_number': return parseInt(el.getAttribute('data-set-number'), 10) || 0;
             case 'series':     return el.getAttribute('data-series');
-            case 'tier':       return TIER_ORDER.indexOf(el.getAttribute('data-tier'));
+            // Editions sort by key string; 'legacy-hd' < 'ultra-hd' happens to match sort_order. A future
+            // edition whose key doesn't sort into place alphabetically would need a key->order map here.
+            case 'edition':    return el.getAttribute('data-edition') || '';
             case 'state':      return STATE_ORDER.indexOf(el.getAttribute('data-state'));
             case 'progress':   return parseFloat(el.getAttribute('data-progress')) || 0;
             case 'earned':     return parseInt(el.getAttribute('data-earned'), 10) || 0;   // earn epoch; 0 = not held
             case 'rarity':     return parseFloat(el.getAttribute('data-rarity-pct')) || 0;
-            case 'rank':       return parseInt(el.getAttribute('data-rank'), 10) || 0;
             case 'theme':      return el.getAttribute('data-theme');
             default:           return 0;
         }
@@ -203,13 +74,13 @@
         };
     }
 
-    // Wire the tier/state filter chips within `scope`: click sets the dimension + repaints the group's
+    // Wire the edition/state filter chips within `scope`: click sets the dimension + repaints the group's
     // active state, then re-applies. (The Set dimension is a <select>, wired separately in initGallery.)
     function wireFilterChips(scope, filters, applyFilters) {
-        scope.querySelectorAll('[data-filter-tier], [data-filter-state]').forEach(function (chip) {
+        scope.querySelectorAll('[data-filter-edition], [data-filter-state]').forEach(function (chip) {
             chip.addEventListener('click', function () {
                 if (navigator.vibrate) { try { navigator.vibrate(5); } catch (e) { /* no-op on desktop */ } }
-                var dim = chip.hasAttribute('data-filter-tier') ? 'tier' : 'state';
+                var dim = chip.hasAttribute('data-filter-edition') ? 'edition' : 'state';
                 filters[dim] = chip.getAttribute('data-filter-' + dim);
                 scope.querySelectorAll('[data-filter-' + dim + ']').forEach(function (c) {
                     c.classList.toggle('is-active', c === chip);
@@ -232,7 +103,7 @@
         var stats = gal.querySelector('[data-visible-count]');
         var emptyMsg = gal.querySelector('[data-empty-message]');
         var total = cells.length;
-        var filters = { tier: 'all', state: 'all', theme: 'all' };
+        var filters = { edition: 'all', state: 'all', theme: 'all' };
         var searchTerm = '';
 
         function reduced() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
@@ -282,7 +153,7 @@
 
         var metaClear = gal.querySelector('.pp-gallery__meta [data-clear-filters]');
         function anyActive() {
-            return filters.tier !== 'all' || filters.state !== 'all' || filters.theme !== 'all' || searchTerm !== '';
+            return filters.edition !== 'all' || filters.state !== 'all' || filters.theme !== 'all' || searchTerm !== '';
         }
         function syncClear() { if (metaClear) metaClear.hidden = !anyActive(); }
 
@@ -306,9 +177,9 @@
             syncURL();
         }
 
-        wireFilterChips(gal, filters, applyFilters);   // tier + state chips (theme is a <select>, below)
+        wireFilterChips(gal, filters, applyFilters);   // edition + state chips (theme is a <select>, below)
 
-        // Filters toggle: the tier/state/set groups live in a collapsible panel (compact default). The button
+        // Filters toggle: the edition/state/set groups live in a collapsible panel (compact default). The button
         // shows/hides it + carries an active-count badge (how many filter DIMENSIONS are narrowed -- search is
         // separate, in the bar). Mirrors the Badges browse gallery's Filters toggle.
         var advToggle = gal.querySelector('[data-gallery-filters-toggle]');
@@ -330,7 +201,7 @@
             advToggle.addEventListener('click', function () { setAdvPanel(advPanel.hasAttribute('hidden'), true); });
         }
         function syncFilterCount() {
-            var n = (filters.tier !== 'all' ? 1 : 0) + (filters.state !== 'all' ? 1 : 0) + (filters.theme !== 'all' ? 1 : 0);
+            var n = (filters.edition !== 'all' ? 1 : 0) + (filters.state !== 'all' ? 1 : 0) + (filters.theme !== 'all' ? 1 : 0);
             if (advCount) { advCount.textContent = String(n); advCount.hidden = (n === 0); }
         }
 
@@ -390,11 +261,11 @@
             return false;
         }
         function clearAll() {
-            filters.tier = filters.state = filters.theme = 'all';
+            filters.edition = filters.state = filters.theme = 'all';
             searchTerm = '';
             if (search) search.value = '';
             if (themeSelect) themeSelect.value = 'all';
-            resetChips('tier'); resetChips('state');
+            resetChips('edition'); resetChips('state');
             applyFilters();
             syncSearchClear();
         }
@@ -403,14 +274,15 @@
         // Applied-filter pills: one removable token per active filter, so it's clear what's narrowing the
         // wall and any single one can be dropped (vs "Clear filters" nuking everything).
         var pillsBox = gal.querySelector('[data-gallery-pills]');
-        var STATE_LABELS = { earned: 'Earned', in_progress: 'In Progress', unearned: 'Unearned', maintenance: 'Maintenance' };
+        var STATE_LABELS = { earned: 'Earned', in_progress: 'In Progress', unearned: 'Not earned' };
+        var EDITION_LABELS = { 'legacy-hd': 'Legacy HD', 'ultra-hd': 'Ultra HD' };
         function filterLabel(dim, val) {
             if (dim === 'state') return STATE_LABELS[val] || val;
             if (dim === 'theme') {
                 var opt = themeSelect && themeSelect.querySelector('option[value="' + val + '"]');
                 return 'Set: ' + (opt ? opt.textContent.trim() : val);
             }
-            if (dim === 'tier') return 'Tier: ' + val.charAt(0).toUpperCase() + val.slice(1);
+            if (dim === 'edition') return 'Edition: ' + (EDITION_LABELS[val] || val);
             return val;
         }
         function removeFilter(dim) {
@@ -422,7 +294,7 @@
         function renderPills() {
             if (!pillsBox) return;
             var active = [];
-            if (filters.tier !== 'all') active.push(['tier', filterLabel('tier', filters.tier)]);
+            if (filters.edition !== 'all') active.push(['edition', filterLabel('edition', filters.edition)]);
             if (filters.state !== 'all') active.push(['state', filterLabel('state', filters.state)]);
             if (filters.theme !== 'all') active.push(['theme', filterLabel('theme', filters.theme)]);
             if (searchTerm) active.push(['search', '“' + searchTerm + '”']);
@@ -455,9 +327,9 @@
                 var n = countIf(f, term);
                 if (n > 0 && (!out || n > out[2])) out = [dim, label, n];
             }
-            if (filters.tier !== 'all') consider('tier', { tier: 'all', state: filters.state, theme: filters.theme }, searchTerm, filters.tier.charAt(0).toUpperCase() + filters.tier.slice(1));
-            if (filters.state !== 'all') consider('state', { tier: filters.tier, state: 'all', theme: filters.theme }, searchTerm, STATE_LABELS[filters.state] || filters.state);
-            if (filters.theme !== 'all') consider('theme', { tier: filters.tier, state: filters.state, theme: 'all' }, searchTerm, filterLabel('theme', filters.theme).replace(/^Set: /, ''));
+            if (filters.edition !== 'all') consider('edition', { edition: 'all', state: filters.state, theme: filters.theme }, searchTerm, EDITION_LABELS[filters.edition] || filters.edition);
+            if (filters.state !== 'all') consider('state', { edition: filters.edition, state: 'all', theme: filters.theme }, searchTerm, STATE_LABELS[filters.state] || filters.state);
+            if (filters.theme !== 'all') consider('theme', { edition: filters.edition, state: filters.state, theme: 'all' }, searchTerm, filterLabel('theme', filters.theme).replace(/^Set: /, ''));
             if (searchTerm) consider('search', filters, '', 'the search');
             return out;
         }
@@ -472,15 +344,21 @@
         if (suggestBtn) suggestBtn.addEventListener('click', function () { if (suggestBtn._dim) removeFilter(suggestBtn._dim); });
 
         var sortSel = gal.querySelector('[data-gallery-sort]');
-        var galleryView = root.querySelector('#collection-view-gallery');
+        var DEFAULT_SORT = 'progress:desc';   // must match collection_gallery.html's first <option> (service DEFAULT_SORT)
         // The caption's second line reflects what you're sorting by: rarity / earned date / progress,
-        // defaulting to the rarity flex for the name/tier/set sorts. The medallion already carries
-        // tier + state, so this surfaces the ONE stat the object doesn't.
+        // defaulting to the rarity flex for the name/edition/set sorts. The medallion already carries its
+        // metal + state, so this surfaces the ONE stat the object doesn't.
+        // Exception: an IN-PROGRESS badge always shows its "X / Y stages" chase count here (the caption slot
+        // completed badges use for "Top X%"), so the stage count reads without growing the card.
         function statText(cell, key) {
+            var st = cell.getAttribute('data-state');
+            if (st === 'in_progress') {
+                var stages = cell.getAttribute('data-stages');
+                if (stages) return stages + ' stages';
+            }
             if (key === 'earned') return cell.getAttribute('data-earned-label') || '';
             if (key === 'progress') {
-                var st = cell.getAttribute('data-state');
-                if (st === 'earned' || st === 'maintenance') return 'Complete';
+                if (st === 'earned') return 'Complete';
                 var p = parseFloat(cell.getAttribute('data-progress')) || 0;
                 return p ? p + '%' : '';
             }
@@ -488,7 +366,7 @@
             return rarity ? 'Top ' + rarity + '%' : '';
         }
         function applySort(animate) {
-            var spec = ((sortSel && sortSel.value) || 'series:asc').split(':');
+            var spec = ((sortSel && sortSel.value) || DEFAULT_SORT).split(':');
             var reorder = function () { cells.slice().sort(compareBy(spec[0], spec[1] || 'asc')).forEach(function (c) { grid.appendChild(c); }); };
             if (animate) flip(reorder); else reorder();
             cells.forEach(function (c) {
@@ -498,27 +376,24 @@
             syncURL();
         }
 
-        // --- URL state (matches the Career tabs): mirror the Gallery's filters + sort in the URL while it
-        //     is the active view, and restore them from a shared / reloaded ?view=gallery link. ---
+        // --- URL state: mirror the Gallery's filters + sort in the URL (shareable / reloadable). Each param is
+        //     omitted at its default so a plain /collection/ link stays clean (no ?sort= on first load). ---
         function syncURL() {
             if (!window.history || !history.replaceState) return;
-            if (!galleryView || galleryView.hasAttribute('hidden')) return;   // only mirror while the Gallery is shown
             var qp = new URLSearchParams(location.search);
-            qp.set('view', 'gallery');
             function put(k, v, def) { if (v && v !== def) qp.set(k, v); else qp.delete(k); }
-            put('tier', filters.tier, 'all');
+            put('edition', filters.edition, 'all');
             put('state', filters.state, 'all');
             put('set', filters.theme, 'all');
             put('q', searchTerm, '');
-            put('sort', sortSel ? sortSel.value : '', 'series:asc');
+            put('sort', sortSel ? sortSel.value : '', DEFAULT_SORT);
             var qps = qp.toString();
             history.replaceState(null, '', location.pathname + (qps ? '?' + qps : '') + location.hash);
         }
         function restoreFromURL() {
             var qp = new URLSearchParams(location.search);
-            if (qp.get('view') !== 'gallery') return;   // only restore when deep-linked to the Gallery
-            var t = qp.get('tier'), s = qp.get('state'), set = qp.get('set'), q = qp.get('q'), so = qp.get('sort');
-            if (t && chipHas('tier', t)) { filters.tier = t; activateChip('tier', t); }
+            var t = qp.get('edition'), s = qp.get('state'), set = qp.get('set'), q = qp.get('q'), so = qp.get('sort');
+            if (t && chipHas('edition', t)) { filters.edition = t; activateChip('edition', t); }
             if (s && chipHas('state', s)) { filters.state = s; activateChip('state', s); }
             if (set && optHas(themeSelect, set)) { filters.theme = set; themeSelect.value = set; }
             if (q) { searchTerm = q.toLowerCase().trim(); if (search) search.value = q; }
@@ -538,14 +413,12 @@
                 applySort(true);
             });
         }
-        restoreFromURL();      // a deep-linked ?view=gallery restores its filters + sort (overrides stored sort)
+        restoreFromURL();      // a deep-linked URL restores filters + sort (overrides stored sort)
         applyFilters(false);   // apply any restored filters instantly (visually a no-op if none)
         applySort(false);      // initial / persisted / URL sort + fill the stat
 
-        // Reveal stagger whenever the Gallery view becomes visible (view-switch or first load) -- matches
-        // the Case, which staggers on every switch. Restart the class each show so the animation replays;
-        // strip it after so its animation-fill can't shadow the FLIP transforms. (No is-touched hack.)
-        // On show we also re-sync the URL (the view toggle strips the Gallery params when you leave it).
+        // Reveal stagger on load: the Gallery is the only view now, so it's always shown. Restart the class
+        // so the animation replays, then strip it after so its animation-fill can't shadow the FLIP transforms.
         var revealT;
         function reveal() {
             if (reduced()) return;
@@ -555,14 +428,7 @@
             clearTimeout(revealT);
             revealT = setTimeout(function () { gal.classList.remove('is-revealing'); }, 900);
         }
-        if (galleryView) {
-            if (!galleryView.hasAttribute('hidden')) reveal();
-            new MutationObserver(function (muts) {
-                for (var i = 0; i < muts.length; i++) {
-                    if (muts[i].attributeName === 'hidden' && !galleryView.hasAttribute('hidden')) { reveal(); syncURL(); break; }
-                }
-            }).observe(galleryView, { attributes: true, attributeFilter: ['hidden'] });
-        }
+        reveal();
 
         // ("/" + Cmd/Ctrl+K focus is the shared global shortcut in utils.js, which targets the visible
         //  [data-page-search] -- the gallery search input carries it, so it only fires while Gallery shows.)
@@ -591,7 +457,7 @@
     // mints in with a flash + light-sweep. "Seen" is tracked per-device in localStorage (no backend); the
     // first-ever visit initialises the set silently so your existing collection doesn't all mint at once.
     var MINT_KEY = 'pp-badges-minted';
-    function isEarnedState(s) { return s === 'earned' || s === 'maintenance'; }
+    function isEarnedState(s) { return s === 'earned'; }
     // Play the mint ceremony across a list of medallions, staggered; clears the class after so hover/tilt
     // work again. (The .is-minting CSS is motion-gated, so this is a no-op under reduced motion.)
     function playMint(els) {
@@ -658,31 +524,11 @@
     function init() {
         var root = document.querySelector('.pp-collection');
         if (!root) return;
-        // Header stats (earned tally + tier composition) count up on load, matched to the completion
-        // bar's ~0.85s CSS entrance so the number and the bar rise together -- shared util; no-op if
-        // reduced-motion or utils.js hasn't loaded.
+        // Header stats (earned tally + the .scard edition/progress/holographic grid) count up on load --
+        // shared util; no-op if reduced-motion or utils.js hasn't loaded.
         if (window.PlatPursuit && PlatPursuit.countUp) {
             root.querySelectorAll('[data-countup]').forEach(function (el) { PlatPursuit.countUp(el, 850); });
         }
-        // Tappable tier stats: jump to the Gallery filtered to that tier ("stats are controls"). Reuses
-        // the existing view-chip + filter-chip handlers by clicking them, so no new filter logic here.
-        root.querySelectorAll('[data-tier-jump]').forEach(function (el) {
-            el.addEventListener('click', function () {
-                var tier = el.getAttribute('data-tier-jump');
-                var galleryChip = root.querySelector('.pp-switch__chip[data-collection-view="gallery"]');
-                if (galleryChip) galleryChip.click();
-                var filterChip = root.querySelector('.pp-gallery [data-filter-tier="' + tier + '"]');
-                if (filterChip) filterChip.click();
-                // Bring the (now-filtered) wall into view so the jump reads as "here are your <tier>s".
-                var galleryView = root.querySelector('#collection-view-gallery');
-                if (galleryView) {
-                    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-                    galleryView.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-                }
-            });
-        });
-        initViewToggle(root);
-        initCase(root);
         initDetail(root);
         initGallery(root);
         initMint(root);

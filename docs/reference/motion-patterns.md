@@ -89,7 +89,7 @@ has a sense of place. Classes **`.pp-view-in-right` / `.pp-view-in-left`** (`com
 translateX ±16px + fade, 0.28s, reduced-motion gated) applied by the helper **`PlatPursuit.slideViewIn(
 panel, fromName, toName, order)`** (picks the direction from `order`, restarts the animation, adds the
 class). Two host patterns:
-- **JS toggle** (Career tabs, Collection Case/Gallery/List — panels pre-rendered, toggled via `hidden`):
+- **JS toggle** (Career tabs, Badges Series/Gallery — panels pre-rendered, toggled via `hidden`):
   capture the outgoing view, flip `hidden`, call the helper on the now-shown panel.
 - **HTMX island swap** (Badges Series/Gallery): keep a `lastView`; in `htmx:afterSwap` on the island, call
   the helper on the swapped-in root with `lastView → new`, then update `lastView`.

@@ -810,7 +810,7 @@
 .rpm__bar-art img { width: 100%; height: 100%; object-fit: cover; }
 .rpm__bar-title { font-weight: 800; font-size: 0.9rem; color: var(--pp-text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .emodal__close { z-index: 5; }   /* keep the close button above the sticky bar */
-/* iOS-style drag handle is now the shared .pp-dismissable::before (collection-case.css), added by
+/* iOS-style drag handle is now the shared .pp-dismissable::before (badge-inspect.css), added by
    PlatPursuit.dismissableSheet -- one grabber treatment for every swipe-to-close modal site-wide. */
 @media (prefers-reduced-motion: reduce) { .rpm__bar { transition: none; } .rpg__prog-fill { transition: none; } }
 .rpm__head { position: relative; }

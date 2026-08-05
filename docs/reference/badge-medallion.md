@@ -1,4 +1,4 @@
-# Badge Medallion + the Collection Case
+# Badge Medallion + the Collection Gallery
 
 The shipped presentation of a badge on `/collection/`: the badge as a **precious OBJECT**, not the
 trading-card [Frame](frame-component.md). The badge art is already a self-contained laurel-framed
@@ -66,42 +66,35 @@ per-badge requirement is **Platinum** for bronze/gold tiers, **100%** for silver
 `0046` tier choices) — the detail modal labels this correctly. (This replaced an earlier segmented
 *ring* that wrapped the badge; the ring detracted from the object, so it was moved to a bar below.)
 
-## The Case
+## The Gallery (the single view)
 
-`templates/components/collection_case.html` + `static/css/components/collection-case.css`, wired by
-`static/js/collection.js` (`initCase` + `initDetail`). Replaced the binder on `/collection/`.
+`templates/components/collection_gallery.html` + `static/css/components/collection-gallery.css`, wired by
+`static/js/collection.js` (`initGallery` + `initDetail`). `/collection/` is ONE view now: a flat,
+filterable / sortable / searchable **wall of medallions**. The earlier Case + List views were retired —
+the Gallery's sort/filter absorbed both "browse what you have" and the dense data scan.
 
-- **Set tabs -> a shelf per set** (badge type). Within a shelf, badges **group by series**: the 4 tiers
-  (bronze -> platinum) stay bound in one `.pp-case__group` panel and never split across a row.
-  `collection_service` emits `groups` per set (grouped by `series_slug`, which the model confirms
-  "groups tiers of the same series").
-- Responsive: 2x2 within a group on mobile -> 4-in-a-row with width; one -> two groups per row.
-
-## The three views (Case / Gallery / List)
-
-`/collection/` exposes the same flat badge set three ways, switched by the view toggle (a generic
-`data-collection-view` tablist wired by `initViewToggle`). All three read one context build; the Gallery
-and List reuse `list_badges` (already flattened by `_flatten_for_list`), so switching views is free.
-
-| View | What it's for | Presentation |
-|------|---------------|--------------|
-| **Case** (`collection_case.html`) | The display piece — browse what you have + what's missing | Set tabs -> series-grouped shelves of medallions, plus Showcase + Chase |
-| **Gallery** (`collection_gallery.html`) | The **visual** hunting tool — "show me all bronze", "only the ones I own" | A flat, filterable/sortable **wall of medallions**; tap -> detail modal |
-| **List** (`collection_list.html`) | The **data** hunting tool — dense scan/sort by rarity, rank, set # | A sortable/filterable table (column-header sort) |
-
-- **Gallery + List share one filter/sort engine** in `collection.js` (`stateMatches`/`elMatches`/
-  `sortValue`/`compareBy`/`wireFilterChips` at module scope). They filter identical `data-*` attributes;
-  only the sort UI differs (Gallery = a `key:dir` `<select>`; List = clickable column headers with
-  `aria-sort`). `initGallery` and `initList` are thin wrappers over the shared primitives.
-- The tier/state/set **filter chips + search + empty-state + count** markup is shared — the Gallery
-  reuses the List's `.pp-list__toolbar` / `__chip` / `__search` / `__stats` / `__empty` classes; its own
-  CSS file only adds the sort control + the medallion grid + captions.
+- **The badge set is the viewer's ENGAGED editions** — the live per-platform-group badges (Legacy HD /
+  Ultra HD) of every series they hold or have started. `collection_service.build_collection_context` emits
+  a flat `list_badges` of Frame dicts; there is **no per-tier grouping** (the grouping-badge system has no
+  tiers — each edition is its own badge). The scope + eval are whale-BOUNDED to the engaged series' catalog.
+- **Per-edition state is derived LIVE** from the badge engine's DesiredState (the SAME source the detail
+  modal uses), so a card and its modal never disagree: held -> earned (holo when mastered); this edition
+  has partial progress -> in_progress + its own progress; else unearned (incl. an edition the viewer has
+  0% on — the series furthest-along would wrongly paint it). Nothing per-edition is denormed.
+- **Filter/sort** (`collection.js`, module scope: `stateMatches` / `elMatches` / `sortValue` / `compareBy` /
+  `wireFilterChips`): **edition** (Legacy HD / Ultra HD) + **state** (earned / in-progress / not earned)
+  chips + a Set `<select>`, plus a `key:dir` sort `<select>` (default `progress:desc`). All operate on the
+  cells' `data-*` attributes.
+- **In-progress cells** show their "X / Y stages" count in the **caption line** (via `data-stages` +
+  `statText`), where earned cells show "Top X%" — NOT under the medallion. The gallery passes
+  `no_count=True` to the medallion so the count doesn't grow the card.
 
 ## The detail ("pick it up")
 
-Tap a medallion -> `CollectionBadgeModalView` (`/collection/badge/<id>/`) fetches **one** badge's detail
-(single-hero `build_badge_frame`, whale-safe) -> a modal with the medallion big + full stats. Focus
-trap + Escape; the slot keeps its badge-page `href` as a **no-JS fallback**.
+Tap a medallion -> `CollectionBadgeModalView` (`/collection/badge/<id>/`) fetches **one** GROUP badge's
+detail (`get_badge_detail`, live per-group) and renders the shared `components/group_badge_modal.html` —
+the SAME modal the badge-detail page's peek uses — a modal with the medallion big + full stats. Focus
+trap + Escape; the cell keeps its badge-page `href` as a **no-JS fallback**.
 
 **"Turn it in your hand"** (`initTilt`): the big medallion tilts in 3D toward the cursor with a
 light-tracking glare (a JS-injected `.pp-med__glare`) and springs back on leave. It's a hover affordance,

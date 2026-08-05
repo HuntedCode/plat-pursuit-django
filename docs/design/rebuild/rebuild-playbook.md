@@ -118,7 +118,7 @@ verification).
 | Page | URL | Status | Notes |
 |---|---|---|---|
 | **Career** | `/career/` | ✅ | **The reference standard.** Jobs / Radar / Contracts. Depth pass applied. |
-| **Collection** | `/collection/` | ✅ | Case + Gallery. **Object-depth model** (medallion cast/rim shadows carry depth — deliberately does NOT take the card-lift). |
+| **Collection** | `/collection/` | ✅ | Single Gallery (grouping-badge system; per-edition state derived live; Case + List retired). **Object-depth model** (medallion cast/rim shadows carry depth — deliberately does NOT take the card-lift). |
 | **Badges** | `/badges/` | ✅ | Series + Gallery views; dynamic HTMX view-swap; depth pass; filter/sort settle. Anon quick-peek modal deferred. |
 | **Badge Detail** | `/badges/<slug>/` | ✅ | From-scratch: header + tier ladder + how-to-earn grid + context band (rarity/ranks/My Stats modal) + stage journey (game cards w/ **contract band → in-place modal**, bundle, delisted strip, numbered spine w/ "Up next"). **Finish-audited 2026-07** (3-agent gap analysis vs the Career bar): shared motion primitives adopted (gated `.pp-head-cascade` header, sticky mini-header), whale-safe, a11y-covered. Cleanup done: dead context vars + a wasted per-load fundraiser query removed, `raw_response` deferred. Deferred nice-to-haves: `get_stage_completion` re-queried 4× (once/tier), stage-collapse load reflow, `sm:` vs `md:` breakpoint on the hero. |
 | **Home / Overview** | `/` | 🟡 | 4 gamification-first blocks shipped in an earlier phase; not finished to standard. Shares `.scard` (got the depth lift). |

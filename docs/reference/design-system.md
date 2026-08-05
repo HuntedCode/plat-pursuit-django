@@ -105,7 +105,7 @@ Every content module uses this card structure:
 
 ### Card Variants
 
-**Page structure = STACKED chrome + FREE content (site-wide rule, 2026-07).** The chrome is carded -- an accented page-header card, then optional stat/education/toolbar cards, each `mb-3`/`mb-4` apart. The main content (grids, lists, tab panels) is NOT wrapped in an outer card; it flows free below the chrome, like the Collection (header card -> free toggle -> free Case/Gallery). Never one bordered box swallowing the header + sections, and never an outer card around the content grid -- both trap long / paginated (infinite-scroll) pages in an ever-growing border. Item-level cards *inside* the content (game/badge cards, tiles, the empty state) are fine; it's the outer content wrapper that must not be a card.
+**Page structure = STACKED chrome + FREE content (site-wide rule, 2026-07).** The chrome is carded -- an accented page-header card, then optional stat/education/toolbar cards, each `mb-3`/`mb-4` apart. The main content (grids, lists, tab panels) is NOT wrapped in an outer card; it flows free below the chrome, like the Collection (header card -> free Gallery wall). Never one bordered box swallowing the header + sections, and never an outer card around the content grid -- both trap long / paginated (infinite-scroll) pages in an ever-growing border. Item-level cards *inside* the content (game/badge cards, tiles, the empty state) are fine; it's the outer content wrapper that must not be a card.
 
 **Content module cards** (dashboard modules, detail page sections): Full card tokens with `p-3 md:p-5 lg:p-7` padding.
 
@@ -210,7 +210,7 @@ Every rebuilt page should have a header card that establishes context and houses
 
 ### Tab Group / View Switcher (site-wide standard, 2026-07)
 
-**The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Case/Gallery, Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses the shared **`.pp-switch`** component (`static/css/components/switcher.css`): one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end mt-5` row -- `mt-5` is the standard top gap above the switcher (it sits below the page-header card / whatever chrome precedes it). Used site-wide: Career, Badges (Series/Gallery), Collection. Unified 2026-07 from three near-identical class systems (`.lab-view-tab` / `.pp-collection__view-chip` / `.pp-vtoggle`, all retired).
+**The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses the shared **`.pp-switch`** component (`static/css/components/switcher.css`): one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end mt-5` row -- `mt-5` is the standard top gap above the switcher (it sits below the page-header card / whatever chrome precedes it). Used site-wide: Career, Badges (Series/Gallery). (Collection was a Case/Gallery switcher but is now a single Gallery, so it no longer carries one.) Unified 2026-07 from three near-identical class systems (`.lab-view-tab` / `.pp-collection__view-chip` / `.pp-vtoggle`, all retired).
 
 ```html
 <div class="flex items-center justify-end mt-5">
@@ -230,7 +230,7 @@ Every rebuilt page should have a header card that establishes context and houses
 - **Mini-bar copies**: wrap each chip's label in `<span class="pp-switch__lbl">` so it collapses to icon-only on mobile (`.pp-minibar__controls .pp-switch__lbl { display:none }`).
 - **Behavior**: wire with `PlatPursuit.wireTablist(chips, {onSelect})` (roving tabindex + Arrow/Home/End; `{manual:true}` for HTMX `<a>` chips). Directional panel slide via `PlatPursuit.slideViewIn`. → [js-utilities](js-utilities.md), [motion-patterns](motion-patterns.md).
 - **A11y**: `role="tablist"` on the container, `role="tab"` + `aria-selected` on chips, `aria-controls` -> the panel; `:focus-visible` ring in `--pp-primary`.
-- **Distinct siblings (NOT `.pp-switch`)**: Career's `.jlayout__btn` (rounded-pill Dossier/Sheet toggle) and the Case's `.pp-case__set-tab` (completion-ring set filters) are their own components.
+- **Distinct siblings (NOT `.pp-switch`)**: Career's `.jlayout__btn` (rounded-pill Dossier/Sheet toggle) is its own component.
 
 ### Progression ladder (.pgl)
 

@@ -12,9 +12,8 @@
 @import "./components/elements.css";
 @import "./components/pursuer-card.css";
 @import "./components/pursuer-card-forge.css";
-@import "./components/binder.css";
-@import "./components/collection-case.css";
 @import "./components/collection-gallery.css";
+@import "./components/badge-inspect.css";
 @import "./components/browse-gallery.css";
 @import "./components/game-browse.css";
 @import "./components/game-card.css";
