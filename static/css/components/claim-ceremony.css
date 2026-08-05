@@ -23,11 +23,13 @@
     background: radial-gradient(120% 90% at 50% 42%,
         color-mix(in oklab, var(--pp-bg-0, #05070a) 82%, transparent) 0%,
         color-mix(in oklab, var(--pp-bg-0, #05070a) 94%, transparent) 70%);
-    backdrop-filter: blur(0px);   /* standard only -- hand-writing -webkit- made lightningcss drop the standard */
     opacity: 0;
-    transition: opacity 0.32s ease, backdrop-filter 0.42s ease, -webkit-backdrop-filter 0.42s ease;
+    /* NO backdrop-filter: TRANSITIONING a blur re-blurred the whole page every frame of the 0.42s reveal AND
+       every frame the ceremony animates on top of it -- it lagged the entire ceremony. The radial dim above is
+       already near-opaque, so a plain opacity fade reads the same. See motion-patterns.md (modal-scrim gotcha). */
+    transition: opacity 0.32s ease;
 }
-.ccx.is-in .ccx__scrim { opacity: 1; backdrop-filter: blur(7px); }
+.ccx.is-in .ccx__scrim { opacity: 1; }
 
 /* ---- Stage ---- */
 .ccx__stage {
@@ -414,7 +416,7 @@
 
 /* ---- Reduced motion: no reveal, no bloom -- just show the summary. ---- */
 @media (prefers-reduced-motion: reduce) {
-    .ccx__scrim { transition: none; backdrop-filter: blur(6px); }
+    .ccx__scrim { transition: none; }
     .ccx__stage, .ccx__glow, .ccx__job, .ccx__jobs, .ccx__foot, .ccx__summary, .ccx__rankbar, .ccx__jtier, .ccx__job .pp-horizon__fill { transition: none; }
     .ccx__award.is-hit, .ccx__lv.is-levelup, .ccx__lv.is-threshold { animation: none; }
     .ccx__sparks { display: none; }   /* blooms are skipped in reduced motion anyway; belt + braces */
