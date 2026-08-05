@@ -42,6 +42,19 @@ def _fraction(result) -> float:
     return result.base_satisfied_count / result.gating_count if result.gating_count else 0.0
 
 
+def edition_display_state(held: bool, cleared: int, gating: int) -> tuple:
+    """Map a viewer's hold + THIS edition's (cleared, gating) gating-stage counts to a per-edition display
+    state + percent. The ONE source both the Collection wall (reading the materialized
+    SeriesBadgeStanding.group_progress) and the badge-detail live view (badge_detail_service._group_view) share,
+    so the wall and the modal can't derive different states from the same numbers. Returns (state, progress_pct)
+    with state in {'earned', 'in_progress', 'unearned'}; holo is a separate flag the caller layers on."""
+    if held:
+        return 'earned', 100
+    if cleared > 0:
+        return 'in_progress', (round(100 * cleared / gating) if gating else 0)
+    return 'unearned', 0
+
+
 def compute_series_standings(results_by_series: dict) -> dict:
     """Pure. results_by_series: {series_slug: [GroupBadgeResult, ...]}. Returns {series_slug: SeriesStanding}.
     Series XP sums the group badges' XP; progress is the single best group's cleared/gating fraction."""
@@ -93,10 +106,20 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     positive = {slug: s for slug, s in standings.items() if s.xp > 0}
     zeroed = [slug for slug, s in standings.items() if s.xp == 0]
 
+    # Per-EDITION read-model {slug: {platform_group_key: [cleared, gating]}} for editions with partial progress.
+    # The engine already computed these per-group results; materializing them lets the Collection wall read each
+    # edition's OWN progress without re-evaluating. Same recompute-from-scratch seam as the rest of the standing.
+    group_prog = defaultdict(dict)
+    for gb in group_badges:
+        r = desired.get(gb.id)
+        if r is not None and r.base_satisfied_count > 0:
+            group_prog[gb.series.series_slug][gb.platform_group.key] = [r.base_satisfied_count, r.gating_count]
+
     for slug, s in positive.items():
         _upsert(SeriesBadgeStanding, {'profile_id': profile_id, 'series_slug': slug},
                 {'xp': s.xp, 'progress_bp': s.progress_bp,
-                 'stages_cleared': s.stages_cleared, 'stages_total': s.stages_total})
+                 'stages_cleared': s.stages_cleared, 'stages_total': s.stages_total,
+                 'group_progress': dict(group_prog.get(slug, {}))})
     if zeroed:
         SeriesBadgeStanding.objects.filter(profile_id=profile_id, series_slug__in=zeroed).delete()
 

@@ -214,6 +214,19 @@ Constants (`XP_PER_STAGE=500`, `XP_BADGE_COMPLETION_BONUS=600` -> ~3,100 XP/badg
 ~80% of the catalog (hard but doable), with headroom above for two-version + holo elites. Pinned by
 `test_million_club_calibration`; the Club milestone itself is future work.
 
+**Per-edition read-model (`SeriesBadgeStanding.group_progress`).** The series-level `progress_bp` is the
+*furthest* edition's fraction -- right for the chasers board, but it over-claims on the Collection wall (it'd
+paint an edition the viewer has 0% on at the furthest edition's %). Showing each edition's OWN progress needs
+per-edition data, and the Collection renders *many* series at once, so live-evaluating per page load is
+O(engaged series) -- a whale-scale timeout. So `recompute_standing` also materializes `group_progress` =
+`{platform_group_key: [cleared, gating]}` for every edition with partial progress, from the per-group results
+the engine *already computes and used to discard*. The Collection reads it (zero eval); the badge-detail page
+still live-evals one series (it needs the full stage journey), and both derive display state through the shared
+`badge_xp.edition_display_state`, so wall and modal can't disagree. This is a **read-model, not a denorm sin**:
+it's *factual* (your own cleared-stage counts, not relative like `rank`/`rarity`) and recompute-from-scratch in
+the one write seam -- the same category as the `stages_cleared`/`stages_total` display fields already there,
+just per-edition. (Cutover: an `evaluate_badges` run backfills it onto existing standings.)
+
 **Lane B leaderboards** (`services/badge_leaderboards.py`, DB reads over the stores -- no Redis/rebuild cron):
 global XP (`xp_rows`/`xp_rank`), per-series XP (`series_xp_rows`/`series_rank`), per-series progress/chasers
 (`series_progress_rows`), and per-badge earners (`earners_rows` + `earners_rank`/`earners_ranks` -- the LIVE

@@ -76,11 +76,16 @@ the Gallery's sort/filter absorbed both "browse what you have" and the dense dat
 - **The badge set is the viewer's ENGAGED editions** — the live per-platform-group badges (Legacy HD /
   Ultra HD) of every series they hold or have started. `collection_service.build_collection_context` emits
   a flat `list_badges` of Frame dicts; there is **no per-tier grouping** (the grouping-badge system has no
-  tiers — each edition is its own badge). The scope + eval are whale-BOUNDED to the engaged series' catalog.
-- **Per-edition state is derived LIVE** from the badge engine's DesiredState (the SAME source the detail
-  modal uses), so a card and its modal never disagree: held -> earned (holo when mastered); this edition
-  has partial progress -> in_progress + its own progress; else unearned (incl. an edition the viewer has
-  0% on — the series furthest-along would wrongly paint it). Nothing per-edition is denormed.
+  tiers — each edition is its own badge). Whale-safe: a fixed handful of bulk reads, **no live eval**.
+- **Per-edition state is READ from the materialized read-model** — `SeriesBadgeStanding.group_progress`
+  (`{edition_key: [cleared, gating]}`, written by the sync's `recompute_standing`), run through the shared
+  `badge_xp.edition_display_state`. The **badge-detail modal** derives state through the *same* helper but
+  from a *live* eval (it needs the full stage journey), and both reflect the last sync — so a card and its
+  modal can't disagree. State: held -> earned (holo when mastered); this edition has partial progress ->
+  in_progress + its own progress; else unearned (incl. an edition the viewer has 0% on — the series
+  furthest-along would wrongly paint it). See [badge-backend-rebuild.md](../design/rebuild/badge-backend-rebuild.md)
+  for why per-edition progress is a materialized read-model (factual, recompute-from-scratch), not a live eval
+  on the wall (it'd be O(engaged series) per load — a whale-scale timeout) nor a request cache.
 - **Filter/sort** (`collection.js`, module scope: `stateMatches` / `elMatches` / `sortValue` / `compareBy` /
   `wireFilterChips`): **edition** (Legacy HD / Ultra HD) + **state** (earned / in-progress / not earned)
   chips + a Set `<select>`, plus a `key:dir` sort `<select>` (default `progress:desc`). All operate on the

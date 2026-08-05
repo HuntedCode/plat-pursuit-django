@@ -3105,13 +3105,26 @@ class SeriesBadgeStanding(models.Model):
     """Sealed per-(profile, series) standing -- backs the per-series XP + progress ("chasers") leaderboards and a
     profile's per-series breakdown. Recomputed from scratch on every evaluation; a row exists only while the
     profile has progress in the series. progress_bp is the furthest-along fraction (basis points, 0-10000) over
-    the series' group badges; stages_cleared/total describe that best group for display."""
+    the series' group badges; stages_cleared/total describe that best group for display.
+
+    group_progress is the per-EDITION read-model: {platform_group_key: [stages_cleared, gating_count]} for every
+    edition the profile has partial progress on. It's a materialized read-model (same pattern as stages_cleared/
+    total -- factual, recompute-from-scratch here, so it can't drift), NOT a leaderboard key. It exists so the
+    Collection wall can render each edition's OWN progress for MANY series in one cheap read, instead of live-
+    evaluating the badge engine per page load. The badge-detail page still live-evals (it needs the full stage
+    journey); both derive from the same engine + reflect the last sync, so they can't disagree. See
+    docs/design/rebuild/badge-backend-rebuild.md."""
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='series_badge_standings')
     series_slug = models.SlugField(max_length=100)
     xp = models.PositiveIntegerField(default=0)
     progress_bp = models.PositiveIntegerField(default=0, help_text="Furthest-along fraction, basis points (0-10000).")
     stages_cleared = models.PositiveIntegerField(default=0)
     stages_total = models.PositiveIntegerField(default=0)
+    group_progress = models.JSONField(
+        default=dict, blank=True,
+        help_text="Per-edition read-model {platform_group_key: [stages_cleared, gating_count]} for editions with "
+                  "partial progress -- lets the Collection show each edition's own progress without a live eval.",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

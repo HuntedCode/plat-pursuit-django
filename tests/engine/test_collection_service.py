@@ -6,19 +6,19 @@ edition of (a UserGroupBadge) or have STARTED (a SeriesBadgeStanding with progre
 in-progress ones carry THAT edition's own progress, the rest are waiting mounts. These pin the contract:
 
 - SCOPE: engaged series only (held OR started); untouched live series stay out (discovery lives on Browse).
-- STATE per edition: held -> earned (holo when mastered); not-held + THIS edition has partial live progress
-  -> in_progress; else unearned (incl. an edition the viewer has 0% on -- the series furthest-along would
-  wrongly paint it, so per-edition state is derived LIVE from the badge engine, matching the inspect modal).
+- STATE per edition: held -> earned (holo when mastered); not-held + THIS edition has partial progress ->
+  in_progress; else unearned (incl. an edition the viewer has 0% on -- the series furthest-along would
+  wrongly paint it).
 - SUMMARY: held/in-progress counts + a per-EDITION composition (Legacy HD / Ultra HD held counts).
-- Live rarity (earned_count vs series pursuers), the "+N this week" recency window, sort options, and a query
-  count BOUNDED by the engaged catalog (not the trophy library).
+- Live rarity (earned_count vs series pursuers), the "+N this week" recency window, sort options, and a fixed
+  query count regardless of badge count (no live eval on the wall).
 
-The per-edition progress comes from the badge engine's DesiredState; these tests stub build_catalog +
-evaluate_with_catalog so they pin the collection's frame logic, not the engine internals (those are covered by
-test_badge_detail). (Replaces the retired per-tier binder/Case suite.)
+Per-edition progress is READ from the materialized SeriesBadgeStanding.group_progress read-model (written by the
+sync's recompute_standing -- covered by test_badge_xp), so these tests just set group_progress on the standing.
+State is derived through the shared badge_xp.edition_display_state, same as the live badge-detail view.
+(Replaces the retired per-tier binder/Case suite.)
 """
 from datetime import timedelta
-from types import SimpleNamespace
 
 import pytest
 from django.db import connection
@@ -37,24 +37,6 @@ pytestmark = pytest.mark.django_db
 
 # The two canonical editions, with the platform routing + display order they ship with in prod.
 _EDITIONS = [('legacy-hd', 'Legacy HD', ['PS3', 'PSVITA'], 1), ('ultra-hd', 'Ultra HD', ['PS4', 'PS5'], 2)]
-
-
-@pytest.fixture(autouse=True)
-def _stub_engine(monkeypatch):
-    """Keep the badge engine out of the collection unit tests: build_catalog is a no-op and the eval returns NO
-    progress by default. In-progress tests override the eval via _stub_eval."""
-    monkeypatch.setattr(collection_service, 'build_catalog', lambda gbs: {'stub': True})
-    monkeypatch.setattr(collection_service, 'evaluate_with_catalog', lambda profile, catalog: {})
-
-
-def _result(cleared, gating):
-    """A stand-in GroupBadgeResult: the collection frame only reads base_satisfied_count + gating_count."""
-    return SimpleNamespace(base_satisfied_count=cleared, gating_count=gating)
-
-
-def _stub_eval(monkeypatch, desired):
-    """Override the stubbed eval so the collection sees `desired` = {group_badge_id: _result(...)}."""
-    monkeypatch.setattr(collection_service, 'evaluate_with_catalog', lambda profile, catalog: desired)
 
 
 def _series(slug, name=None, badge_type='series', editions=_EDITIONS, live=True):
@@ -78,9 +60,11 @@ def _hold(profile, gb, is_holo=False, earned_at=None):
     return ugb
 
 
-def _standing(profile, slug, bp, xp=100, cleared=1, total=1):
+def _standing(profile, slug, bp=0, xp=100, group_progress=None):
+    """A SeriesBadgeStanding = the series is engaged (scope). Pass group_progress={edition_key: [cleared, gating]}
+    to give an edition partial progress (the read-model the collection reads)."""
     return SeriesBadgeStanding.objects.create(
-        profile=profile, series_slug=slug, xp=xp, progress_bp=bp, stages_cleared=cleared, stages_total=total,
+        profile=profile, series_slug=slug, xp=xp, progress_bp=bp, group_progress=group_progress or {},
     )
 
 
@@ -160,46 +144,43 @@ def test_held_edition_is_earned():
     assert frames['ultra-hd']['progress_pct'] == 100
 
 
-def test_edition_progress_is_per_edition_not_series_level(monkeypatch):
-    """THE fix: a started series shows each edition's OWN live progress, not the series furthest-along. If the
-    viewer has progress on Ultra HD but 0% on Legacy HD, Ultra reads in_progress and Legacy reads UNEARNED (the
-    old series-level paint wrongly showed both in progress) -- matching what the inspect modal shows."""
+def test_edition_progress_is_per_edition_not_series_level():
+    """THE fix: a started series shows each edition's OWN progress (from the read-model), not the series
+    furthest-along. Progress on Ultra HD but 0% on Legacy HD -> Ultra in_progress, Legacy UNEARNED (the old
+    series-level paint wrongly showed both) -- matching what the inspect modal shows."""
     profile = ProfileFactory()
-    _, groups = _series('rs-wip')
-    _standing(profile, 'rs-wip', bp=6000)                             # engages the series (scope)
-    _stub_eval(monkeypatch, {groups['ultra-hd'].id: _result(3, 5)})   # only Ultra HD has live progress
+    _series('rs-wip')
+    _standing(profile, 'rs-wip', group_progress={'ultra-hd': [3, 5]})   # only Ultra HD has progress
 
     frames = _frames_by_edition(build_collection_context(profile))
 
     assert frames['ultra-hd']['state'] == 'in_progress'
-    assert frames['ultra-hd']['progress_pct'] == 60                   # 3 / 5
-    assert frames['legacy-hd']['state'] == 'unearned'                 # 0% on this edition -> waiting mount, no fill
+    assert frames['ultra-hd']['progress_pct'] == 60                     # 3 / 5
+    assert frames['legacy-hd']['state'] == 'unearned'                   # not in group_progress -> waiting mount
 
 
-def test_in_progress_frame_carries_stage_count(monkeypatch):
-    """An in-progress edition surfaces its live stage count (done / total) so the medallion can render
-    "X / Y stages". Earned + unearned frames carry 0 (no count)."""
+def test_in_progress_frame_carries_stage_count():
+    """An in-progress edition surfaces its stage count (done / total) from the read-model so the medallion can
+    render "X / Y stages". Earned + unearned frames carry 0 (no count)."""
     profile = ProfileFactory()
-    _, groups = _series('rs-stages')
-    _standing(profile, 'rs-stages', bp=1)
-    _stub_eval(monkeypatch, {groups['ultra-hd'].id: _result(3, 5)})
+    _series('rs-stages')
+    _standing(profile, 'rs-stages', group_progress={'ultra-hd': [3, 5]})
 
     frames = _frames_by_edition(build_collection_context(profile))
 
     assert frames['ultra-hd']['state'] == 'in_progress'
     assert frames['ultra-hd']['stages_done'] == 3
     assert frames['ultra-hd']['stages_total'] == 5
-    assert frames['legacy-hd']['stages_total'] == 0                   # unearned -> no count
+    assert frames['legacy-hd']['stages_total'] == 0                     # unearned -> no count
 
 
-def test_held_edition_does_not_lend_completion_to_the_other(monkeypatch):
-    """A held edition reads earned; the OTHER edition, with no live progress of its own, reads unearned rather
-    than borrowing the held edition's completion (the series-furthest-along bug)."""
+def test_held_edition_does_not_lend_completion_to_the_other():
+    """A held edition reads earned; the OTHER edition, absent from the read-model, reads unearned rather than
+    borrowing the held edition's completion (the series-furthest-along bug)."""
     profile = ProfileFactory()
     _, groups = _series('rs-cross')
     _hold(profile, groups['ultra-hd'])
-    _standing(profile, 'rs-cross', bp=10000)
-    _stub_eval(monkeypatch, {groups['ultra-hd'].id: _result(5, 5)})   # ultra complete; legacy absent from eval
+    _standing(profile, 'rs-cross', group_progress={'ultra-hd': [5, 5]})   # ultra complete; legacy not in the map
 
     frames = _frames_by_edition(build_collection_context(profile))
 
@@ -222,19 +203,16 @@ def test_holo_hold_is_holographic():
 # --- summary -------------------------------------------------------------------
 
 
-def test_summary_counts_and_pct_use_the_full_catalog(monkeypatch):
+def test_summary_counts_and_pct_use_the_full_catalog():
     """earned/in_progress count the engaged wall, but the completion pct + `catalog_total` denominator are the
     WHOLE live badge catalog (not just engaged) -- an untouched live series still swells the denominator."""
     profile = ProfileFactory()
     _, a = _series('rs-a')
-    _, b = _series('rs-b')
+    _series('rs-b')
     _series('rs-untouched')                        # +2 live group badges in the catalog, never engaged
     _hold(profile, a['ultra-hd'])                  # 1 earned
-    _standing(profile, 'rs-a', bp=1)               # engages a (legacy edition has no live progress -> unearned)
-    _standing(profile, 'rs-b', bp=1)               # engages b
-    _stub_eval(monkeypatch, {                      # both of b's editions in progress
-        b['ultra-hd'].id: _result(3, 10), b['legacy-hd'].id: _result(3, 10),
-    })
+    _standing(profile, 'rs-a')                     # engages a (legacy edition not in the read-model -> unearned)
+    _standing(profile, 'rs-b', group_progress={'ultra-hd': [3, 10], 'legacy-hd': [3, 10]})  # both of b in progress
 
     summary = build_collection_context(profile)['summary']
 
@@ -413,15 +391,14 @@ def test_gallery_template_renders_edition_and_state_chips():
     assert 'pp-gallery__check' in html                        # the held edition wears the earned tick
 
 
-def test_gallery_in_progress_cell_carries_stage_count_in_the_caption(monkeypatch):
+def test_gallery_in_progress_cell_carries_stage_count_in_the_caption():
     """An in-progress cell carries its "X / Y" stage count as data-stages (the caption slot fills it in as
     "3 / 5 stages" via collection.js). The count is kept OUT of the medallion (no_count) so cards don't grow."""
     from django.template.loader import render_to_string
 
     profile = ProfileFactory()
-    _, groups = _series('rs-ip')
-    _standing(profile, 'rs-ip', bp=1)
-    _stub_eval(monkeypatch, {groups['ultra-hd'].id: _result(3, 5)})
+    _series('rs-ip')
+    _standing(profile, 'rs-ip', group_progress={'ultra-hd': [3, 5]})
 
     html = render_to_string('components/collection_gallery.html', build_collection_context(profile))
 

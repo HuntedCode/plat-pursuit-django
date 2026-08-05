@@ -122,6 +122,36 @@ def test_standing_partial_progress_writes_xp_and_progress():
 
 
 @pytest.mark.django_db
+def test_standing_materializes_per_edition_group_progress():
+    """recompute_standing writes the per-edition read-model the Collection reads: group_progress maps each
+    edition's platform_group key -> [cleared, gating], and ONLY editions with real progress appear (an edition
+    the viewer has 0% on is absent, so the wall reads it as unearned instead of the series furthest-along)."""
+    from trophies.services.badge_apply import evaluate_and_apply
+    from trophies.models import SeriesBadgeStanding
+    from tests.factories import (
+        ProfileFactory, BadgeSeriesFactory, StageFactory, ConceptFactory, GameFactory,
+        PlatformGroupFactory, GroupBadgeFactory,
+    )
+    series = BadgeSeriesFactory(series_slug='gow')
+    ultra = GroupBadgeFactory(series=series, is_live=True,
+                              platform_group=PlatformGroupFactory(key='ultra-hd', name='Ultra', platforms=['PS4', 'PS5']))
+    legacy = GroupBadgeFactory(series=series, is_live=True,
+                               platform_group=PlatformGroupFactory(key='legacy-hd', name='Legacy', platforms=['PS3']))
+    games = {}   # each stage has a PS5 game (gates Ultra HD) + a PS3 game (gates Legacy HD)
+    for i in (1, 2):
+        st = StageFactory(series_slug='gow', stage_number=i)
+        c = ConceptFactory(); st.concepts.add(c)
+        games[('ps5', i)] = GameFactory(concept=c, title_platform=['PS5'])
+        games[('ps3', i)] = GameFactory(concept=c, title_platform=['PS3'])
+    p = ProfileFactory()
+    _complete(p, games[('ps5', 1)])              # Ultra HD 1/2 ; Legacy HD 0/2 (no PS3 game completed)
+    evaluate_and_apply(p, [ultra, legacy])
+
+    sbs = SeriesBadgeStanding.objects.get(profile=p, series_slug='gow')
+    assert sbs.group_progress == {'ultra-hd': [1, 2]}   # Ultra materialized; Legacy (0 progress) absent
+
+
+@pytest.mark.django_db
 def test_standing_earned_gets_bonus_and_full_progress():
     from trophies.services.badge_apply import evaluate_and_apply
     from trophies.models import ProfileBadgeStanding, SeriesBadgeStanding

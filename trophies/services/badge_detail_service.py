@@ -12,7 +12,7 @@ from django.templatetags.static import static
 
 from trophies.models import UserGroupBadge, SeriesBadgeStanding, Game, ProfileGame
 from trophies.services.badge_orchestrator import build_catalog, evaluate_with_catalog
-from trophies.services.badge_xp import compute_series_standings, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS
+from trophies.services.badge_xp import compute_series_standings, edition_display_state, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS
 from trophies.services.badge_rarity import group_rarity
 from trophies.services.rating_service import RatingService
 from trophies.services import badge_leaderboards as lb
@@ -312,16 +312,16 @@ def _group_user_stats(gb, catalog, profile_games, journey, target_profile) -> Op
 def _group_view(gb, result, hold, target_profile, series, catalog, games_map, profile_games,
                 ratings_map, contract_map, participants) -> GroupView:
     is_holo = bool(hold and hold.is_holo)
-    if hold:
-        state = 'holo' if is_holo else 'earned'
-    elif result and result.base_satisfied_count > 0:
-        state = 'in_progress'
-    else:
-        state = 'none'
     stage_count = sum(1 for st in catalog['stages'] if st.stage_number > 0)
     gating = result.gating_count if result else (gb.required_stages or stage_count)
     cleared = result.base_satisfied_count if result else 0
     holo_cnt = result.holo_satisfied_count if result else 0
+    # Per-edition state via the shared helper (badge_xp.edition_display_state), so this LIVE view and the
+    # Collection wall (which reads the materialized standing) can't derive different states from the same
+    # numbers. Holo is layered on here (detail-only 'holo'/'none' vocabulary; the wall renders holo off
+    # is_holographic), and progress_pct comes from the same helper.
+    base_state, progress_pct = edition_display_state(bool(hold), cleared, gating)
+    state = ('holo' if is_holo else 'earned') if hold else ('in_progress' if base_state == 'in_progress' else 'none')
     # A live earners position only exists while the viewer currently holds the badge.
     rank = lb.earners_rank(target_profile.id, gb.id) if (hold and target_profile) else None
     stats = _group_stats(gb, result, catalog, ratings_map)
@@ -335,7 +335,7 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
         earners_rank=rank, earned_count=gb.earned_count,
         rarity_pct=rarity_pct, rarity_class=rarity_class,
         stages_cleared=cleared, gating_count=gating, holo_satisfied_count=holo_cnt,
-        progress_pct=(round(100 * cleared / gating) if gating else 0),
+        progress_pct=progress_pct,
         segments=[i < cleared for i in range(gating)],
         games_count=stats['games_count'], avg_difficulty=stats['avg_difficulty'],
         avg_hours=stats['avg_hours'], xp_on_offer=stats['xp_on_offer'],

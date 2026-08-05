@@ -8,11 +8,11 @@ discovery lives on the Browse badge Gallery, not here.
 
 Grouping-badge model: no tiers. The medallion frames reuse group_medallion_layers (so metals / avatars / holo
 match the rest of the site) + group_rarity, with per-viewer state layered on: earned = held; in_progress = THIS
-edition (per-group) has partial progress; else unearned. Progress is derived LIVE from the badge engine's
-DesiredState -- the SAME source the detail modal uses -- so the wall and the modal can't disagree, and nothing
-is denormed (per-edition progress has no leaderboard, so it's never stored; see badge-backend-rebuild.md).
-Whale-BOUNDED, not read-fixed: the catalog + eval are scoped to the ENGAGED series' games (catalog game-ids),
-never the profile's whole trophy library. Read-only.
+edition has partial progress; else unearned. Per-edition progress is READ from the materialized
+SeriesBadgeStanding.group_progress read-model (written by the sync's recompute_standing), NOT live-evaluated --
+so the wall stays a cheap fixed-cost read regardless of account size, and it derives state through the SAME
+shared helper (badge_xp.edition_display_state) the live badge-detail view uses, so the wall and the modal can't
+disagree. Both reflect the last sync. See docs/design/rebuild/badge-backend-rebuild.md. Read-only, whale-safe.
 """
 import logging
 from collections import defaultdict
@@ -23,8 +23,8 @@ from django.utils import timezone
 
 from trophies.models import GroupBadge, UserGroupBadge, SeriesBadgeStanding
 from trophies.services.badge_detail_service import group_medallion_layers
-from trophies.services.badge_orchestrator import build_catalog, evaluate_with_catalog
 from trophies.services.badge_rarity import group_rarity
+from trophies.services.badge_xp import edition_display_state
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +54,9 @@ DEFAULT_SORT = 'progress'
 def _engaged_series(profile):
     """The series the viewer is engaged with: they HOLD an edition (a UserGroupBadge) or have STARTED it (a
     SeriesBadgeStanding row exists only while xp>0, i.e. real progress). ONE bounded read of the held editions
-    (with every field the wall needs off them) + one of the started slugs -- both catalog-bounded, not
-    trophy-bounded; this scopes the live eval to only the series worth evaluating. Returns
-    (engaged_slugs, holds, earned_at) where holds = {group_badge_id: is_holo}, earned_at = {group_badge_id: dt}."""
+    (with every field the wall needs off them) + one of the standings -- both catalog-bounded, not
+    trophy-bounded. Returns (engaged_slugs, holds, earned_at, standings) where holds = {group_badge_id: is_holo},
+    earned_at = {group_badge_id: dt}, standings = {series_slug: SeriesBadgeStanding} (carries group_progress)."""
     held_rows = list(
         UserGroupBadge.objects.filter(profile=profile)
         .values_list('group_badge_id', 'is_holo', 'group_badge__series__series_slug', 'earned_at')
@@ -64,38 +64,30 @@ def _engaged_series(profile):
     holds = {gid: is_holo for gid, is_holo, _slug, _ea in held_rows}
     earned_at = {gid: ea for gid, _holo, _slug, ea in held_rows}
     held_slugs = {slug for _gid, _holo, slug, _ea in held_rows}
-    started_slugs = set(
-        SeriesBadgeStanding.objects.filter(profile=profile).values_list('series_slug', flat=True)
-    )
-    return (held_slugs | started_slugs), holds, earned_at
+    standings = {sb.series_slug: sb for sb in SeriesBadgeStanding.objects.filter(profile=profile)}
+    return (held_slugs | set(standings)), holds, earned_at, standings
 
 
-def _badge_frame(gb, holds, desired, participants):
-    """A collection Gallery frame for one group badge (edition), with the viewer's PER-EDITION state layered on
-    (live from the badge engine's DesiredState -- the SAME source the inspect modal uses, so the wall and modal
-    can't disagree):
+def _badge_frame(gb, holds, standings, participants):
+    """A collection Gallery frame for one group badge (edition), with the viewer's PER-EDITION state layered on.
+    Progress is READ from the series' materialized SeriesBadgeStanding.group_progress read-model (per-edition
+    {platform_group_key: [cleared, gating]}), then run through the shared badge_xp.edition_display_state -- the
+    SAME derivation the live badge-detail view uses, so the wall and the modal can't disagree:
       - held                                    -> 'earned' (holo when mastered),
-      - not held, THIS edition has partial progress (0 < base_satisfied < gating) -> 'in_progress' + its progress,
+      - not held, THIS edition has partial progress -> 'in_progress' + its own progress,
       - else                                    -> 'unearned' (a waiting mount -- incl. an edition the viewer has
                                                    0% on, which the series furthest-along would wrongly paint).
     Reuses group_medallion_layers (art) + group_rarity (live rarity), so it matches the browse pages exactly."""
     series, pg = gb.series, gb.platform_group
     tier, layers, is_avatar = group_medallion_layers(gb)
     held = gb.id in holds
-    result = desired.get(gb.id)
+    st = standings.get(series.series_slug)
+    cleared, gating = (st.group_progress.get(pg.key) or (0, 0)) if st else (0, 0)   # THIS edition's progress
 
-    stages_done = stages_total = 0   # only the in-progress meter carries the "X / Y stages" count
-    if held:
-        state, progress_pct, is_holo = 'earned', 100, bool(holds.get(gb.id))
-    elif result and result.base_satisfied_count > 0:
-        # THIS edition's own live progress (per-group), not the series furthest-along. Matches _group_view.
-        is_holo = False
-        cleared, gating = result.base_satisfied_count, result.gating_count
-        state = 'in_progress'
-        progress_pct = round(100 * cleared / gating) if gating else 0
-        stages_done, stages_total = cleared, gating
-    else:
-        state, progress_pct, is_holo = 'unearned', 0, False
+    state, progress_pct = edition_display_state(held, cleared, gating)
+    is_holo = bool(holds.get(gb.id)) if held else False
+    # Only an in-progress edition carries the "X / Y stages" count (earned/unearned show none).
+    stages_done, stages_total = (cleared, gating) if state == 'in_progress' else (0, 0)
 
     pct, cls = group_rarity(gb.earned_count, participants.get(series.series_slug, 0))
     return {
@@ -125,8 +117,9 @@ def _badge_frame(gb, holds, desired, participants):
 
 def build_collection_context(profile, sort=DEFAULT_SORT):
     """Assemble the Collection Gallery context: a flat `list_badges` of the viewer's engaged editions + a
-    summary (held / in-progress / per-edition composition) + the Set themes. Read-only; whale-BOUNDED (the live
-    per-edition eval is scoped to the engaged series' catalog, not the whole trophy library).
+    summary (held / in-progress / per-edition composition) + the Set themes. Read-only + whale-safe: a fixed
+    handful of bulk reads (held rows, standings, pursuer counts, catalog count) -- no live eval, no per-badge
+    queries. Per-edition progress comes from the standings' materialized group_progress read-model.
     `sort` picks the initial dropdown value (the wall is sorted client-side); unknown values fall back."""
     if sort not in dict(COLLECTION_SORTS):
         sort = DEFAULT_SORT
@@ -137,7 +130,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         'sort': sort, 'sort_options': COLLECTION_SORTS,
     }
     try:
-        engaged, holds, earned_at = _engaged_series(profile)
+        engaged, holds, earned_at, standings = _engaged_series(profile)
         if not engaged:
             return context
 
@@ -149,12 +142,6 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         )
         if not group_badges:
             return context
-
-        # Live per-edition progress from the badge engine (the SAME DesiredState the detail modal reads, so the
-        # wall and the modal agree). Bounded: build_catalog + the eval touch only the ENGAGED series' games
-        # (catalog game-ids), never the profile's whole trophy library. Progress is derived, never denormed.
-        catalog = build_catalog(group_badges)
-        desired = evaluate_with_catalog(profile, catalog) if catalog else {}
 
         # Live rarity denominator: the series' pursuer base (one indexed count over all engaged series' slugs).
         slugs = {gb.series.series_slug for gb in group_badges}
@@ -177,7 +164,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         list_badges, edition_counts = [], {}
         earned = in_progress = recent = holo = 0
         for gb in group_badges:
-            fr = _badge_frame(gb, holds, desired, participants)
+            fr = _badge_frame(gb, holds, standings, participants)
             btype = gb.series.badge_type
             fr['theme'] = _SECTION_LABELS.get(btype, btype.title())
             fr['palette'] = palette_of.get(btype, _PALETTES[0])
