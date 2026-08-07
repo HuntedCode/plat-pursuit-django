@@ -17,68 +17,70 @@
 <div class="fgroup-grid{% if request.htmx and group_reveal %} pp-reveal{% endif %}">
     {% for group in groups %}
     <article class="fgroup">
-        <div class="fgroup__cover{% if not group.cover_url %} fgroup__cover--empty{% endif %}">
-            {% if group.cover_url %}
-            <img src="{{ group.cover_url }}" alt="{{ group.display_name }}" loading="lazy" />
-            {% else %}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/></svg>
-            {% endif %}
-            {% if group.has_platinum %}
-            <span class="fgroup__plat-flag" title="Has a platinum">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-            </span>
-            {% endif %}
-        </div>
-
-        <div class="fgroup__body">
-            <div class="fgroup__head">
+        {% comment %} Compact header: a small cover thumbnail + the game name, so the version rows below get
+        the FULL card width (a stretched cover-left column cramped the rows + ran the art down tall cards on
+        mobile). {% endcomment %}
+        <div class="fgroup__head">
+            <div class="fgroup__cover{% if not group.cover_url %} fgroup__cover--empty{% endif %}">
+                {% if group.cover_url %}
+                <img src="{{ group.cover_url }}" alt="{{ group.display_name }}" loading="lazy" />
+                {% else %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/></svg>
+                {% endif %}
+                {% if group.has_platinum %}
+                <span class="fgroup__plat-flag" title="Has a platinum">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                </span>
+                {% endif %}
+            </div>
+            <div class="fgroup__titles">
                 <h3 class="fgroup__name">{{ group.display_name }}</h3>
                 {% if group.release_date %}<span class="fgroup__year">{{ group.release_date|date:"Y" }}</span>{% endif %}
             </div>
-
-            <div class="fgroup__vers">
-                {% for game in group.games %}
-                <a href="{% url 'game_detail' np_communication_id=game.np_communication_id %}" class="fgroup__ver">
-                    <span class="fgroup__ver-title">{{ game.title_name }}</span>
-                    <span class="fgroup__meta">
-                        <span class="fgroup__plats">
-                            {% for platform in game.title_platform reversed %}
-                            <span class="fgroup__plat border-{{ platform|platform_color_str }}">{{ platform }}</span>
-                            {% endfor %}
-                        </span>
-                        {% include 'partials/region_badges.html' with game=game badge_size='badge-xs' %}
-                        {% include 'trophies/partials/_game_flags.html' with game=game %}
-                        {% if game.defined_trophies %}
-                        <span class="fgroup__troph">
-                            <span class="b">{{ game.defined_trophies.bronze }}</span>
-                            <span class="s">{{ game.defined_trophies.silver }}</span>
-                            <span class="g">{{ game.defined_trophies.gold }}</span>
-                            {% if game.defined_trophies.platinum %}<span class="p">{{ game.defined_trophies.platinum }}</span>{% endif %}
-                        </span>
-                        {% endif %}
-                        {% if user_progress_stats %}
-                            {% if game.user_pg %}
-                            <span class="fgroup__prog">
-                                <span class="fgroup__ring" style="background: conic-gradient(var(--pp-primary) {{ game.user_pg.progress }}%, var(--pp-bg-2) 0);" title="{{ game.user_pg.progress }}% complete">
-                                    <span class="fgroup__ring-in"><span>{{ game.user_pg.progress }}</span></span>
-                                </span>
-                                {% if game.user_pg.has_plat %}
-                                <svg viewBox="0 0 24 24" fill="currentColor" aria-label="Platinum earned"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                                {% endif %}
-                            </span>
-                            {% else %}
-                            <span class="fgroup__unplayed">Unplayed</span>
-                            {% endif %}
-                        {% endif %}
-                    </span>
-                </a>
-                {% endfor %}
-            </div>
-
-            {% if group.games|length > 1 %}
-            <div class="fgroup__foot">{{ group.total_trophies|intcomma }} total troph{{ group.total_trophies|pluralize:"y,ies" }} across {{ group.games|length }} version{{ group.games|length|pluralize }}</div>
-            {% endif %}
         </div>
+
+        <div class="fgroup__vers">
+            {% for game in group.games %}
+            <a href="{% url 'game_detail' np_communication_id=game.np_communication_id %}" class="fgroup__ver">
+                <span class="fgroup__ver-title">{{ game.title_name }}</span>
+                <span class="fgroup__meta">
+                    <span class="fgroup__plats">
+                        {% for platform in game.title_platform reversed %}
+                        <span class="fgroup__plat border-{{ platform|platform_color_str }}">{{ platform }}</span>
+                        {% endfor %}
+                    </span>
+                    {% include 'partials/region_badges.html' with game=game badge_size='badge-xs' %}
+                    {% include 'trophies/partials/_game_flags.html' with game=game %}
+                    {% if game.defined_trophies %}
+                    <span class="fgroup__troph">
+                        <span class="b">{{ game.defined_trophies.bronze }}</span>
+                        <span class="s">{{ game.defined_trophies.silver }}</span>
+                        <span class="g">{{ game.defined_trophies.gold }}</span>
+                        {% if game.defined_trophies.platinum %}<span class="p">{{ game.defined_trophies.platinum }}</span>{% endif %}
+                    </span>
+                    {% endif %}
+                    {% if user_progress_stats %}
+                        {% if game.user_pg %}
+                        <span class="fgroup__prog">
+                            <span class="fgroup__ring" style="background: conic-gradient(var(--pp-primary) {{ game.user_pg.progress }}%, var(--pp-bg-2) 0);" title="{{ game.user_pg.progress }}% complete">
+                                <span class="fgroup__ring-in"><span>{{ game.user_pg.progress }}</span></span>
+                            </span>
+                            {% if game.user_pg.has_plat %}
+                            <svg viewBox="0 0 24 24" fill="currentColor" aria-label="Platinum earned"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                            {% endif %}
+                        </span>
+                        {% else %}
+                        <span class="fgroup__unplayed">Unplayed</span>
+                        {% endif %}
+                    {% endif %}
+                </span>
+            </a>
+            {% endfor %}
+        </div>
+
+        {% if group.games|length > 1 %}
+        <div class="fgroup__foot">{{ group.total_trophies|intcomma }} total troph{{ group.total_trophies|pluralize:"y,ies" }} across {{ group.games|length }} version{{ group.games|length|pluralize }}</div>
+        {% endif %}
     </article>
     {% empty %}
     <div class="fgroup-empty">
