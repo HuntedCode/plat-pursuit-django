@@ -1,0 +1,53 @@
+/* ============================================================
+ * TAG DETAIL (Genre / Theme) -- the per-tag game list. The header is a cinematic hero: the tag's materialized
+ * representative_game cover as a scrimmed backdrop, with the name + type + .scard stats over a heavy
+ * left-weighted scrim (the "over-artwork" detail-page treatment) so text stays readable while the art shows
+ * through on the right. A tag with no cover falls back to the plain accented surface. Everything below the
+ * header reuses the Browse Games system (.pp-gbrowse toolbar, .pp-gcard grid, infinite scroll).
+ * ============================================================ */
+.pp-taghero {
+    position: relative; overflow: hidden;
+    border-radius: 16px; background: var(--pp-bg-1);
+    border: 2px solid var(--pp-border); border-left: 4px solid var(--pp-primary);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+.pp-taghero__bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; z-index: 0; }
+/* Left-weighted scrim: near-opaque over the text column, thinning toward the right so the art reads through;
+   plus a floor gradient for the stat row. Blended from the card base so the hero sits on the page surface. */
+.pp-taghero__scrim {
+    position: absolute; inset: 0; z-index: 1;
+    background:
+        linear-gradient(90deg,
+            color-mix(in oklab, var(--pp-bg-1) 97%, transparent) 0%,
+            color-mix(in oklab, var(--pp-bg-1) 90%, transparent) 42%,
+            color-mix(in oklab, var(--pp-bg-1) 45%, transparent) 100%),
+        linear-gradient(0deg, color-mix(in oklab, var(--pp-bg-0) 78%, transparent) 0%, transparent 62%);
+}
+.pp-taghero__body { position: relative; z-index: 2; padding: 1rem 1rem 1.1rem; }
+@media (min-width: 768px) { .pp-taghero__body { padding: 1.4rem 1.5rem; } }
+@media (min-width: 1024px) { .pp-taghero__body { padding: 1.6rem 1.75rem; } }
+.pp-taghero__type {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 0.6rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 999px;
+    color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+}
+.pp-taghero__type svg { width: 12px; height: 12px; }
+.pp-taghero__name { font-size: 1.4rem; line-height: 1.1; font-weight: 800; color: var(--pp-text); }
+@media (min-width: 768px) { .pp-taghero__name { font-size: 1.9rem; } }
+@media (min-width: 1024px) { .pp-taghero__name { font-size: 2.3rem; } }
+.pp-taghero__intro { font-size: 0.75rem; font-style: italic; color: var(--pp-text-mute); padding-right: 0.25rem; }
+@media (min-width: 768px) { .pp-taghero__intro { font-size: 0.85rem; } }
+
+/* ── Related-tags rail: a compact grid of the shared .pp-gtile tiles, materialized by co-occurrence. ── */
+.pp-related { margin-top: 1.25rem; }
+.pp-related__head { display: flex; align-items: center; gap: 8px; margin-bottom: 0.6rem; }
+.pp-related__head svg { width: 18px; height: 18px; color: var(--pp-primary); flex-shrink: 0; }
+.pp-related__title { font-size: 0.95rem; font-weight: 800; color: var(--pp-text); }
+.pp-related__sub { font-size: 0.72rem; color: var(--pp-text-mute); font-style: italic; }
+.pp-related__grid {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+}
+@media (min-width: 640px)  { .pp-related__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
+@media (min-width: 1024px) { .pp-related__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }

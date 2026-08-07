@@ -2,7 +2,7 @@ import logging
 
 from core.services.tracking import track_page_view
 from django.db.models import (
-    Q, F, Count, Avg, Subquery, OuterRef, Prefetch, IntegerField, FloatField,
+    Q, F, Count, Avg, Sum, Subquery, OuterRef, IntegerField, FloatField,
 )
 from django.db.models.functions import Lower
 from django.http import Http404
@@ -10,16 +10,14 @@ from django.urls import reverse_lazy
 from django.views.generic import ListView
 
 from trophies.mixins import HtmxListMixin
-from ..models import (
-    Genre, Theme, Game, Trophy, UserConceptRating, ProfileGame,
-    ConceptGenre, ConceptTheme,
-)
+from ..models import Genre, Theme, Game, ConceptGenre, ConceptTheme
 from ..forms import GameSearchForm
 from trophies.util_modules.constants import ALL_PLATFORMS
 from .browse_helpers import (
     annotate_ascii_name, apply_game_browse_filters,
-    apply_game_browse_sort,
+    apply_game_browse_sort, get_active_filter_chips,
 )
+from .game_views import build_game_card_context
 
 logger = logging.getLogger("psn_api")
 
@@ -171,6 +169,19 @@ class TagDetailBaseView(HtmxListMixin, ListView):
         """Subclasses return the Q filter for their tag type."""
         raise NotImplementedError
 
+    def get_tag(self):
+        """Subclasses return the resolved Genre/Theme instance."""
+        raise NotImplementedError
+
+    def get_tag_model(self):
+        """Subclasses return the Genre or Theme model class (for the related-tags rail lookup)."""
+        raise NotImplementedError
+
+    def get_rail_count_path(self):
+        """Subclasses return the reverse path from the tag model to games, for annotating a related tag's
+        game_count (e.g. 'genre_concepts__concept__games')."""
+        raise NotImplementedError
+
     def get_filter_form(self):
         if not hasattr(self, '_filter_form'):
             self._filter_form = GameSearchForm(self.request.GET)
@@ -191,22 +202,50 @@ class TagDetailBaseView(HtmxListMixin, ListView):
             qs = annotate_ascii_name(qs)
             order = ['is_ascii_name', Lower('title_name')]
 
-        qs = qs.select_related(
-            'concept', 'concept__igdb_match',
-        ).prefetch_related(
-            Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
-        )
+        # Defer the ~30 KB IGDB blob (never read by the card); the platinum_trophy prefetch is dead -- the
+        # shared card reads defined_trophies.platinum (a JSON column), not game.platinum_trophy.
+        qs = qs.select_related('concept', 'concept__igdb_match').defer('concept__igdb_match__raw_response')
         return qs.order_by(*order)
 
     def get_shared_context(self, context):
-        """Adds filter form, platform choices, and post-pagination data."""
-        # Total unfiltered game count for this tag (used in header flavor text)
-        context['total_game_count'] = Game.objects.filter(
-            self.get_tag_filter()
-        ).count()
+        """Header stats + hero cover + related-tags rail + the shared card context + filter/toolbar state."""
+        tag = self.get_tag()
+
+        # Header stats: one aggregate over the tag's games, off DENORMED Game columns -> whale-safe (bounded by
+        # game count, not player rows). games/plays/plats/avg-completion for the .scard row.
+        stats = Game.objects.filter(self.get_tag_filter()).aggregate(
+            games=Count('id'),
+            plays=Sum('played_count'),
+            plats=Sum('plats_earned_count'),
+            avg_completion=Avg('avg_completion'),
+        )
+        context['total_game_count'] = stats['games'] or 0
+        context['tag_stats'] = stats
+        context['representative_game'] = tag.representative_game   # hero cover (select_related in dispatch)
+
+        # Related-tags rail: the materialized co-occurrence slug list, loaded + reordered + game_count-annotated
+        # (bounded to RELATED_N tiles). Rendered with the shared .pp-gtile.
+        related_slugs = list(tag.related_tags or [])
+        if related_slugs:
+            Model = self.get_tag_model()
+            rail = list(
+                Model.objects.filter(slug__in=related_slugs)
+                .select_related(
+                    'representative_game', 'representative_game__concept',
+                    'representative_game__concept__igdb_match',
+                )
+                .defer('representative_game__concept__igdb_match__raw_response')
+                .annotate(game_count=Count(self.get_rail_count_path(), distinct=True))
+            )
+            order = {s: i for i, s in enumerate(related_slugs)}
+            rail.sort(key=lambda t: order.get(t.slug, len(order)))
+            context['related_tags'] = [t for t in rail if t.game_count]
+        else:
+            context['related_tags'] = []
 
         form = self.get_filter_form()
         context['form'] = form
+        context.update(get_active_filter_chips(self.request, form))   # dismissable active-filter chips
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['platform_choices'] = ALL_PLATFORMS
@@ -225,29 +264,10 @@ class TagDetailBaseView(HtmxListMixin, ListView):
             if k not in ('page', 'view') and any(v)
         )
 
-        # Rating map for page games
-        page_games = context['object_list']
-        concept_ids = [g.concept_id for g in page_games if g.concept_id]
-        if concept_ids:
-            ratings = UserConceptRating.objects.filter(
-                concept_id__in=concept_ids,
-                concept_trophy_group__isnull=True,
-            ).values('concept_id').annotate(
-                avg_difficulty=Avg('difficulty'),
-                avg_fun=Avg('fun_ranking'),
-                avg_rating=Avg('overall_rating'),
-                rating_count=Count('id'),
-            )
-            context['rating_map'] = {r['concept_id']: r for r in ratings}
-
-        # User game map
-        if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
-            game_ids = [g.id for g in page_games]
-            user_games = ProfileGame.objects.filter(
-                profile=self.request.user.profile,
-                game_id__in=game_ids,
-            ).values('game_id', 'progress', 'has_plat', 'earned_trophies_count')
-            context['user_game_map'] = {pg['game_id']: pg for pg in user_games}
+        # Shared, batched, whale-safe card context (progress / DLC counts / ratings / badge + contract hooks),
+        # the same helper Browse Games + Recently Added use -- lights up the pursuer band the old hand-built
+        # rating/user maps were missing.
+        context.update(build_game_card_context(context['object_list'], self.request))
 
         return context
 
@@ -257,13 +277,30 @@ class GenreDetailView(TagDetailBaseView):
     template_name = 'trophies/tag_detail.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.genre = Genre.objects.filter(slug=kwargs['slug']).first()
+        # select_related the hero cover chain so representative_game.display_image_url is free in the header.
+        self.genre = (
+            Genre.objects.select_related(
+                'representative_game', 'representative_game__concept',
+                'representative_game__concept__igdb_match',
+            )
+            .defer('representative_game__concept__igdb_match__raw_response')
+            .filter(slug=kwargs['slug']).first()
+        )
         if not self.genre:
             raise Http404
         return super().dispatch(request, *args, **kwargs)
 
     def get_tag_filter(self):
         return Q(concept__concept_genres__genre=self.genre)
+
+    def get_tag(self):
+        return self.genre
+
+    def get_tag_model(self):
+        return Genre
+
+    def get_rail_count_path(self):
+        return 'genre_concepts__concept__games'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -292,13 +329,29 @@ class ThemeDetailView(TagDetailBaseView):
     template_name = 'trophies/tag_detail.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.theme = Theme.objects.filter(slug=kwargs['slug']).first()
+        self.theme = (
+            Theme.objects.select_related(
+                'representative_game', 'representative_game__concept',
+                'representative_game__concept__igdb_match',
+            )
+            .defer('representative_game__concept__igdb_match__raw_response')
+            .filter(slug=kwargs['slug']).first()
+        )
         if not self.theme:
             raise Http404
         return super().dispatch(request, *args, **kwargs)
 
     def get_tag_filter(self):
         return Q(concept__concept_themes__theme=self.theme)
+
+    def get_tag(self):
+        return self.theme
+
+    def get_tag_model(self):
+        return Theme
+
+    def get_rail_count_path(self):
+        return 'theme_concepts__concept__games'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

@@ -1,49 +1,308 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load query_tags %}
 {% load humanize %}
+{% load job_icons %}
 {% block title %}{{ tag_name }} PlayStation Games & Trophy Lists{% endblock %}
 {% block meta_description %}PlayStation games tagged {{ tag_name }} with trophy lists, community ratings, and platinum roadmaps on Platinum Pursuit.{% endblock %}
 {% block og_title %}{{ tag_name }} Games on Platinum Pursuit{% endblock %}
 {% block og_description %}Browse PlayStation trophy lists for {{ tag_name }} games.{% endblock %}
 
 {% block content %}
+<div class="pp-gbrowse">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ── Header Card ── #}
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-secondary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4 lg:p-5">
-            <div class="flex items-center gap-2 flex-wrap">
+    {% comment %} Hero header: the tag's materialized representative_game cover as a scrimmed cinematic
+    backdrop, name + type + .scard stats over it. Coverless tags fall back to the plain accented surface. {% endcomment %}
+    <section class="pp-taghero mb-3">
+        {% if representative_game %}
+        <img src="{{ representative_game.display_image_url }}" alt="" loading="lazy" class="pp-taghero__bg" />
+        {% endif %}
+        <span class="pp-taghero__scrim"></span>
+        <div class="pp-taghero__body pp-head-cascade">
+            <span class="pp-taghero__type">
                 {% if tag_type == 'Theme' %}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-secondary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="13.5" cy="6.5" r="2.5"></circle>
-                        <path d="M17 2H7a5 5 0 0 0-5 5v10a5 5 0 0 0 5 5h10a5 5 0 0 0 5-5V7a5 5 0 0 0-5-5Z"></path>
-                    </svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r="2.5"/><path d="M17 2H7a5 5 0 0 0-5 5v10a5 5 0 0 0 5 5h10a5 5 0 0 0 5-5V7a5 5 0 0 0-5-5Z"/></svg>
                 {% else %}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-secondary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-                    </svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h.01"/><path d="M20.83 12.83 12 21.66a2 2 0 0 1-2.83 0l-6-6a2 2 0 0 1 0-2.83l8.83-8.83A2 2 0 0 1 13.41 2H20a2 2 0 0 1 2 2v6.59a2 2 0 0 1-.59 1.41Z"/></svg>
                 {% endif %}
-                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ tag_name }}</h1>
-                <span class="badge badge-sm badge-secondary">{{ tag_type }}</span>
-            </div>
-            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                {{ tag_type }}
+            </span>
+            <h1 class="pp-taghero__name mt-1.5">{{ tag_name }}</h1>
+            <p class="pp-taghero__intro mt-1">
                 {{ total_game_count|intcomma }} game{{ total_game_count|pluralize }} {{ tag_intro_suffix }}
             </p>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Games</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tag_stats.games|default:0 }}">{{ tag_stats.games|default:0|intcomma }}</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Owned</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tag_stats.plays|default:0 }}">{{ tag_stats.plays|default:0|intcomma }}</div>
+                    <div class="scard__sub">in libraries</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Platinums</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tag_stats.plats|default:0 }}">{{ tag_stats.plats|default:0|intcomma }}</div>
+                    <div class="scard__sub">earned</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Avg completion</div>
+                    <div class="scard__value pp-tally">{{ tag_stats.avg_completion|default:0|floatformat:0 }}%</div>
+                    <div class="scard__sub">across the {{ tag_type|lower }}</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% comment %} Sticky mini-bar: tag identity + live count + quick search/sort + a Filters reach. OUTSIDE
+    #browse-results so it persists across filter swaps; the sentinel sits after the toolbar. {% endcomment %}
+    <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#tagd-minibar-sentinel">
+        <div class="pp-minibar__inner container mx-auto">
+            <span class="pp-minibar__id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h.01"/><path d="M20.83 12.83 12 21.66a2 2 0 0 1-2.83 0l-6-6a2 2 0 0 1 0-2.83l8.83-8.83A2 2 0 0 1 13.41 2H20a2 2 0 0 1 2 2v6.59a2 2 0 0 1-.59 1.41Z"/></svg>
+                <span class="pp-minibar__title">{{ tag_name }}</span>
+                <span class="pp-minibar__count" data-minibar-count title="games shown">{{ paginator.count|intcomma }}</span>
+            </span>
+            <div class="pp-minibar__controls">
+                <span class="pp-minibar__search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" data-minibar-search value="{{ request.GET.query }}" placeholder="Search&hellip;" aria-label="Search games by title" />
+                </span>
+                <select data-minibar-sort class="pp-gallery__select pp-minibar__sort" aria-label="Sort games"></select>
+                <button type="button" class="pp-minibar__filters" data-minibar-filters aria-label="Scroll to the filters and open the panel">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    <span class="pp-minibar__flbl">Filters</span>
+                </button>
+            </div>
         </div>
     </div>
 
-    {# ── Filter Drawer ── #}
-    {% include 'trophies/partials/tag_detail/filter_drawer.html' %}
-
     {% include 'partials/ad_unit.html' with ad_slot="5392580059" %}
+    {% job_icon_sprite %}
 
+    {% comment %} Toolbar: quiet chrome. Search + sort + Lucky + a Filters toggle; the platform/quick/flag/
+    rating/time/engine/letter filters tuck into a collapsible panel. Filters auto-apply via browse-filters.js
+    (HTMX grid swap). Same GameSearchForm + apply_game_browse_* pipeline as Browse Games, tag-scoped. {% endcomment %}
+    <form data-browse-form data-live-search id="tagd-form"
+          hx-get="{% url detail_url_name slug=detail_slug %}"
+          hx-target="#browse-results"
+          hx-push-url="true"
+          hx-swap="innerHTML"
+          hx-trigger="submit"
+          hx-indicator="#browse-results">
+        <div class="pp-toolbar-card pp-gbrowse__toolbar">
+            <div class="pp-gbrowse__bar">
+                <span class="pp-bgal__search" data-search-wrap>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" name="query" value="{{ request.GET.query }}" placeholder="Search {{ tag_name }} games&hellip;" aria-label="Search games by title" data-page-search />
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+                </span>
+
+                <label class="pp-gbrowse__sort">
+                    <span class="sr-only">Sort games</span>
+                    <select name="sort" class="pp-gallery__select">
+                        {% for group_label, group_choices in form.SORT_GROUPS %}
+                        <optgroup label="{{ group_label }}">
+                            {% for value, display in group_choices %}
+                            <option value="{{ value }}" {% if request.GET.sort == value or not request.GET.sort and value == 'alpha' %}selected{% endif %}>{{ display }}</option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <button type="button" class="pp-gbrowse__lucky" data-lucky-btn data-lucky-extra="{% if tag_type == 'Theme' %}themes={{ theme.id }}{% else %}genres={{ genre.id }}{% endif %}" aria-label="Open a random game in this {{ tag_type|lower }}" title="Open a random game in this {{ tag_type|lower }}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/><circle cx="9" cy="15" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+                    <span class="pp-gbrowse__lucky__lbl">Lucky</span>
+                </button>
+
+                <button type="button" class="pp-bgal__advbtn" id="tagd-filters-toggle" aria-expanded="false" aria-controls="tagd-advanced">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    <span>Filters</span>
+                    <span class="pp-bgal__advbtn__n" id="tagd-filter-count" aria-live="polite" aria-label="active filters" hidden>0</span>
+                </button>
+            </div>
+
+            {% include 'partials/browse/active_filters.html' %}
+
+            <div class="pp-bgal__advanced" id="tagd-advanced">
+              <div class="pp-bgal__advanced-in">
+                {# ── Platforms ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/></svg>
+                        Platforms
+                    </div>
+                    <div class="pp-gbrowse__fchips">
+                        {% for value, display in form.platform.field.choices %}
+                        <label class="pp-bgal__chip">
+                            <input type="checkbox" name="platform" value="{{ value }}" {% if value in selected_platforms %}checked{% endif %} />
+                            {{ display }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# ── Regions ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        Regions
+                    </div>
+                    <div class="pp-gbrowse__fchips">
+                        {% for value, display in form.regions.field.choices %}
+                        <label class="pp-bgal__chip">
+                            <input type="checkbox" name="regions" value="{{ value }}" {% if value in selected_regions %}checked{% endif %} />
+                            {{ display }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# ── Quick filters ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                        Quick Filters
+                    </div>
+                    <div class="pp-gbrowse__fchips">
+                        <label class="pp-bgal__chip">
+                            <input type="checkbox" name="show_only_platinum" value="on" {% if show_only_platinum == 'on' %}checked{% endif %} />
+                            {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-3 h-3' %}
+                            Platinum Only
+                        </label>
+                        <label class="pp-bgal__chip pp-bgal__chip--warn">
+                            <input type="checkbox" name="filter_shovelware" value="on" {% if filter_shovelware == 'on' %}checked{% endif %} />
+                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Z"/></svg>
+                            Hide Shovelware
+                        </label>
+                        {% include 'partials/browse/badge_filter.html' %}
+                    </div>
+                </div>
+
+                {# ── Community flags ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                        Community Flags
+                    </div>
+                    {% include 'partials/browse/flag_filters.html' %}
+                </div>
+
+                {# ── Ratings + Time ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__ftwo">
+                        <div>
+                            <div class="pp-gbrowse__flabel">
+                                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                                Community Ratings
+                            </div>
+                            {% include 'partials/browse/rating_filters.html' %}
+                        </div>
+                        <div>
+                            <div class="pp-gbrowse__flabel">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                Time to Beat
+                            </div>
+                            {% include 'partials/browse/time_filters.html' %}
+                        </div>
+                    </div>
+                </div>
+
+                {# ── Game engine ── #}
+                {% if form.engine.field.choices|length > 1 %}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        Game Engine
+                    </div>
+                    <select name="engine" class="pp-gallery__select">
+                        {% for value, display in form.engine.field.choices %}
+                        <option value="{{ value }}" {% if request.GET.engine == value|stringformat:"s" %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
+                {# ── Filter by letter ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                        Filter by Letter
+                    </div>
+                    <div class="pp-gbrowse__fchips pp-gbrowse__fchips--letters">
+                        {% for value, display in form.fields.letter.choices %}
+                        <label class="pp-bgal__chip">
+                            <input type="radio" name="letter" value="{{ value }}" {% if request.GET.letter == value %}checked{% endif %} />
+                            {{ display|default:"All" }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# ── Actions ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__acts">
+                        <a href="{% url detail_url_name slug=detail_slug %}" class="pp-gbrowse__act">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                            Reset Filters
+                        </a>
+                    </div>
+                    <p class="pp-gbrowse__note">
+                        Genre, theme, engine, and time-to-beat data is sourced from
+                        <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer">IGDB</a>.
+                    </p>
+                </div>
+              </div>
+            </div>
+        </div>
+
+        <input type="hidden" name="view" value="grid" />
+        <input type="hidden" name="page" value="{{ page_obj.number|default:'1' }}" />
+    </form>
+
+    <span id="tagd-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
+    {# ── Browse results (HTMX filter-swap target = just the grid) ── #}
     <div id="browse-results">
         {% include 'trophies/partials/tag_detail/browse_results.html' %}
     </div>
 
+    {% comment %} Infinite scroll: sentinel + spinner OUTSIDE #browse-results so they persist across filter
+    swaps; InfiniteScroller re-binds to the fresh #items-grid in htmx:afterSwap. {% endcomment %}
+    <div id="tagd-sentinel" class="h-4" aria-hidden="true"></div>
+    <div id="tagd-loading" class="pp-gbrowse__loading hidden"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
+
+    {% comment %} Related-tags rail: co-occurring tags (materialized), rendered with the shared .pp-gtile. {% endcomment %}
+    {% if related_tags %}
+    <section class="pp-related">
+        <div class="pp-related__head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            <span class="pp-related__title">Related {{ tag_type|lower }}s</span>
+            <span class="pp-related__sub">games in {{ tag_name }} often share these</span>
+        </div>
+        <div class="pp-related__grid">
+            {% for t in related_tags %}
+            {% include 'trophies/partials/tag_tile.html' with tag=t detail_url_name=detail_url_name item_type=tag_type|lower %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+</div>
 {% endblock %}
 
 {% block js_scripts %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
+    <script src="{% static 'js/tag-detail.js' %}"></script>
+    {% if user.is_authenticated and user.profile %}
+    <script src="{% static 'js/game-lists.js' %}"></script>
+    <script>document.addEventListener('DOMContentLoaded', () => GameListQuickAdd.init());</script>
+    {% endif %}
 {% endblock %}

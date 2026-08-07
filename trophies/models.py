@@ -6271,6 +6271,10 @@ class Genre(models.Model):
     representative_game = models.ForeignKey(
         'Game', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
     )
+    # Materialized "related genres" for the detail-page rail: an ordered list of genre SLUGS ranked by game
+    # co-occurrence (genres whose games overlap this one's most), recomputed by `recompute_tag_covers`. A
+    # JSON slug list (not an M2M) so the co-occurrence GROUP BY runs off the request path, not per page load.
+    related_tags = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ['name']
@@ -6288,6 +6292,8 @@ class Theme(models.Model):
     representative_game = models.ForeignKey(
         'Game', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
     )
+    # Materialized "related themes" (co-occurrence slug list) -- see Genre.related_tags.
+    related_tags = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ['name']
