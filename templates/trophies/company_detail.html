@@ -1,260 +1,179 @@
 {% extends 'base.html' %}
+{% load static %}
 {% load humanize %}
-{% load custom_filters %}
 {% block title %}{{ object.name }} - Games & Trophy Lists{% endblock %}
-{% block meta_description %}PlayStation games developed, published, or ported by {{ object.name }}. Browse trophy lists, community ratings, and platinum roadmaps on Platinum Pursuit.{% endblock %}
+{% block meta_description %}PlayStation games developed, published, or ported by {{ object.name }}. Browse trophy lists, community ratings, and platinum progress on Platinum Pursuit.{% endblock %}
 {% block og_title %}{{ object.name }} on Platinum Pursuit{% endblock %}
 {% block og_description %}All PlayStation games from {{ object.name }} with trophy lists and community ratings.{% endblock %}
 
 {% block content %}
+<div class="pp-gbrowse">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# -- Company Header (Poster Hero) -- #}
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-4">
-        <div class="card-body p-4 md:p-6 lg:p-8">
-            <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4 md:gap-6 lg:gap-8">
-                {% comment %}
-                    Poster-style logo panel matching the franchise hero
-                    dimensions. When a logo is present it sits inside a
-                    contrast-friendly white-ish plate so single-color logos
-                    pop against the dark theme. Fallback is a generic
-                    building icon when IGDB has no logo_image_id for the
-                    company.
-                {% endcomment %}
-                <div class="w-32 h-40 md:w-40 md:h-52 lg:w-48 lg:h-64 shrink-0 rounded-lg bg-base-300 overflow-hidden ring-2 ring-primary/30 ring-offset-2 ring-offset-base-200 shadow-xl shadow-primary/10 flex items-center justify-center">
+    {# ── Page header: accented card + logo thumb + catalogue totals; opening-beat cascade. ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start gap-3 md:gap-5">
+                {# Logo thumb: studio logo on a light plate (contain), else a cover from their catalogue, else a glyph. #}
+                <div class="co-logo shrink-0">
                     {% if object.logo_url %}
-                        <div class="w-full h-full bg-base-100/95 flex items-center justify-center p-4 md:p-5 lg:p-6">
-                            <img src="{{ object.logo_url }}" alt="{{ object.name }}"
-                                 class="max-w-full max-h-full object-contain" />
-                        </div>
+                    <span class="co-logo__plate"><img src="{{ object.logo_url }}" alt="{{ object.name }}" loading="lazy" /></span>
                     {% elif hero_cover %}
-                        {% comment %}Fallback when company has no logo but we do have representative cover art from one of their games.{% endcomment %}
-                        <img src="{{ hero_cover }}" alt="{{ object.name }}"
-                             class="w-full h-full object-cover object-top" />
+                    <img class="co-logo__cover" src="{{ hero_cover }}" alt="{{ object.name }}" loading="lazy" />
                     {% else %}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 md:w-14 md:h-14 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                            <path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5m-4 0h4"></path>
-                        </svg>
+                    <span class="co-logo__empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5m-4 0h4"/></svg>
+                    </span>
                     {% endif %}
                 </div>
 
-                <div class="flex-1 min-w-0 text-center sm:text-left">
-                    <div class="flex items-center gap-2 justify-center sm:justify-start mb-1.5">
-                        <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-primary/80">
-                            Company
-                        </span>
-                        <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-primary/40 to-transparent"></div>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 md:w-5 md:h-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1"/></svg>
+                        <span class="text-[0.6rem] font-extrabold uppercase tracking-wider text-primary bg-primary/15 border border-primary/30 rounded-full px-2 py-0.5">Company</span>
                     </div>
+                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold leading-tight mt-1">{{ object.name }}</h1>
 
-                    <h1 class="text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black leading-tight">
-                        {{ object.name }}
-                    </h1>
-
-                    {# Secondary identity line: country + founding year (only when known). #}
                     {% if object.country_display or object.start_date %}
-                        <div class="flex items-center gap-2 justify-center sm:justify-start text-xs md:text-sm text-base-content/60 mt-1.5 flex-wrap">
-                            {% if object.country_display %}
-                                <span>{{ object.country_display }}</span>
-                            {% endif %}
-                            {% if object.country_display and object.start_date %}
-                                <span class="text-base-content/30">&bull;</span>
-                            {% endif %}
-                            {% if object.start_date %}
-                                <span>Est. {{ object.start_date.year }}</span>
-                            {% endif %}
-                        </div>
+                    <div class="flex items-center gap-1.5 text-xs md:text-sm text-base-content/55 mt-1 flex-wrap">
+                        {% if object.country_display %}<span>{{ object.country_display }}</span>{% endif %}
+                        {% if object.country_display and object.start_date %}<span class="text-base-content/25">&bull;</span>{% endif %}
+                        {% if object.start_date %}<span>Est. {{ object.start_date.year }}</span>{% endif %}
+                    </div>
                     {% endif %}
 
-                    {# Merger / Parent hints. #}
                     {% if parent_company %}
-                        <p class="text-xs text-base-content/50 mt-2">
-                            Subsidiary of
-                            <a href="{% url 'company_detail' slug=parent_company.slug %}" class="link link-primary">{{ parent_company.name }}</a>
-                        </p>
+                    <p class="text-xs text-base-content/50 mt-1.5">Subsidiary of <a href="{% url 'company_detail' slug=parent_company.slug %}" class="link link-primary">{{ parent_company.name }}</a></p>
                     {% endif %}
                     {% if current_company and current_company.id != object.id %}
-                        <p class="text-xs text-base-content/50 mt-1">
-                            Now operating as
-                            <a href="{% url 'company_detail' slug=current_company.slug %}" class="link link-primary">{{ current_company.name }}</a>
-                        </p>
+                    <p class="text-xs text-base-content/50 mt-1">Now operating as <a href="{% url 'company_detail' slug=current_company.slug %}" class="link link-primary">{{ current_company.name }}</a></p>
                     {% endif %}
 
                     {% if object.description %}
-                        <p class="text-xs md:text-sm text-base-content/70 mt-3 max-w-prose">{{ object.description }}</p>
+                    <p class="text-xs md:text-sm text-base-content/60 mt-2 max-w-prose line-clamp-3">{{ object.description }}</p>
                     {% endif %}
 
-                    {% if user_progress_stats %}
-                        {# "Your Progress" stat cells: numerator/denominator format across all the company's games. #}
-                        <div class="flex items-center gap-2 justify-center sm:justify-start mb-2 mt-4">
-                            <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-base-content/50">Your Progress</span>
-                            <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-base-content/15 to-transparent"></div>
-                        </div>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">
-                                    {{ user_progress_stats.games_played|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_games|intcomma }}</span>
-                                </div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Games Played</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black">
-                                    {{ user_progress_stats.versions_played|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_versions|intcomma }}</span>
-                                </div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Version{{ total_versions|pluralize }}</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black text-warning">
-                                    {{ user_progress_stats.trophies_earned|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_trophies|intcomma }}</span>
-                                </div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Troph{{ total_trophies|pluralize:"y,ies" }}</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black" style="color: var(--color-trophy-platinum)">
-                                    {{ user_progress_stats.games_platinumed|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_platinums|intcomma }}</span>
-                                </div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Platinum{{ total_platinums|pluralize }}</div>
-                            </div>
-                        </div>
-
-                        {# Overall completion bar #}
-                        <div class="mt-3 md:mt-4">
-                            <div class="flex items-center justify-between text-xs mb-1">
-                                <span class="text-base-content/60 font-medium">Catalog Completion</span>
-                                <span class="font-bold text-primary">{{ user_progress_stats.completion_pct }}%</span>
-                            </div>
-                            <div class="h-2 bg-base-300 rounded-full overflow-hidden">
-                                <div class="h-full bg-gradient-to-r from-primary to-accent rounded-full transition-all duration-500"
-                                     style="width: {{ user_progress_stats.completion_pct }}%"></div>
-                            </div>
-                        </div>
-                    {% else %}
-                        {# Totals-only view (anonymous / unlinked) #}
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-4 md:mt-5">
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">{{ total_games|intcomma }}</div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Game{{ total_games|pluralize }}</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black">{{ total_versions|intcomma }}</div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Version{{ total_versions|pluralize }}</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black text-warning">{{ total_trophies|intcomma }}</div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Troph{{ total_trophies|pluralize:"y,ies" }}</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black" style="color: var(--color-trophy-platinum)">{{ total_platinums|intcomma }}</div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Platinum{{ total_platinums|pluralize }}</div>
-                            </div>
-                        </div>
-                    {% endif %}
-
-                    {% if company_rating_count %}
-                        {% comment %}Community stats strip. Matches the "Your Progress" visual rhythm, same eyebrow label + cell grid.{% endcomment %}
-                        <div class="flex items-center gap-2 justify-center sm:justify-start mb-2 mt-4 md:mt-5">
-                            <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-base-content/50">Community Stats</span>
-                            <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-base-content/15 to-transparent"></div>
-                        </div>
-                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
-                                <div class="text-base md:text-lg lg:text-xl font-black text-warning">{{ company_avg_rating|floatformat:1 }}<span class="text-base-content/40 text-xs md:text-sm">/5</span></div>
-                                <div class="text-[10px] text-base-content/50 font-medium uppercase tracking-wider">Rating</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
-                                <div class="text-base md:text-lg lg:text-xl font-black text-error">{{ company_avg_difficulty|floatformat:1 }}<span class="text-base-content/40 text-xs md:text-sm">/10</span></div>
-                                <div class="text-[10px] text-base-content/50 font-medium uppercase tracking-wider">Difficulty</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
-                                <div class="text-base md:text-lg lg:text-xl font-black text-success">{{ company_avg_fun|floatformat:1 }}<span class="text-base-content/40 text-xs md:text-sm">/10</span></div>
-                                <div class="text-[10px] text-base-content/50 font-medium uppercase tracking-wider">Fun</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
-                                <div class="text-base md:text-lg lg:text-xl font-black text-info">{{ company_avg_grindiness|floatformat:1 }}<span class="text-base-content/40 text-xs md:text-sm">/10</span></div>
-                                <div class="text-[10px] text-base-content/50 font-medium uppercase tracking-wider">Grind</div>
-                            </div>
-                            {% if company_avg_hours %}
-                                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
-                                    <div class="text-base md:text-lg lg:text-xl font-black text-accent">{{ company_avg_hours|floatformat:0 }}h</div>
-                                    <div class="text-[10px] text-base-content/50 font-medium uppercase tracking-wider">Avg Hours</div>
-                                </div>
-                            {% endif %}
-                            {% if company_total_players %}
-                                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
-                                    <div class="text-base md:text-lg lg:text-xl font-black">{{ company_total_players|intcomma }}</div>
-                                    <div class="text-[10px] text-base-content/50 font-medium uppercase tracking-wider">Players</div>
-                                </div>
-                            {% endif %}
-                        </div>
-                        <p class="text-[10px] text-base-content/30 italic mt-2 pr-1 text-center sm:text-left">
-                            Based on {{ company_rating_count|intcomma }} rating{{ company_rating_count|pluralize }} across {{ company_rated_games|intcomma }} game{{ company_rated_games|pluralize }}.
-                        </p>
-                    {% endif %}
-
-                    <p class="text-[10px] text-base-content/30 italic mt-3 pr-1 text-center sm:text-left">
-                        Company data sourced from <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>.
+                    <p class="text-[0.7rem] md:text-xs text-base-content/40 mt-1.5">
+                        Data sourced from <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-hover">IGDB</a>.
                     </p>
                 </div>
             </div>
-        </div>
-    </div>
 
-    {# -- Role Tabs -- #}
-    {% comment %}
-        One tab per populated role (Developed / Published / Ported /
-        Supporting Development). Each tab carries the current ?sort= so
-        switching roles preserves the sort selection. HTMX attrs swap only
-        the tab body; the inline script below flips .tab-active on click so
-        the bar reflects the active tab during the HTMX round-trip. href
-        stays as a no-JS fallback. The bar only renders when more than one
-        role has games — a single-role company shows its games directly.
-    {% endcomment %}
-    {% if sections|length > 1 %}
-        <div class="tabs tabs-boxed bg-base-300/60 mb-3" role="tablist" aria-label="Company roles"
-             data-company-tabs>
-            {% for section in sections %}
-                <a href="?tab={{ section.slug }}&sort={{ current_sort }}"
-                   hx-get="{% url 'company_detail' slug=object.slug %}?tab={{ section.slug }}&sort={{ current_sort }}"
-                   hx-target="#company-tab-content"
-                   hx-swap="innerHTML"
-                   hx-push-url="true"
-                   hx-indicator="#company-tab-content"
-                   data-company-tab
-                   role="tab"
-                   class="tab {% if current_tab == section.slug %}tab-active{% endif %}"
-                   aria-selected="{% if current_tab == section.slug %}true{% else %}false{% endif %}">
-                    <span class="text-xs md:text-sm">{{ section.label }} <span class="opacity-50">({{ section.count|intcomma }})</span></span>
-                </a>
-            {% endfor %}
+            {# Catalogue totals (objective facts about the company's output). #}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Games</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ total_games }}">{{ total_games|intcomma }}</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Versions</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ total_versions }}">{{ total_versions|intcomma }}</div>
+                    <div class="scard__sub">on PSN</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Trophies</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ total_trophies }}">{{ total_trophies|intcomma }}</div>
+                    <div class="scard__sub">defined</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Platinums</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ total_platinums }}">{{ total_platinums|intcomma }}</div>
+                    <div class="scard__sub">to earn</div>
+                </div>
+            </div>
+
+            {% if user_progress_stats %}
+            {# "Your progress" across the whole catalogue (authed only). #}
+            <div class="fr-prog">
+                <div class="fr-prog__head">
+                    <span class="fr-prog__label">Your progress</span>
+                    {# % lives in CSS (::after) so the count-up's textContent write can't eat it. #}
+                    <span class="fr-prog__pct pp-tally" data-countup="{{ user_progress_stats.completion_pct }}">{{ user_progress_stats.completion_pct }}</span>
+                </div>
+                {% include 'components/horizon.html' with progress=user_progress_stats.completion_pct height='8px' %}
+                <div class="fr-prog__stats">
+                    <span><strong>{{ user_progress_stats.games_played|intcomma }}</strong>/{{ total_games|intcomma }} played</span>
+                    <span><strong>{{ user_progress_stats.trophies_earned|intcomma }}</strong> troph{{ user_progress_stats.trophies_earned|pluralize:"y,ies" }} earned</span>
+                    <span><strong style="color: var(--color-trophy-platinum)">{{ user_progress_stats.games_platinumed|intcomma }}</strong> platinum{{ user_progress_stats.games_platinumed|pluralize }}</span>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if company_rating_count %}
+            {% comment %} Community stats across this company's rated games (a compact pill strip). {% endcomment %}
+            <div class="co-comm">
+                <div class="co-comm__grid">
+                    <span class="co-comm__stat"><span class="co-comm__v" style="color: var(--color-trophy-gold)">{{ company_avg_rating|floatformat:1 }}<i>/5</i></span><span class="co-comm__l">Rating</span></span>
+                    <span class="co-comm__stat"><span class="co-comm__v text-error">{{ company_avg_difficulty|floatformat:1 }}<i>/10</i></span><span class="co-comm__l">Difficulty</span></span>
+                    <span class="co-comm__stat"><span class="co-comm__v text-success">{{ company_avg_fun|floatformat:1 }}<i>/10</i></span><span class="co-comm__l">Fun</span></span>
+                    <span class="co-comm__stat"><span class="co-comm__v text-info">{{ company_avg_grindiness|floatformat:1 }}<i>/10</i></span><span class="co-comm__l">Grind</span></span>
+                    {% if company_avg_hours %}<span class="co-comm__stat"><span class="co-comm__v text-accent">{{ company_avg_hours|floatformat:0 }}h</span><span class="co-comm__l">Avg to plat</span></span>{% endif %}
+                    {% if company_total_players %}<span class="co-comm__stat"><span class="co-comm__v">{{ company_total_players|intcomma }}</span><span class="co-comm__l">Players</span></span>{% endif %}
+                </div>
+                <p class="co-comm__note">Based on {{ company_rating_count|intcomma }} rating{{ company_rating_count|pluralize }} across {{ company_rated_games|intcomma }} game{{ company_rated_games|pluralize }}.</p>
+            </div>
+            {% endif %}
         </div>
-    {% endif %}
+    </section>
 
     {% include 'partials/ad_unit.html' with ad_slot="9209595625" %}
 
-    {# -- Tab body (swap target for HTMX-driven tab + sort changes) -- #}
-    <div id="company-tab-content" class="transition-opacity duration-150">
-        {% include 'trophies/partials/company_detail/tab_content.html' %}
+    {% comment %} Role switcher + sort. Both HTMX-swap just #company-groups (the header + controls stay put).
+    The role switcher is a segmented .pp-switch backed by radios (single-select, preserves the active sort;
+    native :checked + Back correct with no JS). Only rendered when the company has more than one populated
+    role; a single-role company carries its role as a hidden input. {% endcomment %}
+    <form id="co-form"
+          hx-get="{% url 'company_detail' slug=object.slug %}"
+          hx-target="#company-groups"
+          hx-swap="innerHTML"
+          hx-push-url="true"
+          hx-trigger="change"
+          hx-indicator="#company-groups">
+        {% if sections|length > 1 %}
+        <div class="flex items-center justify-center md:justify-start mt-4 mb-3">
+            <div class="pp-switch" role="group" aria-label="Company role">
+                {% for section in sections %}
+                <label class="pp-switch__chip">
+                    <input type="radio" name="tab" value="{{ section.slug }}" class="sr-only" {% if current_tab == section.slug %}checked{% endif %} />
+                    {% if section.slug == 'developed' %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    {% elif section.slug == 'published' %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    {% elif section.slug == 'ported' %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                    {% else %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    {% endif %}
+                    {{ section.label }} <span class="opacity-50">({{ section.count|intcomma }})</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% elif current_tab %}
+        <input type="hidden" name="tab" value="{{ current_tab }}" />
+        {% endif %}
+
+        <div class="pp-toolbar-card pp-gbrowse__toolbar mb-3">
+            <div class="pp-gbrowse__bar pp-gbrowse__bar--end">
+                <label class="pp-gbrowse__sort">
+                    <span class="sr-only">Sort games</span>
+                    <select name="sort" class="pp-gallery__select">
+                        {% for value, display in sort_choices %}
+                        <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+        </div>
+    </form>
+
+    {# ── Grouped game list (HTMX role/sort-swap target). ── #}
+    <div id="company-groups">
+        {% include 'trophies/partials/franchise_detail/game_groups_list.html' %}
     </div>
+</div>
+{% endblock %}
 
-    {% comment %}
-        Instant active-state feedback on tab click: HTMX swaps the body but
-        the tab bar lives outside the swap target, so the class flip has to
-        happen client-side. The tab bar DOM is preserved across swaps, so the
-        handlers stay bound without re-init.
-    {% endcomment %}
-    <script>
-        (function () {
-            var tabs = document.querySelectorAll('[data-company-tabs] [data-company-tab]');
-            tabs.forEach(function (tab) {
-                tab.addEventListener('click', function () {
-                    tabs.forEach(function (t) {
-                        t.classList.remove('tab-active');
-                        t.setAttribute('aria-selected', 'false');
-                    });
-                    tab.classList.add('tab-active');
-                    tab.setAttribute('aria-selected', 'true');
-                });
-            });
-        })();
-    </script>
-
+{% block js_scripts %}
+    <script src="{% static 'js/company-detail.js' %}"></script>
 {% endblock %}

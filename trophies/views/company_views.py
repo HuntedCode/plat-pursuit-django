@@ -218,15 +218,16 @@ class CompanyDetailView(DetailView):
     """
     model = Company
     template_name = 'trophies/company_detail.html'
-    partial_template_name = 'trophies/partials/company_detail/tab_content.html'
+    # HTMX role-switch / sort changes swap only the grouped list; the header, role
+    # switcher, and sort toolbar stay put (same shape as FranchiseDetailView).
+    partial_template_name = 'trophies/partials/franchise_detail/game_groups_list.html'
     slug_field = 'slug'
     slug_url_kwarg = 'slug'
 
     def get_template_names(self):
-        # On HTMX requests (tab switch or sort change), return only the active
-        # tab's body partial so the rest of the page (header, tab bar, ad slot)
-        # stays in place. Non-HTMX requests render the full page so deep links
-        # to ?tab=...&sort=... still work for bookmarks / first paint.
+        # On HTMX (role switcher or sort) return just the grouped-list partial so the
+        # header + switcher + toolbar stay put. Full page otherwise so a deep-linked
+        # ?tab=...&sort=... URL still works for bookmarks / first paint.
         if getattr(self.request, 'htmx', False):
             return [self.partial_template_name]
         return [self.template_name]
@@ -388,6 +389,12 @@ class CompanyDetailView(DetailView):
         context['sections'] = sections
         context['current_tab'] = current_tab
         context['active_section'] = active_section
+        # `groups` + `empty_message` + `group_reveal` are the shared game_groups_list.html contract (also fed
+        # to that partial standalone on the HTMX role/sort swap). group_reveal gates pp-reveal since company
+        # detail runs staggerReveal on .fgroup.
+        context['groups'] = active_section['groups'] if active_section else []
+        context['empty_message'] = 'No games found for this role.'
+        context['group_reveal'] = True
         context['sort_choices'] = grouping.SORT_CHOICES
         context['current_sort'] = sort_val
         context['hero_cover'] = hero_cover

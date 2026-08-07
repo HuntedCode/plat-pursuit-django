@@ -122,3 +122,25 @@
 
 /* Lone sort control sits at the trailing edge of the toolbar bar. */
 .pp-gbrowse__bar--end { justify-content: flex-end; }
+
+/* ---- Company detail header chrome (logo thumb + community-stats strip) ---- */
+.co-logo { position: relative; width: 68px; aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; background: var(--pp-bg-2); box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 26%, transparent), 0 8px 22px -12px rgba(0, 0, 0, 0.6); }
+@media (min-width: 768px) { .co-logo { width: 96px; border-radius: 12px; } }
+.co-logo__plate { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12%; background: color-mix(in oklab, #fff 90%, var(--pp-bg-2)); }
+.co-logo__plate img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.co-logo__cover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.co-logo__empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 30% 25%, color-mix(in oklab, var(--pp-primary) 22%, var(--pp-bg-2)), var(--pp-bg-0)); }
+.co-logo__empty svg { width: 40%; height: 40%; color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-text-mute)); }
+
+.co-comm { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--pp-border); }
+.co-comm__grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.co-comm__stat {
+    flex: 1 1 72px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+    padding: 7px 6px; border-radius: 9px;
+    background: color-mix(in oklab, var(--pp-text) 3%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-text) 6%, transparent);
+}
+.co-comm__v { font-size: 15px; font-weight: 900; line-height: 1.1; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.co-comm__v i { font-size: 10px; font-weight: 700; font-style: normal; color: var(--pp-text-mute); }
+.co-comm__l { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-mute); }
+.co-comm__note { font-size: 10.5px; color: var(--pp-text-mute); margin-top: 8px; font-style: italic; }
