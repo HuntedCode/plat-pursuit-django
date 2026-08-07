@@ -75,7 +75,12 @@
     flex: 1 1 140px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--pp-text);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.15s ease;
 }
-.fgroup__meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: none; }
+/* Meta takes its own full-width line (basis 100% forces the title onto the line above), then splits: the
+   left group (platform/region/flags) hugs the start and the right group (trophies + progress) pins to the
+   end. nowrap keeps them on one line -- the left group wraps its own badges instead of dropping the right. */
+.fgroup__meta { display: flex; align-items: center; gap: 10px; flex: 1 1 100%; justify-content: space-between; flex-wrap: nowrap; }
+.fgroup__meta-l { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; flex-wrap: wrap; min-width: 0; }
+.fgroup__meta-r { display: flex; align-items: center; gap: 8px; flex: none; }
 .fgroup__plats { display: inline-flex; gap: 3px; }
 .fgroup__plat {
     font-size: 9.5px; font-weight: 800; letter-spacing: 0.02em; line-height: 1.5;
