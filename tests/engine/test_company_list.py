@@ -159,11 +159,99 @@ def test_recompute_materializes_company_cover(client):
     assert 'pp-gtile__art--empty' not in content
 
 
-def test_query_count_is_bounded(client, django_assert_max_num_queries):
-    for i in range(20):
-        co = _company(f'Studio {i}', f'studio-{i}', country=840, logo=f'lg{i}')
-        _link(co, f'Game {i}')
+def test_game_vs_version_count_distinction(client):
+    """game_count = distinct IGDB games; version_count = distinct Games. One concept with two editions
+    (PS4 + PS5) sharing one igdb_id is 1 game / 2 versions -- no cross-join multiplication."""
+    from trophies.models import Company, ConceptCompany
+    co = _company('Multi Co', 'multi-co')
+    concept = ConceptFactory(unified_title='Multi Game')
+    IGDBMatchFactory(concept=concept, igdb_id=next(_ig_seq))
+    GameFactory(concept=concept, title_name='Multi Game', title_platform=['PS5'])
+    GameFactory(concept=concept, title_name='Multi Game', title_platform=['PS4'])   # second edition, same igdb id
+    ConceptCompany.objects.create(concept=concept, company=co, is_developer=True)
 
-    with django_assert_max_num_queries(14):
-        resp = client.get(reverse('companies_list'))
+    resp = client.get(reverse('companies_list'))
+    row = {c.slug: c for c in resp.context['object_list']}['multi-co']
+
+    assert row.game_count == 1        # one distinct IGDB game
+    assert row.version_count == 2     # two PSN editions
+
+
+def test_company_without_games_is_dropped(client):
+    """A company whose only link points at a game-less concept fails the version_count>0 gate."""
+    from trophies.models import Company, ConceptCompany
+    empty = _company('Empty Co', 'empty-co')
+    concept = ConceptFactory(unified_title='No Games Concept')   # no Game attached
+    ConceptCompany.objects.create(concept=concept, company=empty, is_developer=True)
+    shown = _company('Real Co', 'real-co')
+    _link(shown, 'Real Game')
+
+    content = client.get(reverse('companies_list')).content.decode()
+
+    assert 'Real Co' in content
+    assert 'Empty Co' not in content
+
+
+def test_platform_filter_narrows(client):
+    ps5 = _company('PS5 Studio', 'ps5-studio')
+    _link(ps5, 'PS5 Game', platforms=['PS5'])
+    ps3 = _company('PS3 Studio', 'ps3-studio')
+    _link(ps3, 'PS3 Game', platforms=['PS3'])
+
+    content = client.get(reverse('companies_list'), {'platform': 'PS5'}).content.decode()
+
+    assert 'PS5 Studio' in content
+    assert 'PS3 Studio' not in content
+
+
+def test_genre_filter_narrows(client):
+    from trophies.models import Genre, ConceptGenre, ConceptCompany
+    genre = Genre.objects.create(igdb_id=next(_ig_seq), name='Roguelike', slug='roguelike')
+    rogue = _company('Rogue Co', 'rogue-co')
+    concept = ConceptFactory(unified_title='Rogue Game')
+    IGDBMatchFactory(concept=concept, igdb_id=next(_ig_seq))
+    GameFactory(concept=concept, title_name='Rogue Game')
+    ConceptCompany.objects.create(concept=concept, company=rogue, is_developer=True)
+    ConceptGenre.objects.create(concept=concept, genre=genre)
+    other = _company('Other Co', 'other-co')
+    _link(other, 'Other Game')
+
+    content = client.get(reverse('companies_list'), {'genres': str(genre.id)}).content.decode()
+
+    assert 'Rogue Co' in content
+    assert 'Other Co' not in content
+
+
+@pytest.mark.parametrize('sort', ['avg_rating', 'total_players', 'plats_earned', 'games_inv'])
+def test_whale_sorts_render(client, sort):
+    """The rating/popularity/plats sorts (subquery-annotated) must render without error."""
+    co = _company('Sortable Co', 'sortable-co')
+    _link(co, 'Sortable Game')
+
+    resp = client.get(reverse('companies_list'), {'sort': sort})
+
     assert resp.status_code == 200
+    assert 'Sortable Co' in resp.content.decode()
+
+
+def test_query_count_invariant_across_size(client):
+    """Query count must be CONSTANT regardless of company count -- a fixed ceiling would hide a small N+1."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    def _seed(prefix, n):
+        for i in range(n):
+            co = _company(f'{prefix} {i}', f'{prefix}-{i}', country=840, logo=f'lg{prefix}{i}')
+            _link(co, f'{prefix} Game {i}')
+
+    def _q(params):
+        with CaptureQueriesContext(connection) as ctx:
+            assert client.get(reverse('companies_list'), params).status_code == 200
+        return len(ctx)
+
+    _seed('Small', 5)
+    small = _q({'query': 'Small'})
+    _seed('Big', 20)
+    big = _q({'query': 'Big'})
+
+    assert small == big   # 4x the tiles, same query count -> no per-tile cover/logo/country N+1

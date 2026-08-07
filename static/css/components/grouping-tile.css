@@ -64,8 +64,10 @@
     position: absolute; top: 8px; right: 8px; z-index: 3;
     width: 30px; height: 30px; border-radius: 7px; padding: 3px;
     display: flex; align-items: center; justify-content: center;
-    background: color-mix(in oklab, var(--pp-bg-0) 62%, transparent);
-    border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(3px);
+    /* Opaque backing (NOT backdrop-filter): the chip rides inside the reveal-animated .pp-gtile, and a live
+       blur recomputing under an ancestor transform janks low-end mobile GPUs (motion-patterns gotcha). */
+    background: color-mix(in oklab, var(--pp-bg-0) 92%, #000);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
 }
 .pp-gtile__logo img { width: 100%; height: 100%; object-fit: contain; }

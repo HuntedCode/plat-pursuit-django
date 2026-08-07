@@ -126,6 +126,10 @@ class CompanyListView(HtmxListMixin, ListView):
                     )
                 ))
 
+            # The rating/popularity/plats sorts annotate UNDERSCORE-prefixed fields on purpose: they drive
+            # ORDER BY only. Unlike the genre/theme tiles, company tiles do NOT surface a per-tile sort-stat
+            # chip -- the .pp-gtile meta slot carries the studio logo + country instead (richer company
+            # identity), so there's no `stat_*` field for the shared tile to render. Deliberate divergence.
             if sort_val == 'games':
                 order = ['-game_count', Lower('name')]
             elif sort_val == 'games_inv':
