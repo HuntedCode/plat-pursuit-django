@@ -110,8 +110,9 @@
 }
 
 /* ---- Franchise/Series detail header chrome (page-specific: cover thumb + your-progress block) ---- */
+/* Mobile: a centered poster (own line, bigger so it's viewable). md+: a smaller inline thumb beside the text. */
 .fr-thumb {
-    position: relative; width: 68px; aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden;
+    position: relative; width: 120px; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden;
     background: var(--pp-bg-2);
     box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 26%, transparent), 0 8px 22px -12px rgba(0, 0, 0, 0.6);
 }
@@ -132,7 +133,8 @@
 .pp-gbrowse__bar--end { justify-content: flex-end; }
 
 /* ---- Company detail header chrome (logo thumb + community-stats strip) ---- */
-.co-logo { position: relative; width: 68px; aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; background: var(--pp-bg-2); box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 26%, transparent), 0 8px 22px -12px rgba(0, 0, 0, 0.6); }
+/* Mobile: a centered poster (own line, bigger so it's viewable). md+: a smaller inline thumb beside the text. */
+.co-logo { position: relative; width: 120px; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: var(--pp-bg-2); box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 26%, transparent), 0 8px 22px -12px rgba(0, 0, 0, 0.6); }
 @media (min-width: 768px) { .co-logo { width: 96px; border-radius: 12px; } }
 .co-logo__plate { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12%; background: color-mix(in oklab, #fff 90%, var(--pp-bg-2)); }
 .co-logo__plate img { max-width: 100%; max-height: 100%; object-fit: contain; }

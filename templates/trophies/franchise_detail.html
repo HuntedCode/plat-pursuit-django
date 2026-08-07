@@ -18,7 +18,7 @@
             md+ places it beside the identity column. {% endcomment %}
             <div class="flex flex-col md:flex-row gap-3 md:gap-5 md:items-start">
                 {# Cover thumb: the franchise's most recent release (portrait 3:4, object-top keeps logos). #}
-                <div class="fr-thumb shrink-0">
+                <div class="fr-thumb shrink-0 mx-auto md:mx-0">
                     {% if hero_cover %}
                     <img src="{{ hero_cover }}" alt="{{ object.name }}" loading="lazy" />
                     {% else %}
