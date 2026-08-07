@@ -109,15 +109,18 @@ BROWSE_HUB = HubSubnavConfig(
         '/themes/',
         '/engines/',
     ),
-    # Grouped rail (locked in the chrome workshop): Catalog = the core browse surfaces;
-    # Curation = the cross-cutting groupings + data-quality. Order = group order (regroup-ready).
+    # Flat rail: once the strip shrank to 6 surfaces (Flagged Games removed), the old Catalog/Curation
+    # group LABELS cost more scanning attention than they saved and read as internal jargon, so they're
+    # dropped. Items stay in the former group order (catalogue surfaces first, then the groupings) so
+    # related pills still cluster -- just without announced section headers. (Community/Support keep their
+    # groups: Explore/Create is a genuine user distinction, unlike Catalog/Curation.)
     items=(
-        HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2', group='Catalog'),
-        HubSubnavItem('badges', 'Badges', 'badges_list', 'award', group='Catalog'),
-        HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock', group='Catalog'),
-        HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers', group='Curation'),
-        HubSubnavItem('companies', 'Companies', 'companies_list', 'building', group='Curation'),
-        HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag', group='Curation'),
+        HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2'),
+        HubSubnavItem('badges', 'Badges', 'badges_list', 'award'),
+        HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock'),
+        HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers'),
+        HubSubnavItem('companies', 'Companies', 'companies_list', 'building'),
+        HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag'),
     ),
 )
 
