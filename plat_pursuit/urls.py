@@ -37,7 +37,7 @@ sitemaps = {
     'lists': GameListSitemap,
     'challenges': ChallengeSitemap,
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, TrophiesListView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView, MyStatsView, FlaggedGamesView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, EngineListView, EngineDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView, MyStatsView, FlaggedGamesView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
 from users.subscription_admin_views import SubscriptionAdminView
@@ -117,15 +117,17 @@ urlpatterns = [
     path('genres/<slug:slug>/', GenreDetailView.as_view(), name='genre_detail'),
     path('themes/<slug:slug>/', ThemeDetailView.as_view(), name='theme_detail'),
 
-    # Game engine pages
-    path('engines/', EngineListView.as_view(), name='engines_list'),
-    path('engines/<slug:slug>/', EngineDetailView.as_view(), name='engine_detail'),
+    # Retired engine pages -> Browse games (301; keeps bookmarks / inbound links alive). Names kept so any
+    # lingering reverse('engines_list'/'engine_detail') degrades to a redirect, not a 500.
+    path('engines/', RedirectView.as_view(pattern_name='games_list', permanent=True), name='engines_list'),
+    path('engines/<slug:slug>/', RedirectView.as_view(url='/games/', permanent=True), name='engine_detail'),
     # MUST precede game_detail_with_profile below, which would otherwise match 'leaderboard' as a
     # psn_username -- the same reason the roadmap sub-paths are declared above.
     path('games/<str:np_communication_id>/leaderboard/', GameLeaderboardView.as_view(), name='game_leaderboard'),
     path('games/<str:np_communication_id>/', GameDetailView.as_view(), name='game_detail'),
     path('games/<str:np_communication_id>/<str:psn_username>/', GameDetailView.as_view(), name='game_detail_with_profile'),
-    path('trophies/', TrophiesListView.as_view(), name='trophies_list'),
+    # Retired trophies-list page -> Browse games (301).
+    path('trophies/', RedirectView.as_view(pattern_name='games_list', permanent=True), name='trophies_list'),
 
     # Profiles (canonical paths under /community/, legacy redirects below)
     path('community/profiles/', ProfilesListView.as_view(), name='profiles_list'),

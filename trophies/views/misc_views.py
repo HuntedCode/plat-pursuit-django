@@ -14,10 +14,8 @@ class SearchView(View):
         search_type = request.GET.get('type')
         query = request.GET.get('query', '')
 
-        if search_type == 'game':
+        if search_type == 'game' or search_type == 'trophy':   # trophies-list page retired -> search games
             return HttpResponseRedirect(reverse_lazy('games_list') + f"?query={query}")
-        elif search_type == 'trophy':
-            return HttpResponseRedirect(reverse_lazy('trophies_list') + f"?query={query}")
         elif search_type == 'user':
             return HttpResponseRedirect(reverse_lazy('profiles_list') + f"?query={query}")
         else:

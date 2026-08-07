@@ -1009,12 +1009,9 @@ class GameDetailView(DetailView):
         add('Ported by', 'Ported by', porting)
         add('Additional dev', 'Additional devs', supporting)
 
-        engines = [
-            {'name': ce.engine.name, 'url': reverse('engine_detail', kwargs={'slug': ce.engine.slug})}
-            for ce in concept.concept_engines.all()
-        ]
+        # Engine detail pages were retired -> engines show as plain text (name only, no link).
+        engines = [{'name': ce.engine.name, 'url': ''} for ce in concept.concept_engines.all()]
         if not engines and igdb and igdb.game_engine_name:
-            # Denorm fallback for concepts not re-enriched since the GameEngine rollout (no link target).
             engines = [{'name': igdb.game_engine_name, 'url': ''}]
         add('Engine', 'Engines', engines)
 

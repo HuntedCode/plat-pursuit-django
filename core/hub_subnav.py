@@ -113,12 +113,10 @@ BROWSE_HUB = HubSubnavConfig(
     # Curation = the cross-cutting groupings + data-quality. Order = group order (regroup-ready).
     items=(
         HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2', group='Catalog'),
-        HubSubnavItem('trophies', 'Trophies', 'trophies_list', 'trophy', group='Catalog'),
         HubSubnavItem('badges', 'Badges', 'badges_list', 'award', group='Catalog'),
         HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock', group='Catalog'),
         HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers', group='Curation'),
         HubSubnavItem('companies', 'Companies', 'companies_list', 'building', group='Curation'),
-        HubSubnavItem('engines', 'Engines', 'engines_list', 'cpu', group='Curation'),
         HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag', group='Curation'),
         HubSubnavItem('flagged', 'Flagged Games', 'flagged_games', 'flag', group='Curation'),
     ),
@@ -214,7 +212,6 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'badge_detail_with_profile': ('browse', 'badges'),
     'genre_detail': ('browse', 'genres'),
     'theme_detail': ('browse', 'genres'),
-    'engine_detail': ('browse', 'engines'),
     'roadmap_edit': ('browse', 'games'),
     # Community
     'profile_detail': ('community', 'profiles'),

@@ -6,7 +6,7 @@ Re-exports all view classes for backward compatibility with existing URL configu
 
 from .game_views import GamesListView, GameDetailView, GuideListView, FlaggedGamesView, RecentlyAddedView, RandomGameView
 from .game_leaderboard_views import GameLeaderboardView
-from .trophy_views import TrophiesListView, TrophyCaseView, ToggleSelectionView
+from .trophy_views import TrophyCaseView, ToggleSelectionView
 from .profile_views import ProfilesListView, ProfileDetailView, LinkPSNView, ProfileVerifyView, ProfileEditorView
 from .badge_views import BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView
 # Checklist views removed during roadmap migration (DB tables retained)
@@ -38,13 +38,12 @@ from .stats_views import MyStatsView
 from .company_views import CompanyListView, CompanyDetailView
 from .franchise_views import FranchiseListView, FranchiseDetailView
 from .genre_views import GenreThemeListView, GenreDetailView, ThemeDetailView
-from .engine_views import EngineListView, EngineDetailView
 
 __all__ = [
     # Game views
     'GamesListView', 'GameDetailView', 'GuideListView', 'FlaggedGamesView', 'RecentlyAddedView', 'RandomGameView',
     # Trophy views
-    'TrophiesListView', 'TrophyCaseView', 'ToggleSelectionView',
+    'TrophyCaseView', 'ToggleSelectionView',
     # Profile views
     'ProfilesListView', 'ProfileDetailView', 'LinkPSNView', 'ProfileVerifyView', 'ProfileEditorView',
     # Badge views
@@ -92,5 +91,4 @@ __all__ = [
     # Genre/Theme views
     'GenreThemeListView', 'GenreDetailView', 'ThemeDetailView',
     # Engine views
-    'EngineListView', 'EngineDetailView',
 ]
