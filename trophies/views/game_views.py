@@ -31,6 +31,132 @@ from .browse_helpers import (
 logger = logging.getLogger("psn_api")
 
 
+def build_game_card_context(page_games, request):
+    """Batched, whale-safe context for a page of `.pp-gcard` game cards.
+
+    Builds everything the shared `game_list/game_cards.html` card consumes for a
+    single page of `Game` objects: the viewer's per-game progress, DLC-pack
+    counts, community ratings, and the pursuer hooks (badge SERIES + home
+    CONTRACT). Every map is keyed off the page's <=30 games/concepts in a handful
+    of bounded queries -- never per-card -- so it stays safe for whale accounts.
+
+    Returns a dict to `context.update(...)` into any ListView that renders the
+    shared card (Browse Games, Recently Added). `show_game_hooks` is always set,
+    so the card's pursuer band renders wherever this helper is used; browse pages
+    that don't call it leave the band off (the card gates on the flag).
+    """
+    from collections import defaultdict
+    from trophies.constants import BADGE_TYPE_DISPLAY_PRIORITY
+    from trophies.models import BadgeSeries
+    from trophies.services.contract_service import contract_by_concept_map
+    from trophies.util_modules.constants import CONTRACT_XP_TOTAL
+
+    ctx = {'show_game_hooks': True}
+    game_ids = [g.id for g in page_games]
+
+    # User-specific game data (1 query): progress + plat state for the card's bottom-edge fill.
+    if request.user.is_authenticated and hasattr(request.user, 'profile'):
+        user_games = ProfileGame.objects.filter(
+            profile=request.user.profile,
+            game_id__in=game_ids,
+        ).values('game_id', 'progress', 'has_plat', 'earned_trophies_count')
+        ctx['user_game_map'] = {pg['game_id']: pg for pg in user_games}
+
+    # DLC pack count per game (1 grouped query): trophy groups beyond the base 'default' group.
+    dlc_counts = (
+        TrophyGroup.objects.filter(game_id__in=game_ids)
+        .exclude(trophy_group_id='default')
+        .values('game_id').annotate(n=Count('id'))
+    )
+    ctx['dlc_map'] = {d['game_id']: d['n'] for d in dlc_counts}
+
+    concept_ids = [g.concept_id for g in page_games if g.concept_id]
+    if not concept_ids:
+        return ctx
+
+    # Community ratings (1 query): base-game overall average for the card's star fact.
+    ratings = UserConceptRating.objects.filter(
+        concept_id__in=concept_ids,
+        concept_trophy_group__isnull=True,
+    ).values('concept_id').annotate(
+        avg_difficulty=Avg('difficulty'),
+        avg_fun=Avg('fun_ranking'),
+        avg_rating=Avg('overall_rating'),
+        rating_count=Count('id'),
+    )
+    ctx['rating_map'] = {r['concept_id']: r for r in ratings}
+
+    # ── Pursuer hooks: the badge SERIES a game belongs to + its home CONTRACT. Both concept-keyed and
+    #    batched over the page's <=30 concepts (whale-safe -- 3 bounded queries, never per-card). ──
+    badge_cap = 3
+    prio = {t: i for i, t in enumerate(BADGE_TYPE_DISPLAY_PRIORITY)}
+    concept_id_set = set(concept_ids)
+
+    # concept -> distinct badge series_slugs it appears in (1 query over the M2M).
+    concept_series = defaultdict(set)
+    for cid, slug in (
+        Stage.objects.filter(concepts__in=concept_ids)
+        .exclude(series_slug__isnull=True).exclude(series_slug='')
+        # .order_by() strips Stage.Meta.ordering (stage_number), which would otherwise ride the
+        # SELECT + defeat .distinct() (a concept in two same-series stages -> duplicate rows).
+        .values_list('concepts', 'series_slug').order_by().distinct()
+    ):
+        if cid in concept_id_set:
+            concept_series[cid].add(slug)
+
+    # series_slug -> {label, badge_type} for each SERIES that ships a live group badge (1 query).
+    all_slugs = {s for slugs in concept_series.values() for s in slugs}
+    series_badge = {}
+    if all_slugs:
+        series_badge = {
+            b['series_slug']: {**b, 'label': b['display_series'] or b['name']}
+            for b in BadgeSeries.objects.filter(series_slug__in=all_slugs, group_badges__is_live=True)
+            .values('series_slug', 'name', 'display_series', 'badge_type').distinct()
+        }
+
+    badge_map = {}
+    for cid, slugs in concept_series.items():
+        items = [series_badge[s] for s in slugs if s in series_badge]
+        if not items:
+            continue
+        items.sort(key=lambda b: (prio.get(b['badge_type'], 99), b['label'].lower()))
+        badge_map[cid] = {
+            'total': len(items),
+            'names': [b['label'] for b in items[:badge_cap]],
+            'more': max(0, len(items) - badge_cap),
+        }
+    ctx['badge_map'] = badge_map
+
+    # concept -> home contract (live only) + its jobs (1 query + jobs prefetch).
+    contract_map = {}
+    for concept_id, ct in contract_by_concept_map(concept_ids, live_only=True).items():
+        jobs = list(ct.jobs.all())
+        discs = []
+        for j in jobs:
+            if j.discipline and j.discipline not in discs:
+                discs.append(j.discipline)
+        if len(discs) >= 2:
+            stops = ', '.join(
+                f'color-mix(in oklab, var(--disc-{d}) 18%, var(--pp-bg-2))' for d in discs
+            )
+            band_bg = f'linear-gradient(120deg, {stops})'
+        elif discs:
+            band_bg = f'color-mix(in oklab, var(--disc-{discs[0]}) 15%, var(--pp-bg-2))'
+        else:
+            band_bg = ''
+        contract_map[concept_id] = {
+            'name': ct.name,
+            'slug': ct.slug,
+            'xp': ct.xp_total_override or CONTRACT_XP_TOTAL,
+            'jobs': [{'name': j.name, 'icon': j.icon, 'discipline': j.discipline} for j in jobs[:6]],
+            'band_bg': band_bg,
+            'accent': f'var(--disc-{discs[0]})' if discs else 'var(--pp-secondary)',
+        }
+    ctx['contract_map'] = contract_map
+
+    return ctx
+
+
 class GamesListView(HtmxListMixin, ListView):
     """
     Display paginated list of games with filtering and sorting options.
@@ -157,124 +283,9 @@ class GamesListView(HtmxListMixin, ListView):
             "Search by name, filter by platform, and track your trophy progress."
         )
 
-        # Post-pagination data (only for the 25 games on this page)
-        page_games = context['object_list']
-        game_ids = [g.id for g in page_games]
-
-        # User-specific game data (1 query)
-        if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
-            user_games = ProfileGame.objects.filter(
-                profile=self.request.user.profile,
-                game_id__in=game_ids
-            ).values('game_id', 'progress', 'has_plat', 'earned_trophies_count')
-            context['user_game_map'] = {pg['game_id']: pg for pg in user_games}
-
-        # DLC pack count per game: trophy groups beyond the base game (trophy_group_id='default'), for the
-        # card's [DLC xN] tag. 1 grouped query over the page's games (whale-safe, never per-card).
-        dlc_counts = (
-            TrophyGroup.objects.filter(game_id__in=game_ids)
-            .exclude(trophy_group_id='default')
-            .values('game_id').annotate(n=Count('id'))
-        )
-        context['dlc_map'] = {d['game_id']: d['n'] for d in dlc_counts}
-
-        # Community ratings (1 query)
-        concept_ids = [g.concept_id for g in page_games if g.concept_id]
-        if concept_ids:
-            ratings = UserConceptRating.objects.filter(
-                concept_id__in=concept_ids,
-                concept_trophy_group__isnull=True
-            ).values('concept_id').annotate(
-                avg_difficulty=Avg('difficulty'),
-                avg_fun=Avg('fun_ranking'),
-                avg_rating=Avg('overall_rating'),
-                rating_count=Count('id')
-            )
-            context['rating_map'] = {r['concept_id']: r for r in ratings}
-
-        # ── Pursuer hooks: the badge SERIES a game belongs to + its home CONTRACT. Both concept-keyed and
-        #    batched over the page's <=30 concepts (whale-safe -- 3 bounded queries, never per-card). Only
-        #    set on Browse Games; the shared card renders the band only when show_game_hooks is truthy, so
-        #    the other browse pages (which don't build these maps) are unaffected. ──
-        context['show_game_hooks'] = True
-        if concept_ids:
-            from collections import defaultdict
-            from trophies.constants import BADGE_TYPE_DISPLAY_PRIORITY
-            from trophies.models import Stage, BadgeSeries
-            from trophies.services.contract_service import contract_by_concept_map
-            from trophies.util_modules.constants import CONTRACT_XP_TOTAL
-
-            badge_cap = 3
-            prio = {t: i for i, t in enumerate(BADGE_TYPE_DISPLAY_PRIORITY)}
-            concept_id_set = set(concept_ids)
-
-            # concept -> distinct badge series_slugs it appears in (1 query over the M2M).
-            concept_series = defaultdict(set)
-            for cid, slug in (
-                Stage.objects.filter(concepts__in=concept_ids)
-                .exclude(series_slug__isnull=True).exclude(series_slug='')
-                # .order_by() strips Stage.Meta.ordering (stage_number), which would otherwise ride the
-                # SELECT + defeat .distinct() (a concept in two same-series stages -> duplicate rows).
-                .values_list('concepts', 'series_slug').order_by().distinct()
-            ):
-                if cid in concept_id_set:
-                    concept_series[cid].add(slug)
-
-            # series_slug -> {label, badge_type} for each SERIES that ships a live group badge (1 query,
-            # grouping-badge system). Per-series (not per-edition): the card lists the badge SERIES a game
-            # belongs to, and both editions share one series identity.
-            all_slugs = {s for slugs in concept_series.values() for s in slugs}
-            series_badge = {}
-            if all_slugs:
-                # display_series is the clean SERIES name ("God of War"); fall back to name only if unset.
-                # .distinct() collapses the group_badges join (a series with 2 live editions -> 1 row).
-                series_badge = {
-                    b['series_slug']: {**b, 'label': b['display_series'] or b['name']}
-                    for b in BadgeSeries.objects.filter(series_slug__in=all_slugs, group_badges__is_live=True)
-                    .values('series_slug', 'name', 'display_series', 'badge_type').distinct()
-                }
-
-            badge_map = {}
-            for cid, slugs in concept_series.items():
-                items = [series_badge[s] for s in slugs if s in series_badge]
-                if not items:
-                    continue
-                items.sort(key=lambda b: (prio.get(b['badge_type'], 99), b['label'].lower()))
-                badge_map[cid] = {
-                    'total': len(items),
-                    'names': [b['label'] for b in items[:badge_cap]],
-                    'more': max(0, len(items) - badge_cap),
-                }
-            context['badge_map'] = badge_map
-
-            # concept -> home contract (live only) + its jobs (1 query + jobs prefetch). Jobs carry their
-            # Lucide icon + discipline (icons are discipline-coloured on the card, mirroring the badge-detail
-            # stage card); the band gets a subtle discipline-tinted background + an accent for its border.
-            contract_map = {}
-            for concept_id, ct in contract_by_concept_map(concept_ids, live_only=True).items():
-                jobs = list(ct.jobs.all())
-                discs = []
-                for j in jobs:
-                    if j.discipline and j.discipline not in discs:
-                        discs.append(j.discipline)
-                if len(discs) >= 2:
-                    stops = ', '.join(
-                        f'color-mix(in oklab, var(--disc-{d}) 18%, var(--pp-bg-2))' for d in discs
-                    )
-                    band_bg = f'linear-gradient(120deg, {stops})'
-                elif discs:
-                    band_bg = f'color-mix(in oklab, var(--disc-{discs[0]}) 15%, var(--pp-bg-2))'
-                else:
-                    band_bg = ''
-                contract_map[concept_id] = {
-                    'name': ct.name,
-                    'slug': ct.slug,
-                    'xp': ct.xp_total_override or CONTRACT_XP_TOTAL,
-                    'jobs': [{'name': j.name, 'icon': j.icon, 'discipline': j.discipline} for j in jobs[:6]],
-                    'band_bg': band_bg,
-                    'accent': f'var(--disc-{discs[0]})' if discs else 'var(--pp-secondary)',
-                }
-            context['contract_map'] = contract_map
+        # Post-pagination card data (progress / DLC counts / ratings / pursuer hooks) for the <=30 games on
+        # this page. Shared, batched, whale-safe -- see build_game_card_context (also used by Recently Added).
+        context.update(build_game_card_context(context['object_list'], self.request))
 
         track_page_view('games_list', 'list', self.request)
         return context
@@ -1751,7 +1762,8 @@ class RecentlyAddedView(HtmxListMixin, ListView):
     }
 
     def get_category(self):
-        return self.request.GET.get('category', 'base_games')
+        category = self.request.GET.get('category', 'base_games')
+        return category if category in self.CATEGORIES else 'base_games'
 
     @property
     def model(self):
@@ -1759,28 +1771,29 @@ class RecentlyAddedView(HtmxListMixin, ListView):
             return TrophyGroup
         return Game
 
-    POOL_SIZE = 200  # Cap to the N most recent entries per category
+    WINDOW_DAYS = 30       # "Recently added" = discovered within this many days (matches the header stats).
+    POOL_SIZE = 200        # Safety ceiling on the window -- guards the page against an unbounded mass-import.
+
+    def get_window_start(self):
+        return timezone.now() - timedelta(days=self.WINDOW_DAYS)
 
     def get_queryset(self):
         category = self.get_category()
         sort_val = self.request.GET.get('sort', 'recent')
+        cutoff = self.get_window_start()
 
         if category == 'base_games':
-            # Cap to the most recent POOL_SIZE base games
+            # Base games discovered within the window (most-recent first), ceilinged at POOL_SIZE.
             recent_ids = list(
-                Game.objects.order_by('-created_at')
+                Game.objects.filter(created_at__gte=cutoff).order_by('-created_at')
                 .values_list('id', flat=True)[:self.POOL_SIZE]
             )
             qs = (
                 Game.objects.filter(id__in=recent_ids)
                 .select_related('concept', 'concept__igdb_match')
-                .prefetch_related(
-                    Prefetch(
-                        'trophies',
-                        queryset=Trophy.objects.filter(trophy_type='platinum'),
-                        to_attr='platinum_trophy',
-                    )
-                )
+                # The ~30 KB IGDB raw_response is never read by the card; defer it so many-card renders
+                # don't pile the blob into the join payload (whale-safe cover-render rule).
+                .defer('concept__igdb_match__raw_response')
             )
 
             # Filters
@@ -1821,9 +1834,10 @@ class RecentlyAddedView(HtmxListMixin, ListView):
                 return qs.order_by('-created_at')
 
         if category == 'dlc':
-            # Cap to the most recent POOL_SIZE DLC packs
+            # DLC packs discovered within the window (most-recent first), ceilinged at POOL_SIZE.
             recent_ids = list(
                 TrophyGroup.objects.exclude(trophy_group_id='default')
+                .filter(created_at__gte=cutoff)
                 .order_by('-created_at')
                 .values_list('id', flat=True)[:self.POOL_SIZE]
             )
@@ -1831,6 +1845,8 @@ class RecentlyAddedView(HtmxListMixin, ListView):
                 TrophyGroup.objects.filter(id__in=recent_ids)
                 .exclude(trophy_group_id='default')
                 .select_related('game', 'game__concept', 'game__concept__igdb_match')
+                # Defer the IGDB blob (never read by the DLC card) off the join payload.
+                .defer('game__concept__igdb_match__raw_response')
             )
 
             # Filters
@@ -1879,39 +1895,27 @@ class RecentlyAddedView(HtmxListMixin, ListView):
         context['hide_shovelware_checked'] = bool(self.request.GET.get('hide_shovelware'))
         context['platform_choices'] = ALL_PLATFORMS
 
-        # 30-day counts for category cards
-        thirty_days_ago = timezone.now() - timedelta(days=30)
+        # Windowed discovery counts for the header stats + switcher captions (2 bounded counts). Same window
+        # the grid uses (get_window_start) -- these are the raw discovery scale for the window, so they read
+        # a touch higher than the grid when active filters narrow it or a POOL_SIZE-exceeding burst is capped.
+        window_start = self.get_window_start()
+        dlc_qs = TrophyGroup.objects.exclude(trophy_group_id='default')
         context['category_counts'] = {
-            'base_games': Game.objects.filter(created_at__gte=thirty_days_ago).count(),
-            'dlc': TrophyGroup.objects.exclude(
-                trophy_group_id='default',
-            ).filter(created_at__gte=thirty_days_ago).count(),
+            'base_games': Game.objects.filter(created_at__gte=window_start).count(),
+            'dlc': dlc_qs.filter(created_at__gte=window_start).count(),
         }
 
-        # User game data for base games category
+        # Freshest add across both categories -> header recency stat (2 indexed LIMIT-1 lookups).
+        newest_game = Game.objects.order_by('-created_at').values_list('created_at', flat=True).first()
+        newest_dlc = dlc_qs.order_by('-created_at').values_list('created_at', flat=True).first()
+        context['newest_added_at'] = max(
+            [t for t in (newest_game, newest_dlc) if t is not None], default=None,
+        )
+
+        # Base-games cards render the shared `.pp-gcard`, so feed it the same batched, whale-safe card
+        # context Browse Games uses (progress / DLC counts / ratings / badge + contract pursuer hooks).
         if category == 'base_games':
-            page_games = context['object_list']
-            game_ids = [g.id for g in page_games]
-
-            if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
-                user_games = ProfileGame.objects.filter(
-                    profile=self.request.user.profile,
-                    game_id__in=game_ids,
-                ).values('game_id', 'progress', 'has_plat', 'earned_trophies_count')
-                context['user_game_map'] = {pg['game_id']: pg for pg in user_games}
-
-            concept_ids = [g.concept_id for g in page_games if g.concept_id]
-            if concept_ids:
-                ratings = UserConceptRating.objects.filter(
-                    concept_id__in=concept_ids,
-                    concept_trophy_group__isnull=True,
-                ).values('concept_id').annotate(
-                    avg_difficulty=Avg('difficulty'),
-                    avg_fun=Avg('fun_ranking'),
-                    avg_rating=Avg('overall_rating'),
-                    rating_count=Count('id'),
-                )
-                context['rating_map'] = {r['concept_id']: r for r in ratings}
+            context.update(build_game_card_context(context['object_list'], self.request))
 
         context['seo_description'] = (
             "Browse recently added PlayStation trophy lists: new games "

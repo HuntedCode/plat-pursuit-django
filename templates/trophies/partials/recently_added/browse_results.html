@@ -1,22 +1,20 @@
-{# Recently Added browse results partial. Returned on HTMX requests. #}
+{% comment %} Recently Added results grid. Returned on HTMX filter swaps AND plain XHR infinite-scroll page
+fetches (HtmxListMixin serves this partial for both). Base games render the shared `.pp-gcard`; DLC packs
+render the `.pp-gcard--dlc` sibling. `pp-reveal` is baked in only on HTMX swaps (JS staggerReveal drives the
+land-in); on first full load the inline JS adds it before observing. {% endcomment %}
 {% load humanize %}
-
-{% if active_category == 'base_games' %}
-    {% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
-
-    <div id="items-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-2.5">
-        {% include 'trophies/partials/game_list/game_cards.html' %}
-    </div>
-
-    {% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}
-{% elif active_category == 'dlc' %}
-    {% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
-
-    <div id="items-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-2.5">
+<div id="items-grid" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ paginator.count }}">
+    {% if active_category == 'dlc' %}
         {% for tg in object_list %}
             {% include 'trophies/partials/recently_added/dlc_card.html' with trophy_group=tg %}
+        {% empty %}
+            <div class="pp-gcard-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
+                <p class="pp-gcard-empty__title">No new DLC found</p>
+                <p class="pp-gcard-empty__hint">Nothing here matches your current filters. Try clearing one.</p>
+            </div>
         {% endfor %}
-    </div>
-
-    {% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}
-{% endif %}
+    {% else %}
+        {% include 'trophies/partials/game_list/game_cards.html' %}
+    {% endif %}
+</div>

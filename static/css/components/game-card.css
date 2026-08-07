@@ -142,6 +142,50 @@
 .pp-gcard-empty__reset:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .pp-gcard-empty__reset:active { transform: none; } }
 
+/* ============================================================
+ * DLC VARIANT (.pp-gcard--dlc) -- a recently-added DLC pack (a TrophyGroup, not a Game), rendered in the same
+ * cell system as the base card so the two read as one family. Differences: a SECONDARY accent (DLC's colour
+ * across the site), a "DLC" tag on the cover, a parent-game subtitle line, and a trophy-count facts row. DLC
+ * packs have no platinum / viewer progress / player count, so those pieces are simply absent. PSN pack icons
+ * are landscape -- --contain letterboxes them instead of top-cropping a portrait frame.
+ * ============================================================ */
+/* Landscape-icon letterbox (generic modifier -- kept unscoped so any card can reuse it for wide art). */
+.pp-gcard__art--contain { object-fit: contain; padding: 10px; }
+
+/* DLC-only sub-elements, scoped under the variant so the base card is free to add its own __sub/__count/__tag
+   later without a collision (per the "suspect a class collision" lesson). */
+/* Cover tag (top-left): the DLC marker. Sits where base-card flags live; secondary-tinted. */
+.pp-gcard--dlc .pp-gcard__tag {
+    position: absolute; top: 6px; left: 6px; z-index: 3;
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 6px; border-radius: 5px; line-height: 1;
+    font-size: 8.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--pp-text); background: color-mix(in oklab, var(--pp-secondary) 82%, var(--pp-bg-0));
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+}
+.pp-gcard--dlc .pp-gcard__tag svg { width: 10px; height: 10px; }
+
+/* Parent-game subtitle: which game this pack belongs to. One quiet line under the pack title. */
+.pp-gcard--dlc .pp-gcard__sub {
+    font-size: 10.5px; color: var(--pp-text-mute); line-height: 1.3; padding-right: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* DLC facts: trophy counts left, a small "N trophies" tally right (no rating / plat columns). */
+.pp-gcard--dlc .pp-gcard__facts { display: flex; align-items: center; justify-content: space-between; }
+.pp-gcard--dlc .pp-gcard__count { font-size: 10px; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+
+/* Secondary hover-warm (override the base card's primary tint; equal specificity, so this must follow it). */
+@media (hover: hover) {
+    .pp-gcard--dlc:hover {
+        border-color: color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                    0 0 0 1px color-mix(in oklab, var(--pp-secondary) 22%, transparent),
+                    0 14px 34px -16px color-mix(in oklab, var(--pp-secondary) 42%, #000);
+    }
+    .pp-gcard--dlc:hover .pp-gcard__title { color: color-mix(in oklab, var(--pp-secondary) 45%, var(--pp-text)); }
+}
+
 /* Scroll-reveal: PlatPursuit.staggerReveal drives the per-card WAAPI motion; these rules only hold the
    hidden/shown states. The .pp-reveal class is added by JS ONLY when it will observe, so cards never stick
    hidden (and it's motion-gated -- reduced-motion viewers never hide anything). Empty panel fades in on swap
