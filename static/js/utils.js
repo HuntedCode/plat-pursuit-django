@@ -818,7 +818,13 @@ const InfiniteScroller = {
         if (!grid || !sentinel || !loading) return null;
 
         const cardSelector = config.cardSelector || '.card';
-        let page = 2;
+        // Resume AFTER the pages already in the grid rather than hard-coding page 2. On a fresh load that's one
+        // page -> 2 (unchanged); but an HTMX Back/Forward history restore brings back a snapshot that already
+        // contains the previously fetch-appended pages, so starting at 2 would re-fetch + append duplicates.
+        // ceil handles a partial last page (its next page 404s and stops). The observe guard below still gates
+        // the first fetch on a full first page, so under-a-page grids never fetch regardless of this value.
+        const loadedCards = grid.querySelectorAll(cardSelector).length;
+        let page = config.paginateBy ? Math.max(2, Math.ceil(loadedCards / config.paginateBy) + 1) : 2;
         const baseUrl = window.location.pathname;
         const queryParams = new URLSearchParams(window.location.search);
         queryParams.delete('page');

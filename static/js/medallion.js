@@ -387,7 +387,10 @@
             finishClose();   // hide + wipe + restore focus (the visibility restore inside is idempotent)
         }
         modal.querySelectorAll(config.closeSel || '[data-detail-close]').forEach(function (b) { b.addEventListener('click', close); });
-        document.addEventListener('keydown', function (e) {
+        // Document-level key handling (Escape to close + Tab focus-trap). Kept as a named ref so destroy() can
+        // remove it: callers that RECREATE the controller on a fresh modal node (e.g. the badge list re-wiring
+        // on HTMX history restore) must destroy the prior one first, or these accumulate on document.
+        function onKeydown(e) {
             if (modal.hidden) return;
             if (e.key === 'Escape') { close(); return; }
             if (e.key === 'Tab' && dialog) {   // trap focus within the dialog
@@ -398,7 +401,8 @@
                 if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
                 else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
             }
-        });
+        }
+        document.addEventListener('keydown', onKeydown);
         // Swipe down to close on touch -- every peek gets it here (collection, badge list, badge detail all
         // share detailModal). The helper slides the sheet off; dismissClose returns the object home. It adds
         // .pp-dismissable to the dialog, surfacing the grabber handle -- so the peek is now swipeable AND shows
@@ -409,7 +413,14 @@
                 onClose: dismissClose
             });
         }
-        return { open: open, close: close };
+        return {
+            open: open,
+            close: close,
+            // Remove the document-level keydown handler. Element-local listeners (close buttons, the
+            // dismissableSheet touch handlers on the dialog/scrim) die with the modal subtree, so only the
+            // document listener needs explicit teardown before the controller is recreated on a fresh node.
+            destroy: function () { document.removeEventListener('keydown', onKeydown); },
+        };
     }
 
     window.PlatPursuit.Medallion = {

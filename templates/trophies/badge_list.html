@@ -416,13 +416,15 @@
         // PlatPursuit.onPageReady contract (rebuild-playbook section 7), applied inline here since this script
         // predates the helper. Every binding below targets a freshly-resolved node, so restores don't leak; the
         // body/document listeners above are added once (they survive the restore) and are NOT re-added here.
-        function wireView() {
-            var catalogCount = document.querySelector('[data-badge-count]');
-            if (catalogCount && window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(catalogCount, 900); }
-            if (window.PlatPursuit && PlatPursuit.countUp) {
+        function wireView(first) {
+            if (first && window.PlatPursuit && PlatPursuit.countUp) {   // count up on first load only, not on restore
+                var catalogCount = document.querySelector('[data-badge-count]');
+                if (catalogCount) { PlatPursuit.countUp(catalogCount, 900); }
                 document.querySelectorAll('[data-scard-count]').forEach(function (el) { PlatPursuit.countUp(el, 900); });
             }
-            // Quick-peek modal controller on the (fresh) #badge-peek dialog.
+            // Quick-peek modal controller on the (fresh) #badge-peek dialog. Tear down the prior controller
+            // first so its document keydown handler doesn't accumulate across history restores.
+            if (peek && peek.destroy) { peek.destroy(); }
             peekEl = document.getElementById('badge-peek');
             peek = (peekEl && window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)
                 ? PlatPursuit.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
@@ -439,8 +441,8 @@
             var mbBadgeFilters = document.querySelector('[data-minibar-badge-filters]');
             if (mbBadgeFilters) { mbBadgeFilters.addEventListener('click', onMbBadgeFiltersClick); }
         }
-        wireView();
-        document.body.addEventListener('htmx:historyRestore', wireView);
+        wireView(true);
+        document.body.addEventListener('htmx:historyRestore', function () { wireView(false); });
     });
     </script>
 {% endblock %}
