@@ -154,6 +154,30 @@ def test_merger_parent_link(client):
     assert 'Parent Corp' in content
 
 
+def test_description_renders_readmore_scaffold(client):
+    """When the company has a description, the expandable About scaffold + (initially hidden) toggle render.
+    The overflow gating that un-hides the toggle is JS/browser-side; here we assert the markup is present."""
+    co = _company('Described Co', 'described-co')
+    co.description = 'A long studio history. ' * 25
+    co.save(update_fields=['description'])
+    _link(co, 'Some Game')
+
+    content = client.get(reverse('company_detail', kwargs={'slug': co.slug})).content.decode()
+
+    assert 'data-co-about' in content
+    assert 'data-co-about-toggle' in content
+    assert 'Read more' in content
+
+
+def test_no_description_no_about_block(client):
+    co = _company('Terse Co', 'terse-co')   # no description
+    _link(co, 'Some Game')
+
+    content = client.get(reverse('company_detail', kwargs={'slug': co.slug})).content.decode()
+
+    assert 'data-co-about' not in content
+
+
 def test_merger_now_operating_as_link(client):
     successor = _company('New Corp', 'new-corp')
     _link(successor, 'New Game')

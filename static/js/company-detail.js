@@ -36,6 +36,29 @@
         if (g) { g.classList.add('is-swapping'); }
     }
 
+    // "Read more / less" on the company description. The toggle stays hidden unless the text overflows the
+    // 3-line clamp, so a short blurb never shows it. Toggling `line-clamp-3` expands/collapses.
+    function onAboutToggle(e) {
+        var btn = e.currentTarget;
+        var text = document.querySelector('[data-co-about-text]');
+        if (!text) { return; }
+        text.classList.toggle('line-clamp-3');
+        var collapsed = text.classList.contains('line-clamp-3');
+        btn.textContent = collapsed ? 'Read more' : 'Read less';
+        btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+    function wireAbout() {
+        var text = document.querySelector('[data-co-about-text]');
+        var btn = document.querySelector('[data-co-about-toggle]');
+        if (!text || !btn) { return; }
+        var overflows = text.scrollHeight - text.clientHeight > 2;   // measured while clamped (first paint)
+        btn.hidden = !overflows;
+        if (overflows && !btn.dataset.wired) {
+            btn.dataset.wired = '1';
+            btn.addEventListener('click', onAboutToggle);
+        }
+    }
+
     function onAfterSwap(e) {
         var t = (e.detail && e.detail.target) || e.target;
         if (!t || t.id !== 'company-groups') { return; }
@@ -62,6 +85,7 @@
         }
         var form = document.getElementById('co-form');
         if (form) { form.addEventListener('change', onFormChange); }   // same fn ref -> dedupes across boots
+        wireAbout();
         initReveal();
         if (first) { document.body.addEventListener('htmx:afterSwap', onAfterSwap); }
     }

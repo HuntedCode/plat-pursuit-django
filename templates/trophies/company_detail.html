@@ -50,7 +50,12 @@
                     {% endif %}
 
                     {% if object.description %}
-                    <p class="text-xs md:text-sm text-base-content/60 mt-2 max-w-prose line-clamp-3">{{ object.description }}</p>
+                    <div class="mt-2" data-co-about>
+                        <p class="text-xs md:text-sm text-base-content/60 max-w-prose line-clamp-3" data-co-about-text>{{ object.description }}</p>
+                        {% comment %} The toggle stays hidden until JS confirms the text actually overflows the
+                        3-line clamp (no "Read more" on a short blurb). {% endcomment %}
+                        <button type="button" class="mt-1 text-[11px] font-bold text-primary hover:underline focus-visible:ring-2 focus-visible:ring-primary rounded-sm" data-co-about-toggle aria-expanded="false" hidden>Read more</button>
+                    </div>
                     {% endif %}
 
                     <p class="text-[0.7rem] md:text-xs text-base-content/40 mt-1.5">
