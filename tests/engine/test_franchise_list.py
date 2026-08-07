@@ -22,7 +22,7 @@ _fr_seq = itertools.count(40001)
 _ig_seq = itertools.count(880001)
 
 
-def _franchise(name, source_type='franchise', n_games=2, excluded=False, **game_kwargs):
+def _franchise(name, source_type='franchise', n_games=2, excluded=False, spinoff=False, **game_kwargs):
     """A Franchise/Series with `n_games` distinct-IGDB-id member games (so game_count == n_games)."""
     from trophies.models import Franchise, ConceptFranchise
     fr = Franchise.objects.create(
@@ -31,7 +31,9 @@ def _franchise(name, source_type='franchise', n_games=2, excluded=False, **game_
     for _ in range(n_games):
         game = GameFactory(**game_kwargs)
         IGDBMatchFactory(concept=game.concept, igdb_id=next(_ig_seq))
-        ConceptFranchise.objects.create(concept=game.concept, franchise=fr, is_excluded=excluded)
+        ConceptFranchise.objects.create(
+            concept=game.concept, franchise=fr, is_excluded=excluded, is_spinoff=spinoff,
+        )
     return fr
 
 
@@ -160,6 +162,54 @@ def test_recompute_ignores_excluded_links_for_cover(client):
 
     assert fr.representative_game_id is not None
     assert fr.representative_game_id != bad.id   # the excluded game never provides the cover
+
+
+def test_recompute_ignores_spinoff_links_for_cover(client):
+    """The franchise cover pick honors is_spinoff -- a spin-off link's game must not provide the cover."""
+    from trophies.models import Franchise, ConceptFranchise
+    fr = Franchise.objects.create(igdb_id=next(_fr_seq), name='Mainline', slug='mainline', source_type='franchise')
+    spinoff = GameFactory(title_platform=['PS5'], title_image='https://example.com/SPINOFF.jpg')
+    IGDBMatchFactory(concept=spinoff.concept, igdb_id=next(_ig_seq))
+    ConceptFranchise.objects.create(concept=spinoff.concept, franchise=fr, is_spinoff=True)
+    for _ in range(2):
+        g = GameFactory(title_platform=['PS5'], title_image='https://example.com/ok.jpg')
+        IGDBMatchFactory(concept=g.concept, igdb_id=next(_ig_seq))
+        ConceptFranchise.objects.create(concept=g.concept, franchise=fr, is_spinoff=False)
+
+    call_command('recompute_tag_covers')
+    fr.refresh_from_db()
+
+    assert fr.representative_game_id is not None
+    assert fr.representative_game_id != spinoff.id   # the spin-off game never provides the cover
+
+
+# ── Version-count display ─────────────────────────────────────────────────────────────────────────────────
+
+def test_version_count_suffix_renders_when_editions_exceed_games(client):
+    """A franchise with more editions (distinct Games) than distinct IGDB games shows the '· N versions' suffix.
+
+    game_count counts distinct concept__igdb_match__igdb_id; version_count counts distinct concept__games. Give
+    one member concept two Games (two editions, one IGDB id) so version_count (3) > game_count (2), and the tile
+    renders the versions suffix without it being suppressed by the `!= game_count` guard.
+    """
+    from trophies.models import Franchise, ConceptFranchise
+    fr = Franchise.objects.create(igdb_id=next(_fr_seq), name='Multi Edition', slug='multi-edition',
+                                  source_type='franchise')
+    # Concept A: two editions (two Games) sharing one IGDB id.
+    multi = GameFactory(title_platform=['PS5'])
+    IGDBMatchFactory(concept=multi.concept, igdb_id=next(_ig_seq))
+    GameFactory(concept=multi.concept, title_platform=['PS4'])   # second edition, same concept
+    ConceptFranchise.objects.create(concept=multi.concept, franchise=fr)
+    # Concept B: a normal single-edition member (so game_count == 2, visible by default).
+    solo = GameFactory(title_platform=['PS5'])
+    IGDBMatchFactory(concept=solo.concept, igdb_id=next(_ig_seq))
+    ConceptFranchise.objects.create(concept=solo.concept, franchise=fr)
+
+    content = client.get(reverse('franchises_list')).content.decode()
+
+    assert 'Multi Edition' in content
+    assert '2 games' in content
+    assert '3 versions' in content   # editions (3 Games) exceed distinct IGDB games (2)
 
 
 def test_query_count_is_bounded(client, django_assert_max_num_queries):

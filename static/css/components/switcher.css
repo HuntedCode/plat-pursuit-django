@@ -33,6 +33,9 @@
     background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
     border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
 }
-.pp-switch__chip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* Focus ring: JS chips (<a>/<button>) take focus directly; radio-backed chips take focus on the sr-only
+   <input> inside, so mirror the ring via :has() so keyboard users always see the indicator. */
+.pp-switch__chip:focus-visible,
+.pp-switch__chip:has(input:focus-visible) { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .pp-switch__chip svg { width: 15px; height: 15px; flex: none; }
 @media (min-width: 768px) { .pp-switch__chip { padding: 7px 18px; } }   /* roomier chips on desktop */
