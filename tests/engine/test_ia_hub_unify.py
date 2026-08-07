@@ -52,13 +52,11 @@ def _grouped(ctx):
     return groups
 
 
-def test_browse_items_flat_rail():
-    # Browse is a FLAT rail now: the Catalog/Curation group labels were dropped once the strip shrank to
-    # 6 surfaces (they read as internal jargon and cost more scanning than they saved). All items share the
-    # empty group, in the former group order (catalogue surfaces first, then the groupings).
+def test_browse_items_grouped_catalog_curation():
+    # Grouped rail, kept consistent with the other hubs' group labels.
     groups = _grouped(hub_subnav(_req('/games/')))
-    assert list(groups.keys()) == ['']
-    assert groups[''] == ['games', 'badges', 'recently-added', 'franchises', 'companies', 'genres']
+    assert groups['Catalog'] == ['games', 'badges', 'recently-added']
+    assert groups['Curation'] == ['franchises', 'companies', 'genres']
 
 
 def test_community_items_grouped_explore_create():
