@@ -141,14 +141,10 @@
     document.addEventListener('DOMContentLoaded', function () {
         // Header: count the catalog number up on load. countUp() honours prefers-reduced-motion (jumps
         // straight to the target); the header's fade-in reveal masks the brief reset-to-zero.
-        var catalogCount = document.querySelector('[data-badge-count]');
-        if (catalogCount && window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(catalogCount, 900); }
-        // Catalogue .scard values animate in on the same beat as the headline Tally (browse header parity).
-        if (window.PlatPursuit && PlatPursuit.countUp) {
-            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PlatPursuit.countUp(el, 900); });
-        }
-
-        var scroller = null, revealHandle = null;
+        // Element state -- (re)assigned by wireView() on first load AND on HTMX Back/Forward history restore
+        // (which swaps in fresh nodes without re-firing afterSwap). The body-level listeners below are added
+        // once and persist across a restore (document.body survives), so wireView must NOT re-add them.
+        var scroller = null, revealHandle = null, peek = null, peekEl = null, vtoggles = [];
         // Read the active view from the swapped-in island (the toggle HTMX-swaps #badge-view, no full
         // reload): the Gallery root is .pp-bgal, the Series root .pp-slist; each carries its own page size.
         function viewConfig() {
@@ -204,10 +200,7 @@
         // Quick-peek modal: a medallion tap GROWS the PUBLIC group_badge_quick_peek partial into the shared
         // #badge-peek dialog -- the collection's .pp-detail-modal chrome + the shared pick-up/put-down
         // controller (PlatPursuit.Medallion.detailModal). data-peek-url is the reverse with a 0 placeholder.
-        var peekEl = document.getElementById('badge-peek');
-        var peek = (peekEl && window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)
-            ? PlatPursuit.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
-            : null;
+        // peekEl / peek are (re)created in wireView() (the #badge-peek dialog is a fresh node after a restore).
         // Grow the peek from the tapped source cell. sourceEl is the Series group cell (.pp-scard__group) or
         // the Gallery cell (.pp-bgal__card) -- both hold the .pp-med the controller measures + hides.
         function openPeek(badgeId, sourceEl) {
@@ -409,27 +402,45 @@
                 if (sw && si && document.activeElement === si) { sw.classList.add('is-searching'); }
             }
         });
-        // Keyboard-enable the Series/Gallery toggle(s): roving tabindex + Arrow/Home/End move focus. MANUAL
-        // activation -- the chips are HTMX <a> links, so Enter/click does the swap natively; auto-activating
-        // on each arrow keypress would fire a request per keystroke. Both the toolbar and mini-bar copies wire.
-        var vtoggles = Array.prototype.slice.call(document.querySelectorAll('.pp-switch')).map(function (grp) {
-            return PlatPursuit.wireTablist(grp.querySelectorAll('.pp-switch__chip'), { manual: true });
-        });
-        initView();
-
-        // Sticky mini-bar: the chips are driven by HTMX + updateToggleActive (they duplicate the real
-        // .pp-switch__chip links). The "Filters" reach scrolls the current view's toolbar into view and
-        // opens its collapsible panel (both re-rendered per swap, so query fresh at click time).
-        if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }
-        var mbBadgeFilters = document.querySelector('[data-minibar-badge-filters]');
-        if (mbBadgeFilters) {
-            mbBadgeFilters.addEventListener('click', function () {
-                var toggle = document.getElementById('bgal-filters-toggle');
-                if (toggle && toggle.getAttribute('aria-expanded') !== 'true') { toggle.click(); }   // open the panel
-                var tb = document.getElementById('filter-form');
-                if (tb) { tb.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-            });
+        // Sticky mini-bar "Filters" reach: scroll the current view's toolbar into view + open its panel (both
+        // re-rendered per swap, so query fresh at click time).
+        function onMbBadgeFiltersClick() {
+            var toggle = document.getElementById('bgal-filters-toggle');
+            if (toggle && toggle.getAttribute('aria-expanded') !== 'true') { toggle.click(); }   // open the panel
+            var tb = document.getElementById('filter-form');
+            if (tb) { tb.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
         }
+
+        // (Re)wire everything that belongs to the CURRENT DOM -- run on first load AND on HTMX history restore
+        // (Back/Forward), which replaces the page's nodes without re-firing afterSwap. This mirrors the shared
+        // PlatPursuit.onPageReady contract (rebuild-playbook section 7), applied inline here since this script
+        // predates the helper. Every binding below targets a freshly-resolved node, so restores don't leak; the
+        // body/document listeners above are added once (they survive the restore) and are NOT re-added here.
+        function wireView() {
+            var catalogCount = document.querySelector('[data-badge-count]');
+            if (catalogCount && window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(catalogCount, 900); }
+            if (window.PlatPursuit && PlatPursuit.countUp) {
+                document.querySelectorAll('[data-scard-count]').forEach(function (el) { PlatPursuit.countUp(el, 900); });
+            }
+            // Quick-peek modal controller on the (fresh) #badge-peek dialog.
+            peekEl = document.getElementById('badge-peek');
+            peek = (peekEl && window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)
+                ? PlatPursuit.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
+                : null;
+            // Keyboard-enable the Series/Gallery toggle(s): roving tabindex + Arrow/Home/End move focus. MANUAL
+            // activation -- the chips are HTMX <a> links, so Enter/click does the swap natively. Toolbar + mini-bar.
+            vtoggles = Array.prototype.slice.call(document.querySelectorAll('.pp-switch')).map(function (grp) {
+                return PlatPursuit.wireTablist(grp.querySelectorAll('.pp-switch__chip'), { manual: true });
+            });
+            lastView = (viewConfig() || {}).view || 'series';
+            badgeCountLast = null;
+            initView();
+            if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }
+            var mbBadgeFilters = document.querySelector('[data-minibar-badge-filters]');
+            if (mbBadgeFilters) { mbBadgeFilters.addEventListener('click', onMbBadgeFiltersClick); }
+        }
+        wireView();
+        document.body.addEventListener('htmx:historyRestore', wireView);
     });
     </script>
 {% endblock %}

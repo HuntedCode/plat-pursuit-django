@@ -6,32 +6,19 @@
  *     re-renders in sync with the tab; we slide the island in directionally + re-init its chrome.
  *   - A search/sort change swaps only the inner #browse-results grid.
  * No pagination / infinite scroll (bounded taxonomy).
+ *
+ * Wired via PlatPursuit.onPageReady(boot): boot(first) runs the element wiring on first load AND on HTMX
+ * Back/Forward history restore (fresh DOM); the body-level listeners are guarded by `first` so they bind once.
  */
-document.addEventListener('DOMContentLoaded', function () {
+(function () {
     var PP = window.PlatPursuit || {};
     var ORDER = ['genres', 'themes'];
 
+    // Element state -- reassigned by boot() on each fresh DOM (load + history restore).
+    var tablist = null, mbSort = null, revealHandle = null, handledGrid = null, countLast = null, lastTab = 'genres';
+
     function activeChip() { return document.querySelector('.pp-switch__chip.is-active[data-tab]'); }
-    var _initChip = activeChip();
-    var lastTab = _initChip ? _initChip.getAttribute('data-tab') : 'genres';
-
-    // ── Header + .scard count-ups on load. ──
-    if (PP.countUp) {
-        var countEl = document.querySelector('[data-gtl-count]');
-        if (countEl) { PP.countUp(countEl, 900); }
-        document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); });
-    }
-
-    // ── Switcher: keyboard model + ignite. The chips are HTMX <a> links (manual mode -- arrows move focus,
-    //    click/Enter does the swap). ──
-    var tablist = PP.wireTablist
-        ? PP.wireTablist(document.querySelectorAll('.pp-switch__chip[data-tab]'), { manual: true })
-        : null;
-    function igniteActive() {
-        var chip = activeChip();
-        if (chip && PP.igniteTab) { PP.igniteTab(chip); }
-    }
-    setTimeout(igniteActive, 240);
+    function igniteActive() { var chip = activeChip(); if (chip && PP.igniteTab) { PP.igniteTab(chip); } }
 
     function updateToggleActive(tab) {
         document.querySelectorAll('.pp-switch__chip[data-tab]').forEach(function (chip) {
@@ -47,16 +34,8 @@ document.addEventListener('DOMContentLoaded', function () {
         var sub = document.getElementById('gtl-sublabel');
         if (sub) { sub.textContent = tab === 'themes' ? 'themes shown' : 'genres shown'; }
     }
-    // Clicking the already-active tab shouldn't fire a redundant swap.
-    document.body.addEventListener('htmx:beforeRequest', function (e) {
-        var el = e.detail && e.detail.elt;
-        if (el && el.classList && el.classList.contains('pp-switch__chip') && el.classList.contains('is-active')) {
-            e.preventDefault();
-        }
-    });
 
-    // ── Staggered tile reveal (shared with Browse / Badges). ──
-    var revealHandle = null, handledGrid = null;
+    // Staggered tile reveal (shared with Browse / Badges).
     function initReveal() {
         if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
         var grid = document.getElementById('items-grid');
@@ -75,8 +54,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // ── Header result-count tick (old -> new), read off the freshly-swapped grid's data-result-count. ──
-    var countLast = null;
+    // Header result-count tick (old -> new), read off the freshly-swapped grid's data-result-count.
     function tickCount(grid) {
         var headEl = document.getElementById('gtl-count');
         if (!grid || !headEl || !PP.countUp) { return; }
@@ -91,11 +69,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (mbCount) { mbCount.textContent = newVal.toLocaleString(); }
     }
 
-    // ── Mini-bar quick-sort proxy. mbSort persists (outside the island); the real select is new after each
-    //    tab swap. Bind the mbSort listener ONCE (reads the current real select at event time); re-sync values
-    //    + bind the new real select on each swap. ──
-    var mbSort = document.querySelector('[data-minibar-sort]');
+    // Mini-bar quick-sort proxy. mbSort is re-resolved by boot (it's a fresh node after a restore); the real
+    // select is new after each tab swap, so bind its sync each time (new node -> no leak).
     function currentSort() { return document.querySelector('#gtl-form select[name="sort"]'); }
+    function onMbSortChange() {
+        var real = currentSort();
+        if (real) { real.value = mbSort.value; real.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
     function syncSortProxy() {
         var real = currentSort();
         if (!mbSort || !real) { return; }
@@ -103,14 +83,15 @@ document.addEventListener('DOMContentLoaded', function () {
         mbSort.value = real.value;
         real.addEventListener('change', function () { mbSort.value = real.value; });
     }
-    if (mbSort) {
-        mbSort.addEventListener('change', function () {
-            var real = currentSort();
-            if (real) { real.value = mbSort.value; real.dispatchEvent(new Event('change', { bubbles: true })); }
-        });
-    }
 
-    document.body.addEventListener('htmx:afterSwap', function (e) {
+    // ── Body-level listeners (bound once via `first`; document.body persists across a history restore). ──
+    function onBeforeRequest(e) {
+        var el = e.detail && e.detail.elt;
+        if (el && el.classList && el.classList.contains('pp-switch__chip') && el.classList.contains('is-active')) {
+            e.preventDefault();   // clicking the already-active tab shouldn't fire a redundant swap
+        }
+    }
+    function onAfterSwap(e) {
         var t = (e.detail && e.detail.target) || e.target;
         if (!t) { return; }
         if (t.id === 'browse-results') {
@@ -135,17 +116,46 @@ document.addEventListener('DOMContentLoaded', function () {
             tickCount(g);
             initReveal();
         }
-    });
-    // Safety net: clear the settle dim when a swap request completes (incl. non-2xx / aborted).
-    document.body.addEventListener('htmx:afterRequest', function (e) {
+    }
+    function onAfterRequest(e) {
         var elt = e.detail && e.detail.elt;
         var isOurs = elt && (elt.id === 'gtl-form' || (elt.classList && elt.classList.contains('pp-switch__chip')));
         if (!isOurs) { return; }
         var r = document.getElementById('browse-results');
         if (r) { r.classList.remove('is-swapping', 'pointer-events-none'); }
-    });
+    }
 
-    initReveal();
-    if (PP.StickyReveal) { PP.StickyReveal.init(); }
-    syncSortProxy();
-});
+    // ── Element wiring: runs on first load AND on each history restore (fresh DOM). ──
+    function boot(first) {
+        var chip = activeChip();
+        lastTab = chip ? chip.getAttribute('data-tab') : 'genres';
+        handledGrid = null;
+
+        if (PP.countUp) {
+            var countEl = document.querySelector('[data-gtl-count]');
+            if (countEl) { PP.countUp(countEl, 900); }
+            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); });
+        }
+
+        tablist = PP.wireTablist
+            ? PP.wireTablist(document.querySelectorAll('.pp-switch__chip[data-tab]'), { manual: true })
+            : null;
+        setTimeout(igniteActive, 240);
+
+        mbSort = document.querySelector('[data-minibar-sort]');
+        if (mbSort) { mbSort.addEventListener('change', onMbSortChange); }
+        syncSortProxy();
+
+        initReveal();
+        if (PP.StickyReveal) { PP.StickyReveal.init(); }
+
+        if (first) {
+            document.body.addEventListener('htmx:beforeRequest', onBeforeRequest);
+            document.body.addEventListener('htmx:afterSwap', onAfterSwap);
+            document.body.addEventListener('htmx:afterRequest', onAfterRequest);
+        }
+    }
+
+    if (PP.onPageReady) { PP.onPageReady(boot); }
+    else { document.addEventListener('DOMContentLoaded', function () { boot(true); }); }
+})();

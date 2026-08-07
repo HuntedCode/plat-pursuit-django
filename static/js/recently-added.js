@@ -6,31 +6,22 @@
  *     sentinel) so the category-scoped sorts + Has Platinum filter re-render in sync; we slide the island in
  *     directionally + re-init its chrome (filter panel, badge, scroller, sort proxy).
  *   - A filter/sort change (or an InfiniteScroller page fetch) swaps only the inner #browse-results grid.
+ *
+ * Wired via PlatPursuit.onPageReady(boot): boot(first) runs the element wiring on first load AND on HTMX
+ * Back/Forward history restore (fresh DOM); the body-level listeners are guarded by `first` so they bind once.
  */
-document.addEventListener('DOMContentLoaded', function () {
+(function () {
     var PP = window.PlatPursuit || {};
     var ORDER = ['base_games', 'dlc'];
 
+    // Element state -- reassigned by boot()/initToolbar() on each fresh DOM (load + history restore + tab swap).
+    var tablist = null, mbSort = null, scroller = null, revealHandle = null, handledGrid = null, countLast = null;
+    var lastCat = 'base_games';
+    var form = null, toggle = null, panel = null, badge = null, panelAnimEnd = null, prevBadgeN = null;
+    var SKIP = { page: 1, sort: 1, category: 1 };
+
     function activeChip() { return document.querySelector('.pp-switch__chip.is-active[data-category]'); }
-    var _initChip = activeChip();
-    var lastCat = _initChip ? _initChip.getAttribute('data-category') : 'base_games';
-
-    // ── Header + .scard count-ups on load. ──
-    if (PP.countUp) {
-        var countEl = document.querySelector('[data-radded-count]');
-        if (countEl) { PP.countUp(countEl, 900); }
-        document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); });
-    }
-
-    // ── Switcher: keyboard model + ignite. ──
-    var tablist = PP.wireTablist
-        ? PP.wireTablist(document.querySelectorAll('.pp-switch__chip[data-category]'), { manual: true })
-        : null;
-    function igniteActive() {
-        var chip = activeChip();
-        if (chip && PP.igniteTab) { PP.igniteTab(chip); }
-    }
-    setTimeout(igniteActive, 240);
+    function igniteActive() { var chip = activeChip(); if (chip && PP.igniteTab) { PP.igniteTab(chip); } }
 
     function updateToggleActive(cat) {
         document.querySelectorAll('.pp-switch__chip[data-category]').forEach(function (chip) {
@@ -44,19 +35,9 @@ document.addEventListener('DOMContentLoaded', function () {
         var sub = document.getElementById('radded-sublabel');
         if (sub) { sub.textContent = cat === 'dlc' ? 'packs shown' : 'games shown'; }
     }
-    // Clicking the already-active category shouldn't fire a redundant swap.
-    document.body.addEventListener('htmx:beforeRequest', function (e) {
-        var el = e.detail && e.detail.elt;
-        if (el && el.classList && el.classList.contains('pp-switch__chip') && el.classList.contains('is-active')) {
-            e.preventDefault();
-        }
-    });
 
-    // ── Toolbar chrome (filter panel + active-count badge). Re-init on load AND on a category swap, since the
-    //    toolbar rides the #ra-view island. form/toggle/panel/badge are reassigned by initToolbar. ──
-    var form = null, toggle = null, panel = null, badge = null, panelAnimEnd = null, prevBadgeN = null;
-    var SKIP = { page: 1, sort: 1, category: 1 };
-
+    // ── Toolbar chrome (filter panel + active-count badge). Re-resolved by initToolbar on each fresh toolbar
+    //    (load, history restore, and category swap -- the toolbar rides the #ra-view island). ──
     function clearPanelAnim() {
         if (panelAnimEnd && panel) { panel.removeEventListener('transitionend', panelAnimEnd); }
         panelAnimEnd = null;
@@ -115,6 +96,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         prevBadgeN = n;
     }
+    function onFormChange() { refreshBadge(); }
+    function onFormChangeDim() {
+        var r = document.getElementById('browse-results');
+        if (r) { r.classList.add('is-swapping'); }
+    }
     function initToolbar() {
         form = document.getElementById('radded-form');
         toggle = document.getElementById('radded-filters-toggle');
@@ -123,18 +109,13 @@ document.addEventListener('DOMContentLoaded', function () {
         prevBadgeN = null;
         if (!form || !toggle || !panel) { return; }
         toggle.addEventListener('click', function () { setPanel(toggle.getAttribute('aria-expanded') !== 'true', true); });
-        form.addEventListener('change', refreshBadge);
-        // Settle the results the instant a filter/sort changes.
-        form.addEventListener('change', function () {
-            var r = document.getElementById('browse-results');
-            if (r) { r.classList.add('is-swapping'); }
-        });
+        form.addEventListener('change', onFormChange);
+        form.addEventListener('change', onFormChangeDim);   // settle the results the instant a filter changes
         refreshBadge();
         setPanel(activeCount() > 0, false);   // collapsed on load; open if a filter is already applied
     }
 
     // ── Grid: infinite scroll + staggered card reveal. `.pp-gcard` matches base + DLC (`--dlc`) cards. ──
-    var scroller = null, revealHandle = null, handledGrid = null;
     function initReveal() {
         if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
         var grid = document.getElementById('items-grid');
@@ -167,8 +148,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // ── Header result-count tick (old -> new). ──
-    var countLast = null;
     function tickCount(grid) {
         var headEl = document.getElementById('radded-count');
         if (!grid || !headEl || !PP.countUp) { return; }
@@ -183,9 +162,12 @@ document.addEventListener('DOMContentLoaded', function () {
         if (mbCount) { mbCount.textContent = newVal.toLocaleString(); }
     }
 
-    // ── Mini-bar quick-sort proxy (mbSort persists; the real select is new each category swap). ──
-    var mbSort = document.querySelector('[data-minibar-sort]');
+    // ── Mini-bar quick-sort proxy + Filters reach. ──
     function currentSort() { return document.querySelector('#radded-form select[name="sort"]'); }
+    function onMbSortChange() {
+        var real = currentSort();
+        if (real) { real.value = mbSort.value; real.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
     function syncSortProxy() {
         var real = currentSort();
         if (!mbSort || !real) { return; }
@@ -193,24 +175,21 @@ document.addEventListener('DOMContentLoaded', function () {
         mbSort.value = real.value;
         real.addEventListener('change', function () { mbSort.value = real.value; });
     }
-    if (mbSort) {
-        mbSort.addEventListener('change', function () {
-            var real = currentSort();
-            if (real) { real.value = mbSort.value; real.dispatchEvent(new Event('change', { bubbles: true })); }
-        });
-    }
-    // Mini-bar "Filters" reach (query the current toggle/form at event time -- both ride the island).
-    var mbFilters = document.querySelector('[data-minibar-filters]');
-    if (mbFilters) {
-        mbFilters.addEventListener('click', function () {
-            var tg = document.getElementById('radded-filters-toggle');
-            if (tg && tg.getAttribute('aria-expanded') !== 'true') { setPanel(true, true); }
-            var f = document.getElementById('radded-form');
-            if (f) { f.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-        });
+    function onMbFiltersClick() {
+        var tg = document.getElementById('radded-filters-toggle');
+        if (tg && tg.getAttribute('aria-expanded') !== 'true') { setPanel(true, true); }
+        var f = document.getElementById('radded-form');
+        if (f) { f.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     }
 
-    document.body.addEventListener('htmx:afterSwap', function (e) {
+    // ── Body-level listeners (bound once via `first`; document.body persists across a history restore). ──
+    function onBeforeRequest(e) {
+        var el = e.detail && e.detail.elt;
+        if (el && el.classList && el.classList.contains('pp-switch__chip') && el.classList.contains('is-active')) {
+            e.preventDefault();   // clicking the already-active category shouldn't fire a redundant swap
+        }
+    }
+    function onAfterSwap(e) {
         var t = (e.detail && e.detail.target) || e.target;
         if (!t) { return; }
         if (t.id === 'browse-results') {
@@ -239,9 +218,8 @@ document.addEventListener('DOMContentLoaded', function () {
             initReveal();
             initScroller();
         }
-    });
-    // Safety net: clear the settle dim when a swap request completes (incl. non-2xx / aborted).
-    document.body.addEventListener('htmx:afterRequest', function (e) {
+    }
+    function onAfterRequest(e) {
         var elt = e.detail && e.detail.elt;
         var ours = elt && (
             elt.id === 'radded-form'
@@ -250,12 +228,44 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!ours) { return; }
         var r = document.getElementById('browse-results');
         if (r) { r.classList.remove('is-swapping', 'pointer-events-none'); }
-    });
+    }
 
-    // ── On load. ──
-    initToolbar();
-    initReveal();
-    initScroller();
-    if (PP.StickyReveal) { PP.StickyReveal.init(); }
-    syncSortProxy();
-});
+    // ── Element wiring: runs on first load AND on each history restore (fresh DOM). ──
+    function boot(first) {
+        var chip = activeChip();
+        lastCat = chip ? chip.getAttribute('data-category') : 'base_games';
+        handledGrid = null;
+
+        if (PP.countUp) {
+            var countEl = document.querySelector('[data-radded-count]');
+            if (countEl) { PP.countUp(countEl, 900); }
+            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); });
+        }
+
+        tablist = PP.wireTablist
+            ? PP.wireTablist(document.querySelectorAll('.pp-switch__chip[data-category]'), { manual: true })
+            : null;
+        setTimeout(igniteActive, 240);
+
+        initToolbar();
+
+        mbSort = document.querySelector('[data-minibar-sort]');
+        if (mbSort) { mbSort.addEventListener('change', onMbSortChange); }
+        syncSortProxy();
+        var mbFilters = document.querySelector('[data-minibar-filters]');
+        if (mbFilters) { mbFilters.addEventListener('click', onMbFiltersClick); }
+
+        initReveal();
+        initScroller();
+        if (PP.StickyReveal) { PP.StickyReveal.init(); }
+
+        if (first) {
+            document.body.addEventListener('htmx:beforeRequest', onBeforeRequest);
+            document.body.addEventListener('htmx:afterSwap', onAfterSwap);
+            document.body.addEventListener('htmx:afterRequest', onAfterRequest);
+        }
+    }
+
+    if (PP.onPageReady) { PP.onPageReady(boot); }
+    else { document.addEventListener('DOMContentLoaded', function () { boot(true); }); }
+})();

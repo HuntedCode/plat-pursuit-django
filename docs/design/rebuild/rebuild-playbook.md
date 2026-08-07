@@ -245,6 +245,15 @@ no-JS degrade). The canonical shape (Badges, Recently Added, Genres & Themes):
   chip is clicked (`htmx:beforeRequest` → `preventDefault`). Keep tab-specific header copy (subtitle) neutral
   or update it in the handler, since the header sits outside the island. `wireTablist(chips, {manual:true})`
   for the keyboard model on the `<a>` chips. Reference JS: `static/js/{genre-theme-list,recently-added}.js`.
+- **Survive Back/Forward — wire via `PlatPursuit.onPageReady(boot)`.** HTMX restores a pushed-URL page by
+  replacing the history element's innerHTML from a snapshot; it does NOT re-fire `DOMContentLoaded` or
+  `afterSwap`, so the restored DOM is fresh, unwired nodes — but `document.body` persists. `onPageReady` runs
+  `boot(first)` on first load AND on `htmx:historyRestore`: put **element wiring** (resolve nodes, bind their
+  listeners, init reveals/scrollers) in `boot` so it re-runs on restore against the fresh nodes (the old
+  bindings died with the old nodes — no leak), and guard **body/document/window listeners** with `if (first)`
+  so they bind exactly once and keep firing across restores. Skipping this leaves a Back-restored page with a
+  dead filter panel / sort proxy / reveal. (Badges predates the helper and does the equivalent inline via a
+  `wireView()` re-run on `htmx:historyRestore`.)
 
 ### 8. Filter/sort settle (no blank-flash)
 On a filter/sort swap, dim the results container while in flight so it never freezes/blank-flashes. Add

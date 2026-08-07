@@ -1632,6 +1632,31 @@ function dismissableSheet(dialog, opts) {
     });
 }
 
+/**
+ * onPageReady -- run a page's wiring on first load AND on HTMX Back/Forward history restore.
+ *
+ * HTMX restores a pushed-URL page by replacing the history element's innerHTML from a snapshot; it does NOT
+ * re-fire DOMContentLoaded or htmx:afterSwap, so the restored DOM is all fresh, unwired nodes. But
+ * `document.body` itself persists, so body/document/window listeners survive -- naively re-running init would
+ * DOUBLE-bind them. `fn(first)` solves that: `first` is true on the initial load, false on each restore.
+ *   - Element wiring (query nodes, bind their listeners, init reveals/scrollers) runs EVERY time -- on a
+ *     restore those nodes are new, so the old bindings died with the old nodes (no leak).
+ *   - Guard body/document/window listeners with `if (first)` so they bind exactly once and keep working
+ *     across restores.
+ * This is the shared contract for every HTMX view-swap page (see rebuild-playbook section 7).
+ *
+ * @param {function(boolean)} fn  called as fn(true) on load, fn(false) on each history restore
+ */
+function onPageReady(fn) {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { fn(true); }, { once: true });
+    } else {
+        fn(true);   // script ran after DOMContentLoaded already fired (deferred / end-of-body)
+    }
+    // body persists across a history restore, so this listener (added once) keeps firing.
+    document.body.addEventListener('htmx:historyRestore', function () { fn(false); });
+}
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -1658,6 +1683,7 @@ window.PlatPursuit.wireTablist = wireTablist;
 window.PlatPursuit.syncViewParam = syncViewParam;
 window.PlatPursuit.staggerReveal = staggerReveal;
 window.PlatPursuit.dismissableSheet = dismissableSheet;
+window.PlatPursuit.onPageReady = onPageReady;
 
 /**
  * discPopovers -- the OPEN/CLOSE mechanics for a `.rp-disc` discipline-dropdown group (the shared look
