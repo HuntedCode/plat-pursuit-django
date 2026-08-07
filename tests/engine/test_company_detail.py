@@ -165,8 +165,11 @@ def test_description_renders_readmore_scaffold(client):
     content = client.get(reverse('company_detail', kwargs={'slug': co.slug})).content.decode()
 
     assert 'data-co-about' in content
+    assert 'data-co-about-text' in content          # the element the toggle JS measures/queries
     assert 'data-co-about-toggle' in content
     assert 'Read more' in content
+    assert 'aria-expanded="false"' in content       # toggle starts collapsed
+    assert 'aria-controls="co-about-text"' in content
 
 
 def test_no_description_no_about_block(client):

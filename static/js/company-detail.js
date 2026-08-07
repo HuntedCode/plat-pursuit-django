@@ -51,10 +51,17 @@
         var text = document.querySelector('[data-co-about-text]');
         var btn = document.querySelector('[data-co-about-toggle]');
         if (!text || !btn) { return; }
-        var overflows = text.scrollHeight - text.clientHeight > 2;   // measured while clamped (first paint)
+        // If the text is already expanded (e.g. a cached history restore snapshotted it open), keep the toggle
+        // available as "Read less"; otherwise only offer it when the clamped text actually overflows.
+        var expanded = !text.classList.contains('line-clamp-3');
+        var overflows = expanded || (text.scrollHeight - text.clientHeight > 2);
         btn.hidden = !overflows;
-        if (overflows && !btn.dataset.wired) {
-            btn.dataset.wired = '1';
+        if (overflows) {
+            btn.textContent = expanded ? 'Read less' : 'Read more';
+            btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            // Bind unconditionally with the stable fn ref: the browser dedups (type, listener) on the same
+            // node, and an HTMX history restore yields a FRESH node that needs the listener re-added. (A
+            // data-* guard would wrongly skip it -- the snapshot preserves the attribute but not the listener.)
             btn.addEventListener('click', onAboutToggle);
         }
     }
@@ -86,6 +93,8 @@
         var form = document.getElementById('co-form');
         if (form) { form.addEventListener('change', onFormChange); }   // same fn ref -> dedupes across boots
         wireAbout();
+        // Re-measure once web fonts settle -- a FOUT height shift can flip a borderline 3-line clamp.
+        if (document.fonts && document.fonts.ready) { document.fonts.ready.then(wireAbout); }
         initReveal();
         if (first) { document.body.addEventListener('htmx:afterSwap', onAfterSwap); }
     }

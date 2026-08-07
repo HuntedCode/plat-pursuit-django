@@ -280,7 +280,7 @@
 
   // ── Active filter badge on drawer summary ──────────────────────────────
   // Keys that don't count as "active filters" (display/pagination state only)
-  var IGNORED_KEYS = {'page': 1, 'view': 1, 'category': 1};
+  var IGNORED_KEYS = {'page': 1, 'view': 1};
 
   function updateFilterBadge() {
     var form = document.querySelector('[data-browse-form]');
