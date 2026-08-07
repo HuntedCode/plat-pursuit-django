@@ -18,6 +18,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
 | 03:30 UTC daily | `recalc_profile_counters` | Daily | None |
+| 03:45 UTC daily | `recompute_tag_covers` | Daily | None |
 | 04:30 UTC daily | `detect_dlc_and_refresh` | Daily | TrophyGroups synced (TokenKeeper current) |
 | 05:00 UTC daily | `audit_badge_coverage` | Daily | None |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
@@ -128,6 +129,16 @@ historical pass after Phase 3's rematch run.
 - **Dependencies**: None. Read-heavy; ideally runs in a low-traffic window.
 - **Idempotency**: Fully safe to re-run. Computes deltas and skips rows whose values already match. `--dry-run` reports counts without writing.
 - **Failure impact**: `Trophy.earn_rate` and `Game.played_count` get up to 24 hours stale from the daily run alone. With the incremental signal updates layered on top (see [signal-driven counter updates](../architecture/data-model.md)), values stay live in steady state and the cron acts purely as a drift-correction safety net. Rerun manually if a one-day gap is unacceptable.
+
+### recompute_tag_covers
+
+- **Schedule**: Daily, 03:45 UTC
+- **Command**: `python manage.py recompute_tag_covers`
+- **What it does**: Materializes each `Genre.representative_game` / `Theme.representative_game` — the cover shown on that tag's browse tile (`/genres/`). Per tag it picks a CONTRACT game (a curated Job-Board entry, so tiles favour recognizable titles) with a STABLE per-tag variety shuffle (a hash of tag+game id, so adjacent tiles differ but a tile never reshuffles between page loads), bounded to the most-recent `POOL_CAP` (50) contract members. Falls back to the most-recent member game with real cover art, then to any most-recent member. `bulk_update`s only the tags whose pick changed.
+- **Why it exists**: The tile cover was originally a live correlated subquery per tile, whose cost grows with the catalogue / contract-catalogue size. Materializing the pick off the request path makes the page read it as a single O(1) FK, so the tiles scale regardless of how large contracts or genres get. Slow-changing decorative data → a textbook denorm/read-model (same pattern as `recalc_earn_rates`' community stats).
+- **Dependencies**: None. Uses an indexed `EXISTS` on `Contract.igdb_id`; read-heavy over a bounded taxonomy (~20 genres / ~40 themes).
+- **Idempotency**: Fully safe to re-run — recomputes from scratch and the pick is stable (a re-run does not reshuffle). `--dry-run` reports how many covers would change without writing.
+- **Failure impact**: Tile covers get up to 24 hours stale (they shift only as new games sync into a tag). A brand-new tag with no materialized pick yet renders the neutral tag-glyph placeholder until the next run — never an error.
 
 ### recalc_profile_counters
 

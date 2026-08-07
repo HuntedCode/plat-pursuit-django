@@ -4,88 +4,143 @@
 {% block title %}Genres & Themes{% endblock %}
 
 {% block content %}
+<div class="pp-gbrowse">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ── Header Card ── #}
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-secondary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4 lg:p-5">
-            <div class="flex items-center gap-2 flex-wrap">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-secondary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-                </svg>
-                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Genres & Themes</h1>
+    {# ── Page header: accented card (primary/cyan accent) + --pp-* substance, opening-beat cascade. ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M7.5 4.27 9 5.15"></path><path d="M2 22V12a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 22 12v10"></path><path d="m2 12 10 6 10-6"></path><path d="M12 22V12"></path>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Genres &amp; Themes</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        {% if active_tab == 'themes' %}
+                            Browse by theme, the mood and setting behind the game. Pick a lens and dig in.
+                        {% else %}
+                            Browse by genre, the shape of the play. Find your next hunt by the kind of game it is.
+                        {% endif %}
+                    </p>
+                    <p class="text-[0.7rem] md:text-xs text-base-content/40 mt-1">
+                        Genre, theme, and cover data sourced from
+                        <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-hover">IGDB</a>.
+                    </p>
+                </div>
+
+                {% comment %} Active-tab count as the headline Tally; the catalogue scale (both taxonomies)
+                lives in the .scard grid below. {% endcomment %}
+                <div class="shrink-0 text-right flex items-baseline gap-1 whitespace-nowrap md:block">
+                    <span id="gtl-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-gtl-count data-countup="{{ item_count }}">{{ item_count|intcomma }}</span>
+                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">
+                        {% if active_tab == 'themes' %}theme{{ item_count|pluralize }} shown{% else %}genre{{ item_count|pluralize }} shown{% endif %}
+                    </span>
+                </div>
             </div>
-            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                Browse games by what they are and what they feel like. Data sourced from
-            <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>
-            and may not cover every game in our library.
-            </p>
+
+            <div class="grid grid-cols-2 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Genres</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ genre_count|default:0 }}">{{ genre_count|default:0|intcomma }}</div>
+                    <div class="scard__sub">with games</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Themes</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ theme_count|default:0 }}">{{ theme_count|default:0|intcomma }}</div>
+                    <div class="scard__sub">with games</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% comment %} Sticky mini-bar: identity + live count + a quick sort, re-surfaced when the toolbar scrolls
+    away. OUTSIDE #browse-results so it persists across search/sort swaps; the sentinel sits after the toolbar. {% endcomment %}
+    <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#gtl-minibar-sentinel">
+        <div class="pp-minibar__inner container mx-auto">
+            <span class="pp-minibar__id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 22V12a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 22 12v10"/><path d="m2 12 10 6 10-6"/><path d="M12 22V12"/></svg>
+                <span class="pp-minibar__title">{% if active_tab == 'themes' %}Themes{% else %}Genres{% endif %}</span>
+                <span class="pp-minibar__count" data-minibar-count title="shown">{{ item_count|intcomma }}</span>
+            </span>
+            <div class="pp-minibar__controls">
+                <select data-minibar-sort class="pp-gallery__select pp-minibar__sort" aria-label="Sort results"></select>
+            </div>
         </div>
     </div>
-
-    {# ── Tab Toggle ── #}
-    <div class="flex gap-2 mb-3">
-        <a href="?tab=genres{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}"
-           class="btn btn-sm {% if active_tab == 'genres' %}btn-secondary{% else %}btn-ghost border border-base-300{% endif %}">
-            Genres
-        </a>
-        <a href="?tab=themes{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}"
-           class="btn btn-sm {% if active_tab == 'themes' %}btn-secondary{% else %}btn-ghost border border-base-300{% endif %}">
-            Themes
-        </a>
-    </div>
-
-    {# ── Search + Sort ── #}
-    <form method="get" class="mb-3" data-browse-form
-          hx-get="{% url 'genres_list' %}" hx-target="#browse-results" hx-push-url="true" hx-swap="outerHTML" hx-select="#browse-results" hx-trigger="submit">
-        <input type="hidden" name="tab" value="{{ active_tab }}" />
-        <div class="flex flex-col md:flex-row gap-2">
-            <div class="relative flex-1">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/60 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <input type="text" name="query" value="{{ request.GET.query }}"
-                       class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
-                       placeholder="Search {{ active_tab }}..." />
-            </div>
-            <select name="sort" class="select select-bordered select-sm md:select-md w-full md:w-48">
-                <option value="alpha" {% if request.GET.sort == 'alpha' or not request.GET.sort %}selected{% endif %}>Alphabetical</option>
-                <option value="games" {% if request.GET.sort == 'games' %}selected{% endif %}>Most Games</option>
-                <option value="avg_rating" {% if request.GET.sort == 'avg_rating' %}selected{% endif %}>Highest Avg Rating</option>
-                <option value="players" {% if request.GET.sort == 'players' %}selected{% endif %}>Most Players</option>
-                <option value="plats_earned" {% if request.GET.sort == 'plats_earned' %}selected{% endif %}>Most Platinums Earned</option>
-            </select>
-            <button type="button" data-submit-btn class="btn btn-sm md:btn-md btn-primary">Search</button>
-        </div>
-    </form>
 
     {% include 'partials/ad_unit.html' with ad_slot="5392580059" %}
 
-    {# ── Tag Cards Grid ── #}
-    <div id="browse-results" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 md:gap-3">
-        {% for item in items %}
-            <a href="{% url detail_url_name slug=item.slug %}"
-               class="card bg-base-200/90 border-2 border-base-300 shadow-md hover:shadow-lg hover:border-secondary/50 transition-all duration-200 group">
-                <div class="card-body p-3 md:p-4">
-                    <h3 class="font-bold text-sm md:text-base group-hover:text-secondary transition-colors">
-                        {{ item.name }}
-                    </h3>
-                    <span class="badge badge-sm badge-ghost mt-1">{{ item.game_count|intcomma }} game{{ item.game_count|pluralize }}</span>
-                </div>
+    {% comment %} Genre / Theme switcher: the site-standard segmented control. Full-page nav (<a> links, clean
+    slate per tab) so the server renders the tab's own items + sorts; the directional slide + ignite play on
+    load in JS. {% endcomment %}
+    <div class="flex items-center justify-center md:justify-end mt-4 mb-3">
+        <div class="pp-switch" role="tablist" aria-label="Genres or themes">
+            <a href="{% url 'genres_list' %}?tab=genres" role="tab" data-tab="genres" aria-selected="{% if active_tab == 'genres' %}true{% else %}false{% endif %}"
+               class="pp-switch__chip {% if active_tab == 'genres' %}is-active{% endif %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h.01"/><path d="M20.83 12.83 12 21.66a2 2 0 0 1-2.83 0l-6-6a2 2 0 0 1 0-2.83l8.83-8.83A2 2 0 0 1 13.41 2H20a2 2 0 0 1 2 2v6.59a2 2 0 0 1-.59 1.41Z"/></svg>
+                <span class="pp-switch__lbl">Genres</span>
+                <span class="ml-1 text-[0.65rem] font-semibold opacity-60 tabular-nums">{{ genre_count|default:0|intcomma }}</span>
             </a>
-        {% empty %}
-            <div class="col-span-full card bg-base-200/90 border-2 border-base-300 shadow-lg">
-                <div class="card-body items-center text-center py-12">
-                    <p class="text-base-content/40 text-sm">No {{ active_tab }} found matching your search.</p>
-                </div>
-            </div>
-        {% endfor %}
+            <a href="{% url 'genres_list' %}?tab=themes" role="tab" data-tab="themes" aria-selected="{% if active_tab == 'themes' %}true{% else %}false{% endif %}"
+               class="pp-switch__chip {% if active_tab == 'themes' %}is-active{% endif %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r="1.5" fill="currentColor"/><circle cx="17.5" cy="10.5" r="1.5" fill="currentColor"/><circle cx="8.5" cy="7.5" r="1.5" fill="currentColor"/><circle cx="6.5" cy="12.5" r="1.5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+                <span class="pp-switch__lbl">Themes</span>
+                <span class="ml-1 text-[0.65rem] font-semibold opacity-60 tabular-nums">{{ theme_count|default:0|intcomma }}</span>
+            </a>
+        </div>
     </div>
 
+    {% comment %} Toolbar: quiet chrome. Search + sort only (genres/themes have no platform-style filters).
+    Search/sort auto-apply via browse-filters.js (HTMX grid swap); no Apply button. {% endcomment %}
+    <form data-browse-form data-live-search id="gtl-form"
+          hx-get="{% url 'genres_list' %}"
+          hx-target="#browse-results"
+          hx-push-url="true"
+          hx-swap="innerHTML"
+          hx-trigger="submit"
+          hx-indicator="#browse-results">
+        <div class="pp-toolbar-card pp-gbrowse__toolbar">
+            <div class="pp-gbrowse__bar">
+                <span class="pp-bgal__search" data-search-wrap>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" name="query" value="{{ current_query }}" placeholder="Search {% if active_tab == 'themes' %}themes{% else %}genres{% endif %}&hellip;" aria-label="Search by name" data-page-search />
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </span>
+
+                <label class="pp-gbrowse__sort">
+                    <span class="sr-only">Sort results</span>
+                    <select name="sort" class="pp-gallery__select">
+                        <option value="alpha" {% if current_sort == 'alpha' %}selected{% endif %}>Alphabetical</option>
+                        <option value="games" {% if current_sort == 'games' %}selected{% endif %}>Most Games</option>
+                        <option value="avg_rating" {% if current_sort == 'avg_rating' %}selected{% endif %}>Highest Rated</option>
+                        <option value="players" {% if current_sort == 'players' %}selected{% endif %}>Most Players</option>
+                        <option value="plats_earned" {% if current_sort == 'plats_earned' %}selected{% endif %}>Most Platinums</option>
+                    </select>
+                </label>
+            </div>
+        </div>
+
+        {# Non-filter state carried on the form so search/sort swaps stay in the active tab. #}
+        <input type="hidden" name="tab" value="{{ active_tab }}" />
+    </form>
+
+    {# Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar above. #}
+    <span id="gtl-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
+    {# ── Browse results (HTMX search/sort swap target) ── #}
+    <div id="browse-results">
+        {% include 'trophies/partials/genre_theme_list/browse_results.html' %}
+    </div>
+</div>
 {% endblock %}
 
 {% block js_scripts %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
+    <script src="{% static 'js/genre-theme-list.js' %}"></script>
 {% endblock %}

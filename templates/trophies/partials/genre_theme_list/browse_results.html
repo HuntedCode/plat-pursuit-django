@@ -1,0 +1,49 @@
+{% comment %} Genre / Theme results grid. Returned on HTMX search/sort swaps (HtmxListMixin serves this
+partial). Each item is a category tile (.pp-gtile): the representative member-game cover as a scrimmed
+backdrop with the grouping name + game count over it, plus the stat it's sorted by. `pp-reveal` is baked in
+only on HTMX swaps; on first load the inline JS adds it before observing (staggerReveal land-in). {% endcomment %}
+{% load humanize %}
+<div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ item_count }}">
+    {% for item in items %}
+    <a href="{% url detail_url_name slug=item.slug %}" class="pp-gtile" data-gtile aria-label="{{ item.name }}, {{ item.game_count }} game{{ item.game_count|pluralize }}">
+        {% comment %} Representative cover: a materialized member game (recompute_tag_covers). display_image_url
+        owns the IGDB-first fallback chain (single source of truth); has_cover_art picks cover vs generic-icon
+        styling. Null only for a brand-new tag not yet recomputed -> the tag-glyph placeholder. {% endcomment %}
+        {% if item.representative_game %}
+            <img src="{{ item.representative_game.display_image_url }}" alt="" loading="lazy" class="pp-gtile__art{% if not item.representative_game.has_cover_art %} pp-gtile__art--icon{% endif %}" />
+        {% else %}
+            <span class="pp-gtile__art pp-gtile__art--empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h.01"/><path d="M20.83 12.83 12 21.66a2 2 0 0 1-2.83 0l-6-6a2 2 0 0 1 0-2.83l8.83-8.83A2 2 0 0 1 13.41 2H20a2 2 0 0 1 2 2v6.59a2 2 0 0 1-.59 1.41Z"/></svg>
+            </span>
+        {% endif %}
+        <span class="pp-gtile__scrim"></span>
+
+        <span class="pp-gtile__body">
+            <span class="pp-gtile__name">{{ item.name }}</span>
+            <span class="pp-gtile__meta">
+                <span class="pp-gtile__count">{{ item.game_count|intcomma }} game{{ item.game_count|pluralize }}</span>
+                {% comment %} Secondary stat, shown only for the sort it belongs to (the view annotates it then). {% endcomment %}
+                {% if current_sort == 'avg_rating' and item.stat_rating %}
+                <span class="pp-gtile__stat" title="Average community rating">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>{{ item.stat_rating|floatformat:1 }}
+                </span>
+                {% elif current_sort == 'players' and item.stat_players %}
+                <span class="pp-gtile__stat" title="Players across this {{ item_type }}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>{{ item.stat_players|intcomma }}
+                </span>
+                {% elif current_sort == 'plats_earned' and item.stat_plats %}
+                <span class="pp-gtile__stat" title="Platinums earned across this {{ item_type }}">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3h14a1 1 0 0 1 1 1v3a5 5 0 0 1-4 4.9A4 4 0 0 1 13 15v2h2a1 1 0 0 1 1 1v2H8v-2a1 1 0 0 1 1-1h2v-2a4 4 0 0 1-3-3.1A5 5 0 0 1 4 7V4a1 1 0 0 1 1-1Z"/></svg>{{ item.stat_plats|intcomma }}
+                </span>
+                {% endif %}
+            </span>
+        </span>
+    </a>
+    {% empty %}
+    <div class="pp-gtile-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <p class="pp-gtile-empty__title">No {% if active_tab == 'themes' %}themes{% else %}genres{% endif %} found</p>
+        <p class="pp-gtile-empty__hint">Nothing matches your search. Try a different term or clear it.</p>
+    </div>
+    {% endfor %}
+</div>

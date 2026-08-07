@@ -1,0 +1,79 @@
+/* ============================================================
+ * GROUPING CATEGORY TILE (.pp-gtile) -- a taxonomy / collection cell (genre + theme today; reusable for
+ * franchise / company later). Unlike a game card, a grouping has no single cover, so the representative
+ * member-game cover fills the tile as a backdrop under a gradient scrim, with the grouping NAME set large
+ * over the art + a game count. It reads as a "category", not a game. Neutral surface, single cyan hover-warm
+ * (colour restraint). Depth-pass card per playbook section 4.
+ * ============================================================ */
+.pp-gtile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+@media (min-width: 640px)  { .pp-gtile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
+@media (min-width: 1024px) { .pp-gtile-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1536px) { .pp-gtile-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+.pp-gtile {
+    position: relative; display: block; aspect-ratio: 4 / 3;
+    border-radius: 13px; overflow: hidden;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
+    text-decoration: none; color: inherit;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+@media (hover: hover) {
+    .pp-gtile:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                    0 0 0 1px color-mix(in oklab, var(--pp-primary) 22%, transparent),
+                    0 14px 34px -16px color-mix(in oklab, var(--pp-primary) 42%, #000);
+    }
+    .pp-gtile:hover .pp-gtile__art { transform: scale(1.06); }
+    .pp-gtile:hover .pp-gtile__name { color: color-mix(in oklab, var(--pp-primary) 32%, #fff); }
+}
+.pp-gtile:active { transform: scale(0.985); }
+.pp-gtile:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+    .pp-gtile { transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+    .pp-gtile:active { transform: none; }
+    .pp-gtile__art { transition: none; }
+}
+
+/* Cover backdrop (representative member-game art). object-top preserves game logos as the portrait cover
+   crops into the wider tile; the scrim sits below where the name lives. */
+.pp-gtile__art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; transition: transform 0.35s ease; }
+.pp-gtile__art--icon { object-fit: contain; padding: 22px; opacity: 0.9; }   /* tier-4 generic PS icon */
+.pp-gtile__scrim {
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(4, 6, 10, 0.92) 0%, rgba(4, 6, 10, 0.55) 38%, rgba(4, 6, 10, 0.12) 68%, rgba(4, 6, 10, 0) 100%);
+}
+/* No-cover placeholder: a quiet primary-tinted field + the tag glyph, so the tile still reads deliberately. */
+.pp-gtile__art--empty { display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 30% 25%, color-mix(in oklab, var(--pp-primary) 22%, var(--pp-bg-2)), var(--pp-bg-0)); }
+.pp-gtile__art--empty svg { width: 34%; height: 34%; color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-text-mute)); opacity: 0.7; }
+
+/* Name + meta, set over the art at the bottom. */
+.pp-gtile__body { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 10px 11px; display: flex; flex-direction: column; gap: 3px; }
+.pp-gtile__name {
+    font-size: 14px; font-weight: 800; line-height: 1.15; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    transition: color 0.18s ease;
+}
+.pp-gtile__meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pp-gtile__count { font-size: 11px; font-weight: 700; color: rgba(255, 255, 255, 0.82); font-variant-numeric: tabular-nums; }
+.pp-gtile__stat { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 700; color: var(--pp-primary); font-variant-numeric: tabular-nums; padding: 1px 6px; border-radius: 5px; background: color-mix(in oklab, var(--pp-primary) 20%, rgba(0, 0, 0, 0.45)); }
+.pp-gtile__stat svg { width: 11px; height: 11px; }
+
+/* Empty state (spans the grid); reuses the shared ppResultsEmptyIn fade (browse-gallery.css). */
+.pp-gtile-empty { grid-column: 1 / -1; text-align: center; color: var(--pp-text-mute); padding: 48px 16px; }
+.pp-gtile-empty svg { width: 40px; height: 40px; margin: 0 auto 8px; opacity: 0.55; }
+.pp-gtile-empty__title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
+.pp-gtile-empty__hint { font-size: 12.5px; margin-top: 2px; }
+
+/* Scroll-reveal: staggerReveal drives the per-tile WAAPI motion; these rules only hold hidden/shown states.
+   .pp-reveal is added by JS only when it will observe (motion-gated), so tiles never stick hidden. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-gtile { opacity: 0; }
+    .pp-reveal .pp-gtile.is-revealed { opacity: 1; }
+    .pp-gtile-empty { animation: ppResultsEmptyIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+}

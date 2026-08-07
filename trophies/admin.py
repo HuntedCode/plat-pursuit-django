@@ -3362,6 +3362,8 @@ class GenreAdmin(admin.ModelAdmin):
     list_display = ('name', 'igdb_id', 'slug', 'game_count')
     search_fields = ('name', 'slug')
     readonly_fields = ('igdb_id',)
+    # Materialized browse-tile cover FK -- raw-id widget, not a full-catalogue <select>.
+    raw_id_fields = ('representative_game',)
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(_game_count=Count('genre_concepts'))
@@ -3377,6 +3379,8 @@ class ThemeAdmin(admin.ModelAdmin):
     list_display = ('name', 'igdb_id', 'slug', 'game_count')
     search_fields = ('name', 'slug')
     readonly_fields = ('igdb_id',)
+    # Materialized browse-tile cover FK -- raw-id widget, not a full-catalogue <select>.
+    raw_id_fields = ('representative_game',)
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(_game_count=Count('theme_concepts'))

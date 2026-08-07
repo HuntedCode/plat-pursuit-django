@@ -6265,6 +6265,12 @@ class Genre(models.Model):
     igdb_id = models.IntegerField(unique=True, db_index=True)
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=100, unique=True)
+    # Materialized cover for the browse tile: a representative member game (contract-preferred, stable
+    # per-tag variety, most-recent fallback), recomputed off the request path by `recompute_tag_covers`.
+    # Read O(1) at render (a single FK) so the tile scales regardless of catalogue / contract-catalogue size.
+    representative_game = models.ForeignKey(
+        'Game', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
 
     class Meta:
         ordering = ['name']
@@ -6278,6 +6284,10 @@ class Theme(models.Model):
     igdb_id = models.IntegerField(unique=True, db_index=True)
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=100, unique=True)
+    # Materialized browse-tile cover -- see Genre.representative_game.
+    representative_game = models.ForeignKey(
+        'Game', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
 
     class Meta:
         ordering = ['name']

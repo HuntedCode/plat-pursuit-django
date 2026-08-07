@@ -2,17 +2,16 @@ import logging
 
 from core.services.tracking import track_page_view
 from django.db.models import (
-    Q, F, Count, Avg, Subquery, OuterRef, Prefetch, Value, IntegerField,
-    FloatField, Case, When,
+    Q, F, Count, Avg, Subquery, OuterRef, Prefetch, IntegerField, FloatField,
 )
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.urls import reverse_lazy
-from django.views.generic import ListView, TemplateView
+from django.views.generic import ListView
 
 from trophies.mixins import HtmxListMixin
 from ..models import (
-    Genre, Theme, Game, Trophy, Badge, UserConceptRating, ProfileGame,
+    Genre, Theme, Game, Trophy, UserConceptRating, ProfileGame,
     ConceptGenre, ConceptTheme,
 )
 from ..forms import GameSearchForm
@@ -25,93 +24,122 @@ from .browse_helpers import (
 logger = logging.getLogger("psn_api")
 
 
-class GenreThemeListView(TemplateView):
-    """Combined browse page for genres and themes with a tab toggle."""
+class GenreThemeListView(HtmxListMixin, ListView):
+    """Combined browse page for genres and themes with a `?tab=` toggle.
+
+    A bounded taxonomy (~20 genres / ~40 themes with games), so there is no
+    pagination -- the whole tab renders in one grid. HTMX search/sort swap the
+    `#browse-results` partial (like Browse Games), replacing the old full-page
+    `hx-select` re-render. Each tag's category-tile cover is the materialized
+    `representative_game` FK (recompute_tag_covers), read O(1) here -- no live
+    cover subquery -- so the tiles scale regardless of catalogue size.
+    """
     template_name = 'trophies/genre_theme_list.html'
+    partial_template_name = 'trophies/partials/genre_theme_list/browse_results.html'
+    context_object_name = 'items'
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Genres & Themes'},
-        ]
+    VALID_TABS = ('genres', 'themes')
 
-        active_tab = self.request.GET.get('tab', 'genres')
+    def get_tab(self):
+        tab = self.request.GET.get('tab', 'genres')
+        return tab if tab in self.VALID_TABS else 'genres'
+
+    def _tab_config(self):
+        """Per-tab model / through-table / join wiring for the active tab."""
+        if self.get_tab() == 'themes':
+            return {
+                'model': Theme, 'through': ConceptTheme, 'tag_field': 'theme',
+                'through_path': 'concept__concept_themes__theme',
+                'item_type': 'theme', 'detail_url_name': 'theme_detail',
+            }
+        return {
+            'model': Genre, 'through': ConceptGenre, 'tag_field': 'genre',
+            'through_path': 'concept__concept_genres__genre',
+            'item_type': 'genre', 'detail_url_name': 'genre_detail',
+        }
+
+    def get_queryset(self):
+        cfg = self._tab_config()
+        Through = cfg['through']
+        tag_field = cfg['tag_field']
         query = self.request.GET.get('query', '').strip()
         sort_val = self.request.GET.get('sort', 'alpha')
 
-        context['active_tab'] = active_tab
-
-        # Pick the through-model and concept join field for whichever tab is
-        # active. Each Subquery scoped through this row's tag → ConceptX →
-        # Concept → Game keeps the outer query shape simple (one row per tag).
-        if active_tab == 'themes':
-            ThroughModel = ConceptTheme
-            tag_field = 'theme'
-            items = Theme.objects.all()
-            context['item_type'] = 'theme'
-            context['detail_url_name'] = 'theme_detail'
-        else:
-            ThroughModel = ConceptGenre
-            tag_field = 'genre'
-            items = Genre.objects.all()
-            context['item_type'] = 'genre'
-            context['detail_url_name'] = 'genre_detail'
-
-        def _through_subquery(*aggregate_args, **aggregate_kwargs):
-            """Build a Subquery scoped to this tag row.
-
-            Each annotation needs to count/avg something across this tag's
-            ConceptGenre/ConceptTheme rows. Wrapping each one in its own
-            Subquery keeps the outer queryset shape at one row per tag, so
-            chained sort annotations don't pile joins onto each other.
-            """
-            agg_name, agg_expr = next(iter(aggregate_kwargs.items()))
+        def _through_subquery(output_field, **agg):
+            """A Subquery scoped to this tag row -- keeps the outer queryset at one
+            row per tag so chained sort annotations don't pile joins onto each other."""
+            name, expr = next(iter(agg.items()))
             return Subquery(
-                ThroughModel.objects.filter(**{tag_field: OuterRef('pk')})
-                .values(tag_field)
-                .annotate(**{agg_name: agg_expr})
-                .values(agg_name)[:1],
-                output_field=aggregate_args[0] if aggregate_args else IntegerField(),
+                Through.objects.filter(**{tag_field: OuterRef('pk')})
+                .values(tag_field).annotate(**{name: expr}).values(name)[:1],
+                output_field=output_field,
             )
 
-        items = items.annotate(
+        # Representative cover is materialized as an FK (recompute_tag_covers), read O(1) here -- no live cover
+        # subquery, so the tile scales regardless of catalogue / contract-catalogue size. select_related the
+        # game + its concept/igdb_match for display_image_url; defer the never-read raw_response blob.
+        items = cfg['model'].objects.annotate(
             game_count=_through_subquery(IntegerField(), c=Count('concept__games', distinct=True)),
-        ).filter(game_count__gt=0)
+        ).filter(game_count__gt=0).select_related(
+            'representative_game', 'representative_game__concept', 'representative_game__concept__igdb_match',
+        ).defer('representative_game__concept__igdb_match__raw_response')
 
         if query:
             items = items.filter(name__icontains=query)
 
+        # Sort. The secondary-stat sorts annotate a non-underscore field (template-accessible) so the tile
+        # can surface the stat it's sorted by. Lower('name') keeps Unicode/emoji names sorting correctly.
         if sort_val == 'games':
-            items = items.order_by('-game_count', 'name')
-        elif sort_val == 'avg_rating':
-            items = items.annotate(
-                _avg_rating=_through_subquery(
+            return items.order_by('-game_count', Lower('name'))
+        if sort_val == 'avg_rating':
+            return items.annotate(
+                stat_rating=_through_subquery(
                     FloatField(),
                     v=Avg('concept__user_ratings__overall_rating',
                           filter=Q(concept__user_ratings__concept_trophy_group__isnull=True)),
                 ),
-            ).order_by(F('_avg_rating').desc(nulls_last=True), 'name')
-        elif sort_val == 'players':
-            items = items.annotate(
-                _total_players=_through_subquery(
+            ).order_by(F('stat_rating').desc(nulls_last=True), Lower('name'))
+        if sort_val == 'players':
+            return items.annotate(
+                stat_players=_through_subquery(
                     IntegerField(),
-                    c=Count('concept__games__played_by', distinct=True),
+                    # Distinct PROFILES, not ProfileGame rows -- a hunter owning N games in the tag is one player.
+                    c=Count('concept__games__played_by__profile', distinct=True),
                 ),
-            ).order_by(F('_total_players').desc(nulls_last=True), 'name')
-        elif sort_val == 'plats_earned':
-            items = items.annotate(
-                _total_plats=_through_subquery(
+            ).order_by(F('stat_players').desc(nulls_last=True), Lower('name'))
+        if sort_val == 'plats_earned':
+            return items.annotate(
+                stat_plats=_through_subquery(
                     IntegerField(),
                     c=Count('concept__games__played_by',
                             filter=Q(concept__games__played_by__has_plat=True),
                             distinct=True),
                 ),
-            ).order_by(F('_total_plats').desc(nulls_last=True), 'name')
-        else:
-            items = items.order_by('name')
+            ).order_by(F('stat_plats').desc(nulls_last=True), Lower('name'))
+        return items.order_by(Lower('name'))
 
-        context['items'] = items
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        cfg = self._tab_config()
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Genres & Themes'},
+        ]
+        context['active_tab'] = self.get_tab()
+        context['item_type'] = cfg['item_type']
+        context['detail_url_name'] = cfg['detail_url_name']
+        context['current_sort'] = self.request.GET.get('sort', 'alpha')
+        context['current_query'] = self.request.GET.get('query', '').strip()
+        context['item_count'] = len(context['items'])
+
+        # Header stats: how many genres / themes actually carry games. A distinct existence count is lighter
+        # than a per-tag COUNT(DISTINCT games) aggregate -- we only need "has >=1 game", not the tally.
+        context['genre_count'] = (
+            Genre.objects.filter(genre_concepts__concept__games__isnull=False).distinct().count()
+        )
+        context['theme_count'] = (
+            Theme.objects.filter(theme_concepts__concept__games__isnull=False).distinct().count()
+        )
 
         context['seo_description'] = (
             "Browse PlayStation games by genre and theme. "
