@@ -221,7 +221,6 @@ class TagDetailBaseView(HtmxListMixin, ListView):
         )
         context['total_game_count'] = stats['games'] or 0
         context['tag_stats'] = stats
-        context['representative_game'] = tag.representative_game   # hero cover (select_related in dispatch)
 
         # Related-tags rail: the materialized co-occurrence slug list, loaded + reordered + game_count-annotated
         # (bounded to RELATED_N tiles). Rendered with the shared .pp-gtile.
@@ -277,15 +276,7 @@ class GenreDetailView(TagDetailBaseView):
     template_name = 'trophies/tag_detail.html'
 
     def dispatch(self, request, *args, **kwargs):
-        # select_related the hero cover chain so representative_game.display_image_url is free in the header.
-        self.genre = (
-            Genre.objects.select_related(
-                'representative_game', 'representative_game__concept',
-                'representative_game__concept__igdb_match',
-            )
-            .defer('representative_game__concept__igdb_match__raw_response')
-            .filter(slug=kwargs['slug']).first()
-        )
+        self.genre = Genre.objects.filter(slug=kwargs['slug']).first()
         if not self.genre:
             raise Http404
         return super().dispatch(request, *args, **kwargs)
@@ -329,14 +320,7 @@ class ThemeDetailView(TagDetailBaseView):
     template_name = 'trophies/tag_detail.html'
 
     def dispatch(self, request, *args, **kwargs):
-        self.theme = (
-            Theme.objects.select_related(
-                'representative_game', 'representative_game__concept',
-                'representative_game__concept__igdb_match',
-            )
-            .defer('representative_game__concept__igdb_match__raw_response')
-            .filter(slug=kwargs['slug']).first()
-        )
+        self.theme = Theme.objects.filter(slug=kwargs['slug']).first()
         if not self.theme:
             raise Http404
         return super().dispatch(request, *args, **kwargs)

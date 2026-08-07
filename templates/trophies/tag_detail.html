@@ -12,24 +12,19 @@
 <div class="pp-gbrowse">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {% comment %} Hero header: the tag's materialized representative_game cover as a scrimmed cinematic
-    backdrop, name + type + .scard stats over it. Coverless tags fall back to the plain accented surface. {% endcomment %}
-    <section class="pp-taghero mb-3">
-        {% if representative_game %}
-        <img src="{{ representative_game.display_image_url }}" alt="" loading="lazy" class="pp-taghero__bg" />
-        {% endif %}
-        <span class="pp-taghero__scrim"></span>
-        <div class="pp-taghero__body pp-head-cascade">
-            <span class="pp-taghero__type">
+    {# ── Page header: accented card (primary/cyan accent) + --pp-* substance, opening-beat cascade. ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-center gap-2 flex-wrap">
                 {% if tag_type == 'Theme' %}
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r="2.5"/><path d="M17 2H7a5 5 0 0 0-5 5v10a5 5 0 0 0 5 5h10a5 5 0 0 0 5-5V7a5 5 0 0 0-5-5Z"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r="2.5"/><path d="M17 2H7a5 5 0 0 0-5 5v10a5 5 0 0 0 5 5h10a5 5 0 0 0 5-5V7a5 5 0 0 0-5-5Z"/></svg>
                 {% else %}
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h.01"/><path d="M20.83 12.83 12 21.66a2 2 0 0 1-2.83 0l-6-6a2 2 0 0 1 0-2.83l8.83-8.83A2 2 0 0 1 13.41 2H20a2 2 0 0 1 2 2v6.59a2 2 0 0 1-.59 1.41Z"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h.01"/><path d="M20.83 12.83 12 21.66a2 2 0 0 1-2.83 0l-6-6a2 2 0 0 1 0-2.83l8.83-8.83A2 2 0 0 1 13.41 2H20a2 2 0 0 1 2 2v6.59a2 2 0 0 1-.59 1.41Z"/></svg>
                 {% endif %}
-                {{ tag_type }}
-            </span>
-            <h1 class="pp-taghero__name mt-1.5">{{ tag_name }}</h1>
-            <p class="pp-taghero__intro mt-1">
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ tag_name }}</h1>
+                <span class="text-[0.6rem] font-extrabold uppercase tracking-wider text-primary bg-primary/15 border border-primary/30 rounded-full px-2 py-0.5">{{ tag_type }}</span>
+            </div>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                 {{ total_game_count|intcomma }} game{{ total_game_count|pluralize }} {{ tag_intro_suffix }}
             </p>
 

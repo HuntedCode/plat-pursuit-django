@@ -51,7 +51,7 @@ def test_genre_detail_renders_hero_and_grid(client):
     content = resp.content.decode()
 
     assert resp.status_code == 200
-    assert 'pp-taghero' in content            # rebuilt hero header
+    assert 'border-l-primary' in content      # rebuilt accented header
     assert 'Shooter' in content
     assert 'pp-gcard' in content              # shared game card grid
     assert 'Bang Bang' in content
@@ -67,7 +67,7 @@ def test_theme_detail_renders(client):
 
     content = client.get(reverse('theme_detail', kwargs={'slug': 'horror'})).content.decode()
 
-    assert 'pp-taghero' in content
+    assert 'border-l-primary' in content
     assert 'Horror' in content
     assert 'Spooky' in content
 
