@@ -24,7 +24,11 @@
 }
 .pp-switch__chip:hover { color: var(--pp-text); }
 .pp-switch__chip:active { transform: translateY(1px); }
-.pp-switch__chip.is-active {
+.pp-switch__chip.is-active,
+/* Radio-backed variant (a segmented FILTER, not a JS view toggle -- e.g. the Franchise/Series/All type
+   toggle): a chip whose wrapped radio is checked reads active, so native form submit + browser Back keep the
+   selection correct with zero JS. Harmless for the JS-active switchers (their chips wrap no checked radio). */
+.pp-switch__chip:has(input:checked) {
     color: var(--pp-text); font-weight: 700;
     background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
     border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));

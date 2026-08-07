@@ -1,11 +1,13 @@
-{% comment %} Shared category tile (.pp-gtile) -- used by the Genres & Themes LIST grid and the tag-DETAIL
-related-tags rail. The representative member-game cover is a scrimmed backdrop with the tag name + game count
-over it. Expects: `tag` (a Genre/Theme with `representative_game` + a `game_count` annotation), `detail_url_name`,
-`item_type`. Optional `current_sort` (LIST page only) shows the stat the grid is sorted by. {% endcomment %}
+{% comment %} Shared GROUPING tile (.pp-gtile) -- used by the Genres & Themes list grid, the tag-detail related
+rail, AND the Franchise/Company lists. The representative member-game cover is a scrimmed backdrop with the
+grouping name + game count over it. Expects: `tag` (a Genre/Theme/Franchise with `representative_game` +
+a `game_count` annotation), `detail_url_name`, `item_type`. The tile ADAPTS to franchise-only fields when the
+object carries them: `source_type` -> a Franchise/Series corner badge; `version_count` -> a "· N versions"
+suffix. Optional `current_sort` (genre/theme LIST only) shows the stat the grid is sorted by. {% endcomment %}
 {% load humanize %}
 <a href="{% url detail_url_name slug=tag.slug %}" class="pp-gtile" data-gtile aria-label="{{ tag.name }}, {{ tag.game_count }} game{{ tag.game_count|pluralize }}">
     {% comment %} Cover via display_image_url (single-source IGDB-first chain); has_cover_art picks cover vs
-    generic-icon styling. Null only for a brand-new tag not yet recomputed -> the tag-glyph placeholder. {% endcomment %}
+    generic-icon styling. Null only for a brand-new grouping not yet recomputed -> the tag-glyph placeholder. {% endcomment %}
     {% if tag.representative_game %}
         <img src="{{ tag.representative_game.display_image_url }}" alt="" loading="lazy" class="pp-gtile__art{% if not tag.representative_game.has_cover_art %} pp-gtile__art--icon{% endif %}" />
     {% else %}
@@ -15,10 +17,15 @@ over it. Expects: `tag` (a Genre/Theme with `representative_game` + a `game_coun
     {% endif %}
     <span class="pp-gtile__scrim"></span>
 
+    {% comment %} Franchise/Company only: a type corner badge (Series vs Franchise). Absent on genres/themes. {% endcomment %}
+    {% if tag.source_type %}
+    <span class="pp-gtile__tag">{% if tag.source_type == 'collection' %}Series{% else %}Franchise{% endif %}</span>
+    {% endif %}
+
     <span class="pp-gtile__body">
         <span class="pp-gtile__name">{{ tag.name }}</span>
         <span class="pp-gtile__meta">
-            <span class="pp-gtile__count">{{ tag.game_count|intcomma }} game{{ tag.game_count|pluralize }}</span>
+            <span class="pp-gtile__count">{{ tag.game_count|intcomma }} game{{ tag.game_count|pluralize }}{% if tag.version_count and tag.version_count != tag.game_count %} &middot; {{ tag.version_count|intcomma }} version{{ tag.version_count|pluralize }}{% endif %}</span>
             {% comment %} Secondary stat, shown only for the sort it belongs to (the view annotates it then). {% endcomment %}
             {% if current_sort == 'avg_rating' and tag.stat_rating %}
             <span class="pp-gtile__stat" title="Average community rating">

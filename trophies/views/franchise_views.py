@@ -145,7 +145,6 @@ class FranchiseListView(HtmxListMixin, ListView):
             version_count=_per_franchise_count(
                 'concept__games', extra_filter=visible_link_filter,
             ),
-            **_franchise_cover_annotations(),
         ).filter(
             Q(source_type='franchise', version_count__gt=0)
             | Q(source_type='collection', version_count__gt=0),
@@ -182,7 +181,10 @@ class FranchiseListView(HtmxListMixin, ListView):
         else:
             order = [Lower('name')]
 
-        return qs.order_by(*order)
+        # Materialized tile cover (recompute_tag_covers) read O(1) via select_related -- no live cover subquery.
+        return qs.select_related(
+            'representative_game', 'representative_game__concept', 'representative_game__concept__igdb_match',
+        ).defer('representative_game__concept__igdb_match__raw_response').order_by(*order)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

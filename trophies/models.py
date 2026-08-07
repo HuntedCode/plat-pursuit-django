@@ -6446,6 +6446,11 @@ class Franchise(models.Model):
     source_type = models.CharField(
         max_length=20, choices=SOURCE_TYPE_CHOICES, default='franchise',
     )
+    # Materialized browse-tile cover -- see Genre.representative_game. Recomputed by `recompute_tag_covers`
+    # (the cover pick honours the ConceptFranchise is_excluded / is_spinoff flags).
+    representative_game = models.ForeignKey(
+        'Game', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
 
     class Meta:
         ordering = ['name']
