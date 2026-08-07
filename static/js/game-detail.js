@@ -1,7 +1,7 @@
 /**
  * Game Detail Page controller (rebuild).
  *
- * Owns: the Trophies/Roadmap/Community/About view switcher (shared .pp-switch +
+ * Owns: the Trophies/Ratings/Ranks/About view switcher (shared .pp-switch +
  * PlatPursuit.wireTablist/slideViewIn/igniteTab/syncViewParam), the hero screenshot
  * lightbox, the trophy-filter settle + scroll restore, hero count-ups, and deep-link
  * jumps ([data-gd-goto]). The quick-rate modal block is carried over from the legacy
@@ -613,13 +613,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function lbJumpToRank(panel, n) { lbJump(panel, n); }
 
     // ============================================================
-    // View switcher: Trophies (default) / Roadmap / Community / About
+    // View switcher: Trophies (default) / Ratings / Ranks / About
     // ============================================================
     (function () {
         const viewTabs = document.querySelectorAll('#gd-switch .pp-switch__chip[data-view]');
         const views = document.querySelectorAll('.gd-view');
         if (!viewTabs.length || !views.length) return;
-        const VIEW_ORDER = ['trophies', 'roadmap', 'ratings', 'leaderboard', 'about'];
+        const VIEW_ORDER = ['trophies', 'ratings', 'leaderboard', 'about'];
         // The minibar's per-view extras (sort / count / Filters) are gated by data-mb-active, which showView()
         // keeps in sync with the active view.
         const minibar = document.querySelector('.gd-minibar');
@@ -672,7 +672,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => { if (initTab.classList.contains('is-active')) PlatPursuit.igniteTab(initTab); }, 260);
         }
 
-        // Deep-link jumps (e.g. the hero roadmap teaser -> Roadmap tab).
+        // Deep-link jumps (e.g. the hero "X Players" link -> Ranks tab).
         document.querySelectorAll('[data-gd-goto]').forEach((el) => {
             el.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -1378,26 +1378,6 @@ document.addEventListener('DOMContentLoaded', () => {
         window.scrollTo({ top: parseInt(savedScroll, 10) || 0, behavior: reduce ? 'auto' : 'smooth' });
         localStorage.removeItem(scrollKey);
     }
-
-    // Legacy DLC tab bar for the Roadmap CTA card (Phase 3 rebuild still pending). Restores the per-CTG
-    // panel switch that lived in community_tabs_section.html before the Phase 4 Ratings rebuild removed it.
-    // The Ratings tab uses its own [data-rate-ctg] selector; this only drives the roadmap card's .community-tab-*.
-    (function legacyRoadmapDlcTabs() {
-        const btns = Array.prototype.slice.call(document.querySelectorAll('.community-tab-btn'));
-        if (!btns.length) return;
-        btns.forEach((btn) => btn.addEventListener('click', () => {
-            const id = btn.dataset.ctgId;
-            btns.forEach((b) => {
-                const on = b.dataset.ctgId === id;
-                b.classList.toggle('bg-primary', on);
-                b.classList.toggle('text-primary-content', on);
-                b.classList.toggle('shadow-sm', on);
-                b.classList.toggle('text-base-content/60', !on);
-                b.setAttribute('aria-selected', on ? 'true' : 'false');
-            });
-            document.querySelectorAll('.community-tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.ctgId !== id));
-        }));
-    })();
 
     // ============================================================
     // Ratings tab: per-group (DLC) selector + quick-rate modal (rebuilt in Phase 4).

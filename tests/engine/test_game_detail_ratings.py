@@ -253,9 +253,18 @@ def test_ratings_tab_replaced_community(client):
     assert 'id="gd-view-ratings"' in content
     assert 'data-view="ratings"' in content
     assert '<span class="pp-switch__lbl">Ratings</span>' in content
-    assert 'data-gd-goto="ratings"' in content          # hero "Players" jump retargeted
     assert 'gd-view-community' not in content
     assert '<span class="pp-switch__lbl">Community</span>' not in content
+
+
+def test_roadmap_tab_removed_and_players_link_goes_to_ranks(client):
+    """The Roadmap tab/panel were removed from game detail; the hero "X Players" jump now targets the Ranks
+    (leaderboard) tab, not Ratings."""
+    content = _detail(client, GameFactory(defined_trophies=_DEFINED, played_count=100))
+    assert 'data-view="roadmap"' not in content and 'gd-view-roadmap' not in content   # tab + panel gone
+    assert '<span class="pp-switch__lbl">Roadmap</span>' not in content
+    assert 'data-gd-goto="leaderboard"' in content and 'href="?view=leaderboard"' in content
+    assert 'data-gd-goto="ratings"' not in content     # the Players jump no longer points at Ratings
 
 
 def test_ratings_stats_strip_surfaces_denormed_numbers(client):
@@ -359,7 +368,7 @@ def test_quick_takes_count_in_title():
 def test_minibar_has_per_tab_icons_and_ratings_group_slot(client):
     """The sticky minibar carries an icon per tab (matches the active one) + the Base/DLC group slot."""
     content = _detail(client, GameFactory(defined_trophies=_DEFINED))
-    for tab in ('trophies', 'roadmap', 'ratings', 'leaderboard', 'about'):
+    for tab in ('trophies', 'ratings', 'leaderboard', 'about'):
         assert 'data-mb-only="' + tab + '"' in content
     assert 'data-rate-mb-title' in content
 
