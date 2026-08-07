@@ -24,9 +24,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // ── Switcher: keyboard model + ignite. The chips are HTMX <a> links (manual mode -- arrows move focus,
     //    click/Enter does the swap). ──
-    if (PP.wireTablist) {
-        PP.wireTablist(document.querySelectorAll('.pp-switch__chip[data-tab]'), { manual: true });
-    }
+    var tablist = PP.wireTablist
+        ? PP.wireTablist(document.querySelectorAll('.pp-switch__chip[data-tab]'), { manual: true })
+        : null;
     function igniteActive() {
         var chip = activeChip();
         if (chip && PP.igniteTab) { PP.igniteTab(chip); }
@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', function () {
             chip.classList.toggle('is-active', on);
             chip.setAttribute('aria-selected', on ? 'true' : 'false');
         });
+        if (tablist) { tablist.syncTabindex(); }   // re-point the roving tab-stop at the new active chip
     }
     function updateTabLabels(tab) {
         var title = document.querySelector('.pp-minibar__title');
@@ -131,7 +132,6 @@ document.addEventListener('DOMContentLoaded', function () {
             lastTab = newTab;
             handledGrid = g;
             syncSortProxy();
-            if (PP.StickyReveal) { PP.StickyReveal.init(); }
             tickCount(g);
             initReveal();
         }

@@ -107,6 +107,11 @@
         </div>
     </div>
 
+    {% comment %} Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar. OUTSIDE
+    the swap island (like Badges) so it persists across category swaps -- StickyReveal's observer can't re-point
+    at a replaced sentinel. {% endcomment %}
+    <span id="radded-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
     {% comment %} View island (#ra-view) = toolbar + results + infinite-scroll sentinel. The switcher HTMX-swaps
     this whole island so the category-scoped toolbar re-renders in sync (target=='ra-view'); a filter/sort
     change swaps only the inner #browse-results grid. recently-added.js re-inits the island on a category swap. {% endcomment %}

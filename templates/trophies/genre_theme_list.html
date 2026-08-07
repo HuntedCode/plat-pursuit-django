@@ -91,6 +91,11 @@
         </div>
     </div>
 
+    {% comment %} Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar. OUTSIDE
+    the swap island (like Badges) so it persists across tab swaps -- StickyReveal's observer can't re-point at
+    a replaced sentinel. {% endcomment %}
+    <span id="gtl-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
     {% comment %} View island (#gt-view) = toolbar + results. The switcher HTMX-swaps this whole island so the
     toolbar re-renders in sync with the grid (target=='gt-view'); a search/sort change swaps only the inner
     #browse-results. genre-theme-list.js re-inits the island + slides it in directionally on a tab swap. {% endcomment %}

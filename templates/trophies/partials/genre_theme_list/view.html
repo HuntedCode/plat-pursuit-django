@@ -37,9 +37,6 @@ A search/sort change swaps only the inner #browse-results grid. {% endcomment %}
     <input type="hidden" name="tab" value="{{ active_tab }}" />
 </form>
 
-{# Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar above. #}
-<span id="gtl-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
-
 {# Browse results (HTMX search/sort swap target). #}
 <div id="browse-results">
     {% include 'trophies/partials/genre_theme_list/browse_results.html' %}

@@ -23,9 +23,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ── Switcher: keyboard model + ignite. ──
-    if (PP.wireTablist) {
-        PP.wireTablist(document.querySelectorAll('.pp-switch__chip[data-category]'), { manual: true });
-    }
+    var tablist = PP.wireTablist
+        ? PP.wireTablist(document.querySelectorAll('.pp-switch__chip[data-category]'), { manual: true })
+        : null;
     function igniteActive() {
         var chip = activeChip();
         if (chip && PP.igniteTab) { PP.igniteTab(chip); }
@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', function () {
             chip.classList.toggle('is-active', on);
             chip.setAttribute('aria-selected', on ? 'true' : 'false');
         });
+        if (tablist) { tablist.syncTabindex(); }   // re-point the roving tab-stop at the new active chip
     }
     function updateCatLabels(cat) {
         var sub = document.getElementById('radded-sublabel');
@@ -234,7 +235,6 @@ document.addEventListener('DOMContentLoaded', function () {
             handledGrid = g;
             initToolbar();          // re-wire the freshly-rendered toolbar (toggle / panel / badge)
             syncSortProxy();
-            if (PP.StickyReveal) { PP.StickyReveal.init(); }
             tickCount(g);
             initReveal();
             initScroller();

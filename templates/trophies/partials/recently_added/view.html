@@ -96,9 +96,6 @@ swaps only the inner #browse-results grid. {% endcomment %}
     <input type="hidden" name="page" value="{{ page_obj.number|default:'1' }}" />
 </form>
 
-{# Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar above. #}
-<span id="radded-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
-
 {# ── Browse results (HTMX filter-swap target = just the grid) ── #}
 <div id="browse-results">
     {% include 'trophies/partials/recently_added/browse_results.html' %}
