@@ -1,5 +1,5 @@
-"""Materialize the grouping browse read-models: `representative_game` (tile cover) for Genres, Themes, and
-Franchises, plus `related_tags` (detail-page rail) for Genres and Themes.
+"""Materialize the grouping browse read-models: `representative_game` (tile cover) for Genres, Themes,
+Franchises, and Companies, plus `related_tags` (detail-page rail) for Genres and Themes.
 
 Both are slow-changing derived data that would otherwise cost a per-request query, so we compute them off the
 request path here and the pages read them O(1).
@@ -26,7 +26,8 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count, Exists, OuterRef, Q
 
 from trophies.models import (
-    Genre, Theme, Franchise, Game, Contract, ConceptGenre, ConceptTheme, ConceptFranchise,
+    Genre, Theme, Franchise, Company, Game, Contract,
+    ConceptGenre, ConceptTheme, ConceptFranchise, ConceptCompany,
 )
 from trophies.services.game_grouping_service import _MOST_RECENT_RELEASE_ORDER
 
@@ -46,8 +47,8 @@ _FRANCHISE_COVER_FILTER = Q(
 
 class Command(BaseCommand):
     help = (
-        "Materialize Genre/Theme/Franchise.representative_game (the tile cover) + Genre/Theme.related_tags "
-        "(the detail rail's co-occurring tags). Read O(1) at render."
+        "Materialize Genre/Theme/Franchise/Company.representative_game (the tile cover) + Genre/Theme."
+        "related_tags (the detail rail's co-occurring tags). Read O(1) at render."
     )
 
     POOL_CAP = 50   # bound the per-grouping contract pool so the offline shuffle never scans a whole big one
@@ -63,6 +64,10 @@ class Command(BaseCommand):
         {'model': Franchise, 'through': ConceptFranchise, 'field': 'franchise',
          'path': 'concept__concept_franchises__franchise', 'cover_filter': _FRANCHISE_COVER_FILTER,
          'related': False, 'iterate': Q(franchise_concepts__is_excluded=False)},
+        # Companies have no link-level exclusion flags, so no cover_filter; iterate only companies with games.
+        {'model': Company, 'through': ConceptCompany, 'field': 'company',
+         'path': 'concept__concept_companies__company', 'cover_filter': None,
+         'related': False, 'iterate': Q(company_concepts__concept__games__isnull=False)},
     ]
 
     def add_arguments(self, parser):

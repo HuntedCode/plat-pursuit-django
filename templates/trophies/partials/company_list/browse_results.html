@@ -1,8 +1,16 @@
-{# Company browse results partial. Returned on HTMX requests. #}
-{% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
-
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-2.5">
-    {% include 'trophies/partials/company_list/company_cards.html' %}
+{% comment %} Company browse results -- grid-only, infinite scroll. Returned on HTMX filter swaps AND the
+InfiniteScroller's ?page fetches (X-Requested-With, via the HtmxListMixin XHR guard). The sentinel + loading
+live in company_list.html (outside #browse-results) so only the grid swaps on a filter change. pp-reveal is
+baked in on HTMX swaps only (matches the htmx-settle-strips-classes fix). {% endcomment %}
+{% load humanize %}
+<div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ paginator.count }}">
+    {% for company in object_list %}
+    {% include 'trophies/partials/tag_tile.html' with tag=company detail_url_name='company_detail' item_type='company' current_sort=current_sort %}
+    {% empty %}
+    <div class="pp-gtile-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1"/></svg>
+        <p class="pp-gtile-empty__title">No companies found</p>
+        <p class="pp-gtile-empty__hint">Nothing matches your filters. Try a different term, role, or clear the filters.</p>
+    </div>
+    {% endfor %}
 </div>
-
-{% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}

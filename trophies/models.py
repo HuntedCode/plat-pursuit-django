@@ -6158,6 +6158,11 @@ class Company(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Materialized browse-tile cover -- see Genre.representative_game. Recomputed by `recompute_tag_covers`.
+    representative_game = models.ForeignKey(
+        'Game', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+
     class Meta:
         verbose_name_plural = 'companies'
         ordering = ['name']

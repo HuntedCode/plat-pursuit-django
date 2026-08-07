@@ -1,9 +1,10 @@
 {% comment %} Shared GROUPING tile (.pp-gtile) -- used by the Genres & Themes list grid, the tag-detail related
 rail, AND the Franchise/Company lists. The representative member-game cover is a scrimmed backdrop with the
-grouping name + game count over it. Expects: `tag` (a Genre/Theme/Franchise with `representative_game` +
-a `game_count` annotation), `detail_url_name`, `item_type`. The tile ADAPTS to franchise-only fields when the
-object carries them: `source_type` -> a Franchise/Series corner badge; `version_count` -> a "· N versions"
-suffix. Optional `current_sort` (genre/theme LIST only) shows the stat the grid is sorted by. {% endcomment %}
+grouping name + game count over it. Expects: `tag` (a Genre/Theme/Franchise/Company with `representative_game`
++ a `game_count` annotation), `detail_url_name`, `item_type`. The tile ADAPTS to the fields an object carries:
+`source_type` -> a Franchise/Series corner badge + a "· N versions" suffix (franchises); `logo_url` -> a studio
+logo chip and `country_display` -> a country meta line (companies). Optional `current_sort` (genre/theme LIST
+only) shows the stat the grid is sorted by. {% endcomment %}
 {% load humanize %}
 <a href="{% url detail_url_name slug=tag.slug %}" class="pp-gtile" data-gtile aria-label="{{ tag.name }}, {{ tag.game_count }} game{{ tag.game_count|pluralize }}">
     {% comment %} Cover via display_image_url (single-source IGDB-first chain); has_cover_art picks cover vs
@@ -17,15 +18,21 @@ suffix. Optional `current_sort` (genre/theme LIST only) shows the stat the grid 
     {% endif %}
     <span class="pp-gtile__scrim"></span>
 
-    {% comment %} Franchise/Company only: a type corner badge (Series vs Franchise). Absent on genres/themes. {% endcomment %}
+    {% comment %} Franchise only: a type corner badge (Series vs Franchise). Absent on genres/themes/companies. {% endcomment %}
     {% if tag.source_type %}
     <span class="pp-gtile__tag">{% if tag.source_type == 'collection' %}Series{% else %}Franchise{% endif %}</span>
+    {% endif %}
+
+    {% comment %} Company only: the studio logo chip, top-right over the art. Absent on genres/themes/franchises. {% endcomment %}
+    {% if tag.logo_url %}
+    <span class="pp-gtile__logo"><img src="{{ tag.logo_url }}" alt="" loading="lazy" /></span>
     {% endif %}
 
     <span class="pp-gtile__body">
         <span class="pp-gtile__name">{{ tag.name }}</span>
         <span class="pp-gtile__meta">
-            <span class="pp-gtile__count">{{ tag.game_count|intcomma }} game{{ tag.game_count|pluralize }}{% if tag.version_count and tag.version_count != tag.game_count %} &middot; {{ tag.version_count|intcomma }} version{{ tag.version_count|pluralize }}{% endif %}</span>
+            <span class="pp-gtile__count">{{ tag.game_count|intcomma }} game{{ tag.game_count|pluralize }}{% if tag.source_type and tag.version_count and tag.version_count != tag.game_count %} &middot; {{ tag.version_count|intcomma }} version{{ tag.version_count|pluralize }}{% endif %}</span>
+            {% if tag.country_display %}<span class="pp-gtile__country" title="{{ tag.country_display }}">{{ tag.country_display }}</span>{% endif %}
             {% comment %} Secondary stat, shown only for the sort it belongs to (the view annotates it then). {% endcomment %}
             {% if current_sort == 'avg_rating' and tag.stat_rating %}
             <span class="pp-gtile__stat" title="Average community rating">

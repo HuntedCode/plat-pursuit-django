@@ -17,26 +17,14 @@ from ..forms import CompanySearchForm
 logger = logging.getLogger("psn_api")
 
 
-# Cover-art subquery annotations for company browse cards. The through-path
-# (Game -> Concept -> ConceptCompany -> Company) is the same for all three
-# tiers so we factor it out once.
-def _company_cover_annotations():
-    """Returns the four cover-art Subquery annotations for Company rows."""
-    path = 'concept__concept_companies__company'
-    return {
-        'representative_title_image': grouping.representative_title_image_subquery(
-            through_path=path,
-        ),
-        'representative_concept_icon': grouping.representative_concept_icon_subquery(
-            through_path=path,
-        ),
-        'representative_igdb_cover_id': grouping.representative_igdb_cover_id_subquery(
-            through_path=path,
-        ),
-        'representative_title_icon': grouping.representative_title_icon_subquery(
-            through_path=path,
-        ),
-    }
+def _company_count(field):
+    """A per-company COUNT(DISTINCT field) scoped to the outer Company row via a Subquery, so the outer
+    queryset stays at one row per company (no cross-join multiplication between the game/version counts)."""
+    return Subquery(
+        ConceptCompany.objects.filter(company=OuterRef('pk'))
+        .values('company').annotate(c=Count(field, distinct=True)).values('c')[:1],
+        output_field=IntegerField(),
+    )
 
 
 # Detail-page role metadata. Driven by this list so ordering, slugs, and the
@@ -61,10 +49,9 @@ class CompanyListView(HtmxListMixin, ListView):
         qs = super().get_queryset().annotate(
             # game_count: distinct IGDB game IDs (the true "game" count).
             # Two concepts sharing the same igdb_id count as ONE game.
-            game_count=Count('company_concepts__concept__igdb_match__igdb_id', distinct=True),
+            game_count=_company_count('concept__igdb_match__igdb_id'),
             # version_count: distinct Games (individual PSN trophy lists).
-            version_count=Count('company_concepts__concept__games', distinct=True),
-            **_company_cover_annotations(),
+            version_count=_company_count('concept__games'),
         ).filter(version_count__gt=0)
 
         form = CompanySearchForm(self.request.GET)
@@ -184,7 +171,10 @@ class CompanyListView(HtmxListMixin, ListView):
                 )
                 order = [F('_total_plats').desc(nulls_last=True), Lower('name')]
 
-        return qs.order_by(*order)
+        # Materialized tile cover (recompute_tag_covers) read O(1) via select_related -- no live cover subquery.
+        return qs.select_related(
+            'representative_game', 'representative_game__concept', 'representative_game__concept__igdb_match',
+        ).defer('representative_game__concept__igdb_match__raw_response').order_by(*order)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -193,10 +183,17 @@ class CompanyListView(HtmxListMixin, ListView):
             {'text': 'Companies'},
         ]
         context['form'] = CompanySearchForm(self.request.GET)
+        context['current_sort'] = self.request.GET.get('sort', '')
+        context['current_query'] = self.request.GET.get('query', '').strip()
         context['selected_roles'] = self.request.GET.getlist('role')
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_genres'] = self.request.GET.getlist('genres')
         context['selected_country'] = self.request.GET.get('country', '')
+        context['total_company_count'] = context['paginator'].count if context.get('paginator') else 0
+        # Any advanced filter engaged (drives the Filters button's active dot + panel-open on load).
+        context['has_advanced_filters'] = any(
+            self.request.GET.getlist(k) for k in ('platform', 'genres', 'badge_series')
+        ) or bool(self.request.GET.get('country'))
 
         context['seo_description'] = (
             "Browse PlayStation game developers and publishers on Platinum Pursuit. "
