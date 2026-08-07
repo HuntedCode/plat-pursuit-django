@@ -19,6 +19,23 @@ FRANCHISE_SORT_CHOICES = [
 # Detail-page sort shared between franchise and company pages.
 DETAIL_SORT_CHOICES = grouping.SORT_CHOICES
 
+# Visible-link filter for per-franchise counts: skip admin-excluded rows and collection spin-offs (so a
+# series' counts aren't padded by games it hides). is_spinoff is always False on franchise-type links, so
+# the spinoff clause is a no-op there.
+_VISIBLE_LINK_FILTER = Q(is_excluded=False, is_spinoff=False)
+
+
+def _visible_link_count(field, distinct=True):
+    """A per-franchise COUNT(DISTINCT field) over VISIBLE links, scoped to the outer Franchise row via a
+    Subquery (keeps the outer queryset at one row per franchise). Shared by the browse list counts and the
+    detail related-rail so a rail tile and the browse list report the SAME game/version totals for an entity."""
+    return Subquery(
+        ConceptFranchise.objects.filter(franchise=OuterRef('pk'))
+        .filter(_VISIBLE_LINK_FILTER)
+        .values('franchise').annotate(c=Count(field, distinct=distinct)).values('c')[:1],
+        output_field=IntegerField(),
+    )
+
 
 class FranchiseListView(HtmxListMixin, ListView):
     """Browse page for game franchises and collections."""
@@ -65,27 +82,10 @@ class FranchiseListView(HtmxListMixin, ListView):
             )
         )
 
-        # Per-franchise game_count / version_count via Subquery so each row
-        # carries its own scoped count instead of joining the outer query
-        # against franchise_concepts. This keeps the outer queryset at one
-        # row per franchise.
-        def _per_franchise_count(field, distinct=True, extra_filter=None):
-            qs = ConceptFranchise.objects.filter(franchise=OuterRef('pk'))
-            if extra_filter is not None:
-                qs = qs.filter(extra_filter)
-            return Subquery(
-                qs.values('franchise')
-                .annotate(c=Count(field, distinct=distinct))
-                .values('c')[:1],
-                output_field=IntegerField(),
-            )
-
-        # Counts include every non-excluded link, minus collection spin-offs
-        # (which are hidden from the series, so they must not pad its
-        # game/version counts). is_spinoff is always False on franchise-type
-        # links, so the spinoff clause is a no-op for franchises.
-        visible_link_filter = Q(is_excluded=False, is_spinoff=False)
-
+        # Per-franchise game_count / version_count via the shared _visible_link_count Subquery so each row
+        # carries its own scoped count (over VISIBLE links) instead of joining the outer query against
+        # franchise_concepts. This keeps the outer queryset at one row per franchise, and the detail rail
+        # reuses the same helper so its tile counts match this page's for the same entity.
         qs = super().get_queryset().filter(
             Q(source_type='collection') | eligible_link_exists,
         ).annotate(
@@ -95,14 +95,10 @@ class FranchiseListView(HtmxListMixin, ListView):
             # match are excluded (NULL igdb_id ignored by COUNT DISTINCT)
             # which slightly undercounts, but in practice nearly all
             # concepts in franchise/series pages have IGDB matches.
-            game_count=_per_franchise_count(
-                'concept__igdb_match__igdb_id', extra_filter=visible_link_filter,
-            ),
+            game_count=_visible_link_count('concept__igdb_match__igdb_id'),
             # version_count: distinct Games, i.e. individual PSN records
             # (a game on both PS4 and PS5 counts as 2 versions of 1 game).
-            version_count=_per_franchise_count(
-                'concept__games', extra_filter=visible_link_filter,
-            ),
+            version_count=_visible_link_count('concept__games'),
         ).filter(
             Q(source_type='franchise', version_count__gt=0)
             | Q(source_type='collection', version_count__gt=0),
@@ -255,15 +251,6 @@ class FranchiseDetailView(DetailView):
         # version_count are named to match what the tile expects.
         opposite_type = 'collection' if franchise.source_type == 'franchise' else 'franchise'
 
-        def _rail_count(field, distinct=True):
-            return Subquery(
-                ConceptFranchise.objects.filter(franchise=OuterRef('pk'))
-                .values('franchise')
-                .annotate(c=Count(field, distinct=distinct))
-                .values('c')[:1],
-                output_field=IntegerField(),
-            )
-
         related_entries = list(
             Franchise.objects.filter(source_type=opposite_type)
             .filter(Exists(ConceptFranchise.objects.filter(
@@ -272,8 +259,9 @@ class FranchiseDetailView(DetailView):
             )))
             .exclude(pk=franchise.pk)
             .annotate(
-                game_count=_rail_count('concept__igdb_match__igdb_id'),
-                version_count=_rail_count('concept__games'),
+                # Shared with the browse list, over VISIBLE links, so a rail tile and the list agree.
+                game_count=_visible_link_count('concept__igdb_match__igdb_id'),
+                version_count=_visible_link_count('concept__games'),
             )
             .filter(version_count__gt=0)
             .select_related(

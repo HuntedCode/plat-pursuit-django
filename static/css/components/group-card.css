@@ -116,7 +116,7 @@
 .fr-prog__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
 .fr-prog__label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); }
 .fr-prog__pct { font-size: 18px; font-weight: 900; color: var(--pp-primary); line-height: 1; font-variant-numeric: tabular-nums; }
-.fr-prog__pctsign { font-size: 12px; font-weight: 800; margin-left: 1px; }
+.fr-prog__pct::after { content: '%'; font-size: 12px; font-weight: 800; margin-left: 1px; }
 .fr-prog__stats { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 9px; font-size: 11.5px; color: var(--pp-text-mute); }
 .fr-prog__stats strong { color: var(--pp-text); font-weight: 800; font-variant-numeric: tabular-nums; }
 

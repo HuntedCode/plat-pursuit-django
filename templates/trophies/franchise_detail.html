@@ -39,7 +39,7 @@
                         {% endif %}
                         <span class="text-[0.6rem] font-extrabold uppercase tracking-wider text-primary bg-primary/15 border border-primary/30 rounded-full px-2 py-0.5">{% if is_series %}Series{% else %}Franchise{% endif %}</span>
                     </div>
-                    <h1 class="text-xl md:text-2xl lg:text-3xl font-black leading-tight mt-1">{{ object.name }}</h1>
+                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold leading-tight mt-1">{{ object.name }}</h1>
                     <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                         {{ total_games|intcomma }} game{{ total_games|pluralize }}{% if total_versions != total_games %} across {{ total_versions|intcomma }} version{{ total_versions|pluralize }}{% endif %}.
                         {% if is_series %}Part of a broader franchise universe.{% else %}The full saga in one place.{% endif %}
@@ -76,10 +76,11 @@
 
             {% if user_progress_stats %}
             {# "Your progress" across the whole franchise (authed only). #}
-            <div class="fr-prog" data-fr-prog>
+            <div class="fr-prog">
                 <div class="fr-prog__head">
                     <span class="fr-prog__label">Your progress</span>
-                    <span class="fr-prog__pct pp-tally" data-countup="{{ user_progress_stats.completion_pct }}">{{ user_progress_stats.completion_pct }}<span class="fr-prog__pctsign">%</span></span>
+                    {# % lives in CSS (::after) so the count-up's textContent write can't eat it. #}
+                    <span class="fr-prog__pct pp-tally" data-countup="{{ user_progress_stats.completion_pct }}">{{ user_progress_stats.completion_pct }}</span>
                 </div>
                 {% include 'components/horizon.html' with progress=user_progress_stats.completion_pct height='8px' %}
                 <div class="fr-prog__stats">

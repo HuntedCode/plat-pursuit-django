@@ -154,14 +154,59 @@ def test_sort_change_returns_group_partial(client):
     assert 'pp-reveal' in resp.content.decode()   # group_reveal baked on the franchise HTMX swap
 
 
-def test_detail_query_count_bounded(client, django_assert_max_num_queries):
-    fr = _franchise('Assassins Creed', 'assassins-creed')
-    for i in range(8):
-        _member(fr, f'AC {i}')
+def test_detail_no_per_group_n_plus_1(client):
+    """Query count must be CONSTANT regardless of member count -- a fixed ceiling would hide a small N+1."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
 
-    with django_assert_max_num_queries(15):
-        resp = client.get(reverse('franchise_detail', kwargs={'slug': fr.slug}))
-    assert resp.status_code == 200
+    small = _franchise('Small IP', 'small-ip')
+    for i in range(3):
+        _member(small, f'S{i}')
+    big = _franchise('Big IP', 'big-ip')
+    for i in range(12):
+        _member(big, f'B{i}')
+
+    def _q(slug):
+        with CaptureQueriesContext(connection) as ctx:
+            assert client.get(reverse('franchise_detail', kwargs={'slug': slug})).status_code == 200
+        return len(ctx)
+
+    assert _q('small-ip') == _q('big-ip')   # 4x the members, same query count -> no per-group/version N+1
+
+
+def test_excluded_member_hidden_from_list(client):
+    fr = _franchise('Gears', 'gears-detail')
+    _member(fr, 'Gears 5')
+    _member(fr, 'Gears Hidden', excluded=True)
+
+    content = client.get(reverse('franchise_detail', kwargs={'slug': fr.slug})).content.decode()
+
+    assert 'Gears 5' in content
+    assert 'Gears Hidden' not in content
+
+
+def test_rail_counts_exclude_hidden_links(client):
+    """A rail tile's game/version counts must match the browse list -- over VISIBLE links only."""
+    from trophies.models import ConceptFranchise
+    franchise = _franchise('Halo IP', 'halo-ip', source_type='franchise')
+    series = _franchise('Halo Trilogy', 'halo-trilogy', source_type='collection')
+    shared = ConceptFactory(unified_title='Halo CE')
+    IGDBMatchFactory(concept=shared, igdb_id=next(_ig_seq))
+    GameFactory(concept=shared, title_name='Halo CE', defined_trophies=_TROPHIES)
+    ConceptFranchise.objects.create(concept=shared, franchise=franchise)   # ties the two together
+    ConceptFranchise.objects.create(concept=shared, franchise=series)      # visible member of the series
+    # An EXCLUDED extra member of the series must NOT inflate its rail counts.
+    excluded = ConceptFactory(unified_title='Halo Excluded')
+    IGDBMatchFactory(concept=excluded, igdb_id=next(_ig_seq))
+    GameFactory(concept=excluded, title_name='Halo Excluded')
+    ConceptFranchise.objects.create(concept=excluded, franchise=series, is_excluded=True)
+
+    resp = client.get(reverse('franchise_detail', kwargs={'slug': franchise.slug}))
+    rail = {e.slug: e for e in resp.context['related_entries']}
+
+    assert 'halo-trilogy' in rail
+    assert rail['halo-trilogy'].game_count == 1      # only the visible shared member; excluded one filtered out
+    assert rail['halo-trilogy'].version_count == 1
 
 
 # ── Company detail still works with the rebuilt shared card ───────────────────────────────────────────────
