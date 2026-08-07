@@ -20,48 +20,6 @@ FRANCHISE_SORT_CHOICES = [
 DETAIL_SORT_CHOICES = grouping.SORT_CHOICES
 
 
-# Browse / detail cover-art filter. With is_main gone, every non-excluded link
-# is equal — we just need to skip admin-excluded rows and collection spin-offs
-# (so a series' cover isn't anchored by a spin-off). is_spinoff is always False
-# on franchise-type links, so the spinoff clause is a no-op for franchises.
-#
-# BEST-EFFORT for cover art only: this filter is applied to a Game queryset as a SECOND
-# .filter() after the OuterRef franchise correlation, so Django joins a separate
-# ConceptFranchise row -- the flags aren't guaranteed to come from the same membership
-# that ties the game to this franchise. The exact suppression (same-row) lives where
-# it matters: the detail member list (FranchiseDetailView.links_qs) and the browse
-# counts (visible_link_filter below), both of which filter ConceptFranchise rows directly.
-# Cover art is cosmetic, so the residual leak is acceptable.
-_VISIBLE_LINK_FILTER = Q(
-    concept__concept_franchises__is_excluded=False,
-    concept__concept_franchises__is_spinoff=False,
-)
-
-
-def _franchise_cover_annotations():
-    """Build the cover-art Subquery annotations for Franchise rows.
-
-    All non-excluded, non-spin-off links contribute. Tiebreak comes from
-    `_MOST_RECENT_RELEASE_ORDER` inside the grouping subqueries.
-    """
-    path = 'concept__concept_franchises__franchise'
-    extra = _VISIBLE_LINK_FILTER
-    return {
-        'representative_title_image': grouping.representative_title_image_subquery(
-            through_path=path, extra_filter=extra,
-        ),
-        'representative_concept_icon': grouping.representative_concept_icon_subquery(
-            through_path=path, extra_filter=extra,
-        ),
-        'representative_igdb_cover_id': grouping.representative_igdb_cover_id_subquery(
-            through_path=path, extra_filter=extra,
-        ),
-        'representative_title_icon': grouping.representative_title_icon_subquery(
-            through_path=path, extra_filter=extra,
-        ),
-    }
-
-
 class FranchiseListView(HtmxListMixin, ListView):
     """Browse page for game franchises and collections."""
     model = Franchise
@@ -213,18 +171,25 @@ class FranchiseListView(HtmxListMixin, ListView):
 
 
 class FranchiseDetailView(DetailView):
-    """Detail page for a single franchise showing games grouped by IGDB entry."""
+    """Detail page for a single franchise/series showing games grouped by IGDB entry.
+
+    Rebuilt to the Platinum standard: an accented header (cover thumb + .scard totals +
+    a completion bar for signed-in viewers), one IGDB-grouped game list, and a related
+    franchises/series rail (shared `.pp-gtile`). No tabs -- the legacy "also featured"
+    partition is gone and the related entries moved from a tab to a bottom rail. Sort is
+    the only interactive control; it swaps just the group list (`#franchise-groups`).
+    """
     model = Franchise
     template_name = 'trophies/franchise_detail.html'
-    partial_template_name = 'trophies/partials/franchise_detail/tab_content.html'
+    # HTMX sort changes swap only the grouped list; the header + rail stay put.
+    partial_template_name = 'trophies/partials/franchise_detail/game_groups_list.html'
     slug_field = 'slug'
     slug_url_kwarg = 'slug'
 
     def get_template_names(self):
-        # On HTMX requests (sort dropdown), return only the tab-content
-        # partial so the page header, tabs, and ad slot stay put. Non-HTMX
-        # requests render the full page so deep-linked ?sort=... / ?tab=...
-        # URLs still work for bookmarks / first paint.
+        # On HTMX (the sort dropdown) return just the grouped-list partial so the
+        # header, sort toolbar, and rail stay put. Full page otherwise so a
+        # deep-linked ?sort=... URL still works for bookmarks / first paint.
         if getattr(self.request, 'htmx', False):
             return [self.partial_template_name]
         return [self.template_name]
@@ -238,12 +203,13 @@ class FranchiseDetailView(DetailView):
             {'text': 'Franchises', 'url': reverse_lazy('franchises_list')},
             {'text': franchise.name},
         ]
+        context['is_series'] = franchise.source_type == 'collection'
 
-        # Fetch all visible concept links. With is_main gone, every non-excluded
-        # link contributes equally to the franchise's game list. Spin-off members
-        # are still excluded so a Series doesn't list games IGDB types as spin-offs
-        # of it (e.g. Agents of Mayhem under Saints Row). Franchise-type links
-        # are never spin-offs, so the spinoff clause is a no-op for them.
+        # Fetch all visible concept links. Every non-excluded link contributes
+        # equally to the game list; spin-off members are excluded so a Series
+        # doesn't list games IGDB types as spin-offs of it (e.g. Agents of Mayhem
+        # under Saints Row). Franchise-type links are never spin-offs, so the
+        # spinoff clause is a no-op for them.
         links_qs = ConceptFranchise.objects.filter(
             franchise=franchise, is_excluded=False, is_spinoff=False,
         )
@@ -252,12 +218,9 @@ class FranchiseDetailView(DetailView):
         games = list(
             Game.objects.filter(concept_id__in=Subquery(concept_ids_subq))
             .select_related('concept__igdb_match', 'concept__family')
-            .defer(
-                # See CLAUDE.md: raw_response is the IGDB API blob (~30 KB per
-                # row). Franchise pages can list 30+ versions of every entry;
-                # cover-art rendering only needs igdb_cover_image_id.
-                'concept__igdb_match__raw_response',
-            )
+            # raw_response is the ~30 KB IGDB blob; franchise pages list 30+ versions
+            # and cover-art rendering only needs igdb_cover_image_id (CLAUDE.md).
+            .defer('concept__igdb_match__raw_response')
             .order_by('title_name')
         )
 
@@ -271,45 +234,28 @@ class FranchiseDetailView(DetailView):
 
         # Shared service: group by IGDB id, compute per-group stats, attach
         # user progress to each game.
-        all_groups = grouping.build_igdb_groups(
-            games,
-            user_progress_map=user_progress_map,
-        )
+        groups = grouping.build_igdb_groups(games, user_progress_map=user_progress_map)
 
-        # Single unified game list for both franchise- and collection-type
-        # pages. The legacy "main vs also-featured" partition is gone — every
-        # IGDB-listed link counts equally now. main_groups is kept as the
-        # context-var name for template back-compat; also_featured_groups is
-        # an empty list that the template's optional block renders as nothing.
-        main_groups = all_groups
-        also_featured_groups = []
-
-        # Aggregate stats include every non-excluded linked game.
-        total_trophies = sum(g['total_trophies'] for g in main_groups)
-        platinums = sum(1 for g in main_groups if g['has_platinum'])
-        main_versions_count = sum(len(g['games']) for g in main_groups)
+        total_trophies = sum(g['total_trophies'] for g in groups)
+        platinums = sum(1 for g in groups if g['has_platinum'])
+        versions_count = sum(len(g['games']) for g in groups)
 
         user_progress_stats = grouping.compute_user_progress_stats(
-            main_groups, total_trophies, user_progress_map, profile=profile,
+            groups, total_trophies, user_progress_map, profile=profile,
         )
 
-        # Apply user-selected sort.
         sort_val = self.request.GET.get('sort', 'release')
-        main_groups = grouping.sort_groups(main_groups, sort_val)
+        groups = grouping.sort_groups(groups, sort_val)
+        hero_cover = grouping.pick_hero_cover(groups)
 
-        # Pick hero cover from the unified list.
-        hero_cover = grouping.pick_hero_cover(main_groups)
-
-        # Related entries of the opposite IGDB source type (collections for a
-        # franchise page, or vice versa). Detected via shared concepts: any
-        # Franchise row that links to at least one concept in this franchise.
+        # Related entries of the opposite IGDB source type (series for a franchise
+        # page, or vice versa), detected via shared concepts. Covers read the
+        # materialized `representative_game` FK (recompute_tag_covers) so the rail
+        # reuses the shared `.pp-gtile` with no live cover subqueries. game_count /
+        # version_count are named to match what the tile expects.
         opposite_type = 'collection' if franchise.source_type == 'franchise' else 'franchise'
 
-        # Find candidate related franchises via Exists (a row matches if any
-        # of its links touches one of this franchise's concepts), then
-        # annotate counts as Subqueries to avoid joining the outer row with
-        # franchise_concepts a second time.
-        def _related_count(field, distinct=True):
+        def _rail_count(field, distinct=True):
             return Subquery(
                 ConceptFranchise.objects.filter(franchise=OuterRef('pk'))
                 .values('franchise')
@@ -319,62 +265,50 @@ class FranchiseDetailView(DetailView):
             )
 
         related_entries = list(
-            Franchise.objects.filter(
-                source_type=opposite_type,
-            ).filter(
-                Exists(ConceptFranchise.objects.filter(
-                    franchise=OuterRef('pk'),
-                    concept_id__in=Subquery(concept_ids_subq),
-                ))
-            )
+            Franchise.objects.filter(source_type=opposite_type)
+            .filter(Exists(ConceptFranchise.objects.filter(
+                franchise=OuterRef('pk'),
+                concept_id__in=Subquery(concept_ids_subq),
+            )))
             .exclude(pk=franchise.pk)
             .annotate(
-                related_game_count=_related_count('concept'),
-                related_version_count=_related_count('concept__games'),
-                **_franchise_cover_annotations(),
+                game_count=_rail_count('concept__igdb_match__igdb_id'),
+                version_count=_rail_count('concept__games'),
             )
-            .filter(related_version_count__gt=0)
+            .filter(version_count__gt=0)
+            .select_related(
+                'representative_game', 'representative_game__concept',
+                'representative_game__concept__igdb_match',
+            )
+            .defer('representative_game__concept__igdb_match__raw_response')
             .order_by(Lower('name'))
         )
 
-        # Tab selection. Three tabs:
-        #   - games: main_groups (this franchise IS their primary identity)
-        #   - also_featured: tie-in groups (franchise pages only)
-        #   - collections: related_entries (when present)
-        # Tabs auto-fall-back to 'games' when their content is empty so a stale
-        # querystring doesn't strand users on a blank tab.
-        # Accept ?tab=series (the user-facing label) and the legacy
-        # ?tab=collections alias so any pre-existing bookmark or share
-        # URL keeps working.
-        current_tab = self.request.GET.get('tab', 'games')
-        if current_tab == 'collections':
-            current_tab = 'series'
-        if current_tab == 'series' and not related_entries:
-            current_tab = 'games'
-        if current_tab == 'also_featured' and not also_featured_groups:
-            current_tab = 'games'
-
-        context['main_groups'] = main_groups
-        context['also_featured_groups'] = also_featured_groups
+        # `groups` + `empty_message` are the shared game_groups_list.html contract
+        # (also fed to that partial standalone on the HTMX sort swap).
+        context['groups'] = groups
+        # Franchise detail runs staggerReveal on .fgroup, so the shared partial may bake pp-reveal on HTMX
+        # swaps here. Company detail (same partial, no reveal JS) leaves this unset -> its cards never hide.
+        context['group_reveal'] = True
+        context['empty_message'] = (
+            'No games found in this series yet.' if context['is_series']
+            else 'No games found in this franchise yet.'
+        )
         context['hero_cover'] = hero_cover
-        context['total_games'] = len(main_groups)
-        context['total_versions'] = main_versions_count
+        context['total_games'] = len(groups)
+        context['total_versions'] = versions_count
         context['total_trophies'] = total_trophies
         context['total_platinums'] = platinums
-        context['also_featured_count'] = len(also_featured_groups)
         context['sort_choices'] = DETAIL_SORT_CHOICES
         context['current_sort'] = sort_val
         context['related_entries'] = related_entries
-        context['related_entries_label'] = (
-            'Series' if opposite_type == 'collection' else 'Franchises'
-        )
-        context['current_tab'] = current_tab
+        context['related_entries_label'] = 'Series' if opposite_type == 'collection' else 'Franchises'
         context['user_progress_stats'] = user_progress_stats
 
         context['seo_description'] = (
             f"Explore the {franchise.name} franchise on Platinum Pursuit. "
-            f"{len(main_groups)} game{'s' if len(main_groups) != 1 else ''}, "
-            f"{main_versions_count} version{'s' if main_versions_count != 1 else ''}."
+            f"{len(groups)} game{'s' if len(groups) != 1 else ''}, "
+            f"{versions_count} version{'s' if versions_count != 1 else ''}."
         )
 
         track_page_view('franchise_detail', franchise.id, self.request)
