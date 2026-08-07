@@ -215,7 +215,7 @@ class TagDetailBaseView(HtmxListMixin, ListView):
         # game count, not player rows). games/plays/plats/avg-completion for the .scard row.
         stats = Game.objects.filter(self.get_tag_filter()).aggregate(
             games=Count('id'),
-            plays=Sum('played_count'),
+            owned=Sum('played_count'),   # total ownership records across the tag's games (not distinct players)
             plats=Sum('plats_earned_count'),
             avg_completion=Avg('avg_completion'),
         )

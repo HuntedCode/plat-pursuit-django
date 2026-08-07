@@ -35,7 +35,7 @@
                 </div>
                 <div class="scard">
                     <div class="scard__label">Owned</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tag_stats.plays|default:0 }}">{{ tag_stats.plays|default:0|intcomma }}</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tag_stats.owned|default:0 }}">{{ tag_stats.owned|default:0|intcomma }}</div>
                     <div class="scard__sub">in libraries</div>
                 </div>
                 <div class="scard">
@@ -125,7 +125,8 @@
                 </button>
             </div>
 
-            {% include 'partials/browse/active_filters.html' %}
+            {% url detail_url_name slug=detail_slug as tag_detail_url %}
+            {% include 'partials/browse/active_filters.html' with chip_base_url=tag_detail_url %}
 
             <div class="pp-bgal__advanced" id="tagd-advanced">
               <div class="pp-bgal__advanced-in">
@@ -280,7 +281,7 @@
     <section class="pp-related">
         <div class="pp-related__head">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-            <span class="pp-related__title">Related {{ tag_type|lower }}s</span>
+            <h2 class="pp-related__title">Related {{ tag_type|lower }}s</h2>
             <span class="pp-related__sub">games in {{ tag_name }} often share these</span>
         </div>
         <div class="pp-related__grid">

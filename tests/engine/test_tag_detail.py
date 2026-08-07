@@ -96,6 +96,18 @@ def test_cards_get_pursuer_hooks(client):
 
 # ── Filters / sort ────────────────────────────────────────────────────────────────────────────────────────
 
+def test_active_filter_chips_keep_tag_scope(client):
+    """Removing a filter chip / Clear all must resolve against the tag detail path, not eject to Browse Games
+    (the tag lives in the URL path, so a /games/?... link would silently drop the genre)."""
+    genre, _ = _genre('Strategy', title_platform=['PS5'])
+
+    content = client.get(_url(genre), {'letter': 'A'}).content.decode()
+
+    assert 'pp-gbrowse__achip' in content                       # a filter chip rendered (Starts with A)
+    assert 'href="' + _url(genre) + '?' in content              # chip/Clear-all resolve to the genre path
+    assert 'href="' + reverse('games_list') + '?' not in content  # never back to Browse Games
+
+
 def test_platform_filter_narrows(client):
     genre = GenreFactory(name='Puzzle', slug='puzzle')
     ps5 = GameFactory(title_name='PS5 Puzzle', title_platform=['PS5'])

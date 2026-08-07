@@ -3,7 +3,8 @@ swaps AND on the InfiniteScroller's ?page fetches (X-Requested-With, via the Htm
 sentinel + loading live in tag_detail.html (outside #browse-results) so only the grid swaps on a filter change.
 pp-reveal is baked in on HTMX swaps only (matches the htmx-settle-strips-classes fix). {% endcomment %}
 {% load humanize %}
+{% url detail_url_name slug=detail_slug as tag_reset_url %}
 <div id="items-grid" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ paginator.count }}">
-    {% include 'trophies/partials/game_list/game_cards.html' %}
+    {% include 'trophies/partials/game_list/game_cards.html' with empty_reset_url=tag_reset_url %}
 </div>
-{% if request.htmx %}{% include 'partials/browse/active_filters.html' with oob=True %}{% endif %}
+{% if request.htmx %}{% url detail_url_name slug=detail_slug as tag_detail_url %}{% include 'partials/browse/active_filters.html' with oob=True chip_base_url=tag_detail_url %}{% endif %}
