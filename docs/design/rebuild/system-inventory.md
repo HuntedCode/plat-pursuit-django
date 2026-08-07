@@ -282,7 +282,7 @@ Mostly **Keep** — solid HTMX-based discovery layer. Mostly orthogonal to the P
 | Company System (`/companies/`) | Shipped | **Keep** | Role tabs; shares `game_grouping_service` |
 | Franchise System (`/franchises/`) | Shipped | **Keep** | main/tie-in; shares grouping service |
 | Genre / Theme / Engine | Shipped | **Keep** (Engine maybe demote) | Normalized M2M; Genre/Theme drive challenges; Engine pages low-value |
-| Flagged Games (`/games/flagged/`) | Shipped | **Keep** | Integrity gate |
+| Flagged Games (`/games/flagged/`) | **Removed** | May re-add later | Browse page (view + templates + `flagged_games` URL + subnav) removed as low-value; the underlying game flag fields + Browse Games flag filters remain. Restore from git history if reinstated. |
 | Recently Added + Scout Accounts | Shipped | **Keep** | Content freshness; `refresh_scouts` cron |
 | Shovelware Detection | Shipped | **Keep** | Proportional blacklist + whitelist (recent); integrity-critical |
 | `game_grouping_service.py` | Shipped | **Keep** | Version-stacking — fundamental to series/DLC progress |

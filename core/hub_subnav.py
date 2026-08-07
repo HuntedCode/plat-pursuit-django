@@ -118,7 +118,6 @@ BROWSE_HUB = HubSubnavConfig(
         HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers', group='Curation'),
         HubSubnavItem('companies', 'Companies', 'companies_list', 'building', group='Curation'),
         HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag', group='Curation'),
-        HubSubnavItem('flagged', 'Flagged Games', 'flagged_games', 'flag', group='Curation'),
     ),
 )
 

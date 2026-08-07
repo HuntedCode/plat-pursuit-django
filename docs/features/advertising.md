@@ -36,7 +36,7 @@ Each slot ID is a separate ad unit in AdSense, which enables per-page revenue re
 | `9209595625` | ppc-company | Company detail + list | `templates/trophies/company_{detail,list}.html` |
 | `3933218215` | ppc-engine | Engine detail + list | `templates/trophies/engine_{detail,list}.html` |
 | `5392580059` | ppc-genre-theme | Genre/Theme list + Tag detail (shared template) | `templates/trophies/{genre_theme_list,tag_detail}.html` |
-| `7312166386` | ppc-flagged-games | Flagged games browse | `templates/trophies/flagged_games.html` |
+| `7312166386` | ppc-flagged-games | ~~Flagged games browse~~ (page removed; slot unused, free to retire or reuse) | — |
 | `2766416714` | ppc-recently-added | Recently added browse | `templates/trophies/recently_added.html` |
 | `5270350613` | ppc-browse-games | Main games browse | `templates/trophies/game_list.html` |
 | `7440158895` | ppc-dashboard-inline | Dashboard, between site heartbeat and tab bar | `templates/trophies/dashboard.html` |

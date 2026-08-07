@@ -294,24 +294,14 @@ class GamesListView(HtmxListMixin, ListView):
 class RandomGameView(View):
     """Redirect to a random game detail page, respecting active browse filters.
 
-    Also honors page-level scope that lives outside the standard filter form.
-    The Lucky button on scoped pages (genre/theme/flagged) carries that context
-    forward: `category` for flagged-games sub-pages, and `genres`/`themes` ids
-    injected by the Lucky button's `data-lucky-extra` attribute on tag-detail
-    pages (see browse-filters.js).
+    Also honors page-level scope that lives outside the standard filter form:
+    the Lucky button on tag-detail pages (genre/theme) carries `genres`/`themes`
+    ids forward via its `data-lucky-extra` attribute (see browse-filters.js).
     """
 
     def get(self, request):
         form = GameSearchForm(request.GET)
         qs = Game.objects.all()
-
-        category = request.GET.get('category', '')
-        if category:
-            flag_filter = FlaggedGamesView.FLAG_CATEGORIES.get(category, {}).get('filter')
-            if flag_filter:
-                qs = qs.filter(**flag_filter)
-            else:
-                qs = qs.none()
 
         if form.is_valid():
             qs, _ = apply_game_browse_filters(qs, form)
@@ -1584,155 +1574,6 @@ class GuideListView(ListView):
         track_site_event('guide_visit', 'list', self.request)
         track_page_view('guides_list', 'list', self.request)
 
-        return context
-
-
-class FlaggedGamesView(HtmxListMixin, ListView):
-    """Dedicated browse page for games with community-reported flag status.
-
-    Landing state shows category cards with counts. Selecting a category
-    displays a filtered game grid with secondary filters.
-    """
-    model = Game
-    template_name = 'trophies/flagged_games.html'
-    partial_template_name = 'trophies/partials/flagged_games/browse_results.html'
-    paginate_by = 30
-
-    FLAG_CATEGORIES = {
-        'delisted': {
-            'filter': {'is_delisted': True},
-            'label': 'Delisted Games',
-            'description': 'Games removed from the PlayStation Store. Get them while you can.',
-            'color': 'error',
-            'icon': 'store-slash',
-        },
-        'unobtainable': {
-            'filter': {'is_obtainable': False},
-            'label': 'Unobtainable Trophies',
-            'description': 'Games with trophies that can no longer be earned.',
-            'color': 'error',
-            'icon': 'lock',
-        },
-        'online': {
-            'filter': {'has_online_trophies': True},
-            'label': 'Online Trophies',
-            'description': 'Games with trophies requiring online connectivity.',
-            'color': 'warning',
-            'icon': 'wifi',
-        },
-        'buggy': {
-            'filter': {'has_buggy_trophies': True},
-            'label': 'Buggy Trophies',
-            'description': 'Games with trophies affected by known bugs.',
-            'color': 'warning',
-            'icon': 'bug',
-        },
-    }
-
-    def get_filter_form(self):
-        if not hasattr(self, '_filter_form'):
-            self._filter_form = GameSearchForm(self.request.GET)
-        return self._filter_form
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        category = self.request.GET.get('category', '')
-
-        if category in self.FLAG_CATEGORIES:
-            qs = qs.filter(**self.FLAG_CATEGORIES[category]['filter'])
-        else:
-            return qs.none()
-
-        form = self.get_filter_form()
-
-        if form.is_valid():
-            sort_val = form.cleaned_data.get('sort', '')
-            qs, annotations = apply_game_browse_filters(qs, form, sort_val)
-            qs, order = apply_game_browse_sort(qs, sort_val, annotations)
-        else:
-            qs = annotate_ascii_name(qs)
-            order = ['is_ascii_name', Lower('title_name')]
-
-        qs = qs.select_related(
-            'concept', 'concept__igdb_match',
-        ).defer(
-            # IGDBMatch.raw_response is the full IGDB API blob (~30 KB per row).
-            # Browse-style listings paginate many games per page; without this
-            # defer each page would pull hundreds of KB of raw_response payload
-            # that is never used by the card render. See CLAUDE.md "IGDB cover-art
-            # querysets" and the May 2026 OOM postmortem.
-            'concept__igdb_match__raw_response',
-        ).prefetch_related(
-            Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
-        )
-        return qs.order_by(*order)
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Games', 'url': reverse_lazy('games_list')},
-            {'text': 'Flagged Games'},
-        ]
-
-        category = self.request.GET.get('category', '')
-        context['active_category'] = category
-        context['categories'] = self.FLAG_CATEGORIES
-        context['form'] = self.get_filter_form()
-
-        context['selected_platforms'] = self.request.GET.getlist('platform')
-        context['selected_regions'] = self.request.GET.getlist('regions')
-        context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
-        context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
-        context['show_delisted'] = self.request.GET.get('show_delisted', '')
-        context['show_unobtainable'] = self.request.GET.get('show_unobtainable', '')
-        context['show_online'] = self.request.GET.get('show_online', '')
-        context['show_buggy'] = self.request.GET.get('show_buggy', '')
-        context['selected_genres'] = self.request.GET.getlist('genres')
-        context['selected_themes'] = self.request.GET.getlist('themes')
-        context['view_type'] = self.request.GET.get('view', 'grid')
-
-        context['has_advanced_filters'] = any(
-            v for k, v in self.request.GET.lists()
-            if k not in ('page', 'view', 'category') and any(v)
-        )
-
-        # Counts for each category (cheap queries on indexed boolean fields)
-        context['category_counts'] = {
-            key: Game.objects.filter(**info['filter']).count()
-            for key, info in self.FLAG_CATEGORIES.items()
-        }
-
-        # Rating map + user game map for page games
-        if category:
-            page_games = context['object_list']
-            concept_ids = [g.concept_id for g in page_games if g.concept_id]
-            if concept_ids:
-                ratings = UserConceptRating.objects.filter(
-                    concept_id__in=concept_ids,
-                    concept_trophy_group__isnull=True,
-                ).values('concept_id').annotate(
-                    avg_difficulty=Avg('difficulty'),
-                    avg_fun=Avg('fun_ranking'),
-                    avg_rating=Avg('overall_rating'),
-                    rating_count=Count('id'),
-                )
-                context['rating_map'] = {r['concept_id']: r for r in ratings}
-
-            if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
-                game_ids = [g.id for g in page_games]
-                user_games = ProfileGame.objects.filter(
-                    profile=self.request.user.profile,
-                    game_id__in=game_ids,
-                ).values('game_id', 'progress', 'has_plat', 'earned_trophies_count')
-                context['user_game_map'] = {pg['game_id']: pg for pg in user_games}
-
-        context['seo_description'] = (
-            "Browse PlayStation games flagged by the community: delisted games, "
-            "unobtainable trophies, online-required trophies, and buggy trophies."
-        )
-
-        track_page_view('flagged_games', 'list', self.request)
         return context
 
 
