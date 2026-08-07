@@ -31,10 +31,11 @@ _ROLE_FLAG = {
 _TROPHIES = {'bronze': 10, 'silver': 5, 'gold': 3, 'platinum': 1}
 
 
-def _company(name, slug, country=None, logo=None, parent=None):
+def _company(name, slug, country=None, logo=None, parent=None, changed_company=None):
     from trophies.models import Company
     return Company.objects.create(
-        igdb_id=next(_co_seq), name=name, slug=slug, country=country, logo_image_id=logo or '', parent=parent,
+        igdb_id=next(_co_seq), name=name, slug=slug, country=country, logo_image_id=logo or '',
+        parent=parent, changed_company=changed_company,
     )
 
 
@@ -126,12 +127,19 @@ def test_authed_your_progress_block(client):
 def test_community_stats_strip(client):
     co = _company('Rated Studio', 'rated-studio')
     concept, _ = _link(co, 'Rated Game')
-    UserConceptRatingFactory(concept=concept, concept_trophy_group=None, overall_rating=4.0)
+    UserConceptRatingFactory(
+        concept=concept, concept_trophy_group=None,
+        overall_rating=4.0, difficulty=7, grindiness=3, fun_ranking=8, hours_to_platinum=25,
+    )
 
     content = client.get(reverse('company_detail', kwargs={'slug': co.slug})).content.decode()
 
     assert 'co-comm' in content
     assert 'Based on' in content
+    # The aggregated metrics actually render (labels + a distinctive value).
+    for label in ('Rating', 'Difficulty', 'Fun', 'Grind'):
+        assert label in content
+    assert '25h' in content            # avg hours-to-plat, distinctive
 
 
 def test_merger_parent_link(client):
@@ -144,6 +152,55 @@ def test_merger_parent_link(client):
 
     assert 'Subsidiary of' in content
     assert 'Parent Corp' in content
+
+
+def test_merger_now_operating_as_link(client):
+    successor = _company('New Corp', 'new-corp')
+    _link(successor, 'New Game')
+    old = _company('Old Corp', 'old-corp', changed_company=successor)
+    _link(old, 'Old Game')
+
+    content = client.get(reverse('company_detail', kwargs={'slug': old.slug})).content.decode()
+
+    assert 'Now operating as' in content
+    assert 'New Corp' in content
+
+
+# ── Fallbacks / edge cases ────────────────────────────────────────────────────────────────────────────────
+
+def test_stale_tab_falls_back_to_first_section(client):
+    co = _company('Fallback Studio', 'fallback-studio')
+    _link(co, 'Dev Game', role='developer')
+
+    content = client.get(
+        reverse('company_detail', kwargs={'slug': co.slug}), {'tab': 'ported'},   # role with no games
+    ).content.decode()
+
+    assert 'Dev Game' in content       # fell back to the developed section rather than a blank tab
+
+
+def test_company_with_no_games_shows_empty_message(client):
+    from trophies.models import ConceptCompany
+    co = _company('Ghost Studio', 'ghost-studio')
+    concept = ConceptFactory(unified_title='Concept Without Games')   # no Game attached
+    ConceptCompany.objects.create(concept=concept, company=co, is_developer=True)
+
+    content = client.get(reverse('company_detail', kwargs={'slug': co.slug})).content.decode()
+
+    assert 'No games found for this role.' in content
+    assert 'pp-switch' not in content
+
+
+def test_sort_reorders_group_list(client):
+    co = _company('Sortable Studio', 'sortable-studio')
+    _link(co, 'Alpha Game')
+    _link(co, 'Zeta Game')
+
+    az = client.get(reverse('company_detail', kwargs={'slug': co.slug}), {'sort': 'alpha'}).content.decode()
+    za = client.get(reverse('company_detail', kwargs={'slug': co.slug}), {'sort': 'alpha_desc'}).content.decode()
+
+    assert az.index('Alpha Game') < az.index('Zeta Game')
+    assert za.index('Zeta Game') < za.index('Alpha Game')
 
 
 # ── HTMX role/sort swap ───────────────────────────────────────────────────────────────────────────────────
@@ -164,11 +221,31 @@ def test_role_swap_returns_group_partial(client):
     assert 'pp-reveal' in resp.content.decode()
 
 
-def test_detail_query_count_bounded(client, django_assert_max_num_queries):
-    co = _company('Big Catalogue', 'big-catalogue')
-    for i in range(10):
-        _link(co, f'Game {i}')
+def test_detail_no_per_game_n_plus_1(client):
+    """Query count must be CONSTANT regardless of catalogue size -- a fixed ceiling would hide a per-game N+1.
+    Exercises the authed path (progress rings) + a multi-version group, the N+1-prone renders."""
+    from trophies.models import ConceptCompany
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
 
-    with django_assert_max_num_queries(18):
-        resp = client.get(reverse('company_detail', kwargs={'slug': co.slug}))
-    assert resp.status_code == 200
+    profile = ProfileFactory()
+    client.force_login(profile.user)
+
+    def _seed(prefix, n):
+        co = _company(f'{prefix} Studio', f'{prefix.lower()}-studio')
+        for i in range(n):
+            concept, game = _link(co, f'{prefix} Game {i}')
+            GameFactory(concept=concept, title_name=f'{prefix} Game {i}', title_platform=['PS4'],
+                        defined_trophies=_TROPHIES)   # second edition -> a multi-version group
+            ProfileGameFactory(profile=profile, game=game, progress=50)
+        return co
+
+    small = _seed('Small', 3)
+    big = _seed('Big', 12)
+
+    def _q(slug):
+        with CaptureQueriesContext(connection) as ctx:
+            assert client.get(reverse('company_detail', kwargs={'slug': slug})).status_code == 200
+        return len(ctx)
+
+    assert _q(small.slug) == _q(big.slug)   # 4x the games, same query count -> no per-game/version N+1

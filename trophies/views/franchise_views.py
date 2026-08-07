@@ -276,7 +276,8 @@ class FranchiseDetailView(DetailView):
         # (also fed to that partial standalone on the HTMX sort swap).
         context['groups'] = groups
         # Franchise detail runs staggerReveal on .fgroup, so the shared partial may bake pp-reveal on HTMX
-        # swaps here. Company detail (same partial, no reveal JS) leaves this unset -> its cards never hide.
+        # swaps here. (Company detail sets its own group_reveal too; any page that includes this partial
+        # WITHOUT reveal JS must leave it unset so its cards never stick hidden.)
         context['group_reveal'] = True
         context['empty_message'] = (
             'No games found in this series yet.' if context['is_series']

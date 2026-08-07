@@ -10,9 +10,9 @@
       - user_progress_stats: truthy when the viewer has a linked profile (toggles the per-row progress ring
         vs. a trophy-count-only display)
       - empty_message: text shown when the list is empty
-      - group_reveal: set truthy ONLY by a page that runs staggerReveal on .fgroup (franchise detail). Company
-        detail shares this partial but has no reveal JS, so it must NOT bake pp-reveal or the cards would stick
-        hidden (opacity:0) after an HTMX swap.
+      - group_reveal: set truthy by a page that runs staggerReveal on .fgroup (franchise detail AND company
+        detail both do). A page that includes this partial WITHOUT reveal JS must leave it unset, or the cards
+        would stick hidden (opacity:0) after an HTMX swap.
 {% endcomment %}
 <div class="fgroup-grid{% if request.htmx and group_reveal %} pp-reveal{% endif %}">
     {% for group in groups %}

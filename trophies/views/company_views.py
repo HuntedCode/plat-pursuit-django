@@ -368,6 +368,8 @@ class CompanyDetailView(DetailView):
                 avg_grindiness=Avg('grindiness'),
                 avg_hours=Avg('hours_to_platinum'),
                 rating_count=Count('id'),
+                # Distinct rated games, folded into the same aggregate (was a second query).
+                rated_games=Count('concept_id', distinct=True),
             )
             context['company_avg_rating'] = rating_agg.get('avg_rating')
             context['company_avg_difficulty'] = rating_agg.get('avg_difficulty')
@@ -375,10 +377,7 @@ class CompanyDetailView(DetailView):
             context['company_avg_grindiness'] = rating_agg.get('avg_grindiness')
             context['company_avg_hours'] = rating_agg.get('avg_hours')
             context['company_rating_count'] = rating_agg.get('rating_count', 0)
-            context['company_rated_games'] = UserConceptRating.objects.filter(
-                concept_id__in=company_concept_ids,
-                concept_trophy_group__isnull=True,
-            ).values('concept_id').distinct().count()
+            context['company_rated_games'] = rating_agg.get('rated_games', 0)
 
             # Player stats summed across the company's games.
             game_agg = Game.objects.filter(
