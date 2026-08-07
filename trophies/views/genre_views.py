@@ -40,6 +40,17 @@ class GenreThemeListView(HtmxListMixin, ListView):
 
     VALID_TABS = ('genres', 'themes')
 
+    def get_template_names(self):
+        # Two HTMX swap scopes: the Genres/Themes switcher swaps the whole #gt-view island (toolbar + grid, so
+        # the toolbar re-renders in sync); a search/sort change swaps only the inner #browse-results grid.
+        htmx = getattr(self.request, 'htmx', False)
+        if htmx and self.request.htmx.target == 'gt-view':
+            return ['trophies/partials/genre_theme_list/view.html']
+        xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if (htmx and self.request.htmx.target == 'browse-results') or xhr:
+            return [self.partial_template_name]
+        return [self.template_name]
+
     def get_tab(self):
         tab = self.request.GET.get('tab', 'genres')
         return tab if tab in self.VALID_TABS else 'genres'

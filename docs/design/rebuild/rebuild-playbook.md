@@ -227,6 +227,25 @@ from, to, order)` + the `.pp-view-in-*` classes (`components/motion.css`). Works
 tabs, Collection Case/Gallery/List — call it on the shown panel) and HTMX swaps (Badges — track `lastView`
 and call it on the swapped-in root in `afterSwap`). → motion-patterns.md (Directional view switch).
 
+**The segmented switcher itself MUST HTMX-swap — never a full-page reload.** A `.pp-switch` whose chips are
+`<a href="?tab=…">` that reload the page is a bug, not an acceptable fallback (keep the `href` only as the
+no-JS degrade). The canonical shape (Badges, Recently Added, Genres & Themes):
+- **Two nested swap targets.** The chips swap a **view island** (`hx-target="#<page>-view"`) that wraps the
+  *toolbar + results* — so a per-tab toolbar (different sorts/filters per tab) re-renders in sync with the
+  grid. A search/sort/filter change swaps only the inner **`#browse-results`** grid, so the open filter panel
+  survives. The view's `get_template_names` returns the view-island partial when `request.htmx.target ==
+  '<page>-view'`, the grid partial when it's `'browse-results'` (or an InfiniteScroller XHR), else the full
+  page. Even when a page's toolbar is identical across tabs (G&T), swap the island anyway for one uniform
+  pattern — never a grid-only tab swap that leaves the toolbar controls out of sync with the rendered grid.
+- **Re-init on the island `afterSwap`.** Branch on `target.id`: for the grid swap re-init reveal/scroller +
+  tick the count; for the island swap ALSO `slideViewIn(island, lastTab, newTab, ORDER)`, sync the toggle
+  active state (`is-active` + `aria-selected`) + any header/mini-bar labels that name the tab, re-wire the
+  freshly-rendered toolbar chrome (filter panel, badge, sort proxy) + `StickyReveal.init()`. Read the new tab
+  off a `data-active-*` attr baked onto the swapped `#items-grid`. Cancel a redundant swap when the *active*
+  chip is clicked (`htmx:beforeRequest` → `preventDefault`). Keep tab-specific header copy (subtitle) neutral
+  or update it in the handler, since the header sits outside the island. `wireTablist(chips, {manual:true})`
+  for the keyboard model on the `<a>` chips. Reference JS: `static/js/{genre-theme-list,recently-added}.js`.
+
 ### 8. Filter/sort settle (no blank-flash)
 On a filter/sort swap, dim the results container while in flight so it never freezes/blank-flashes. Add
 the dim **on `change`** (a JS `.is-swapping` class) so it spans the `hx-trigger` debounce — not just the

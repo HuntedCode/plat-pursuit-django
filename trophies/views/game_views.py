@@ -1746,6 +1746,18 @@ class RecentlyAddedView(HtmxListMixin, ListView):
     partial_template_name = 'trophies/partials/recently_added/browse_results.html'
     paginate_by = 30
 
+    def get_template_names(self):
+        # Two HTMX swap scopes: the New Games/New DLC switcher swaps the whole #ra-view island (toolbar + grid,
+        # so the category-scoped sorts + Has Platinum filter re-render); a filter/sort change or an
+        # InfiniteScroller page fetch (XHR) swaps only the inner #browse-results grid.
+        htmx = getattr(self.request, 'htmx', False)
+        if htmx and self.request.htmx.target == 'ra-view':
+            return ['trophies/partials/recently_added/view.html']
+        xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if (htmx and self.request.htmx.target == 'browse-results') or xhr:
+            return [self.partial_template_name]
+        return [self.template_name]
+
     CATEGORIES = {
         'base_games': {
             'label': 'New Games',

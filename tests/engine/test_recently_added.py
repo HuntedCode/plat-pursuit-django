@@ -78,11 +78,11 @@ def test_switcher_marks_active_category(client):
     GameFactory(title_platform=['PS5'])
 
     base = client.get(reverse('recently_added'), {'category': 'base_games'}).content.decode()
-    assert 'data-category="base_games" aria-selected="true"' in base
-    assert 'data-category="dlc" aria-selected="false"' in base
+    assert 'data-category="base_games" aria-controls="ra-view" aria-selected="true"' in base
+    assert 'data-category="dlc" aria-controls="ra-view" aria-selected="false"' in base
 
     dlc = client.get(reverse('recently_added'), {'category': 'dlc'}).content.decode()
-    assert 'data-category="dlc" aria-selected="true"' in dlc
+    assert 'data-category="dlc" aria-controls="ra-view" aria-selected="true"' in dlc
 
 
 def test_unknown_category_falls_back_to_base_games(client):
@@ -94,7 +94,7 @@ def test_unknown_category_falls_back_to_base_games(client):
 
     assert resp.status_code == 200
     assert 'Fallback Game' in content
-    assert 'data-category="base_games" aria-selected="true"' in content
+    assert 'data-category="base_games" aria-controls="ra-view" aria-selected="true"' in content
 
 
 def test_base_cards_get_pursuer_hooks(client):
@@ -189,6 +189,41 @@ def test_xhr_returns_rows_partial(client):
     assert GRID_PARTIAL in templates
     assert FULL_PAGE not in templates
     assert 'data-result-count' in resp.content.decode()
+
+
+def test_category_switch_returns_view_island(client):
+    """The New Games/New DLC switcher HTMX-swaps the #ra-view island (toolbar + grid), not the full page --
+    dynamic switch, no reload. The category-scoped toolbar re-renders inside it."""
+    GameFactory(title_name='Island Game', title_platform=['PS5'])
+
+    resp = client.get(
+        reverse('recently_added'), {'category': 'base_games'},
+        HTTP_HX_REQUEST='true', HTTP_HX_TARGET='ra-view',
+    )
+    templates = {t.name for t in resp.templates if t.name}
+    content = resp.content.decode()
+
+    assert resp.status_code == 200
+    assert 'trophies/partials/recently_added/view.html' in templates
+    assert FULL_PAGE not in templates
+    assert 'radded-form' in content        # toolbar re-rendered inside the island
+    assert 'radded-sentinel' in content    # infinite-scroll sentinel rides the island
+
+
+def test_filter_swap_returns_grid_only(client):
+    """A filter/sort change HTMX-swaps only the inner #browse-results grid, not the toolbar island."""
+    GameFactory(title_platform=['PS5'])
+
+    resp = client.get(
+        reverse('recently_added'), {'sort': 'alpha'},
+        HTTP_HX_REQUEST='true', HTTP_HX_TARGET='browse-results',
+    )
+    templates = {t.name for t in resp.templates if t.name}
+
+    assert resp.status_code == 200
+    assert GRID_PARTIAL in templates
+    assert 'trophies/partials/recently_added/view.html' not in templates
+    assert FULL_PAGE not in templates
 
 
 # ── Whale-safety: deferred blob + bounded queries ─────────────────────────────────────────────────────────

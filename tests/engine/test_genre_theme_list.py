@@ -81,11 +81,11 @@ def test_switcher_marks_active_tab(client):
     _genre_with_games('Puzzle')
 
     genres = client.get(reverse('genres_list'), {'tab': 'genres'}).content.decode()
-    assert 'data-tab="genres" aria-selected="true"' in genres
-    assert 'data-tab="themes" aria-selected="false"' in genres
+    assert 'data-tab="genres" aria-controls="gt-view" aria-selected="true"' in genres
+    assert 'data-tab="themes" aria-controls="gt-view" aria-selected="false"' in genres
 
     themes = client.get(reverse('genres_list'), {'tab': 'themes'}).content.decode()
-    assert 'data-tab="themes" aria-selected="true"' in themes
+    assert 'data-tab="themes" aria-controls="gt-view" aria-selected="true"' in themes
 
 
 def test_unknown_tab_falls_back_to_genres(client):
@@ -94,7 +94,7 @@ def test_unknown_tab_falls_back_to_genres(client):
     content = client.get(reverse('genres_list'), {'tab': 'bogus'}).content.decode()
 
     assert 'Platformer' in content
-    assert 'data-tab="genres" aria-selected="true"' in content
+    assert 'data-tab="genres" aria-controls="gt-view" aria-selected="true"' in content
 
 
 # ── game_count gate + cover ───────────────────────────────────────────────────────────────────────────────
@@ -232,6 +232,9 @@ def test_stat_players_counts_unique_profiles(client):
 
 # ── HtmxListMixin partial / XHR guard ─────────────────────────────────────────────────────────────────────
 
+VIEW_PARTIAL = 'trophies/partials/genre_theme_list/view.html'
+
+
 def test_xhr_returns_rows_partial(client):
     _genre_with_games('Fighting')
 
@@ -242,6 +245,41 @@ def test_xhr_returns_rows_partial(client):
     assert GRID_PARTIAL in templates
     assert FULL_PAGE not in templates
     assert 'data-result-count' in resp.content.decode()
+
+
+def test_switcher_swap_returns_view_island(client):
+    """The Genres/Themes switcher HTMX-swaps the #gt-view island (toolbar + grid), not the full page --
+    dynamic tab switch, no reload. (django-htmx reads HX-Request + HX-Target.)"""
+    _theme_with_games('Stealth')
+
+    resp = client.get(
+        reverse('genres_list'), {'tab': 'themes'},
+        HTTP_HX_REQUEST='true', HTTP_HX_TARGET='gt-view',
+    )
+    templates = {t.name for t in resp.templates if t.name}
+    content = resp.content.decode()
+
+    assert resp.status_code == 200
+    assert VIEW_PARTIAL in templates
+    assert FULL_PAGE not in templates
+    assert 'gtl-form' in content          # the toolbar re-rendered inside the island
+    assert 'Stealth' in content           # the new tab's grid
+
+
+def test_filter_swap_returns_grid_only(client):
+    """A search/sort change HTMX-swaps only the inner #browse-results grid, not the toolbar island."""
+    _genre_with_games('Rhythm')
+
+    resp = client.get(
+        reverse('genres_list'), {'sort': 'games'},
+        HTTP_HX_REQUEST='true', HTTP_HX_TARGET='browse-results',
+    )
+    templates = {t.name for t in resp.templates if t.name}
+
+    assert resp.status_code == 200
+    assert GRID_PARTIAL in templates
+    assert VIEW_PARTIAL not in templates
+    assert FULL_PAGE not in templates
 
 
 # ── Bounded query count ───────────────────────────────────────────────────────────────────────────────────

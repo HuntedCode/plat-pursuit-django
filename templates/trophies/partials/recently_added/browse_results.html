@@ -3,7 +3,7 @@ fetches (HtmxListMixin serves this partial for both). Base games render the shar
 render the `.pp-gcard--dlc` sibling. `pp-reveal` is baked in only on HTMX swaps (JS staggerReveal drives the
 land-in); on first full load the inline JS adds it before observing. {% endcomment %}
 {% load humanize %}
-<div id="items-grid" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ paginator.count }}">
+<div id="items-grid" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ paginator.count }}" data-active-category="{{ active_category }}">
     {% if active_category == 'dlc' %}
         {% for tg in object_list %}
             {% include 'trophies/partials/recently_added/dlc_card.html' with trophy_group=tg %}

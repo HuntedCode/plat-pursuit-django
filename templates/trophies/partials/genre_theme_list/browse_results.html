@@ -3,7 +3,7 @@ partial). Each item is a category tile (.pp-gtile): the representative member-ga
 backdrop with the grouping name + game count over it, plus the stat it's sorted by. `pp-reveal` is baked in
 only on HTMX swaps; on first load the inline JS adds it before observing (staggerReveal land-in). {% endcomment %}
 {% load humanize %}
-<div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ item_count }}">
+<div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ item_count }}" data-active-tab="{{ active_tab }}">
     {% for item in items %}
     <a href="{% url detail_url_name slug=item.slug %}" class="pp-gtile" data-gtile aria-label="{{ item.name }}, {{ item.game_count }} game{{ item.game_count|pluralize }}">
         {% comment %} Representative cover: a materialized member game (recompute_tag_covers). display_image_url
