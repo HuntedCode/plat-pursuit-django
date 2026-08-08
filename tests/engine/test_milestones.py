@@ -10,6 +10,7 @@ from django.core.management import call_command
 from milestones import services
 from milestones.metrics import metric_value
 from milestones.models import EarnedMilestoneTier, Milestone, MilestoneTier, UserMilestone
+from milestones.page import build_milestones_context
 from tests.factories import ProfileFactory, ProfileGameFactory
 
 pytestmark = pytest.mark.django_db
@@ -378,3 +379,64 @@ def test_recompute_command_unknown_profile_errors():
     from django.core.management.base import CommandError
     with pytest.raises(CommandError):
         call_command('recompute_milestones', '--profile', 'no_such_hunter')
+
+
+# ── Rarity denominator + page context (Phase 2 data layer) ────────────────────────────────────────────────
+
+def test_refresh_total_hunters_counts_linked_only():
+    ProfileFactory(is_linked=True)
+    ProfileFactory(is_linked=True)
+    ProfileFactory(is_linked=False)
+    assert services.refresh_total_hunters() == 2
+
+
+def test_tier_rarity_pct_math():
+    assert services.tier_rarity_pct(1, denom=4) == 25.0
+    assert services.tier_rarity_pct(3, denom=4) == 75.0
+    assert services.tier_rarity_pct(5, denom=0) is None   # no denominator -> hide the line
+
+
+def test_build_context_for_linked_profile():
+    call_command('seed_milestones')
+    p = ProfileFactory()
+    _plats(p, 12)   # Platinum Hunter: tiers 1/5/10 earned, next rung = 25
+    services.recompute_milestones(p, reconcile_discord=False)
+
+    ctx = build_milestones_context(p)
+    assert ctx['ms_has_progress'] is True
+    assert ctx['ms_total_milestones'] == 6
+
+    ph = next(c for c in ctx['milestone_cards'] if c['slug'] == 'platinum-hunter')
+    assert ph['value'] == 12
+    assert ph['earned_count'] == 3
+    assert ph['total_tiers'] == 10
+    assert ph['maxed'] is False
+    assert ph['next_tier']['threshold'] == 25
+    assert [t['index'] for t in ph['tiers'] if t['earned']] == [1, 2, 3]
+    assert [t['index'] for t in ph['tiers'] if t['is_next']] == [4]
+    assert ph['progress_pct'] == 13   # (12-10)/(25-10) = 13%
+
+
+def test_build_context_anonymous_has_no_progress():
+    call_command('seed_milestones')
+    ctx = build_milestones_context(None)
+
+    assert ctx['ms_has_progress'] is False
+    assert ctx['ms_earned_tiers'] == 0
+    ph = next(c for c in ctx['milestone_cards'] if c['slug'] == 'platinum-hunter')
+    assert ph['earned_count'] == 0
+    assert ph['next_tier']['index'] == 1
+    assert all(not t['earned'] for t in ph['tiers'])
+
+
+def test_build_context_maxed_milestone():
+    call_command('seed_milestones')
+    p = ProfileFactory(total_trophies=100000)   # Trophy Collector final rung
+    services.recompute_milestones(p, reconcile_discord=False)
+
+    ctx = build_milestones_context(p)
+    tc = next(c for c in ctx['milestone_cards'] if c['slug'] == 'trophy-collector')
+    assert tc['maxed'] is True
+    assert tc['next_tier'] is None
+    assert tc['progress_pct'] == 100
+    assert tc['earned_count'] == 10

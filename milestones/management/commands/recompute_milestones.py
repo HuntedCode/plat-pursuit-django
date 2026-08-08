@@ -10,7 +10,7 @@ Whale-safe: each profile's sweep is a handful of bounded aggregates; profiles ar
 """
 from django.core.management.base import BaseCommand, CommandError
 
-from milestones.services import recompute_milestones, recompute_tier_earned_counts
+from milestones.services import recompute_milestones, recompute_tier_earned_counts, refresh_total_hunters
 
 
 class Command(BaseCommand):
@@ -47,8 +47,9 @@ class Command(BaseCommand):
                 self.stdout.write(f"  …{swept} profiles swept")
 
         drift = recompute_tier_earned_counts()
+        hunters = refresh_total_hunters()   # refresh the rarity denominator
         self.stdout.write(self.style.SUCCESS(
             f"Swept {swept} profiles, awarded {awarded} new tier(s); "
-            f"corrected earned_count on {drift} tier(s)."
+            f"corrected earned_count on {drift} tier(s); rarity denominator = {hunters} hunters."
             + (" Reconciled Discord roles." if reconcile else "")
         ))

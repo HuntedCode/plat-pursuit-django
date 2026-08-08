@@ -11,6 +11,7 @@ desired set and makes the member's milestone-managed roles exactly match it (add
 """
 import logging
 
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import F
 
@@ -18,6 +19,10 @@ from .metrics import MILESTONE_METRICS, metric_value
 from .models import EarnedMilestoneTier, Milestone, MilestoneTier, UserMilestone
 
 logger = logging.getLogger("milestones")
+
+# Rarity denominator ("X% of hunters reached this") -- a cached total-hunters count, refreshed nightly so
+# the per-render rarity is a plain division on denormalized numbers (no per-request COUNT). See spec §6.
+TOTAL_HUNTERS_CACHE_KEY = 'milestones:total_hunters'
 
 # Metrics we've already warned about this process, so a single misconfigured milestone doesn't log once
 # per profile across a 100K-profile sweep.
@@ -149,6 +154,27 @@ def reconcile_discord_roles(profile):
             notify_bot_role_removed(profile, role_id)
 
     transaction.on_commit(_fire)
+
+
+def total_hunters() -> int:
+    """The cached rarity denominator (linked-hunter count). 0 until the nightly refresh has run."""
+    return cache.get(TOTAL_HUNTERS_CACHE_KEY) or 0
+
+
+def refresh_total_hunters() -> int:
+    """Recompute + cache the linked-hunter count (rarity denominator). Called by the nightly sweep."""
+    from trophies.models import Profile
+    n = Profile.objects.filter(is_linked=True).count()
+    cache.set(TOTAL_HUNTERS_CACHE_KEY, n, None)   # no TTL; overwritten each nightly run
+    return n
+
+
+def tier_rarity_pct(tier_earned_count, denom=None):
+    """Percent of hunters who reached a tier. None when the denominator isn't cached yet (hide the line)."""
+    denom = total_hunters() if denom is None else denom
+    if not denom:
+        return None
+    return round(tier_earned_count / denom * 100, 1)
 
 
 def recompute_tier_earned_counts():
