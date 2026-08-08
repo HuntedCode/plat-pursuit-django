@@ -40,7 +40,7 @@ CATALOG = [
     },
     {
         'slug': 'badge-collector', 'name': 'Badge Collector', 'icon': 'shield',
-        'accent': '#a78bfa',
+        'accent': '#4f8ef7',   # true blue (not cyan/Platinum, not indigo/Time)
         'description': 'Badges earned across the collection.',
         'metric': 'total_badges_earned', 'category': 'Collection', 'sort_order': 40,
         # PLACEHOLDER ceiling — calibrate against the real badge catalogue size.
