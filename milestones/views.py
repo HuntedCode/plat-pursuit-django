@@ -4,10 +4,11 @@ A thin view over `build_milestones_context` (milestones/page.py): the heavy lift
 model assembly there. Anonymous / unlinked viewers get the ladders as a preview (no progress).
 """
 from core.services.tracking import track_page_view
+from django.conf import settings
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 
-from .page import build_milestones_context
+from .page import build_demo_context, build_milestones_context
 
 
 class MilestoneListView(TemplateView):
@@ -19,7 +20,12 @@ class MilestoneListView(TemplateView):
             getattr(self.request.user, 'profile', None)
             if self.request.user.is_authenticated else None
         )
-        context.update(build_milestones_context(profile))
+        # Dev/staff-only: ?preview renders the page with fabricated data (writes nothing) so the finished
+        # states -- full ladders, maxed foil, a rare feat -- can be reviewed without earning anything.
+        if self.request.GET.get('preview') and (settings.DEBUG or self.request.user.is_staff):
+            context.update(build_demo_context(profile))
+        else:
+            context.update(build_milestones_context(profile))
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Milestones'},

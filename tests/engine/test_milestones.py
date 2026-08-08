@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import pytest
 from django.core.management import call_command
+from django.test import override_settings
 
 from milestones import services
 from milestones.metrics import metric_value
@@ -514,6 +515,39 @@ def test_milestones_page_renders_for_anonymous(client):
     assert resp.status_code == 200
     assert 'Platinum Hunter' in content
     assert 'Link your PSN account' in content   # anon preview nudge
+
+
+def test_demo_context_covers_all_states():
+    """The staff/DEBUG preview fabricates a spread across every visual state (writes nothing)."""
+    from milestones.models import MilestoneTier
+    from milestones.page import build_demo_context
+    call_command('seed_milestones')
+
+    ctx = build_demo_context(None)
+    assert ctx['ms_preview'] is True and ctx['ms_has_progress'] is True
+    assert len(ctx['milestone_cards']) == 8
+    assert any(c['maxed'] for c in ctx['milestone_cards'])        # a maxed ladder (foil)
+    assert any(not c['maxed'] for c in ctx['milestone_cards'])    # an in-progress ladder
+    assert ctx['ms_nearest'] is not None
+    assert ctx['ms_rarest'] is not None and 0 <= ctx['ms_rarest']['rarity_pct'] <= 100
+    # The fabricated earned_count overrides are in-memory only -- nothing persisted.
+    assert all(t.earned_count == 0 for t in MilestoneTier.objects.all())
+
+
+@override_settings(DEBUG=False)
+def test_preview_gated_to_staff(client):
+    from django.urls import reverse
+    call_command('seed_milestones')
+
+    anon = client.get(reverse('milestones_list') + '?preview=1').content.decode()
+    assert 'Preview mode' not in anon      # ignored for regular visitors
+
+    p = ProfileFactory()
+    p.user.is_staff = True
+    p.user.save(update_fields=['is_staff'])
+    client.force_login(p.user)
+    staff = client.get(reverse('milestones_list') + '?preview=1').content.decode()
+    assert 'Preview mode' in staff         # staff get the fabricated preview
 
 
 def test_seed_sets_accent_and_context_and_page_pass_it(client):

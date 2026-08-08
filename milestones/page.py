@@ -1,10 +1,10 @@
 """Read-side assembly for the /milestones/ page.
 
-`build_milestones_context(profile)` turns the materialized read-models (UserMilestone progress +
-EarnedMilestoneTier records + the Milestone/MilestoneTier catalogue + the cached rarity denominator) into the
-template-ready display data. Whale-safe: it reads O(catalogue) rows + two per-viewer queries, and NEVER
-live-evaluates a metric on the request path. `profile=None` (anon / unlinked) renders the ladders with no
-progress.
+`build_milestones_context(profile)` turns the materialized read-models (UserMilestone progress + the
+Milestone/MilestoneTier catalogue + the cached rarity denominator) into the template-ready display data.
+Whale-safe: it reads O(catalogue) rows + one per-viewer query, and NEVER live-evaluates a metric on the
+request path. `profile=None` (anon / unlinked) renders the ladders with no progress. `build_demo_context`
+(bottom) renders the same page with fabricated data for a staff/DEBUG-only visual check.
 """
 from django.urls import NoReverseMatch, reverse
 
@@ -47,14 +47,22 @@ def _metric_action(metric, profile):
 
 def build_milestones_context(profile):
     milestones = list(Milestone.objects.filter(is_active=True).prefetch_related('tiers'))
-    denom = total_hunters()
-
     progress_by_milestone = {}
     if profile is not None:
         progress_by_milestone = {
             um.milestone_id: um for um in UserMilestone.objects.filter(profile=profile)
         }
+    return _assemble(milestones, progress_by_milestone, total_hunters(),
+                     has_progress=profile is not None, link_profile=profile)
 
+
+def _assemble(milestones, progress_by_milestone, denom, has_progress, link_profile):
+    """Turn the catalogue + per-milestone progress into the template context. Shared by the live page and
+    the dev preview (build_demo_context) so both render through the exact same path.
+
+    `progress_by_milestone` maps milestone_id -> anything with `.current_value` + `.highest_tier_index`
+    (a real UserMilestone, or a demo stand-in). `link_profile` only resolves the card deep-links.
+    """
     cards = []
     total_tiers = total_earned = started = 0
 
@@ -88,7 +96,7 @@ def build_milestones_context(profile):
         else:
             progress_pct = 100
 
-        action_url, action_label = _metric_action(milestone.metric, profile)
+        action_url, action_label = _metric_action(milestone.metric, link_profile)
         cards.append({
             'slug': milestone.slug,
             'name': milestone.name,
@@ -113,7 +121,7 @@ def build_milestones_context(profile):
         total_earned += highest
         started += int(highest > 0)
 
-    nearest, rarest = _spotlights(cards) if profile is not None else (None, None)
+    nearest, rarest = _spotlights(cards) if has_progress else (None, None)
 
     return {
         'milestone_cards': cards,
@@ -124,7 +132,7 @@ def build_milestones_context(profile):
         'ms_total_tiers': total_tiers,
         'ms_earned_tiers': total_earned,
         'ms_total_hunters': denom,
-        'ms_has_progress': profile is not None,
+        'ms_has_progress': has_progress,
     }
 
 
@@ -156,3 +164,48 @@ def _spotlights(cards):
         }
 
     return nearest, rarest
+
+
+# ── Dev preview (staff / DEBUG only) ────────────────────────────────────────────────────────────────────
+# The "complete" states (maxed foil, full ladders, a rare feat) are hard to reach naturally, so this renders
+# the page through the REAL assembly with fabricated progress + rarities. It writes NOTHING: the per-tier
+# `earned_count` overrides live only on the in-memory prefetched instances of this one request.
+
+class _DemoProgress:
+    """Duck-types a UserMilestone for `_assemble` (current_value + highest_tier_index)."""
+    __slots__ = ('current_value', 'highest_tier_index')
+
+    def __init__(self, current_value, highest_tier_index):
+        self.current_value = current_value
+        self.highest_tier_index = highest_tier_index
+
+
+# One entry per milestone (cycled): how many rungs are cleared, as a fraction of the ladder length. Spreads
+# the sample across every visual state -- maxed (foil), almost-there, midway, just-started, untouched.
+_DEMO_FILL = (1.0, 0.9, 0.5, 0.1, 0.0)
+_DEMO_DENOM = 1000   # a round stand-in denominator so fabricated rarities read as believable percentages
+
+
+def build_demo_context(profile):
+    """Fabricated-data render of the page for a quick visual check. `profile` only resolves deep-links."""
+    milestones = list(Milestone.objects.filter(is_active=True).prefetch_related('tiers'))
+    progress = {}
+    for i, milestone in enumerate(milestones):
+        tiers = sorted(milestone.tiers.all(), key=lambda t: t.index)
+        n = len(tiers)
+        if not n:
+            continue
+        highest = round(_DEMO_FILL[i % len(_DEMO_FILL)] * n)
+        if highest >= n:
+            value = tiers[-1].threshold                       # maxed -> sit on the final rung
+        else:
+            low = tiers[highest - 1].threshold if highest > 0 else 0
+            value = low + (tiers[highest].threshold - low) * 3 // 5   # ~60% into the next rung
+        progress[milestone.id] = _DemoProgress(value, highest)
+        # Fabricate a descending rarity ladder (rarer as you climb) on the in-memory tiers -- never saved.
+        for t in tiers:
+            t.earned_count = max(1, round(_DEMO_DENOM / (t.index + 1)))
+
+    ctx = _assemble(milestones, progress, _DEMO_DENOM, has_progress=True, link_profile=profile)
+    ctx['ms_preview'] = True
+    return ctx
