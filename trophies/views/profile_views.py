@@ -36,7 +36,6 @@ from ..models import (
     UserBadge,
     UserBadgeProgress,
     GameList,
-    Challenge,
     Review,
     Trophy,
     UserConceptRating,
@@ -816,13 +815,6 @@ class ProfileDetailView(DetailView):
         """Build context for lists tab — public game lists for this profile."""
         return {'profile_lists': public_lists_qs.order_by('-like_count', '-created_at')}
 
-    def _build_challenges_tab_context(self, profile):
-        """Build context for challenges tab — all challenges by this profile."""
-        challenges = Challenge.objects.filter(
-            profile=profile, is_deleted=False
-        ).order_by('-created_at')
-        return {'profile_challenges': challenges}
-
     def _build_reviews_tab_context(self, profile, per_page, page_number):
         """Build context for reviews tab — reviews written by this profile."""
         reviews_qs = Review.objects.filter(
@@ -877,10 +869,6 @@ class ProfileDetailView(DetailView):
         public_lists_qs = GameList.objects.filter(profile=profile, is_public=True, is_deleted=False)
         context['profile_lists_count'] = public_lists_qs.count()
 
-        # Challenge count (shown in tab header). Reviews archived 2026-05 —
-        # the reviews tab + count were removed.
-        context['profile_challenge_count'] = Challenge.objects.filter(profile=profile, is_deleted=False).count()
-
         # Delegate to tab-specific handler methods
         if tab == 'games':
             tab_context = self._build_games_tab_context(profile, per_page, page_number)
@@ -890,8 +878,6 @@ class ProfileDetailView(DetailView):
             tab_context = self._build_badges_tab_context(profile)
         elif tab == 'lists':
             tab_context = self._build_lists_tab_context(public_lists_qs)
-        elif tab == 'challenges':
-            tab_context = self._build_challenges_tab_context(profile)
         else:
             # Default to games tab if invalid tab specified
             tab_context = self._build_games_tab_context(profile, per_page, page_number)
@@ -912,7 +898,6 @@ class ProfileDetailView(DetailView):
             'trophies': 'trophies/partials/profile_detail/tabs/trophies_tab.html',
             'badges': 'trophies/partials/profile_detail/tabs/badges_tab.html',
             'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
-            'challenges': 'trophies/partials/profile_detail/tabs/challenges_tab.html',
         }
         context['tab_template'] = tab_templates.get(tab, tab_templates['games'])
 
@@ -968,7 +953,6 @@ class ProfileDetailView(DetailView):
         'trophies': 'trophies/partials/profile_detail/tabs/trophies_tab.html',
         'badges': 'trophies/partials/profile_detail/tabs/badges_tab.html',
         'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
-        'challenges': 'trophies/partials/profile_detail/tabs/challenges_tab.html',
         'reviews': 'trophies/partials/profile_detail/tabs/reviews_tab.html',
     }
     _RESULTS_TEMPLATES = {
