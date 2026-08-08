@@ -21,6 +21,9 @@ class Milestone(models.Model):
     name = models.CharField(max_length=120)
     description = models.CharField(max_length=255, blank=True, help_text="One line: what this celebrates.")
     icon = models.CharField(max_length=64, blank=True, help_text="Lucide-style icon key (template renders it).")
+    accent = models.CharField(max_length=32, blank=True,
+                              help_text="Optional CSS accent colour (hex or token) tinting this milestone's "
+                                        "icon/rungs/progress. Blank = the default cyan.")
     # Key into milestones.metrics.MILESTONE_METRICS — the single whale-safe aggregate this milestone ladders on.
     metric = models.CharField(max_length=64)
     category = models.CharField(max_length=64, blank=True, help_text="Optional grouping bucket (unused at v1; flat list).")

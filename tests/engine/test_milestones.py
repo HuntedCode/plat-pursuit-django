@@ -472,3 +472,15 @@ def test_milestones_page_renders_for_anonymous(client):
     assert resp.status_code == 200
     assert 'Platinum Hunter' in content
     assert 'Link your PSN account' in content   # anon preview nudge
+
+
+def test_seed_sets_accent_and_context_and_page_pass_it(client):
+    from django.urls import reverse
+    call_command('seed_milestones')
+    assert Milestone.objects.get(slug='completionist').accent == '#34d399'
+
+    comp = next(c for c in build_milestones_context(None)['milestone_cards'] if c['slug'] == 'completionist')
+    assert comp['accent'] == '#34d399'
+
+    content = client.get(reverse('milestones_list')).content.decode()
+    assert '--msc-accent: #34d399' in content   # rendered as the card's inline accent var

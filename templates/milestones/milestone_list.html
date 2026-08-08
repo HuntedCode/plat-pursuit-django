@@ -52,7 +52,7 @@
     {# ── Milestone cards: one tiered ladder each. ── #}
     <div class="msc-grid" data-msc-grid>
         {% for card in milestone_cards %}
-        <article class="msc{% if card.maxed %} msc--maxed{% endif %}">
+        <article class="msc{% if card.maxed %} msc--maxed{% endif %}"{% if card.accent %} style="--msc-accent: {{ card.accent }};"{% endif %}>
             <div class="msc__head">
                 <span class="msc__icon">
                     {% if card.icon == 'trophy' %}

@@ -61,6 +61,7 @@ def build_milestones_context(profile):
             'name': milestone.name,
             'description': milestone.description,
             'icon': milestone.icon,
+            'accent': milestone.accent,
             'category': milestone.category,
             'value': value,
             'tiers': tier_rows,
