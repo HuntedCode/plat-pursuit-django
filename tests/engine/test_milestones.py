@@ -385,6 +385,30 @@ def test_recompute_command_unknown_profile_errors():
         call_command('recompute_milestones', '--profile', 'no_such_hunter')
 
 
+def test_recompute_reset_wipes_stale_and_reawards_cleanly():
+    """--reset wipes earned/progress rows, then re-derives from the current metric with no stale rows and
+    no double-counted earned_count."""
+    call_command('seed_milestones')
+    p = ProfileFactory()
+    _plats(p, 12)   # Platinum Hunter: earns tiers 1/5/10, next = 25
+    services.recompute_milestones(p, reconcile_discord=False)
+    ph = Milestone.objects.get(slug='platinum-hunter')
+    assert EarnedMilestoneTier.objects.filter(profile=p).count() == 3
+    assert ph.tiers.get(index=1).earned_count == 1
+
+    # A stale earned rung the profile no longer qualifies for (tier 6 = 100 plats, they only have 12).
+    EarnedMilestoneTier.objects.create(profile=p, tier=ph.tiers.get(index=6))
+    assert EarnedMilestoneTier.objects.filter(profile=p).count() == 4
+
+    call_command('recompute_milestones', '--profile', p.psn_username, '--reset', '--yes')
+
+    assert EarnedMilestoneTier.objects.filter(profile=p).count() == 3          # stale rung wiped, 3 re-awarded
+    assert not EarnedMilestoneTier.objects.filter(profile=p, tier__index=6).exists()
+    assert ph.tiers.get(index=1).earned_count == 1                             # corrected, not double-bumped
+    assert ph.tiers.get(index=6).earned_count == 0
+    assert UserMilestone.objects.filter(profile=p, milestone=ph).exists()      # progress read-model rebuilt
+
+
 # ── Rarity denominator + page context (Phase 2 data layer) ────────────────────────────────────────────────
 
 def test_refresh_total_hunters_counts_registered_members_only():

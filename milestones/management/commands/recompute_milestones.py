@@ -5,6 +5,9 @@
 - `--reconcile-discord`: also reconcile each profile's Discord roles. This is the **cutover batch** (grant
   everyone the roles they've already earned) and the **periodic safety-net** the design calls for.
 - `--profile <psn_username>`: sweep a single profile, reconciling its Discord roles.
+- `--reset`: WIPE earned milestones (EarnedMilestoneTier + UserMilestone) before recomputing, for a clean
+  re-award off the current metric definitions (scoped to `--profile` if given, else ALL). Prompts unless
+  `--yes`. Pair with `--reconcile-discord` to also drop Discord roles that are no longer earned.
 
 Whale-safe: each profile's sweep is a handful of bounded aggregates; profiles are streamed with `.iterator()`.
 """
@@ -20,20 +23,44 @@ class Command(BaseCommand):
         parser.add_argument('--profile', help="Recompute a single profile by PSN username (reconciles Discord).")
         parser.add_argument('--reconcile-discord', action='store_true',
                             help="Also reconcile each profile's Discord roles (cutover / periodic safety-net).")
+        parser.add_argument('--reset', action='store_true',
+                            help="Wipe earned milestones (EarnedMilestoneTier + UserMilestone) BEFORE recomputing, "
+                                 "for a clean re-award. Scoped to --profile if given, else ALL profiles.")
+        parser.add_argument('--yes', action='store_true', help="Skip the --reset confirmation prompt.")
 
     def handle(self, *args, **options):
         from trophies.models import Profile
+        from milestones.models import EarnedMilestoneTier, MilestoneTier, UserMilestone
 
         username = options.get('profile')
+        reset = options.get('reset', False)
+
+        if reset and not options.get('yes'):
+            scope = f"profile {username!r}" if username else "ALL profiles"
+            if input(f"Wipe earned milestones for {scope} and recompute? [y/N] ").strip().lower() not in ('y', 'yes'):
+                self.stdout.write("Aborted.")
+                return
+
         if username:
             profile = Profile.objects.filter(psn_username__iexact=username).first()
             if not profile:
                 raise CommandError(f"No profile with psn_username {username!r}.")
+            if reset:
+                EarnedMilestoneTier.objects.filter(profile=profile).delete()
+                UserMilestone.objects.filter(profile=profile).delete()
+                self.stdout.write(self.style.WARNING(f"Wiped {profile.psn_username}: earned + progress records removed."))
             newly = recompute_milestones(profile, reconcile_discord=True)
-            self.stdout.write(self.style.SUCCESS(
-                f"{profile.psn_username}: {len(newly)} new tier(s) awarded."
-            ))
+            if reset:
+                recompute_tier_earned_counts()   # the wiped re-award double-bumps earned_count; recompute it from truth
+                refresh_total_hunters()
+            self.stdout.write(self.style.SUCCESS(f"{profile.psn_username}: {len(newly)} new tier(s) awarded."))
             return
+
+        if reset:
+            EarnedMilestoneTier.objects.all().delete()
+            UserMilestone.objects.all().delete()
+            MilestoneTier.objects.update(earned_count=0)   # re-bumped from 0 by the sweep; drift-corrected at the end
+            self.stdout.write(self.style.WARNING("Wiped ALL earned milestones + progress."))
 
         reconcile = options.get('reconcile_discord', False)
         swept = awarded = 0
@@ -55,3 +82,8 @@ class Command(BaseCommand):
             f"corrected earned_count on {drift} tier(s); rarity denominator = {hunters} hunters."
             + (" Reconciled Discord roles." if reconcile else "")
         ))
+        if reset and not reconcile:
+            self.stdout.write(self.style.NOTICE(
+                "Note: Discord roles were NOT reconciled. Re-run with --reconcile-discord to drop roles that "
+                "are no longer earned after the reset."
+            ))
