@@ -13,8 +13,6 @@ to the various share-image surfaces:
   share image showcasing your trophy profile and stats
 - Monthly Recap (`/dashboard/recap/`) — Spotify-Wrapped style summary
   card for any month you've hunted (lives in trophies/recap_views.py)
-- Challenge Cards (`/dashboard/shareables/challenges/`) — generate share
-  images for your A-Z, Calendar, and Genre challenges
 
 Historically the My Shareables page was a single browse-all-platinums
 interface. The Phase 10b restructure split it into a landing + sub-pages
@@ -33,7 +31,7 @@ from django.utils import timezone
 from django.views.generic import TemplateView
 
 from core.services.tracking import track_page_view
-from trophies.models import EarnedTrophy, Challenge
+from trophies.models import EarnedTrophy
 from trophies.themes import get_available_themes_for_grid
 
 logger = logging.getLogger(__name__)
@@ -173,90 +171,6 @@ class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Templ
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'My Shareables', 'url': reverse_lazy('my_shareables')},
             {'text': 'Platinum Cards'},
-        ]
-
-        track_page_view('my_shareables', 'user', self.request)
-        return context
-
-
-class MyChallengeSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, TemplateView):
-    """
-    Challenge share cards page at `/dashboard/shareables/challenges/`.
-
-    Lists every challenge the user has created (A-Z, Calendar, Genre)
-    grouped by type, with previews and download buttons for each. This
-    is the dedicated home for challenge share cards — users no longer
-    need to bounce between individual challenge detail pages to find
-    each card. The existing challenge detail pages keep their inline
-    share buttons too; this page is additive.
-
-    Each challenge entry uses the same `/api/v1/challenges/<type>/<id>/
-    share/html/` and `share/png/` endpoints that the dashboard's
-    challenge_share_cards module and the challenge detail pages use,
-    so the share-image rendering, theming, and download flows are
-    shared across all surfaces.
-    """
-    template_name = 'shareables/challenges.html'
-    login_url = reverse_lazy('account_login')
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        user = self.request.user
-        profile = user.profile if hasattr(user, 'profile') else None
-
-        if not profile:
-            context['challenges_by_type'] = {}
-            context['has_challenges'] = False
-            return context
-
-        # Pull every non-deleted challenge for this profile, ordered so
-        # active challenges come before completed ones, and within each
-        # group the most recent are first.
-        all_challenges = (
-            Challenge.objects
-            .filter(profile=profile, is_deleted=False)
-            .order_by('is_complete', '-created_at')
-        )
-
-        # Group by challenge_type so the template can render one section
-        # per type (A-Z / Calendar / Genre)
-        grouped: dict[str, list[Challenge]] = defaultdict(list)
-        for ch in all_challenges:
-            grouped[ch.challenge_type].append(ch)
-
-        # Render in a stable order: A-Z first, then Calendar, then Genre.
-        # Use a list of (type_key, type_label, challenges) tuples so the
-        # template doesn't have to know the labels.
-        TYPE_ORDER = [
-            ('az', 'A-Z Platinum Challenge'),
-            ('calendar', 'Platinum Calendar'),
-            ('genre', 'Genre Challenge'),
-        ]
-        challenges_sections = [
-            {
-                'type_key': key,
-                'type_label': label,
-                'challenges': grouped.get(key, []),
-            }
-            for key, label in TYPE_ORDER
-        ]
-
-        context['challenges_sections'] = challenges_sections
-        context['has_challenges'] = any(s['challenges'] for s in challenges_sections)
-
-        # Theme picker grid for the shared color_grid_modal partial.
-        # Challenges aren't tied to a single game, so game art themes
-        # (which composite a specific game's artwork into the background)
-        # are excluded — same call shape as MyProfileCardView.
-        context['available_themes'] = get_available_themes_for_grid(
-            include_game_art=False,
-            grouped=True,
-        )
-
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'My Shareables', 'url': reverse_lazy('my_shareables')},
-            {'text': 'Challenge Cards'},
         ]
 
         track_page_view('my_shareables', 'user', self.request)

@@ -31,7 +31,7 @@ from .dashboard_views import DashboardView
 from .title_views import MyTitlesView
 from .platinum_grid_views import PlatinumGridView
 from .roadmap_views import RoadmapDetailView, RoadmapEditorView
-from .shareables_views import MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView
+from .shareables_views import MyShareablesView, MyPlatinumSharesView, MyProfileCardView
 from .career_views import CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView
 from .collection_views import CollectionView, CollectionBadgeModalView
 from .stats_views import MyStatsView
@@ -76,7 +76,7 @@ __all__ = [
     # Roadmap views
     'RoadmapDetailView', 'RoadmapEditorView',
     # Shareables views
-    'MyShareablesView', 'MyPlatinumSharesView', 'MyChallengeSharesView', 'MyProfileCardView',
+    'MyShareablesView', 'MyPlatinumSharesView', 'MyProfileCardView',
     # The Lab view
     'CareerView', 'ContractsResultsView', 'ContractModalView', 'ContractModalPreviewView',
     # Collection album view
