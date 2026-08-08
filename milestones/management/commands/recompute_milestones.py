@@ -37,9 +37,11 @@ class Command(BaseCommand):
 
         reconcile = options.get('reconcile_discord', False)
         swept = awarded = 0
-        # No .only() -- two metrics read denormalized Profile columns (total_trophies/total_completes); deferring
-        # them would trigger a per-profile refetch (an N+1 across the whole fleet). Profile is one narrow row.
-        for profile in Profile.objects.filter(is_linked=True).iterator(chunk_size=500):
+        # REGISTERED members only (user__isnull=False) -- milestones are for site accounts, not synced/scouted
+        # profiles (which would also skew the rarity denominator). No .only(): two metrics read denormalized
+        # Profile columns (total_trophies/total_completes) + a metric reads profile.user; deferring would cause
+        # a per-profile refetch N+1. Profile is one narrow row.
+        for profile in Profile.objects.filter(user__isnull=False).select_related('user').iterator(chunk_size=500):
             newly = recompute_milestones(profile, reconcile_discord=reconcile)
             swept += 1
             awarded += len(newly)

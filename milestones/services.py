@@ -157,14 +157,16 @@ def reconcile_discord_roles(profile):
 
 
 def total_hunters() -> int:
-    """The cached rarity denominator (linked-hunter count). 0 until the nightly refresh has run."""
+    """The cached rarity denominator (registered-member count). 0 until the nightly refresh has run."""
     return cache.get(TOTAL_HUNTERS_CACHE_KEY) or 0
 
 
 def refresh_total_hunters() -> int:
-    """Recompute + cache the linked-hunter count (rarity denominator). Called by the nightly sweep."""
+    """Recompute + cache the rarity denominator. Counts REGISTERED members only (user__isnull=False) --
+    synced/scouted profiles without a site account are excluded so the '% of hunters' isn't skewed by
+    sync noise. Called by the nightly sweep."""
     from trophies.models import Profile
-    n = Profile.objects.filter(is_linked=True).count()
+    n = Profile.objects.filter(user__isnull=False).count()
     cache.set(TOTAL_HUNTERS_CACHE_KEY, n, None)   # no TTL; overwritten each nightly run
     return n
 

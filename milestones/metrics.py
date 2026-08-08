@@ -67,3 +67,31 @@ def _playtime_hours(profile) -> int:
     from trophies.models import ProfileGame
     total = ProfileGame.objects.filter(profile=profile).aggregate(s=Sum('play_duration'))['s']
     return int(total.total_seconds() // 3600) if total else 0
+
+
+@milestone_metric("community_months")
+def _community_months(profile) -> int:
+    # Whole months since the user SIGNED UP (user.date_joined) -- not Profile.created_at, which can predate
+    # registration for a synced/scouted profile. 0 for a profile with no registered user yet.
+    from django.utils import timezone
+    user = getattr(profile, 'user', None)
+    if not user or not user.date_joined:
+        return 0
+    return max((timezone.now() - user.date_joined).days // 30, 0)
+
+
+@milestone_metric("premium_months")
+def _premium_months(profile) -> int:
+    # Whole months summed across the user's subscription periods (open periods count up to now). Bounded per
+    # user (a handful of periods), so the small Python sum is whale-safe.
+    from django.utils import timezone
+    from users.models import SubscriptionPeriod
+    user = getattr(profile, 'user', None)
+    if not user:
+        return 0
+    now = timezone.now()
+    total_days = 0
+    for started, ended in SubscriptionPeriod.objects.filter(user=user).values_list('started_at', 'ended_at'):
+        if started:
+            total_days += max(((ended or now) - started).days, 0)
+    return int(total_days // 30)

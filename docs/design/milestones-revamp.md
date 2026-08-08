@@ -171,7 +171,9 @@ set and syncs it idempotently (this is the robust version of the legacy "just se
 "**X% of hunters have reached this**" per tier, to reinforce the pride/beacon feel. Cheap:
 - `MilestoneTier.earned_count` — denormalized, `F()`-bumped on award, **recomputed nightly** for drift
   correction (same pattern as badge rarity + the old `Milestone.earned_count`).
-- Denominator = a cached **total-hunters** count (linked profiles), refreshed by the nightly cron.
+- Denominator = a cached **registered-member** count (`user__isnull=False`), refreshed by the nightly cron.
+  Synced / scouted profiles without a site account are excluded so the `%` isn't skewed by sync noise (the
+  sweep is scoped the same way). NOT `is_linked` — that includes scouts.
 - `rarity_pct = earned_count / total_hunters` — a plain division at render, **O(1)**, zero per-render
   queries. Whale-safe.
 
@@ -212,10 +214,23 @@ ceilings and just add intermediate rungs to reach 10.
    above baseline and the ceiling is aspirational, not a hard cap. This one is In Flight (the level economy
    is still settling) — calibrate the ladder once when we build, don't hard-guess now.
 
-**Categories:** with only six, launch as a **single flat list** (no category tabs). The `Milestone.category`
+**Supporter group (added):** two more milestones live under a light **"Supporter"** section (community + the
+premium tenure ones aren't trophy-hunting feats, so a quiet group label separates them from the core):
+
+| Milestone | Metric | Accent | Tiers (months) |
+|---|---|---|---|
+| **Loyal Member** | `community_months` (since `user.date_joined`) | teal | 1 / 3 / 6 / 12 / 24 / 36 / 48 / 60 / 96 / 120 |
+| **Premium Supporter** | `premium_months` (summed `SubscriptionPeriod`) | rose | 1 / 3 / 6 / 12 / 18 / 24 / 36 / 48 / 60 / 84 |
+
+Both are time-based but need no new cron — the nightly sweep re-evaluates every metric. Community tenure reads
+the **sign-up date** (`user.date_joined`), not `Profile.created_at` (a synced profile can predate registration).
+
+**Categories:** the six core milestones share a blank category (the default section, no header); the two
+Supporter ones carry `category="Supporter"` and render under a quiet section label (`{% regroup %}`). The `Milestone.category`
 field stays in the model for when the catalogue grows.
 
-**Deliberately deferred to a later expansion** (to avoid the old sprawl): Community (ratings/reviews),
+**Deliberately deferred to a later expansion** (to avoid the old sprawl): community *contributions*
+(ratings/reviews — distinct from the tenure-based Loyal Member above),
 Supporter (subscription tenure), breadth (distinct genres/franchises), Secret/hidden feats, per-tier flair.
 The model supports them with **zero schema change** — new metrics + data rows when we choose to add them.
 

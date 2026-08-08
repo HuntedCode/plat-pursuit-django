@@ -7,6 +7,15 @@
 .msc-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
 @media (min-width: 1280px) { .msc-grid { grid-template-columns: 1fr 1fr; } }
 
+/* Group section label (e.g. "Supporter"), spanning the grid with a trailing divider. The default (blank)
+   group has no header, so the page opens straight into the core milestones. */
+.msc-section {
+    grid-column: 1 / -1; margin-top: 6px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-text-mute);
+}
+.msc-section::after { content: ''; flex: 1 1 auto; height: 1px; background: var(--pp-border); }
+
 .msc {
     /* Per-milestone accent: --msc-accent is set inline from the milestone's `accent` field; falls back to the
        signature cyan. --msc-c is the single handle every accent spot below uses; --horizon-accent tints the

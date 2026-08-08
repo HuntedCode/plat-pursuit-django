@@ -76,12 +76,12 @@ def test_unknown_metric_returns_zero():
 
 def test_seed_catalogue_idempotent():
     call_command('seed_milestones')
-    assert Milestone.objects.count() == 6
+    assert Milestone.objects.count() == 8
     assert all(m.tiers.count() == 10 for m in Milestone.objects.all())
 
     call_command('seed_milestones')   # re-run
-    assert Milestone.objects.count() == 6
-    assert MilestoneTier.objects.count() == 60
+    assert Milestone.objects.count() == 8
+    assert MilestoneTier.objects.count() == 80
 
 
 def test_seed_preserves_earned_count_on_rerun():
@@ -364,15 +364,15 @@ def test_seed_preserves_discord_role_id_on_rerun():
 
 def test_recompute_command_mass_path():
     call_command('seed_milestones')
-    p = ProfileFactory(is_linked=True)
+    p = ProfileFactory()                          # registered member
     _plats(p, 12)
-    unlinked = ProfileFactory(is_linked=False)   # must be skipped by the is_linked filter
-    _plats(unlinked, 12)
+    scout = ProfileFactory(user=None)             # synced/scout, no site account -> must be skipped
+    _plats(scout, 12)
 
     call_command('recompute_milestones')
 
     assert EarnedMilestoneTier.objects.filter(profile=p, tier__milestone__slug='platinum-hunter').count() == 3
-    assert not EarnedMilestoneTier.objects.filter(profile=unlinked).exists()
+    assert not EarnedMilestoneTier.objects.filter(profile=scout).exists()
 
 
 def test_recompute_command_unknown_profile_errors():
@@ -383,10 +383,10 @@ def test_recompute_command_unknown_profile_errors():
 
 # ── Rarity denominator + page context (Phase 2 data layer) ────────────────────────────────────────────────
 
-def test_refresh_total_hunters_counts_linked_only():
-    ProfileFactory(is_linked=True)
-    ProfileFactory(is_linked=True)
-    ProfileFactory(is_linked=False)
+def test_refresh_total_hunters_counts_registered_members_only():
+    ProfileFactory()               # has a site user
+    ProfileFactory()               # has a site user
+    ProfileFactory(user=None)      # synced/scout profile, no site account -> excluded from the denominator
     assert services.refresh_total_hunters() == 2
 
 
@@ -404,7 +404,7 @@ def test_build_context_for_linked_profile():
 
     ctx = build_milestones_context(p)
     assert ctx['ms_has_progress'] is True
-    assert ctx['ms_total_milestones'] == 6
+    assert ctx['ms_total_milestones'] == 8
 
     ph = next(c for c in ctx['milestone_cards'] if c['slug'] == 'platinum-hunter')
     assert ph['value'] == 12
@@ -484,3 +484,42 @@ def test_seed_sets_accent_and_context_and_page_pass_it(client):
 
     content = client.get(reverse('milestones_list')).content.decode()
     assert '--msc-accent: #34d399' in content   # rendered as the card's inline accent var
+
+
+# ── Supporter metrics + grouping ──────────────────────────────────────────────────────────────────────────
+
+def test_metric_community_months():
+    from datetime import timedelta
+    from django.utils import timezone
+    p = ProfileFactory()
+    p.user.date_joined = timezone.now() - timedelta(days=400)   # ~13 months since sign-up
+    p.user.save(update_fields=['date_joined'])
+    assert metric_value('community_months', p) == 13   # 400 // 30
+
+    assert metric_value('community_months', ProfileFactory(user=None)) == 0   # no site account
+
+
+def test_metric_premium_months():
+    from datetime import timedelta
+    from django.utils import timezone
+    from users.models import SubscriptionPeriod
+    p = ProfileFactory()
+    now = timezone.now()
+    SubscriptionPeriod.objects.create(user=p.user, started_at=now - timedelta(days=90),
+                                      ended_at=now - timedelta(days=30), provider='stripe')   # 60 days
+    SubscriptionPeriod.objects.create(user=p.user, started_at=now - timedelta(days=30),
+                                      ended_at=None, provider='stripe')                        # 30 days, open
+    assert metric_value('premium_months', p) == 3   # 90 // 30
+
+    assert metric_value('premium_months', ProfileFactory()) == 0   # never subscribed
+
+
+def test_page_groups_supporter_section(client):
+    from django.urls import reverse
+    call_command('seed_milestones')
+    content = client.get(reverse('milestones_list')).content.decode()
+
+    assert 'Loyal Member' in content
+    assert 'Premium Supporter' in content
+    assert 'msc-section' in content     # the group header rendered
+    assert '>Supporter<' in content
