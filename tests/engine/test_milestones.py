@@ -385,6 +385,30 @@ def test_recompute_command_unknown_profile_errors():
         call_command('recompute_milestones', '--profile', 'no_such_hunter')
 
 
+def test_recompute_on_sync_reconciles_only_on_role_bearing_crossing(monkeypatch):
+    """The per-sync trigger reconciles Discord only when a tier WITH a role is newly crossed."""
+    call_command('seed_milestones')
+    p = ProfileFactory()
+    calls = []
+    monkeypatch.setattr(services, 'reconcile_discord_roles', lambda prof: calls.append(prof))
+
+    # Cross rungs that carry no Discord role -> awarded, but NO reconcile.
+    _plats(p, 12)                                  # Platinum Hunter tiers 1/5/10
+    newly = services.recompute_on_sync(p)
+    assert {t.threshold for t in newly} == {1, 5, 10}
+    assert calls == []
+
+    # Attach a role to the next rung (25), then cross it -> reconcile fires exactly once.
+    ph = Milestone.objects.get(slug='platinum-hunter')
+    t25 = ph.tiers.get(index=4)
+    t25.discord_role_id = 999
+    t25.save(update_fields=['discord_role_id'])
+    _plats(p, 13)                                  # 12 -> 25 total, crosses the role-bearing rung
+    newly = services.recompute_on_sync(p)
+    assert [t.threshold for t in newly] == [25]
+    assert calls == [p]
+
+
 def test_recompute_reset_wipes_stale_and_reawards_cleanly():
     """--reset wipes earned/progress rows, then re-derives from the current metric with no stale rows and
     no double-counted earned_count."""

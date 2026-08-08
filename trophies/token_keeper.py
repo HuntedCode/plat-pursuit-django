@@ -31,7 +31,6 @@ from trophies.util_modules.language import detect_asian_language
 from trophies.util_modules.region import detect_region_from_details
 from trophies.services.profile_stats_service import update_profile_games, update_profile_trophy_counts
 from trophies.services.badge_service import check_profile_badges
-from trophies.services.milestone_service import check_all_milestones_for_user
 from trophies.services.concept_anchor_service import try_anchor_new_game
 
 logger = logging.getLogger("psn_api")
@@ -1505,11 +1504,10 @@ class TokenKeeper:
                 DeferredNotificationService.create_badge_notifications(profile_id, profile=profile)
             except Exception as e:
                 logger.error(f"[profile {profile_id}] sync_complete badge notification failed: {e}", exc_info=True)
-            _set_phase('milestones')
-            from trophies.milestone_constants import ALL_CALENDAR_TYPES, ALL_GENRE_TYPES
-            # Challenge-specific types are excluded here because they're checked
-            # separately by their respective check_*_challenge_progress() functions below
-            check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES | {'az_progress'} | ALL_GENRE_TYPES)
+
+            # NOTE: the new milestones app (platinums/trophies/completions/badges/level/playtime) is recomputed
+            # LATER, in the 'finishing' phase below -- it reads the post-sync denorm counts (total_trophies /
+            # total_completes) that update_profile_trophy_counts refreshes there, so it must run after them.
 
             _set_phase('challenges')
             # Check A-Z challenge progress
@@ -1537,6 +1535,17 @@ class TokenKeeper:
             # consistent even when the user toggles that setting between syncs.
             update_profile_games(profile)
             update_profile_trophy_counts(profile)
+
+            # New milestones app: recompute off the now-fresh post-sync signals (plats, badges, and the
+            # trophy/completion denorms just refreshed above). recompute_on_sync reconciles Discord only when a
+            # role-bearing tier was newly crossed, so a routine sync never re-asserts roles against the bot.
+            _set_phase('milestones')
+            try:
+                from milestones.services import recompute_on_sync
+                recompute_on_sync(profile)
+            except Exception:
+                logger.exception(f"[profile {profile_id}] milestone recompute failed")
+
             profile.set_sync_status('synced')
 
             from trophies.services.timeline_service import invalidate_timeline_cache

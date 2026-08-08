@@ -89,6 +89,16 @@ def recompute_milestones(profile, *, reconcile_discord=True):
     return newly
 
 
+def recompute_on_sync(profile):
+    """The high-frequency post-sync trigger (token_keeper `sync_complete`): recompute, and reconcile Discord
+    ONLY when a ROLE-BEARING tier was newly crossed -- so a routine sync that awards no new role never
+    re-asserts roles against the bot. Returns the newly-earned tiers."""
+    newly = recompute_milestones(profile, reconcile_discord=False)
+    if newly and any(t.discord_role_id for t in newly):
+        reconcile_discord_roles(profile)
+    return newly
+
+
 def _award_tiers(profile, tiers):
     """Persist the permanent earn records + bump the rarity counters."""
     with transaction.atomic():

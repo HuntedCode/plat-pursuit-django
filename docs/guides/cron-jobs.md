@@ -21,6 +21,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 03:45 UTC daily | `recompute_tag_covers` | Daily | None |
 | 04:30 UTC daily | `detect_dlc_and_refresh` | Daily | TrophyGroups synced (TokenKeeper current) |
 | 05:00 UTC daily | `audit_badge_coverage` | Daily | None |
+| 05:30 UTC daily | `recompute_milestones` | Daily | Profile counters current (`recalc_profile_counters` at 03:30) |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
 | Weekly (Saturday 09:00 UTC) | `enrich_from_igdb --missing-or-no-match --max-minutes 60` | Weekly | None |
@@ -159,6 +160,16 @@ historical pass after Phase 3's rematch run.
 - **Dependencies**: None. Read-only. More accurate after IGDB enrichment (franchise/developer + concept links) is current.
 - **Idempotency**: Fully safe to re-run; pure read + email. By default sends mail only when gaps exist.
 - **Failure impact**: Staff miss a day of "new game not in its badge" alerts; no data effect. Re-running catches up.
+
+### recompute_milestones
+
+- **Schedule**: Daily, 05:30 UTC
+- **Command**: `python manage.py recompute_milestones`
+- **What it does**: Sweeps every registered profile, recomputing each active milestone ladder (platinums, trophies, completions, badges, Pursuer level, playtime, tenure, premium), awarding any newly-crossed tiers and writing the materialized progress read-model. Then drift-corrects every tier's `earned_count` and refreshes the cached rarity denominator (`total_hunters`). Milestones are also recomputed per-profile at the end of each PSN sync (`token_keeper` `sync_complete`); this daily sweep is the safety-net + the **only** refresh of the rarity denominator. Logic in `milestones/services.py`; see [milestones-revamp](../design/milestones-revamp.md).
+- **Dependencies**: Denormalized profile counters current — schedule after `recalc_profile_counters` (03:30). Whale-safe: one bounded aggregate per distinct metric per profile; profiles are streamed with `.iterator()`.
+- **Discord**: Runs WITHOUT `--reconcile-discord` (roles are kept current by the per-sync + on-link reconcile). Add `--reconcile-discord` for a periodic role safety-net (heavier — one bot call per linked profile with a role delta).
+- **Idempotency**: Fully safe to re-run; already-earned rungs are never re-awarded. `--reset` (optionally `--milestone <slug>`) wipes + re-derives a ladder against changed thresholds.
+- **Failure impact**: Milestone pages show yesterday's progress + a stale/absent rarity denominator until the next run; per-sync recompute still updates any actively-syncing hunter. Re-running catches up.
 
 ### update_shovelware
 

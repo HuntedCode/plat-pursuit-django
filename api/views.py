@@ -131,6 +131,13 @@ class VerifyView(APIView):
                     profile.link_discord(discord_id)
                     initial_badge_check(profile)
                     check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES)
+                    # New milestones app: compute + grant the ladder roles they've already earned on link.
+                    # Guarded so a milestone hiccup never fails an otherwise-successful link.
+                    try:
+                        from milestones.services import recompute_milestones
+                        recompute_milestones(profile, reconcile_discord=True)
+                    except Exception:
+                        logger.exception(f"[verify] milestone recompute failed for {psn_username}")
                     sync_discord_roles(profile)
                     return Response({'success': True, 'message': 'Verified and linked successfully!'})
                 else:
@@ -206,6 +213,14 @@ class SyncRolesView(APIView):
 
         from trophies.services.badge_service import sync_discord_roles
         role_counts = sync_discord_roles(profile)
+
+        # New milestones app roles (highest earned per ladder) -- reconcile alongside the legacy sync so
+        # /sync-roles re-pushes them too. Idempotent + self-healing; guarded so it never fails the sync.
+        try:
+            from milestones.services import reconcile_discord_roles
+            reconcile_discord_roles(profile)
+        except Exception:
+            logger.exception(f"[sync-roles] milestone reconcile failed for discord_id={discord_id}")
 
         total = sum(role_counts.values())
         return Response({
