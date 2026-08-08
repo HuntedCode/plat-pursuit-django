@@ -93,13 +93,20 @@ def _playtime_hours(profile) -> int:
 
 @milestone_metric("community_months")
 def _community_months(profile) -> int:
-    # Whole months since the user SIGNED UP (user.date_joined) -- not Profile.created_at, which can predate
-    # registration for a synced/scouted profile. 0 for a profile with no registered user yet.
+    # Whole months since the profile FIRST engaged with the community, via website sign-up (user.date_joined)
+    # OR a verified Discord link (discord_linked_at) -- whichever came first. A Discord-only client counts
+    # from their link date; a web user from sign-up. NOT Profile.created_at (can predate either for a synced
+    # profile). 0 if neither.
     from django.utils import timezone
+    starts = []
     user = getattr(profile, 'user', None)
-    if not user or not user.date_joined:
+    if user and user.date_joined:
+        starts.append(user.date_joined)
+    if getattr(profile, 'is_discord_verified', False) and getattr(profile, 'discord_linked_at', None):
+        starts.append(profile.discord_linked_at)
+    if not starts:
         return 0
-    return max((timezone.now() - user.date_joined).days // 30, 0)
+    return max((timezone.now() - min(starts)).days // 30, 0)
 
 
 @milestone_metric("premium_months")

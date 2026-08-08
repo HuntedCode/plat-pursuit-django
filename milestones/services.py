@@ -13,12 +13,27 @@ import logging
 
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Q
 
 from .metrics import MILESTONE_METRICS, metric_value
 from .models import EarnedMilestoneTier, Milestone, MilestoneTier, UserMilestone
 
 logger = logging.getLogger("milestones")
+
+
+def member_q(prefix='') -> Q:
+    """Q selecting milestone "community members" -- anyone engaged via the WEBSITE (a site account) OR
+    DISCORD (a verified link). Excludes pure scouts / unregistered synced profiles (no account, no Discord).
+
+    This is the single population that BOTH earns milestones AND forms the rarity denominator, so the
+    "% of hunters" numerator + denominator always agree. `prefix` is for related lookups, e.g.
+    `member_q('profile__')` over an EarnedMilestoneTier queryset."""
+    return Q(**{f'{prefix}user__isnull': False}) | Q(**{f'{prefix}is_discord_verified': True})
+
+
+def is_member(profile) -> bool:
+    """Imperative `member_q` for one profile: has a site account OR a verified Discord link."""
+    return getattr(profile, 'user_id', None) is not None or bool(getattr(profile, 'is_discord_verified', False))
 
 # Rarity denominator ("X% of hunters reached this") -- a cached total-hunters count, refreshed nightly so
 # the per-render rarity is a plain division on denormalized numbers (no per-request COUNT). See spec §6.
@@ -94,10 +109,10 @@ def recompute_on_sync(profile):
     ONLY when a ROLE-BEARING tier was newly crossed -- so a routine sync that awards no new role never
     re-asserts roles against the bot. Returns the newly-earned tiers.
 
-    Registered members ONLY: scouts + unregistered synced profiles (user=None) reach sync_complete too, and
-    minting milestone rows for them would bloat the tables and skew the rarity numerator against the
-    registered-only denominator (matches the mass sweep's `user__isnull=False` filter)."""
-    if getattr(profile, 'user_id', None) is None:
+    Community members ONLY (site account OR verified Discord): scouts + unregistered synced profiles reach
+    sync_complete too, and minting milestone rows for them would bloat the tables and skew the rarity
+    numerator against the members-only denominator (see `member_q`)."""
+    if not is_member(profile):
         return []
     newly = recompute_milestones(profile, reconcile_discord=False)
     if newly and any(t.discord_role_id for t in newly):
@@ -180,11 +195,11 @@ def total_hunters() -> int:
 
 
 def refresh_total_hunters() -> int:
-    """Recompute + cache the rarity denominator. Counts REGISTERED members only (user__isnull=False) --
-    synced/scouted profiles without a site account are excluded so the '% of hunters' isn't skewed by
-    sync noise. Called by the nightly sweep."""
+    """Recompute + cache the rarity denominator. Counts community members (site account OR verified Discord;
+    see `member_q`) -- pure scouts / unregistered synced profiles are excluded so the '% of hunters' isn't
+    skewed by sync noise. Called by the nightly sweep."""
     from trophies.models import Profile
-    n = Profile.objects.filter(user__isnull=False).count()
+    n = Profile.objects.filter(member_q()).count()
     cache.set(TOTAL_HUNTERS_CACHE_KEY, n, None)   # no TTL; overwritten each nightly run
     return n
 
@@ -203,11 +218,11 @@ def tier_rarity_pct(tier_earned_count, denom=None):
 
 def recompute_tier_earned_counts():
     """Nightly drift-correction: recompute every tier's denormalized `earned_count` from the source of
-    truth. Bounded (one grouped COUNT over the catalog). Counts REGISTERED members only, matching the
-    rarity denominator (`refresh_total_hunters`) so the '% of hunters' numerator + denominator agree."""
+    truth. Bounded (one grouped COUNT over the catalog). Counts community members only (`member_q`),
+    matching the rarity denominator (`refresh_total_hunters`) so the '% of hunters' numerator + denom agree."""
     from django.db.models import Count
     counts = dict(
-        EarnedMilestoneTier.objects.filter(profile__user__isnull=False)
+        EarnedMilestoneTier.objects.filter(member_q('profile__'))
         .values('tier_id').annotate(c=Count('id')).values_list('tier_id', 'c')
     )
     to_update = []

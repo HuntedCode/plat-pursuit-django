@@ -414,17 +414,21 @@ def test_recompute_on_sync_reconciles_only_on_role_bearing_crossing(monkeypatch)
     assert calls == [p]
 
 
-def test_recompute_on_sync_skips_userless_profiles():
-    """Scouts / unregistered synced profiles (user=None) must not mint milestone rows or skew rarity."""
+def test_recompute_on_sync_membership_scope():
+    """Scouts/unregistered syncs are skipped; Discord-only clients (verified, no site account) earn."""
     call_command('seed_milestones')
-    scout = ProfileFactory(user=None)
-    _plats(scout, 12)   # would cross Platinum Hunter rungs if it were a member
 
-    newly = services.recompute_on_sync(scout)
-
-    assert newly == []
+    scout = ProfileFactory(user=None)          # no account, no Discord -> skipped
+    _plats(scout, 12)
+    assert services.recompute_on_sync(scout) == []
     assert not EarnedMilestoneTier.objects.filter(profile=scout).exists()
     assert not UserMilestone.objects.filter(profile=scout).exists()
+
+    discord_only = ProfileFactory(user=None, is_discord_verified=True)   # Discord member -> earns
+    _plats(discord_only, 12)                   # crosses Platinum Hunter rungs 1/5/10
+    newly = services.recompute_on_sync(discord_only)
+    assert {t.threshold for t in newly} == {1, 5, 10}
+    assert EarnedMilestoneTier.objects.filter(profile=discord_only).count() == 3
 
 
 def test_recompute_reset_wipes_stale_and_reawards_cleanly():
@@ -484,11 +488,13 @@ def test_recompute_milestone_scope_validates():
 
 # ── Rarity denominator + page context (Phase 2 data layer) ────────────────────────────────────────────────
 
-def test_refresh_total_hunters_counts_registered_members_only():
-    ProfileFactory()               # has a site user
-    ProfileFactory()               # has a site user
-    ProfileFactory(user=None)      # synced/scout profile, no site account -> excluded from the denominator
-    assert services.refresh_total_hunters() == 2
+def test_refresh_total_hunters_counts_community_members():
+    # Community = site account OR verified Discord. Scouts / unregistered syncs are excluded.
+    ProfileFactory()                                        # site user -> counts
+    ProfileFactory()                                        # site user -> counts
+    ProfileFactory(user=None, is_discord_verified=True)     # Discord-only client -> counts
+    ProfileFactory(user=None)                               # scout / unregistered sync -> excluded
+    assert services.refresh_total_hunters() == 3
 
 
 def test_tier_rarity_pct_math():
@@ -667,12 +673,25 @@ def test_seed_sets_accent_and_context_and_page_pass_it(client):
 def test_metric_community_months():
     from datetime import timedelta
     from django.utils import timezone
+    now = timezone.now()
     p = ProfileFactory()
-    p.user.date_joined = timezone.now() - timedelta(days=400)   # ~13 months since sign-up
+    p.user.date_joined = now - timedelta(days=400)   # ~13 months since sign-up
     p.user.save(update_fields=['date_joined'])
     assert metric_value('community_months', p) == 13   # 400 // 30
 
-    assert metric_value('community_months', ProfileFactory(user=None)) == 0   # no site account
+    # Discord-only client: tenure counts from the verified link date.
+    dc = ProfileFactory(user=None, is_discord_verified=True,
+                        discord_linked_at=now - timedelta(days=90))
+    assert metric_value('community_months', dc) == 3   # 90 // 30
+
+    # A dual member counts from the EARLIER engagement (sign-up here predates the Discord link).
+    p.discord_linked_at = now - timedelta(days=100)
+    p.is_discord_verified = True
+    p.save(update_fields=['discord_linked_at', 'is_discord_verified'])
+    assert metric_value('community_months', p) == 13   # earliest of 400d / 100d
+
+    # Neither account nor Discord -> 0.
+    assert metric_value('community_months', ProfileFactory(user=None)) == 0
 
 
 def test_metric_premium_months():

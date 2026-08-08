@@ -132,11 +132,11 @@ class VerifyView(APIView):
                     initial_badge_check(profile)
                     check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES)
                     # New milestones app: compute + grant the ladder roles they've already earned on link.
-                    # Registered members only (milestones are site-account-scoped -- see recompute_on_sync).
-                    # Guarded so a milestone hiccup never fails an otherwise-successful link.
-                    if profile.user_id:
+                    # Community members (site account OR the Discord link just made) earn milestones -- see
+                    # milestones.services.member_q. Guarded so a hiccup never fails an otherwise-good link.
+                    from milestones.services import is_member, recompute_milestones
+                    if is_member(profile):
                         try:
-                            from milestones.services import recompute_milestones
                             recompute_milestones(profile, reconcile_discord=True)
                         except Exception:
                             logger.exception(f"[verify] milestone recompute failed for {psn_username}")
@@ -217,11 +217,11 @@ class SyncRolesView(APIView):
         role_counts = sync_discord_roles(profile)
 
         # New milestones app roles (highest earned per ladder) -- reconcile alongside the legacy sync so
-        # /sync-roles re-pushes them too. Registered members only (site-account-scoped); idempotent +
+        # /sync-roles re-pushes them too. Community members (site account OR verified Discord); idempotent +
         # self-healing; guarded so it never fails the sync.
-        if profile.user_id:
+        from milestones.services import is_member, reconcile_discord_roles
+        if is_member(profile):
             try:
-                from milestones.services import reconcile_discord_roles
                 reconcile_discord_roles(profile)
             except Exception:
                 logger.exception(f"[sync-roles] milestone reconcile failed for discord_id={discord_id}")

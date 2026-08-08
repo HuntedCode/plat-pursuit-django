@@ -171,9 +171,13 @@ set and syncs it idempotently (this is the robust version of the legacy "just se
 "**X% of hunters have reached this**" per tier, to reinforce the pride/beacon feel. Cheap:
 - `MilestoneTier.earned_count` — denormalized, `F()`-bumped on award, **recomputed nightly** for drift
   correction (same pattern as badge rarity + the old `Milestone.earned_count`).
-- Denominator = a cached **registered-member** count (`user__isnull=False`), refreshed by the nightly cron.
-  Synced / scouted profiles without a site account are excluded so the `%` isn't skewed by sync noise (the
-  sweep is scoped the same way). NOT `is_linked` — that includes scouts.
+- Denominator = a cached **community-member** count, refreshed by the nightly cron. A community member is a
+  profile engaged via the **website** (a site account, `user__isnull=False`) **OR Discord** (a verified link,
+  `is_discord_verified=True`) — the single `milestones.services.member_q` predicate. Pure scouts /
+  unregistered synced profiles (no account, no Discord) are excluded so the `%` isn't skewed by sync noise.
+  The numerator (`earned_count`) is scoped the SAME way — both the per-sync/on-link earn paths and the nightly
+  drift-corrector gate on `member_q`, so numerator and denominator always agree. Discord-only clients earn
+  milestones too (so the bot can grant the right roles). NOT `is_linked` — that includes scouts.
 - `rarity_pct = earned_count / total_hunters` — a plain division at render, **O(1)**, zero per-render
   queries. Whale-safe.
 
@@ -219,11 +223,14 @@ premium tenure ones aren't trophy-hunting feats, so a quiet group label separate
 
 | Milestone | Metric | Accent | Tiers (months) |
 |---|---|---|---|
-| **Loyal Member** | `community_months` (since `user.date_joined`) | teal | 1 / 3 / 6 / 12 / 24 / 36 / 48 / 60 / 96 / 120 |
+| **Loyal Member** | `community_months` (since first engagement) | teal | 1 / 3 / 6 / 12 / 24 / 36 / 48 / 60 / 96 / 120 |
 | **Premium Supporter** | `premium_months` (summed `SubscriptionPeriod`) | rose | 1 / 3 / 6 / 12 / 18 / 24 / 36 / 48 / 60 / 84 |
 
-Both are time-based but need no new cron — the nightly sweep re-evaluates every metric. Community tenure reads
-the **sign-up date** (`user.date_joined`), not `Profile.created_at` (a synced profile can predate registration).
+Both are time-based but need no new cron — the nightly sweep re-evaluates every metric. Community tenure counts
+from the **earliest engagement**: website **sign-up** (`user.date_joined`) OR verified **Discord link**
+(`discord_linked_at`), whichever came first — so a Discord-only client accrues tenure from their link date, a
+web user from sign-up. NOT `Profile.created_at` (a synced profile can predate either). `premium_months`
+requires a site account (subscriptions are account-scoped); a Discord-only client reads 0 there.
 
 **Categories:** the six core milestones carry `category="Trophy Hunting"`; the two Supporter ones carry
 `category="Supporter"`. Both render under a quiet section label (`{% regroup %}`, ordered by `sort_order` so
