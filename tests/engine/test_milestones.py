@@ -409,6 +409,37 @@ def test_recompute_reset_wipes_stale_and_reawards_cleanly():
     assert UserMilestone.objects.filter(profile=p, milestone=ph).exists()      # progress read-model rebuilt
 
 
+def test_recompute_reset_scoped_to_one_milestone():
+    """--milestone narrows the wipe to a single ladder; other ladders are untouched."""
+    call_command('seed_milestones')
+    p = ProfileFactory(total_trophies=1234)   # Trophy Collector earns 100/500/1000
+    _plats(p, 12)                             # Platinum Hunter earns 1/5/10
+    services.recompute_milestones(p, reconcile_discord=False)
+
+    ph = Milestone.objects.get(slug='platinum-hunter')
+    tc = Milestone.objects.get(slug='trophy-collector')
+    # A stale rung in each ladder the profile doesn't actually qualify for.
+    EarnedMilestoneTier.objects.create(profile=p, tier=ph.tiers.get(index=9))
+    EarnedMilestoneTier.objects.create(profile=p, tier=tc.tiers.get(index=9))
+
+    call_command('recompute_milestones', '--profile', p.psn_username,
+                 '--reset', '--milestone', 'trophy-collector', '--yes')
+
+    # Trophy Collector was wiped + re-derived: its stale rung is gone.
+    assert not EarnedMilestoneTier.objects.filter(profile=p, tier=tc.tiers.get(index=9)).exists()
+    # Platinum Hunter was NOT in scope: its stale rung survives (proves the wipe was scoped).
+    assert EarnedMilestoneTier.objects.filter(profile=p, tier=ph.tiers.get(index=9)).exists()
+
+
+def test_recompute_milestone_scope_validates():
+    from django.core.management.base import CommandError
+    call_command('seed_milestones')
+    with pytest.raises(CommandError):   # --milestone requires --reset
+        call_command('recompute_milestones', '--milestone', 'platinum-hunter')
+    with pytest.raises(CommandError):   # unknown slug
+        call_command('recompute_milestones', '--reset', '--milestone', 'no-such-ladder', '--yes')
+
+
 # ── Rarity denominator + page context (Phase 2 data layer) ────────────────────────────────────────────────
 
 def test_refresh_total_hunters_counts_registered_members_only():

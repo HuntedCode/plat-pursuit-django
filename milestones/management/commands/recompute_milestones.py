@@ -8,6 +8,8 @@
 - `--reset`: WIPE earned milestones (EarnedMilestoneTier + UserMilestone) before recomputing, for a clean
   re-award off the current metric definitions (scoped to `--profile` if given, else ALL). Prompts unless
   `--yes`. Pair with `--reconcile-discord` to also drop Discord roles that are no longer earned.
+- `--milestone <slug>`: narrow `--reset` to ONE ladder (e.g. after a single metric changes). The recompute
+  still runs the full per-profile sweep (idempotent for the untouched ladders); only the wipe is scoped.
 
 Whale-safe: each profile's sweep is a handful of bounded aggregates; profiles are streamed with `.iterator()`.
 """
@@ -26,29 +28,44 @@ class Command(BaseCommand):
         parser.add_argument('--reset', action='store_true',
                             help="Wipe earned milestones (EarnedMilestoneTier + UserMilestone) BEFORE recomputing, "
                                  "for a clean re-award. Scoped to --profile if given, else ALL profiles.")
+        parser.add_argument('--milestone', help="Narrow --reset to a single milestone ladder (by slug).")
         parser.add_argument('--yes', action='store_true', help="Skip the --reset confirmation prompt.")
 
     def handle(self, *args, **options):
         from trophies.models import Profile
-        from milestones.models import EarnedMilestoneTier, MilestoneTier, UserMilestone
+        from milestones.models import EarnedMilestoneTier, Milestone, MilestoneTier, UserMilestone
 
         username = options.get('profile')
         reset = options.get('reset', False)
+        slug = options.get('milestone')
+
+        if slug:
+            if not reset:
+                raise CommandError("--milestone only applies with --reset.")
+            if not Milestone.objects.filter(slug=slug).exists():
+                raise CommandError(f"No milestone with slug {slug!r}.")
+
+        def _scope_wipe(qs, path):
+            """Narrow a wipe queryset to the chosen milestone ladder, when --milestone is given."""
+            return qs.filter(**{path: slug}) if slug else qs
 
         if reset and not options.get('yes'):
             scope = f"profile {username!r}" if username else "ALL profiles"
+            scope += f", milestone {slug!r}" if slug else " (all milestones)"
             if input(f"Wipe earned milestones for {scope} and recompute? [y/N] ").strip().lower() not in ('y', 'yes'):
                 self.stdout.write("Aborted.")
                 return
+
+        label = f" [{slug}]" if slug else ""
 
         if username:
             profile = Profile.objects.filter(psn_username__iexact=username).first()
             if not profile:
                 raise CommandError(f"No profile with psn_username {username!r}.")
             if reset:
-                EarnedMilestoneTier.objects.filter(profile=profile).delete()
-                UserMilestone.objects.filter(profile=profile).delete()
-                self.stdout.write(self.style.WARNING(f"Wiped {profile.psn_username}: earned + progress records removed."))
+                _scope_wipe(EarnedMilestoneTier.objects.filter(profile=profile), 'tier__milestone__slug').delete()
+                _scope_wipe(UserMilestone.objects.filter(profile=profile), 'milestone__slug').delete()
+                self.stdout.write(self.style.WARNING(f"Wiped {profile.psn_username}{label}: earned + progress records removed."))
             newly = recompute_milestones(profile, reconcile_discord=True)
             if reset:
                 recompute_tier_earned_counts()   # the wiped re-award double-bumps earned_count; recompute it from truth
@@ -57,10 +74,10 @@ class Command(BaseCommand):
             return
 
         if reset:
-            EarnedMilestoneTier.objects.all().delete()
-            UserMilestone.objects.all().delete()
-            MilestoneTier.objects.update(earned_count=0)   # re-bumped from 0 by the sweep; drift-corrected at the end
-            self.stdout.write(self.style.WARNING("Wiped ALL earned milestones + progress."))
+            _scope_wipe(EarnedMilestoneTier.objects.all(), 'tier__milestone__slug').delete()
+            _scope_wipe(UserMilestone.objects.all(), 'milestone__slug').delete()
+            _scope_wipe(MilestoneTier.objects.all(), 'milestone__slug').update(earned_count=0)   # re-bumped from 0 by the sweep
+            self.stdout.write(self.style.WARNING(f"Wiped ALL earned milestones + progress{label}."))
 
         reconcile = options.get('reconcile_discord', False)
         swept = awarded = 0
