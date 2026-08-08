@@ -46,8 +46,10 @@ CATALOG = [
         'slug': 'pursuer-ascent', 'name': 'Pursuer Ascent', 'icon': 'trending-up',
         'description': 'Your total Pursuer Level across every job.',
         'metric': 'pursuer_level', 'category': 'Collection', 'sort_order': 50,
-        # PLACEHOLDER — the Pursuer Level curve is flat + cap-less with a nonzero baseline; calibrate.
-        'tiers': [25, 50, 100, 200, 300, 500, 750, 1000, 1500, 2000],
+        # PLACEHOLDER — flat + cap-less curve. A fresh linked account already sits at ~25 (every job floored
+        # at level 1), so the first rung MUST clear the baseline or everyone auto-earns it. Calibrate vs. the
+        # real level distribution.
+        'tiers': [40, 75, 150, 250, 400, 600, 850, 1200, 1600, 2000],
     },
     {
         'slug': 'time-invested', 'name': 'Time Invested', 'icon': 'clock',
