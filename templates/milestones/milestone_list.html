@@ -49,6 +49,16 @@
 
     {% include 'partials/ad_unit.html' with ad_slot="8944812256" %}
 
+    {% if ms_dev_tools %}
+    {# Dev/staff-only: preview the earn celebration without actually crossing a tier (cycles the milestones). #}
+    <div class="mb-3">
+        <button type="button" class="btn btn-xs btn-ghost border border-base-300 gap-1" data-ms-celebrate-demo>
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Preview celebration <span class="opacity-50">(dev)</span>
+        </button>
+    </div>
+    {% endif %}
+
     {# ── Milestone cards: one tiered ladder each, grouped by category (blank = the default section). ── #}
     <div class="msc-grid" data-msc-grid>
         {% regroup milestone_cards by category as msc_groups %}
@@ -127,5 +137,6 @@
 {% endblock %}
 
 {% block js_scripts %}
+    <script src="{% static 'js/milestone-celebration.js' %}"></script>
     <script src="{% static 'js/milestones.js' %}"></script>
 {% endblock %}

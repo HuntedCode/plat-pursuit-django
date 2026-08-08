@@ -523,3 +523,19 @@ def test_page_groups_supporter_section(client):
     assert 'Premium Supporter' in content
     assert 'msc-section' in content     # the group header rendered
     assert '>Supporter<' in content
+
+
+def test_dev_celebration_button_is_gated(client):
+    from django.urls import reverse
+    call_command('seed_milestones')
+
+    anon = client.get(reverse('milestones_list')).content.decode()
+    assert 'data-ms-celebrate-demo' not in anon      # hidden for regular visitors
+    assert 'milestone-celebration.js' in anon        # the component still ships for real earns
+
+    p = ProfileFactory()
+    p.user.is_staff = True
+    p.user.save(update_fields=['is_staff'])
+    client.force_login(p.user)
+    staff = client.get(reverse('milestones_list')).content.decode()
+    assert 'data-ms-celebrate-demo' in staff          # dev/staff get the preview button

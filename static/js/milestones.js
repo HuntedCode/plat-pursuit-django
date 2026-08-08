@@ -36,11 +36,34 @@
         });
     }
 
+    // Dev/staff-only: cycle a preview of the earn celebration across the milestones (to review each accent).
+    var demoIndex = 0;
+    function onDemoClick() {
+        if (!window.MilestoneCelebration) { return; }
+        var cards = document.querySelectorAll('.msc');
+        if (!cards.length) { return; }
+        var card = cards[demoIndex % cards.length];
+        demoIndex += 1;
+        var nameEl = card.querySelector('.msc__name');
+        var iconEl = card.querySelector('.msc__icon');
+        var rungs = card.querySelectorAll('.msc__rung');
+        var rung = rungs[Math.min(5, rungs.length - 1)];   // a mid rung as a representative sample
+        window.MilestoneCelebration.play({
+            name: nameEl ? nameEl.textContent : 'Milestone',
+            tierLabel: rung ? ('Reached ' + rung.textContent.trim()) : '',
+            rarity: 'A rare feat',
+            accent: (card.style.getPropertyValue('--msc-accent') || '').trim(),
+            iconSvg: iconEl ? iconEl.innerHTML : '',
+        });
+    }
+
     function boot(first) {
         if (first && PP.countUp) {
             document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); });
         }
         initReveal();
+        var demo = document.querySelector('[data-ms-celebrate-demo]');
+        if (demo && first) { demo.addEventListener('click', onDemoClick); }
     }
 
     if (PP.onPageReady) { PP.onPageReady(boot); }
