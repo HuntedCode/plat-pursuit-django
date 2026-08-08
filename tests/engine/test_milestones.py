@@ -163,10 +163,15 @@ def test_recompute_tier_earned_counts_corrects_drift():
     t1 = MilestoneTier.objects.get(milestone__slug='platinum-hunter', index=1)
     MilestoneTier.objects.filter(pk=t1.pk).update(earned_count=99)   # corrupt
 
+    # A userless (scout) earned row must NOT count toward rarity -- the numerator is registered-only, same
+    # as the denominator. Insert one directly and confirm the corrector ignores it.
+    scout = ProfileFactory(user=None)
+    EarnedMilestoneTier.objects.create(profile=scout, tier=t1)
+
     fixed = services.recompute_tier_earned_counts()
 
     t1.refresh_from_db()
-    assert t1.earned_count == 1
+    assert t1.earned_count == 1   # only the registered earner counts (scout excluded)
     assert fixed == 1   # exactly the one corrupted row corrected
 
 
@@ -407,6 +412,19 @@ def test_recompute_on_sync_reconciles_only_on_role_bearing_crossing(monkeypatch)
     newly = services.recompute_on_sync(p)
     assert [t.threshold for t in newly] == [25]
     assert calls == [p]
+
+
+def test_recompute_on_sync_skips_userless_profiles():
+    """Scouts / unregistered synced profiles (user=None) must not mint milestone rows or skew rarity."""
+    call_command('seed_milestones')
+    scout = ProfileFactory(user=None)
+    _plats(scout, 12)   # would cross Platinum Hunter rungs if it were a member
+
+    newly = services.recompute_on_sync(scout)
+
+    assert newly == []
+    assert not EarnedMilestoneTier.objects.filter(profile=scout).exists()
+    assert not UserMilestone.objects.filter(profile=scout).exists()
 
 
 def test_recompute_reset_wipes_stale_and_reawards_cleanly():

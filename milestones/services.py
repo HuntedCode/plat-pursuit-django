@@ -92,7 +92,13 @@ def recompute_milestones(profile, *, reconcile_discord=True):
 def recompute_on_sync(profile):
     """The high-frequency post-sync trigger (token_keeper `sync_complete`): recompute, and reconcile Discord
     ONLY when a ROLE-BEARING tier was newly crossed -- so a routine sync that awards no new role never
-    re-asserts roles against the bot. Returns the newly-earned tiers."""
+    re-asserts roles against the bot. Returns the newly-earned tiers.
+
+    Registered members ONLY: scouts + unregistered synced profiles (user=None) reach sync_complete too, and
+    minting milestone rows for them would bloat the tables and skew the rarity numerator against the
+    registered-only denominator (matches the mass sweep's `user__isnull=False` filter)."""
+    if getattr(profile, 'user_id', None) is None:
+        return []
     newly = recompute_milestones(profile, reconcile_discord=False)
     if newly and any(t.discord_role_id for t in newly):
         reconcile_discord_roles(profile)
@@ -147,7 +153,9 @@ def reconcile_discord_roles(profile):
     missing, remove superseded. Idempotent + self-healing. No-op unless the profile is Discord-verified.
 
     This is the robust version of the legacy "just send all their roles": it also removes stale brackets
-    (needed for highest-only), and re-running is always safe. Fired on-commit so it never runs mid-transaction.
+    (needed for highest-only), and re-running is always safe. The bot calls are deferred to `on_commit`, so if
+    a caller wraps this in a transaction that later rolls back, no roles are pushed; with no open transaction
+    they fire immediately.
     """
     if not getattr(profile, 'is_discord_verified', False) or not getattr(profile, 'discord_id', None):
         return
@@ -195,10 +203,12 @@ def tier_rarity_pct(tier_earned_count, denom=None):
 
 def recompute_tier_earned_counts():
     """Nightly drift-correction: recompute every tier's denormalized `earned_count` from the source of
-    truth. Bounded (one grouped COUNT over the catalog)."""
+    truth. Bounded (one grouped COUNT over the catalog). Counts REGISTERED members only, matching the
+    rarity denominator (`refresh_total_hunters`) so the '% of hunters' numerator + denominator agree."""
     from django.db.models import Count
     counts = dict(
-        EarnedMilestoneTier.objects.values('tier_id').annotate(c=Count('id')).values_list('tier_id', 'c')
+        EarnedMilestoneTier.objects.filter(profile__user__isnull=False)
+        .values('tier_id').annotate(c=Count('id')).values_list('tier_id', 'c')
     )
     to_update = []
     for tier in MilestoneTier.objects.all().only('id', 'earned_count'):

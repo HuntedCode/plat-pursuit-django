@@ -1539,7 +1539,7 @@ class TokenKeeper:
             # New milestones app: recompute off the now-fresh post-sync signals (plats, badges, and the
             # trophy/completion denorms just refreshed above). recompute_on_sync reconciles Discord only when a
             # role-bearing tier was newly crossed, so a routine sync never re-asserts roles against the bot.
-            _set_phase('milestones')
+            # (Stays under the 'finishing' phase -- it's quick and part of finalize.)
             try:
                 from milestones.services import recompute_on_sync
                 recompute_on_sync(profile)
