@@ -242,6 +242,7 @@ INSTALLED_APPS = [
     'notifications.apps.NotificationsConfig',
     'fundraiser.apps.FundraiserConfig',
     'art_reveal.apps.ArtRevealConfig',
+    'milestones.apps.MilestonesConfig',
     'django_htmx',
 ]
 
