@@ -1,6 +1,6 @@
 from django.contrib.sitemaps import Sitemap
 from django.urls import reverse
-from trophies.models import Game, Profile, Badge, Checklist, GameList, Challenge, Roadmap
+from trophies.models import Game, Profile, Badge, Checklist, GameList, Roadmap
 
 
 class StaticViewSitemap(Sitemap):
@@ -11,7 +11,7 @@ class StaticViewSitemap(Sitemap):
         return [
             'home', 'privacy', 'terms', 'about', 'contact',
             'games_list', 'profiles_list', 'badges_list',
-            'challenges_browse', 'lists_browse',
+            'lists_browse',
             'community_hub',
         ]
 
@@ -237,31 +237,3 @@ class GameListSitemap(Sitemap):
         )
 
 
-class ChallengeSitemap(Sitemap):
-    changefreq = 'daily'
-    priority = 0.4
-    limit = 5000
-
-    def items(self):
-        return (
-            Challenge.objects
-            .filter(is_deleted=False)
-            .only('id', 'challenge_type', 'updated_at')
-            .order_by('-id')
-        )
-
-    def location(self, obj):
-        prefix_map = {'az': 'az', 'calendar': 'calendar', 'genre': 'genre'}
-        prefix = prefix_map.get(obj.challenge_type, 'az')
-        return reverse(f'{prefix}_challenge_detail', kwargs={'challenge_id': obj.id})
-
-    def lastmod(self, obj):
-        return obj.updated_at
-
-    def get_latest_lastmod(self):
-        return (
-            Challenge.objects.filter(is_deleted=False)
-            .order_by('-updated_at')
-            .values_list('updated_at', flat=True)
-            .first()
-        )

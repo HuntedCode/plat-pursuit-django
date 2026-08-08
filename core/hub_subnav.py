@@ -134,7 +134,6 @@ COMMUNITY_HUB = HubSubnavConfig(
         HubSubnavItem('profiles', 'Profiles', 'profiles_list', 'user', group='Explore'),
         HubSubnavItem('leaderboards', 'Leaderboards', 'overall_badge_leaderboards', 'bar-chart', group='Explore'),
         HubSubnavItem('rate_my_games', 'Rate My Games', 'rate_my_games', 'star', group='Create'),
-        HubSubnavItem('challenges', 'Challenges', 'challenges_browse', 'target', group='Create'),
         HubSubnavItem('lists', 'Lists', 'lists_browse', 'list', group='Create'),
     ),
 )
@@ -225,17 +224,6 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'list_detail': ('community', 'lists'),
     'list_create': ('community', 'lists'),
     'list_edit': ('community', 'lists'),
-    'my_challenges': ('community', 'challenges'),
-    'az_challenge_create': ('community', 'challenges'),
-    'az_challenge_detail': ('community', 'challenges'),
-    'az_challenge_setup': ('community', 'challenges'),
-    'az_challenge_edit': ('community', 'challenges'),
-    'calendar_challenge_create': ('community', 'challenges'),
-    'calendar_challenge_detail': ('community', 'challenges'),
-    'genre_challenge_create': ('community', 'challenges'),
-    'genre_challenge_detail': ('community', 'challenges'),
-    'genre_challenge_setup': ('community', 'challenges'),
-    'genre_challenge_edit': ('community', 'challenges'),
     'badge_leaderboards': ('community', 'leaderboards'),
     # (badge_detail now highlights the Browse > Badges tab -- see the Browse block above.)
     # My Pursuit: nested sub-pages of the moved items. The shareables sub-pages
@@ -243,7 +231,6 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # sub-nav item; the platinum_grid wizard is one of those nested children.
     'my_shareables_platinums': ('my_pursuit', 'shareables'),
     'my_shareables_profile_card': ('my_pursuit', 'shareables'),
-    'my_shareables_challenges': ('my_pursuit', 'shareables'),
     'platinum_grid': ('my_pursuit', 'shareables'),
     'recap_view': ('my_pursuit', 'recap'),
     # (The fundraiser + fundraiser_success pages resolve to the Support hub via its /fundraiser/

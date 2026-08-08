@@ -85,9 +85,6 @@ def _increment_parent_view_count(page_type, object_id):
         elif page_type == 'game_list':
             from trophies.models import GameList
             GameList.objects.filter(id=int(object_id)).update(view_count=F('view_count') + 1)
-        elif page_type == 'az_challenge':
-            from trophies.models import Challenge
-            Challenge.objects.filter(id=int(object_id)).update(view_count=F('view_count') + 1)
         elif page_type == 'index':
             from core.models import SiteSettings
             SiteSettings.objects.filter(id=1).update(index_page_view_count=F('index_page_view_count') + 1)

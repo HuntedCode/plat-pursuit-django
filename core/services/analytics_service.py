@@ -337,12 +337,6 @@ def _attach_object_labels(rows):
         for gl in GameList.objects.filter(id__in=ids).only("id", "name"):
             label_map[("game_list", str(gl.id))] = gl.name or f"List {gl.id}"
 
-    if "az_challenge" in grouped:
-        from trophies.models import Challenge
-        ids = [int(x) for x in grouped["az_challenge"] if str(x).isdigit()]
-        for ch in Challenge.objects.filter(id__in=ids).only("id", "name"):
-            label_map[("az_challenge", str(ch.id))] = ch.name or f"Challenge {ch.id}"
-
     if "index" in grouped:
         for oid in grouped["index"]:
             label_map[("index", oid)] = "Home"
