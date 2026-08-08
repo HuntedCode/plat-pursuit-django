@@ -21,10 +21,12 @@
        signature cyan. --msc-c is the single handle every accent spot below uses; --horizon-accent tints the
        progress bar. Surface + text stay neutral so the six read as one cohesive family, not six designs. */
     --msc-c: var(--msc-accent, var(--pp-primary));
+    position: relative;   /* anchors the stretched action link + the maxed foil sweep */
     border: 1px solid var(--pp-border); border-radius: 14px; background: var(--pp-bg-1); padding: 14px 15px;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 6px 18px -10px rgba(0, 0, 0, 0.4);
-    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
+@media (hover: hover) { .msc--link:hover { transform: translateY(-2px); } }
 @media (hover: hover) {
     .msc:hover {
         border-color: color-mix(in oklab, var(--msc-c) 30%, var(--pp-border));
@@ -48,11 +50,34 @@
 .msc__id { flex: 1 1 auto; min-width: 0; }
 .msc__name { font-size: 15px; font-weight: 800; color: var(--pp-text); line-height: 1.2; }
 .msc__desc { font-size: 12px; color: var(--pp-text-mute); margin-top: 2px; }
-.msc__tier { flex: none; font-size: 16px; font-weight: 900; color: var(--msc-c); font-variant-numeric: tabular-nums; line-height: 1; }
-.msc__tier-of { font-size: 11px; font-weight: 700; color: var(--pp-text-mute); }
-.msc--maxed .msc__tier { color: var(--color-trophy-gold); }
+/* Link affordance: a chevron trails the name on a clickable card (reveals on hover; faint on touch). */
+.msc--link .msc__name::after {
+    content: '\203A'; margin-left: 4px; font-weight: 700; color: var(--msc-c); display: inline-block;
+    opacity: 0; transform: translateX(-3px); transition: opacity 0.18s ease, transform 0.18s ease;
+}
+@media (hover: hover) { .msc--link:hover .msc__name::after { opacity: 0.75; transform: none; } }
+@media (hover: none) { .msc--link .msc__name::after { opacity: 0.4; transform: none; } }
+
+/* Focal number: the hunter's current total for this measure -- the card's hero, mirroring the Career page's
+   number-forward treatment. Big accent Tally + a quiet unit sub-label; gold when the ladder is maxed. */
+.msc__metric { flex: none; text-align: right; line-height: 1; padding-top: 1px; }
+.msc__metric-val {
+    display: block; font-size: 30px; font-weight: 900; letter-spacing: -0.015em; line-height: 0.95;
+    color: var(--msc-c); font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 22px color-mix(in oklab, var(--msc-c) 26%, transparent);
+}
+.msc__metric-unit { display: block; margin-top: 4px; font-size: 9px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--pp-text-mute); }
+.msc--maxed .msc__metric-val { color: var(--color-trophy-gold); text-shadow: 0 0 22px color-mix(in oklab, var(--color-trophy-gold) 26%, transparent); }
 
 .msc__status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 11px; font-size: 12px; }
+.msc__tier-pill {
+    margin-left: auto; flex: none; font-size: 10.5px; font-weight: 700; color: var(--pp-text-dim);
+    font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+    padding: 1px 8px; border-radius: 999px; border: 1px solid var(--pp-border);
+    background: color-mix(in oklab, var(--pp-text) 3%, transparent);
+}
+.msc__tier-pill .msc__tier-of { color: var(--pp-text-mute); font-weight: 700; }
+.msc--maxed .msc__tier-pill { color: var(--color-trophy-gold); border-color: color-mix(in oklab, var(--color-trophy-gold) 34%, var(--pp-border)); }
 .msc__reached { color: var(--pp-text-dim); }
 .msc__reached strong { color: var(--pp-text); font-weight: 800; font-variant-numeric: tabular-nums; }
 .msc__reached--none { color: var(--pp-text-mute); font-style: italic; }
@@ -73,7 +98,7 @@
 .msc__prog-val { color: var(--pp-text); font-weight: 800; }
 .msc__prog-next { margin-left: auto; text-transform: uppercase; letter-spacing: 0.06em; font-size: 9.5px; font-weight: 700; }
 
-.msc__ladder { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
+.msc__ladder { position: relative; z-index: 2; display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
 .msc__rung {
     font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums;
     padding: 3px 7px; border-radius: 6px; border: 1px solid var(--pp-border);
@@ -106,3 +131,70 @@
         50% { box-shadow: 0 0 0 4px transparent; }
     }
 }
+
+/* Stretched action link: covers the whole card so a tap anywhere navigates to where you move this milestone.
+   z-index 1 sits above the resting content but BELOW the ladder (z-index 2), so rung rarity tooltips survive
+   and a rung tap doesn't navigate. The maxed foil (z-index 3) sweeps over everything, pointer-events off. */
+.msc__action { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+/* Keyboard focus lands on the stretched link -- ring the whole card so it's clearly the focused target. */
+.msc__action:focus-visible { outline: 2px solid var(--msc-c); outline-offset: 2px; }
+.msc-spot:focus-visible { outline: 2px solid var(--spot-c); outline-offset: 2px; }
+
+/* Prestige: a slow gold foil catches the light across a fully-cleared ladder -- reserved for the rare
+   "complete" state (a meaningful moment), rests most of the loop, and stills entirely on reduced-motion. */
+.msc--maxed { overflow: hidden; }
+.msc--maxed::before {
+    --msc-foil: color-mix(in oklab, var(--color-trophy-gold) 52%, #fff);
+    content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 62%;
+    pointer-events: none; z-index: 3; mix-blend-mode: screen; opacity: 0; transform: translateX(-70%);
+    background: linear-gradient(115deg, transparent 36%, var(--msc-foil) 50%, transparent 64%);
+}
+@media (prefers-reduced-motion: no-preference) {
+    .msc--maxed::before { animation: mscFoil 6.5s ease-in-out infinite; }
+    @keyframes mscFoil {
+        0% { transform: translateX(-70%); opacity: 0; }
+        10% { opacity: 0.5; }
+        32% { opacity: 0.5; }
+        50% { transform: translateX(230%); opacity: 0; }
+        100% { transform: translateX(230%); opacity: 0; }
+    }
+}
+
+/* ── Header spotlights: the two hooks (closest milestone + rarest feat) above the summary counts. ── */
+.msc-spots { display: flex; flex-direction: column; gap: 8px; }
+@media (min-width: 768px) { .msc-spots { flex-direction: row; } }
+
+.msc-spot {
+    --spot-c: var(--spot-accent, var(--pp-primary));
+    position: relative; flex: 1 1 0; min-width: 0;
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 13px; border-radius: 12px; color: inherit; text-decoration: none;
+    background: linear-gradient(135deg, color-mix(in oklab, var(--spot-c) 13%, var(--pp-bg-1)) 0%, var(--pp-bg-1) 72%);
+    border: 1px solid color-mix(in oklab, var(--spot-c) 30%, var(--pp-border));
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+@media (hover: hover) {
+    .msc-spot[href]:hover {
+        border-color: color-mix(in oklab, var(--spot-c) 52%, var(--pp-border));
+        box-shadow: 0 14px 30px -18px color-mix(in oklab, var(--spot-c) 60%, #000);
+        transform: translateY(-2px);
+    }
+}
+.msc-spot__ico {
+    flex: none; width: 40px; height: 40px; border-radius: 11px;
+    display: flex; align-items: center; justify-content: center; color: var(--spot-c);
+    background: color-mix(in oklab, var(--spot-c) 18%, transparent);
+    border: 1px solid color-mix(in oklab, var(--spot-c) 34%, var(--pp-border));
+}
+.msc-spot__ico svg { width: 21px; height: 21px; }
+.msc-spot__body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.msc-spot__label { font-size: 9.5px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--spot-c); }
+.msc-spot__name { font-size: 13.5px; font-weight: 800; color: var(--pp-text); line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msc-spot__cap { font-size: 11.5px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.msc-spot__cap strong { color: var(--pp-text); font-weight: 800; }
+.msc-spot__rare-line { font-size: 12px; color: var(--pp-text-dim); }
+.msc-spot__rare-line strong { color: var(--spot-c); font-weight: 900; font-size: 16px; margin-right: 3px; letter-spacing: -0.01em; }
+.msc-spot__bar { display: block; margin: 4px 0 1px; }
+.msc-spot .pp-horizon { --horizon-accent: var(--spot-c); }   /* pp-horizon sets its own accent -- override on the element */
+.msc-spot__arrow { flex: none; width: 16px; height: 16px; color: var(--spot-c); opacity: 0.55; transition: opacity 0.18s ease, transform 0.18s ease; }
+@media (hover: hover) { .msc-spot[href]:hover .msc-spot__arrow { opacity: 1; transform: translateX(2px); } }

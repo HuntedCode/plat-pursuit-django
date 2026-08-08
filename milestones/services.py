@@ -172,11 +172,15 @@ def refresh_total_hunters() -> int:
 
 
 def tier_rarity_pct(tier_earned_count, denom=None):
-    """Percent of hunters who reached a tier. None when the denominator isn't cached yet (hide the line)."""
+    """Percent of hunters who reached a tier. None when the denominator isn't cached yet (hide the line).
+
+    Clamped to 100: `earned_count` is bumped live on each award while `denom` is a nightly-cached member
+    count, so a burst of signups + awards between refreshes could otherwise render "120% of hunters".
+    """
     denom = total_hunters() if denom is None else denom
     if not denom:
         return None
-    return round(tier_earned_count / denom * 100, 1)
+    return round(min(tier_earned_count / denom, 1) * 100, 1)
 
 
 def recompute_tier_earned_counts():

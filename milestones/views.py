@@ -4,7 +4,6 @@ A thin view over `build_milestones_context` (milestones/page.py): the heavy lift
 model assembly there. Anonymous / unlinked viewers get the ladders as a preview (no progress).
 """
 from core.services.tracking import track_page_view
-from django.conf import settings
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 
@@ -29,7 +28,5 @@ class MilestoneListView(TemplateView):
             "Track your long-term PlayStation trophy-hunting milestones on Platinum Pursuit — "
             "platinums, trophies, completions, and more."
         )
-        # Gates the dev-only "preview celebration" button (local dev + staff only).
-        context['ms_dev_tools'] = settings.DEBUG or self.request.user.is_staff
         track_page_view('milestones_list', 'list', self.request)
         return context

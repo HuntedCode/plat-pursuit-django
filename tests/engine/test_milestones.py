@@ -394,6 +394,8 @@ def test_tier_rarity_pct_math():
     assert services.tier_rarity_pct(1, denom=4) == 25.0
     assert services.tier_rarity_pct(3, denom=4) == 75.0
     assert services.tier_rarity_pct(5, denom=0) is None   # no denominator -> hide the line
+    # Clamp: live earned_count can briefly exceed the nightly-cached denom -> never render >100%.
+    assert services.tier_rarity_pct(6, denom=4) == 100.0
 
 
 def test_build_context_for_linked_profile():
@@ -408,7 +410,15 @@ def test_build_context_for_linked_profile():
 
     ph = next(c for c in ctx['milestone_cards'] if c['slug'] == 'platinum-hunter')
     assert ph['value'] == 12
+    assert ph['unit'] == 'platinums'   # the focal number's sub-label (metric -> noun)
+    assert ph['action_url'] and ph['action_url'].endswith(f'/{p.psn_username}/')   # card deep-links to the profile
     assert ph['earned_count'] == 3
+
+    # Spotlights: only Platinum Hunter has progress, so it's the closest; a rarest feat exists (earned tiers).
+    assert ctx['ms_nearest']['slug'] == 'platinum-hunter'
+    assert ctx['ms_nearest']['remaining'] == 13   # 25 (next rung) - 12
+    assert ctx['ms_nearest']['action_url'] == ph['action_url']
+    assert ctx['ms_rarest'] is not None and ctx['ms_rarest']['rarity_pct'] is not None
     assert ph['total_tiers'] == 10
     assert ph['maxed'] is False
     assert ph['next_tier']['threshold'] == 25
@@ -423,10 +433,38 @@ def test_build_context_anonymous_has_no_progress():
 
     assert ctx['ms_has_progress'] is False
     assert ctx['ms_earned_tiers'] == 0
+    assert ctx['ms_nearest'] is None and ctx['ms_rarest'] is None   # no spotlights without a profile
     ph = next(c for c in ctx['milestone_cards'] if c['slug'] == 'platinum-hunter')
     assert ph['earned_count'] == 0
     assert ph['next_tier']['index'] == 1
     assert all(not t['earned'] for t in ph['tiers'])
+
+
+def test_spotlights_selection():
+    """_spotlights picks the closest-to-next non-maxed ladder + the rarest earned tier (pure selection)."""
+    from milestones.page import _spotlights
+
+    def card(slug, pct, rem, maxed, earned_rarities):
+        nt = None if maxed else {'name': ''}
+        return {
+            'slug': slug, 'name': slug, 'icon': 'trophy', 'accent': '#111', 'unit': 'x',
+            'value': 100 - rem, 'next_threshold': 100, 'progress_pct': pct, 'maxed': maxed,
+            'next_tier': nt, 'action_url': f'/{slug}', 'action_label': slug,
+            'tiers': [{'earned': True, 'rarity_pct': r, 'threshold': 10, 'name': ''} for r in earned_rarities],
+        }
+
+    cards = [
+        card('a', pct=80, rem=20, maxed=False, earned_rarities=[30]),
+        card('b', pct=20, rem=5, maxed=False, earned_rarities=[5]),     # rarest earned tier (5%)
+        card('c', pct=100, rem=0, maxed=True, earned_rarities=[50]),    # maxed -> ineligible for nearest
+    ]
+    nearest, rarest = _spotlights(cards)
+    assert nearest['slug'] == 'a'          # highest progress among non-maxed
+    assert rarest['slug'] == 'b' and rarest['rarity_pct'] == 5
+
+    # No earned tiers anywhere -> no rarest; all maxed -> no nearest.
+    n2, r2 = _spotlights([card('z', pct=100, rem=0, maxed=True, earned_rarities=[])])
+    assert n2 is None and r2 is None
 
 
 def test_build_context_maxed_milestone():
@@ -460,6 +498,10 @@ def test_milestones_page_renders_for_linked_profile(client):
     assert 'Platinum Hunter' in content
     assert 'msc__ladder' in content            # the tier ladder rendered
     assert 'Milestones started' in content     # authed overview
+    assert 'msc-spots' in content              # header spotlights (nearest + rarest)
+    assert 'Closest milestone' in content
+    assert 'msc--link' in content              # cards are actionable
+    assert 'class="msc__action"' in content    # stretched-link overlay
     assert '{%' not in content and '{#' not in content
 
 
@@ -514,28 +556,15 @@ def test_metric_premium_months():
     assert metric_value('premium_months', ProfileFactory()) == 0   # never subscribed
 
 
-def test_page_groups_supporter_section(client):
+def test_page_groups_into_labelled_sections(client):
     from django.urls import reverse
     call_command('seed_milestones')
     content = client.get(reverse('milestones_list')).content.decode()
 
     assert 'Loyal Member' in content
     assert 'Premium Supporter' in content
-    assert 'msc-section' in content     # the group header rendered
-    assert '>Supporter<' in content
-
-
-def test_dev_celebration_button_is_gated(client):
-    from django.urls import reverse
-    call_command('seed_milestones')
-
-    anon = client.get(reverse('milestones_list')).content.decode()
-    assert 'data-ms-celebrate-demo' not in anon      # hidden for regular visitors
-    assert 'milestone-celebration.js' in anon        # the component still ships for real earns
-
-    p = ProfileFactory()
-    p.user.is_staff = True
-    p.user.save(update_fields=['is_staff'])
-    client.force_login(p.user)
-    staff = client.get(reverse('milestones_list')).content.decode()
-    assert 'data-ms-celebrate-demo' in staff          # dev/staff get the preview button
+    assert 'msc-section' in content            # group headers rendered
+    assert '>Trophy Hunting<' in content       # the core group header
+    assert '>Supporter<' in content            # the supporter group header
+    # Core section leads (sort_order 10-60), Supporter follows (70-80).
+    assert content.index('>Trophy Hunting<') < content.index('>Supporter<')

@@ -225,9 +225,32 @@ premium tenure ones aren't trophy-hunting feats, so a quiet group label separate
 Both are time-based but need no new cron — the nightly sweep re-evaluates every metric. Community tenure reads
 the **sign-up date** (`user.date_joined`), not `Profile.created_at` (a synced profile can predate registration).
 
-**Categories:** the six core milestones share a blank category (the default section, no header); the two
-Supporter ones carry `category="Supporter"` and render under a quiet section label (`{% regroup %}`). The `Milestone.category`
-field stays in the model for when the catalogue grows.
+**Categories:** the six core milestones carry `category="Trophy Hunting"`; the two Supporter ones carry
+`category="Supporter"`. Both render under a quiet section label (`{% regroup %}`, ordered by `sort_order` so
+each grouper is contiguous), giving the page two clearly separated bands. The `Milestone.category` field
+supports more sections as the catalogue grows.
+
+**Page polish (the "what would Google/Apple reach for" pass).** All whale-safe — derived from the already-
+assembled cards / read-model, no extra queries:
+
+- **Focal number** — each card's *current total* for its measure is the hero (big accent `.pp-tally`,
+  counts up on reveal) with a `metric_unit()` sub-label ("47 / platinums"). The tier count moved to a quiet
+  status-line pill so the number isn't crowded. Number-forward, matching the Career page.
+- **Header spotlights** (`ms_nearest`, `ms_rarest` in the context; `_spotlights(cards)`): two hooks above the
+  summary counts. *Closest milestone* — the non-maxed ladder furthest along toward its next rung (ties broken
+  by fewest units remaining): forward pull. *Rarest feat* — the earned tier with the smallest "% of hunters":
+  the brag. Both are accent-tinted link tiles into the milestone's surface.
+- **Actionable cards** — the whole card is a stretched-link into "where you move this" (`_metric_action`
+  maps each metric → a route: trophy/plat/completion/playtime → the viewer's **profile**, badges →
+  Collection, level → Career, tenure → Support, premium → membership). Affordance = a name chevron
+  (`.msc--link`) + hover lift.
+  The ladder is lifted above the overlay so per-rung rarity tooltips survive.
+- **Prestige foil** — a fully-cleared (`.msc--maxed`) ladder gets a slow gold foil sweep (reserved for the
+  rare "complete" state, rests most of the loop, stills on reduced-motion) — a meaningful-moment flourish,
+  not motion-everywhere.
+
+The card icon SVGs live in one partial, `milestones/_msc_icon.html` (shared by the card head + both
+spotlight tiles), keyed by the `icon` string.
 
 **Deliberately deferred to a later expansion** (to avoid the old sprawl): community *contributions*
 (ratings/reviews — distinct from the tenure-based Loyal Member above),

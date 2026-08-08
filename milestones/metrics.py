@@ -31,6 +31,25 @@ def metric_value(key, profile) -> int:
     return fn(profile) or 0
 
 
+# The short noun each metric counts, sub-labelling the card's focal number ("47 / platinums"). Display-only;
+# a milestone on an unmapped metric just renders the number with no unit.
+METRIC_UNITS = {
+    "lifetime_platinums": "platinums",
+    "lifetime_trophies": "trophies",
+    "full_completions": "completions",
+    "total_badges_earned": "badges",
+    "pursuer_level": "levels",
+    "playtime_hours": "hours",
+    "community_months": "months",
+    "premium_months": "months",
+}
+
+
+def metric_unit(key) -> str:
+    """The short noun a metric counts (for the focal number's sub-label). '' when unmapped."""
+    return METRIC_UNITS.get(key, "")
+
+
 # ── The v1 metrics (one per starter milestone) ──────────────────────────────────────────────────────────
 
 @milestone_metric("lifetime_platinums")

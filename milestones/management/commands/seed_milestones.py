@@ -21,28 +21,28 @@ CATALOG = [
         'slug': 'platinum-hunter', 'name': 'Platinum Hunter', 'icon': 'trophy',
         'accent': '#67d1f8',
         'description': 'Platinums earned across your whole library.',
-        'metric': 'lifetime_platinums', 'category': '', 'sort_order': 10,
+        'metric': 'lifetime_platinums', 'category': 'Trophy Hunting', 'sort_order': 10,
         'tiers': [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2000],
     },
     {
         'slug': 'trophy-collector', 'name': 'Trophy Collector', 'icon': 'award',
         'accent': '#e0b84a',
         'description': 'Total trophies of every grade earned.',
-        'metric': 'lifetime_trophies', 'category': '', 'sort_order': 20,
+        'metric': 'lifetime_trophies', 'category': 'Trophy Hunting', 'sort_order': 20,
         'tiers': [100, 500, 1000, 2500, 5000, 10000, 25000, 50000, 75000, 100000],
     },
     {
         'slug': 'completionist', 'name': 'Completionist', 'icon': 'check-circle',
         'accent': '#34d399',
         'description': 'Games taken all the way to 100% completion.',
-        'metric': 'full_completions', 'category': '', 'sort_order': 30,
+        'metric': 'full_completions', 'category': 'Trophy Hunting', 'sort_order': 30,
         'tiers': [1, 5, 10, 25, 50, 100, 250, 500, 750, 1000],
     },
     {
         'slug': 'badge-collector', 'name': 'Badge Collector', 'icon': 'shield',
         'accent': '#4f8ef7',   # true blue (not cyan/Platinum, not indigo/Time)
         'description': 'Badges earned across the collection.',
-        'metric': 'total_badges_earned', 'category': '', 'sort_order': 40,
+        'metric': 'total_badges_earned', 'category': 'Trophy Hunting', 'sort_order': 40,
         # PLACEHOLDER ceiling — calibrate against the real badge catalogue size.
         'tiers': [1, 5, 10, 25, 50, 100, 150, 250, 375, 500],
     },
@@ -50,7 +50,7 @@ CATALOG = [
         'slug': 'pursuer-ascent', 'name': 'Pursuer Ascent', 'icon': 'trending-up',
         'accent': '#f97316',
         'description': 'Your total Pursuer Level across every job.',
-        'metric': 'pursuer_level', 'category': '', 'sort_order': 50,
+        'metric': 'pursuer_level', 'category': 'Trophy Hunting', 'sort_order': 50,
         # PLACEHOLDER — flat + cap-less curve. A fresh linked account already sits at ~25 (every job floored
         # at level 1), so the first rung MUST clear the baseline or everyone auto-earns it. Calibrate vs. the
         # real level distribution.
@@ -60,7 +60,7 @@ CATALOG = [
         'slug': 'time-invested', 'name': 'Time Invested', 'icon': 'clock',
         'accent': '#818cf8',
         'description': 'Hours logged across your PlayStation library.',
-        'metric': 'playtime_hours', 'category': '', 'sort_order': 60,
+        'metric': 'playtime_hours', 'category': 'Trophy Hunting', 'sort_order': 60,
         'tiers': [10, 50, 100, 250, 500, 1000, 2500, 5000, 7500, 10000],
     },
     {
