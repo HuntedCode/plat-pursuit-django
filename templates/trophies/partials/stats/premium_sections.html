@@ -43,12 +43,7 @@
     {% include 'trophies/partials/stats/badge_stats.html' %}
 {% endwith %}
 
-{# Section 10: Challenge Progress #}
-{% with data=premium_stats.challenges %}
-    {% include 'trophies/partials/stats/challenge_progress.html' %}
-{% endwith %}
-
-{# Section 11: Community Contributions #}
+{# Section 10: Community Contributions #}
 {% with data=premium_stats.community %}
     {% include 'trophies/partials/stats/community_stats.html' %}
 {% endwith %}

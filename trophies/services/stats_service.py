@@ -394,7 +394,6 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
         'genres': _compute_genre_breakdown(profile, exclude_shovelware, exclude_hidden),
         'library': _compute_game_library(profile_games, igdb_lookup, engine_lookup, igdb_meta),
         'badges': _compute_badge_stats(profile, gamification),
-        'challenges': _compute_challenge_progress(profile),
         'community': _compute_community_stats(profile),
         'recaps': _compute_recap_stats(profile),
         'milestones': _compute_milestones(profile),
@@ -1873,60 +1872,6 @@ def _compute_badge_stats(profile, gamification):
     }
 
 
-# ---------------------------------------------------------------------------
-# Section: Challenge Progress
-# ---------------------------------------------------------------------------
-
-def _compute_challenge_progress(profile):
-    from trophies.models import (
-        Challenge, AZChallengeSlot, CalendarChallengeDay,
-        GenreChallengeSlot, GenreBonusSlot, UserMilestone, UserTitle,
-    )
-
-    challenges = Challenge.objects.filter(profile=profile, is_deleted=False)
-    total_challenges = challenges.count()
-    completed_challenges = challenges.filter(is_complete=True).count()
-
-    # A-Z
-    az_filled = AZChallengeSlot.objects.filter(
-        challenge__profile=profile, challenge__is_deleted=False, is_completed=True,
-    ).count()
-
-    # Calendar
-    cal_filled = CalendarChallengeDay.objects.filter(
-        challenge__profile=profile, challenge__is_deleted=False, is_filled=True,
-    ).count()
-    cal_multi = CalendarChallengeDay.objects.filter(
-        challenge__profile=profile, challenge__is_deleted=False, plat_count__gte=2,
-    ).count()
-
-    # Genre
-    genre_filled = GenreChallengeSlot.objects.filter(
-        challenge__profile=profile, challenge__is_deleted=False, is_completed=True,
-    ).count()
-    genre_total = GenreChallengeSlot.objects.filter(
-        challenge__profile=profile, challenge__is_deleted=False,
-    ).count()
-    bonus_filled = GenreBonusSlot.objects.filter(
-        challenge__profile=profile, challenge__is_deleted=False, is_completed=True,
-    ).count()
-
-    # Milestones & titles
-    milestones_earned = UserMilestone.objects.filter(profile=profile).count()
-    titles_earned = UserTitle.objects.filter(profile=profile).count()
-
-    return {
-        'total_challenges': total_challenges,
-        'completed_challenges': completed_challenges,
-        'az_filled': az_filled,
-        'cal_filled': cal_filled,
-        'cal_multi_plat': cal_multi,
-        'genre_filled': genre_filled,
-        'genre_total': genre_total,
-        'bonus_filled': bonus_filled,
-        'milestones_earned': milestones_earned,
-        'titles_earned': titles_earned,
-    }
 
 
 # ---------------------------------------------------------------------------
