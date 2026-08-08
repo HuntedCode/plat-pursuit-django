@@ -152,34 +152,6 @@
             margin: 16px 0 8px 0;
         }
 
-        /* Challenge progress */
-        .challenge-item {
-            margin-bottom: 14px;
-        }
-
-        .challenge-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .challenge-name {
-            font-size: 14px;
-            font-weight: 600;
-            color: #333333;
-        }
-
-        .challenge-type-badge {
-            display: inline-block;
-            font-size: 10px;
-            font-weight: 600;
-            text-transform: uppercase;
-            padding: 2px 6px;
-            border-radius: 4px;
-            background-color: #e8e8ff;
-            color: #667eea;
-            margin-left: 6px;
-            vertical-align: middle;
-        }
-
         .progress-bar-bg {
             background-color: #e0e0e0;
             border-radius: 4px;
@@ -193,17 +165,6 @@
             border-radius: 4px;
             height: 8px;
             min-width: 2px;
-        }
-
-        .challenge-stats {
-            font-size: 12px;
-            color: #666666;
-        }
-
-        .weekly-delta {
-            color: #38a169;
-            font-weight: 600;
-            margin-left: 6px;
         }
 
         /* Badge updates */
@@ -389,27 +350,6 @@
         <p class="your-week-summary">
             No trophies this week. The next platinum is out there waiting.
         </p>
-        {% endif %}
-
-        {% if your_week.has_challenges %}
-        <p class="sub-header">Challenge Progress</p>
-        {% for challenge in your_week.challenges %}
-        <div class="challenge-item">
-            <div>
-                <span class="challenge-name">{{ challenge.name }}</span>
-                <span class="challenge-type-badge">{{ challenge.challenge_type }}</span>
-            </div>
-            <div class="progress-bar-bg">
-                <div class="progress-bar-fill" style="width: {{ challenge.progress_percentage }}%;"></div>
-            </div>
-            <div class="challenge-stats">
-                {{ challenge.completed_count|intcomma }}/{{ challenge.total_items|intcomma }} completed
-                {% if challenge.weekly_delta > 0 %}
-                <span class="weekly-delta">+{{ challenge.weekly_delta|intcomma }} this week</span>
-                {% endif %}
-            </div>
-        </div>
-        {% endfor %}
         {% endif %}
 
         {% if your_week.has_badges_earned or your_week.has_closest_badge %}

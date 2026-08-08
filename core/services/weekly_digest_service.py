@@ -25,7 +25,7 @@ class WeeklyDigestService:
 
     Community data (site-wide stats, top platted games, review of the week)
     is fetched once per batch and shared across all recipients. Personal data
-    (trophy count, challenges, badges) is fetched per user.
+    (trophy count, badges) is fetched per user.
     """
 
     @staticmethod
@@ -84,60 +84,6 @@ class WeeklyDigestService:
             'platinum': counts['platinum'] or 0,
         }
 
-    @classmethod
-    def get_challenge_progress(cls, profile, week_start, week_end):
-        """
-        Active challenge data with weekly deltas.
-
-        Returns list of dicts: {challenge_type, name, completed_count,
-        total_items, progress_percentage, weekly_delta}
-        """
-        from trophies.models import (
-            Challenge, AZChallengeSlot, CalendarChallengeDay, GenreChallengeSlot,
-        )
-
-        challenges = Challenge.objects.filter(
-            profile=profile,
-            is_deleted=False,
-            is_complete=False,
-        ).order_by('-updated_at')
-
-        result = []
-        for challenge in challenges:
-            # Weekly delta varies by type
-            weekly_delta = 0
-            if challenge.challenge_type == 'az':
-                weekly_delta = AZChallengeSlot.objects.filter(
-                    challenge=challenge,
-                    is_completed=True,
-                    completed_at__gte=week_start,
-                    completed_at__lt=week_end,
-                ).count()
-            elif challenge.challenge_type == 'calendar':
-                weekly_delta = CalendarChallengeDay.objects.filter(
-                    challenge=challenge,
-                    is_filled=True,
-                    filled_at__gte=week_start,
-                    filled_at__lt=week_end,
-                ).count()
-            elif challenge.challenge_type == 'genre':
-                weekly_delta = GenreChallengeSlot.objects.filter(
-                    challenge=challenge,
-                    is_completed=True,
-                    completed_at__gte=week_start,
-                    completed_at__lt=week_end,
-                ).count()
-
-            result.append({
-                'challenge_type': challenge.get_challenge_type_display(),
-                'name': challenge.name,
-                'completed_count': challenge.completed_count,
-                'total_items': challenge.total_items,
-                'progress_percentage': challenge.progress_percentage,
-                'weekly_delta': weekly_delta,
-            })
-
-        return result
 
     @classmethod
     def get_badge_updates(cls, profile, week_start, week_end):
@@ -338,16 +284,14 @@ class WeeklyDigestService:
         """
         Collect personal digest data for a single profile.
 
-        Returns a dict with trophy stats, challenges, and badge updates.
+        Returns a dict with trophy stats and badge updates.
         Intentionally lightweight: deep personal stats live in the monthly recap.
         """
         trophy_stats = cls.get_trophy_stats(profile, week_start, week_end)
-        challenges = cls.get_challenge_progress(profile, week_start, week_end)
         badge_updates = cls.get_badge_updates(profile, week_start, week_end)
 
         return {
             'trophy_stats': trophy_stats,
-            'challenges': challenges,
             'badge_updates': badge_updates,
         }
 
@@ -375,7 +319,6 @@ class WeeklyDigestService:
         badge_updates = digest_data['badge_updates']
         return (
             trophy_stats['total'] == 0
-            and len(digest_data['challenges']) == 0
             and len(badge_updates['badges_earned']) == 0
             and badge_updates['closest_badge'] is None
         )
@@ -441,8 +384,6 @@ class WeeklyDigestService:
             'has_activity': user_total > 0,
             'contribution_pct': contribution_pct,
             'platinums_count': trophy_stats['platinum'],
-            'challenges': digest_data['challenges'],
-            'has_challenges': len(digest_data['challenges']) > 0,
             'badges_earned': badge_updates['badges_earned'],
             'has_badges_earned': len(badge_updates['badges_earned']) > 0,
             'closest_badge': badge_updates['closest_badge'],
