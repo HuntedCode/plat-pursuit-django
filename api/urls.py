@@ -40,8 +40,8 @@ from .calendar_challenge_views import (
 )
 from .calendar_challenge_share_views import (
     CalendarChallengeShareHTMLView, CalendarChallengeSharePNGView,
-    GameBackgroundSearchView, ConceptBannerImagesView,
 )
+from .game_picker_views import GameBackgroundSearchView, ConceptBannerImagesView
 from .genre_challenge_views import (
     GenreChallengeCreateAPIView, GenreChallengeDetailAPIView,
     GenreChallengeUpdateAPIView, GenreChallengeDeleteAPIView,

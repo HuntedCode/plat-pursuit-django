@@ -1509,26 +1509,6 @@ class TokenKeeper:
             # LATER, in the 'finishing' phase below -- it reads the post-sync denorm counts (total_trophies /
             # total_completes) that update_profile_trophy_counts refreshes there, so it must run after them.
 
-            _set_phase('challenges')
-            # Check A-Z challenge progress
-            from trophies.services.challenge_service import check_az_challenge_progress, check_calendar_challenge_progress, check_genre_challenge_progress
-            try:
-                check_az_challenge_progress(profile)
-            except Exception:
-                logger.exception(f"Failed to check A-Z challenge progress for profile {profile_id}")
-
-            # Check Calendar challenge progress
-            try:
-                check_calendar_challenge_progress(profile)
-            except Exception:
-                logger.exception(f"Failed to check calendar challenge progress for profile {profile_id}")
-
-            # Check Genre challenge progress
-            try:
-                check_genre_challenge_progress(profile)
-            except Exception:
-                logger.exception(f"Failed to check genre challenge progress for profile {profile_id}")
-
             _set_phase('finishing')
             # Refresh denormalized stats from authoritative post-sync state.
             # Both updaters honor profile.hide_hiddens, so totals stay
