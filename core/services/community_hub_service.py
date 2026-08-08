@@ -5,15 +5,15 @@ a fixed-layout **Feature Spotlight** page (NOT an aggregator) composed of:
 
 - Hero (built_for_hunters site heartbeat ribbon)
 - Conditional active fundraiser banner
-- 2x2 Feature Grid (Reviews / Game Lists / Challenges / Leaderboards)
+- Feature Grid (Rate My Games / Game Lists / Leaderboards)
 - Permanent Discord callout
 
 Each Feature Grid card is split into two halves divided by a horizontal
 rule:
 
 - **Top half (community pulse)**: a small slice of fresh community
-  signal — 5 most recently reviewed titles, 5 most recent public lists,
-  5 most recently active challenges, top 5 badge XP. The lists are
+  signal — 5 most-rated games, 5 most recent public lists, top 5 badge
+  XP. The lists are
   always padded to ``SPOTLIGHT_LIMIT`` rows so cards stay the same
   height regardless of how much data exists; missing rows render as
   greyed-out placeholders. This is mostly a dev-machine affordance —
@@ -41,7 +41,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# All four cards' top halves use the same slot count so the cards stay
+# All cards' top halves use the same slot count so the cards stay
 # visually balanced. The personal half also uses 5 for the leaderboards
 # card (rank + 2 above + 2 below) for the same reason. Each helper pads
 # its return value to ``SPOTLIGHT_LIMIT`` rows by appending None entries
@@ -122,25 +122,6 @@ def _get_most_rated_games_spotlight(limit=SPOTLIGHT_LIMIT):
     return _pad_to_limit(result, limit)
 
 
-def _get_active_challenges_spotlight(limit=SPOTLIGHT_LIMIT):
-    """Recent active (incomplete) challenges across all types.
-
-    Feeds the Challenges feature card top half. Filters out completed and
-    soft-deleted challenges. Ordered by most recently created.
-
-    Returns a list of Challenge instances ordered newest-first, padded
-    to ``limit`` slots with None entries for placeholder rendering.
-    """
-    from trophies.models import Challenge
-    rows = list(
-        Challenge.objects
-        .filter(is_deleted=False, is_complete=False)
-        .select_related('profile')
-        .order_by('-created_at')[:limit]
-    )
-    return _pad_to_limit(rows, limit)
-
-
 def _get_recent_lists_spotlight(limit=SPOTLIGHT_LIMIT):
     """Most recent published public game lists — Game Lists card top half.
 
@@ -214,12 +195,11 @@ def _get_xp_leaderboard_spotlight(viewer_profile=None, top_n=SPOTLIGHT_LIMIT):
 #
 # Each card's bottom half answers a different question per card type:
 #
-#  Reviews    -> "how do MY reviews compare?" (count + helpful + recommend %)
+#  Rate My Games -> "how do MY ratings compare?"
 #  Lists      -> "what's MY list footprint?" (lists + public + total games)
-#  Challenges -> "where am I in each challenge type?" (per-type latest)
 #  Leaderboards -> "where do I sit on the global ranks?" (rank + neighbors)
 #
-# All four return None for anonymous viewers OR viewers without a linked
+# Each returns None for anonymous viewers OR viewers without a linked
 # PSN profile — the template branches on the None to render the
 # "sign in / link PSN" CTA. Returning None instead of an empty dict makes
 # the template's branching unambiguous.
@@ -285,56 +265,6 @@ def _get_personal_list_stats(viewer_profile):
     }
 
 
-def _get_personal_challenge_slots(viewer_profile):
-    """Per-type latest challenge rows for the Challenges card bottom half.
-
-    Returns a list of 3 dicts, one per challenge type, in canonical
-    display order (A-Z, Calendar, Genre). Each dict has:
-
-        type_key:    'az' | 'calendar' | 'genre'
-        type_label:  short uppercase label for the row badge
-        challenge:   most-recent Challenge instance for that type, or None
-                     if the viewer hasn't started one of that type
-        detail_url_name: the URL name for the type's detail page (so the
-                     template doesn't have to hardcode a mapping)
-
-    Returning rows + ``challenge=None`` instead of just a dict keyed by
-    type lets the template iterate one structure and pick a live or
-    placeholder render per row, without doing per-type if/else branches.
-
-    Returns None for anonymous viewers / no-profile viewers (which the
-    template branches on to render the link-PSN CTA).
-    """
-    if viewer_profile is None:
-        return None
-
-    from trophies.models import Challenge
-
-    # Canonical row layout. Row order is the type order users see on the
-    # challenges browse page.
-    type_rows = [
-        {'type_key': 'az',       'type_label': 'A-Z',      'detail_url_name': 'az_challenge_detail',       'challenge': None},
-        {'type_key': 'calendar', 'type_label': 'Calendar', 'detail_url_name': 'calendar_challenge_detail', 'challenge': None},
-        {'type_key': 'genre',    'type_label': 'Genre',    'detail_url_name': 'genre_challenge_detail',    'challenge': None},
-    ]
-    type_index = {row['type_key']: row for row in type_rows}
-
-    # One query gets every non-deleted challenge ordered newest-first; we
-    # take the first hit per type and stop. Cheaper than three separate
-    # queries on the (profile, is_deleted, challenge_type) index.
-    remaining = set(type_index.keys())
-    for ch in (
-        Challenge.objects
-        .filter(profile=viewer_profile, is_deleted=False)
-        .order_by('-created_at')
-    ):
-        if ch.challenge_type in remaining:
-            type_index[ch.challenge_type]['challenge'] = ch
-            remaining.discard(ch.challenge_type)
-            if not remaining:
-                break
-
-    return type_rows
 
 
 def _get_personal_xp_neighborhood(viewer_profile):
@@ -412,12 +342,10 @@ def build_community_hub_context(viewer_profile=None):
         Top halves:
             - most_rated_games
             - recent_lists
-            - active_challenges
             - xp_leaderboard
         Personal halves (None when viewer_profile is None):
             - personal_rating_stats
             - personal_list_stats
-            - personal_challenge_slots
             - personal_xp_neighborhood
         Page-wide:
             - discord_member_count
@@ -444,12 +372,6 @@ def build_community_hub_context(viewer_profile=None):
         context['recent_lists'] = []
 
     try:
-        context['active_challenges'] = _get_active_challenges_spotlight()
-    except Exception:
-        logger.exception("Failed to load community hub active_challenges")
-        context['active_challenges'] = []
-
-    try:
         context['xp_leaderboard'] = _get_xp_leaderboard_spotlight(viewer_profile)
     except Exception:
         logger.exception("Failed to load community hub xp_leaderboard")
@@ -470,12 +392,6 @@ def build_community_hub_context(viewer_profile=None):
     except Exception:
         logger.exception("Failed to load community hub personal_list_stats")
         context['personal_list_stats'] = None
-
-    try:
-        context['personal_challenge_slots'] = _get_personal_challenge_slots(viewer_profile)
-    except Exception:
-        logger.exception("Failed to load community hub personal_challenge_slots")
-        context['personal_challenge_slots'] = None
 
     try:
         context['personal_xp_neighborhood'] = _get_personal_xp_neighborhood(viewer_profile)
