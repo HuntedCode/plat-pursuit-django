@@ -440,3 +440,35 @@ def test_build_context_maxed_milestone():
     assert tc['next_tier'] is None
     assert tc['progress_pct'] == 100
     assert tc['earned_count'] == 10
+
+
+# ── Page render (view + template) ─────────────────────────────────────────────────────────────────────────
+
+def test_milestones_page_renders_for_linked_profile(client):
+    from django.urls import reverse
+    call_command('seed_milestones')
+    services.refresh_total_hunters()
+    p = ProfileFactory()
+    _plats(p, 12)
+    services.recompute_milestones(p, reconcile_discord=False)
+
+    client.force_login(p.user)
+    resp = client.get(reverse('milestones_list'))
+    content = resp.content.decode()
+
+    assert resp.status_code == 200
+    assert 'Platinum Hunter' in content
+    assert 'msc__ladder' in content            # the tier ladder rendered
+    assert 'Milestones started' in content     # authed overview
+    assert '{%' not in content and '{#' not in content
+
+
+def test_milestones_page_renders_for_anonymous(client):
+    from django.urls import reverse
+    call_command('seed_milestones')
+    resp = client.get(reverse('milestones_list'))
+    content = resp.content.decode()
+
+    assert resp.status_code == 200
+    assert 'Platinum Hunter' in content
+    assert 'Link your PSN account' in content   # anon preview nudge

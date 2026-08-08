@@ -66,6 +66,7 @@ def build_milestones_context(profile):
             'tiers': tier_rows,
             'earned_count': highest,
             'total_tiers': len(tiers),
+            'highest_earned': tier_rows[highest - 1] if highest > 0 else None,   # for the rarity/prestige line
             'next_tier': next_row,
             'next_threshold': next_row['threshold'] if next_row else None,
             'progress_pct': progress_pct,
