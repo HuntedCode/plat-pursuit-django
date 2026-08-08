@@ -1,7 +1,11 @@
 """Seed / update the v1 milestone catalogue (idempotent).
 
 The catalogue is DATA — this command upserts it. Re-running updates names/thresholds/metadata and PRESERVES
-each tier's `earned_count` and every `EarnedMilestoneTier`. Safe to run on every deploy.
+each tier's `earned_count`, `discord_role_id`, and every `EarnedMilestoneTier`. Safe to re-run.
+
+Note: it does NOT auto-shrink a ladder — if a catalogue entry loses tiers, the old higher-index rows are
+left in place (deleting them would drop earned history) and the command WARNS about them so an operator can
+decide. Growing a ladder or changing thresholds is fully handled.
 
 Two ladders are placeholders pending real-data calibration (badge catalogue size, the cap-less Pursuer Level
 economy) — see docs/design/milestones-revamp.md §8. They're pure data, so re-seeding with tuned numbers is
@@ -73,6 +77,14 @@ class Command(BaseCommand):
                 )
                 created_t += int(t_created)
                 updated_t += int(not t_created)
+
+            # Warn (don't delete -- preserves earned history) if the ladder shrank vs. what's stored.
+            stale = milestone.tiers.filter(index__gt=len(tiers)).count()
+            if stale:
+                self.stderr.write(self.style.WARNING(
+                    f"  {milestone.slug}: {stale} stale tier(s) with index > {len(tiers)} remain "
+                    f"(ladder shrank). Left in place to preserve earned history; remove manually if intended."
+                ))
 
         self.stdout.write(self.style.SUCCESS(
             f"Milestones seeded: {created_m} created / {updated_m} updated; "

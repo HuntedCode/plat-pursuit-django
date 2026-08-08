@@ -19,6 +19,10 @@ from .models import EarnedMilestoneTier, Milestone, MilestoneTier, UserMilestone
 
 logger = logging.getLogger("milestones")
 
+# Metrics we've already warned about this process, so a single misconfigured milestone doesn't log once
+# per profile across a 100K-profile sweep.
+_warned_unknown_metrics: set[str] = set()
+
 
 def recompute_milestones(profile, *, reconcile_discord=True):
     """Recompute every active milestone for `profile`.
@@ -41,29 +45,40 @@ def recompute_milestones(profile, *, reconcile_discord=True):
 
     for m in actives:
         if m.metric not in MILESTONE_METRICS:
-            logger.warning("Milestone %r references unknown metric %r; skipping.", m.slug, m.metric)
+            if m.metric not in _warned_unknown_metrics:   # warn once per process, not once per profile
+                _warned_unknown_metrics.add(m.metric)
+                logger.warning("Milestone %r references unknown metric %r; skipping.", m.slug, m.metric)
             continue
         if m.metric not in metric_cache:
             metric_cache[m.metric] = metric_value(m.metric, profile)
         value = metric_cache[m.metric]
 
-        highest_idx = 0
+        # highest_tier_index ratchets off EARNED rungs (already-earned OR newly-crossed) -- never off the
+        # current thresholds alone. So an upward threshold re-seed can't make this read-model under-report a
+        # rung the permanent EarnedMilestoneTier record says was earned (spec §11: index is the authority, and
+        # earned rows are never deleted).
+        earned_indices = []
         for tier in sorted(m.tiers.all(), key=lambda t: t.index):
-            if value >= tier.threshold:
-                highest_idx = max(highest_idx, tier.index)
-                if tier.id not in earned_tier_ids:
-                    newly.append(tier)
+            already = tier.id in earned_tier_ids
+            crossed = value >= tier.threshold
+            if already or crossed:
+                earned_indices.append(tier.index)
+            if crossed and not already:
+                newly.append(tier)
 
         UserMilestone.objects.update_or_create(
             profile=profile, milestone=m,
-            defaults={'current_value': value, 'highest_tier_index': highest_idx},
+            defaults={'current_value': value, 'highest_tier_index': max(earned_indices, default=0)},
         )
 
     if newly:
         _award_tiers(profile, newly)
 
-    # Only bother the bot when a role-bearing rung was actually crossed (avoids re-asserting roles every sync).
-    if reconcile_discord and any(t.discord_role_id for t in newly):
+    # Reconcile whenever the caller asks: it's idempotent and converges the FULL desired set, so this is the
+    # path --profile / Discord-link / cutover use to grant roles a hunter ALREADY earned (not just fresh
+    # crossings). The high-frequency sync trigger (Phase 2) instead passes reconcile_discord=False and
+    # reconciles itself only when a role-bearing tier was just crossed (avoids re-asserting roles every sync).
+    if reconcile_discord:
         reconcile_discord_roles(profile)
 
     return newly
@@ -99,11 +114,15 @@ def desired_milestone_roles(profile) -> set[int]:
 
 
 def managed_milestone_roles() -> set[int]:
-    """Every discord_role_id configured across active milestone tiers -- the universe reconciliation may
-    touch, so it never disturbs non-milestone server roles."""
+    """Every discord_role_id configured across ALL milestone tiers (active or not) -- the universe
+    reconciliation is allowed to touch, so it never disturbs non-milestone server roles.
+
+    Retired (is_active=False) milestones are deliberately INCLUDED here but EXCLUDED from
+    `desired_milestone_roles`: their role becomes managed-but-not-desired and is stripped on the next
+    reconcile. (If it filtered on is_active, retiring a milestone would orphan its role forever.)"""
     return set(
         MilestoneTier.objects
-        .filter(discord_role_id__isnull=False, milestone__is_active=True)
+        .filter(discord_role_id__isnull=False)
         .values_list('discord_role_id', flat=True)
     )
 

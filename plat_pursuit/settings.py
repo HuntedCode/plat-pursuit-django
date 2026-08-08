@@ -556,6 +556,11 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        'milestones': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
 

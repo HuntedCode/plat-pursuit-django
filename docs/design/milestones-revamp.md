@@ -271,3 +271,11 @@ Because every v1 metric is **derived from data users already have**, going fresh
   being "pure pride" and re-tangles with the economy. If that's ever wanted, it's a badge, not a milestone.
 - **Tier ordering is by `index`, not `threshold`.** Two rungs could in theory share a threshold; `index` is
   the authority for order + "highest earned."
+- **`highest_tier_index` ratchets off EARNED rungs, not current thresholds.** The sweep derives it from the
+  union of already-earned + newly-crossed tiers, so raising a tier's threshold above a hunter's current value
+  (an upward re-seed) can never walk the read-model back below a rung they permanently earned.
+- **Discord reconcile fires unconditionally when the caller asks** (`recompute_milestones(reconcile_discord=
+  True)` / `--profile` / link / `recompute_milestones --reconcile-discord`), so it grants roles a hunter
+  ALREADY earned — not only fresh crossings. The high-frequency sync trigger (Phase 2) instead passes
+  `reconcile_discord=False` and reconciles itself only on a role-bearing crossing (to avoid re-asserting roles
+  every sync). `managed_milestone_roles()` includes **retired** milestones' roles so reconcile can strip them.

@@ -162,7 +162,7 @@ def test_recompute_tier_earned_counts_corrects_drift():
 
     t1.refresh_from_db()
     assert t1.earned_count == 1
-    assert fixed >= 1
+    assert fixed == 1   # exactly the one corrupted row corrected
 
 
 # ── Unknown metric is skipped, not fatal ──────────────────────────────────────────────────────────────────
@@ -218,9 +218,11 @@ def test_reconcile_adds_highest_removes_stale(monkeypatch, django_capture_on_com
     assert set(removed) == {111}     # the superseded lower bracket is removed
 
 
-def test_reconcile_noop_when_not_discord_verified(monkeypatch, django_capture_on_commit_callbacks):
+@pytest.mark.parametrize('verified,discord_id', [(False, 999301), (True, None)])
+def test_reconcile_noop_when_not_linked(monkeypatch, django_capture_on_commit_callbacks, verified, discord_id):
+    """Both gates: unverified, and verified-but-no-discord_id, must no-op."""
     _role_ladder()
-    p = ProfileFactory(is_discord_verified=False)   # not verified
+    p = ProfileFactory(is_discord_verified=verified, discord_id=discord_id)
     _plats(p, 12)
     services.recompute_milestones(p, reconcile_discord=False)
 
@@ -234,3 +236,145 @@ def test_reconcile_noop_when_not_discord_verified(monkeypatch, django_capture_on
         services.reconcile_discord_roles(p)
 
     assert called == []
+
+
+# ── H1: --profile grants ALREADY-earned roles (no new crossing needed) ────────────────────────────────────
+
+def test_profile_command_reconciles_already_earned_roles(monkeypatch, django_capture_on_commit_callbacks):
+    """After a role-bearing tier is already earned (e.g. a prior backfill), a `--profile` run must still grant
+    the role -- reconcile fires unconditionally when reconcile_discord=True, not only on a fresh crossing."""
+    _role_ladder()   # roles on tiers 2 (111) and 3 (222)
+    p = ProfileFactory(is_discord_verified=True, discord_id=999401)
+    _plats(p, 12)
+    services.recompute_milestones(p, reconcile_discord=False)   # earn tiers WITHOUT reconciling (backfill)
+
+    added = []
+    monkeypatch.setattr('trophies.services.badge_service.notify_bot_role_earned',
+                        lambda prof, rid: added.append(rid))
+    monkeypatch.setattr('trophies.services.badge_service.notify_bot_role_removed', lambda prof, rid: None)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        call_command('recompute_milestones', '--profile', p.psn_username)
+
+    assert 222 in added   # highest already-earned role granted despite zero new crossings
+
+
+def test_reconcile_empty_desired_removes_all_managed(monkeypatch, django_capture_on_commit_callbacks):
+    """A verified hunter who has earned no role-bearing rung has every managed role stripped."""
+    _role_ladder()
+    p = ProfileFactory(is_discord_verified=True, discord_id=999402)   # 0 plats -> earns no role tier
+    services.recompute_milestones(p, reconcile_discord=False)
+
+    added, removed = [], []
+    monkeypatch.setattr('trophies.services.badge_service.notify_bot_role_earned',
+                        lambda prof, rid: added.append(rid))
+    monkeypatch.setattr('trophies.services.badge_service.notify_bot_role_removed',
+                        lambda prof, rid: removed.append(rid))
+
+    with django_capture_on_commit_callbacks(execute=True):
+        services.reconcile_discord_roles(p)
+
+    assert added == []
+    assert set(removed) == {111, 222}
+
+
+# ── Retirement (is_active=False) ──────────────────────────────────────────────────────────────────────────
+
+def test_retired_milestone_skipped_but_history_preserved():
+    _role_ladder()
+    p = ProfileFactory()
+    _plats(p, 12)
+    services.recompute_milestones(p, reconcile_discord=False)
+    ph = Milestone.objects.get(slug='platinum-hunter')
+
+    Milestone.objects.filter(pk=ph.pk).update(is_active=False)
+    services.recompute_milestones(p, reconcile_discord=False)   # retired -> skipped, no crash
+
+    assert EarnedMilestoneTier.objects.filter(profile=p, tier__milestone=ph).count() == 3   # history kept
+
+
+def test_retired_milestone_role_is_removable():
+    """A retired milestone's role stays in the MANAGED universe (so reconcile can strip it) but leaves DESIRED."""
+    _role_ladder()
+    p = ProfileFactory(is_discord_verified=True, discord_id=999403)
+    _plats(p, 12)
+    services.recompute_milestones(p, reconcile_discord=False)
+    assert services.desired_milestone_roles(p) == {222}
+
+    Milestone.objects.filter(slug='platinum-hunter').update(is_active=False)
+
+    assert services.desired_milestone_roles(p) == set()        # inactive excluded from desired
+    assert {111, 222} <= services.managed_milestone_roles()    # but still managed -> strippable
+
+
+# ── M3: highest_tier_index ratchets (never under-reports an earned rung) ───────────────────────────────────
+
+def test_highest_tier_index_ratchets_after_upward_reseed():
+    call_command('seed_milestones')
+    p = ProfileFactory()
+    _plats(p, 12)   # earns Platinum Hunter tiers 1,5,10 -> index 3
+    services.recompute_milestones(p, reconcile_discord=False)
+    ph = Milestone.objects.get(slug='platinum-hunter')
+    assert UserMilestone.objects.get(profile=p, milestone=ph).highest_tier_index == 3
+
+    # Raise tier 3's threshold ABOVE the hunter's current value.
+    MilestoneTier.objects.filter(milestone=ph, index=3).update(threshold=100)
+    services.recompute_milestones(p, reconcile_discord=False)
+
+    um = UserMilestone.objects.get(profile=p, milestone=ph)
+    assert um.current_value == 12
+    assert um.highest_tier_index == 3   # ratchets: the earned rung is preserved, not walked back to 2
+    assert EarnedMilestoneTier.objects.filter(profile=p, tier__milestone=ph).count() == 3
+
+
+# ── More metric edge cases ────────────────────────────────────────────────────────────────────────────────
+
+def test_metric_playtime_handles_null_durations():
+    p = ProfileFactory()
+    ProfileGameFactory(profile=p, play_duration=None)
+    ProfileGameFactory(profile=p, play_duration=timedelta(hours=4))
+    assert metric_value('playtime_hours', p) == 4
+    assert metric_value('playtime_hours', ProfileFactory()) == 0   # no games at all
+
+
+def test_metric_pursuer_level_zero_jobs():
+    assert metric_value('pursuer_level', ProfileFactory()) == 0
+
+
+def test_recompute_milestone_with_no_tiers():
+    m = Milestone.objects.create(slug='tierless', name='Tierless', metric='lifetime_platinums')
+    p = ProfileFactory()
+    _plats(p, 5)
+    services.recompute_milestones(p, reconcile_discord=False)   # no crash
+    um = UserMilestone.objects.get(profile=p, milestone=m)
+    assert um.current_value == 5 and um.highest_tier_index == 0
+
+
+def test_seed_preserves_discord_role_id_on_rerun():
+    call_command('seed_milestones')
+    t = MilestoneTier.objects.get(milestone__slug='platinum-hunter', index=2)
+    MilestoneTier.objects.filter(pk=t.pk).update(discord_role_id=555)
+    call_command('seed_milestones')
+    t.refresh_from_db()
+    assert t.discord_role_id == 555
+
+
+# ── recompute_milestones management command ───────────────────────────────────────────────────────────────
+
+def test_recompute_command_mass_path():
+    call_command('seed_milestones')
+    p = ProfileFactory(is_linked=True)
+    _plats(p, 12)
+    unlinked = ProfileFactory(is_linked=False)   # must be skipped by the is_linked filter
+    _plats(unlinked, 12)
+
+    call_command('recompute_milestones')
+
+    assert EarnedMilestoneTier.objects.filter(profile=p, tier__milestone__slug='platinum-hunter').count() == 3
+    assert not EarnedMilestoneTier.objects.filter(profile=unlinked).exists()
+
+
+def test_recompute_command_unknown_profile_errors():
+    from django.core.management.base import CommandError
+    with pytest.raises(CommandError):
+        call_command('recompute_milestones', '--profile', 'no_such_hunter')
