@@ -19,13 +19,6 @@ from .admin_views import (
 )
 from .misc_views import SearchView
 from .list_views import BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView
-from .challenge_views import (
-    ChallengeHubView, MyChallengesView, AZChallengeCreateView,
-    AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView,
-    CalendarChallengeCreateView, CalendarChallengeDetailView,
-    GenreChallengeCreateView, GenreChallengeSetupView,
-    GenreChallengeDetailView, GenreChallengeEditView,
-)
 from .review_hub_views import ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView
 from .dashboard_views import DashboardView
 from .title_views import MyTitlesView
@@ -59,12 +52,6 @@ __all__ = [
     'SearchView',
     # List views
     'BrowseListsView', 'GameListDetailView', 'GameListEditView', 'GameListCreateView', 'MyListsView',
-    # Challenge views
-    'ChallengeHubView', 'MyChallengesView', 'AZChallengeCreateView',
-    'AZChallengeSetupView', 'AZChallengeDetailView', 'AZChallengeEditView',
-    'CalendarChallengeCreateView', 'CalendarChallengeDetailView',
-    'GenreChallengeCreateView', 'GenreChallengeSetupView',
-    'GenreChallengeDetailView', 'GenreChallengeEditView',
     # Review Hub views
     'ReviewHubLandingView', 'RateMyGamesView', 'ReviewHubDetailView', 'ReviewsArchivedView',
     # Dashboard views

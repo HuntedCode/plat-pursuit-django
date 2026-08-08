@@ -27,30 +27,7 @@ from .game_list_views import (
     GameListLikeView, GameListQuickAddView, UserGameListsView, GameListCopyView,
     GameSearchView,
 )
-from .az_challenge_views import (
-    AZChallengeCreateAPIView, AZChallengeDetailAPIView, AZChallengeUpdateAPIView,
-    AZChallengeDeleteAPIView, AZSlotAssignAPIView, AZSlotClearAPIView,
-    AZGameSearchAPIView,
-)
-from .az_challenge_share_views import AZChallengeShareHTMLView, AZChallengeSharePNGView
-from .calendar_challenge_views import (
-    CalendarChallengeCreateAPIView, CalendarChallengeDetailAPIView,
-    CalendarChallengeUpdateAPIView, CalendarChallengeDeleteAPIView,
-    CalendarDayDetailAPIView,
-)
-from .calendar_challenge_share_views import (
-    CalendarChallengeShareHTMLView, CalendarChallengeSharePNGView,
-)
 from .game_picker_views import GameBackgroundSearchView, ConceptBannerImagesView
-from .genre_challenge_views import (
-    GenreChallengeCreateAPIView, GenreChallengeDetailAPIView,
-    GenreChallengeUpdateAPIView, GenreChallengeDeleteAPIView,
-    GenreSlotAssignAPIView, GenreSlotClearAPIView,
-    GenreConceptSearchAPIView,
-    GenreBonusAddAPIView, GenreBonusClearAPIView,
-    GenreMoveAPIView, GenreSwapTargetsAPIView,
-)
-from .genre_challenge_share_views import GenreChallengeShareHTMLView, GenreChallengeSharePNGView
 from .game_family_views import (
     GameFamilyCreateView, GameFamilyUpdateView, GameFamilyDeleteView,
     GameFamilyAddConceptView, GameFamilyRemoveConceptView,
@@ -220,44 +197,9 @@ urlpatterns = [
     # Game flags (community data quality reports)
     path('games/<int:game_id>/flag/', GameFlagView.as_view(), name='game-flag'),
 
-    # A-Z Challenge endpoints (static paths before <int:> to avoid URL conflicts)
-    path('challenges/az/', AZChallengeCreateAPIView.as_view(), name='az-challenge-create'),
-    path('challenges/az/game-search/', AZGameSearchAPIView.as_view(), name='az-game-search'),
-    path('challenges/az/<int:challenge_id>/', AZChallengeDetailAPIView.as_view(), name='az-challenge-detail'),
-    path('challenges/az/<int:challenge_id>/update/', AZChallengeUpdateAPIView.as_view(), name='az-challenge-update'),
-    path('challenges/az/<int:challenge_id>/delete/', AZChallengeDeleteAPIView.as_view(), name='az-challenge-delete'),
-    path('challenges/az/<int:challenge_id>/slots/<str:letter>/assign/', AZSlotAssignAPIView.as_view(), name='az-slot-assign'),
-    path('challenges/az/<int:challenge_id>/slots/<str:letter>/clear/', AZSlotClearAPIView.as_view(), name='az-slot-clear'),
-    path('challenges/az/<int:challenge_id>/share/html/', AZChallengeShareHTMLView.as_view(), name='az-challenge-share-html'),
-    path('challenges/az/<int:challenge_id>/share/png/', AZChallengeSharePNGView.as_view(), name='az-challenge-share-png'),
-
     # Game background search (shared by share card + banner picker)
     path('game-backgrounds/', GameBackgroundSearchView.as_view(), name='game-background-search'),
     path('game-backgrounds/<int:concept_id>/images/', ConceptBannerImagesView.as_view(), name='concept-banner-images'),
-
-    # Platinum Calendar Challenge endpoints
-    path('challenges/calendar/', CalendarChallengeCreateAPIView.as_view(), name='calendar-challenge-create'),
-    path('challenges/calendar/<int:challenge_id>/', CalendarChallengeDetailAPIView.as_view(), name='calendar-challenge-detail'),
-    path('challenges/calendar/<int:challenge_id>/update/', CalendarChallengeUpdateAPIView.as_view(), name='calendar-challenge-update'),
-    path('challenges/calendar/<int:challenge_id>/delete/', CalendarChallengeDeleteAPIView.as_view(), name='calendar-challenge-delete'),
-    path('challenges/calendar/<int:challenge_id>/day/<int:month>/<int:day>/', CalendarDayDetailAPIView.as_view(), name='calendar-day-detail'),
-    path('challenges/calendar/<int:challenge_id>/share/html/', CalendarChallengeShareHTMLView.as_view(), name='calendar-challenge-share-html'),
-    path('challenges/calendar/<int:challenge_id>/share/png/', CalendarChallengeSharePNGView.as_view(), name='calendar-challenge-share-png'),
-
-    # Genre Challenge endpoints (static paths before <int:> to avoid URL conflicts)
-    path('challenges/genre/', GenreChallengeCreateAPIView.as_view(), name='genre-challenge-create'),
-    path('challenges/genre/concept-search/', GenreConceptSearchAPIView.as_view(), name='genre-concept-search'),
-    path('challenges/genre/<int:challenge_id>/', GenreChallengeDetailAPIView.as_view(), name='genre-challenge-detail'),
-    path('challenges/genre/<int:challenge_id>/update/', GenreChallengeUpdateAPIView.as_view(), name='genre-challenge-update'),
-    path('challenges/genre/<int:challenge_id>/delete/', GenreChallengeDeleteAPIView.as_view(), name='genre-challenge-delete'),
-    path('challenges/genre/<int:challenge_id>/slots/<str:genre>/assign/', GenreSlotAssignAPIView.as_view(), name='genre-slot-assign'),
-    path('challenges/genre/<int:challenge_id>/slots/<str:genre>/clear/', GenreSlotClearAPIView.as_view(), name='genre-slot-clear'),
-    path('challenges/genre/<int:challenge_id>/bonus/add/', GenreBonusAddAPIView.as_view(), name='genre-bonus-add'),
-    path('challenges/genre/<int:challenge_id>/bonus/<int:bonus_slot_id>/clear/', GenreBonusClearAPIView.as_view(), name='genre-bonus-clear'),
-    path('challenges/genre/<int:challenge_id>/move/', GenreMoveAPIView.as_view(), name='genre-move'),
-    path('challenges/genre/<int:challenge_id>/move-targets/', GenreSwapTargetsAPIView.as_view(), name='genre-move-targets'),
-    path('challenges/genre/<int:challenge_id>/share/html/', GenreChallengeShareHTMLView.as_view(), name='genre-challenge-share-html'),
-    path('challenges/genre/<int:challenge_id>/share/png/', GenreChallengeSharePNGView.as_view(), name='genre-challenge-share-png'),
 
     # Game Family endpoints (staff-only)
     path('game-families/', GameFamilyCreateView.as_view(), name='game-family-create'),

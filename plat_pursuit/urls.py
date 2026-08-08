@@ -36,7 +36,7 @@ sitemaps = {
     'roadmaps': RoadmapSitemap,
     'lists': GameListSitemap,
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyProfileCardView, MyStatsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyProfileCardView, MyStatsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
@@ -206,20 +206,6 @@ urlpatterns = [
     path('community/lists/<int:list_id>/edit/', GameListEditView.as_view(), name='list_edit'),
     path('my-lists/', MyListsView.as_view(), name='my_lists'),
 
-    # Challenges (canonical paths under /community/challenges/)
-    path('community/challenges/', ChallengeHubView.as_view(), name='challenges_browse'),
-    path('community/challenges/az/create/', AZChallengeCreateView.as_view(), name='az_challenge_create'),
-    path('community/challenges/az/<int:challenge_id>/', AZChallengeDetailView.as_view(), name='az_challenge_detail'),
-    path('community/challenges/az/<int:challenge_id>/setup/', AZChallengeSetupView.as_view(), name='az_challenge_setup'),
-    path('community/challenges/az/<int:challenge_id>/edit/', AZChallengeEditView.as_view(), name='az_challenge_edit'),
-    path('community/challenges/calendar/create/', CalendarChallengeCreateView.as_view(), name='calendar_challenge_create'),
-    path('community/challenges/calendar/<int:challenge_id>/', CalendarChallengeDetailView.as_view(), name='calendar_challenge_detail'),
-    path('community/challenges/genre/create/', GenreChallengeCreateView.as_view(), name='genre_challenge_create'),
-    path('community/challenges/genre/<int:challenge_id>/', GenreChallengeDetailView.as_view(), name='genre_challenge_detail'),
-    path('community/challenges/genre/<int:challenge_id>/setup/', GenreChallengeSetupView.as_view(), name='genre_challenge_setup'),
-    path('community/challenges/genre/<int:challenge_id>/edit/', GenreChallengeEditView.as_view(), name='genre_challenge_edit'),
-    path('my-challenges/', MyChallengesView.as_view(), name='my_challenges'),
-
     # Rate My Games wizard (ratings-only; lives outside the archived
     # /community/reviews/ subtree).
     path('community/rate-my-games/', RateMyGamesView.as_view(), name='rate_my_games'),
@@ -299,18 +285,6 @@ urlpatterns = [
     path('lists/<int:list_id>/', RedirectView.as_view(pattern_name='list_detail', permanent=True, query_string=True)),
     path('lists/<int:list_id>/edit/', RedirectView.as_view(pattern_name='list_edit', permanent=True, query_string=True)),
 
-    # Challenges
-    path('challenges/', RedirectView.as_view(pattern_name='challenges_browse', permanent=True, query_string=True)),
-    path('challenges/az/create/', RedirectView.as_view(pattern_name='az_challenge_create', permanent=True, query_string=True)),
-    path('challenges/az/<int:challenge_id>/', RedirectView.as_view(pattern_name='az_challenge_detail', permanent=True, query_string=True)),
-    path('challenges/az/<int:challenge_id>/setup/', RedirectView.as_view(pattern_name='az_challenge_setup', permanent=True, query_string=True)),
-    path('challenges/az/<int:challenge_id>/edit/', RedirectView.as_view(pattern_name='az_challenge_edit', permanent=True, query_string=True)),
-    path('challenges/calendar/create/', RedirectView.as_view(pattern_name='calendar_challenge_create', permanent=True, query_string=True)),
-    path('challenges/calendar/<int:challenge_id>/', RedirectView.as_view(pattern_name='calendar_challenge_detail', permanent=True, query_string=True)),
-    path('challenges/genre/create/', RedirectView.as_view(pattern_name='genre_challenge_create', permanent=True, query_string=True)),
-    path('challenges/genre/<int:challenge_id>/', RedirectView.as_view(pattern_name='genre_challenge_detail', permanent=True, query_string=True)),
-    path('challenges/genre/<int:challenge_id>/setup/', RedirectView.as_view(pattern_name='genre_challenge_setup', permanent=True, query_string=True)),
-    path('challenges/genre/<int:challenge_id>/edit/', RedirectView.as_view(pattern_name='genre_challenge_edit', permanent=True, query_string=True)),
 
     # Reviews
     path('reviews/', RedirectView.as_view(pattern_name='reviews_landing', permanent=True, query_string=True)),
