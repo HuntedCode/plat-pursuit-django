@@ -291,8 +291,10 @@ Old `UserBadge` history is never deleted at cutover — retained for rollback an
 - **A from-scratch earn engine can silently mis-award.** Mitigated by the exhaustive engine unit tests, the
   `--dry-run` inspectability of any profile, per-badge reversible cutover, and the `--compare-legacy` glance
   (§6.2) — in place of a heavyweight reconciliation harness.
-- **Milestones read badge counts.** Preserve `total_badges_earned` / `unique_badges_earned` as a stable query,
-  or the two milestone criteria break.
+- **Milestones read badge counts.** The Badge Collector milestone now counts held group badges directly
+  (`UserGroupBadge.filter(profile=…).count()` in `milestones/metrics.py`), off the new subsystem — NOT the
+  legacy `ProfileGamification.total_badges_earned` (which still tracks retired `UserBadge` tiers). A future
+  `unique_badges_earned`-style milestone would count `distinct group_badge__series` the same way.
 - **Holo XP is a trap.** Live + lapsing + XP = fluctuating totals. Keep holo cosmetic.
 - **Completion-date data must be trustworthy** for `earned_at` (the derived earners rank) — it leans on the
   default `ProfileTrophyGroup.last_trophy_at` / `ProfileGame` dates, the least-tested paths today. Backfill coverage first.

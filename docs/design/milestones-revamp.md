@@ -203,7 +203,7 @@ ceilings and just add intermediate rungs to reach 10.
 - `lifetime_platinums` — `ProfileGame.filter(has_plat=True).count()`
 - `lifetime_trophies` — denorm `profile.total_trophies`
 - `full_completions` — denorm `profile.total_completes`
-- `total_badges_earned` — denorm `ProfileGamification.total_badges_earned`
+- `total_badges_earned` — `UserGroupBadge.filter(profile=…).count()` (held group badges in the new subsystem, the same surface the Collection reads; NOT the legacy `ProfileGamification.total_badges_earned` tier count)
 - `pursuer_level` — `ProfileJobXP.filter(profile=…).aggregate(Sum('level'))`
 - `playtime_hours` — `Sum(ProfileGame.play_duration)` → hours
 

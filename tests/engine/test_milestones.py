@@ -45,11 +45,14 @@ def test_metric_denorm_fields():
 
 
 def test_metric_total_badges_earned():
-    from trophies.models import ProfileGamification
+    # Counts held group badges (the new subsystem's UserGroupBadge), NOT the legacy tier count.
+    from trophies.models import UserGroupBadge
+    from tests.factories import GroupBadgeFactory
     p = ProfileFactory()
-    assert metric_value('total_badges_earned', _fresh(p)) == 0   # no gamification row yet
-    ProfileGamification.objects.create(profile=p, total_badges_earned=42)
-    assert metric_value('total_badges_earned', _fresh(p)) == 42
+    assert metric_value('total_badges_earned', p) == 0
+    UserGroupBadge.objects.create(profile=p, group_badge=GroupBadgeFactory())
+    UserGroupBadge.objects.create(profile=p, group_badge=GroupBadgeFactory())
+    assert metric_value('total_badges_earned', p) == 2
 
 
 def test_metric_pursuer_level():

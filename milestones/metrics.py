@@ -70,8 +70,11 @@ def _full_completions(profile) -> int:
 
 @milestone_metric("total_badges_earned")
 def _total_badges_earned(profile) -> int:
-    gamification = getattr(profile, 'gamification', None)  # OneToOne (may be absent pre-sync)
-    return gamification.total_badges_earned if gamification else 0
+    # New grouping-badge system: one UserGroupBadge row == one currently-held group badge (edition) -- the same
+    # held-editions surface the Collection reads. (The legacy ProfileGamification.total_badges_earned counts the
+    # retired UserBadge tiers.) Single COUNT, catalog-bounded -> whale-safe.
+    from trophies.models import UserGroupBadge
+    return UserGroupBadge.objects.filter(profile=profile).count()
 
 
 @milestone_metric("pursuer_level")
