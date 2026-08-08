@@ -528,7 +528,7 @@ def test_spotlights_selection():
 
 def test_build_context_maxed_milestone():
     call_command('seed_milestones')
-    p = ProfileFactory(total_trophies=100000)   # Trophy Collector final rung
+    p = ProfileFactory(total_trophies=60000)   # Trophy Collector final rung
     services.recompute_milestones(p, reconcile_discord=False)
 
     ctx = build_milestones_context(p)

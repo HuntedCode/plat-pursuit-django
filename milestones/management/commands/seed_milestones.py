@@ -29,7 +29,7 @@ CATALOG = [
         'accent': '#e0b84a',
         'description': 'Total trophies of every grade earned.',
         'metric': 'lifetime_trophies', 'category': 'Trophy Hunting', 'sort_order': 20,
-        'tiers': [100, 500, 1000, 2500, 5000, 10000, 25000, 50000, 75000, 100000],
+        'tiers': [100, 500, 1000, 2500, 5000, 10000, 20000, 35000, 50000, 60000],
     },
     {
         'slug': 'completionist', 'name': 'Completionist', 'icon': 'check-circle',
@@ -61,7 +61,7 @@ CATALOG = [
         'accent': '#818cf8',
         'description': 'Hours logged across your PlayStation library.',
         'metric': 'playtime_hours', 'category': 'Trophy Hunting', 'sort_order': 60,
-        'tiers': [10, 50, 100, 250, 500, 1000, 2500, 5000, 7500, 10000],
+        'tiers': [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 20000],
     },
     {
         'slug': 'loyal-member', 'name': 'Loyal Member', 'icon': 'heart',

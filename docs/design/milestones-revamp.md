@@ -187,17 +187,17 @@ shows the name with the threshold as a subtitle. No named rungs required.
 
 Six milestones, **10 tiers each** (locked with product). Metric-driven ladders only — no manual/secret/
 one-off in v1 (§9). Rung growth roughly doubles up the ladder; the top rung is ~2× the earlier draft max,
-**except** Total Trophies (fixed final = 100,000) and Playtime (fixed final = 10,000 hrs), which keep those
-ceilings and just add intermediate rungs to reach 10.
+**except** Total Trophies (fixed final = 60,000) and Playtime (fixed final = 20,000 hrs), which set those
+ceilings deliberately and space the intermediate rungs to reach 10.
 
 | Milestone | Metric | Tiers (10) |
 |---|---|---|
 | **Platinum Hunter** | `lifetime_platinums` | 1, 5, 10, 25, 50, 100, 250, 500, 1000, **2000** |
-| **Trophy Collector** | `lifetime_trophies` *(fixed 100k)* | 100, 500, 1000, 2500, 5000, 10000, 25000, 50000, 75000, **100000** |
+| **Trophy Collector** | `lifetime_trophies` *(fixed 60k)* | 100, 500, 1000, 2500, 5000, 10000, 20000, 35000, 50000, **60000** |
 | **Completionist** | `full_completions` (100%) | 1, 5, 10, 25, 50, 100, 250, 500, 750, **1000** |
 | **Badge Collector** | `total_badges_earned` | 1, 5, 10, 25, 50, 100, 150, 250, 375, **500** ⚠ tune vs badge catalogue |
 | **Pursuer Ascent** | `pursuer_level` = `Sum(ProfileJobXP.level)` | ⚠ calibrate (cap-less curve; nonzero baseline) |
-| **Time Invested** | `playtime_hours` *(fixed 10k)* | 10, 50, 100, 250, 500, 1000, 2500, 5000, 7500, **10000** |
+| **Time Invested** | `playtime_hours` *(fixed 20k)* | 10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, **20000** |
 
 **Metrics needed** (all single-aggregate / whale-safe):
 - `lifetime_platinums` — `ProfileGame.filter(has_plat=True).count()`
