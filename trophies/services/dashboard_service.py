@@ -194,100 +194,6 @@ def provide_recent_activity(profile, settings=None):
     return {'events': events[:limit]}
 
 
-def _find_challenge(profile, challenge_type):
-    """Find a user's active challenge, falling back to most recently completed."""
-    from trophies.models import Challenge
-    qs = Challenge.objects.filter(
-        profile=profile, challenge_type=challenge_type, is_deleted=False
-    )
-    return (
-        qs.filter(is_complete=False).first()
-        or qs.filter(is_complete=True).order_by('-completed_at').first()
-    )
-
-
-def provide_challenge_hub(profile, size='large'):
-    """Overview of all 3 challenge types with mini visual previews."""
-    from trophies.services.challenge_service import get_calendar_stats, get_calendar_month_data
-    from django.utils import timezone
-    import pytz
-
-    # Get user's timezone for calendar today highlight
-    tz_name = profile.user.user_timezone if profile.user else 'UTC'
-    user_tz = pytz.timezone(tz_name or 'UTC')
-    now_local = timezone.now().astimezone(user_tz)
-
-    result = {}
-    for ctype in ('az', 'calendar', 'genre'):
-        challenge = _find_challenge(profile, ctype)
-
-        if not challenge:
-            result[ctype] = None
-            continue
-
-        data = {
-            'challenge_id': challenge.id,
-            'challenge_name': challenge.name,
-            'is_complete': challenge.is_complete,
-            'completed_at': challenge.completed_at,
-        }
-
-        if ctype == 'az':
-            data['filled'] = challenge.filled_count
-            data['completed'] = challenge.completed_count
-            data['total'] = 26
-            data['pct'] = round(challenge.completed_count / 26 * 100) if 26 else 0
-            # Letter strip data
-            slots = challenge.az_slots.all().order_by('letter')
-            data['slots'] = [
-                {'letter': s.letter, 'filled': s.game_id is not None, 'completed': s.is_completed}
-                for s in slots
-            ]
-        elif ctype == 'calendar':
-            month_data = get_calendar_month_data(challenge)
-            stats = get_calendar_stats(challenge, month_data=month_data)
-            filled = stats.get('total_filled', 0)
-            data['filled'] = filled
-            data['total'] = 365
-            data['streak'] = stats.get('longest_streak', 0)
-            data['pct'] = round(filled / 365 * 100)
-            # Current month mini-calendar with today highlight
-            current_month_num = now_local.month
-            current_month = month_data[current_month_num - 1]
-            data['current_month'] = {
-                'name': current_month['month_name'],
-                'weekday_offset': current_month['weekday_offset'],
-                'today': now_local.day,
-                'days': [{'day': d['day'], 'is_filled': d['is_filled']} for d in current_month['days']],
-            }
-        elif ctype == 'genre':
-            from trophies.services.challenge_service import get_subgenre_status
-            data['filled'] = challenge.filled_count
-            data['completed'] = challenge.completed_count
-            total = challenge.total_items or challenge.genre_slots.count()
-            data['total'] = total
-            data['bonus_count'] = challenge.bonus_count
-            data['pct'] = round(challenge.completed_count / total * 100) if total else 0
-            # Genre tag data
-            slots = challenge.genre_slots.all().order_by('genre')
-            data['slots'] = [
-                {'genre': s.genre_display or s.genre, 'filled': s.concept_id is not None, 'completed': s.is_completed}
-                for s in slots
-            ]
-            # Subgenre tags with status
-            subgenre_status = get_subgenre_status(challenge)
-            data['subgenres'] = sorted([
-                {'name': key.replace('_', ' ').title(), 'status': status}
-                for key, status in subgenre_status.items()
-            ], key=lambda s: (s['status'] != 'platted', s['name']))
-            data['subgenre_total'] = len(subgenre_status)
-            data['platted_subgenre_count'] = sum(1 for v in subgenre_status.values() if v == 'platted')
-
-        result[ctype] = data
-
-    return result
-
-
 def provide_badge_progress(profile, settings=None):
     """In-progress badges sorted by completion percentage.
 
@@ -637,226 +543,6 @@ def provide_country_xp_leaderboard(profile, settings=None):
         'leaderboard_entries': entries,
         'user_in_top': user_in_top,
         'show_gap': show_gap,
-    }
-
-
-def provide_az_challenge(profile, challenge=None):
-    """Full 26-letter A-Z challenge grid with game icons and completion status.
-
-    If `challenge` is provided, uses that specific instance. Otherwise finds
-    the profile's active (or most recently completed) A-Z challenge.
-    """
-    if challenge is None:
-        challenge = _find_challenge(profile, 'az')
-    if not challenge:
-        return {'has_challenge': False}
-
-    slots_qs = challenge.az_slots.all().select_related(
-        'game', 'game__concept'
-    ).order_by('letter')
-
-    slots = []
-    most_recent_plat = None
-    most_recent_plat_at = None
-    next_target = None
-
-    for s in slots_qs:
-        game = s.game
-        concept = getattr(game, 'concept', None) if game else None
-        if s.is_completed:
-            state = 'completed'
-        elif game:
-            state = 'assigned'
-        else:
-            state = 'empty'
-
-        game_name = concept.unified_title if concept else (game.title_name if game else None)
-        icon_url = concept.cover_url if concept else (game.title_image if game else None)
-
-        slots.append({
-            'letter': s.letter,
-            'state': state,
-            'game_name': game_name,
-            'icon_url': icon_url,
-        })
-
-        # Track most recently completed slot (by completed_at timestamp)
-        if state == 'completed' and s.completed_at:
-            if most_recent_plat_at is None or s.completed_at > most_recent_plat_at:
-                most_recent_plat_at = s.completed_at
-                most_recent_plat = {
-                    'letter': s.letter,
-                    'game_name': game_name,
-                    'icon_url': icon_url,
-                    'completed_at': s.completed_at,
-                }
-
-        # First incomplete slot is the next target
-        if next_target is None and state in ('assigned', 'empty'):
-            next_target = {'letter': s.letter, 'game_name': game_name}
-
-    return {
-        'has_challenge': True,
-        'challenge_id': challenge.id,
-        'challenge_name': challenge.name,
-        'is_complete': challenge.is_complete,
-        'completed_at': challenge.completed_at,
-        'completed_count': challenge.completed_count,
-        'filled_count': challenge.filled_count,
-        'total': 26,
-        'pct': round(challenge.completed_count / 26 * 100),
-        'slots': slots,
-        'most_recent_plat': most_recent_plat,
-        'next_target': next_target,
-    }
-
-
-def provide_genre_challenge(profile, challenge=None):
-    """Genre slots with completion status and subgenre tag cloud.
-
-    If `challenge` is provided, uses that specific instance. Otherwise finds
-    the profile's active (or most recently completed) genre challenge.
-    """
-    from trophies.services.challenge_service import get_subgenre_status
-
-    if challenge is None:
-        challenge = _find_challenge(profile, 'genre')
-    if not challenge:
-        return {'has_challenge': False}
-
-    # Genre slots
-    slots_qs = challenge.genre_slots.all().select_related('concept', 'concept__igdb_match').order_by('genre')
-    slots = []
-    most_recent_plat = None
-    most_recent_plat_at = None
-    next_target = None
-
-    for s in slots_qs:
-        concept = s.concept
-        if s.is_completed:
-            state = 'completed'
-        elif concept:
-            state = 'assigned'
-        else:
-            state = 'empty'
-
-        genre_name = s.genre_display or s.genre
-        concept_title = concept.unified_title if concept else None
-        icon_url = concept.cover_url if concept else None
-
-        slots.append({
-            'genre': genre_name,
-            'state': state,
-            'concept_title': concept_title,
-            'icon_url': icon_url,
-        })
-
-        # Track most recently completed slot
-        if state == 'completed' and s.completed_at:
-            if most_recent_plat_at is None or s.completed_at > most_recent_plat_at:
-                most_recent_plat_at = s.completed_at
-                most_recent_plat = {
-                    'genre': genre_name,
-                    'concept_title': concept_title,
-                    'icon_url': icon_url,
-                    'completed_at': s.completed_at,
-                }
-
-        # First incomplete slot is the next target
-        if next_target is None and state in ('assigned', 'empty'):
-            next_target = {'genre': genre_name, 'concept_title': concept_title}
-
-    # Bonus slots
-    bonus_qs = challenge.bonus_slots.all().select_related('concept', 'concept__igdb_match')
-    bonus_slots = []
-    for b in bonus_qs:
-        concept = b.concept
-        bonus_slots.append({
-            'concept_title': concept.unified_title if concept else None,
-            'icon_url': concept.cover_url if concept else None,
-            'is_completed': b.is_completed,
-        })
-
-    # Subgenres
-    subgenre_status = get_subgenre_status(challenge)
-    subgenres = sorted([
-        {'name': key.replace('_', ' ').title(), 'status': status}
-        for key, status in subgenre_status.items()
-    ], key=lambda sg: (sg['status'] != 'platted', sg['name']))
-
-    total = challenge.total_items or challenge.genre_slots.count()
-
-    return {
-        'has_challenge': True,
-        'challenge_id': challenge.id,
-        'challenge_name': challenge.name,
-        'is_complete': challenge.is_complete,
-        'completed_at': challenge.completed_at,
-        'completed_count': challenge.completed_count,
-        'filled_count': challenge.filled_count,
-        'total': total,
-        'pct': round(challenge.completed_count / total * 100) if total else 0,
-        'slots': slots,
-        'bonus_slots': bonus_slots,
-        'bonus_count': challenge.bonus_count,
-        'subgenres': subgenres,
-        'subgenre_total': len(subgenre_status),
-        'platted_subgenre_count': sum(1 for v in subgenre_status.values() if v == 'platted'),
-        'most_recent_plat': most_recent_plat,
-        'next_target': next_target,
-    }
-
-
-def provide_calendar_challenge(profile, challenge=None):
-    """Full 12-month perpetual calendar showing platinum earns per day.
-
-    If `challenge` is provided, uses that specific instance. Otherwise finds
-    the profile's active (or most recently completed) calendar challenge.
-    """
-    from trophies.services.challenge_service import get_calendar_month_data, get_calendar_stats
-    from django.utils import timezone
-    import pytz
-
-    if challenge is None:
-        challenge = _find_challenge(profile, 'calendar')
-    if not challenge:
-        return {'has_challenge': False}
-
-    month_data = get_calendar_month_data(challenge)
-    stats = get_calendar_stats(challenge, month_data=month_data)
-
-    # User timezone for today highlight
-    tz_name = profile.user.user_timezone if profile.user else 'UTC'
-    user_tz = pytz.timezone(tz_name or 'UTC')
-    now_local = timezone.now().astimezone(user_tz)
-
-    # Serialize months (strip game info, use integer weekday_offset)
-    months = []
-    for m in month_data:
-        months.append({
-            'month_name': m['month_name'],
-            'month_abbr': m['month_abbr'],
-            'weekday_offset': m['weekday_offset'],
-            'filled_count': m['filled_count'],
-            'num_days': m['num_days'],
-            'days': [{'day': d['day'], 'is_filled': d['is_filled']} for d in m['days']],
-        })
-
-    total_filled = stats.get('total_filled', 0)
-    return {
-        'has_challenge': True,
-        'challenge_id': challenge.id,
-        'is_complete': challenge.is_complete,
-        'completed_at': challenge.completed_at,
-        'total_filled': total_filled,
-        'total_days': 365,
-        'pct': round(total_filled / 365 * 100),
-        'longest_streak': stats.get('longest_streak', 0),
-        'best_month_name': stats.get('best_month_name', ''),
-        'best_month_filled': stats.get('best_month_filled', 0),
-        'today_month': now_local.month,
-        'today_day': now_local.day,
-        'months': months,
     }
 
 
@@ -1927,24 +1613,6 @@ def provide_recent_platinum_card(profile):
         'trophy_name': trophy.trophy_name,
         'earn_rate': trophy.trophy_earn_rate,
         'earned_date': et.earned_date_time,
-    }
-
-
-def provide_challenge_share_cards(profile):
-    """Challenge IDs for client-side share card HTML previews."""
-    challenges = {}
-    for ctype in ('az', 'calendar', 'genre'):
-        challenge = _find_challenge(profile, ctype)
-        if challenge:
-            challenges[ctype] = {
-                'challenge_id': challenge.id,
-                'challenge_name': challenge.name,
-                'is_complete': challenge.is_complete,
-            }
-
-    return {
-        'challenges': challenges,
-        'has_challenges': bool(challenges),
     }
 
 
@@ -4732,22 +4400,6 @@ DASHBOARD_MODULES = [
         'allowed_sizes': ['small', 'medium', 'large'],
     },
     {
-        'slug': 'challenge_hub',
-        'name': 'Challenge Hub',
-        'description': 'Track your A-Z, Calendar, and Genre challenge progress all in one place.',
-        'category': 'progress',
-        'template': 'trophies/partials/dashboard/challenge_hub.html',
-        'provider': provide_challenge_hub,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 1,  # progress #1
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 300,
-        'default_size': 'large',
-        'allowed_sizes': ['medium', 'large'],
-    },
-    {
         'slug': 'badge_progress',
         'name': 'Badge Progress',
         'description': 'Badges you are closest to earning. Keep pushing, hunter!',
@@ -4864,54 +4516,6 @@ DASHBOARD_MODULES = [
         'cache_ttl': 600,
         'default_size': 'small',
         'allowed_sizes': ['small', 'medium'],
-    },
-    {
-        'slug': 'az_challenge',
-        'name': 'A-Z Challenge',
-        'description': 'Your full 26-letter A-Z challenge grid. Every letter, every platinum.',
-        'category': 'progress',
-        'template': 'trophies/partials/dashboard/az_challenge.html',
-        'provider': provide_az_challenge,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 5,  # progress #5
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 300,
-        'default_size': 'medium',
-        'allowed_sizes': ['medium', 'large'],
-    },
-    {
-        'slug': 'genre_challenge',
-        'name': 'Genre Challenge',
-        'description': 'Genre slots, subgenre tags, and bonus progress. Master every genre!',
-        'category': 'progress',
-        'template': 'trophies/partials/dashboard/genre_challenge.html',
-        'provider': provide_genre_challenge,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 7,  # progress #7
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 300,
-        'default_size': 'medium',
-        'allowed_sizes': ['medium', 'large'],
-    },
-    {
-        'slug': 'calendar_challenge',
-        'name': 'Platinum Calendar',
-        'description': 'Your full 365-day platinum calendar. Every month, every day.',
-        'category': 'progress',
-        'template': 'trophies/partials/dashboard/calendar_challenge.html',
-        'provider': provide_calendar_challenge,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 6,  # progress #6
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 300,
-        'default_size': 'large',
-        'allowed_sizes': ['medium', 'large'],
     },
     {
         'slug': 'completion_milestones',
@@ -5126,22 +4730,6 @@ DASHBOARD_MODULES = [
         'requires_premium': False,
         'load_strategy': 'lazy',
         'default_order': 2,  # share #2
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 600,
-        'default_size': 'large',
-        'allowed_sizes': ['medium', 'large'],
-    },
-    {
-        'slug': 'challenge_share_cards',
-        'name': 'Challenge Cards',
-        'description': 'Preview and download share cards for your active challenges.',
-        'category': 'share',
-        'template': 'trophies/partials/dashboard/challenge_share_cards.html',
-        'provider': provide_challenge_share_cards,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 5,  # share #5
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 600,
@@ -5686,7 +5274,7 @@ def get_tabs_for_customize(config, is_premium):
 
 CATEGORY_DISPLAY_NAMES = {
     'at_a_glance': 'At a Glance',
-    'progress': 'Progress & Challenges',
+    'progress': 'Progress',
     'badges': 'Badges & Achievements',
     'share': 'Share & Export',
     'highlights': 'Highlights & History',
