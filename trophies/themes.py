@@ -1688,8 +1688,7 @@ PLAT_CARD_THEME_KEYS = [
     'ppMidnight',
     'ppEmber',
     'ppAurora',
-    'ppArtWide',
-    'ppArtCover',
+    'ppArt',
 ]
 
 #: What the card falls back to, and what a fresh picker opens on.
@@ -1732,11 +1731,18 @@ GRADIENT_THEMES.update({
         'banner_border_color': '#404853',
         'category': 'plat_card',
     },
-    # The two art grounds. Deliberately NOT the shared gameArtConceptBg / gameArtBlur: those fall back
-    # to a pre-rebuild gradient when a game has no usable art, which would drop an old-palette card
-    # into an otherwise house-palette set. These carry the house ground as the fallback instead, so a
-    # game with no art degrades to Substrate rather than to 2024.
-    'ppArtWide': {
+    # The art ground. WHICH image it uses is chosen per card (see ART_OPTION_CAP): a game's
+    # landscape_urls are already ordered by quality, so the picker offers each one rather than
+    # forcing the first.
+    #
+    # Deliberately NOT the shared gameArtConceptBg: that falls back to a pre-rebuild gradient when a
+    # game has no usable art, which would drop an old-palette card into an otherwise house-palette
+    # set. This falls back to the house ground. (The shared entries are untouched -- recap and the
+    # site pickers still read them.)
+    #
+    # There is no cover-blur option. A 3:4 cover blown up to 1200x630 is mostly upscale, and it
+    # looked it.
+    'ppArt': {
         'name': 'Game Art',
         'description': "The game's own backdrop",
         'accent_color': '#27ebfe',
@@ -1746,17 +1752,6 @@ GRADIENT_THEMES.update({
         'category': 'plat_card',
         'requires_game_image': True,
         'game_image_source': 'concept_bg_url',
-    },
-    'ppArtCover': {
-        'name': 'Cover Blur',
-        'description': 'The cover, blown up behind',
-        'accent_color': '#27ebfe',
-        'background': 'radial-gradient(120% 90% at 12% 0%, #232a31 0%, #181d23 45%, #05080c 100%)',
-        'banner_background': 'transparent',
-        'banner_border_color': '#404853',
-        'category': 'plat_card',
-        'requires_game_image': True,
-        'game_image_source': 'game_image',
     },
 })
 

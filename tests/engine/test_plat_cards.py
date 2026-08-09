@@ -618,3 +618,56 @@ def test_the_medallion_actually_reaches_the_rendered_card(client):
 
     assert 'images/badges/' in html, 'the medallion art never made it into the card'
     assert 'Norse Saga' in html
+
+
+# ── Art grounds are offered only when the game HAS art ────────────────────────────────────────────
+
+def test_a_game_with_no_art_offers_no_art_ground(client):
+    """The picker must not offer a ground that silently falls back to a gradient -- that was the
+    preview-lies-about-the-download class of bug all over again."""
+    profile = ProfileFactory()
+    _, group, standing = _completed_game(profile, with_platinum=True)
+    client.force_login(profile.user)
+
+    assert cards.get_card_data(profile, standing)['art_urls'] == []
+    assert client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()['art_options'] == []
+
+
+def test_every_landscape_image_is_offered_as_its_own_ground():
+    """`landscape_urls` is ordered by quality (trusted IGDB screenshots -> artworks -> PSN bg), so a
+    game with several gives a real choice of backdrop rather than one take-it-or-leave-it."""
+    from trophies.models import IGDBMatch
+
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    IGDBMatch.objects.create(
+        concept=game.concept, igdb_id=99, status=IGDBMatch.TRUSTED_STATUSES[0],
+        igdb_screenshot_image_ids=['aaa', 'bbb', 'ccc'],
+    )
+
+    urls = cards.get_card_data(profile, standing)['art_urls']
+
+    assert len(urls) == 3 and all(u.startswith('https://images.igdb.com/') for u in urls)
+
+
+def test_the_art_list_is_capped():
+    """Each option is another image to cache and another swatch; past a handful it stops being a
+    choice."""
+    from trophies.models import IGDBMatch
+
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    IGDBMatch.objects.create(
+        concept=game.concept, igdb_id=99, status=IGDBMatch.TRUSTED_STATUSES[0],
+        igdb_screenshot_image_ids=[f'shot{i}' for i in range(12)],
+    )
+
+    assert len(cards.get_card_data(profile, standing)['art_urls']) == cards.ART_OPTION_CAP
+
+
+def test_the_cover_blur_ground_is_gone():
+    """A 3:4 cover blown up to 1200x630 is mostly upscale, and it looked it."""
+    from trophies.themes import PLAT_CARD_THEME_KEYS
+
+    assert 'ppArtCover' not in PLAT_CARD_THEME_KEYS
+    assert 'gameArtBlur' not in PLAT_CARD_THEME_KEYS

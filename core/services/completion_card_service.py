@@ -53,6 +53,10 @@ VARIANT_LABELS = {
 #: sort in `_badge_lines`; the cap is just how many survive it.
 BADGE_LINE_CAP = 1
 
+#: How many art grounds a card offers. Each is another image to cache and another swatch in the
+#: picker, and past a handful the choice stops being a choice.
+ART_OPTION_CAP = 4
+
 #: Raw Lucide path geometry per icon name, borrowed from the site's job-icon library so the card and
 #: the site draw the same glyphs from one source. (The tag itself is unusable here -- see the note in
 #: _contract_line.)
@@ -569,7 +573,11 @@ def get_card_data(profile, standing):
         'concept_id': concept.id if concept else None,
         'trophy_group_id': group.id,
         'game_image': game.display_image_url_large,
-        'landscape_url': (concept.get_landscape_url() or '') if concept else '',
+        # Every landscape image the concept has, not just the best one. `landscape_urls` is already
+        # ordered by quality (trusted IGDB screenshots -> artworks -> PSN bg_url), so a game with
+        # several gives the hunter a real choice of backdrop instead of one take-it-or-leave-it. Capped
+        # because each option is another image to cache and show as a swatch.
+        'art_urls': concept.landscape_urls(limit=ART_OPTION_CAP) if concept else [],
         'region': game.region,
         'is_regional': game.is_regional,
 

@@ -62,7 +62,6 @@ def build_card_context(profile, standing):
         ('avatar_image', data['user_avatar_url']),
         ('game_image', data['game_image']),
         ('trophy_image', data['trophy_icon_url']),
-        ('backdrop_image', data['landscape_url']),
     ):
         cached = ShareImageCache.fetch_and_cache(source) if source else ''
         if source and not cached:
@@ -92,8 +91,32 @@ def build_card_context(profile, standing):
                 cached_layers.append(resolved)
         line['medallion_cached'] = cached_layers
 
+    # Art grounds: cache each candidate so the picker can show the REAL image as its swatch and the
+    # renderer has a local path for whichever one is chosen.
+    data['art_cached'] = [
+        cached for cached in (ShareImageCache.fetch_and_cache(url) for url in data['art_urls'] if url) if cached
+    ]
+
     data['playtime'] = _format_playtime(data['play_duration_seconds'])
     return data
+
+
+def _art_path(context, request):
+    """Filesystem path for the chosen art ground, or None.
+
+    `?art=<i>` indexes the card's own art list rather than naming a URL, so a request can only ever
+    select art the card already offers -- no arbitrary remote fetch from a query string.
+    """
+    options = context.get('art_cached') or []
+    if not options:
+        return None
+    try:
+        index = int(request.query_params.get('art', 0))
+    except (TypeError, ValueError):
+        index = 0
+    if not 0 <= index < len(options):
+        index = 0
+    return resolve_temp_path(options[index])
 
 
 class _CardViewBase(APIView):
@@ -136,7 +159,9 @@ class PlatCardHTMLView(_CardViewBase):
             'concept_id': context['concept_id'],
             'trophy_group_id': context['trophy_group_id'],
             'has_rating': context['user_rating'] is not None,
-            'has_backdrop': bool(context['backdrop_image']),
+            # The picker builds its art swatches from these -- so a game with no usable art simply
+            # isn't offered the art ground, instead of offering one that silently falls back.
+            'art_options': context['art_cached'],
             'playtime': context['playtime'],
         })
 
@@ -169,7 +194,7 @@ class PlatCardPNGView(_CardViewBase):
                     else PLAT_CARD_DEFAULT_THEME
                 ),
                 game_image_path=resolve_temp_path(context['game_image']),
-                concept_bg_path=resolve_temp_path(context['backdrop_image']),
+                concept_bg_path=_art_path(context, request),
                 image_max_size=CARD_IMAGE_MAX,
             )
         except Exception:

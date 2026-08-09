@@ -172,7 +172,10 @@
 .pc-modal__controls { padding: 4px 18px 18px; display: flex; flex-direction: column; gap: 14px; }
 
 .pc-modal__themes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-@media (min-width: 640px) { .pc-modal__themes { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+/* The JS appends art swatches into this slot; `display: contents` lets them sit in the same
+   grid as the fixed grounds instead of being boxed into one cell. */
+[data-share-art-slot] { display: contents; }
+@media (min-width: 640px) { .pc-modal__themes { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
 
 .pc-theme { display: flex; flex-direction: column; gap: 6px; cursor: pointer; }
 .pc-theme__swatch {
@@ -184,8 +187,12 @@
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .pc-theme__swatch svg { width: 18px; height: 18px; }
-/* Art grounds can't be previewed as a flat swatch (the image is per-game), so they read as an icon. */
-.pc-theme--art .pc-theme__swatch { background: repeating-linear-gradient(45deg, var(--pp-bg-2), var(--pp-bg-2) 6px, var(--pp-bg-3) 6px, var(--pp-bg-3) 12px); }
+/* An art swatch IS the image it would apply (set inline by the JS, since which images a game has
+   isn't known until a card is opened), scrimmed to match how it reads on the card. */
+.pc-theme--art .pc-theme__swatch {
+    background-size: cover; background-position: center;
+    box-shadow: inset 0 0 0 999px rgba(5, 8, 12, 0.34);
+}
 .pc-theme__name { font-size: 11px; font-weight: 600; color: var(--pp-text-dim); text-align: center; line-height: 1.2; }
 
 .pc-theme:hover .pc-theme__swatch { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }

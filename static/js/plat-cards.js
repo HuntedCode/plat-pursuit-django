@@ -97,9 +97,32 @@
         return themeData;
     }
 
-    function theme() {
-        var picked = dlg && dlg.querySelector('[data-share-theme]:checked');
-        return picked ? picked.value : '';
+    function picked() { return dlg && dlg.querySelector('[data-share-theme]:checked'); }
+    function theme() { var p = picked(); return p ? p.value : ''; }
+    function artIndex() {
+        var p = picked();
+        return p && p.dataset.artIndex ? p.dataset.artIndex : null;
+    }
+
+    // Art swatches are per-card: how many a game has, and what they look like, isn't known until one
+    // is opened. Rebuilt on every open so the picker never offers art the current card doesn't have.
+    function buildArtSwatches(options) {
+        var slot = dlg && dlg.querySelector('[data-share-art-slot]');
+        if (!slot) { return; }
+        slot.innerHTML = '';
+        (options || []).forEach(function (url, i) {
+            var label = document.createElement('label');
+            label.className = 'pc-theme pc-theme--art';
+            label.title = "Use the game's own art";
+            label.innerHTML =
+                '<input type="radio" name="pc-theme" value="ppArt" class="sr-only" data-share-theme data-art-index="' + i + '" />' +
+                '<span class="pc-theme__swatch" aria-hidden="true"></span>' +
+                '<span class="pc-theme__name">' + (options.length > 1 ? 'Art ' + (i + 1) : 'Game Art') + '</span>';
+            // The swatch IS the image, so the choice is visible before it's made.
+            label.querySelector('.pc-theme__swatch').style.backgroundImage = 'url("' + url + '")';
+            label.querySelector('[data-share-theme]').dataset.artUrl = url;
+            slot.appendChild(label);
+        });
     }
 
     // The card renders at a fixed 1200x630; scale it to whatever the frame is, so the preview keeps
@@ -136,6 +159,7 @@
                 current.hasRating = !!data.has_rating;
                 current.conceptId = data.concept_id;
                 current.variant = data.variant;
+                buildArtSwatches(data.art_options);
                 var label = dlg.querySelector('[data-share-download-label]');
                 if (label) { label.textContent = data.variant === 'platinum' ? 'Download platinum card' : 'Download 100% card'; }
                 // The card ships with its own inline ground; paint the SELECTED one over it straight
@@ -160,9 +184,9 @@
         var def = cardThemes()[picked.value];
         if (!def) { return; }
         if (def.is_game_art) {
-            var src = def.source === 'game_image' ? current.gameImage : current.conceptBg;
+            var src = picked().dataset.artUrl || '';
             card.style.background = src
-                ? 'linear-gradient(rgba(5, 8, 12, 0.62), rgba(5, 8, 12, 0.62)), url("' + src + '")'
+                ? 'linear-gradient(rgba(5, 8, 12, 0.48), rgba(5, 8, 12, 0.48)), url("' + src + '")'
                 : def.background;
             card.style.backgroundSize = 'cover';
             card.style.backgroundPosition = 'center';
@@ -191,7 +215,9 @@
     }
 
     function pngUrl() {
-        return '/api/v1/shareables/completion/' + current.groupId + '/png/?theme=' + encodeURIComponent(theme());
+        var url = '/api/v1/shareables/completion/' + current.groupId + '/png/?theme=' + encodeURIComponent(theme());
+        var i = artIndex();
+        return i === null ? url : url + '&art=' + encodeURIComponent(i);
     }
 
     // Rate-before-download. The card carries the hunter's own stars, difficulty and fun, so an unrated
