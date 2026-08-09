@@ -113,50 +113,6 @@ Staff-authored platinum guides on game detail pages. Replaces the old Checklists
 | GET | `/api/v1/games/search/` | Login | Game search (typeahead) |
 | GET | `/api/v1/games/<np_comm_id>/players/` | Public | Game players list (JSON). Sets `authentication_classes = []` / `permission_classes = []`, so it is anonymous despite what this table said previously. Its in-app consumer (the game-detail players modal) was retired in favour of the Ranks tab; kept in case an external client uses it. See [Game Leaderboards](../features/game-leaderboards.md) |
 
-### A-Z Challenge
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/v1/challenges/az/` | Login | Create challenge |
-| GET | `/api/v1/challenges/az/game-search/` | Login | Search games by letter |
-| GET | `/api/v1/challenges/az/<id>/` | Login | Challenge detail |
-| PUT | `/api/v1/challenges/az/<id>/update/` | Login | Update settings |
-| DELETE | `/api/v1/challenges/az/<id>/delete/` | Login | Delete challenge |
-| POST | `/api/v1/challenges/az/<id>/slots/<letter>/assign/` | Login | Assign game to slot |
-| POST | `/api/v1/challenges/az/<id>/slots/<letter>/clear/` | Login | Clear slot |
-| GET | `/api/v1/challenges/az/<id>/share/html/` | Login | Share card HTML |
-| GET | `/api/v1/challenges/az/<id>/share/png/` | Login | Share card PNG |
-
-### Calendar Challenge
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/v1/challenges/calendar/` | Login | Create challenge |
-| GET | `/api/v1/challenges/calendar/<id>/` | Login | Challenge detail |
-| PUT | `/api/v1/challenges/calendar/<id>/update/` | Login | Update settings |
-| DELETE | `/api/v1/challenges/calendar/<id>/delete/` | Login | Delete challenge |
-| GET | `/api/v1/challenges/calendar/<id>/day/<month>/<day>/` | Login | Day detail (all platinums) |
-| GET | `/api/v1/challenges/calendar/<id>/share/html/` | Login | Share card HTML |
-| GET | `/api/v1/challenges/calendar/<id>/share/png/` | Login | Share card PNG |
-
-### Genre Challenge
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/v1/challenges/genre/` | Login | Create challenge |
-| GET | `/api/v1/challenges/genre/concept-search/` | Login | Search concepts by genre |
-| GET | `/api/v1/challenges/genre/<id>/` | Login | Challenge detail |
-| PUT | `/api/v1/challenges/genre/<id>/update/` | Login | Update settings |
-| DELETE | `/api/v1/challenges/genre/<id>/delete/` | Login | Delete challenge |
-| POST | `/api/v1/challenges/genre/<id>/slots/<genre>/assign/` | Login | Assign concept to slot |
-| POST | `/api/v1/challenges/genre/<id>/slots/<genre>/clear/` | Login | Clear slot |
-| POST | `/api/v1/challenges/genre/<id>/bonus/add/` | Login | Add bonus slot |
-| POST | `/api/v1/challenges/genre/<id>/bonus/<id>/clear/` | Login | Clear bonus slot |
-| POST | `/api/v1/challenges/genre/<id>/move/` | Login | Move concept between slots |
-| GET | `/api/v1/challenges/genre/<id>/move-targets/` | Login | Valid move targets |
-| GET | `/api/v1/challenges/genre/<id>/share/html/` | Login | Share card HTML |
-| GET | `/api/v1/challenges/genre/<id>/share/png/` | Login | Share card PNG |
-
 ### Game Families (Staff Only)
 
 | Method | Path | Auth | Purpose |
@@ -285,7 +241,7 @@ Blurbs are read only through `UserConceptRating.visible_blurbs()` (present + not
 | POST | `/api/v1/equip-title/` | Login | Equip/unequip title |
 | POST | `/api/v1/user/timezone/` | Login | Update user timezone |
 | POST | `/api/v1/tracking/site-event/` | No | Track client-side event |
-| POST | `/api/v1/easter-eggs/claim/` | Login | Claim easter egg milestone (server-side mapping) |
+| POST | `/api/v1/easter-eggs/roll/` | Login | Server-side easter-egg probability roll |
 | GET | `/api/v1/game-backgrounds/` | Login | Search game backgrounds |
 
 ### Mobile App

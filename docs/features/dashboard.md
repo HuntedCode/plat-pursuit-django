@@ -225,8 +225,6 @@ Cache keys: `dashboard:mod:{slug}:{profile_id}:{settings_hash}` where `settings_
 **Invalidation points:**
 - `Challenge.soft_delete()` in `trophies/models.py`
 - `check_profile_badges()` in `badge_service.py` (after sync)
-- `check_all_milestones_for_user()` in `milestone_service.py` (covers milestone tracker + reviews via milestone checks)
-- `award_milestone_directly()` in `milestone_service.py`
 
 ## Premium Module Previews (Free Users)
 
@@ -266,7 +264,7 @@ Free users see blurred previews of all premium modules using real data from the 
 - **Almost There hidden game filtering**: Always excludes `user_hidden=True`. Additionally excludes `hidden_flag=True` only if `profile.hide_hiddens` is enabled.
 - **Almost There configurable threshold**: Default 90%, options 80/90/95. Stored in `module_settings` and included in cache key hash.
 - **My Reviews aggregate fallback**: Django `Sum()` returns `None` for empty querysets. Provider handles with `or 0` on all aggregate values.
-- **Cache invalidation coverage**: Milestone tracker invalidated via `check_all_milestones_for_user` hook. Reviews invalidated via same (milestone check called in create/delete). Almost There and Rarity Showcase covered by existing sync pipeline.
+- **Cache invalidation coverage**: Almost There and Rarity Showcase are covered by the existing sync pipeline.
 - **Rate My Games ticker strip**: Auto-scrolling CSS animation with duplicated icons for seamless loop. Pauses on hover. Icons are clickable links to review_hub. Defensive slug check prevents crash on concepts without slugs.
 - **Rarity Showcase 2-column grid**: Shows trophy icon with overlapping game icon badge. Includes trophy description (`trophy_detail`). Even limit options (4/6/8). Filters `earn_rate > 0`. Uses `rarity_color_hex` filter.
 - **Share card preview pattern**: All share card modules (platinum, recap) use `_initShareCards()` in dashboard.js. Finds `.share-card-preview` containers by `data-share-html-url`, fetches HTML via API, scales to 1200x630 aspect ratio. Theme switching is client-side via `applyTheme()` (modifies DOM directly). Game art themes are excluded unless the preview has `data-supports-game-art="true"` (platinum card only). Clicking a preview opens a full-size modal (`<dialog>`). Download buttons use `data-share-png-url` with the selected theme key.

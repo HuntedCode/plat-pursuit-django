@@ -108,7 +108,7 @@ This is the heart of the rebuild. **The foundation (Badge XP) is shipped and sol
 
 ### Milestones & Titles
 - **What:** 30+ criteria types; milestones award equippable Titles. Easter eggs are manual-type milestones.
-- **Lives in:** `models.py` (~2304-2408), `services/milestone_service.py`, `milestone_handlers.py`.
+- **Lives in:** RETIRED 2026-08 — the legacy engine was deleted (migration `0282`). Milestones now live in the `milestones` app.
 - **Status:** Shipped; evaluated on sync.
 - **Disposition:** **Keep** (adapt) — the title/milestone infra is exactly where Job-level titles ("Apprentice Driver" → "Master Driver") will plug in.
 

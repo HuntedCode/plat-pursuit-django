@@ -334,10 +334,6 @@ Stages link to badges via `series_slug` string matching, not a foreign key. This
 
 | Command | Usage | Purpose |
 |---------|-------|---------|
-| `populate_milestones` | `--dry-run` | Create/update all milestone definitions and associated Titles (idempotent) |
-| `populate_user_milestones` | `--type <criteria_type>`, `--username <user>`, `--silent` | Batch check milestones for all or one user |
-| `grant_milestone` | `<name>`, `--username <user>`, `--usernames <csv>`, `--dry-run`, `--silent` | Manually grant a milestone (with full side effects) |
-| `check_subscription_milestones` | `--silent`, `--dry-run` | Daily cron: check subscription_months milestones for active subscribers only |
 
 ### Gamification Commands
 

@@ -56,7 +56,6 @@ The "Complete" count is the source of truth from `DASHBOARD_MODULES` in `trophie
 | 7 | A-Z Challenge Progress | Lazy (5m) | **Done** | AZChallengeSlot + icons, last plat, next target, Pick Next Game CTA |
 | 8 | Calendar Challenge Progress | Lazy (5m) | **Done** | CalendarChallengeDay, 3-month paginated view with JS arrows |
 | 9 | Genre Challenge Progress | Lazy (5m) | **Done** | GenreChallengeSlot + subgenres + last plat, next target, Pick Next Game CTA |
-| 10 | Milestone Tracker | Lazy (10m) | **Done** | UserMilestoneProgress, Python-side pct sort |
 | 11 | Almost There | Lazy (10m) | **Done** | ProfileGame (90%+ configurable threshold) |
 | 28 | Roadmaps for Your Library | Lazy (30m) | **Done** | `Roadmap` (1:1 with `Concept`). Surfaces published roadmaps for concepts in the user's library where they haven't platinumed yet. The dashboard replacement for the legacy "My Checklists" surface. |
 | 41 | VR Trophy Hunter | Lazy (30m) | **Done** | PSVR + PSVR2 progress at a glance: stats, in-progress games, "back into the headset" CTA. Powered by IGDB VR-platform detection. |
@@ -188,7 +187,6 @@ Design these against the schema in `architecture/gamification.md` (which already
 
 | # | Module | Status |
 |---|--------|--------|
-| 10 | Milestone Tracker | Done: progress is motivating |
 | 11 | Completion Milestones | Done: "almost there" games are actionable |
 | 16 | My Reviews | Done: engagement-focused (weekly vote feed) |
 | 19 | My Checklists | Cut: may revisit later |
