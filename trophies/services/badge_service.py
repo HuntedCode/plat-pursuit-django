@@ -819,8 +819,6 @@ def sync_discord_roles(profile):
     Returns:
         dict with counts of roles synced by source
     """
-    from trophies.models import UserMilestone
-
     if not profile.is_discord_verified or not profile.discord_id:
         return {'badge_roles': 0, 'milestone_roles': 0, 'premium_roles': 0}
 
@@ -828,14 +826,9 @@ def sync_discord_roles(profile):
     # sync-roles response shape is unchanged.
     role_counts = {'badge_roles': 0, 'milestone_roles': 0, 'premium_roles': 0}
 
-    # Milestone roles
-    milestone_role_ids = list(
-        UserMilestone.objects.filter(
-            profile=profile,
-            milestone__discord_role_id__isnull=False,
-            milestone__is_active=True,
-        ).values_list('milestone__discord_role_id', flat=True)
-    )
+    # Milestone roles: the milestones app owns these now (highest earned rung per ladder).
+    from milestones.services import desired_milestone_roles
+    milestone_role_ids = list(desired_milestone_roles(profile))
     for role_id in milestone_role_ids:
         notify_bot_role_earned(profile, role_id)
     role_counts['milestone_roles'] = len(milestone_role_ids)

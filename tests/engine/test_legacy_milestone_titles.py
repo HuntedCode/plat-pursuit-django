@@ -43,3 +43,24 @@ def test_titles_page_shows_surviving_awards_as_special(client):
     assert specials[0]['source'] is None       # no live source row to describe
     assert specials[0]['earned'] is True
     assert resp.context['total_earned'] == 1
+
+
+def test_milestone_title_also_granted_by_a_badge_is_not_double_counted(client):
+    """A surviving milestone title whose Title a live badge also grants belongs to the badge
+    section only -- listing it in both would double-count total_earned."""
+    from tests.factories import BadgeFactory
+
+    profile = ProfileFactory()
+    title = Title.objects.create(name='Case Hardened')
+    BadgeFactory(title=title, is_live=True)      # a live badge grants the same Title
+    UserTitle.objects.create(
+        profile=profile, title=title, source_type='milestone', source_id=999999,
+    )
+    client.force_login(profile.user)
+
+    resp = client.get('/titles/')
+
+    assert resp.status_code == 200
+    assert resp.context['special_titles'] == []                     # not duplicated here
+    assert [e['title'].name for e in resp.context['badge_titles']] == ['Case Hardened']
+    assert resp.context['total_earned'] == 1                        # counted exactly once

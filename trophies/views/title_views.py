@@ -93,6 +93,8 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
         # 5. Special titles: one-off awards the viewer earned from the retired milestone
         #    engine (fundraiser patron, easter eggs). Shown only once earned; there's no
         #    live source row to describe, so the card renders the title alone.
+        #    Skip any whose Title a live badge also grants -- that one already renders in the
+        #    badge section above, and listing it twice would double-count `total_earned`.
         special_titles = [
             {
                 'title': ut.title,
@@ -102,7 +104,8 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
                 'is_displayed': ut.is_displayed,
                 'earned_at': ut.earned_at,
             }
-            for ut in user_titles if ut.source_type == 'milestone'
+            for ut in user_titles
+            if ut.source_type == 'milestone' and ut.title_id not in discoverable_ids
         ]
         special_titles.sort(key=lambda e: e['earned_at'], reverse=True)
 

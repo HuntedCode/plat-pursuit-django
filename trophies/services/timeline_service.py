@@ -5,7 +5,6 @@ Collects notable events from a user's trophy hunting journey (first trophy,
 fastest platinum, rarest platinum, badges, etc.) and selects the most
 interesting ones for display using a priority-based algorithm.
 """
-import math
 import logging
 
 from django.core.cache import cache
@@ -59,8 +58,6 @@ def _get_first_trophy_event(profile):
         et.trophy.game.title_name,
         et.earned_date_time, 'primary', 7,
     )]
-
-
 
 
 def _get_fastest_plat_event(profile):

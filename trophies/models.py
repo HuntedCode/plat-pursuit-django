@@ -354,10 +354,13 @@ class Profile(models.Model):
             # Badges no longer grant Discord roles (retired); only milestone + premium
             # roles are managed now.
 
-            # Collect milestone roles (the milestones app owns these -- the roles the
-            # profile currently holds are exactly the ones to strip on unlink).
-            from milestones.services import desired_milestone_roles
-            all_role_ids.update(desired_milestone_roles(self))
+            # Collect milestone roles. Use the MANAGED set (every configured milestone role,
+            # including retired milestones' and superseded lower rungs), not just the currently
+            # desired ones: after unlink `reconcile_discord_roles` early-returns on
+            # is_discord_verified=False, so anything missed here is stranded permanently.
+            # Removing a role the member doesn't hold is a no-op for the bot.
+            from milestones.services import managed_milestone_roles
+            all_role_ids.update(managed_milestone_roles())
 
             # Collect premium roles if applicable
             from django.conf import settings
@@ -4779,13 +4782,6 @@ class ArchivedAZChallenge(models.Model):
 
     def __str__(self):
         return f"Archived A-Z ({self.psn_username}, {self.completed_count}/26)"
-
-
-# Non-leap-year day counts per month (Feb 29 excluded from calendar challenge)
-CALENDAR_DAYS_PER_MONTH = {
-    1: 31, 2: 28, 3: 31, 4: 30, 5: 31, 6: 30,
-    7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31,
-}
 
 
 class DashboardConfig(models.Model):
