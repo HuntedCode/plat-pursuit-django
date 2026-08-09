@@ -14,19 +14,22 @@ History: this page began as a single browse-all-platinums interface, was split i
 four sub-pages by the Phase 10b restructure, and has now been narrowed back to its one job.
 """
 import logging
-from collections import defaultdict
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import F
+from django.db.models.functions import Lower
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
-from django.views.generic import TemplateView
+from django.views.generic import ListView, TemplateView
 
+from core.services import completion_card_service as cards
 from core.services.tracking import track_page_view
-from trophies.models import EarnedTrophy
+from trophies.mixins import HtmxListMixin
 from trophies.themes import get_available_themes_for_grid, get_plat_card_themes
+
+#: Hidden by default on this page -- see PlatCardsView.get_queryset.
+SHOVELWARE_STATUSES = ('auto_flagged', 'manually_flagged')
 
 logger = logging.getLogger(__name__)
 
@@ -48,128 +51,112 @@ class _RequireLinkedProfileMixin:
         return super().dispatch(request, *args, **kwargs)
 
 
-class MyShareablesView(LoginRequiredMixin, _RequireLinkedProfileMixin, TemplateView):
-    """
-    My Shareables landing page at `/dashboard/shareables/`.
+class PlatCardsView(LoginRequiredMixin, _RequireLinkedProfileMixin, HtmxListMixin, ListView):
+    """The Plat Cards page at `/shareables/` -- browse your completions, make a card from any of them.
 
-    A wayfinder grid that distributes users to the dedicated sub-pages
-    for each share image type. Each card has an icon, name, tagline,
-    example image (or fallback gradient), and a CTA to its sub-page.
+    Rebuilt from scratch 2026-08. What it replaced and why:
 
-    The landing itself queries no per-user data — it's purely a static
-    layout of cards. The sub-pages do the heavy lifting. This keeps
-    the landing fast and means new users with no platinums yet still
-    see a useful "here's what's available" page instead of an empty
-    state for each share type.
+    - A 4-card WAYFINDER landing sat in front of this, distributing to Platinum Cards / Platinum Grid /
+      Profile Card / Recap. Three of those are gone, so the wayfinder was a menu with one real item.
+    - The browse itself listed platinum `EarnedTrophy` rows, which is why a 100%-with-no-platinum game
+      could never produce a card. Eligibility is now the DEFAULT trophy group at 100%
+      (`completion_card_service.eligible_completions`), a superset that yields both card variants.
+    - It rendered EVERY platinum in one response with client-side search. A hunter with 800 platinums
+      shipped 800 rows on load; adding non-platinum completions only grows that. Now paginated with
+      server-side filter/sort and infinite scroll, the same shape as Browse Games.
+
+    The variant toggle is a segmented FILTER (radios styled as .pp-switch), not a view island: switching
+    preserves the active search and sort, and native `checked` keeps browser Back correct with no JS.
     """
-    template_name = 'shareables/landing.html'
+    template_name = 'shareables/plat_cards.html'
+    partial_template_name = 'shareables/partials/plat_card_results.html'
+    context_object_name = 'completions'
+    paginate_by = 24
     login_url = reverse_lazy('account_login')
+
+    VARIANT_CHOICES = [
+        ('all', 'All'),
+        (cards.PLATINUM, 'Platinum'),
+        (cards.FULL, '100%'),
+    ]
+    SORT_CHOICES = [
+        ('recent', 'Most recent'),
+        ('oldest', 'Oldest first'),
+        ('name', 'Game A-Z'),
+        ('name_desc', 'Game Z-A'),
+    ]
+    _SORTS = {
+        # `-last_trophy_at` is the completion moment. `trophy_group_id` is the total-order tiebreak:
+        # without it, rows sharing a timestamp can reorder between pages and infinite scroll skips or
+        # repeats a card (the same reason the leaderboard indexes carry a unique final key).
+        'recent': ('-last_trophy_at', '-trophy_group_id'),
+        'oldest': ('last_trophy_at', 'trophy_group_id'),
+        'name': (Lower('trophy_group__game__title_name'), 'trophy_group_id'),
+        'name_desc': (Lower('trophy_group__game__title_name').desc(), 'trophy_group_id'),
+    }
+
+    def _variant(self):
+        raw = self.request.GET.get('variant', 'all')
+        return raw if raw in dict(self.VARIANT_CHOICES) else 'all'
+
+    def _sort(self):
+        raw = self.request.GET.get('sort', 'recent')
+        return raw if raw in self._SORTS else 'recent'
+
+    def get_queryset(self):
+        profile = self.request.user.profile
+        qs = cards.eligible_completions(profile)
+
+        variant = self._variant()
+        if variant != 'all':
+            qs = cards.variant_filter(qs, variant)
+
+        query = (self.request.GET.get('query') or '').strip()
+        if query:
+            qs = qs.filter(trophy_group__game__title_name__icontains=query)
+
+        # Shovelware is hidden by default here (unlike Browse Games, where it's catalogue): these are
+        # the hunter's OWN completions, and the asset-flip platinums are the ones they least want to
+        # scroll past looking for the game they actually care about.
+        if not self.request.GET.get('show_shovelware'):
+            qs = qs.exclude(trophy_group__game__shovelware_status__in=SHOVELWARE_STATUSES)
+
+        return qs.order_by(*self._SORTS[self._sort()])
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'My Shareables'},
-        ]
-        track_page_view('my_shareables', 'user', self.request)
-        return context
+        profile = self.request.user.profile
 
-
-class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, TemplateView):
-    """
-    Platinum share images browse page at `/dashboard/shareables/platinums/`.
-
-    Lists every platinum trophy the user has earned, grouped by year,
-    with click-to-share buttons that open the share-image modal. This
-    is the experience that used to be the My Shareables page itself
-    before the landing-page restructure; the queryset, milestone-numbering,
-    shovelware filtering, and year grouping all carried over unchanged.
-    """
-    template_name = 'shareables/platinums.html'
-    login_url = reverse_lazy('account_login')
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        user = self.request.user
-        profile = user.profile if hasattr(user, 'profile') else None
-
-        if not profile:
-            context['platinums_by_year'] = {}
-            context['total_platinums'] = 0
-            return context
-
-        # Get user's platinum trophies (including shovelware - filtered client-side
-        # via the toggle in the page header). `nulls_last=True` puts NULL-date
-        # platinums (rare; PSN occasionally returns no timestamp for very old
-        # or hidden trophies) at the END of the listing so the newest-by-date
-        # plat reliably gets the highest ordinal (`#total_count`). The
-        # share-card count in ShareableDataService.get_platinum_share_data is
-        # the coupled pair to this ordering: flipping one without the other
-        # silently desyncs the listing's ordinal from the rendered card. The
-        # `-id` secondary sort breaks ties (PSN sometimes returns identical
-        # timestamps for trophies popped the same second).
-        earned_platinums = EarnedTrophy.objects.filter(
-            profile=profile,
-            earned=True,
-            trophy__trophy_type='platinum',
-        ).select_related(
-            'trophy__game',
-            'trophy__game__concept',
-            'trophy__game__concept__igdb_match',
-        ).order_by(F('earned_date_time').desc(nulls_last=True), '-id')
-
-        # Calculate platinum number for each trophy (for milestone display).
-        # Since the queryset is ordered newest-first, the newest plat is
-        # #total_count and the oldest is #1.
-        platinum_list = list(earned_platinums)
-        total_count = len(platinum_list)
-        for idx, et in enumerate(platinum_list):
-            et.platinum_number = total_count - idx
-            et.is_milestone = et.platinum_number % 10 == 0 and et.platinum_number > 0
-            et.is_shovelware = et.trophy.game.is_shovelware
-
-        # Count shovelware so the toggle can show "X hidden" affordance
-        shovelware_count = sum(1 for et in platinum_list if et.trophy.game.is_shovelware)
-
-        # Group by year (using user's local timezone) for organization
-        user_tz = timezone.get_current_timezone()
-        platinums_by_year: dict = {}
-        for et in platinum_list:
-            if et.earned_date_time:
-                local_dt = et.earned_date_time.astimezone(user_tz)
-                year = local_dt.year
-            else:
-                year = 'Unknown'
-            platinums_by_year.setdefault(year, []).append(et)
-
-        # Sort years descending, with 'Unknown' at the end
-        sorted_years = sorted(
-            (y for y in platinums_by_year if y != 'Unknown'),
-            reverse=True,
-        )
-        if 'Unknown' in platinums_by_year:
-            sorted_years.append('Unknown')
-
-        context['platinums_by_year'] = {year: platinums_by_year[year] for year in sorted_years}
-        context['total_platinums'] = total_count
-        context['shovelware_count'] = shovelware_count
-
-        # The CURATED plat-card set, not all ~105 site gradients. The card only renders the six keys in
-        # PLAT_CARD_THEME_KEYS and silently falls back to the house ground for anything else, so passing
-        # the full grid meant a hunter picked "Sakura", watched the preview turn pink, and downloaded a
-        # dark grey card -- every time, for 99 of the 105 options, with no error. Meanwhile the six that
-        # DO work weren't offered at all.
-        context['available_themes'] = [
-            ('plat_card', 'Card Styles', get_plat_card_themes()),
-        ]
-
-        # Breadcrumbs
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'My Shareables', 'url': reverse_lazy('my_shareables')},
-            {'text': 'Platinum Cards'},
-        ]
-
+        # Header stats read the unfiltered ladders, so they describe the hunter's career rather than
+        # whatever the toolbar currently shows.
+        total_plats, total_full = cards.hunter_totals(profile)
+        themes = get_plat_card_themes()
+        year_start = timezone.now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        context.update({
+            'total_platinums': total_plats,
+            'total_completions': total_full,
+            'this_year': cards.eligible_completions(profile).filter(last_trophy_at__gte=year_start).count(),
+            'variant_choices': self.VARIANT_CHOICES,
+            'current_variant': self._variant(),
+            'sort_choices': self.SORT_CHOICES,
+            'current_sort': self._sort(),
+            'show_shovelware': bool(self.request.GET.get('show_shovelware')),
+            'card_themes': themes,
+            # The same six, shaped for the preview's client-side restyle. The download applies the
+            # ground server-side, so this only has to make the PREVIEW agree with it.
+            'card_theme_js': {
+                key: {
+                    'background': t['background_css'],
+                    'is_game_art': t.get('is_game_art', False),
+                    'source': t.get('game_image_source', ''),
+                }
+                for key, t in themes
+            },
+            'breadcrumb': [
+                {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'Plat Cards'},
+            ],
+        })
         track_page_view('my_shareables', 'user', self.request)
         return context
 
@@ -178,9 +165,13 @@ class MyProfileCardView(LoginRequiredMixin, _RequireLinkedProfileMixin, Template
     """Profile card builder page.
 
     RETIRED (2026-08): PARKED, not routed. My Shareables now serves plat cards only -- see
-    docs/features/share-images.md. /shareables/profile-card/ bounces to the shareables landing;
-    this class is kept so the surface can be revived under the new card design instead of rebuilt
-    from nothing.
+    docs/features/share-images.md. /shareables/profile-card/ bounces to the Plat Cards page.
+
+    Kept for its DATA CONTRACT, not as a working page: its template hand-invokes a dashboard module
+    init that no longer exists in the registry, and `static/js/profile-card-share.js` requires
+    `ShareImageManager` from `share-image.js`, which was deleted with the page it served. Reviving
+    this means rebuilding the front end against the new card design -- which was always the plan --
+    so what's useful here is the ProfileCardSettings wiring below, not the page.
 
     Was at `/dashboard/shareables/profile-card/`.
 

@@ -1,0 +1,70 @@
+{% comment %}
+Share modal -- preview a card, pick its ground, download it.
+
+Rebuilt from scratch 2026-08. What it replaces: the `color_grid_modal` swatch wall (built for browsing
+~105 site gradients) driven by share-image.js + shareable-manager.js, which between them carried a
+format toggle, a theme-nudge flow, per-swatch game-art compositing and a rating prompt -- roughly 1,200
+lines for a card that now has one format and six grounds.
+
+Six designed grounds get named cards, not swatches: with this few, "which one is this" matters more
+than "how many are there". The preview is the REAL card markup from the HTML endpoint, so what you see
+is what downloads -- the two share one template and one theme list.
+{% endcomment %}
+{% comment %}Only the SIX curated grounds reach the JS. The old page dumped all ~105 site gradients
+into a `window.GRADIENT_THEMES` global for a picker that offered all of them; the card renders six, so
+six is what ships -- scoped to this element instead of a global.{% endcomment %}
+{{ card_theme_js|json_script:"pc-theme-data" }}
+
+<dialog id="pc-share" class="pc-modal" aria-labelledby="pc-share-title">
+    <div class="pc-modal__box">
+        <header class="pc-modal__head">
+            <div class="min-w-0">
+                <h2 id="pc-share-title" class="pc-modal__title">Your card</h2>
+                <p class="pc-modal__sub" data-share-game></p>
+            </div>
+            <button type="button" class="pc-modal__x" data-share-close aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </header>
+
+        {% comment %}The card renders at a fixed 1200x630 and is scaled to fit with a transform, so the
+        preview is the real artifact at real proportions rather than a re-implementation that can drift
+        from it.{% endcomment %}
+        <div class="pc-modal__stage">
+            <div class="pc-modal__frame" data-share-frame>
+                <div class="pc-modal__scaler" data-share-preview></div>
+            </div>
+            <div class="pc-modal__loading" data-share-loading>
+                <span class="pp-gbrowse__spinner" aria-hidden="true"></span>
+            </div>
+            <p class="pc-modal__error" data-share-error hidden></p>
+        </div>
+
+        <div class="pc-modal__controls">
+            <div class="pc-modal__themes" role="radiogroup" aria-label="Card background">
+                {% for key, theme in card_themes %}
+                <label class="pc-theme{% if theme.is_game_art %} pc-theme--art{% endif %}"
+                       title="{{ theme.description }}"
+                       {% if not theme.is_game_art %}style="--pc-theme-bg: {{ theme.background_css }};"{% endif %}>
+                    <input type="radio" name="pc-theme" value="{{ key }}" class="sr-only"
+                           {% if forloop.first %}checked{% endif %} data-share-theme />
+                    <span class="pc-theme__swatch" aria-hidden="true">
+                        {% if theme.is_game_art %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                        {% endif %}
+                    </span>
+                    <span class="pc-theme__name">{{ theme.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+
+            <div class="pc-modal__actions">
+                <button type="button" class="pc-btn pc-btn--ghost" data-share-close>Close</button>
+                <button type="button" class="pc-btn pc-btn--go" data-share-download>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span data-share-download-label>Download</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</dialog>

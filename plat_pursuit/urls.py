@@ -36,7 +36,7 @@ sitemaps = {
     'roadmaps': RoadmapSitemap,
     'lists': GameListSitemap,
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
@@ -180,8 +180,13 @@ urlpatterns = [
     path('stats/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_stats'),
     # Shareables: landing + dedicated sub-pages for each share type (moved from /dashboard/).
     # See trophies/views/shareables_views.py for the per-view docstrings.
-    path('shareables/', MyShareablesView.as_view(), name='my_shareables'),
-    path('shareables/platinums/', MyPlatinumSharesView.as_view(), name='my_shareables_platinums'),
+    # /shareables/ IS the Plat Cards page now. The 4-card wayfinder landing that used to sit here
+    # distributed to three surfaces that no longer exist, and /shareables/platinums/ was the browse it
+    # pointed at -- so the two collapsed into one. The old sub-path keeps its name and redirects, since
+    # platinum-earned notifications deep-link it with ?et=<id>; TEMPORARY, because if the page ever
+    # regains siblings this path is where the browse would live again.
+    path('shareables/', PlatCardsView.as_view(), name='my_shareables'),
+    path('shareables/platinums/', RedirectView.as_view(pattern_name='my_shareables', permanent=False, query_string=True), name='my_shareables_platinums'),
     # Profile Card + Platinum Grid are RETIRED (2026-08): My Shareables now serves plat cards only.
     # Both bounce to the shareables landing rather than 404ing, and stay TEMPORARY (302) because the
     # views/templates/JS are parked for a possible revival under the new card design -- a cached 301

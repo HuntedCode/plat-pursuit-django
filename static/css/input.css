@@ -28,6 +28,7 @@
 @import "./components/home.css";
 @import "./components/claim-ceremony.css";
 @import "./components/game-detail.css";
+@import "./components/plat-cards.css";
 @plugin "daisyui";
 
 @theme {

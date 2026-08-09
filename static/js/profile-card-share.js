@@ -2,7 +2,9 @@
  * Profile Card share manager (My Shareables Profile Card sub-page).
  *
  * Depends on: PlatPursuit.API, PlatPursuit.ToastManager (from utils.js)
- * Requires: ShareImageManager (share-image.js) for ProfileCardShareManager
+ * DEAD as of 2026-08: requires ShareImageManager from share-image.js, which was deleted with the
+ * old share modal. Its only consumer (the Profile Card page) is parked/unrouted. Kept as a
+ * reference for the eventual rebuild, NOT as working code -- it will not run as-is.
  */
 
 window.PlatPursuit = window.PlatPursuit || {};

@@ -113,6 +113,12 @@ def eligible_completions(profile):
         ProfileTrophyGroup.objects
         .filter(profile=profile, trophy_group__trophy_group_id='default')
         .filter(Q(progress=100) | Q(trophy_group__game_id__in=completed_games))
+        # How many platinums the GAME defines -- the variant discriminator, annotated once here so a
+        # browse row knows which card it is without a per-row Python call, and so `variant_filter` has
+        # something to filter on rather than re-deriving it.
+        .annotate(plat_defined=Coalesce(
+            Cast(F('trophy_group__game__defined_trophies__platinum'), IntegerField()), Value(0),
+        ))
         .select_related(
             'trophy_group',
             'trophy_group__game',
@@ -142,21 +148,18 @@ def resolve_variant(game):
 def variant_filter(qs, variant):
     """Narrow an `eligible_completions` queryset to one variant, in the DB.
 
-    CAST, not a raw JSON transform. `exclude(defined_trophies__platinum__gt=0)` does NOT match rows
-    where the key is absent -- the `->` yields SQL NULL and `NOT NULL` is NULL -- so a game with
-    `defined_trophies = {}` fell out of BOTH arms while `resolve_variant` (pure Python) called it FULL:
-    invisible to the counts, but still rendering, with an ordinal from a ladder it wasn't in. Casting
-    also fixes jsonb's string-vs-number ordering, where a stored "1" sorts below any number and reads
-    as "no platinum". Every other consumer in the codebase casts (browse_helpers, game_views, admin).
+    Filters the `plat_defined` annotation from `eligible_completions` -- a CAST, not a raw JSON
+    transform. `exclude(defined_trophies__platinum__gt=0)` does NOT match rows where the key is absent
+    (the `->` yields SQL NULL and `NOT NULL` is NULL), so a game with `defined_trophies = {}` fell out
+    of BOTH arms while `resolve_variant` (pure Python) called it FULL: invisible to the counts, but
+    still rendering, with an ordinal from a ladder it wasn't in. Casting also fixes jsonb's
+    string-vs-number ordering, where a stored "1" sorts below any number and reads as "no platinum".
+    Every other consumer in the codebase casts (browse_helpers, game_views, admin).
     """
-    plat_count = Cast(
-        F('trophy_group__game__defined_trophies__platinum'), IntegerField(),
-    )
-    qs = qs.annotate(_plat_defined=Coalesce(plat_count, Value(0)))
     if variant == PLATINUM:
-        return qs.filter(_plat_defined__gt=0)
+        return qs.filter(plat_defined__gt=0)
     if variant == FULL:
-        return qs.filter(_plat_defined=0)
+        return qs.filter(plat_defined=0)
     return qs
 
 
