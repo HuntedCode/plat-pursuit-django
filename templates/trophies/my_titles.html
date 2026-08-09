@@ -1,20 +1,22 @@
 {% extends 'base.html' %}
 {% load static humanize %}
 {% block title %}Titles{% endblock %}
-{% block meta_description %}The titles you've earned on Platinum Pursuit, the ones within reach, and the full vocabulary waiting to be claimed.{% endblock %}
+{% block meta_description %}The titles you've earned on Platinum Pursuit: what each game's world calls you once you've conquered it, which are within reach, and every one still out there.{% endblock %}
 
 {% comment %}
-Titles: the words you can wear.
+Titles: what each world calls you once you've conquered it.
 
-A title belongs to a badge SERIES -- earn any edition, earn the word. So the page isn't a second
-Collection (that's the medallions); it's the vocabulary. Structure:
+A title belongs to a badge SERIES -- clear any edition and that game's world names you (Crash ->
+"Crate Crusher", Sly Cooper -> "Master Thief"). So the page isn't a second Collection (that's the
+medallions); it's the set of identities you've earned. Structure:
 
-  1. The NAMEPLATE -- the word you're wearing right now, as the page's subject.
+  1. The NAMEPLATE -- the title you're wearing right now, as the page's subject.
   2. A .pp-switch: Yours / Within reach / All.
   3. One entry component for all three views (`_title_row.html`), adapting its trailing slot to state.
 
-"Within reach" is the motivating slice: unheld titles you've already started, closest first, off the
-materialized SeriesBadgeStanding.progress_bp. All three panels are server-rendered; JS only toggles.
+"Within reach" is the motivating slice: unearned titles whose world you've already set foot in,
+closest first, off the materialized SeriesBadgeStanding.progress_bp. All three panels are
+server-rendered; JS only toggles.
 {% endcomment %}
 
 {% block content %}
@@ -29,20 +31,20 @@ materialized SeriesBadgeStanding.progress_bp. All three panels are server-render
                 <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Titles</h1>
             </div>
             <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                Earn a badge series, earn its word. Wear the one that says the most about you.
+                Conquer a series and its world gives you a name. Wear the one you've earned the hardest.
             </p>
 
             {# ── The nameplate: what you're wearing right now. ── #}
             <div class="ttl-plate{% if not equipped_title %} ttl-plate--empty{% endif %} mt-3 md:mt-4" data-ttl-plate>
                 <span class="ttl-plate__label">Currently wearing</span>
                 {% if equipped_title %}
-                <span class="ttl-plate__word" data-ttl-plate-word>{{ equipped_title.name }}</span>
+                <span class="ttl-plate__name" data-ttl-plate-name>{{ equipped_title.name }}</span>
                 <button type="button" class="ttl-plate__clear" data-ttl-unequip>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
                     Take it off
                 </button>
                 {% else %}
-                <span class="ttl-plate__word ttl-plate__word--none" data-ttl-plate-word>No title equipped</span>
+                <span class="ttl-plate__name ttl-plate__name--none" data-ttl-plate-name>No title equipped</span>
                 <span class="ttl-plate__hint">Pick one from Yours below</span>
                 {% endif %}
             </div>
@@ -51,17 +53,17 @@ materialized SeriesBadgeStanding.progress_bp. All three panels are server-render
                 <div class="scard">
                     <div class="scard__label">Yours</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ yours_count }}">{{ yours_count }}</div>
-                    <div class="scard__sub">words earned</div>
+                    <div class="scard__sub">titles earned</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Within reach</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ within_reach_count }}">{{ within_reach_count }}</div>
-                    <div class="scard__sub">already started</div>
+                    <div class="scard__sub">worlds you've entered</div>
                 </div>
                 <div class="scard">
-                    <div class="scard__label">Vocabulary</div>
+                    <div class="scard__label">All titles</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ all_count }}">{{ all_count }}</div>
-                    <div class="scard__sub">titles exist</div>
+                    <div class="scard__sub">across every series</div>
                 </div>
             </div>
         </div>
@@ -95,7 +97,7 @@ materialized SeriesBadgeStanding.progress_bp. All three panels are server-render
         <div class="ttl-empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></svg>
             <p class="ttl-empty__title">No titles yet</p>
-            <p class="ttl-empty__body">Every badge series carries a word. Earn one and it lands here.</p>
+            <p class="ttl-empty__body">Conquer a badge series and its world will name you.</p>
             <a href="{% url 'badges_list' %}" class="ttl-empty__cta">Browse badges</a>
         </div>
         {% endif %}
@@ -104,7 +106,7 @@ materialized SeriesBadgeStanding.progress_bp. All three panels are server-render
     {# ── Within reach: unheld, already started, closest first. ── #}
     <div id="ttl-reach" role="tabpanel" class="ttl-panel" data-ttl-panel="reach" hidden>
         {% if within_reach %}
-        <p class="ttl-note">Series you've already started. Closest first.</p>
+        <p class="ttl-note">Worlds you've already set foot in. Closest first.</p>
         <div class="ttl-list" data-ttl-grid>
             {% for entry in within_reach %}{% include 'trophies/partials/titles/_title_row.html' with entry=entry view='reach' %}{% endfor %}
         </div>
@@ -112,7 +114,7 @@ materialized SeriesBadgeStanding.progress_bp. All three panels are server-render
         <div class="ttl-empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
             <p class="ttl-empty__title">Nothing in flight</p>
-            <p class="ttl-empty__body">Start a badge series and its word will show up here with how close you are.</p>
+            <p class="ttl-empty__body">Start a badge series and its title shows up here with how close you are to claiming it.</p>
             <a href="{% url 'badges_list' %}" class="ttl-empty__cta">Find a series</a>
         </div>
         {% endif %}
@@ -121,14 +123,14 @@ materialized SeriesBadgeStanding.progress_bp. All three panels are server-render
     {# ── All: the full vocabulary. ── #}
     <div id="ttl-all" role="tabpanel" class="ttl-panel" data-ttl-panel="all" hidden>
         {% if all_titles %}
-        <p class="ttl-note">Every word in circulation, and what earns it.</p>
+        <p class="ttl-note">Every title out there, and the world that grants it.</p>
         <div class="ttl-list" data-ttl-grid>
             {% for entry in all_titles %}{% include 'trophies/partials/titles/_title_row.html' with entry=entry view='all' %}{% endfor %}
         </div>
         {% else %}
         <div class="ttl-empty">
             <p class="ttl-empty__title">No titles in circulation yet</p>
-            <p class="ttl-empty__body">Badge series haven't been released. Check back soon.</p>
+            <p class="ttl-empty__body">No badge series have been released yet. Check back soon.</p>
         </div>
         {% endif %}
     </div>

@@ -51,11 +51,11 @@
     // ---- Equip / unequip -------------------------------------------------
     function setPlate(name) {
         var plate = document.querySelector('[data-ttl-plate]');
-        var word = document.querySelector('[data-ttl-plate-word]');
-        if (!plate || !word) { return; }
+        var nameEl = document.querySelector('[data-ttl-plate-name]');
+        if (!plate || !nameEl) { return; }
         var has = !!name;
-        word.textContent = has ? name : 'No title equipped';
-        word.classList.toggle('ttl-plate__word--none', !has);
+        nameEl.textContent = has ? name : 'No title equipped';
+        nameEl.classList.toggle('ttl-plate__name--none', !has);
         plate.classList.toggle('ttl-plate--empty', !has);
         if (has) {
             plate.classList.remove('is-flash');

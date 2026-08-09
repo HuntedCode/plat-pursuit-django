@@ -1,10 +1,10 @@
 {% load humanize %}
 {% comment %}
-One title entry. The WORD is the hero; the badge series is supporting context.
+One title entry. The TITLE is the hero; the world that grants it is supporting context.
 
 `view` adapts only the trailing slot, so all three panels read as one family:
   yours -> equip control (or the Equipped marker)
-  reach -> a Horizon toward the word + "N of M stages"
+  reach -> a Horizon toward the title + "N of M stages"
   all   -> how many hunters wear it
 {% endcomment %}
 <article class="ttl-row{% if entry.held %} is-held{% endif %}{% if entry.is_displayed %} is-worn{% endif %}{% if entry.is_special %} is-special{% endif %}"
@@ -22,7 +22,7 @@ One title entry. The WORD is the hero; the badge series is supporting context.
     </span>
 
     <div class="ttl-row__id">
-        <h3 class="ttl-row__word">{{ entry.name }}</h3>
+        <h3 class="ttl-row__name">{{ entry.name }}</h3>
         <p class="ttl-row__from">
             {% if entry.is_special %}
             <span class="ttl-row__tag">Special award</span>

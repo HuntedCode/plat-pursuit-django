@@ -1,19 +1,19 @@
 /* ============================================================
- * TITLES (.ttl-) -- the words you can wear.
+ * TITLES (.ttl-) -- what each world calls you once you've conquered it.
  *
- * The WORD is the subject of this page, so it carries the display face and the size everywhere: huge on
+ * The TITLE is the subject of this page, so it carries the display face and the size everywhere: huge on
  * the nameplate, still the largest thing in a row. The badge medallion is deliberately small supporting
- * context -- Collection is where medallions are the object; here they're a footnote saying where the word
+ * context -- Collection is where medallions are the object; here they only name the world the title
  * came from.
  *
  * Three views share ONE row component; only the trailing slot changes (equip control / progress / wearers),
  * so switching views never feels like landing on a different page.
  *
- * Mobile-first: base = 375 (row collapses its trailing slot under the word), md: restores the 3-column
+ * Mobile-first: base = 375 (row collapses its trailing slot under the title), md: restores the 3-column
  * grid. No color-mix inside @keyframes (lightningcss drops those frames).
  * ============================================================ */
 
-/* ---- The nameplate: what you're wearing right now ---- */
+/* ---- The nameplate: the title you're wearing right now ---- */
 .ttl-plate {
     --ttl-c: var(--pp-primary);
     position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -27,12 +27,12 @@
     font-size: 9.5px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase;
     color: color-mix(in oklab, var(--ttl-c) 75%, var(--pp-text-mute));
 }
-.ttl-plate__word {
+.ttl-plate__name {
     font-family: var(--pp-font-display); font-weight: 800; line-height: 1.05;
     font-size: clamp(1.5rem, 6.5vw, 2.25rem); letter-spacing: -0.015em;
     color: var(--pp-text); text-shadow: 0 0 28px color-mix(in oklab, var(--ttl-c) 30%, transparent);
 }
-.ttl-plate__word--none { color: var(--pp-text-mute); font-style: italic; font-weight: 700; text-shadow: none; }
+.ttl-plate__name--none { color: var(--pp-text-mute); font-style: italic; font-weight: 700; text-shadow: none; }
 .ttl-plate__hint { font-size: 11.5px; color: var(--pp-text-mute); }
 .ttl-plate--empty { --ttl-c: var(--pp-text-mute); border-style: dashed; }
 .ttl-plate__clear {
@@ -58,7 +58,7 @@
 .ttl-note { font-size: 11.5px; color: var(--pp-text-mute); font-style: italic; margin: 0 2px 9px; }
 .ttl-list { display: flex; flex-direction: column; gap: 8px; }
 
-/* ---- One row: object · word · trailing state ---- */
+/* ---- One row: object · title · trailing state ---- */
 .ttl-row {
     display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 11px;
     padding: 11px 13px; border-radius: var(--pp-radius-lg);
@@ -74,7 +74,7 @@
         transform: translateY(-1px);
     }
 }
-/* The word you're wearing gets the accent edge -- one row on the page can have it. */
+/* The title you're wearing gets the accent edge -- one row on the page can have it. */
 .ttl-row.is-worn {
     border-color: color-mix(in oklab, var(--pp-primary) 48%, var(--pp-border));
     box-shadow: inset 3px 0 0 var(--pp-primary), inset 0 1px 0 rgba(255, 255, 255, 0.05),
@@ -92,11 +92,11 @@
 .ttl-row__spark svg { width: 18px; height: 18px; }
 
 .ttl-row__id { min-width: 0; }
-.ttl-row__word {
+.ttl-row__name {
     font-family: var(--pp-font-display); font-weight: 800; font-size: 1.02rem; line-height: 1.15;
     color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 1px;
 }
-.ttl-row:not(.is-held) .ttl-row__word { color: var(--pp-text-dim); }
+.ttl-row:not(.is-held) .ttl-row__name { color: var(--pp-text-dim); }
 .ttl-row__from { font-size: 11.5px; color: var(--pp-text-mute); margin-top: 1px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
 .ttl-row__series { color: var(--pp-text-dim); text-decoration: none; border-bottom: 1px solid transparent; }
 @media (hover: hover) { .ttl-row__series:hover { color: var(--pp-primary); border-bottom-color: color-mix(in oklab, var(--pp-primary) 45%, transparent); } }
@@ -109,13 +109,13 @@
 }
 .ttl-row__wearers { font-variant-numeric: tabular-nums; }
 
-/* Progress toward an unheld word (Within reach only). */
+/* Progress toward an unearned title (Within reach only). */
 .ttl-row__prog { display: flex; align-items: center; gap: 9px; margin-top: 7px; }
 .ttl-row__prog .pp-horizon { flex: 1; min-width: 0; }
 .ttl-row__prog-cap { font-size: 10.5px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ttl-row__prog-cap strong { color: var(--pp-text-dim); font-weight: 800; }
 
-/* Trailing slot. On mobile it drops under the word rather than squeezing the row. */
+/* Trailing slot. On mobile it drops under the title rather than squeezing the row. */
 .ttl-row__trail { grid-column: 2; display: flex; align-items: center; gap: 9px; margin-top: 8px; }
 @media (min-width: 768px) { .ttl-row__trail { grid-column: auto; justify-content: flex-end; margin-top: 0; } }
 .ttl-row__trail:empty { display: none; }
@@ -165,7 +165,7 @@
 @media (hover: hover) { .ttl-empty__cta:hover { background: color-mix(in oklab, var(--pp-primary) 12%, transparent); } }
 .ttl-empty__cta:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
-/* ---- Equip flash: the "it's mine" beat when a word becomes the one you wear ---- */
+/* ---- Equip flash: the "it's mine" beat when a title becomes the one you wear ---- */
 @media (prefers-reduced-motion: no-preference) {
     .ttl-plate.is-flash { --ttl-flash: color-mix(in oklab, var(--pp-primary) 60%, transparent); animation: ttlFlash 0.62s var(--pp-ease, ease-out); }
     @keyframes ttlFlash {
