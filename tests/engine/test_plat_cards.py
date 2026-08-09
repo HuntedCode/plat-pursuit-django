@@ -532,3 +532,54 @@ def test_a_held_title_still_wins_within_one_type():
                              source_id=owned.id)
 
     assert cards.get_card_data(profile, standing)['badge_lines'][0]['series_name'] == 'Zeta Series'
+
+
+# ── DLC: celebrate a full clear, never penalise an unfinished one ─────────────────────────────────
+
+def _with_dlc(profile, game, *, cleared):
+    """Give the game a DLC group and set the hunter's whole-game progress accordingly."""
+    from trophies.models import ProfileGame
+
+    dlc = {'bronze': 20, 'silver': 10, 'gold': 5}
+    game.defined_trophies = {'bronze': 30, 'silver': 14, 'gold': 7, 'platinum': 1}   # base + dlc
+    game.save(update_fields=['defined_trophies'])
+    group = TrophyGroupFactory(game=game, trophy_group_id='001', defined_trophies=dlc)
+    ProfileTrophyGroupFactory(profile=profile, trophy_group=group, progress=100 if cleared else 30)
+    ProfileGame.objects.filter(profile=profile, game=game).update(progress=100 if cleared else 71)
+
+
+def test_clearing_every_dlc_is_celebrated_on_the_card():
+    """A hunter who cleared EVERYTHING looked identical to one who cleared only the base list. The
+    whole-game figures appear once the whole game is done."""
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    _with_dlc(profile, game, cleared=True)
+
+    data = cards.get_card_data(profile, standing)
+
+    assert data['all_dlc_done'] is True
+    assert data['trophy_total'] == 52                       # 30+14+7+1, the whole game
+    # The breakdown has to describe the same scope as the total, or the dots contradict the label.
+    assert sum(t['count'] for t in data['tier_counts']) == 52
+
+
+def test_outstanding_dlc_is_never_shown_as_a_shortfall():
+    """"51 of 71" beside a PLATINUM label reads as unfinished. The card stays scoped to the base list
+    and says nothing about the DLC."""
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    _with_dlc(profile, game, cleared=False)
+
+    data = cards.get_card_data(profile, standing)
+
+    assert data['all_dlc_done'] is False
+    assert data['trophy_total'] == 17                       # the default group only: 10+4+2+1
+    assert sum(t['count'] for t in data['tier_counts']) == 17
+
+
+def test_a_game_with_no_dlc_makes_no_dlc_claim():
+    """"ALL DLC" on a game that never had any would be nonsense."""
+    profile = ProfileFactory()
+    _, _, standing = _completed_game(profile, with_platinum=True, full_game_progress=100)
+
+    assert cards.get_card_data(profile, standing)['all_dlc_done'] is False

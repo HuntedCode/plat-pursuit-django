@@ -431,6 +431,15 @@ TIER_DISPLAY = [
 ]
 
 
+def _ints(counts):
+    """The integer values of a defined/earned-trophies JSON blob, tolerating junk."""
+    for value in (counts or {}).values():
+        try:
+            yield int(value or 0)
+        except (TypeError, ValueError):
+            yield 0
+
+
 def _tier_counts(counts):
     """[(tier, count, colour)] for the tiers this game actually has, platinum first."""
     out = []
@@ -479,7 +488,27 @@ def get_card_data(profile, standing):
 
     earned_counts = standing.earned_trophies or {}
     group_defined = group.defined_trophies or {}
+    game_defined = game.defined_trophies or {}
     total_plats, total_full = hunter_totals(profile)
+
+    # DLC. The card is scoped to the DEFAULT group, which is what makes it safe to hand a platinum to
+    # someone whose DLC is still outstanding. But that scoping also made a hunter who cleared EVERYTHING
+    # look identical to one who cleared only the base list, which undersells the bigger chase.
+    #
+    # So the whole-game numbers appear ONLY when the whole game is done. A partial figure is never shown
+    # beside a PLATINUM label: "51 of 71" reads as unfinished, and nobody should be talked out of
+    # sharing a platinum by their own card. `ProfileGame.progress` is the whole-game percentage, so it
+    # is exactly the "everything, DLC included" test.
+    group_total = sum(_ints(group_defined))
+    game_total = sum(_ints(game_defined))
+    has_dlc = game_total > group_total
+    all_dlc_done = has_dlc and bool(profile_game and profile_game.progress == 100)
+
+    # When everything is done, the breakdown and the total both describe the whole game -- otherwise the
+    # dots would sum to the base list while the label counted every group, and contradict each other.
+    # Every trophy is earned in that state, so the game's DEFINED counts are also the earned counts.
+    trophy_source = game_defined if all_dlc_done else (earned_counts or group_defined)
+    trophy_total = game_total if all_dlc_done else group_total
 
     return {
         'variant': variant,
@@ -522,12 +551,12 @@ def get_card_data(profile, standing):
         ),
         # Group-scoped counts: the card is about finishing THIS list, so a game whose DLC is still
         # outstanding must not read as partially done.
-        'group_earned': sum(int(v or 0) for v in earned_counts.values()),
-        'group_defined': sum(int(v or 0) for v in group_defined.values()),
+        'trophy_total': trophy_total,
+        'all_dlc_done': all_dlc_done,
         # Ordered platinum -> bronze for display. Falls back to the group's DEFINED counts because
         # `earned_trophies` is a denorm that can lag, and the group is finished either way, so the two
         # agree whenever both are present.
-        'tier_counts': _tier_counts(earned_counts or group_defined),
+        'tier_counts': _tier_counts(trophy_source),
         'platform_label': ' / '.join(game.title_platform or []),
 
         'badge_lines': _badge_lines(profile, concept),

@@ -123,6 +123,17 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                     {% if ordinal %}
                     <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; line-height: 1.2; font-size: 21px; font-weight: 600; color: #8a939f;">#{{ ordinal }}</span>
                     {% endif %}
+
+                    {% comment %}Everything cleared, DLC included -- a bigger chase than the platinum and
+                    previously invisible on the card. It only ever ADDS: a game with outstanding DLC shows
+                    nothing here rather than a partial figure, because "51 of 71" beside a PLATINUM label
+                    reads as unfinished and nobody should be talked out of sharing by their own card.{% endcomment %}
+                    {% if all_dlc_done %}
+                    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; border: 1px solid rgba(58, 221, 158, 0.5); background: rgba(58, 221, 158, 0.1);">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3add9e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M20 6 9 17l-5-5"/></svg>
+                        <span style="font-size: 14px; line-height: 1.2; font-weight: 700; color: #3add9e; letter-spacing: 0.11em; text-transform: uppercase;">All DLC</span>
+                    </span>
+                    {% endif %}
                 </div>
 
                 {# The game: the single dominant statement. #}
@@ -167,7 +178,7 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                         <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 25px; font-weight: 700; color: #f0f6fd; line-height: 1;">{{ tier.count }}</span>
                     </div>
                     {% endfor %}
-                    <div style="margin-left: auto; line-height: 1.2; font-size: 15px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase;">{{ group_defined }} Trophies</div>
+                    <div style="margin-left: auto; line-height: 1.2; font-size: 15px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase;">{{ trophy_total }} Trophies</div>
                 </div>
                 {% endif %}
 
