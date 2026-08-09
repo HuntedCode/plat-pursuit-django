@@ -122,33 +122,6 @@
         </div>
     </div>
 
-{% if earned_trophy_id %}
-{# Share Card Modal (rebuilt in Phase 6) #}
-<dialog id="share-modal" class="modal">
-    <div class="modal-box max-w-4xl bg-base-200">
-        <form method="dialog">
-            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-            </button>
-        </form>
-        <h3 class="font-bold text-lg mb-4" id="share-modal-title">Create Share Image</h3>
-        <div id="share-modal-content">
-            <div class="flex justify-center items-center py-12">
-                <span class="loading loading-spinner loading-lg"></span>
-            </div>
-        </div>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-        <button>close</button>
-    </form>
-</dialog>
-
-{% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
-{% include 'partials/rate_before_download_modal.html' %}
-{% include 'partials/theme_nudge_modal.html' %}
-{% endif %}
 
 {% endblock %}
 
@@ -269,20 +242,6 @@
     <script src="{% static 'js/browse-filters.js' %}"></script>
     <script src="{% static 'js/game-detail.js' %}"></script>
     <script src="{% static 'js/submit_shimmer.js' %}"></script>
-    {% if earned_trophy_id %}
-    <script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
-    <script src="{% static 'js/share-image.js' %}"></script>
-    <script src="{% static 'js/color-grid-modal.js' %}"></script>
-    <script src="{% static 'js/shareable-manager.js' %}"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const shareBtn = document.getElementById('share-card-btn');
-            if (shareBtn) {
-                shareBtn.addEventListener('click', () => openShareModal(shareBtn));
-            }
-        });
-    </script>
-    {% endif %}
     {% if user.is_authenticated and user.profile %}
     <script src="{% static 'js/game-lists.js' %}"></script>
     <script>

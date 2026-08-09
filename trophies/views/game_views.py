@@ -1267,21 +1267,11 @@ class GameDetailView(DetailView):
         if not has_platinum:
             return {}
 
-        result = {'has_platinum': has_platinum}
-
-        # Query earned trophy ID for share card button
-        earned_trophy_id = EarnedTrophy.objects.filter(
-            profile=profile,
-            trophy__game=game,
-            trophy__trophy_type='platinum',
-            earned=True
-        ).values_list('id', flat=True).first()
-
-        if earned_trophy_id:
-            result['earned_trophy_id'] = earned_trophy_id
-            result['concept_bg_url'] = (game.concept.get_landscape_url() if game.concept else None) or ''
-
-        return result
+        # The share-card button lived here until 2026-08. Plat cards are now generated ONLY from
+        # My Shareables (see docs/features/share-images.md), so this no longer resolves the platinum's
+        # EarnedTrophy id, the landscape art, or the theme registry -- which also drops share-image.js,
+        # shareable-manager.js, color-grid-modal.js and an inlined GRADIENT_THEMES blob off this page.
+        return {'has_platinum': has_platinum}
 
     def _build_breadcrumbs(self, game, target_profile):
         """
@@ -1476,11 +1466,6 @@ class GameDetailView(DetailView):
         # Build user rating context (if earned platinum)
         rating_context = self._build_rating_context(user, game)
         context.update(rating_context)
-
-        # Add share card dependencies if user has earned platinum
-        if rating_context.get('earned_trophy_id'):
-            from trophies.themes import get_available_themes_for_grid
-            context['available_themes'] = get_available_themes_for_grid(include_game_art=True, grouped=True)
 
         # Build breadcrumbs
         context['breadcrumb'] = self._build_breadcrumbs(game, target_profile)

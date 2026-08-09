@@ -36,7 +36,7 @@ sitemaps = {
     'roadmaps': RoadmapSitemap,
     'lists': GameListSitemap,
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyProfileCardView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
@@ -182,8 +182,12 @@ urlpatterns = [
     # See trophies/views/shareables_views.py for the per-view docstrings.
     path('shareables/', MyShareablesView.as_view(), name='my_shareables'),
     path('shareables/platinums/', MyPlatinumSharesView.as_view(), name='my_shareables_platinums'),
-    path('shareables/profile-card/', MyProfileCardView.as_view(), name='my_shareables_profile_card'),
-    path('shareables/platinum-grid/', PlatinumGridView.as_view(), name='platinum_grid'),
+    # Profile Card + Platinum Grid are RETIRED (2026-08): My Shareables now serves plat cards only.
+    # Both bounce to the shareables landing rather than 404ing, and stay TEMPORARY (302) because the
+    # views/templates/JS are parked for a possible revival under the new card design -- a cached 301
+    # would strand returning users. See docs/features/share-images.md.
+    path('shareables/profile-card/', RedirectView.as_view(pattern_name='my_shareables', permanent=False), name='my_shareables_profile_card'),
+    path('shareables/platinum-grid/', RedirectView.as_view(pattern_name='my_shareables', permanent=False), name='platinum_grid'),
     # Old /dashboard/stats|shareables/* → new root canonicals (301).
     path('dashboard/stats/', RedirectView.as_view(pattern_name='my_stats', permanent=True, query_string=True)),
     path('dashboard/shareables/', RedirectView.as_view(pattern_name='my_shareables', permanent=True, query_string=True)),
@@ -326,9 +330,9 @@ urlpatterns = [
     # after the Roadmap migration). Not linked from nav.
     path('staff/legacy-checklists/', LegacyChecklistListView.as_view(), name='legacy_checklist_list'),
     path('staff/legacy-checklists/<int:pk>/', LegacyChecklistDetailView.as_view(), name='legacy_checklist_detail'),
-    # NOTE: PlatinumGridView's canonical path is now /tools/platinum-grid/
-    # (registered above in the Tools section). The legacy /staff/platinum-grid/
-    # path is a 301 redirect, registered in the Phase 10 legacy redirects block.
+    # NOTE: the Platinum Grid wizard is RETIRED (2026-08). /shareables/platinum-grid/ bounces to
+    # the shareables landing; the legacy /staff/platinum-grid/ + /tools/platinum-grid/ 301s funnel
+    # into that bounce. PlatinumGridView is parked unrouted in trophies/views/platinum_grid_views.py.
 
     # Fundraiser
     path('fundraiser/<slug:slug>/', FundraiserView.as_view(), name='fundraiser'),

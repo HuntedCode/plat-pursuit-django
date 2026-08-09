@@ -1486,71 +1486,6 @@ def provide_rate_my_games(profile):
     }
 
 
-def provide_profile_card_preview(profile, settings=None):
-    """
-    Profile card preview: provides theme, premium status, and available themes
-    for the client-side preview module with inline theme picker.
-    The actual card HTML is fetched via /api/v1/profile-card/html/ on the client.
-    """
-    from trophies.models import ProfileCardSettings
-    from trophies.themes import get_available_themes_for_grid
-    from django.urls import reverse
-
-    card_settings, _ = ProfileCardSettings.objects.get_or_create(profile=profile)
-    is_premium = profile.user_is_premium
-
-    # Build compact theme list: key, name, accent_color
-    themes = []
-    for key, data in get_available_themes_for_grid(include_game_art=False):
-        themes.append({
-            'key': key,
-            'name': data['name'],
-            'css': data['background_css'],
-        })
-
-    return {
-        'theme': card_settings.card_theme or 'default',
-        'is_premium': is_premium,
-        'themes': themes,
-        # Customize link goes to the dedicated Profile Card builder page
-        # introduced in piece 6c (the My Shareables landing-page restructure).
-        # Earlier this was '?tab=profile_card' against a tab system that no
-        # longer exists; the build now has a real /dashboard/shareables/
-        # profile-card/ URL.
-        'shareables_url': reverse('my_shareables_profile_card'),
-    }
-
-
-def provide_recent_platinum_card(profile):
-    """Most recent platinum share card data for client-side HTML preview."""
-    from trophies.models import EarnedTrophy
-
-    et = (
-        EarnedTrophy.objects
-        .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
-        .select_related('trophy__game__concept', 'trophy__game__concept__igdb_match')
-        .order_by('-earned_date_time')
-        .first()
-    )
-
-    if not et:
-        return {'has_platinum': False}
-
-    trophy = et.trophy
-    game = trophy.game
-    concept = getattr(game, 'concept', None) if game else None
-
-    return {
-        'has_platinum': True,
-        'earned_trophy_id': et.id,
-        'game_name': concept.unified_title if concept else (game.title_name if game else 'Unknown'),
-        'icon_url': concept.cover_url if concept else (game.title_image if game else ''),
-        'trophy_name': trophy.trophy_name,
-        'earn_rate': trophy.trophy_earn_rate,
-        'earned_date': et.earned_date_time,
-    }
-
-
 def provide_recap_share_card(profile):
     """Most recent finalized recap data for client-side share card preview."""
     from trophies.models import MonthlyRecap
@@ -1573,46 +1508,6 @@ def provide_recap_share_card(profile):
         'month': recap.month,
         'month_name': f"{cal_module.month_name[recap.month]} {recap.year}",
     }
-
-
-def provide_platinum_grid_cta(profile):
-    """CTA for the Platinum Grid share image builder."""
-    from django.urls import reverse
-    from trophies.models import EarnedTrophy
-
-    plat_count = EarnedTrophy.objects.filter(
-        profile=profile, earned=True, trophy__trophy_type='platinum'
-    ).count()
-
-    # Grab up to 8 recent plat icons for a mini preview grid (4x2 at 3:4 portrait)
-    preview_ets = (
-        EarnedTrophy.objects
-        .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
-        .select_related(
-            'trophy__game',
-            'trophy__game__concept',
-            'trophy__game__concept__igdb_match',
-        )
-        .order_by('-earned_date_time')[:8]
-    )
-    preview_icons = [
-        et.trophy.game.display_image_url
-        for et in preview_ets
-    ]
-    # Pad to 8 for consistent 4x2 grid
-    while len(preview_icons) < 8:
-        preview_icons.append('')
-
-    return {
-        'plat_count': plat_count,
-        'grid_url': reverse('platinum_grid'),
-        'preview_icons': preview_icons,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Premium module providers
-# ---------------------------------------------------------------------------
 
 
 def provide_advanced_stats(profile, settings=None):
@@ -4621,38 +4516,6 @@ DASHBOARD_MODULES = [
         'allowed_sizes': ['medium', 'large'],
     },
     {
-        'slug': 'profile_card_preview',
-        'name': 'Profile Card',
-        'description': 'Preview and download your shareable profile card image.',
-        'category': 'share',
-        'template': 'trophies/partials/dashboard/profile_card_preview.html',
-        'provider': provide_profile_card_preview,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 1,  # share #1
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 0,
-        'default_size': 'large',
-        'allowed_sizes': ['medium', 'large'],
-    },
-    {
-        'slug': 'recent_platinum_card',
-        'name': 'Latest Platinum',
-        'description': 'Preview and download the share card for your most recent platinum.',
-        'category': 'share',
-        'template': 'trophies/partials/dashboard/recent_platinum_card.html',
-        'provider': provide_recent_platinum_card,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 2,  # share #2
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 600,
-        'default_size': 'large',
-        'allowed_sizes': ['medium', 'large'],
-    },
-    {
         'slug': 'recap_share_card',
         'name': 'Recap Card',
         'description': 'Preview and download the share card for your latest monthly recap.',
@@ -4661,28 +4524,12 @@ DASHBOARD_MODULES = [
         'provider': provide_recap_share_card,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 3,  # share #3
+        'default_order': 1,  # share #1 (the only share module left -- see share-images.md)
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 1800,
         'default_size': 'large',
         'allowed_sizes': ['medium', 'large'],
-    },
-    {
-        'slug': 'platinum_grid_cta',
-        'name': 'Platinum Grid',
-        'description': 'Build a shareable grid image of your platinum trophy collection.',
-        'category': 'share',
-        'template': 'trophies/partials/dashboard/platinum_grid_cta.html',
-        'provider': provide_platinum_grid_cta,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 4,  # share #4
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 600,
-        'default_size': 'medium',
-        'allowed_sizes': ['small', 'medium', 'large'],
     },
     # --- Premium modules ---
     {

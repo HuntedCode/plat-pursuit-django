@@ -159,14 +159,6 @@
                             </button>
                         {% endif %}
                         {% if user.is_authenticated and user.profile %}
-                        {% if earned_trophy_id %}
-                            <button id="share-card-btn" class="gd-btn" aria-label="Create share card"
-                                    data-earned-trophy-id="{{ earned_trophy_id }}" data-game-name="{{ game.title_name }}"
-                                    data-game-image="{{ game.display_image_url }}" data-concept-bg-url="{{ concept_bg_url }}"
-                                    data-concept-id="{{ game.concept.id|default:'' }}">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>Share Card
-                            </button>
-                        {% endif %}
                         <div id="quick-add-container" data-game-id="{{ game.id }}">
                             <button class="gd-btn quick-add-trigger" aria-label="Add to list">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Add to List

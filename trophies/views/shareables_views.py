@@ -1,23 +1,17 @@
 """
 Shareables views.
 
-Houses the My Shareables landing page and its sub-pages. The landing page
-at `/dashboard/shareables/` is a small wayfinder that distributes users
-to the various share-image surfaces:
+Houses the My Shareables surface.
 
-- Platinum Cards (`/dashboard/shareables/platinums/`) — browse every
-  platinum trophy and generate a themed share image for any of them
-- Platinum Grid (`/dashboard/shareables/platinum-grid/`) — multi-platinum
-  collage wizard (lives in trophies/views/platinum_grid_views.py)
-- Profile Card (`/dashboard/shareables/profile-card/`) — generate a
-  share image showcasing your trophy profile and stats
-- Monthly Recap (`/dashboard/recap/`) — Spotify-Wrapped style summary
-  card for any month you've hunted (lives in trophies/recap_views.py)
+As of 2026-08 this serves **plat cards only** -- the one place a hunter gets a share card for a
+completion. Platinum Grid and Profile Card are retired (their views are parked, their URLs bounce to
+the landing); Monthly Recap keeps its own home at `/recap/`. See docs/features/share-images.md.
 
-Historically the My Shareables page was a single browse-all-platinums
-interface. The Phase 10b restructure split it into a landing + sub-pages
-so each share type has a dedicated home and the landing serves as a
-wayfinder for new users who don't know what's available.
+- Plat Cards (`/shareables/platinums/`) -- browse your completions and generate a card for any of
+  them. Eligibility is the DEFAULT trophy group at 100%, so 100%-with-no-platinum games qualify too.
+
+History: this page began as a single browse-all-platinums interface, was split into a landing +
+four sub-pages by the Phase 10b restructure, and has now been narrowed back to its one job.
 """
 import logging
 from collections import defaultdict
@@ -178,8 +172,14 @@ class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Templ
 
 
 class MyProfileCardView(LoginRequiredMixin, _RequireLinkedProfileMixin, TemplateView):
-    """
-    Profile card builder page at `/dashboard/shareables/profile-card/`.
+    """Profile card builder page.
+
+    RETIRED (2026-08): PARKED, not routed. My Shareables now serves plat cards only -- see
+    docs/features/share-images.md. /shareables/profile-card/ bounces to the shareables landing;
+    this class is kept so the surface can be revived under the new card design instead of rebuilt
+    from nothing.
+
+    Was at `/dashboard/shareables/profile-card/`.
 
     Dedicated page for generating share images of the user's trophy
     profile (landscape, portrait, and tab variants). Loads card HTML

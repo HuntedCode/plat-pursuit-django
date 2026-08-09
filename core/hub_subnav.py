@@ -225,12 +225,10 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'list_edit': ('community', 'lists'),
     'badge_leaderboards': ('community', 'leaderboards'),
     # (badge_detail now highlights the Browse > Badges tab -- see the Browse block above.)
-    # My Pursuit: nested sub-pages of the moved items. The shareables sub-pages
-    # all live under /dashboard/shareables/* and should highlight the Shareables
-    # sub-nav item; the platinum_grid wizard is one of those nested children.
+    # My Pursuit: nested sub-pages of the moved items. Shareables is plat-cards-only as of 2026-08,
+    # so its one nested child is the cards browse; profile_card + platinum_grid are retired and their
+    # URLs bounce to the landing (no override needed for a redirect).
     'my_shareables_platinums': ('my_pursuit', 'shareables'),
-    'my_shareables_profile_card': ('my_pursuit', 'shareables'),
-    'platinum_grid': ('my_pursuit', 'shareables'),
     'recap_view': ('my_pursuit', 'recap'),
     # (The fundraiser + fundraiser_success pages resolve to the Support hub via its /fundraiser/
     # prefix -- no override needed. Support has no sub-nav items, so no active slug.)
