@@ -71,10 +71,6 @@ from trophies.services.redis_leaderboard_service import (
     get_country_xp_page, get_country_xp_rank, get_country_xp_count,
     get_active_country_codes,
 )
-from trophies.milestone_constants import (
-    MILESTONE_CATEGORIES, CRITERIA_TYPE_DISPLAY_NAMES,
-    CALENDAR_MONTH_TYPES, ONE_OFF_TYPES,
-)
 
 logger = logging.getLogger("psn_api")
 

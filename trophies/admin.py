@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge
 
 
 # Register your models here.
@@ -1789,39 +1789,6 @@ class UserTitleAdmin(admin.ModelAdmin):
     raw_id_fields = ('profile', 'title')
     date_hierarchy = 'earned_at'
 
-@admin.register(Milestone)
-class MilestoneAdmin(admin.ModelAdmin):
-    list_display = ['name', 'title', 'discord_role_id', 'criteria_type', 'criteria_details', 'premium_only', 'is_active', 'required_value', 'earned_count']
-    list_filter = ['is_active', 'premium_only', 'criteria_type']
-    search_fields = ['name']
-    actions = ['retire_selected_milestones']
-
-    @admin.action(description="Retire selected milestones (hide + remove granted titles)")
-    def retire_selected_milestones(self, request, queryset):
-        from django.db import transaction
-        from trophies.services.milestone_service import retire_milestones
-        with transaction.atomic():
-            retired, removed = retire_milestones(queryset)
-        self.message_user(
-            request,
-            f"Retired {retired} milestone(s) and removed {removed} granted title(s). "
-            f"Earned records were preserved.",
-        )
-
-@admin.register(UserMilestone)
-class UserMilestoneAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'milestone', 'earned_at']
-    list_select_related = ('profile', 'milestone')
-    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'milestone__name']
-    raw_id_fields = ('profile', 'milestone')
-    date_hierarchy = 'earned_at'
-
-@admin.register(UserMilestoneProgress)
-class UserMilestoneProgressAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'milestone', 'progress_value', 'last_checked']
-    list_select_related = ('profile', 'milestone')
-    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'milestone__name']
-    raw_id_fields = ('profile', 'milestone')
 
 
 @admin.register(Comment)

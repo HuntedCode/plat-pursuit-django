@@ -6,7 +6,6 @@ New code should import directly from the specific service or util modules:
 
 Services (business logic):
 - trophies.services.badge_service - Badge checking and awarding
-- trophies.services.milestone_service - Milestone checking and awarding
 - trophies.services.leaderboard_service - Leaderboard computation
 - trophies.services.profile_stats_service - Profile statistics updates
 
