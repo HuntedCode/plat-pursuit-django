@@ -13,7 +13,6 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | Top of every hour | `process_scheduled_notifications` | Hourly | None |
 | Every 6 hours | `update_leaderboards` | Every 6 hours | Badge data should be reasonably current |
 | Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |
-| 00:00 UTC daily | `check_subscription_milestones` | Daily | None |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
@@ -91,15 +90,6 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 - **Dependencies**: None. Staff schedule notifications through the admin UI; this command just delivers them when they are due.
 - **Idempotency**: Safe to re-run. The `skip_locked` and status transition (`pending` to `processing` to `sent`) prevent double delivery. Already-sent notifications are ignored.
 - **Failure impact**: Scheduled announcements are delayed until the next successful run. Failed individual notifications are marked with `failed` status for admin visibility.
-
-### check_subscription_milestones
-
-- **Schedule**: Daily
-- **Command**: `python manage.py check_subscription_milestones`
-- **What it does**: Evaluates `subscription_months` milestones for every user with an active (open-ended) `SubscriptionPeriod`. Awards milestones at duration thresholds (e.g., 1 month, 3 months, 6 months, 1 year). Only queries profiles whose `SubscriptionPeriod.ended_at` is NULL, so non-subscribers are skipped entirely.
-- **Dependencies**: None. Subscription periods are maintained by webhook handlers.
-- **Idempotency**: Fully safe to re-run. The milestone service skips already-awarded milestones.
-- **Failure impact**: Users receive subscription milestones a day late. No data loss.
 
 ### populate_title_ids
 
@@ -283,8 +273,7 @@ The following diagram shows ordering constraints between jobs. Jobs on the same 
     EVERY 6 HOURS ──── update_leaderboards
 
 
-    DAILY ──────────── check_subscription_milestones
-                        populate_title_ids
+    DAILY ──────────── populate_title_ids
                             |
                             v
                         update_shovelware
@@ -331,7 +320,7 @@ There is no centralized cron job monitoring dashboard. Use these approaches to v
 - **Leaderboard staleness**: Each leaderboard page shows a "Last updated" timestamp sourced from the `_refresh_time` cache key.
 - **Sync queue backlog**: If profiles are not updating, check the TokenKeeper stats via `redis_admin` or the token monitoring admin page (`/staff/token-monitoring/`).
 - **Missing recap emails**: On the 3rd-4th of each month, spot-check that recap emails were sent by querying `MonthlyRecap.objects.filter(email_sent=False, is_finalized=True)`.
-- **Subscription milestones**: If a subscriber reports missing a milestone, run `check_subscription_milestones --dry-run` to verify the job would catch them.
+- **Premium tenure milestones**: Now the `premium_months` ladder in the milestones app — if a subscriber reports a missing tier, run `recompute_milestones --profile <psn_username>`.
 
 ### Manual re-runs
 

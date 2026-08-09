@@ -8,7 +8,7 @@ from .game_views import GamesListView, GameDetailView, GuideListView, RecentlyAd
 from .game_leaderboard_views import GameLeaderboardView
 from .trophy_views import TrophyCaseView, ToggleSelectionView
 from .profile_views import ProfilesListView, ProfileDetailView, LinkPSNView, ProfileVerifyView, ProfileEditorView
-from .badge_views import BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView
+from .badge_views import BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView
 # Checklist views removed during roadmap migration (DB tables retained)
 from .sync_views import ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView
 from .admin_views import (
@@ -40,7 +40,7 @@ __all__ = [
     # Profile views
     'ProfilesListView', 'ProfileDetailView', 'LinkPSNView', 'ProfileVerifyView', 'ProfileEditorView',
     # Badge views
-    'BadgeListView', 'BadgeDetailView', 'BadgeQuickPeekView', 'BadgeProgressPeekView', 'GroupBadgeInspectView', 'BadgeLeaderboardsView', 'OverallBadgeLeaderboardsView', 'MilestoneListView',
+    'BadgeListView', 'BadgeDetailView', 'BadgeQuickPeekView', 'BadgeProgressPeekView', 'GroupBadgeInspectView', 'BadgeLeaderboardsView', 'OverallBadgeLeaderboardsView',
     # Checklist views (removed, DB tables retained)
     # Sync views
     'ProfileSyncStatusView', 'TriggerSyncView', 'SearchSyncProfileView', 'AddSyncStatusView', 'ProfileSuggestView', 'SiteSuggestView',

@@ -183,13 +183,11 @@ class SubscriptionService:
             tier_name = SubscriptionService.get_tier_display_name(tier)
             SubscriptionService._send_subscription_welcome_email(user, tier_name)
 
-        # Check is_premium and subscription_months milestones
+        # Check the is_premium milestone. (subscription_months retired -- superseded by the
+        # milestones app's premium_months ladder, which the nightly sweep recomputes.)
         if is_premium and hasattr(user, 'profile'):
             from trophies.services.milestone_service import check_all_milestones_for_user
-            check_all_milestones_for_user(
-                user.profile,
-                criteria_types=['is_premium', 'subscription_months'],
-            )
+            check_all_milestones_for_user(user.profile, criteria_type='is_premium')
 
         return is_premium
 

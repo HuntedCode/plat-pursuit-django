@@ -42,7 +42,7 @@ def test_personal_pages_resolve_to_my_pursuit(path, slug):
 
 
 def test_other_hubs_unchanged():
-    assert resolve_hub_subnav(_req('/community/challenges/'))['hub'].key == 'community'
+    assert resolve_hub_subnav(_req('/community/lists/'))['hub'].key == 'community'
 
 
 def _grouped(ctx):
@@ -62,7 +62,7 @@ def test_browse_items_grouped_catalog_curation():
 def test_community_items_grouped_explore_create():
     groups = _grouped(hub_subnav(_req('/community/')))
     assert groups['Explore'] == ['hub', 'profiles', 'leaderboards']
-    assert groups['Create'] == ['rate_my_games', 'challenges', 'lists']
+    assert groups['Create'] == ['rate_my_games', 'lists']   # Challenges retired (Lane 2 teardown)
 
 
 def test_my_pursuit_items_grouped_progress_tools():
@@ -85,7 +85,7 @@ def test_strip_hidden_for_anon_on_public_member():
 def test_public_hubs_still_render_for_anon():
     # The anon gate is My-Pursuit-specific -- Browse/Community strips must still show.
     assert hub_subnav(_req('/games/'))['hub_section'] == 'browse'
-    assert hub_subnav(_req('/community/challenges/'))['hub_section'] == 'community'
+    assert hub_subnav(_req('/community/lists/'))['hub_section'] == 'community'
 
 
 # --- Support hub (phase 2) ---
