@@ -333,3 +333,70 @@ def test_the_hunters_own_rating_reaches_the_card(client):
 
     assert cards.get_card_data(profile, standing)['user_rating']['difficulty'] == 6
     assert 'Difficulty' in html and 'Fun' in html
+
+
+# ── Contract: the career half of the spine ────────────────────────────────────────────────────────
+
+def _contracted_game(profile, **kw):
+    """A completion whose concept is anchored + trusted-matched onto a live Contract."""
+    from trophies.models import Contract, IGDBMatch, Job
+    from django.utils import timezone as tz
+
+    game, group, standing = _completed_game(profile, **kw)
+    concept = game.concept
+    concept.anchor_migration_completed_at = tz.now()
+    concept.save(update_fields=['anchor_migration_completed_at'])
+    IGDBMatch.objects.create(concept=concept, igdb_id=4242, status=IGDBMatch.TRUSTED_STATUSES[0])
+    contract = Contract.objects.create(name='Ragnarok', slug='ragnarok', igdb_id=4242, is_live=True)
+    contract.jobs.add(
+        Job.objects.create(slug='berserker', name='Berserker', discipline='combat'),
+        Job.objects.create(slug='wayfarer', name='Wayfarer', discipline='exploration'),
+    )
+    return game, group, standing, contract
+
+
+def test_the_contract_and_its_jobs_reach_the_card():
+    """Badges are the collection, contracts are the career -- a card showing one and not the other
+    tells half the story of what the completion was worth."""
+    profile = ProfileFactory()
+    _, _, standing, _ = _contracted_game(profile, with_platinum=True)
+
+    contract = cards.get_card_data(profile, standing)['contract']
+
+    assert contract['name'] == 'Ragnarok'
+    assert sorted(contract['jobs']) == ['Berserker', 'Wayfarer']
+
+
+def test_banked_contract_xp_is_read_from_the_ledger():
+    """Amounts are paid at the multiplier active at grant time, so the card reports what was actually
+    banked rather than recomputing it from current config."""
+    from trophies.models import ContractXPGrant, EarnedContract
+
+    profile = ProfileFactory()
+    _, _, standing, contract = _contracted_game(profile, with_platinum=True)
+    earned = EarnedContract.objects.create(profile=profile, contract=contract, has_platinum=True)
+    # This contract's jobs only -- the 24-job catalogue is seeded, so Job.objects.all() is not it.
+    for job in contract.jobs.all():
+        ContractXPGrant.objects.create(profile=profile, job=job, amount=600,
+                                       earned_contract=earned, tier='platinum')
+
+    assert cards.get_card_data(profile, standing)['contract']['xp'] == 1200
+
+
+def test_a_reached_but_unaccepted_contract_reads_as_unclaimed():
+    """XP is sitting there waiting -- claiming is the action we want them to go take."""
+    from trophies.models import EarnedContract
+
+    profile = ProfileFactory()
+    _, _, standing, contract = _contracted_game(profile, with_platinum=True)
+    EarnedContract.objects.create(profile=profile, contract=contract, has_platinum=True)
+
+    data = cards.get_card_data(profile, standing)['contract']
+    assert data['xp'] == 0 and data['claimable'] is True
+
+
+def test_a_game_with_no_contract_simply_omits_the_line():
+    profile = ProfileFactory()
+    _, _, standing = _completed_game(profile, with_platinum=True)
+
+    assert cards.get_card_data(profile, standing)['contract'] is None

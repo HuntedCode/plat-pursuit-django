@@ -1,4 +1,4 @@
-{% load static %}{% comment %}
+{% load static humanize %}{% comment %}
 Plat card -- the share image for a game completion. Landscape only, 1200x630.
 
 TWO VARIANTS, one layout. `variant` is 'platinum' (the game defines a platinum, so finishing the
@@ -60,7 +60,7 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
     <div style="position: relative; height: 630px; padding: 40px 46px; box-sizing: border-box; display: flex; flex-direction: column;">
 
         {# ── 1. Identity: the hunter, and the brand ── #}
-        <div data-element="platinum-banner" style="display: flex; align-items: center; gap: 17px; flex-shrink: 0; padding-bottom: 20px; border-bottom: 1px solid rgba(64, 72, 83, 0.55);">
+        <div data-element="platinum-banner" style="display: flex; align-items: center; gap: 17px; flex-shrink: 0; padding-bottom: 20px; box-sizing: content-box; border-bottom: 1px solid rgba(64, 72, 83, 0.55);">
             {% if avatar_image %}
             <img src="{{ avatar_image }}" alt="" style="width: 58px; height: 58px; border-radius: 50%; object-fit: cover; border: 2px solid {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; box-sizing: border-box; flex-shrink: 0;" />
             {% else %}
@@ -68,8 +68,8 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
             {% endif %}
 
             <div style="flex: 1; min-width: 0;">
-                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 30px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.01em; line-height: 1.12; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ username }}</div>
-                <div style="font-size: 16px; font-weight: 500; color: #9da5b1; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 28px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.01em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ username }}</div>
+                <div style="line-height: 1.35; font-size: 15px; font-weight: 500; color: #9da5b1; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                     {% if display_title %}<span style="color: #f0f6fd; font-weight: 600;">{{ display_title }}</span><span style="color: #8a939f;"> &nbsp;&middot;&nbsp; </span>{% endif %}{{ total_platinums }} platinum{{ total_platinums|pluralize }}{% if total_completions %} &nbsp;&middot;&nbsp; {{ total_completions }} at 100%{% endif %}
                 </div>
             </div>
@@ -78,8 +78,8 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
             <div style="flex-shrink: 0; display: flex; align-items: center; gap: 13px;">
                 <img src="{% static 'images/logo.png' %}" alt="" style="width: 50px; height: 50px; border-radius: 9px; object-fit: cover; flex-shrink: 0;" />
                 <div style="text-align: left;">
-                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 23px; font-weight: 700; color: #f0f6fd; letter-spacing: 0.02em; line-height: 1.05;">Platinum Pursuit</div>
-                    <div style="font-size: 16px; font-weight: 600; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; letter-spacing: 0.04em; margin-top: 2px;">platpursuit.com</div>
+                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 24px; font-weight: 700; color: #f0f6fd; letter-spacing: 0.02em; line-height: 1.4;">Platinum Pursuit</div>
+                    <div style="line-height: 1.35; font-size: 15px; font-weight: 600; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; letter-spacing: 0.04em; margin-top: 4px;">platpursuit.com</div>
                 </div>
             </div>
         </div>
@@ -98,14 +98,20 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
 
                 {# What this card IS. #}
                 <div style="display: flex; align-items: center; gap: 13px;">
-                    {% if variant == 'platinum' and trophy_image %}
-                    <img src="{{ trophy_image }}" alt="" style="width: 38px; height: 38px; object-fit: cover; border-radius: 5px; flex-shrink: 0;" />
+                    {% if variant == 'platinum' %}
+                        {% if trophy_image %}
+                        <img src="{{ trophy_image }}" alt="" style="width: 38px; height: 38px; object-fit: cover; border-radius: 5px; flex-shrink: 0;" />
+                        {% else %}
+                        {% comment %}PSN dropped the icon. Fall back to a platinum-coloured ring, NOT the
+                        100% mark -- an amber "100" beside a cyan PLATINUM label reads as a bug.{% endcomment %}
+                        <div style="width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; border: 2px solid #27ebfe; box-sizing: border-box;"></div>
+                        {% endif %}
                     {% else %}
-                    <div style="width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; border: 2px solid #ff9350; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 13px; font-weight: 700; color: #ff9350; letter-spacing: -0.02em;">100</div>
+                    <div style="width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; border: 2px solid #ff9350; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 13px; line-height: 1; font-weight: 700; color: #ff9350; letter-spacing: -0.02em;">100</div>
                     {% endif %}
-                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 21px; font-weight: 700; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; letter-spacing: 0.16em; text-transform: uppercase;">{% if variant == 'platinum' %}Platinum{% else %}100% Complete{% endif %}</span>
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; line-height: 1.2; font-size: 21px; font-weight: 700; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; letter-spacing: 0.16em; text-transform: uppercase;">{% if variant == 'platinum' %}Platinum{% else %}100% Complete{% endif %}</span>
                     {% if ordinal %}
-                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 21px; font-weight: 600; color: #8a939f;">#{{ ordinal }}</span>
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; line-height: 1.2; font-size: 21px; font-weight: 600; color: #8a939f;">#{{ ordinal }}</span>
                     {% endif %}
                 </div>
 
@@ -113,7 +119,7 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                 <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 50px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 12px; max-height: 108px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
 
                 {% if platform_label or completed_at %}
-                <div style="font-size: 17px; font-weight: 500; color: #8a939f; margin-top: 11px; letter-spacing: 0.02em;">
+                <div style="line-height: 1.3; font-size: 17px; font-weight: 500; color: #8a939f; margin-top: 11px; letter-spacing: 0.02em;">
                     {% if platform_label %}{{ platform_label }}{% if is_regional and region %} &middot; {{ region|join:" / " }}{% endif %}{% endif %}{% if platform_label and completed_at %} &nbsp;&middot;&nbsp; {% endif %}{% if completed_at %}{{ completed_at|date:"F j, Y" }}{% endif %}
                 </div>
                 {% endif %}
@@ -127,7 +133,7 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                         <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 25px; font-weight: 700; color: #f0f6fd; line-height: 1;">{{ tier.count }}</span>
                     </div>
                     {% endfor %}
-                    <div style="margin-left: auto; font-size: 15px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase;">{{ group_defined }} Trophies</div>
+                    <div style="margin-left: auto; line-height: 1.2; font-size: 15px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase;">{{ group_defined }} Trophies</div>
                 </div>
                 {% endif %}
 
@@ -136,13 +142,13 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                     {% if variant == 'platinum' and trophy_earn_rate %}
                     <div>
                         <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ trophy_earn_rate }}%</div>
-                        <div style="font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">{{ rarity_label|default:"Rarity" }}</div>
+                        <div style="line-height: 1.2; font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">{{ rarity_label|default:"Rarity" }}</div>
                     </div>
                     {% endif %}
                     {% if playtime %}
                     <div>
                         <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ playtime }}</div>
-                        <div style="font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Played</div>
+                        <div style="line-height: 1.2; font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Played</div>
                     </div>
                     {% endif %}
                     {% comment %}Their own verdict -- data nobody else on the card has, and the reason
@@ -150,37 +156,53 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                     {% if user_rating.difficulty %}
                     <div>
                         <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ user_rating.difficulty }}<span style="font-size: 20px; color: #8a939f;">/10</span></div>
-                        <div style="font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Difficulty</div>
+                        <div style="line-height: 1.2; font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Difficulty</div>
                     </div>
                     {% endif %}
                     {% if user_rating.fun_ranking %}
                     <div>
                         <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ user_rating.fun_ranking }}<span style="font-size: 20px; color: #8a939f;">/10</span></div>
-                        <div style="font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Fun</div>
+                        <div style="line-height: 1.2; font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Fun</div>
                     </div>
                     {% endif %}
                 </div>
             </div>
         </div>
 
-        {# ── 3. The spine: what this completion fed ── #}
-        {% if badge_lines %}
-        <div style="flex-shrink: 0; display: flex; align-items: center; gap: 26px; padding-top: 16px; border-top: 1px solid rgba(64, 72, 83, 0.55); font-size: 19px; color: #9da5b1; white-space: nowrap; overflow: hidden;">
-            {% for line in badge_lines %}
+        {% comment %}── 3. The spine: what this completion fed. The two halves of the product --
+        badges are the collection, contracts are the career -- so showing one without the other tells
+        half the story of what a completion was worth.{% endcomment %}
+        {% if badge_lines or contract %}
+        <div style="flex-shrink: 0; display: flex; align-items: center; gap: 28px; padding-top: 15px; border-top: 1px solid rgba(64, 72, 83, 0.55); font-size: 19px; line-height: 1.3; color: #9da5b1; white-space: nowrap; overflow: hidden;">
+
+            {% if badge_lines %}{% with line=badge_lines.0 %}
             <div style="display: flex; align-items: center; gap: 9px; min-width: 0;">
                 {% if line.title_held and line.title %}
-                <span style="color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; font-size: 17px;">&#9670;</span>
+                <span style="color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; font-size: 17px; line-height: 1;">&#9670;</span>
                 <span style="font-weight: 700; color: #f0f6fd; overflow: hidden; text-overflow: ellipsis;">{{ line.title }}</span>
                 <span style="color: #8a939f;">&middot;</span>
                 <span style="color: #8a939f; overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</span>
                 {% else %}
-                <span style="overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</span>
-                {% if line.stages_total %}
-                <span style="color: #8a939f;">{{ line.stages_cleared }}/{{ line.stages_total }}</span>
-                {% endif %}
+                <span style="color: #8a939f; overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</span>
+                {% if line.stages_total %}<span style="color: #8a939f;">{{ line.stages_cleared }}/{{ line.stages_total }}</span>{% endif %}
                 {% endif %}
             </div>
-            {% endfor %}
+            {% endwith %}{% endif %}
+
+            {% comment %}Job Board contract: the jobs this completion levelled, and what it paid.{% endcomment %}
+            {% if contract %}
+            <div style="display: flex; align-items: center; gap: 9px; min-width: 0; margin-left: auto;">
+                {% if contract.jobs %}
+                <span style="color: #8a939f; overflow: hidden; text-overflow: ellipsis;">{{ contract.jobs|join:" &middot; " }}</span>
+                {% endif %}
+                {% if contract.xp %}
+                <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-weight: 700; color: #f0f6fd;">+{{ contract.xp|intcomma }}</span>
+                <span style="font-size: 15px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase;">XP</span>
+                {% elif contract.claimable %}
+                <span style="font-weight: 700; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %};">XP unclaimed</span>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
         {% endif %}
     </div>

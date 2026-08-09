@@ -25,7 +25,7 @@ which row happened to exist when the link was made.
 """
 import logging
 
-from django.db.models import Q
+from django.db.models import Q, Sum
 
 from trophies.models import (
     BadgeSeries, EarnedTrophy, ProfileGame, ProfileTrophyGroup, SeriesBadgeStanding, Stage,
@@ -246,6 +246,45 @@ def hunter_totals(profile):
     )
 
 
+def _contract_line(profile, concept):
+    """The Job Board contract this game IS, and what the hunter got for it -- or None.
+
+    The other half of the product spine: badges are the collection, contracts are the career. A card
+    that shows one and not the other tells half the story of what a completion was worth.
+
+    Contracts are keyed on the raw IGDB id, so membership is derived from the concept's IGDBMatch
+    (`contract_by_concept_map`) rather than stored. XP is read from the immutable grant ledger rather
+    than recomputed, because amounts are paid at the multiplier active at grant time and config
+    changes must never rewrite history.
+    """
+    if not concept:
+        return None
+    from trophies.models import ContractXPGrant, EarnedContract
+    from trophies.services.contract_service import contract_by_concept_map
+
+    contract = contract_by_concept_map([concept.id]).get(concept.id)
+    if not contract:
+        return None
+
+    earned = EarnedContract.objects.filter(profile=profile, contract=contract).first()
+    xp = 0
+    if earned:
+        xp = (
+            ContractXPGrant.objects
+            .filter(profile=profile, earned_contract=earned)
+            .aggregate(total=Sum('amount'))['total'] or 0
+        )
+    return {
+        'name': contract.name,
+        'slug': contract.slug,
+        'jobs': [j.name for j in contract.jobs.all()],
+        'xp': xp,
+        # Reached but not accepted: the XP is sitting there waiting to be claimed. Worth saying on the
+        # card, since claiming is the action we want the hunter to go take.
+        'claimable': bool(earned and not xp),
+    }
+
+
 def _displayed_title(profile):
     """The title the hunter is currently wearing, or ''."""
     return (
@@ -389,5 +428,6 @@ def get_card_data(profile, standing):
         'platform_label': ' / '.join(game.title_platform or []),
 
         'badge_lines': _badge_lines(profile, concept),
+        'contract': _contract_line(profile, concept),
         'user_rating': _user_rating(profile, concept),
     }
