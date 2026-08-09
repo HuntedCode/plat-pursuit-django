@@ -1,118 +1,140 @@
 {% extends 'base.html' %}
-{% load static custom_filters %}
+{% load static humanize %}
+{% block title %}Titles{% endblock %}
+{% block meta_description %}The titles you've earned on Platinum Pursuit, the ones within reach, and the full vocabulary waiting to be claimed.{% endblock %}
 
-{% block title %}My Titles{% endblock %}
-{% block robots %}noindex, nofollow{% endblock %}
+{% comment %}
+Titles: the words you can wear.
+
+A title belongs to a badge SERIES -- earn any edition, earn the word. So the page isn't a second
+Collection (that's the medallions); it's the vocabulary. Structure:
+
+  1. The NAMEPLATE -- the word you're wearing right now, as the page's subject.
+  2. A .pp-switch: Yours / Within reach / All.
+  3. One entry component for all three views (`_title_row.html`), adapting its trailing slot to state.
+
+"Within reach" is the motivating slice: unheld titles you've already started, closest first, off the
+materialized SeriesBadgeStanding.progress_bp. All three panels are server-rendered; JS only toggles.
+{% endcomment %}
 
 {% block content %}
-<div class="tt">
+<div class="pp-gbrowse">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ── Header ─────────────────────────────────────────────────────────── #}
-    <div class="tt-card tt-header">
-        <div>
-            <div class="tt-header__title">
-                <svg class="tt-header__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg>
-                <h1>My Titles</h1>
+    {# ── Header: identity + the nameplate + the tallies ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-center gap-2">
+                <svg class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></svg>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Titles</h1>
             </div>
-            <p class="tt-header__sub">Titles are earned through dedication. Equip one to wear it across PlatPursuit.</p>
-        </div>
-    </div>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                Earn a badge series, earn its word. Wear the one that says the most about you.
+            </p>
 
-    {# ── Hero: the equipped title is the centerpiece ────────────────────── #}
-    <div class="tt-card tt-hero{% if displayed_title_id %} is-equipped{% endif %}" id="tt-hero">
-        <div class="tt-hero__main">
-            <a href="{% url 'profile_detail' profile.psn_username %}" class="tt-hero__avatar">
-                {% include 'partials/_avatar.html' with url=profile.avatar_url alt=profile.display_psn_username %}
-            </a>
-            <div class="tt-hero__plate">
-                <span class="tt-hero__cap">
-                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg>
-                    Equipped Title
-                </span>
-                <div class="tt-hero__title-row">
-                    <svg class="tt-hero__sparkle" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" data-sparkle><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg>
-                    <span class="tt-hero__name{% if profile.user_is_premium %} is-legendary{% endif %}{% if not displayed_title_id %} is-empty{% endif %}" id="tt-hero-title">{% if displayed_title_id %}{{ displayed_title_name }}{% else %}No title equipped{% endif %}</span>
-                    <svg class="tt-hero__sparkle" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" data-sparkle><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg>
-                </div>
-                <p class="tt-hero__flavor" data-flavor>{% if displayed_title_id %}Your legend, your identity.{% else %}Every legend needs a name. Equip one below.{% endif %}</p>
-                <button type="button" class="tt-hero__unequip" data-action="unequip" aria-label="Unequip title">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    Remove
+            {# ── The nameplate: what you're wearing right now. ── #}
+            <div class="ttl-plate{% if not equipped_title %} ttl-plate--empty{% endif %} mt-3 md:mt-4" data-ttl-plate>
+                <span class="ttl-plate__label">Currently wearing</span>
+                {% if equipped_title %}
+                <span class="ttl-plate__word" data-ttl-plate-word>{{ equipped_title.name }}</span>
+                <button type="button" class="ttl-plate__clear" data-ttl-unequip>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    Take it off
                 </button>
+                {% else %}
+                <span class="ttl-plate__word ttl-plate__word--none" data-ttl-plate-word>No title equipped</span>
+                <span class="ttl-plate__hint">Pick one from Yours below</span>
+                {% endif %}
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Yours</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ yours_count }}">{{ yours_count }}</div>
+                    <div class="scard__sub">words earned</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Within reach</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ within_reach_count }}">{{ within_reach_count }}</div>
+                    <div class="scard__sub">already started</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Vocabulary</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ all_count }}">{{ all_count }}</div>
+                    <div class="scard__sub">titles exist</div>
+                </div>
             </div>
         </div>
-        <div class="tt-hero__strip">
-            <span class="tt-hero__trophy" style="color: var(--color-trophy-platinum);"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>{{ profile.total_plats }}</span>
-            <span class="tt-hero__trophy" style="color: var(--color-trophy-gold);"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>{{ profile.total_golds }}</span>
-            <span class="tt-hero__trophy" style="color: var(--color-trophy-silver);"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>{{ profile.total_silvers }}</span>
-            <span class="tt-hero__trophy" style="color: var(--color-trophy-bronze);"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>{{ profile.total_bronzes }}</span>
-            <span class="tt-hero__strip-sep"></span>
-            <span class="tt-hero__earned">{{ total_earned }} title{{ total_earned|pluralize }} earned</span>
-        </div>
+    </section>
+
+    {% include 'partials/ad_unit.html' with ad_slot="8944812256" %}
+
+    {# ── Switcher: the three ways in. All panels are SSR; JS only toggles. ── #}
+    <div class="pp-switch mb-3" role="tablist" aria-label="Title views" data-ttl-switch>
+        <button type="button" role="tab" aria-selected="true" aria-controls="ttl-yours" class="pp-switch__chip is-active" data-view="yours">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+            <span class="pp-switch__lbl">Yours</span><span class="ttl-chip-n">{{ yours_count }}</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="ttl-reach" class="pp-switch__chip" data-view="reach">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            <span class="pp-switch__lbl">Within reach</span><span class="ttl-chip-n">{{ within_reach_count }}</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="ttl-all" class="pp-switch__chip" data-view="all">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            <span class="pp-switch__lbl">All</span><span class="ttl-chip-n">{{ all_count }}</span>
+        </button>
     </div>
 
-    {# ── Special Titles (manual, earned only) — up top so they aren't buried ── #}
-    {% if special_titles %}
-    <section class="tt-card tt-section tt-section--special" data-tt-section="special">
-        <div class="tt-section__head">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg>
-            <h2>Special Titles</h2>
-            <span class="tt-section__tally"><span class="pp-tally">{{ special_titles|length }}</span></span>
+    {# ── Yours ── #}
+    <div id="ttl-yours" role="tabpanel" class="ttl-panel" data-ttl-panel="yours">
+        {% if yours %}
+        <div class="ttl-list" data-ttl-grid>
+            {% for entry in yours %}{% include 'trophies/partials/titles/_title_row.html' with entry=entry view='yours' %}{% endfor %}
         </div>
-        <p class="tt-section__sub">Bestowed upon the worthy. These can't be earned through gameplay.</p>
-        <div class="tt-toolbar">
-            <span></span>
-            <select class="tt-sort" aria-label="Sort special titles">
-                <option value="recent">Recently earned</option>
-                <option value="name">Name (A-Z)</option>
-            </select>
+        {% else %}
+        <div class="ttl-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></svg>
+            <p class="ttl-empty__title">No titles yet</p>
+            <p class="ttl-empty__body">Every badge series carries a word. Earn one and it lands here.</p>
+            <a href="{% url 'badges_list' %}" class="ttl-empty__cta">Browse badges</a>
         </div>
-        <div class="tt-cards" data-tt-items>
-            {% for entry in special_titles %}{% include 'trophies/partials/titles/_title_card.html' with entry=entry premium=profile.user_is_premium special=True %}{% endfor %}
-        </div>
-    </section>
-    {% endif %}
-
-    {# ── Badge Titles ───────────────────────────────────────────────────── #}
-    {% if badge_titles %}
-    <section class="tt-card tt-section tt-section--badge" data-tt-section="badge">
-        <div class="tt-section__head">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <h2>Badge Titles</h2>
-            <span class="tt-section__tally"><span class="pp-tally">{{ badge_earned }}</span><span class="tt-section__tally-sub">/ {{ badge_total }}</span></span>
-        </div>
-        <p class="tt-section__sub">Worn proof of the badges you've claimed. Tap a title you own to equip it.</p>
-        <div class="tt-toolbar">
-            <div class="tt-seg">
-                <button type="button" class="tt-seg__btn is-active" data-filter="all">All</button>
-                <button type="button" class="tt-seg__btn" data-filter="have">Have</button>
-                <button type="button" class="tt-seg__btn" data-filter="need">Need</button>
-            </div>
-            <select class="tt-sort" aria-label="Sort badge titles">
-                <option value="name">Name (A-Z)</option>
-                <option value="recent">Recently earned</option>
-            </select>
-        </div>
-        <div class="tt-cards" data-tt-items>
-            {% for entry in badge_titles %}{% include 'trophies/partials/titles/_title_card.html' with entry=entry premium=profile.user_is_premium %}{% endfor %}
-        </div>
-        <p class="tt-none" hidden>No badge titles match this filter.</p>
-    </section>
-    {% endif %}
-
-    {# ── Empty (no titles at all) ───────────────────────────────────────── #}
-    {% if not badge_titles and not special_titles %}
-    <div class="tt-card tt-empty">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4l3 12h14l3-12-5.5 3L12 1 7.5 7 2 4z"/><path d="M5 16v4h14v-4"/></svg>
-        <p class="tt-empty__title">No titles available yet</p>
-        <p class="tt-empty__body">Earn badges to unlock titles.</p>
+        {% endif %}
     </div>
-    {% endif %}
+
+    {# ── Within reach: unheld, already started, closest first. ── #}
+    <div id="ttl-reach" role="tabpanel" class="ttl-panel" data-ttl-panel="reach" hidden>
+        {% if within_reach %}
+        <p class="ttl-note">Series you've already started. Closest first.</p>
+        <div class="ttl-list" data-ttl-grid>
+            {% for entry in within_reach %}{% include 'trophies/partials/titles/_title_row.html' with entry=entry view='reach' %}{% endfor %}
+        </div>
+        {% else %}
+        <div class="ttl-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            <p class="ttl-empty__title">Nothing in flight</p>
+            <p class="ttl-empty__body">Start a badge series and its word will show up here with how close you are.</p>
+            <a href="{% url 'badges_list' %}" class="ttl-empty__cta">Find a series</a>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ── All: the full vocabulary. ── #}
+    <div id="ttl-all" role="tabpanel" class="ttl-panel" data-ttl-panel="all" hidden>
+        {% if all_titles %}
+        <p class="ttl-note">Every word in circulation, and what earns it.</p>
+        <div class="ttl-list" data-ttl-grid>
+            {% for entry in all_titles %}{% include 'trophies/partials/titles/_title_row.html' with entry=entry view='all' %}{% endfor %}
+        </div>
+        {% else %}
+        <div class="ttl-empty">
+            <p class="ttl-empty__title">No titles in circulation yet</p>
+            <p class="ttl-empty__body">Badge series haven't been released. Check back soon.</p>
+        </div>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}
 
 {% block js_scripts %}
-<script src="{% static 'js/my-titles.js' %}"></script>
-<script>PlatPursuit.MyTitlesPage.init();</script>
+    <script src="{% static 'js/titles.js' %}"></script>
 {% endblock %}

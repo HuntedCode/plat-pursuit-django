@@ -128,3 +128,48 @@ def test_empty_state_for_a_hunter_with_nothing(client):
     assert resp.status_code == 200
     assert resp.context['yours'] == [] and resp.context['within_reach'] == []
     assert resp.context['equipped_title'] is None
+
+
+# ── Render ────────────────────────────────────────────────────────────────────────────────────────
+
+def test_page_renders_the_three_views_and_the_nameplate(client):
+    p = ProfileFactory()
+    held = _series_with_title('Astro', 'Bot Wrangler')
+    started = _series_with_title('Ratchet', 'Lombax Legend')
+    UserTitle.objects.create(profile=p, title=held.title, source_type='badge_series',
+                             source_id=held.id, is_displayed=True)
+    SeriesBadgeStanding.objects.create(profile=p, series_slug=started.series_slug,
+                                       progress_bp=6000, stages_cleared=3, stages_total=5)
+
+    content = _get(client, p).content.decode()
+
+    # The word you're wearing is the page's subject.
+    assert 'ttl-plate' in content and 'Bot Wrangler' in content
+    # All three panels are server-rendered behind the switcher.
+    assert 'data-ttl-panel="yours"' in content
+    assert 'data-ttl-panel="reach"' in content
+    assert 'data-ttl-panel="all"' in content
+    assert 'pp-switch' in content
+    # The unheld-but-started word shows its progress toward the title.
+    # (The cleared count sits in its own <strong>, so match around it.)
+    assert 'Lombax Legend' in content
+    assert '>3</strong> of 5 stages' in content
+    assert '--horizon-progress: 60%' in content
+    # No unrendered template syntax leaked (multi-line {# #} is a known trap).
+    assert '{%' not in content and '{#' not in content
+
+
+def test_equipped_row_is_marked_worn_and_others_offer_equip(client):
+    p = ProfileFactory()
+    worn = _series_with_title('Astro', 'Bot Wrangler')
+    spare = _series_with_title('Ratchet', 'Lombax Legend')
+    UserTitle.objects.create(profile=p, title=worn.title, source_type='badge_series',
+                             source_id=worn.id, is_displayed=True)
+    UserTitle.objects.create(profile=p, title=spare.title, source_type='badge_series',
+                             source_id=spare.id)
+
+    content = _get(client, p).content.decode()
+
+    assert 'is-worn' in content            # the equipped row carries the accent edge
+    assert 'data-ttl-equip' in content     # the other one offers "Wear this"
+    assert 'data-ttl-unequip' in content   # the nameplate offers "Take it off"

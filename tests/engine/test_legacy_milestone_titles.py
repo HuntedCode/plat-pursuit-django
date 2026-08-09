@@ -32,7 +32,8 @@ def test_only_the_three_manual_awards_survive_as_special(client):
     client.force_login(profile.user)
     resp = client.get('/titles/')
 
-    assert [e['title'].name for e in resp.context['special_titles']] == ['Case Hardened']
+    specials = [e for e in resp.context['yours'] if e['is_special']]
+    assert [e['name'] for e in specials] == ['Case Hardened']
     assert not UT.objects.filter(title=ladder).exists()
 
 
@@ -62,21 +63,24 @@ def test_titles_page_shows_surviving_awards_as_special(client):
     resp = client.get('/titles/')
 
     assert resp.status_code == 200
-    specials = resp.context['special_titles']
-    assert [e['title'].name for e in specials] == ['Unboxed!']
-    assert specials[0]['source'] is None       # no live source row to describe
-    assert specials[0]['earned'] is True
-    assert resp.context['total_earned'] == 1
+    specials = [e for e in resp.context['yours'] if e['is_special']]
+    assert [e['name'] for e in specials] == ['Unboxed!']
+    assert specials[0]['frame'] is None            # no live source badge to show
+    assert specials[0]['series_name'] is None      # nothing to describe it
+    assert specials[0]['held'] is True
+    assert resp.context['yours_count'] == 1
 
 
-def test_milestone_title_also_granted_by_a_badge_is_not_double_counted(client):
-    """A surviving milestone title whose Title a live badge also grants belongs to the badge
-    section only -- listing it in both would double-count total_earned."""
-    from tests.factories import BadgeFactory
+def test_milestone_title_also_granted_by_a_live_series_is_not_duplicated(client):
+    """If a surviving one-off title's Title is ALSO the title of a live badge series, it belongs to the
+    vocabulary entry (which can describe it) -- not to Special as well, which would list it twice."""
+    from trophies.models import SeriesBadgeStanding  # noqa: F401  (kept for symmetry with the suite)
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
 
     profile = ProfileFactory()
     title = Title.objects.create(name='Case Hardened')
-    BadgeFactory(title=title, is_live=True)      # a live badge grants the same Title
+    series = BadgeSeriesFactory(name='Knife Series', title=title)
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
     UserTitle.objects.create(
         profile=profile, title=title, source_type='milestone', source_id=999999,
     )
@@ -85,6 +89,8 @@ def test_milestone_title_also_granted_by_a_badge_is_not_double_counted(client):
     resp = client.get('/titles/')
 
     assert resp.status_code == 200
-    assert resp.context['special_titles'] == []                     # not duplicated here
-    assert [e['title'].name for e in resp.context['badge_titles']] == ['Case Hardened']
-    assert resp.context['total_earned'] == 1                        # counted exactly once
+    yours = resp.context['yours']
+    assert [e['name'] for e in yours] == ['Case Hardened']       # listed exactly once
+    assert yours[0]['is_special'] is False                        # as the series entry, which can describe it
+    assert yours[0]['series_name'] == 'Knife Series'
+    assert resp.context['yours_count'] == 1

@@ -1,0 +1,78 @@
+{% load humanize %}
+{% comment %}
+One title entry. The WORD is the hero; the badge series is supporting context.
+
+`view` adapts only the trailing slot, so all three panels read as one family:
+  yours -> equip control (or the Equipped marker)
+  reach -> a Horizon toward the word + "N of M stages"
+  all   -> how many hunters wear it
+{% endcomment %}
+<article class="ttl-row{% if entry.held %} is-held{% endif %}{% if entry.is_displayed %} is-worn{% endif %}{% if entry.is_special %} is-special{% endif %}"
+         data-ttl-row data-title-id="{{ entry.title.id }}">
+
+    {# Source object: the medallion for a series title, a mark for a one-off award. #}
+    <span class="ttl-row__obj" aria-hidden="true">
+        {% if entry.frame %}
+        {% include 'components/badge_medallion.html' with frame=entry.frame no_id=True no_count=True %}
+        {% elif entry.is_special %}
+        <span class="ttl-row__spark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="3"/></svg>
+        </span>
+        {% endif %}
+    </span>
+
+    <div class="ttl-row__id">
+        <h3 class="ttl-row__word">{{ entry.name }}</h3>
+        <p class="ttl-row__from">
+            {% if entry.is_special %}
+            <span class="ttl-row__tag">Special award</span>
+            {% else %}
+            <a href="{{ entry.url }}" class="ttl-row__series">{{ entry.series_name }}</a>
+            {% endif %}
+            {% if view == 'all' and entry.holders %}
+            <span class="ttl-row__wearers">&middot; {{ entry.holders|intcomma }} wearing</span>
+            {% endif %}
+        </p>
+
+        {% if view == 'reach' %}
+        <div class="ttl-row__prog">
+            <span class="pp-horizon" role="progressbar" aria-label="Progress toward {{ entry.name }}"
+                  aria-valuenow="{{ entry.progress_pct }}" aria-valuemin="0" aria-valuemax="100"
+                  style="--horizon-progress: {{ entry.progress_pct }}%;">
+                <span class="pp-horizon__track"><span class="pp-horizon__fill"></span></span>
+            </span>
+            <span class="ttl-row__prog-cap">
+                {% if entry.stages_total %}<strong class="pp-tally">{{ entry.stages_cleared }}</strong> of {{ entry.stages_total }} stages{% else %}{{ entry.progress_pct }}%{% endif %}
+            </span>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="ttl-row__trail">
+        {% if view == 'yours' %}
+            {% if entry.is_displayed %}
+            <span class="ttl-row__worn" data-ttl-worn>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                Wearing
+            </span>
+            {% else %}
+            <button type="button" class="ttl-row__equip" data-ttl-equip data-title-id="{{ entry.title.id }}"
+                    data-title-name="{{ entry.name }}">Wear this</button>
+            {% endif %}
+            {% if entry.earned_at %}<span class="ttl-row__date">{{ entry.earned_at|date:"M j, Y" }}</span>{% endif %}
+        {% elif view == 'all' %}
+            {% if entry.held %}
+            <span class="ttl-row__have">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                Yours
+            </span>
+            {% elif entry.progress_pct %}
+            <span class="ttl-row__pct pp-tally">{{ entry.progress_pct }}%</span>
+            {% else %}
+            <span class="ttl-row__locked">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </span>
+            {% endif %}
+        {% endif %}
+    </div>
+</article>
