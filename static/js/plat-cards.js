@@ -179,12 +179,12 @@
     function applyTheme() {
         var scaler = dlg && dlg.querySelector('[data-share-preview]');
         var card = scaler && scaler.querySelector('.share-image-content');
-        var picked = dlg && dlg.querySelector('[data-share-theme]:checked');
-        if (!card || !picked) { return; }
-        var def = cardThemes()[picked.value];
+        var choice = picked();
+        if (!card || !choice) { return; }
+        var def = cardThemes()[choice.value];
         if (!def) { return; }
         if (def.is_game_art) {
-            var src = picked().dataset.artUrl || '';
+            var src = choice.dataset.artUrl || '';
             card.style.background = src
                 ? 'linear-gradient(rgba(5, 8, 12, 0.48), rgba(5, 8, 12, 0.48)), url("' + src + '")'
                 : def.background;
