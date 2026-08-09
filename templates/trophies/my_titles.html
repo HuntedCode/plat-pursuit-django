@@ -1,20 +1,21 @@
 {% extends 'base.html' %}
 {% load static humanize %}
 {% block title %}Titles{% endblock %}
-{% block meta_description %}The titles you've earned on Platinum Pursuit: what each game's world calls you once you've conquered it, which are within reach, and every one still out there.{% endblock %}
+{% block meta_description %}The titles you've earned on Platinum Pursuit: every one clawed out of a badge series, which are within reach, and what it takes to claim the rest.{% endblock %}
 
 {% comment %}
-Titles: what each world calls you once you've conquered it.
+Titles: what you've earned the right to be called.
 
-A title belongs to a badge SERIES -- clear any edition and that game's world names you (Crash ->
-"Crate Crusher", Sly Cooper -> "Master Thief"). So the page isn't a second Collection (that's the
-medallions); it's the set of identities you've earned. Structure:
+A title belongs to a badge SERIES -- clear it and the title is yours (Crash -> "Crate Crusher", Sly
+Cooper -> "Master Thief", GTA -> "Criminal Mastermind"). Earned through the work, never handed out,
+the way a knight earns his. So the page isn't a second Collection (that's the medallions); it's the
+record of what you've proven. Structure:
 
   1. The NAMEPLATE -- the title you're wearing right now, as the page's subject.
   2. A .pp-switch: Yours / Within reach / All.
   3. One entry component for all three views (`_title_row.html`), adapting its trailing slot to state.
 
-"Within reach" is the motivating slice: unearned titles whose world you've already set foot in,
+"Within reach" is the motivating slice: unearned titles whose series you've already put work into,
 closest first, off the materialized SeriesBadgeStanding.progress_bp. All three panels are
 server-rendered; JS only toggles.
 {% endcomment %}
@@ -31,7 +32,7 @@ server-rendered; JS only toggles.
                 <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Titles</h1>
             </div>
             <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                Conquer a series and its world gives you a name. Wear the one you've earned the hardest.
+                Every title here is earned, never handed out. Clear a badge series and it's yours to wear.
             </p>
 
             {# ── The nameplate: what you're wearing right now. ── #}
@@ -58,7 +59,7 @@ server-rendered; JS only toggles.
                 <div class="scard">
                     <div class="scard__label">Within reach</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ within_reach_count }}">{{ within_reach_count }}</div>
-                    <div class="scard__sub">worlds you've entered</div>
+                    <div class="scard__sub">series in progress</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">All titles</div>
@@ -94,7 +95,7 @@ server-rendered; JS only toggles.
         {% if yours %}
         {% comment %}Every panel carries a note line -- it sets the sort AND keeps the first card at the
         same vertical position across all three, so switching views doesn't jump.{% endcomment %}
-        <p class="ttl-note">Worlds that have named you. Newest first.</p>
+        <p class="ttl-note">Titles you've earned. Newest first.</p>
         <div class="ttl-list" data-ttl-grid>
             {% for entry in yours %}{% include 'trophies/partials/titles/_title_row.html' with entry=entry view='yours' %}{% endfor %}
         </div>
@@ -102,7 +103,7 @@ server-rendered; JS only toggles.
         <div class="ttl-empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></svg>
             <p class="ttl-empty__title">No titles yet</p>
-            <p class="ttl-empty__body">Conquer a badge series and its world will name you.</p>
+            <p class="ttl-empty__body">Clear a badge series and its title is yours.</p>
             <a href="{% url 'badges_list' %}" class="ttl-empty__cta">Browse badges</a>
         </div>
         {% endif %}
@@ -111,7 +112,7 @@ server-rendered; JS only toggles.
     {# ── Within reach: unheld, already started, closest first. ── #}
     <div id="ttl-reach" role="tabpanel" class="ttl-panel" data-ttl-panel="reach" hidden>
         {% if within_reach %}
-        <p class="ttl-note">Worlds you've already set foot in. Closest first.</p>
+        <p class="ttl-note">Series you've already put work into. Closest first.</p>
         <div class="ttl-list" data-ttl-grid>
             {% for entry in within_reach %}{% include 'trophies/partials/titles/_title_row.html' with entry=entry view='reach' %}{% endfor %}
         </div>
@@ -128,7 +129,7 @@ server-rendered; JS only toggles.
     {# ── All: the full vocabulary. ── #}
     <div id="ttl-all" role="tabpanel" class="ttl-panel" data-ttl-panel="all" hidden>
         {% if all_titles %}
-        <p class="ttl-note">Every title out there, and the world that grants it.</p>
+        <p class="ttl-note">Every title in circulation, and what it takes to earn one.</p>
         <div class="ttl-list" data-ttl-grid>
             {% for entry in all_titles %}{% include 'trophies/partials/titles/_title_row.html' with entry=entry view='all' %}{% endfor %}
         </div>

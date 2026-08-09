@@ -1,10 +1,10 @@
 /* ============================================================
- * TITLES (.ttl-) -- what each world calls you once you've conquered it.
+ * TITLES (.ttl-) -- what you've earned the right to be called.
  *
  * The TITLE is the subject of this page, so it carries the display face and the size everywhere: huge on
  * the nameplate, still the largest thing in a row. The badge medallion is deliberately small supporting
- * context -- Collection is where medallions are the object; here they only name the world the title
- * came from.
+ * context -- Collection is where medallions are the object; here they only name the series the title
+ * was earned in.
  *
  * Three views share ONE row component; only the trailing slot changes (equip control / progress / wearers),
  * so switching views never feels like landing on a different page.
