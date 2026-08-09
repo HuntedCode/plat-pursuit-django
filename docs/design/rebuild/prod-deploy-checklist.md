@@ -48,7 +48,7 @@ These are already on the `main`/production path and can/should happen before cut
 | # | Task | Action | When | Done |
 |---|------|--------|------|------|
 | A | **Art Reveal self-heal** — auto-completes already-revealed funder claims (attribution + email) via an event-wide sweep | Merge the self-heal PR to `main`, redeploy | Now | ☐ |
-| B | ~~**Retire deprecated milestones**~~ — **OBSOLETE (2026-08).** Superseded by the Lane 2 teardown: the entire legacy milestone engine (and the `retire_milestones` command itself) was deleted. Migration `0282_drop_legacy_milestone_engine` removes the ladder-granted `UserTitle` rows and drops the tables on deploy. **Two follow-ups, though:** (1) BEFORE deploying, run the survivor sanity query below — it should return 0; (2) AFTER `migrate`, run `python manage.py populate_user_titles` (idempotent) to re-create any badge-granted title that happened to carry `source_type='milestone'` and was swept up. | `python manage.py populate_user_titles` (after migrate) | With the teardown deploy | ☐ |
+| B | ~~**Retire deprecated milestones**~~ — **OBSOLETE (2026-08).** Superseded by the Lane 2 teardown: the entire legacy milestone engine (and the `retire_milestones` command itself) was deleted. Migrations `0282` + `0283` remove the ladder-granted `UserTitle` rows and drop the tables on deploy — nothing to run by hand. **One follow-up:** after `migrate`, run `python manage.py populate_user_titles` (idempotent) to re-create any badge-granted title that happened to carry `source_type='milestone'` and was swept up. | `python manage.py populate_user_titles` (after migrate) | With the teardown deploy | ☐ |
 | C | **Recompute job XP under the flat curve** — the XP-economy engine PR switches per-job leveling from the old escalating capped curve to flat cap-less (K=3,000) + T=6,000. Ledger amounts (`ContractXPGrant`) are immutable; only the level *derivation* changes, so every `ProfileJobXP.level` must be re-derived. Idempotent (rebuilds from the ledger). Run AFTER migration `0255_*` is applied. | `python manage.py recompute_job_xp --all` | Now (with the economy PR deploy) | ☐ |
 | D | **Backfill community completion stats** — populates the new `Game.plats_earned_count` / `full_completion_count` / `avg_completion` columns immediately (they'd otherwise fill within the nightly `recalc_earn_rates` budget). Idempotent (recomputes from ground truth). Run AFTER migration `0256_game_avg_completion...` is applied; use a low-traffic window (full pass over ProfileGame). | `python manage.py recalc_earn_rates --max-minutes 600` | Now (with the community-stats PR deploy) | ☐ |
 | E | **Universal-search trigram indexes** — migration `0257_universal_search_trgm_indexes` runs `CREATE EXTENSION pg_trgm` then builds three GIN trigram indexes with `AddIndexConcurrently` (`atomic = False`). Auto-applies on deploy; **no command, no backfill**. The only prerequisites: the DB role can create the `pg_trgm` extension (Render Postgres allows it), and the deploy tolerates a non-atomic migration. Verify it applied (`\di *_trgm` shows the three indexes). Dormant until the rebuilt navbar (`site_suggest`) ships. | Watch the deploy migrate step | Now (main PR already merged) | ☐ |
@@ -57,21 +57,19 @@ These are already on the `main`/production path and can/should happen before cut
 
 ---
 
-## Pre-deploy sanity query (milestone teardown)
+## Post-deploy verification (milestone teardown)
 
-Migration `0282` matches ladder titles by `source_id IN (ladder milestone ids)`. Two row shapes would slip
-through and then render as bogus "Special" titles: a `source_type='milestone'` row with a NULL `source_id`,
-or one pointing at a Milestone already deleted by an earlier retirement. Run this BEFORE deploying, while the
-table still exists — expect `0`:
+`0282` deleted ladder titles by `source_id`, which misses rows with a NULL or already-dangling `source_id`
+(they'd linger as bogus "Special" titles — this actually happened on dev). `0283` cleans those up by title
+name. To confirm, only the three genuine one-off awards should remain:
 
 ```sql
-SELECT count(*) FROM trophies_usertitle ut
-WHERE ut.source_type='milestone'
-  AND (ut.source_id IS NULL
-       OR NOT EXISTS (SELECT 1 FROM trophies_milestone m WHERE m.id = ut.source_id));
+SELECT DISTINCT t.name FROM trophies_usertitle ut
+JOIN trophies_title t ON t.id = ut.title_id
+WHERE ut.source_type = 'milestone';
 ```
 
-Anything above 0 needs a decision (keep as a special award, or delete) before the tables are gone.
+Expected: nothing outside `Patron of the Arts`, `Fastest Plat in the West`, `Case Hardened`.
 
 ---
 
