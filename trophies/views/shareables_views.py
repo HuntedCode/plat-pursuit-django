@@ -26,7 +26,7 @@ from django.views.generic import TemplateView
 
 from core.services.tracking import track_page_view
 from trophies.models import EarnedTrophy
-from trophies.themes import get_available_themes_for_grid
+from trophies.themes import get_available_themes_for_grid, get_plat_card_themes
 
 logger = logging.getLogger(__name__)
 
@@ -154,11 +154,14 @@ class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Templ
         context['total_platinums'] = total_count
         context['shovelware_count'] = shovelware_count
 
-        # Themes for the color-grid modal (include game art for the platinum cards)
-        context['available_themes'] = get_available_themes_for_grid(
-            include_game_art=True,
-            grouped=True,
-        )
+        # The CURATED plat-card set, not all ~105 site gradients. The card only renders the six keys in
+        # PLAT_CARD_THEME_KEYS and silently falls back to the house ground for anything else, so passing
+        # the full grid meant a hunter picked "Sakura", watched the preview turn pink, and downloaded a
+        # dark grey card -- every time, for 99 of the 105 options, with no error. Meanwhile the six that
+        # DO work weren't offered at all.
+        context['available_themes'] = [
+            ('plat_card', 'Card Styles', get_plat_card_themes()),
+        ]
 
         # Breadcrumbs
         context['breadcrumb'] = [

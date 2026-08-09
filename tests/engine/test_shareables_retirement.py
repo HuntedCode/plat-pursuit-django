@@ -48,12 +48,22 @@ def test_game_detail_no_longer_offers_a_share_card(client):
     """A plat card comes from My Shareables and nowhere else. Removing the button also drops
     share-image.js, shareable-manager.js, color-grid-modal.js and an inlined GRADIENT_THEMES blob
     off this page."""
-    game = GameFactory()
+    from tests.factories import EarnedTrophyFactory, ProfileGameFactory, TrophyFactory
+
+    game = GameFactory(defined_trophies={'bronze': 5, 'platinum': 1})
     profile = ProfileFactory(is_linked=True)
+    # The button lived behind `if not has_platinum: return {}` -- without an EARNED platinum on this
+    # game the assertions below pass against the pre-change code too, which is exactly how a
+    # retirement test goes quietly vacuous.
+    trophy = TrophyFactory(game=game, trophy_type='platinum', trophy_group_id='default')
+    EarnedTrophyFactory(profile=profile, trophy=trophy, earned=True)
+    ProfileGameFactory(profile=profile, game=game, progress=100, has_plat=True)
     client.force_login(profile.user)
 
-    content = client.get(f'/games/{game.np_communication_id}/').content.decode()
+    resp = client.get(f'/games/{game.np_communication_id}/')
 
+    assert resp.status_code == 200, 'a 404/500 page would satisfy every "not in" below'
+    content = resp.content.decode()
     assert 'share-card-btn' not in content
     assert 'shareable-manager.js' not in content
     assert 'GRADIENT_THEMES' not in content

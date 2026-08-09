@@ -40,7 +40,6 @@ SYNCING_DID_YOU_KNOW = [
     "Game Families group prequels, sequels, and remasters together so your stats reflect the whole journey.",
     "Discord linking lets PlatBot deliver new platinums, badge unlocks, and challenge updates straight to your server.",
     "Every stat on the site updates from real PSN data. No fudging, no estimates, no fake leaderboards.",
-    "The Platinum Grid view lets you visualize every plat you have ever earned in one beautiful wall.",
     "Premium themes change the entire site's vibe, including the navbar, cards, and your share images.",
     "Trophy hunting is more fun with friends. Browse profiles, compare stats, and challenge each other for the top spot.",
 ]

@@ -5,6 +5,8 @@ point of the 2026-08 rebuild: the old anchor was a platinum EarnedTrophy, which 
 100%-with-no-platinum game.
 """
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from core.services import completion_card_service as cards
@@ -139,7 +141,6 @@ def test_each_variant_counts_its_own_ladder():
 
     assert cards.get_card_data(profile, newest_full)['ordinal'] == 1
     assert cards.get_card_data(profile, second_full)['ordinal'] == 2
-    assert cards.get_card_data(profile, second_full)['ordinal_label'] == '100%'
 
 
 def test_platinum_ordinal_counts_platinums_earned_up_to_this_one():
@@ -155,7 +156,6 @@ def test_platinum_ordinal_counts_platinums_earned_up_to_this_one():
 
     assert cards.get_card_data(profile, first)['ordinal'] == 1
     assert cards.get_card_data(profile, second)['ordinal'] == 2
-    assert cards.get_card_data(profile, second)['ordinal_label'] == 'Platinum'
 
 
 # ── Badge lines: the NEW grouping-badge system ────────────────────────────────────────────────────
@@ -250,18 +250,37 @@ def test_legacy_earned_trophy_url_resolves_to_the_same_card(client):
 
     assert legacy['trophy_group_id'] == native['trophy_group_id'] == group.id
     assert 'Bloodborne' in legacy['html']
+def test_query_count_does_not_grow_with_the_completion_list(django_assert_num_queries, client):
+    """Two sizes, same budget -- a single size against a fixed number says nothing about growth.
 
+    The fixture carries a badge series, a contract and a rating on purpose: those are the paths that
+    could fan out per row, and a budget that never exercises them is a budget that guards nothing.
+    """
+    from trophies.models import UserConceptRating
 
-def test_query_count_is_flat_as_the_completion_list_grows(django_assert_max_num_queries, client):
-    profile = ProfileFactory()
-    for _ in range(6):
-        _completed_game(profile, with_platinum=True)
-    _, group, _ = _completed_game(profile, with_platinum=True)
-    client.force_login(profile.user)
-    client.get(f'/api/v1/shareables/completion/{group.id}/html/')   # warm session/auth
+    def _measure(extra_completions):
+        profile = ProfileFactory()
+        for _ in range(extra_completions):
+            _completed_game(profile, with_platinum=True)
+        game, group, _ = _completed_game(profile, with_platinum=True)
+        series = BadgeSeriesFactory(name='Norse Saga', title=Title.objects.create(name=f'T{extra_completions}'))
+        GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
+        StageFactory(series_slug=series.series_slug).concepts.add(game.concept)
+        UserConceptRating.objects.create(profile=profile, concept=game.concept, difficulty=6,
+                                         fun_ranking=9, grindiness=5, hours_to_platinum=40,
+                                         overall_rating=4.0)
+        client.force_login(profile.user)
+        url = f'/api/v1/shareables/completion/{group.id}/html/'
+        client.get(url)                      # warm session/auth
+        with CaptureQueriesContext(connection) as ctx:
+            assert client.get(url).status_code == 200
+        return len(ctx)
 
-    with django_assert_max_num_queries(16):
-        client.get(f'/api/v1/shareables/completion/{group.id}/html/')
+    small, large = _measure(1), _measure(12)
+
+    assert small == large, f'query count grew with the list: {small} -> {large}'
+    assert large <= 20, f'{large} queries for one card'
+
 
 
 # ── Branding + density ────────────────────────────────────────────────────────────────────────────
@@ -307,16 +326,14 @@ def test_the_breakdown_falls_back_to_the_groups_defined_counts():
     assert [t['count'] for t in tiers] == [2, 4, 10]     # gold, silver, bronze (no platinum defined)
 
 
-def test_the_identity_line_carries_career_totals():
+def test_the_identity_line_carries_the_platinum_count():
     """Who is this person, for a stranger seeing the card cold."""
     profile = ProfileFactory()
     for _ in range(3):
         _completed_game(profile, with_platinum=True)
     _, _, standing = _completed_game(profile, with_platinum=False)
 
-    data = cards.get_card_data(profile, standing)
-
-    assert (data['total_platinums'], data['total_completions']) == (3, 1)
+    assert cards.get_card_data(profile, standing)['total_platinums'] == 3
 
 
 def test_the_hunters_own_rating_reaches_the_card(client):
@@ -332,7 +349,8 @@ def test_the_hunters_own_rating_reaches_the_card(client):
     html = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()['html']
 
     assert cards.get_card_data(profile, standing)['user_rating']['difficulty'] == 6
-    assert 'Difficulty' in html and 'Fun' in html
+    # Assert the VALUES -- 'Difficulty'/'Fun' are also plain words elsewhere in the document.
+    assert '>6<' in html and '>9<' in html
 
 
 # ── Contract: the career half of the spine ────────────────────────────────────────────────────────
@@ -412,7 +430,6 @@ def test_the_badge_line_carries_real_medallion_art_and_its_edition():
     line = cards.get_card_data(profile, standing)['badge_lines'][0]
 
     assert line['edition'] == 'Ultra HD'
-    assert line['medallion_tier'] == 'platinum'      # ultra-hd backs platinum
     assert line['medallion_layers'], 'medallion should always resolve at least the default art'
     # The edition label, the ring and the progress bar all wear the badge's backing metal -- the same
     # source-of-truth hex as .pp-med[data-tier] in badge-medallion.css.
@@ -429,7 +446,7 @@ def test_a_legacy_hd_edition_wears_the_gold_metal():
 
     line = cards.get_card_data(profile, standing)['badge_lines'][0]
 
-    assert (line['medallion_tier'], line['medallion_colour']) == ('gold', '#e7c25c')
+    assert line['medallion_colour'] == '#e7c25c'      # legacy-hd backs gold
 
 
 def test_the_medallion_picks_the_edition_that_covers_this_game():
@@ -446,20 +463,20 @@ def test_the_medallion_picks_the_edition_that_covers_this_game():
     assert cards.get_card_data(profile, standing)['badge_lines'][0]['edition'] == 'Ultra HD'
 
 
-def test_only_the_lead_badge_line_carries_art():
-    """Each medallion is two more images to cache and base64 into every render; only the one the card
-    actually draws is worth the payload."""
+def test_only_one_badge_is_resolved():
+    """The spine band draws `badge_lines.0` and nothing else, so resolving a second line meant a sort,
+    a standings lookup and a title lookup thrown away on every render."""
     profile = ProfileFactory()
     game, _, standing = _completed_game(profile, with_platinum=True)
-    for name in ('Alpha Series', 'Beta Series'):
+    for name in ('Alpha Series', 'Beta Series', 'Gamma Series'):
         series = BadgeSeriesFactory(name=name)
         GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
         StageFactory(series_slug=series.series_slug).concepts.add(game.concept)
 
     lines = cards.get_card_data(profile, standing)['badge_lines']
 
-    assert len(lines) == 2
-    assert lines[0].get('medallion_layers') and 'medallion_layers' not in lines[1]
+    assert len(lines) == 1
+    assert lines[0]['medallion_layers'], 'the one line the card draws must carry its art'
 
 
 def test_every_contract_job_is_named_on_the_card():
@@ -501,8 +518,8 @@ def test_the_lead_badge_follows_the_site_wide_type_order():
 
     lines = cards.get_card_data(profile, standing)['badge_lines']
 
+    # Collection outranks Franchise outranks Developer outranks the game's own Series.
     assert lines[0]['series_name'] == 'The Collection'
-    assert lines[1]['series_name'] == 'The Franchise'
 
 
 def test_type_order_outranks_a_held_title():
@@ -583,3 +600,21 @@ def test_a_game_with_no_dlc_makes_no_dlc_claim():
     _, _, standing = _completed_game(profile, with_platinum=True, full_game_progress=100)
 
     assert cards.get_card_data(profile, standing)['all_dlc_done'] is False
+
+
+def test_the_medallion_actually_reaches_the_rendered_card(client):
+    """Asserting the SERVICE output is why this shipped broken. group_medallion_layers returns
+    `static(...)` paths for the backdrop fallback and the default subject art, and ShareImageCache
+    hard-rejects any non-http scheme -- so every static layer was silently dropped and a badge with no
+    custom image rendered with no medallion at all. Assert the <img> in the HTML, not the dict."""
+    profile = ProfileFactory()
+    game, group, _ = _completed_game(profile, with_platinum=True)
+    series = BadgeSeriesFactory(name='Norse Saga')            # no badge_image -> static default art
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
+    StageFactory(series_slug=series.series_slug).concepts.add(game.concept)
+    client.force_login(profile.user)
+
+    html = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()['html']
+
+    assert 'images/badges/' in html, 'the medallion art never made it into the card'
+    assert 'Norse Saga' in html

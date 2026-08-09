@@ -25,7 +25,8 @@ which row happened to exist when the link was made.
 """
 import logging
 
-from django.db.models import Q
+from django.db.models import F, IntegerField, Q, Value
+from django.db.models.functions import Cast, Coalesce
 
 from trophies.models import (
     BadgeSeries, EarnedTrophy, ProfileGame, ProfileTrophyGroup, SeriesBadgeStanding, Stage,
@@ -39,14 +40,18 @@ logger = logging.getLogger(__name__)
 PLATINUM = 'platinum'
 FULL = 'full'
 
+#: The two card names, as the user-facing product calls them. Not on the card itself (the card says
+#: "PLATINUM" / "100% COMPLETE"); this is for surfaces that talk ABOUT cards -- the browse page filter,
+#: the download filename.
 VARIANT_LABELS = {
     PLATINUM: 'Platinum Card',
     FULL: '100% Card',
 }
 
-#: How many badge series a card will ever name. The card renders at embed size (~450px wide in a
-#: Discord preview), so this is a layout constant, not a data limit.
-BADGE_LINE_CAP = 2
+#: The card names ONE badge -- the spine band draws `badge_lines.0` and nothing else. Kept as a
+#: constant (rather than hardcoding a [0]) because which badge leads is a real decision, made by the
+#: sort in `_badge_lines`; the cap is just how many survive it.
+BADGE_LINE_CAP = 1
 
 #: Raw Lucide path geometry per icon name, borrowed from the site's job-icon library so the card and
 #: the site draw the same glyphs from one source. (The tag itself is unusable here -- see the note in
@@ -96,8 +101,12 @@ def eligible_completions(profile):
     a sync, the hunter would otherwise look at a 100% game on their profile and find no card for it. The
     subquery is over the same profile's ProfileGames, so it stays bounded too.
 
-    (A *missing* PTG row is not covered and does not need to be: rows are written for every group a
-    profile has trophy data for, so no row at all means no trophy data for that group.)
+    This only rescues a STALE row, not an absent one -- the base read is ProfileTrophyGroup, so a
+    missing row has nothing for the `Q()` to match. The badge engine handles both
+    (`base_map.get(g.id, (0, None))`), and its comment names "a missing/stale" row explicitly. A
+    completion with no PTG row at all therefore cannot produce a card, which is the one gap left here;
+    `backfill_profile_trophy_groups` is the repair, and the browse page and the endpoints share this
+    predicate so at least they agree with each other about what exists.
     """
     completed_games = ProfileGame.objects.filter(profile=profile, progress=100).values('game_id')
     return (
@@ -131,12 +140,23 @@ def resolve_variant(game):
 
 
 def variant_filter(qs, variant):
-    """Narrow an `eligible_completions` queryset to one variant, in the DB."""
-    has_plat = Q(trophy_group__game__defined_trophies__platinum__gt=0)
+    """Narrow an `eligible_completions` queryset to one variant, in the DB.
+
+    CAST, not a raw JSON transform. `exclude(defined_trophies__platinum__gt=0)` does NOT match rows
+    where the key is absent -- the `->` yields SQL NULL and `NOT NULL` is NULL -- so a game with
+    `defined_trophies = {}` fell out of BOTH arms while `resolve_variant` (pure Python) called it FULL:
+    invisible to the counts, but still rendering, with an ordinal from a ladder it wasn't in. Casting
+    also fixes jsonb's string-vs-number ordering, where a stored "1" sorts below any number and reads
+    as "no platinum". Every other consumer in the codebase casts (browse_helpers, game_views, admin).
+    """
+    plat_count = Cast(
+        F('trophy_group__game__defined_trophies__platinum'), IntegerField(),
+    )
+    qs = qs.annotate(_plat_defined=Coalesce(plat_count, Value(0)))
     if variant == PLATINUM:
-        return qs.filter(has_plat)
+        return qs.filter(_plat_defined__gt=0)
     if variant == FULL:
-        return qs.exclude(has_plat)
+        return qs.filter(_plat_defined=0)
     return qs
 
 
@@ -193,7 +213,7 @@ def _platinum_ordinal(profile, earned_trophy):
     ).count()
 
 
-def _full_ordinal(profile, standing):
+def _full_ordinal(profile, standing, *, self_in_ladder=True):
     """"100% #N" -- the full-completion variant counts its OWN ladder.
 
     A single shared ladder across both variants would have renumbered every platinum card already
@@ -203,17 +223,22 @@ def _full_ordinal(profile, standing):
     completed_at = standing.last_trophy_at
     qs = variant_filter(eligible_completions(profile), FULL)
     if not completed_at:
-        return qs.filter(last_trophy_at__isnull=True, trophy_group_id__lte=standing.trophy_group_id).count()
-    return qs.filter(
-        Q(last_trophy_at__isnull=True)
-        | Q(last_trophy_at__lt=completed_at)
-        | Q(last_trophy_at=completed_at, trophy_group_id__lte=standing.trophy_group_id)
-    ).count()
+        count = qs.filter(last_trophy_at__isnull=True, trophy_group_id__lte=standing.trophy_group_id).count()
+    else:
+        count = qs.filter(
+            Q(last_trophy_at__isnull=True)
+            | Q(last_trophy_at__lt=completed_at)
+            | Q(last_trophy_at=completed_at, trophy_group_id__lte=standing.trophy_group_id)
+        ).count()
+    # A game that DEFINES a platinum but has no earned row is rendered as a full card even though it
+    # isn't in the FULL ladder, so it doesn't count itself. Without the +1 it reads one low, and reads
+    # 0 -- which the template drops entirely -- for a hunter with no other full completions.
+    return count if self_in_ladder else count + 1
 
 
 # ── Badge series + title ──────────────────────────────────────────────────────────────────────────
 
-def _badge_lines(profile, concept):
+def _badge_lines(profile, concept, game):
     """The live badge series this game belongs to, and the title each one grants.
 
     Reads the NEW grouping-badge system (BadgeSeries / SeriesBadgeStanding / UserTitle
@@ -281,11 +306,11 @@ def _badge_lines(profile, concept):
     if lines:
         # Only the LEAD line gets art. Each medallion is two more images to cache and base64 into the
         # render, and only one of them is big enough on the card to be worth the payload.
-        _attach_medallion(lines[0], concept)
+        _attach_medallion(lines[0], concept, game)
     return lines
 
 
-def _attach_medallion(line, concept):
+def _attach_medallion(line, concept, game):
     """Give a badge line its real medallion art + edition, in place.
 
     The card should show the badge OBJECT, not just its name -- it's the product's signature. The
@@ -307,9 +332,10 @@ def _attach_medallion(line, concept):
     if not editions:
         return
 
-    platforms = set()
-    for game in getattr(concept, 'games', None).all() if concept else []:
-        platforms.update(game.title_platform or [])
+    # THIS game's platforms, not every game on the concept. Unioning across the concept gave
+    # {PS3, PS4, PS5} for exactly the multi-generation stacks that editions exist to distinguish, so
+    # the match degenerated to "first live edition by id" and a PS5 completion could show Legacy HD.
+    platforms = set(game.title_platform or [])
     edition = next(
         (e for e in editions if platforms & set(e.platform_group.platforms or [])),
         editions[0],
@@ -319,7 +345,6 @@ def _attach_medallion(line, concept):
     metal = MEDALLION_COLOURS.get(tier, MEDALLION_COLOURS['gold'])
     line.update({
         'edition': edition.platform_group.name,
-        'medallion_tier': tier,
         'medallion_layers': layers,
         'medallion_is_avatar': is_avatar,
         # The edition ("Ultra HD", "Legacy HD") wears its own backing metal, same as everywhere else
@@ -329,16 +354,29 @@ def _attach_medallion(line, concept):
 
 
 def hunter_totals(profile):
-    """(platinums, full completions) -- the hunter's standing, for the card's identity line.
+    """(platinums, full completions) -- the hunter's standing, for the browse page's header counts.
 
-    Two bounded counts. This is the "who is this person" signal a stranger seeing the card in a
-    timeline needs; without it the card says what was done but nothing about who did it.
+    NOT what the card's identity line uses. The card prints "#{ordinal}" from `_platinum_ordinal`,
+    which counts EarnedTrophy rows, and printing a total from a DIFFERENT population directly beneath
+    it let the card read "PLATINUM #47 ... 35 platinums" whenever a platinum's ProfileTrophyGroup row
+    was missing. See `platinum_count`, which counts the same rows the ordinal does.
     """
     completions = eligible_completions(profile)
     return (
         variant_filter(completions, PLATINUM).count(),
         variant_filter(completions, FULL).count(),
     )
+
+
+def platinum_count(profile):
+    """The hunter's platinum total, counted over the SAME rows as `_platinum_ordinal`.
+
+    The card shows the ordinal and the total together, so they have to come from one population or a
+    hunter sees a #N larger than their own total.
+    """
+    return EarnedTrophy.objects.filter(
+        profile=profile, earned=True, trophy__trophy_type='platinum',
+    ).count()
 
 
 def _contract_line(profile, concept):
@@ -366,7 +404,6 @@ def _contract_line(profile, concept):
 
     return {
         'name': contract.name,
-        'slug': contract.slug,
         # Job glyphs travel as raw Lucide PATH geometry, not via the {% job_icon %} tag: that tag sizes
         # itself with Tailwind classes (`w-5 h-5`), and the card is rendered in a document with no
         # stylesheet, so its <svg> would come out unsized. The template wraps this in an <svg> with
@@ -477,19 +514,23 @@ def get_card_data(profile, standing):
         )
 
     if platinum:
-        ordinal, ordinal_label = _platinum_ordinal(profile, platinum), 'Platinum'
+        ordinal = _platinum_ordinal(profile, platinum)
         completed_at = platinum.earned_date_time
     else:
-        # A game that defines a platinum but has no earned row is a data anomaly, not a variant: fall
-        # back to the full presentation rather than rendering a platinum card with an empty hero.
+        # Two different situations land here, and they number differently:
+        #   - a genuine full card (the game defines no platinum) -- it IS in the FULL ladder
+        #   - a game that DEFINES a platinum but has no earned row: a data anomaly, shown as a full
+        #     card rather than a platinum one with an empty hero. The FULL arm excludes games defining
+        #     a platinum, so this one is absent from its own ladder and can't count itself.
+        downgraded = variant == PLATINUM
         variant = FULL
-        ordinal, ordinal_label = _full_ordinal(profile, standing), '100%'
+        ordinal = _full_ordinal(profile, standing, self_in_ladder=not downgraded)
         completed_at = standing.last_trophy_at
 
     earned_counts = standing.earned_trophies or {}
     group_defined = group.defined_trophies or {}
     game_defined = game.defined_trophies or {}
-    total_plats, total_full = hunter_totals(profile)
+    total_plats = platinum_count(profile)
 
     # DLC. The card is scoped to the DEFAULT group, which is what makes it safe to hand a platinum to
     # someone whose DLC is still outstanding. But that scoping also made a hunter who cleared EVERYTHING
@@ -512,39 +553,28 @@ def get_card_data(profile, standing):
 
     return {
         'variant': variant,
-        'variant_label': VARIANT_LABELS[variant],
         'ordinal': ordinal,
-        'ordinal_label': ordinal_label,
 
         'username': profile.display_psn_username or profile.psn_username,
         'user_avatar_url': profile.avatar_url or '',
-        'is_plus': getattr(profile, 'is_plus', False),
         # The title they're WEARING, not one this game granted -- the card's identity strip is the
         # hunter, and the worn title is how they present themselves everywhere else on the site.
         'display_title': _displayed_title(profile),
         'total_platinums': total_plats,
-        # Not drawn on the card (see the identity-line note in plat_card.html) -- kept because the
-        # browse page's header counts read the same helper.
-        'total_completions': total_full,
 
         'game_name': game.title_name,
-        'game_id': game.id,
-        'np_communication_id': game.np_communication_id,
         'concept_id': concept.id if concept else None,
         'trophy_group_id': group.id,
         'game_image': game.display_image_url_large,
         'landscape_url': (concept.get_landscape_url() or '') if concept else '',
-        'title_platform': game.title_platform,
         'region': game.region,
         'is_regional': game.is_regional,
 
-        'trophy_name': platinum.trophy.trophy_name if platinum else '',
         'trophy_icon_url': platinum.trophy.trophy_icon_url or '' if platinum else '',
         'trophy_earn_rate': round(float(platinum.trophy.trophy_earn_rate or 0), 2) if platinum else None,
         'rarity_label': RARITY_LABELS.get(platinum.trophy.trophy_rarity, '') if platinum else '',
 
         'completed_at': completed_at,
-        'started_at': profile_game.first_played_date_time if profile_game else None,
         'play_duration_seconds': (
             profile_game.play_duration.total_seconds()
             if profile_game and profile_game.play_duration else None
@@ -559,7 +589,7 @@ def get_card_data(profile, standing):
         'tier_counts': _tier_counts(trophy_source),
         'platform_label': ' / '.join(game.title_platform or []),
 
-        'badge_lines': _badge_lines(profile, concept),
+        'badge_lines': _badge_lines(profile, concept, game),
         'contract': _contract_line(profile, concept),
         'user_rating': _user_rating(profile, concept),
     }

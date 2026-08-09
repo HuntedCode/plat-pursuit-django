@@ -1627,6 +1627,13 @@ def get_available_themes_for_grid(include_game_art=False, grouped=False):
         if requires_game_image and not include_game_art:
             continue
 
+        # Plat-card grounds are a separate, additive selection over this registry (get_plat_card_themes)
+        # and are drawn for one 1200x630 layout. They must not appear in the SITE theme pickers. The
+        # grouped path can't be relied on to drop them -- it funnels unknown categories into `general`
+        # rather than skipping them -- so exclude them here, where both paths pass.
+        if data.get('category') == 'plat_card':
+            continue
+
         theme_entry = {
             'name': data['name'],
             'description': data['description'],

@@ -69,13 +69,28 @@ def build_card_context(profile, standing):
             logger.warning("[PLAT-CARD] failed to cache %s: %s", key, source)
         data[key] = cached or ''
 
-    # Badge medallion art is the same deal: the layers are static paths or MEDIA/PSN URLs, so they have
-    # to be local before the renderer can base64 them. Only the lead badge line carries art.
+    # Badge medallion art. Unlike the four images above, these are NOT all remote: group_medallion_layers
+    # returns `static(...)` paths for the backdrop fallback and the default subject art, and FileField
+    # urls that are /media/ under DEBUG. ShareImageCache hard-rejects any non-http(s) scheme, so routing
+    # everything through it dropped every static layer in every environment -- a badge with no custom
+    # image rendered with no medallion at all, silently.
+    #
+    # The renderer already resolves /static/ itself, so those pass through untouched. Only genuinely
+    # remote URLs need caching.
     for line in data['badge_lines']:
-        layers = line.get('medallion_layers') or []
-        line['medallion_cached'] = [
-            cached for cached in (ShareImageCache.fetch_and_cache(url) for url in layers if url) if cached
-        ]
+        cached_layers = []
+        for url in line.get('medallion_layers') or []:
+            if not url:
+                continue
+            if url.startswith(('http://', 'https://')):
+                resolved = ShareImageCache.fetch_and_cache(url)
+                if not resolved:
+                    logger.warning("[PLAT-CARD] failed to cache medallion layer: %s", url)
+            else:
+                resolved = url          # /static/... (or /media/... in dev) -- the renderer handles it
+            if resolved:
+                cached_layers.append(resolved)
+        line['medallion_cached'] = cached_layers
 
     data['playtime'] = _format_playtime(data['play_duration_seconds'])
     return data
