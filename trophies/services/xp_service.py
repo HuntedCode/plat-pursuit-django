@@ -4,7 +4,6 @@ XP Service - Centralized logic for Badge XP calculations and updates.
 This service consolidates all XP-related logic that was previously scattered across:
 - leaderboard_service.py (compute_badge_xp_leaderboard)
 - notifications/signals.py (_calculate_badge_xp)
-- core/services/shareable_data_service.py (get_badge_xp_for_game)
 
 All XP calculation should go through this service to ensure consistency.
 """
@@ -291,48 +290,6 @@ def recalculate_all_gamification() -> int:
 
     logger.info(f"Recalculated gamification for {updated_count} profiles")
     return updated_count
-
-
-def get_badge_xp_for_game(profile, game) -> int:
-    """
-    Calculate badge XP earned from completing a specific game/platinum.
-
-    This replaces ShareableDataService.get_badge_xp_for_game() with
-    a centralized implementation that uses the same XP constants.
-
-    Args:
-        profile: Profile instance
-        game: Game instance
-
-    Returns:
-        int: XP earned from this game's badge contributions
-    """
-    from trophies.models import Stage, Badge
-
-    if not game.concept:
-        return 0
-
-    total_xp = 0
-
-    # Find stages that include this game's concept
-    stages = Stage.objects.filter(
-        concepts=game.concept,
-        stage_number__gt=0
-    )
-
-    for stage in stages:
-        # Verify badge series exists
-        if not Badge.objects.filter(series_slug=stage.series_slug).exists():
-            continue
-
-        # Determine applicable tiers (empty = all tiers)
-        applicable_tiers = stage.required_tiers if stage.required_tiers else [1, 2, 3, 4]
-
-        # Sum XP for each applicable tier
-        stage_xp = sum(get_tier_xp(tier) for tier in applicable_tiers)
-        total_xp += stage_xp
-
-    return total_xp
 
 
 # --- Bulk Update Context Manager ---

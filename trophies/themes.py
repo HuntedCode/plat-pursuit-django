@@ -1661,3 +1661,92 @@ def get_available_themes_for_grid(include_game_art=False, grouped=False):
     return [(cat_key, cat_label, cat_themes)
             for cat_key, (cat_label, cat_themes) in category_map.items()
             if cat_themes]
+
+
+# ── Plat card: the curated set ────────────────────────────────────────────────────────────────────
+#
+# The card is DESIGNED, so it does not accept all 105 site gradients -- most were drawn for a
+# different layout and would fight the one it has. These six are the whole picker: four grounds built
+# from the rebuild palette, plus the two game-art backings.
+#
+# `ppSubstrate` is the card's own ground, duplicated here on purpose: the renderer always injects a
+# background with !important (falling back to `default`, which is drawn from the pre-rebuild palette),
+# so without a matching theme entry the card's inline ground could never actually render.
+#
+# Site themes are untouched -- this is a separate, additive selection over the same registry, and the
+# `plat_card` category is deliberately absent from THEME_CATEGORIES so these never leak into the
+# grouped site-theme grids.
+PLAT_CARD_THEME_KEYS = [
+    'ppSubstrate',
+    'ppMidnight',
+    'ppEmber',
+    'ppAurora',
+    'gameArtConceptBg',
+    'gameArtBlur',
+]
+
+#: What the card falls back to, and what a fresh picker opens on.
+PLAT_CARD_DEFAULT_THEME = 'ppSubstrate'
+
+GRADIENT_THEMES.update({
+    'ppSubstrate': {
+        'name': 'Substrate',
+        'description': 'The house ground',
+        'accent_color': '#27ebfe',
+        'background': 'radial-gradient(120% 90% at 12% 0%, #232a31 0%, #181d23 45%, #05080c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    'ppMidnight': {
+        'name': 'Midnight',
+        'description': 'Deep blue, quiet',
+        'accent_color': '#27ebfe',
+        'background': 'radial-gradient(130% 100% at 85% 10%, #14303d 0%, #0b1620 48%, #05080c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    'ppEmber': {
+        'name': 'Ember',
+        'description': 'Warm, low light',
+        'accent_color': '#ff9350',
+        'background': 'radial-gradient(120% 95% at 15% 100%, #33201a 0%, #1a1216 46%, #05080c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    'ppAurora': {
+        'name': 'Aurora',
+        'description': 'Violet into deep teal',
+        'accent_color': '#a191ff',
+        'background': 'radial-gradient(110% 90% at 78% 8%, #2a2044 0%, #141a2e 44%, #05080c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+})
+
+
+def get_plat_card_themes():
+    """The card's picker: [(key, {name, description, background_css, is_game_art, game_image_source})].
+
+    Ordered as PLAT_CARD_THEME_KEYS declares -- designed grounds first, art backings last, since art
+    is the variation and the ground is the default.
+    """
+    out = []
+    for key in PLAT_CARD_THEME_KEYS:
+        data = GRADIENT_THEMES.get(key)
+        if not data:
+            continue
+        entry = {
+            'name': data['name'],
+            'description': data['description'],
+            'background_css': _clean_css(data['background']),
+            'accent_color': data.get('accent_color', ''),
+        }
+        if data.get('requires_game_image'):
+            entry['is_game_art'] = True
+            entry['game_image_source'] = data.get('game_image_source', 'game_image')
+        out.append((key, entry))
+    return out

@@ -12,8 +12,10 @@ from .notification_views import (
     NotificationDeleteView, NotificationRatingView,
     AdminNotificationPreviewView, AdminTargetCountView, AdminUserSearchView
 )
-from .shareable_views import ShareableImageHTMLView, ShareableImagePNGView
-from .platinum_grid_views import PlatinumGridHTMLView, PlatinumGridPNGView
+from .shareable_views import (
+    PlatCardHTMLView, PlatCardPNGView, LegacyPlatinumCardHTMLView, LegacyPlatinumCardPNGView,
+)
+# Platinum Grid is RETIRED (2026-08); api/platinum_grid_views.py is parked unrouted.
 from .recap_views import (
     RecapAvailableView, RecapDetailView, RecapRegenerateView, RecapShareImageHTMLView,
     RecapShareImagePNGView, RecapSlidePartialView
@@ -145,13 +147,14 @@ urlpatterns = [
     path('notifications/<int:pk>/read/', NotificationMarkReadView.as_view(), name='notification-mark-read'),
     path('notifications/<int:pk>/', NotificationDeleteView.as_view(), name='notification-delete'),
 
-    # Shareable image endpoints (EarnedTrophy-based, for My Shareables page)
-    path('shareables/platinum/<int:earned_trophy_id>/html/', ShareableImageHTMLView.as_view(), name='shareable-platinum-html'),
-    path('shareables/platinum/<int:earned_trophy_id>/png/', ShareableImagePNGView.as_view(), name='shareable-platinum-png'),
-
-    # Platinum Grid share image endpoints
-    path('shareables/platinum-grid/html/', PlatinumGridHTMLView.as_view(), name='platinum-grid-html'),
-    path('shareables/platinum-grid/png/', PlatinumGridPNGView.as_view(), name='platinum-grid-png'),
+    # Plat cards. Keyed on the game's default TrophyGroup -- a card is earned by completing that group,
+    # platinum or not (see core/services/completion_card_service.py).
+    path('shareables/completion/<int:trophy_group_id>/html/', PlatCardHTMLView.as_view(), name='plat-card-html'),
+    path('shareables/completion/<int:trophy_group_id>/png/', PlatCardPNGView.as_view(), name='plat-card-png'),
+    # Pre-2026-08 EarnedTrophy-keyed alias. Platinum notifications already sent deep-link this way, and
+    # these carry TokenAuthentication, so assume external consumers too. Same card.
+    path('shareables/platinum/<int:earned_trophy_id>/html/', LegacyPlatinumCardHTMLView.as_view(), name='shareable-platinum-html'),
+    path('shareables/platinum/<int:earned_trophy_id>/png/', LegacyPlatinumCardPNGView.as_view(), name='shareable-platinum-png'),
 
     # Monthly recap endpoints
     path('recap/available/', RecapAvailableView.as_view(), name='recap-available'),

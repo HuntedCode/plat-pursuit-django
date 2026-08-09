@@ -1,283 +1,180 @@
+"""Plat card endpoints -- preview HTML and downloadable PNG for a game completion.
+
+Cards are keyed on the game's default `TrophyGroup`; ownership is the eligibility predicate in
+`completion_card_service` (default trophy group at 100%), so a deep link can never render a card the
+browse page wouldn't list. Two variants share one pipeline: `platinum` when the game defines a platinum,
+`full` when it doesn't.
+
+Landscape only (1200x630). Portrait was dropped in the 2026-08 rebuild: these cards live in link
+previews and timeline embeds, and one format the design is actually tuned for beats two it isn't.
+
+The legacy `/platinum/<earned_trophy_id>/` pair is kept as a thin alias -- platinum notifications
+already in the wild deep-link by EarnedTrophy id, and those endpoints carry TokenAuthentication, so
+assume external consumers.
 """
-REST API views for shareable images.
-Provides endpoints to generate share images directly from EarnedTrophy records.
-"""
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status as http_status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.authentication import SessionAuthentication, TokenAuthentication
-from django.template.loader import render_to_string
+import logging
+
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
+from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
-from core.services.tracking import track_site_event
-from trophies.models import EarnedTrophy
-from core.services.shareable_data_service import ShareableDataService
+from rest_framework import status as http_status
+from rest_framework.authentication import SessionAuthentication, TokenAuthentication
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from core.services import completion_card_service as cards
+from core.services.share_card_utils import resolve_temp_path
 from core.services.share_image_cache import ShareImageCache
-from core.services.share_card_utils import to_int, format_share_date, process_badge_images, resolve_temp_path
-import logging
+from trophies.themes import PLAT_CARD_DEFAULT_THEME, PLAT_CARD_THEME_KEYS
 
 logger = logging.getLogger(__name__)
 
+CARD_TEMPLATE = 'shareables/plat_card.html'
 
-class ShareableImageHTMLView(APIView):
+#: The card carries a large cover slot, so share-temp images must not be downscaled and re-upscaled
+#: during the render. See the renderer's image_max_size note.
+CARD_IMAGE_MAX = 1000
+
+
+def _format_playtime(seconds):
+    if not seconds:
+        return ''
+    try:
+        seconds = float(seconds)
+    except (TypeError, ValueError):
+        return ''
+    hours, minutes = int(seconds // 3600), int((seconds % 3600) // 60)
+    return f"{hours}h {minutes}m" if hours else f"{minutes}m"
+
+
+def build_card_context(profile, standing):
+    """Card data plus the locally-cached image paths the renderer needs.
+
+    External images are cached to same-origin temp files rather than embedded as data URIs at this
+    stage: iOS Safari fails intermittently on data URIs in the browser preview, and the renderer does
+    its own base64 pass for the PNG.
     """
-    GET /api/v1/shareables/platinum/<earned_trophy_id>/html/
+    data = cards.get_card_data(profile, standing)
 
-    Returns rendered HTML for share image card - works directly with EarnedTrophy.
-    Query params: image_format=landscape|portrait
+    for key, source in (
+        ('avatar_image', data['user_avatar_url']),
+        ('game_image', data['game_image']),
+        ('trophy_image', data['trophy_icon_url']),
+        ('backdrop_image', data['landscape_url']),
+    ):
+        cached = ShareImageCache.fetch_and_cache(source) if source else ''
+        if source and not cached:
+            logger.warning("[PLAT-CARD] failed to cache %s: %s", key, source)
+        data[key] = cached or ''
 
-    Returns: { "html": "<rendered html>" }
-    """
+    data['playtime'] = _format_playtime(data['play_duration_seconds'])
+    return data
+
+
+class _CardViewBase(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    def resolve(self, request, **kwargs):
+        """Return (profile, standing) or an error Response."""
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return None, None, Response(
+                {'error': 'No profile linked to this account'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        standing = self.get_standing(profile, **kwargs)
+        if not standing:
+            return None, None, Response(
+                {'error': 'No completion found for this game'},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+        return profile, standing, None
+
+
+class PlatCardHTMLView(_CardViewBase):
+    """GET /api/v1/shareables/completion/<trophy_group_id>/html/ -- preview markup for the modal."""
+
+    def get_standing(self, profile, trophy_group_id=None, **_):
+        return cards.get_completion(profile, trophy_group_id)
 
     @method_decorator(ratelimit(key='user', rate='60/m', method='GET', block=True))
-    def get(self, request, earned_trophy_id):
-        logger.info(f"[SHAREABLE-HTML] Request received for earned_trophy {earned_trophy_id}")
+    def get(self, request, **kwargs):
+        profile, standing, error = self.resolve(request, **kwargs)
+        if error:
+            return error
 
-        # Get the earned trophy and validate ownership
-        profile = getattr(request.user, 'profile', None)
-        if not profile:
-            return Response(
-                {'error': 'No profile linked to this account'},
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-        earned_trophy = get_object_or_404(
-            EarnedTrophy.objects.select_related(
-                'trophy__game__concept',
-                'trophy__game__concept__igdb_match',
-                'profile',
-            ),
-            id=earned_trophy_id,
-            profile=profile,
-            earned=True,
-            trophy__trophy_type='platinum'
-        )
-
-        # Get format from query params
-        format_type = request.query_params.get('image_format', 'landscape')
-        if format_type not in ['landscape', 'portrait']:
-            return Response(
-                {'error': 'Invalid format. Must be landscape or portrait'},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
-
-        # Get share data using centralized service
-        metadata = ShareableDataService.get_platinum_share_data(earned_trophy)
-
-        context = self._build_template_context(metadata, format_type, profile=profile)
-
-        # Render the template
-        html = render_to_string('notifications/partials/share_image_card.html', context)
-
-        # Cache background images as same-origin temp files for JS game art themes
-        game_image_url = metadata.get('game_image', '')
-        concept_bg_url = metadata.get('concept_bg_url', '')
-
-        response_data = {
-            'html': html,
-            'has_rating': metadata.get('user_rating') is not None,
-            'concept_id': metadata.get('concept_id'),
-            'playtime': context.get('playtime', ''),
-        }
-
-        # Include same-origin URLs for background images
-        if game_image_url:
-            game_image_cached = ShareImageCache.fetch_and_cache(game_image_url)
-            if game_image_cached:
-                response_data['game_image_base64'] = game_image_cached
-
-        if concept_bg_url:
-            concept_bg_cached = ShareImageCache.fetch_and_cache(concept_bg_url)
-            if concept_bg_cached:
-                response_data['concept_bg_base64'] = concept_bg_cached
-
-        return Response(response_data)
-
-    def _build_template_context(self, metadata, format_type, profile=None):
-        """Build the context dict for the share image template."""
-        # Cache avatar for identity bar
-        avatar_url = ''
-        is_plus = False
-        if profile:
-            is_plus = getattr(profile, 'is_plus', False)
-            raw_avatar = profile.avatar_url or ''
-            if raw_avatar:
-                avatar_url = ShareImageCache.fetch_and_cache(raw_avatar) or ''
-
-        # Calculate playtime string
-        playtime = ''
-        play_duration_seconds = metadata.get('play_duration_seconds')
-        if play_duration_seconds:
-            try:
-                seconds = float(play_duration_seconds)
-                hours = int(seconds // 3600)
-                minutes = int((seconds % 3600) // 60)
-                if hours > 0:
-                    playtime = f"{hours}h {minutes}m"
-                else:
-                    playtime = f"{minutes}m"
-            except (ValueError, TypeError):
-                pass
-
-        # Format earn rate
-        earn_rate = metadata.get('trophy_earn_rate')
-        if earn_rate:
-            try:
-                earn_rate = round(float(earn_rate), 2)
-            except (ValueError, TypeError):
-                earn_rate = None
-
-        # Cache external images as same-origin temp files (fixes iOS Safari intermittent failures with data URIs)
-        game_image_url = metadata.get('game_image', '')
-        trophy_icon_url = metadata.get('trophy_icon_url', '')
-
-        game_image_data = ShareImageCache.fetch_and_cache(game_image_url)
-        if game_image_url and not game_image_data:
-            logger.warning(f"[SHARE] Failed to cache game image: {game_image_url}")
-
-        trophy_icon_data = ShareImageCache.fetch_and_cache(trophy_icon_url)
-        if trophy_icon_url and not trophy_icon_data:
-            logger.warning(f"[SHARE] Failed to cache trophy icon: {trophy_icon_url}")
-
-        # Extract badge data
-        badge_xp = to_int(metadata.get('badge_xp', 0))
-        tier1_badges = metadata.get('tier1_badges', [])
-
-        # Process badge images - convert to base64 or use default
-        processed_badges = process_badge_images(tier1_badges)
-
-        # Format date strings for display
-        first_played_date_time = format_share_date(metadata.get('first_played_date_time'))
-        earned_date_time = format_share_date(metadata.get('earned_date_time'))
-
-        context = {
-            'format': format_type,
-            'game_name': metadata.get('game_name', 'Unknown Game'),
-            'username': metadata.get('username', 'Player'),
-            'total_plats': to_int(metadata.get('user_total_platinums', 0)),
-            'progress': to_int(metadata.get('progress_percentage', 0)),
-            'earned_trophies': to_int(metadata.get('earned_trophies_count', 0)),
-            'total_trophies': to_int(metadata.get('total_trophies_count', 0)),
-            'game_image': game_image_data,
-            'trophy_icon': trophy_icon_data,
-            'rarity_label': metadata.get('rarity_label', ''),
-            'earn_rate': earn_rate,
-            'playtime': playtime,
-            'title_platform': metadata.get('title_platform', []),
-            'region': metadata.get('region', []),
-            'is_regional': metadata.get('is_regional', False),
-            'first_played_date_time': first_played_date_time,
-            'earned_date_time': earned_date_time,
-            'yearly_plats': to_int(metadata.get('yearly_plats', 0)),
-            'earned_year': to_int(metadata.get('earned_year', 0)),
-            'badge_xp': badge_xp,
-            'tier1_badges': processed_badges,
-            'user_rating': metadata.get('user_rating'),
-            'avatar_url': avatar_url,
-            'is_plus': is_plus,
-        }
-
-        # Compute per-game trophy breakdown percentages
-        defined = metadata.get('defined_trophies', {})
-        total_defined = sum(defined.values()) if defined else 0
-        if total_defined > 0:
-            context['game_total_trophies'] = total_defined
-            context['game_bronze_count'] = defined.get('bronze', 0)
-            context['game_silver_count'] = defined.get('silver', 0)
-            context['game_gold_count'] = defined.get('gold', 0)
-            context['game_plat_count'] = defined.get('platinum', 0)
-            context['pct_bronzes'] = round(defined.get('bronze', 0) / total_defined * 100)
-            context['pct_silvers'] = round(defined.get('silver', 0) / total_defined * 100)
-            context['pct_golds'] = round(defined.get('gold', 0) / total_defined * 100)
-            context['pct_plats'] = round(defined.get('platinum', 0) / total_defined * 100)
-
-        return context
+        context = build_card_context(profile, standing)
+        return Response({
+            'html': render_to_string(CARD_TEMPLATE, context),
+            'variant': context['variant'],
+            'concept_id': context['concept_id'],
+            'trophy_group_id': context['trophy_group_id'],
+            'has_rating': context['user_rating'] is not None,
+            'has_backdrop': bool(context['backdrop_image']),
+            'playtime': context['playtime'],
+        })
 
 
+class PlatCardPNGView(_CardViewBase):
+    """GET /api/v1/shareables/completion/<trophy_group_id>/png/?theme=… -- the download."""
 
-class ShareableImagePNGView(APIView):
-    """
-    GET /api/v1/shareables/platinum/<earned_trophy_id>/png/?image_format=landscape&theme=default
-
-    Server-side PNG rendering via Playwright. Returns the finished PNG as a download.
-    """
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    def get_standing(self, profile, trophy_group_id=None, **_):
+        return cards.get_completion(profile, trophy_group_id)
 
     @method_decorator(ratelimit(key='user', rate='20/m', method='GET', block=True))
-    def get(self, request, earned_trophy_id):
-        profile = getattr(request.user, 'profile', None)
-        if not profile:
-            return Response(
-                {'error': 'No profile linked to this account'},
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-        earned_trophy = get_object_or_404(
-            EarnedTrophy.objects.select_related(
-                'trophy__game__concept',
-                'trophy__game__concept__igdb_match',
-                'profile',
-            ),
-            id=earned_trophy_id,
-            profile=profile,
-            earned=True,
-            trophy__trophy_type='platinum'
-        )
+    def get(self, request, **kwargs):
+        profile, standing, error = self.resolve(request, **kwargs)
+        if error:
+            return error
 
-        format_type = request.query_params.get('image_format', 'landscape')
-        if format_type not in ['landscape', 'portrait']:
-            return Response(
-                {'error': 'Invalid format. Must be landscape or portrait'},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
-
-        theme_key = request.query_params.get('theme', 'default')
-
-        # Reuse existing HTML view's context builder
-        html_view = ShareableImageHTMLView()
-        metadata = ShareableDataService.get_platinum_share_data(earned_trophy)
-        context = html_view._build_template_context(metadata, format_type, profile=profile)
-
-        html = render_to_string('notifications/partials/share_image_card.html', context)
-
-        # Use the cached image paths from the context (already fetched by _build_template_context)
-        game_image_path = resolve_temp_path(context.get('game_image', ''))
-
-        # Concept bg is not in the template context: cache it separately for game art themes
-        concept_bg_url = metadata.get('concept_bg_url', '')
-        concept_bg_cached = ShareImageCache.fetch_and_cache(concept_bg_url) if concept_bg_url else ''
-        concept_bg_path = resolve_temp_path(concept_bg_cached)
+        context = build_card_context(profile, standing)
+        html = render_to_string(CARD_TEMPLATE, context)
 
         try:
             from core.services.playwright_renderer import render_png
-            # Platinum card has only ~3 share-temp images (cover, trophy icon,
-            # avatar) and a 432px cover slot, so override the default 200 cap
-            # to let cover_big_2x (528x748) pass through without resize.
             png_bytes = render_png(
                 html,
-                format_type=format_type,
-                theme_key=theme_key,
-                game_image_path=game_image_path,
-                concept_bg_path=concept_bg_path,
-                image_max_size=1000,
+                format_type='landscape',
+                # Only the curated set renders here; anything else falls back to the house ground
+                # rather than letting an arbitrary site gradient overwrite a designed card.
+                theme_key=(
+                    request.query_params.get('theme')
+                    if request.query_params.get('theme') in PLAT_CARD_THEME_KEYS
+                    else PLAT_CARD_DEFAULT_THEME
+                ),
+                game_image_path=resolve_temp_path(context['game_image']),
+                concept_bg_path=resolve_temp_path(context['backdrop_image']),
+                image_max_size=CARD_IMAGE_MAX,
             )
-        except Exception as e:
-            logger.exception(f"[SHARE-PNG] Playwright render failed for shareable {earned_trophy_id}: {e}")
+        except Exception:
+            logger.exception("[PLAT-CARD] render failed for trophy group %s", context['trophy_group_id'])
             return Response(
                 {'error': 'Failed to render share image'},
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        game_name = earned_trophy.trophy.game.title_name or 'share-card'
-        safe_name = "".join(c for c in game_name if c.isalnum() or c in (' ', '-', '_')).strip() or 'share-card'
-        filename = f"{safe_name}-{format_type}.png"
+        safe_name = "".join(
+            c for c in (context['game_name'] or '') if c.isalnum() or c in (' ', '-', '_')
+        ).strip() or 'plat-card'
+        suffix = 'platinum' if context['variant'] == cards.PLATINUM else '100'
 
         response = HttpResponse(png_bytes, content_type='image/png')
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Content-Disposition'] = f'attachment; filename="{safe_name}-{suffix}.png"'
         return response
 
 
+class LegacyPlatinumCardHTMLView(PlatCardHTMLView):
+    """GET /api/v1/shareables/platinum/<earned_trophy_id>/html/ -- pre-2026-08 key, same card."""
+
+    def get_standing(self, profile, earned_trophy_id=None, **_):
+        return cards.completion_for_earned_trophy(profile, earned_trophy_id)
+
+
+class LegacyPlatinumCardPNGView(PlatCardPNGView):
+    """GET /api/v1/shareables/platinum/<earned_trophy_id>/png/ -- pre-2026-08 key, same card."""
+
+    def get_standing(self, profile, earned_trophy_id=None, **_):
+        return cards.completion_for_earned_trophy(profile, earned_trophy_id)
