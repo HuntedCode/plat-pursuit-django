@@ -25,7 +25,7 @@ which row happened to exist when the link was made.
 """
 import logging
 
-from django.db.models import Q, Sum
+from django.db.models import Q
 
 from trophies.models import (
     BadgeSeries, EarnedTrophy, ProfileGame, ProfileTrophyGroup, SeriesBadgeStanding, Stage,
@@ -46,9 +46,6 @@ VARIANT_LABELS = {
 #: How many badge series a card will ever name. The card renders at embed size (~450px wide in a
 #: Discord preview), so this is a layout constant, not a data limit.
 BADGE_LINE_CAP = 2
-
-#: Likewise for the contract's job icons -- a row of six becomes a smear at embed size.
-JOB_ICON_CAP = 3
 
 #: Raw Lucide path geometry per icon name, borrowed from the site's job-icon library so the card and
 #: the site draw the same glyphs from one source. (The tag itself is unusable here -- see the note in
@@ -310,53 +307,43 @@ def hunter_totals(profile):
 
 
 def _contract_line(profile, concept):
-    """The Job Board contract this game IS, and what the hunter got for it -- or None.
+    """The Job Board contract this game IS, and the jobs it feeds -- or None.
 
     The other half of the product spine: badges are the collection, contracts are the career. A card
     that shows one and not the other tells half the story of what a completion was worth.
 
     Contracts are keyed on the raw IGDB id, so membership is derived from the concept's IGDBMatch
-    (`contract_by_concept_map`) rather than stored. XP is read from the immutable grant ledger rather
-    than recomputed, because amounts are paid at the multiplier active at grant time and config
-    changes must never rewrite history.
+    (`contract_by_concept_map`) rather than stored.
+
+    Deliberately NO XP figure. A contract's XP splits evenly across its jobs, so a single total on the
+    card only reads correctly if every job is shown beside it -- and at up to 6 jobs, showing all the
+    names AND the total doesn't fit. Naming every job is the more useful half, and dropping the number
+    removes any chance of crediting the wrong jobs. (The ledger read that produced it is gone with it,
+    so this is two queries cheaper per card.)
     """
     if not concept:
         return None
-    from trophies.models import ContractXPGrant, EarnedContract
     from trophies.services.contract_service import contract_by_concept_map
 
     contract = contract_by_concept_map([concept.id]).get(concept.id)
     if not contract:
         return None
 
-    earned = EarnedContract.objects.filter(profile=profile, contract=contract).first()
-    xp = 0
-    if earned:
-        xp = (
-            ContractXPGrant.objects
-            .filter(profile=profile, earned_contract=earned)
-            .aggregate(total=Sum('amount'))['total'] or 0
-        )
     return {
         'name': contract.name,
         'slug': contract.slug,
-        # Job glyphs travel as raw Lucide PATH geometry, not via the {% job_icon %} tag: that tag
-        # sizes itself with Tailwind classes (`w-5 h-5`), and the card is rendered in a document with
-        # no stylesheet, so its <svg> would come out unsized. The template wraps this in an <svg> with
-        # explicit width/height instead. Capped for the same reason the badge lines are -- a row of
-        # six icons is a smear at embed size.
+        # Job glyphs travel as raw Lucide PATH geometry, not via the {% job_icon %} tag: that tag sizes
+        # itself with Tailwind classes (`w-5 h-5`), and the card is rendered in a document with no
+        # stylesheet, so its <svg> would come out unsized. The template wraps this in an <svg> with
+        # explicit width/height instead.
         'jobs': [
             {
                 'name': job.name,
                 'icon_paths': JOB_ICON_PATHS.get(job.icon or '', ''),
                 'colour': DISCIPLINE_COLOURS.get(job.discipline, '#9da5b1'),
             }
-            for job in contract.jobs.all()[:JOB_ICON_CAP]
+            for job in contract.jobs.all()
         ],
-        'xp': xp,
-        # Reached but not accepted: the XP is sitting there waiting to be claimed. Worth saying on the
-        # card, since claiming is the action we want the hunter to go take.
-        'claimable': bool(earned and not xp),
     }
 
 

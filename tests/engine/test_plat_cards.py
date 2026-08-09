@@ -372,34 +372,6 @@ def test_the_contract_and_its_jobs_reach_the_card():
     assert by_name['Berserker']['icon_paths'].startswith('<')
 
 
-def test_banked_contract_xp_is_read_from_the_ledger():
-    """Amounts are paid at the multiplier active at grant time, so the card reports what was actually
-    banked rather than recomputing it from current config."""
-    from trophies.models import ContractXPGrant, EarnedContract
-
-    profile = ProfileFactory()
-    _, _, standing, contract = _contracted_game(profile, with_platinum=True)
-    earned = EarnedContract.objects.create(profile=profile, contract=contract, has_platinum=True)
-    # This contract's jobs only -- the 24-job catalogue is seeded, so Job.objects.all() is not it.
-    for job in contract.jobs.all():
-        ContractXPGrant.objects.create(profile=profile, job=job, amount=600,
-                                       earned_contract=earned, tier='platinum')
-
-    assert cards.get_card_data(profile, standing)['contract']['xp'] == 1200
-
-
-def test_a_reached_but_unaccepted_contract_reads_as_unclaimed():
-    """XP is sitting there waiting -- claiming is the action we want them to go take."""
-    from trophies.models import EarnedContract
-
-    profile = ProfileFactory()
-    _, _, standing, contract = _contracted_game(profile, with_platinum=True)
-    EarnedContract.objects.create(profile=profile, contract=contract, has_platinum=True)
-
-    data = cards.get_card_data(profile, standing)['contract']
-    assert data['xp'] == 0 and data['claimable'] is True
-
-
 def test_a_game_with_no_contract_simply_omits_the_line():
     profile = ProfileFactory()
     _, _, standing = _completed_game(profile, with_platinum=True)
@@ -472,3 +444,21 @@ def test_only_the_lead_badge_line_carries_art():
 
     assert len(lines) == 2
     assert lines[0].get('medallion_layers') and 'medallion_layers' not in lines[1]
+
+
+def test_every_contract_job_is_named_on_the_card():
+    """All 6 fit at the maximum. The card shows no XP figure on purpose: a contract's XP splits evenly
+    across its jobs, so a single total only reads correctly with every job beside it -- and naming them
+    is the more useful half of that pair."""
+    from trophies.models import Job
+
+    profile = ProfileFactory()
+    _, _, standing, contract = _contracted_game(profile, with_platinum=True)
+    for i, disc in enumerate(['mind', 'heart', 'finesse', 'combat']):
+        contract.jobs.add(Job.objects.create(slug=f'j{i}', name=f'Job {i}', discipline=disc, icon='sparkles'))
+
+    data = cards.get_card_data(profile, standing)['contract']
+
+    assert len(data['jobs']) == 6                       # 2 from the fixture + 4 here, none dropped
+    assert all(j['name'] and j['colour'] for j in data['jobs'])
+    assert 'xp' not in data and 'claimable' not in data
