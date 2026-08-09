@@ -155,6 +155,9 @@ def test_page_renders_the_three_views_and_the_nameplate(client):
     assert 'Lombax Legend' in content
     assert '>3</strong> of 5 stages' in content
     assert '--horizon-progress: 60%' in content
+    # Every populated panel carries a note line, so the first card sits at the same vertical
+    # position in all three views -- switching must not jump.
+    assert content.count('class="ttl-note"') == 3
     # No unrendered template syntax leaked (multi-line {# #} is a known trap).
     assert '{%' not in content and '{#' not in content
 

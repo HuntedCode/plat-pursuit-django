@@ -92,6 +92,9 @@ server-rendered; JS only toggles.
     {# ── Yours ── #}
     <div id="ttl-yours" role="tabpanel" class="ttl-panel" data-ttl-panel="yours">
         {% if yours %}
+        {% comment %}Every panel carries a note line -- it sets the sort AND keeps the first card at the
+        same vertical position across all three, so switching views doesn't jump.{% endcomment %}
+        <p class="ttl-note">Worlds that have named you. Newest first.</p>
         <div class="ttl-list" data-ttl-grid>
             {% for entry in yours %}{% include 'trophies/partials/titles/_title_row.html' with entry=entry view='yours' %}{% endfor %}
         </div>
