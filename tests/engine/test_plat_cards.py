@@ -262,3 +262,74 @@ def test_query_count_is_flat_as_the_completion_list_grows(django_assert_max_num_
 
     with django_assert_max_num_queries(16):
         client.get(f'/api/v1/shareables/completion/{group.id}/html/')
+
+
+# ── Branding + density ────────────────────────────────────────────────────────────────────────────
+
+def test_the_card_carries_real_branding(client):
+    """These travel to people with no account, so the card is also the advert. The mark, the wordmark
+    and the DOMAIN all have to be on it -- a muted line of text in a corner is not branding."""
+    profile = ProfileFactory()
+    _, group, _ = _completed_game(profile, with_platinum=True)
+    client.force_login(profile.user)
+
+    html = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()['html']
+
+    assert 'Platinum Pursuit' in html
+    assert 'platpursuit.com' in html          # how a stranger finds us
+    assert 'images/logo.png' in html          # the mark itself
+
+
+def test_the_trophy_breakdown_is_on_the_card():
+    """The tier split is the hobby's own vocabulary and reads fast even at embed size."""
+    profile = ProfileFactory()
+    _, group, standing = _completed_game(profile, with_platinum=True)
+    standing.earned_trophies = {'platinum': 1, 'gold': 2, 'silver': 4, 'bronze': 9}
+    standing.save(update_fields=['earned_trophies'])
+
+    tiers = cards.get_card_data(profile, standing)['tier_counts']
+
+    # Platinum first -- the order a hunter reads them in.
+    assert [t['tier'] for t in tiers] == ['platinum', 'gold', 'silver', 'bronze']
+    assert [t['count'] for t in tiers] == [1, 2, 4, 9]
+
+
+def test_the_breakdown_falls_back_to_the_groups_defined_counts():
+    """`earned_trophies` is a denorm that can lag. The group is finished either way, so the defined
+    counts are the same numbers -- better that than an empty row."""
+    profile = ProfileFactory()
+    _, _, standing = _completed_game(profile, with_platinum=False)
+    standing.earned_trophies = {}
+    standing.save(update_fields=['earned_trophies'])
+
+    tiers = cards.get_card_data(profile, standing)['tier_counts']
+
+    assert [t['count'] for t in tiers] == [2, 4, 10]     # gold, silver, bronze (no platinum defined)
+
+
+def test_the_identity_line_carries_career_totals():
+    """Who is this person, for a stranger seeing the card cold."""
+    profile = ProfileFactory()
+    for _ in range(3):
+        _completed_game(profile, with_platinum=True)
+    _, _, standing = _completed_game(profile, with_platinum=False)
+
+    data = cards.get_card_data(profile, standing)
+
+    assert (data['total_platinums'], data['total_completions']) == (3, 1)
+
+
+def test_the_hunters_own_rating_reaches_the_card(client):
+    """Data nobody else on the card has -- and the reason the download flow nudges for a rating."""
+    from trophies.models import UserConceptRating
+
+    profile = ProfileFactory()
+    game, group, standing = _completed_game(profile, with_platinum=True)
+    UserConceptRating.objects.create(profile=profile, concept=game.concept, difficulty=6,
+                                 fun_ranking=9, grindiness=5, hours_to_platinum=40, overall_rating=8)
+    client.force_login(profile.user)
+
+    html = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()['html']
+
+    assert cards.get_card_data(profile, standing)['user_rating']['difficulty'] == 6
+    assert 'Difficulty' in html and 'Fun' in html

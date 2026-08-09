@@ -233,6 +233,19 @@ def _badge_lines(profile, concept):
     return lines[:BADGE_LINE_CAP]
 
 
+def hunter_totals(profile):
+    """(platinums, full completions) -- the hunter's standing, for the card's identity line.
+
+    Two bounded counts. This is the "who is this person" signal a stranger seeing the card in a
+    timeline needs; without it the card says what was done but nothing about who did it.
+    """
+    completions = eligible_completions(profile)
+    return (
+        variant_filter(completions, PLATINUM).count(),
+        variant_filter(completions, FULL).count(),
+    )
+
+
 def _displayed_title(profile):
     """The title the hunter is currently wearing, or ''."""
     return (
@@ -265,6 +278,30 @@ def _user_rating(profile, concept):
 # ── The card payload ──────────────────────────────────────────────────────────────────────────────
 
 RARITY_LABELS = {0: 'Ultra Rare', 1: 'Very Rare', 2: 'Rare', 3: 'Common'}
+
+#: Tier dot colours for the card. The site's --color-trophy-* tokens are deliberately muted metallics
+#: tuned for light-ish card surfaces; on the card's near-black ground silver (#5f5f5f) sits at roughly
+#: 2.4:1 and simply disappears at embed scale. These are the same hues lifted until they read.
+#: Platinum is the site token unchanged -- it was already light enough.
+TIER_DISPLAY = [
+    ('platinum', '#67d1f8'),
+    ('gold', '#e0b055'),
+    ('silver', '#b9c2cc'),
+    ('bronze', '#c07a4a'),
+]
+
+
+def _tier_counts(counts):
+    """[(tier, count, colour)] for the tiers this game actually has, platinum first."""
+    out = []
+    for tier, colour in TIER_DISPLAY:
+        try:
+            n = int(counts.get(tier) or 0)
+        except (TypeError, ValueError, AttributeError):
+            n = 0
+        if n:
+            out.append({'tier': tier, 'count': n, 'colour': colour})
+    return out
 
 
 def get_card_data(profile, standing):
@@ -302,6 +339,7 @@ def get_card_data(profile, standing):
 
     earned_counts = standing.earned_trophies or {}
     group_defined = group.defined_trophies or {}
+    total_plats, total_full = hunter_totals(profile)
 
     return {
         'variant': variant,
@@ -315,6 +353,8 @@ def get_card_data(profile, standing):
         # The title they're WEARING, not one this game granted -- the card's identity strip is the
         # hunter, and the worn title is how they present themselves everywhere else on the site.
         'display_title': _displayed_title(profile),
+        'total_platinums': total_plats,
+        'total_completions': total_full,
 
         'game_name': game.title_name,
         'game_id': game.id,
@@ -342,7 +382,11 @@ def get_card_data(profile, standing):
         # outstanding must not read as partially done.
         'group_earned': sum(int(v or 0) for v in earned_counts.values()),
         'group_defined': sum(int(v or 0) for v in group_defined.values()),
-        'group_tiers': earned_counts,
+        # Ordered platinum -> bronze for display. Falls back to the group's DEFINED counts because
+        # `earned_trophies` is a denorm that can lag, and the group is finished either way, so the two
+        # agree whenever both are present.
+        'tier_counts': _tier_counts(earned_counts or group_defined),
+        'platform_label': ' / '.join(game.title_platform or []),
 
         'badge_lines': _badge_lines(profile, concept),
         'user_rating': _user_rating(profile, concept),

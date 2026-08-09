@@ -1,4 +1,4 @@
-{% comment %}
+{% load static %}{% comment %}
 Plat card -- the share image for a game completion. Landscape only, 1200x630.
 
 TWO VARIANTS, one layout. `variant` is 'platinum' (the game defines a platinum, so finishing the
@@ -6,12 +6,15 @@ default group means they popped it) or 'full' (no platinum defined; the list is 
 They differ in accent, mark and label -- never in structure -- so they read as siblings.
 
 WHY IT LOOKS LIKE THIS
-  - 1200x630 is the OG/Twitter/Discord embed ratio, and that is where these actually get seen:
-    ~450px wide in a Discord preview. Every size here is chosen to survive at ~37% scale. If an
-    element wouldn't read at that size it isn't on the card. That is the whole reason the old card's
-    dense stat grid, badge rail and rating pills are gone.
-  - The hunter is the subject, not the game: identity strip on top (avatar, name, the title they're
-    wearing), then the completion. A share is "look what I did".
+  - 1200x630 is the OG/Twitter/Discord embed ratio, which is where these get seen: ~450px wide in a
+    Discord preview. Sizes are chosen to survive at ~37% scale. That constraint governs the TYPE
+    SCALE, not the amount of information -- the card is zoned (identity / completion / proof /
+    attribution) so density lands as scannable rows rather than mush.
+  - The hunter is the subject, not the game: identity strip on top (avatar, name, worn title, career
+    totals), then what they did. A share is "look what I did".
+  - THE CARD IS ALSO AN ADVERT. It travels to people who don't have an account, so the brand block is
+    a real mark -- logo, wordmark, and the domain -- not a whisper in the corner. It is the second
+    thing you see after the game.
   - Game art BACKS the card, it never leads it. Concept.get_landscape_url() resolves to an IGDB
     screenshot -> artwork -> PSN bg_url -> nothing, so the art is uncurated and often absent. The
     card must be complete without it, which is why the ground is a designed gradient by default and
@@ -29,55 +32,63 @@ properties. So the --pp-* token VALUES are ported by hand. Keep this map in sync
     --pp-primary     #27ebfe   (platinum variant accent)
     --pp-accent      #ff9350   (100% variant accent)
 
+Tier dot colours are lifted from --color-trophy-* -- see TIER_DISPLAY in completion_card_service.
+
 TYPE: the same two-voice pairing as the site -- Bricolage Grotesque (--pp-font-display) for the
-things you read first (username, variant label, game title, tallies), Inter (--pp-font-body) for
-labels and meta. Both are embedded by the renderer from static/fonts/; a face that isn't in that
-directory cannot render here at all, so keep the stacks to those two families.
+things you read first (username, wordmark, variant label, game title, tallies), Inter
+(--pp-font-body) for labels and meta. Both are embedded by the renderer from static/fonts/; a face
+that isn't in that directory cannot render here at all, so keep the stacks to those two families.
 
 Context: see core/services/completion_card_service.get_card_data + api/shareable_views.build_card_context.
 {% endcomment %}
-<div class="share-image-content" style="position: relative; width: 1200px; height: 630px; overflow: hidden; box-sizing: border-box; font-family: 'Inter', -apple-system, sans-serif; background: radial-gradient(120% 90% at 12% 0%, #232a31 0%, #181d23 45%, #05080c 100%);">
+<div class="share-image-content" style="position: relative; width: 1200px; height: 630px; overflow: hidden; box-sizing: border-box; font-family: 'Inter', sans-serif; background: radial-gradient(120% 90% at 12% 0%, #232a31 0%, #181d23 45%, #05080c 100%);">
 
-    {% comment %}Art backing. Sits UNDER the scrim so it enriches the ground without ever competing
-    with the text; absent art costs nothing because the ground below is already finished.{% endcomment %}
+    {% comment %}Art backing. Sits UNDER the scrim so it enriches the ground without competing with
+    the text; absent art costs nothing because the ground below is already finished.{% endcomment %}
     {% if backdrop_image %}
     <div style="position: absolute; inset: 0; background-image: url('{{ backdrop_image }}'); background-size: cover; background-position: center; opacity: 0.5;"></div>
     {% endif %}
 
-    {% comment %}Scrim: an INNER layer, so it survives a theme replacing the ground. Darkest on the
-    left where the text lives, lifting toward the right so art still shows.{% endcomment %}
-    <div style="position: absolute; inset: 0; background: linear-gradient(100deg, rgba(5, 8, 12, 0.94) 0%, rgba(5, 8, 12, 0.86) 46%, rgba(5, 8, 12, 0.62) 100%);"></div>
-    <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(5, 8, 12, 0.75) 0%, rgba(5, 8, 12, 0) 42%);"></div>
+    {% comment %}Scrim: an INNER layer, so it survives a theme replacing the ground.{% endcomment %}
+    <div style="position: absolute; inset: 0; background: linear-gradient(100deg, rgba(5, 8, 12, 0.95) 0%, rgba(5, 8, 12, 0.88) 48%, rgba(5, 8, 12, 0.64) 100%);"></div>
+    <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(5, 8, 12, 0.78) 0%, rgba(5, 8, 12, 0) 40%);"></div>
 
-    {% comment %}The Frame: a thin inset rule that turns the image into an object rather than a
-    screenshot. Accent-tinted per variant.{% endcomment %}
-    <div style="position: absolute; inset: 18px; border: 2px solid {% if variant == 'platinum' %}rgba(39, 235, 254, 0.38){% else %}rgba(255, 147, 80, 0.38){% endif %}; border-radius: 14px; box-shadow: inset 0 0 60px rgba(5, 8, 12, 0.55);"></div>
+    {% comment %}The Frame: a thin inset rule that makes the image an object rather than a
+    screenshot.{% endcomment %}
+    <div style="position: absolute; inset: 16px; border: 2px solid {% if variant == 'platinum' %}rgba(39, 235, 254, 0.38){% else %}rgba(255, 147, 80, 0.38){% endif %}; border-radius: 14px; box-shadow: inset 0 0 60px rgba(5, 8, 12, 0.55);"></div>
 
-    <div style="position: relative; height: 630px; padding: 46px 52px; box-sizing: border-box; display: flex; flex-direction: column;">
+    <div style="position: relative; height: 630px; padding: 40px 46px; box-sizing: border-box; display: flex; flex-direction: column;">
 
-        {# ── Identity: the hunter, first ── #}
-        <div data-element="platinum-banner" style="display: flex; align-items: center; gap: 18px; flex-shrink: 0;">
+        {# ── 1. Identity: the hunter, and the brand ── #}
+        <div data-element="platinum-banner" style="display: flex; align-items: center; gap: 17px; flex-shrink: 0; padding-bottom: 20px; border-bottom: 1px solid rgba(64, 72, 83, 0.55);">
             {% if avatar_image %}
-            <img src="{{ avatar_image }}" alt="" style="width: 62px; height: 62px; border-radius: 50%; object-fit: cover; border: 2px solid {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; box-sizing: border-box; flex-shrink: 0;" />
+            <img src="{{ avatar_image }}" alt="" style="width: 58px; height: 58px; border-radius: 50%; object-fit: cover; border: 2px solid {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; box-sizing: border-box; flex-shrink: 0;" />
             {% else %}
-            <div style="width: 62px; height: 62px; border-radius: 50%; border: 2px solid {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; box-sizing: border-box; background: #232a31; flex-shrink: 0;"></div>
+            <div style="width: 58px; height: 58px; border-radius: 50%; border: 2px solid {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; box-sizing: border-box; background: #232a31; flex-shrink: 0;"></div>
             {% endif %}
 
             <div style="flex: 1; min-width: 0;">
-                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 32px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.01em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ username }}</div>
-                {% if display_title %}
-                <div style="font-size: 17px; font-weight: 600; color: #9da5b1; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ display_title }}</div>
-                {% endif %}
+                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 30px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.01em; line-height: 1.12; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ username }}</div>
+                <div style="font-size: 16px; font-weight: 500; color: #9da5b1; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    {% if display_title %}<span style="color: #f0f6fd; font-weight: 600;">{{ display_title }}</span><span style="color: #8a939f;"> &nbsp;&middot;&nbsp; </span>{% endif %}{{ total_platinums }} platinum{{ total_platinums|pluralize }}{% if total_completions %} &nbsp;&middot;&nbsp; {{ total_completions }} at 100%{% endif %}
+                </div>
             </div>
 
-            <div style="flex-shrink: 0; font-size: 17px; font-weight: 700; color: #8a939f; letter-spacing: 0.14em; text-transform: uppercase;">Platinum Pursuit</div>
+            {# The advert. A stranger sees this card before they ever see the site. #}
+            <div style="flex-shrink: 0; display: flex; align-items: center; gap: 13px;">
+                <img src="{% static 'images/logo.png' %}" alt="" style="width: 50px; height: 50px; border-radius: 9px; object-fit: cover; flex-shrink: 0;" />
+                <div style="text-align: left;">
+                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 23px; font-weight: 700; color: #f0f6fd; letter-spacing: 0.02em; line-height: 1.05;">Platinum Pursuit</div>
+                    <div style="font-size: 16px; font-weight: 600; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; letter-spacing: 0.04em; margin-top: 2px;">platpursuit.com</div>
+                </div>
+            </div>
         </div>
 
-        {# ── The completion ── #}
-        <div style="flex: 1; display: flex; align-items: center; gap: 38px; min-height: 0; padding-top: 26px;">
+        {# ── 2. The completion ── #}
+        <div style="flex: 1; display: flex; align-items: center; gap: 34px; min-height: 0; padding-top: 22px;">
 
             {# Cover, framed rather than bled: it's evidence, not the ground. #}
-            <div style="width: 282px; height: 376px; flex-shrink: 0; border-radius: 10px; overflow: hidden; background: #232a31; border: 1px solid #404853; box-sizing: border-box; box-shadow: 0 18px 40px rgba(5, 8, 12, 0.6);">
+            <div style="width: 290px; height: 387px; flex-shrink: 0; border-radius: 10px; overflow: hidden; background: #232a31; border: 1px solid #404853; box-sizing: border-box; box-shadow: 0 18px 40px rgba(5, 8, 12, 0.6);">
                 {% if game_image %}
                 <img src="{{ game_image }}" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: top;" />
                 {% endif %}
@@ -85,69 +96,92 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
 
             <div style="flex: 1; min-width: 0;">
 
-                {# Variant label + ordinal: what this card IS. #}
-                <div style="display: flex; align-items: center; gap: 14px;">
+                {# What this card IS. #}
+                <div style="display: flex; align-items: center; gap: 13px;">
                     {% if variant == 'platinum' and trophy_image %}
-                    <img src="{{ trophy_image }}" alt="" style="width: 40px; height: 40px; object-fit: cover; border-radius: 5px; flex-shrink: 0;" />
+                    <img src="{{ trophy_image }}" alt="" style="width: 38px; height: 38px; object-fit: cover; border-radius: 5px; flex-shrink: 0;" />
                     {% else %}
-                    <div style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; border: 2px solid #ff9350; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #ff9350; letter-spacing: -0.02em;">100</div>
+                    <div style="width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; border: 2px solid #ff9350; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 13px; font-weight: 700; color: #ff9350; letter-spacing: -0.02em;">100</div>
                     {% endif %}
-                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 22px; font-weight: 700; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; letter-spacing: 0.16em; text-transform: uppercase;">{% if variant == 'platinum' %}Platinum{% else %}100% Complete{% endif %}</span>
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 21px; font-weight: 700; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; letter-spacing: 0.16em; text-transform: uppercase;">{% if variant == 'platinum' %}Platinum{% else %}100% Complete{% endif %}</span>
                     {% if ordinal %}
-                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 22px; font-weight: 600; color: #8a939f; letter-spacing: 0.04em;">#{{ ordinal }}</span>
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 21px; font-weight: 600; color: #8a939f;">#{{ ordinal }}</span>
                     {% endif %}
                 </div>
 
                 {# The game: the single dominant statement. #}
-                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 54px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 14px; max-height: 116px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
+                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 50px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 12px; max-height: 108px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
 
-                <div style="height: 2px; width: 96px; background: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; margin-top: 22px; border-radius: 2px;"></div>
+                {% if platform_label or completed_at %}
+                <div style="font-size: 17px; font-weight: 500; color: #8a939f; margin-top: 11px; letter-spacing: 0.02em;">
+                    {% if platform_label %}{{ platform_label }}{% if is_regional and region %} &middot; {{ region|join:" / " }}{% endif %}{% endif %}{% if platform_label and completed_at %} &nbsp;&middot;&nbsp; {% endif %}{% if completed_at %}{{ completed_at|date:"F j, Y" }}{% endif %}
+                </div>
+                {% endif %}
 
-                {# Three stats, maximum. Any more is mush at embed size. #}
-                <div style="display: flex; gap: 46px; margin-top: 24px;">
-                    <div>
-                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 38px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ group_defined }}</div>
-                        <div style="font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 7px;">Trophies</div>
+                {# Proof: the trophy list itself, in the hobby's own vocabulary. #}
+                {% if tier_counts %}
+                <div style="display: flex; align-items: center; gap: 22px; margin-top: 20px; padding: 13px 0; border-top: 1px solid rgba(64, 72, 83, 0.45); border-bottom: 1px solid rgba(64, 72, 83, 0.45);">
+                    {% for tier in tier_counts %}
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="width: 15px; height: 15px; border-radius: 50%; background: {{ tier.colour }}; display: inline-block; flex-shrink: 0;"></span>
+                        <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 25px; font-weight: 700; color: #f0f6fd; line-height: 1;">{{ tier.count }}</span>
                     </div>
+                    {% endfor %}
+                    <div style="margin-left: auto; font-size: 15px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase;">{{ group_defined }} Trophies</div>
+                </div>
+                {% endif %}
+
+                {# The numbers. #}
+                <div style="display: flex; gap: 42px; margin-top: 20px;">
                     {% if variant == 'platinum' and trophy_earn_rate %}
                     <div>
-                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 38px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ trophy_earn_rate }}%</div>
-                        <div style="font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 7px;">{{ rarity_label|default:"Rarity" }}</div>
-                    </div>
-                    {% elif completed_at %}
-                    <div>
-                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 38px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ completed_at|date:"M j" }}</div>
-                        <div style="font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 7px;">{{ completed_at|date:"Y" }}</div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ trophy_earn_rate }}%</div>
+                        <div style="font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">{{ rarity_label|default:"Rarity" }}</div>
                     </div>
                     {% endif %}
                     {% if playtime %}
                     <div>
-                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 38px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ playtime }}</div>
-                        <div style="font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 7px;">Played</div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ playtime }}</div>
+                        <div style="font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Played</div>
+                    </div>
+                    {% endif %}
+                    {% comment %}Their own verdict -- data nobody else on the card has, and the reason
+                    the download flow nudges for a rating first.{% endcomment %}
+                    {% if user_rating.difficulty %}
+                    <div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ user_rating.difficulty }}<span style="font-size: 20px; color: #8a939f;">/10</span></div>
+                        <div style="font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Difficulty</div>
+                    </div>
+                    {% endif %}
+                    {% if user_rating.fun_ranking %}
+                    <div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ user_rating.fun_ranking }}<span style="font-size: 20px; color: #8a939f;">/10</span></div>
+                        <div style="font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Fun</div>
                     </div>
                     {% endif %}
                 </div>
             </div>
         </div>
 
-        {# ── One badge line: the spine cross-link, and the smallest thing here on purpose. ── #}
+        {# ── 3. The spine: what this completion fed ── #}
         {% if badge_lines %}
-        {% with line=badge_lines.0 %}
-        <div style="flex-shrink: 0; display: flex; align-items: center; gap: 11px; font-size: 22px; color: #9da5b1; white-space: nowrap; overflow: hidden;">
-            {% if line.title_held and line.title %}
-            <span style="color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; font-size: 19px;">&#9670;</span>
-            <span style="font-weight: 700; color: #f0f6fd; overflow: hidden; text-overflow: ellipsis;">{{ line.title }}</span>
-            <span style="color: #8a939f;">&middot;</span>
-            <span style="overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</span>
-            {% else %}
-            <span style="overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</span>
-            {% if line.stages_total %}
-            <span style="color: #8a939f;">&middot;</span>
-            <span style="color: #8a939f;">{{ line.stages_cleared }} of {{ line.stages_total }}</span>
-            {% endif %}
-            {% endif %}
+        <div style="flex-shrink: 0; display: flex; align-items: center; gap: 26px; padding-top: 16px; border-top: 1px solid rgba(64, 72, 83, 0.55); font-size: 19px; color: #9da5b1; white-space: nowrap; overflow: hidden;">
+            {% for line in badge_lines %}
+            <div style="display: flex; align-items: center; gap: 9px; min-width: 0;">
+                {% if line.title_held and line.title %}
+                <span style="color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; font-size: 17px;">&#9670;</span>
+                <span style="font-weight: 700; color: #f0f6fd; overflow: hidden; text-overflow: ellipsis;">{{ line.title }}</span>
+                <span style="color: #8a939f;">&middot;</span>
+                <span style="color: #8a939f; overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</span>
+                {% else %}
+                <span style="overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</span>
+                {% if line.stages_total %}
+                <span style="color: #8a939f;">{{ line.stages_cleared }}/{{ line.stages_total }}</span>
+                {% endif %}
+                {% endif %}
+            </div>
+            {% endfor %}
         </div>
-        {% endwith %}
         {% endif %}
     </div>
 </div>
