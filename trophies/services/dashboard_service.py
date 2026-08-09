@@ -1305,71 +1305,6 @@ def provide_my_stats_teaser(profile):
     }
 
 
-def provide_milestone_tracker(profile, settings=None):
-    """In-progress milestones sorted by completion %, plus recently earned."""
-    from trophies.models import UserMilestoneProgress, UserMilestone
-
-    settings = settings or {}
-    limit = settings.get('limit', 6)
-
-    # Earned milestone IDs
-    earned_ids = set(
-        UserMilestone.objects.filter(profile=profile)
-        .values_list('milestone_id', flat=True)
-    )
-
-    # Recently earned (last 3)
-    recent_earned_qs = (
-        UserMilestone.objects.filter(profile=profile)
-        .select_related('milestone')
-        .order_by('-earned_at')[:3]
-    )
-    earned_list = []
-    for um in recent_earned_qs:
-        m = um.milestone
-        earned_list.append({
-            'name': m.name,
-            'description': m.description,
-            'image_url': m.image.url if m.image else '',
-            'earned_at': um.earned_at,
-        })
-
-    # In-progress milestones: fetch all with progress, sort by pct in Python
-    progress_qs = (
-        UserMilestoneProgress.objects.filter(
-            profile=profile, progress_value__gt=0, milestone__is_active=True
-        )
-        .select_related('milestone')
-        .exclude(milestone__id__in=earned_ids)
-    )
-
-    in_progress = []
-    for p in progress_qs:
-        m = p.milestone
-        if m.required_value <= 0:
-            continue
-        pct = round(p.progress_value / m.required_value * 100, 1)
-        if pct >= 100:
-            continue
-        in_progress.append({
-            'name': m.name,
-            'description': m.description,
-            'image_url': m.image.url if m.image else '',
-            'progress_value': p.progress_value,
-            'required_value': m.required_value,
-            'pct': min(pct, 99.9),
-        })
-
-    in_progress.sort(key=lambda x: x['pct'], reverse=True)
-    in_progress = in_progress[:limit]
-
-    return {
-        'in_progress': in_progress,
-        'recently_earned': earned_list,
-        'total_earned': len(earned_ids),
-    }
-
-
 def provide_my_reviews(profile, settings=None):
     """Review engagement: recent votes on your reviews and overall stats."""
     from trophies.models import Review, ReviewVote
@@ -4533,25 +4468,6 @@ DASHBOARD_MODULES = [
              'options': [{'value': 3, 'label': '3'}, {'value': 6, 'label': '6'}, {'value': 10, 'label': '10'}]},
             {'key': 'threshold', 'label': 'Min. progress', 'type': 'select', 'default': 90,
              'options': [{'value': 80, 'label': '80%'}, {'value': 90, 'label': '90%'}, {'value': 95, 'label': '95%'}]},
-        ],
-        'cache_ttl': 600,
-        'default_size': 'medium',
-        'allowed_sizes': ['small', 'medium', 'large'],
-    },
-    {
-        'slug': 'milestone_tracker',
-        'name': 'Milestone Tracker',
-        'description': 'Track your next milestones. See what you are closest to earning.',
-        'category': 'progress',
-        'template': 'trophies/partials/dashboard/milestone_tracker.html',
-        'provider': provide_milestone_tracker,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 3,  # progress #3
-        'default_settings': {'limit': 6},
-        'configurable_settings': [
-            {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
-             'options': [{'value': 3, 'label': '3'}, {'value': 6, 'label': '6'}, {'value': 9, 'label': '9'}]},
         ],
         'cache_ttl': 600,
         'default_size': 'medium',

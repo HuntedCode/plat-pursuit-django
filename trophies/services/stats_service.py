@@ -396,7 +396,6 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
         'badges': _compute_badge_stats(profile, gamification),
         'community': _compute_community_stats(profile),
         'recaps': _compute_recap_stats(profile),
-        'milestones': _compute_milestones(profile),
         'filters': {
             'exclude_shovelware': exclude_shovelware,
             'exclude_hidden': exclude_hidden,
@@ -1993,120 +1992,7 @@ def _compute_recap_stats(profile):
         'best_completion_month': _fmt_recap(best_completion, 'games_completed'),
     }
 
-
 # ---------------------------------------------------------------------------
-# Section: Milestone Stats
-# ---------------------------------------------------------------------------
-
-def _compute_milestones(profile):
-    from trophies.models import UserMilestone, UserMilestoneProgress, Milestone, CALENDAR_DAYS_PER_MONTH
-    from trophies.milestone_constants import MONTH_MAP, MILESTONE_CATEGORIES
-
-    # All milestones and which ones the user has earned
-    all_milestones = list(Milestone.objects.active().values_list('id', 'criteria_type'))
-    earned_ids = set(
-        UserMilestone.objects.filter(profile=profile, milestone__is_active=True)
-        .values_list('milestone_id', flat=True)
-    )
-
-    total_available = len(all_milestones)
-    total_earned = len(earned_ids)
-    overall_pct = round(total_earned / total_available * 100, 1) if total_available else 0
-
-    # Build a criteria_type -> milestone_id mapping
-    type_to_ids = defaultdict(set)
-    for mid, ctype in all_milestones:
-        type_to_ids[ctype].add(mid)
-
-    # Per-category breakdown (skip 'overview' which has no criteria_types)
-    categories = []
-    for slug, config in MILESTONE_CATEGORIES.items():
-        ctypes = config.get('criteria_types', [])
-        if not ctypes:
-            continue
-        cat_ids = set()
-        for ct in ctypes:
-            cat_ids |= type_to_ids.get(ct, set())
-        cat_earned = len(cat_ids & earned_ids)
-        cat_total = len(cat_ids)
-        if cat_total == 0:
-            continue
-        categories.append({
-            'name': config['name'],
-            'earned': cat_earned,
-            'total': cat_total,
-            'pct': round(cat_earned / cat_total * 100, 1),
-        })
-
-    # Most recent milestone
-    recent = (
-        UserMilestone.objects.filter(profile=profile)
-        .select_related('milestone')
-        .order_by('-earned_at')
-        .first()
-    )
-    most_recent = None
-    if recent:
-        most_recent = {
-            'name': recent.milestone.name,
-            'image': recent.milestone.image.url if recent.milestone.image else None,
-            'earned_at': recent.earned_at,
-        }
-
-    # Next closest unearned milestone
-    progress_qs = (
-        UserMilestoneProgress.objects.filter(
-            profile=profile, progress_value__gt=0, milestone__is_active=True,
-        )
-        .exclude(milestone__id__in=earned_ids)
-        .select_related('milestone')
-    )
-    next_closest = None
-    best_pct = -1
-    for p in progress_qs:
-        m = p.milestone
-        required = _get_milestone_required(m, MONTH_MAP, CALENDAR_DAYS_PER_MONTH)
-        if required > 0:
-            pct = round(p.progress_value / required * 100, 1)
-            if pct > best_pct:
-                best_pct = pct
-                next_closest = {
-                    'name': m.name,
-                    'image': m.image.url if m.image else None,
-                    'progress': p.progress_value,
-                    'required': required,
-                    'pct': min(pct, 99.9),
-                }
-
-    return {
-        'total_earned': total_earned,
-        'total_available': total_available,
-        'overall_pct': overall_pct,
-        'categories': categories,
-        'most_recent': most_recent,
-        'next_closest': next_closest,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Utility helpers
-# ---------------------------------------------------------------------------
-
-def _get_milestone_required(milestone, month_map, days_per_month):
-    """Get the effective required value for a milestone.
-
-    Calendar month milestones use the number of days in the month as their
-    target (progress tracks filled days), but the model's required_value
-    stores 0. This resolves the correct target for display.
-    """
-    ct = milestone.criteria_type
-    if ct in month_map:
-        return days_per_month.get(month_map[ct], 0)
-    if milestone.required_value and milestone.required_value > 0:
-        return milestone.required_value
-    # Fall back to criteria_details target for types like calendar_months_total
-    target = (milestone.criteria_details or {}).get('target', 0)
-    return target if target and target > 0 else 0
 
 
 def _build_completion_tiers(*counts):

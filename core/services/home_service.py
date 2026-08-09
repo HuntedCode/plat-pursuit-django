@@ -25,7 +25,7 @@ from django.utils import timezone
 
 from core.services.site_heartbeat import get_cached_heartbeat
 from trophies.services import (
-    career_service, contract_service, dashboard_service, milestone_service, pursuer_card_service,
+    career_service, contract_service, dashboard_service, pursuer_card_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,10 +73,6 @@ def _build_glances(profile):
             'almost_badges', profile,
             lambda: _unique_series(dashboard_service.provide_badge_progress(profile, {'limit': 12})
                                    .get('badges_in_progress', []))[:3], []),
-        'milestones': _safe(
-            'milestones', profile,
-            lambda: milestone_service.earned_summary(profile),
-            {'earned': 0, 'total': 0}),
         'snapshot': _safe(
             'snapshot', profile,
             lambda: dashboard_service.provide_trophy_snapshot(profile), None),
@@ -142,13 +138,12 @@ def _build_sync(profile):
 def _build_launchers(profile, hero, glances, top_jobs):
     """Navigator tiles into the functional pages, each carrying a live glance-stat drawn from the
     already-built glances (no extra queries here): Career shows your strongest job, Contracts the XP
-    waiting to claim, Collection your closest badge, Milestones how many you've earned, Titles the
-    equipped title. A route that doesn't resolve is dropped."""
+    waiting to claim, Collection your closest badge, Titles the equipped title. A route that doesn't
+    resolve is dropped."""
     level = (hero or {}).get('pursuer_level')
     top_job = (top_jobs or [None])[0]
     claim = (glances or {}).get('claimable') or {}
     almost = ((glances or {}).get('almost_badges') or [None])[0]
-    ms = (glances or {}).get('milestones') or {}
     stats = {
         'career': (f"{top_job['name']} · Lv {top_job['level']}"
                    if top_job and top_job.get('name') and top_job.get('level')
@@ -156,7 +151,6 @@ def _build_launchers(profile, hero, glances, top_jobs):
         'research_panel': f"{claim.get('total_xp'):,} XP to claim" if claim.get('total_xp') else None,
         'badge_collection': (f"{almost['completed']}/{almost['required']} · {almost['tier_name']}"
                              if almost else None),
-        'milestones_list': f"{ms['earned']}/{ms['total']} earned" if ms.get('total') else None,
         'my_titles': (hero or {}).get('active_title'),
     }
     launchers = []

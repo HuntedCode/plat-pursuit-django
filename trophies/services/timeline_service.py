@@ -1,8 +1,8 @@
 """
-Timeline service - Builds chronologically ordered milestone events for profile headers.
+Timeline service - Builds chronologically ordered notable events for profile headers.
 
-Collects notable events from a user's trophy hunting journey (first platinum,
-milestone platinums, fastest platinum, badges, etc.) and selects the most
+Collects notable events from a user's trophy hunting journey (first trophy,
+fastest platinum, rarest platinum, badges, etc.) and selects the most
 interesting ones for display using a priority-based algorithm.
 """
 import math
@@ -61,57 +61,6 @@ def _get_first_trophy_event(profile):
     )]
 
 
-def _get_milestone_plat_events(profile):
-    """Platinum count milestones with actual trophy earned dates. 1 optimized query."""
-    from django.db.models import Window, F
-    from django.db.models.functions import RowNumber
-    from trophies.models import UserMilestone, EarnedTrophy
-
-    # Get milestone targets we need to fetch
-    milestones = list(
-        UserMilestone.objects
-        .filter(profile=profile, milestone__criteria_type='plat_count')
-        .select_related('milestone')
-        .order_by('milestone__required_value')
-    )
-    if not milestones:
-        return []
-
-    # Collect which Nth platinums we need (e.g., [10, 25, 50, 100])
-    needed_positions = {m.milestone.required_value for m in milestones}
-
-    # Single query using Window function to get only needed rows
-    plat_dates_qs = (
-        EarnedTrophy.objects
-        .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
-        .annotate(plat_number=Window(
-            expression=RowNumber(),
-            order_by=F('earned_date_time').asc()
-        ))
-        .filter(plat_number__in=needed_positions)
-        .values('plat_number', 'earned_date_time')
-    )
-
-    # Build lookup dict {10: datetime, 25: datetime, ...}
-    plat_date_lookup = {
-        row['plat_number']: row['earned_date_time']
-        for row in plat_dates_qs
-    }
-
-    events = []
-    for um in milestones:
-        target = um.milestone.required_value
-        earned_date = plat_date_lookup.get(target, um.earned_at)
-
-        # Scale priority: base 8 + log(target/10) capped at 10
-        priority = min(8 + math.log10(max(target, 10)) - 1, 10)
-        events.append(_make_event(
-            'milestone_plat',
-            f'{target} Platinums',
-            um.milestone.name,
-            earned_date, 'trophy-platinum', priority,
-        ))
-    return events
 
 
 def _get_fastest_plat_event(profile):
@@ -203,51 +152,29 @@ def _select_events(candidates, max_events):
 
     Rules:
     - Always include 'joined' and 'first_trophy' if present
-    - Cap milestone_plat events at 3 (highest, lowest, one middle)
     - Cap badge events at 2
     - Sort by priority descending, take top max_events
     - Re-sort final selection by date descending
     """
     # Separate by type
     guaranteed = []
-    milestone_plats = []
     badges = []
     other = []
 
     for event in candidates:
         if event['event_type'] in ('joined', 'first_trophy'):
             guaranteed.append(event)
-        elif event['event_type'] == 'milestone_plat':
-            milestone_plats.append(event)
         elif event['event_type'] == 'badge':
             badges.append(event)
         else:
             other.append(event)
-
-    # Pick milestone plats: up to 3 (highest, lowest, middle)
-    picked_milestones = []
-    if milestone_plats:
-        # Already sorted by required_value ascending from the query
-        milestone_plats.sort(key=lambda e: e['priority'])
-        if len(milestone_plats) == 1:
-            picked_milestones = milestone_plats
-        elif len(milestone_plats) == 2:
-            picked_milestones = milestone_plats
-        else:
-            # Highest priority (highest plat count)
-            picked_milestones.append(milestone_plats[-1])
-            # Lowest (first milestone achieved)
-            picked_milestones.append(milestone_plats[0])
-            # Middle
-            mid = len(milestone_plats) // 2
-            picked_milestones.append(milestone_plats[mid])
 
     # Pick badges: up to 2 (highest tier first)
     picked_badges = badges[:2]
 
     # Guaranteed events are always included, fill remaining slots by priority
     remaining_slots = max_events - len(guaranteed)
-    extras = picked_milestones + picked_badges + other
+    extras = picked_badges + other
     extras.sort(key=lambda e: e['priority'], reverse=True)
     selected = guaranteed + extras[:remaining_slots]
 
@@ -278,7 +205,6 @@ def build_timeline_events(profile, max_events=8):
     candidates = []
     candidates.extend(_get_joined_event(profile))
     candidates.extend(_get_first_trophy_event(profile))
-    candidates.extend(_get_milestone_plat_events(profile))
     candidates.extend(_get_fastest_plat_event(profile))
     candidates.extend(_get_rarest_plat_event(profile))
     candidates.extend(_get_badge_events(profile))

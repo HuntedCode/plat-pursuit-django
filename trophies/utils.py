@@ -64,13 +64,6 @@ from trophies.services.badge_service import (
     initial_badge_check,
 )
 
-# Milestone service functions
-from trophies.services.milestone_service import (
-    check_and_award_milestone,
-    check_all_milestones_for_user,
-    notify_bot_role_earned as milestone_notify_bot_role_earned,
-)
-
 # Use badge service's notify function as the main one (they're identical)
 notify_bot_role_earned = badge_notify_bot_role_earned
 
@@ -131,10 +124,6 @@ __all__ = [
     'handle_badge',
     'notify_bot_role_earned',
     'initial_badge_check',
-
-    # Milestone functions
-    'check_and_award_milestone',
-    'check_all_milestones_for_user',
 
     # Leaderboard functions
     'compute_earners_leaderboard',
