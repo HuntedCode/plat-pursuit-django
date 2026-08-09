@@ -307,6 +307,10 @@ def _user_rating(profile, concept):
         return None
     return {
         'overall_rating': rating.overall_rating,
+        # Percentage fill for the card's star row. `overall_rating` is a 0.5-5.0 FLOAT (unlike
+        # difficulty/grindiness/fun, which are 1-10 ints), so half stars are real and the row is drawn
+        # as a clipped overlay rather than N whole glyphs.
+        'stars_pct': round((rating.overall_rating or 0) / 5 * 100, 1),
         'difficulty': rating.difficulty,
         'grindiness': rating.grindiness,
         'fun_ranking': rating.fun_ranking,

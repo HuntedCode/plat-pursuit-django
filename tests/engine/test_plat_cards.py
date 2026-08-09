@@ -400,3 +400,20 @@ def test_a_game_with_no_contract_simply_omits_the_line():
     _, _, standing = _completed_game(profile, with_platinum=True)
 
     assert cards.get_card_data(profile, standing)['contract'] is None
+
+
+def test_the_star_score_reaches_the_card_with_a_fill_percentage():
+    """`overall_rating` is a 0.5-5.0 FLOAT, unlike the 1-10 difficulty/fun ints, so the card draws a
+    clipped overlay and half stars have to be exact."""
+    from trophies.models import UserConceptRating
+
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    UserConceptRating.objects.create(profile=profile, concept=game.concept, difficulty=6,
+                                     fun_ranking=9, grindiness=5, hours_to_platinum=40,
+                                     overall_rating=4.5)
+
+    rating = cards.get_card_data(profile, standing)['user_rating']
+
+    assert rating['overall_rating'] == 4.5
+    assert rating['stars_pct'] == 90.0

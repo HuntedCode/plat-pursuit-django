@@ -118,9 +118,33 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                 {# The game: the single dominant statement. #}
                 <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 50px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 12px; max-height: 108px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
 
-                {% if platform_label or completed_at %}
-                <div style="line-height: 1.3; font-size: 17px; font-weight: 500; color: #8a939f; margin-top: 11px; letter-spacing: 0.02em;">
-                    {% if platform_label %}{{ platform_label }}{% if is_regional and region %} &middot; {{ region|join:" / " }}{% endif %}{% endif %}{% if platform_label and completed_at %} &nbsp;&middot;&nbsp; {% endif %}{% if completed_at %}{{ completed_at|date:"F j, Y" }}{% endif %}
+                {% if platform_label or completed_at or user_rating.overall_rating %}
+                <div style="display: flex; align-items: center; gap: 16px; margin-top: 11px;">
+                    <div style="line-height: 1.3; font-size: 17px; font-weight: 500; color: #8a939f; letter-spacing: 0.02em;">
+                        {% if platform_label %}{{ platform_label }}{% if is_regional and region %} &middot; {{ region|join:" / " }}{% endif %}{% endif %}{% if platform_label and completed_at %} &nbsp;&middot;&nbsp; {% endif %}{% if completed_at %}{{ completed_at|date:"F j, Y" }}{% endif %}
+                    </div>
+
+                    {% comment %}Their score for the GAME -- a verdict, not a stat about the completion,
+                    which is why it sits with the title rather than in the numbers row. Drawn as two
+                    stacked SVG rows with the gold one clipped to `stars_pct`, so half stars are exact.
+                    SVG rather than a ★ glyph on purpose: the renderer embeds only Bricolage/Inter/
+                    Poppins, none of which carry U+2605, so a glyph would land as tofu on a box with no
+                    fallback font installed.{% endcomment %}
+                    {% if user_rating.overall_rating %}
+                    <div style="display: flex; align-items: center; gap: 9px; margin-left: auto; flex-shrink: 0;">
+                        <div style="position: relative; width: 106px; height: 20px; flex-shrink: 0;">
+                            <div style="position: absolute; inset: 0; display: flex; gap: 2px;">
+                                {% for _ in "12345" %}<svg width="20" height="20" viewBox="0 0 24 24" fill="#2f363f"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>{% endfor %}
+                            </div>
+                            <div style="position: absolute; inset: 0; width: {{ user_rating.stars_pct }}%; overflow: hidden;">
+                                <div style="display: flex; gap: 2px; width: 106px;">
+                                    {% for _ in "12345" %}<svg width="20" height="20" viewBox="0 0 24 24" fill="#fcca21"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>{% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 21px; line-height: 1; font-weight: 700; color: #f0f6fd;">{{ user_rating.overall_rating|floatformat:"-1" }}</span>
+                    </div>
+                    {% endif %}
                 </div>
                 {% endif %}
 
