@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     // Finalize sub-phase labels (keys match _job_sync_complete() in token_keeper.py).
-    var PHASE = { health_check: 'Verifying', stats_badges: 'Badges', milestones: 'Milestones', challenges: 'Challenges', finishing: 'Wrapping up' };
+    var PHASE = { health_check: 'Verifying', stats_badges: 'Badges', finishing: 'Wrapping up' };
 
     var lastStatus = initialStatus, pollTimer = null, pollStart = 0, activeInterval = 2000;
     var INIT = 2000, EXT = 10000, THRESH = 60000;

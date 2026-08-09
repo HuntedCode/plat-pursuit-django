@@ -57,7 +57,7 @@ XP is denormalized into `ProfileGamification` (one row per profile) with both a 
 | File | Purpose |
 |------|---------|
 | `trophies/models.py` | Badge, Stage, ConceptBundle, UserBadge, UserBadgeProgress, ProfileGamification, StatType, StageStatValue, Title, UserTitle model definitions |
-| `trophies/managers.py` | BadgeManager, BadgeQuerySet, MilestoneManager, MilestoneQuerySet with custom filter methods |
+| `trophies/managers.py` | BadgeManager, BadgeQuerySet with custom filter methods |
 | `trophies/services/badge_service.py` | Core badge evaluation, awarding, revocation, Discord role management, and batch checking |
 | `trophies/services/xp_service.py` | XP calculation, ProfileGamification updates, and bulk update context manager |
 | `trophies/services/leaderboard_service.py` | Leaderboard computation: earners, progress, total progress, XP rankings, community XP |

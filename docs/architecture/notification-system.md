@@ -264,9 +264,12 @@ This prevents double-processing if the cron job overlaps (unlikely with hourly r
 
 **Milestone / challenge notifications retired (2026-08).** `create_milestone_notification()` and the `milestone_achieved` / `challenge_completed` types went with the legacy milestone engine and the Challenge system. The `milestones` app is deliberately quiet -- it sends no notification on a tier crossing. The type choices remain in `notifications/models.py` so historical rows still render.
 
-### 11. Milestone Title Rewards in Detail View
+### 11. Historical Milestone Notifications Still Render
 
-When a milestone has an associated `title` FK (to the `Title` model), `_build_milestone_context()` includes `title_name` and `title_text` in the context dict. These flow into `notification.metadata` and are rendered by `renderMilestoneDetail()` in `notification-inbox.js` as a styled callout card. The title info appears only in the expanded detail view, not in the preview `message` text. Milestones without a title reward have empty strings for both fields.
+No new milestone notifications are created (see #10), but rows created before the retirement remain in the
+inbox. Their `metadata` already carries `title_name` / `title_text`, and `renderMilestoneDetail()` in
+`notification-inbox.js` is deliberately kept so those historical entries still render their styled callout
+card. Don't delete that renderer while old rows exist.
 
 ## Management Commands
 
