@@ -15,11 +15,14 @@ WHY IT LOOKS LIKE THIS
   - THE CARD IS ALSO AN ADVERT. It travels to people who don't have an account, so the brand block is
     a real mark -- logo, wordmark, and the domain -- not a whisper in the corner. It is the second
     thing you see after the game.
-  - Game art BACKS the card, it never leads it. Concept.get_landscape_url() resolves to an IGDB
-    screenshot -> artwork -> PSN bg_url -> nothing, so the art is uncurated and often absent. The
-    card must be complete without it, which is why the ground is a designed gradient by default and
-    the scrim is an INNER layer (the renderer replaces the ground with `!important` when a theme is
-    picked, so a scrim baked into the ground would be blown away and text would land on raw art).
+  - Game art BACKS the card, it never leads it -- and it is a THEME, not a fixture. Painting the
+    backdrop unconditionally (as this did at first) put it on top of whatever ground the theme set, so
+    all six options rendered identically. The ground is now owned entirely by the theme: the designed
+    gradients, or one of the art grounds the renderer composites from `concept_bg_path`.
+    Concept.get_landscape_url() resolves to an IGDB screenshot -> artwork -> PSN bg_url -> nothing, so
+    the art is uncurated and often absent, and the card has to be complete without it.
+  - The scrim is an INNER layer for the same reason: the renderer replaces the ground with
+    `!important`, so a scrim baked into it would be blown away and text would land on raw art.
 
 INLINE STYLES, HEX ONLY
 Playwright renders via page.set_content() in an about:blank origin: no stylesheet, no custom
@@ -43,15 +46,15 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
 {% endcomment %}
 <div class="share-image-content" style="position: relative; width: 1200px; height: 630px; overflow: hidden; box-sizing: border-box; font-family: 'Inter', sans-serif; background: radial-gradient(120% 90% at 12% 0%, #232a31 0%, #181d23 45%, #05080c 100%);">
 
-    {% comment %}Art backing. Sits UNDER the scrim so it enriches the ground without competing with
-    the text; absent art costs nothing because the ground below is already finished.{% endcomment %}
-    {% if backdrop_image %}
-    <div style="position: absolute; inset: 0; background-image: url('{{ backdrop_image }}'); background-size: cover; background-position: center; opacity: 0.5;"></div>
-    {% endif %}
+    {% comment %}Scrim: an INNER layer, so it survives a theme replacing the ground with `!important`.
 
-    {% comment %}Scrim: an INNER layer, so it survives a theme replacing the ground.{% endcomment %}
-    <div style="position: absolute; inset: 0; background: linear-gradient(100deg, rgba(5, 8, 12, 0.95) 0%, rgba(5, 8, 12, 0.88) 48%, rgba(5, 8, 12, 0.64) 100%);"></div>
-    <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(5, 8, 12, 0.78) 0%, rgba(5, 8, 12, 0) 40%);"></div>
+    Tuned for a DESIGNED ground, not for raw art. It was originally set for the latter (0.95 -> 0.64)
+    and crushed all four gradient grounds to the same near-black -- picking a different one changed
+    almost nothing. The art grounds don't need that strength from here anyway: the renderer already
+    lays its own 0.45-0.55 black over an image before this layer ever applies, so heavy values here
+    were darkening art twice and everything else once too many.{% endcomment %}
+    <div style="position: absolute; inset: 0; background: linear-gradient(100deg, rgba(5, 8, 12, 0.74) 0%, rgba(5, 8, 12, 0.52) 52%, rgba(5, 8, 12, 0.20) 100%);"></div>
+    <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(5, 8, 12, 0.66) 0%, rgba(5, 8, 12, 0) 44%);"></div>
 
     {% comment %}The Frame: a thin inset rule that makes the image an object rather than a
     screenshot.{% endcomment %}

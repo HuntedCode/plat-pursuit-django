@@ -123,12 +123,18 @@
  * Replaces the DaisyUI `.modal` + `color_grid_modal` swatch wall. Six designed grounds get named
  * cards rather than a palette: at this count "which one is this" matters more than "how many".
  */
-.pc-modal { padding: 0; border: 0; background: transparent; max-width: 100vw; max-height: 100vh; }
+/* `position: fixed; inset: 0; margin: auto` is how the house modals centre (see .gd-modal). A
+   <dialog> relies on the UA's `margin: auto` for that, and the site reset zeroes it -- without this
+   the dialog pins to the top-left corner. */
+.pc-modal {
+    position: fixed; inset: 0; margin: auto;
+    width: min(96vw, 1000px); max-width: 1000px; max-height: 92vh;
+    padding: 0; border: 0; background: transparent; overflow: visible;
+}
 .pc-modal::backdrop { background: rgba(5, 8, 12, 0.72); backdrop-filter: blur(3px); }
 
 .pc-modal__box {
-    width: min(96vw, 1000px);
-    max-height: 92vh; overflow-y: auto;
+    width: 100%; max-height: 92vh; overflow-y: auto;
     display: flex; flex-direction: column;
     border: 1px solid var(--pp-border); border-radius: 16px;
     background: var(--pp-bg-1);

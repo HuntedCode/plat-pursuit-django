@@ -1688,8 +1688,8 @@ PLAT_CARD_THEME_KEYS = [
     'ppMidnight',
     'ppEmber',
     'ppAurora',
-    'gameArtConceptBg',
-    'gameArtBlur',
+    'ppArtWide',
+    'ppArtCover',
 ]
 
 #: What the card falls back to, and what a fresh picker opens on.
@@ -1731,6 +1731,32 @@ GRADIENT_THEMES.update({
         'banner_background': 'transparent',
         'banner_border_color': '#404853',
         'category': 'plat_card',
+    },
+    # The two art grounds. Deliberately NOT the shared gameArtConceptBg / gameArtBlur: those fall back
+    # to a pre-rebuild gradient when a game has no usable art, which would drop an old-palette card
+    # into an otherwise house-palette set. These carry the house ground as the fallback instead, so a
+    # game with no art degrades to Substrate rather than to 2024.
+    'ppArtWide': {
+        'name': 'Game Art',
+        'description': "The game's own backdrop",
+        'accent_color': '#27ebfe',
+        'background': 'radial-gradient(120% 90% at 12% 0%, #232a31 0%, #181d23 45%, #05080c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+        'requires_game_image': True,
+        'game_image_source': 'concept_bg_url',
+    },
+    'ppArtCover': {
+        'name': 'Cover Blur',
+        'description': 'The cover, blown up behind',
+        'accent_color': '#27ebfe',
+        'background': 'radial-gradient(120% 90% at 12% 0%, #232a31 0%, #181d23 45%, #05080c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+        'requires_game_image': True,
+        'game_image_source': 'game_image',
     },
 })
 
