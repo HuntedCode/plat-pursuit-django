@@ -240,11 +240,14 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                     </div>
 
                     {% if line.stages_total and line.stages_cleared < line.stages_total %}
+                    {% comment %}The bar FLEXES so the row ends flush with the title+edition above it --
+                    a short fixed bar left the column looking ragged. Its own max-content is tiny, so
+                    row 1 still sets the column width and the bar simply takes what's left.{% endcomment %}
                     <div style="display: flex; align-items: center; gap: 9px; margin-top: 6px;">
-                        <span style="position: relative; display: inline-block; width: 116px; height: 5px; border-radius: 3px; background: #2f363f; overflow: hidden; flex-shrink: 0;">
+                        <span style="position: relative; display: block; flex: 1; min-width: 60px; height: 5px; border-radius: 3px; background: #2f363f; overflow: hidden;">
                             <span style="position: absolute; inset: 0; width: {% widthratio line.stages_cleared line.stages_total 100 %}%; background: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; border-radius: 3px;"></span>
                         </span>
-                        <span style="font-size: 14px; line-height: 1; font-weight: 600; color: #8a939f;">{{ line.stages_cleared }} of {{ line.stages_total }}</span>
+                        <span style="font-size: 14px; line-height: 1; font-weight: 600; color: #8a939f; flex-shrink: 0;">{{ line.stages_cleared }} of {{ line.stages_total }}</span>
                     </div>
                     {% else %}
                     <div style="font-size: 15px; line-height: 1.3; color: #8a939f; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</div>

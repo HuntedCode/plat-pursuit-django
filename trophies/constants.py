@@ -107,13 +107,17 @@ BADGE_TYPES = [
     BADGE_TYPE_EVENT,
 ]
 
-# Display/sort priority for badge types wherever badges a game belongs to are listed (browse cards, game
-# detail, etc.): most-notable attribution first -- Franchise > Collection > Developer > Series -- with the
-# special types (Megamix / Event / User) trailing. Count DISTINCT series (one per series_slug), never tiers.
-# Consumers sort by this then by name; unknown/new types sort last.
+# Display/sort priority for badge types wherever badges a game belongs to are listed or a single one has
+# to be chosen (browse cards, game detail, the plat card's spine): broadest attribution first --
+# Collection > Franchise > Developer > Series -- with the special types (Megamix / Event / User)
+# trailing. Count DISTINCT series (one per series_slug), never tiers. Consumers sort by this then by
+# name; unknown/new types sort last.
+#
+# One order site-wide on purpose: a game that leads with its Collection badge on a browse card should
+# lead with the same badge on its share card, or the two surfaces disagree about what the game "is".
 BADGE_TYPE_DISPLAY_PRIORITY = [
-    BADGE_TYPE_FRANCHISE,
     BADGE_TYPE_COLLECTION,
+    BADGE_TYPE_FRANCHISE,
     BADGE_TYPE_DEVELOPER,
     BADGE_TYPE_SERIES,
     BADGE_TYPE_MEGAMIX,

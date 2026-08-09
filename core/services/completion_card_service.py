@@ -31,6 +31,7 @@ from trophies.models import (
     BadgeSeries, EarnedTrophy, ProfileGame, ProfileTrophyGroup, SeriesBadgeStanding, Stage,
     TrophyGroup, UserConceptRating, UserTitle,
 )
+from trophies.constants import BADGE_TYPE_DISPLAY_PRIORITY
 from trophies.templatetags.job_icons import _ICONS as _JOB_ICONS
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,10 @@ BADGE_LINE_CAP = 2
 #: the site draw the same glyphs from one source. (The tag itself is unusable here -- see the note in
 #: _contract_line.)
 JOB_ICON_PATHS = _JOB_ICONS
+
+#: Which badge the card leads with when a game belongs to several -- the SAME order the browse
+#: cards and game detail use, so the surfaces can't disagree about what a game primarily is.
+_BADGE_RANK = {t: i for i, t in enumerate(BADGE_TYPE_DISPLAY_PRIORITY)}
 
 #: The five discipline colours (--disc-* in components/elements.css) as hex, because the card is
 #: rendered in a document with no stylesheet and no custom properties. Keep in sync with that file.
@@ -201,8 +206,14 @@ def _badge_lines(profile, concept):
     `source_type='badge_series'`) -- the same read-models Collection and the Titles page use. The card
     used to read the legacy Badge/UserBadgeProgress tier-1 rows, which retire at the badge cutover.
 
-    Ordered so the strongest claim leads: a title the hunter actually HOLDS first, then whichever
-    series they are furthest along in.
+    A game can sit in several badges at once (its Collection, its Franchise, its studio, its own
+    series). The card shows ONE, so ordering matters: badge TYPE decides first, using the site-wide
+    BADGE_TYPE_DISPLAY_PRIORITY, so the badge a game leads with here is the badge it leads with on a
+    browse card. Within one type, a title the hunter actually HOLDS wins, then whichever series they
+    are furthest along in.
+
+    (Consequence worth knowing: holding a Series title does NOT promote it over an unheld Collection
+    badge. Type is the stronger signal of what a game IS, and the card is showing the game.)
     """
     if not concept:
         return []
@@ -236,6 +247,7 @@ def _badge_lines(profile, concept):
         standing = standings.get(series.series_slug)
         progress_bp = standing.progress_bp if standing else 0
         lines.append({
+            'badge_type': series.badge_type,
             'series_name': series.display_series or series.name,
             'series_slug': series.series_slug,
             'title': series.title.name if series.title_id else '',
@@ -245,7 +257,12 @@ def _badge_lines(profile, concept):
             'stages_total': standing.stages_total if standing else 0,
         })
 
-    lines.sort(key=lambda l: (not l['title_held'], -l['progress_pct'], l['series_name'].lower()))
+    lines.sort(key=lambda l: (
+        _BADGE_RANK.get(l['badge_type'], 99),
+        not l['title_held'],
+        -l['progress_pct'],
+        l['series_name'].lower(),
+    ))
     lines = lines[:BADGE_LINE_CAP]
     if lines:
         # Only the LEAD line gets art. Each medallion is two more images to cache and base64 into the

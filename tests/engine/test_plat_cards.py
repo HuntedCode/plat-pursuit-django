@@ -462,3 +462,57 @@ def test_every_contract_job_is_named_on_the_card():
     assert len(data['jobs']) == 6                       # 2 from the fixture + 4 here, none dropped
     assert all(j['name'] and j['colour'] for j in data['jobs'])
     assert 'xp' not in data and 'claimable' not in data
+
+
+# ── Which badge leads when a game is in several ───────────────────────────────────────────────────
+
+def _series_of_type(concept, name, badge_type):
+    series = BadgeSeriesFactory(name=name, badge_type=badge_type)
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
+    StageFactory(series_slug=series.series_slug).concepts.add(concept)
+    return series
+
+
+def test_the_lead_badge_follows_the_site_wide_type_order():
+    """A game sits in its Collection, its Franchise, its studio's badge and its own series at once. The
+    card shows ONE, and it must be the same one a browse card leads with -- otherwise the two surfaces
+    disagree about what the game is."""
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    for name, btype in [('Studio Badge', 'developer'), ('Own Series', 'series'),
+                        ('The Franchise', 'franchise'), ('The Collection', 'collection')]:
+        _series_of_type(game.concept, name, btype)
+
+    lines = cards.get_card_data(profile, standing)['badge_lines']
+
+    assert lines[0]['series_name'] == 'The Collection'
+    assert lines[1]['series_name'] == 'The Franchise'
+
+
+def test_type_order_outranks_a_held_title():
+    """Consequence of ordering by type first, stated so it can't surprise anyone later: holding the
+    Series title does not promote it over an unheld Collection badge. Type is the stronger signal of
+    what a game IS, and the card is showing the game."""
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    _series_of_type(game.concept, 'The Collection', 'collection')
+    owned = _series_of_type(game.concept, 'Own Series', 'series')
+    owned.title = Title.objects.create(name='Held Title')
+    owned.save(update_fields=['title'])
+    UserTitle.objects.create(profile=profile, title=owned.title, source_type='badge_series',
+                             source_id=owned.id)
+
+    assert cards.get_card_data(profile, standing)['badge_lines'][0]['series_name'] == 'The Collection'
+
+
+def test_a_held_title_still_wins_within_one_type():
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    _series_of_type(game.concept, 'Alpha Series', 'series')
+    owned = _series_of_type(game.concept, 'Zeta Series', 'series')
+    owned.title = Title.objects.create(name='Held Title')
+    owned.save(update_fields=['title'])
+    UserTitle.objects.create(profile=profile, title=owned.title, source_type='badge_series',
+                             source_id=owned.id)
+
+    assert cards.get_card_data(profile, standing)['badge_lines'][0]['series_name'] == 'Zeta Series'
