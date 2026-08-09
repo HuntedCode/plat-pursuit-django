@@ -56,17 +56,14 @@ XP is denormalized into `ProfileGamification` (one row per profile) with both a 
 
 | File | Purpose |
 |------|---------|
-| `trophies/models.py` | Badge, Stage, ConceptBundle, UserBadge, UserBadgeProgress, ProfileGamification, StatType, StageStatValue, Milestone, UserMilestone, UserMilestoneProgress, Title, UserTitle model definitions |
+| `trophies/models.py` | Badge, Stage, ConceptBundle, UserBadge, UserBadgeProgress, ProfileGamification, StatType, StageStatValue, Title, UserTitle model definitions |
 | `trophies/managers.py` | BadgeManager, BadgeQuerySet, MilestoneManager, MilestoneQuerySet with custom filter methods |
 | `trophies/services/badge_service.py` | Core badge evaluation, awarding, revocation, Discord role management, and batch checking |
 | `trophies/services/xp_service.py` | XP calculation, ProfileGamification updates, and bulk update context manager |
 | `trophies/services/leaderboard_service.py` | Leaderboard computation: earners, progress, total progress, XP rankings, community XP |
-| `trophies/services/milestone_service.py` | Milestone checking, awarding, and batch processing with notification consolidation |
-| `trophies/milestone_handlers.py` | Pluggable handler registry: one function per `criteria_type` (plat_count, trophy_count, etc.) |
-| `trophies/milestone_constants.py` | Shared constants: MONTH_MAP, ONE_OFF_TYPES, MILESTONE_CATEGORIES, CRITERIA_TYPE_DISPLAY_NAMES |
 | `trophies/signals.py` | Django signal handlers: earned_count updates, gamification recalculation, stage icon auto-population |
 | `trophies/util_modules/constants.py` | XP constants: BRONZE_STAGE_XP (250), SILVER_STAGE_XP (75), GOLD_STAGE_XP (250), PLAT_STAGE_XP (75), BADGE_TIER_XP (3000) |
-| `trophies/token_keeper.py` | Sync pipeline: calls `check_profile_badges()` and `check_all_milestones_for_user()` after game sync |
+| `trophies/token_keeper.py` | Sync pipeline: calls `check_profile_badges()` after game sync |
 | `core/management/commands/update_leaderboards.py` | Cron command to compute and cache all leaderboard data |
 | `trophies/management/commands/` | Various badge/milestone management commands (see Management Commands section) |
 
@@ -145,19 +142,6 @@ Denormalized XP summary (OneToOneField to Profile).
 
 Future-proofing models for the P.L.A.T.I.N.U.M. gamification system. `StatType` defines stat categories (currently just `badge_xp`). `StageStatValue` allows per-stage, per-tier stat grants. These are not yet actively used in badge evaluation (XP still uses the constant-based tier map) but the schema is ready for expansion.
 
-### Milestone
-
-Platform-wide achievement definitions.
-- `criteria_type`: Determines which handler evaluates progress (e.g., `plat_count`, `trophy_count`, `badge_count`).
-- `criteria_details`: JSONField with handler-specific config, typically `{"target": N}`.
-- `required_value`: Denormalized from `criteria_details.target` on every save.
-- `premium_only`: Some milestones (subscription loyalty) are restricted to premium users.
-- `title` / `discord_role_id`: Same reward pattern as badges.
-
-### UserMilestone / UserMilestoneProgress
-
-Same pattern as badge equivalents. `UserMilestone` records the award, `UserMilestoneProgress` tracks current value vs. target.
-
 ### Relationship Diagram
 
 ```
@@ -181,11 +165,6 @@ Badge (series_slug, tier)
 
 ProfileGamification (1:1 Profile)
   |-- total_badge_xp, series_badge_xp, total_badges_earned
-
-Milestone
-  |-- criteria_type --> MILESTONE_HANDLERS registry
-  |-- UserMilestone --> Profile
-  |-- UserMilestoneProgress --> Profile
 ```
 
 ## Key Flows
@@ -257,27 +236,7 @@ During sync (bulk operations), the `bulk_gamification_update()` context manager 
 
 ### Milestone System
 
-Milestones use a **handler registry pattern**:
-
-1. `milestone_handlers.py` defines a `MILESTONE_HANDLERS` dict populated by the `@register_handler(criteria_type)` decorator.
-
-2. Each handler receives `(profile, milestone, _cache=None)` and returns `{'achieved': bool, 'progress': int}`.
-
-3. Handlers use the `_cache` dict for value reuse across tiers of the same criteria type. For example, the `plat_count` handler queries once and caches the count, so checking 20 tiers of plat_count milestones makes 1 DB query instead of 20.
-
-4. `check_all_milestones_for_user()` orchestrates batch checking:
-   - Groups milestones by `criteria_type`.
-   - For **tiered types** (plat_count, trophy_count, etc.): checks all tiers but only sends an in-app notification for the highest newly earned tier. This prevents notification spam when a user qualifies for multiple tiers at once.
-   - For **one-off types** (psn_linked, discord_linked, calendar months): notifies individually since there is at most one tier.
-   - Returns `(all_awarded, notified_user_milestones)` tuple. The second value is used for consolidated milestone emails.
-   - `send_email` parameter (default `True`): when `True`, sends a consolidated email immediately. The sync path passes `False` so `token_keeper.py` can collect milestones from multiple calls and send one email.
-
-5. Calendar month milestones use a parameterized handler: a single `_handle_calendar_month()` function is registered for all 12 `calendar_month_*` types. It shares a pre-fetched `_calendar_month_counts` cache across all months to avoid 12 separate COUNT queries.
-
-6. **Manual milestone awarding**: `award_milestone_directly(profile, milestone)` bypasses handler evaluation and directly creates the `UserMilestone`, increments `earned_count`, creates `UserTitle`, and handles Discord role + notification side effects. `award_manual_milestone(profile, milestone_name)` is a convenience wrapper that looks up the milestone by name (filtered to `criteria_type='manual'`). Used by the easter egg claim API, fundraiser donation service, and `grant_milestone` management command.
-
-**Currently registered handlers** (21 types):
-`manual`, `plat_count`, `psn_linked`, `discord_linked`, `rating_count`, `playtime_hours`, `trophy_count`, `checklist_upvotes`, `badge_count`, `unique_badge_count`, `completion_count`, `stage_count`, `az_progress`, `genre_progress`, `subgenre_progress`, `calendar_month_jan` through `calendar_month_dec`, `calendar_months_total`, `calendar_complete`, `is_premium`, `subscription_months`.
+**RETIRED 2026-08.** The legacy `criteria_type` handler-registry milestone system (`milestone_handlers.py` / `milestone_constants.py` / `milestone_service.py`) was deleted, tables included (migration `0282_drop_legacy_milestone_engine`). Milestones now live in the dedicated `milestones` app -- see [milestones-revamp](../design/milestones-revamp.md). Titles are badge-sourced; the legacy engine's one-off manual awards survive only as historical `UserTitle` rows.
 
 ### Leaderboard Calculation
 
@@ -288,7 +247,7 @@ Leaderboards are maintained in Redis sorted sets with incremental signal-driven 
 ## Integration Points
 
 ### Sync Pipeline (token_keeper.py)
-`_job_sync_complete()` calls `check_profile_badges()` after all trophy data is processed, then calls `check_all_milestones_for_user()` excluding challenge-specific types (those are checked by their own services). Milestone achievements generate in-app notifications only. Deferred badge notifications are consolidated afterward via `DeferredNotificationService`.
+`_job_sync_complete()` calls `check_profile_badges()` after all trophy data is processed, Deferred badge notifications are consolidated afterward via `DeferredNotificationService`.
 
 ### Discord Bot
 - **Role assignment**: `notify_bot_role_earned()` calls POST to `BOT_API_URL/assign-role`.
@@ -299,8 +258,6 @@ Leaderboards are maintained in Redis sorted sets with incremental signal-driven 
 
 ### Notification System
 - Badge notifications are deferred and consolidated by `DeferredNotificationService` (one notification per series, highest tier only).
-- Milestone notifications use `create_milestone_notification()` from `notifications/signals.py`.
-- Tiered milestones only notify for the highest newly earned tier in a batch.
 
 ### Title System
 Both badges and milestones can award Titles. When a badge/milestone is earned, `UserTitle` is created with `source_type='badge'|'milestone'` and `source_id=badge.id|milestone.id`. A title represents active possession, so it is removed when its badge lapses to `maintenance` and restored when the profile re-qualifies.
@@ -341,7 +298,7 @@ Badge views read leaderboard data from cache. If the `update_leaderboards` cron 
 For series, collection, developer, user, and genre badges, ALL non-zero qualifying stages must be complete regardless of the `requires_all` flag. The `min_required` field is only consulted when `badge_type='megamix'` and `requires_all=False`.
 
 ### Milestone handler caching is per-batch, not persistent
-The `_cache` dict passed to milestone handlers lives only for the duration of a single `check_all_milestones_for_user()` call. It prevents redundant queries across tiers of the same type within that call, but the next call starts with a fresh cache.
+
 
 ### Calendar handlers share a single challenge instance
 All 12 calendar month handlers plus `calendar_months_total` share a single `_calendar_challenge` cached reference (the most-progressed calendar challenge). If a user has multiple calendar challenges, only the one with the highest `completed_count` is evaluated for milestones.

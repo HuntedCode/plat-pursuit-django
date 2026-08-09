@@ -1,6 +1,6 @@
 # Token Keeper & Sync Pipeline
 
-The Token Keeper is PlatPursuit's core background engine for synchronizing PSN trophy data. It manages a pool of authenticated PSN API tokens, distributes work across a multi-priority Redis job queue, and orchestrates the full lifecycle of profile syncs: from fetching a user's trophy list to evaluating badges, milestones, and challenge progress. The system runs as a long-lived singleton process, spawning worker threads that continuously pull jobs from Redis queues, acquire token instances, make PSN API calls, and persist results to PostgreSQL.
+The Token Keeper is PlatPursuit's core background engine for synchronizing PSN trophy data. It manages a pool of authenticated PSN API tokens, distributes work across a multi-priority Redis job queue, and orchestrates the full lifecycle of profile syncs: from fetching a user's trophy list to evaluating badges, contracts, and milestones. The system runs as a long-lived singleton process, spawning worker threads that continuously pull jobs from Redis queues, acquire token instances, make PSN API calls, and persist results to PostgreSQL.
 
 ## Architecture Overview
 
@@ -35,7 +35,7 @@ User triggers sync (web UI, cron, admin)
    _complete_job() -> decrement counters, trigger sync_complete when all jobs finish
         |
         v
-   _job_sync_complete() -> badges, milestones, challenges, notifications
+   _job_sync_complete() -> badges, contracts, notifications, milestones
 ```
 
 ### Key Decisions
@@ -85,7 +85,7 @@ Sync operations use a two-tier orchestrator pattern:
 
 1. **Orchestrator job** (`profile_refresh`) runs first for both initial and follow-up syncs. It computes a fingerprint, walks PSN's `trophy_titles` if needed, creates Game/ProfileGame records, reconciles visibility, and fans out child jobs.
 2. **Child jobs** (`sync_trophies`, `sync_trophy_groups`, `sync_title_stats`, `sync_title_id`) each handle one game. As each completes, `_complete_job()` decrements a per-profile counter.
-3. **Completion job** (`sync_complete`) fires automatically when all child job counters reach zero. It recomputes denormalized stats, runs badge / milestone / challenge evaluation, and finalizes the sync.
+3. **Completion job** (`sync_complete`) fires automatically when all child job counters reach zero. It recomputes denormalized stats, runs badge / contract / milestone evaluation, and finalizes the sync.
 
 ### Job Types
 
@@ -93,7 +93,7 @@ Sync operations use a two-tier orchestrator pattern:
 |----------|-------|-------------|
 | `sync_profile_data` | orchestrator | Fetch PSN profile (username, avatar, trophy level, region). Updates `last_synced`. |
 | `profile_refresh` | orchestrator | Unified sync orchestrator: fingerprint check, fast-path skip or full walk + per-game work fan-out |
-| `sync_complete` | orchestrator | Post-sync finalization: stat refresh, badges, milestones, challenges, cache invalidation |
+| `sync_complete` | orchestrator | Post-sync finalization: stat refresh, badges, contracts, milestones, cache invalidation |
 | `check_profile_health` | high_priority | Verify profile accessibility |
 | `handle_privacy_error` | high_priority | Handle PSN privacy settings blocking access |
 | `sync_trophy_groups` | medium_priority | Fetch DLC/group metadata for a single game |
@@ -132,8 +132,6 @@ Both initial and follow-up syncs run through the same `profile_refresh` orchestr
     - Trophy/TrophyGroup completeness check (games with 0 records despite having defined trophies)
     - Calls `update_plats()`, `update_profilegame_stats()`, `check_profile_badges()`
     - Creates consolidated badge notifications via `DeferredNotificationService`
-    - Checks milestones (excluding challenge-specific types)
-    - Checks A-Z challenge, Calendar challenge, and Genre challenge progress
     - Calls `update_profile_games()` and `update_profile_trophy_counts()` so denormalized totals reflect the post-sync state regardless of fast/slow path
     - Invalidates timeline, stats, and dashboard module caches
     - Sets `sync_status='synced'`
@@ -225,11 +223,16 @@ After sync completion, `check_profile_badges(profile, touched_profilegame_ids)` 
 
 ### Challenge Progress
 
-Three challenge systems are checked in `_job_sync_complete()`:
+**Challenges retired (2026-08).** The A-Z / Calendar / Genre challenge checks were removed from `_job_sync_complete()` with the Challenge system.
 
-- **A-Z Challenge** (`check_az_challenge_progress`): Checks if any new platinums match assigned A-Z slots. Uses `bulk_update` for efficiency.
-- **Calendar Challenge** (`check_calendar_challenge_progress`): Checks if platinum earn dates fill calendar days. Early-exits if no new plats since `challenge.updated_at`.
-- **Genre Challenge** (`check_genre_challenge_progress`): Checks platinum progress against genre-specific requirements.
+### Milestones
+
+`recompute_on_sync(profile)` (the `milestones` app) runs in the **`finishing`** phase, deliberately *after*
+`update_profile_trophy_counts()` — several ladders read the denormalized `total_trophies` /
+`total_completes` those updaters refresh, so running earlier would evaluate a sync stale. It recomputes
+every ladder and reconciles Discord roles **only** when a role-bearing tier was newly crossed, so a routine
+sync never re-asserts roles against the bot. Community members only (site account OR verified Discord);
+scouts and unregistered synced profiles are skipped. Wrapped so a failure never breaks the sync.
 
 ### Deferred Notifications
 
@@ -269,7 +272,7 @@ Prevents infinite retry loops for games whose earned trophy counts persistently 
 
 **Detection**: During `sync_complete`, the health check compares per-platform earned counts against PSN's authoritative numbers. When a mismatch is found, the affected games are re-queued for sync and a follow-up `sync_complete` is scheduled. Each re-queue increments a per-profile retry counter in Redis (`health_mismatch_retries:{profile_id}`).
 
-**Behavior when limit reached**: After `MAX_MISMATCH_RETRIES` (3) attempts on the same mismatch, the games are skipped with a `skipping unresolvable mismatch` log entry rather than re-queued again. The sync still finalizes (badges, milestones, challenges, notifications) so the rest of the user's data stays current; only the games causing the loop are deferred.
+**Behavior when limit reached**: After `MAX_MISMATCH_RETRIES` (3) attempts on the same mismatch, the games are skipped with a `skipping unresolvable mismatch` log entry rather than re-queued again. The sync still finalizes (badges, contracts, notifications, milestones) so the rest of the user's data stays current; only the games causing the loop are deferred.
 
 **Recovery**: The retry counter expires after 24 hours, so the next routine `refresh_profiles` cron run will get a fresh attempt. Most unresolvable mismatches turn out to be PSN-side data quality issues (deleted/private games, region edge cases) that resolve on their own.
 
@@ -317,7 +320,7 @@ Several jobs contain the pattern: `game.title_platform[0] if not game.title_plat
 
 Only one `sync_complete` can run per profile at a time, enforced by the `sync_complete_in_progress:{profile_id}` Redis key with `nx=True`. If a second sync_complete is triggered while one is running, the pending data is stored and the duplicate is skipped. The follow-up sync_complete will be triggered by `_complete_job()` when it detects the pending key after the first one finishes.
 
-This same key doubles as a UI-facing "finalizing" signal: `ProfileSyncStatusView` reads it (only when `sync_status == 'syncing'`) and surfaces `is_finalizing: true` in the JSON response. The hotbar uses this to swap "Syncing..." for "Finalizing..." once the bar hits 100% and the post-sync pipeline (health check, badges, milestones, challenges, dashboard cache) is running. The signal also correctly toggles back off if the health check finds a trophy count mismatch and re-queues child jobs, since the `finally` block at the end of `_job_sync_complete()` always clears the key before re-queueing.
+This same key doubles as a UI-facing "finalizing" signal: `ProfileSyncStatusView` reads it (only when `sync_status == 'syncing'`) and surfaces `is_finalizing: true` in the JSON response. The hotbar uses this to swap "Syncing..." for "Finalizing..." once the bar hits 100% and the post-sync pipeline (health check, badges, contracts, milestones, dashboard cache) is running. The signal also correctly toggles back off if the health check finds a trophy count mismatch and re-queues child jobs, since the `finally` block at the end of `_job_sync_complete()` always clears the key before re-queueing.
 
 ### Finalize Sub-Phase Tracking
 
@@ -327,9 +330,7 @@ This same key doubles as a UI-facing "finalizing" signal: `ProfileSyncStatusView
 |-------|------------------|--------------|----------------|
 | `health_check` | The `trophy_summary` health check call | `Verifying...` | "Verifying your trophy data with PSN..." |
 | `stats_badges` | `update_plats()`, `update_profilegame_stats()`, `check_profile_badges()` | `Badges...` | "Updating stats and awarding badges..." |
-| `milestones` | `check_all_milestones_for_user()` | `Milestones...` | "Checking milestones..." |
-| `challenges` | A-Z, Calendar, and Genre challenge checks | `Challenges...` | "Updating challenge progress..." |
-| `finishing` | `update_profile_trophy_counts()`, status flip, cache invalidation, sig render | `Wrapping up...` | "Wrapping things up..." |
+| `finishing` | `update_profile_trophy_counts()`, `recompute_on_sync()` (milestones), status flip, cache invalidation, sig render | `Wrapping up...` | "Wrapping things up..." |
 
 The key is set with the same 1800s TTL as `sync_complete_in_progress` and is cleared in the same `finally` block so they always travel together. `ProfileSyncStatusView` exposes the current phase as `finalize_phase` in the JSON response (only populated when `is_finalizing` is true). The hotbar shows the phase verb directly in the badge (no "Finalizing..." prefix, since the phase label already implies finalization and the badge is too narrow on mobile to fit the longer string); the home page progress card shows the friendlier copy in its phase text element.
 
@@ -465,7 +466,7 @@ python manage.py redis_admin --move-whale-jobs
 | `sync_started_at:{profile_id}` | string (timestamp) | 7200s (2h) | When the sync began (for grace period in stuck detection) |
 | `sync_orchestrator_pending:{profile_id}` | string | 1800s (30m) | Flag: orchestrator job queued but not yet executed |
 | `sync_complete_in_progress:{profile_id}` | string | 1800s (30m) | Atomic guard: prevents concurrent sync_complete. Also surfaced via the sync status API as `is_finalizing` so the hotbar can show "Finalizing..." while the post-sync pipeline runs. |
-| `finalize_phase:{profile_id}` | string | 1800s (30m) | Sub-phase string written by `_job_sync_complete()` at each boundary (`health_check`, `stats_badges`, `milestones`, `challenges`, `finishing`). Surfaced via the sync status API as `finalize_phase`; cleared in the same `finally` block as `sync_complete_in_progress`. |
+| `finalize_phase:{profile_id}` | string | 1800s (30m) | Sub-phase string written by `_job_sync_complete()` at each boundary (`health_check`, `stats_badges`, `finishing`). Surfaced via the sync status API as `finalize_phase`; cleared in the same `finally` block as `sync_complete_in_progress`. |
 | `sync_queued_games:{profile_id}` | set | 7200s (2h) | Dedup set of np_communication_ids already queued |
 | `sync_trophies_lock:{np_communication_id}` | string | 120s | Per-game lock to prevent concurrent sync_trophies |
 | `deferred_jobs:{profile_id}` | list | 86400s (1d) | Deferred jobs for later execution |

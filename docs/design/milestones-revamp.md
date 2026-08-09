@@ -1,8 +1,9 @@
 # Milestones Revamp — Design Spec
 
-> **Status: Design (not implemented).** Working spec for the from-scratch rebuild of the Milestones system.
-> Supersedes the legacy `criteria_type`-enum milestone system (`trophies/models.py` `Milestone` +
-> `milestone_handlers.py` + `milestone_constants.py`), which is retired and rebuilt fresh (see §9).
+> **Status: SHIPPED (2026-08).** The `milestones` app is live: engine, `/milestones/` page, per-sync +
+> nightly recompute, and Discord role reconciliation. The legacy `criteria_type`-enum system it supersedes
+> (`trophies.Milestone*` + `milestone_handlers.py` + `milestone_constants.py`) has been **deleted outright**,
+> tables included — see §9. This doc is now both the spec and the record of that cutover.
 
 ## 1. Vision & Purpose
 
@@ -271,20 +272,22 @@ Because every v1 metric is **derived from data users already have**, going fresh
 1. Ship the new tables (§3) + metrics (§4) + the v1 catalog (§8) as data.
 2. Run `recompute_milestones_all` once at launch → every hunter's earned tiers + progress are backfilled
    from their **current real stats**. Nobody "loses" a milestone; they light up what they've already done.
-3. **Retire the legacy CODE, preserve the DATA — no rename needed.** Because the new system lives in its own
-   `milestones` app (§3), there is **no name collision** with `trophies.Milestone*`, so the legacy models are
-   **left in place, untouched and dormant** (data preserved). At cutover (Phase 2) the legacy *code* is
-   removed — `milestone_handlers` / `milestone_constants` / `milestone_service` / the old view + templates +
-   the ~11 award-trigger call sites — while the `trophies.Milestone` / `UserMilestone` / `UserMilestoneProgress`
-   *tables* stay as a dormant data store (§9.5). (This replaces the earlier "rename to `Legacy*`" plan, which
-   the dedicated app makes unnecessary.)
-4. **Legacy milestone Titles:** the old system granted `UserTitle(source_type='milestone')`. Since titles go
-   Badge-only, those grants are removed (a hunter displaying one gets auto-unequipped). **CONFIRMED** — OK to
-   remove on cutover.
+3. **Retire the legacy system entirely — ✅ DONE (2026-08).** The plan below originally kept the legacy
+   `trophies.Milestone*` tables as a dormant data store. That was **superseded**: keeping two milestone
+   tables was confusing, so the legacy engine was deleted outright in the Lane 2 teardown —
+   `milestone_handlers` / `milestone_constants` / `milestone_service`, the old view + templates, 6
+   management commands, 3 admin classes, every award-trigger call site, and finally the
+   `Milestone` / `UserMilestone` / `UserMilestoneProgress` tables (migration
+   `0282_drop_legacy_milestone_engine`).
+4. **Legacy milestone Titles:** the old system granted `UserTitle(source_type='milestone')`. The titles its
+   metric **ladders** granted were deleted with the engine (a hunter displaying one is auto-unequipped) —
+   **CONFIRMED**. Badge-sourced titles are untouched.
 5. **Legacy manual/one-off recognitions** (fundraiser "Badge Artwork Patron", easter-egg awards):
-   **CONFIRMED — keep the data as-is, do not delete, do not port into the new system.** They stay in the
-   dormant `trophies.Milestone`/`UserMilestone` tables (unrendered) as a **seed for a potential future
-   "Feats / special recognitions" expansion**. The new metric-driven system ignores them entirely.
+   **the earned TITLES are kept**, but the granting mechanism was **not** replaced — no new donor or
+   easter-egg finder earns one. Because `UserTitle.source_id` is a plain integer (not an FK), the survivors
+   outlived the table drop; they render on the Titles page under **Special** with no source row to describe.
+   The `Milestone`/`UserMilestone` rows behind them are gone, so there is no longer a dormant seed for a
+   future "Feats" expansion — that would start fresh.
 
 ## 10. Phasing
 

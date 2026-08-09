@@ -72,7 +72,6 @@ Badge claiming uses `select_for_update()` on the Badge row to prevent race condi
 7. Webhook calls `DonationService.complete_donation()`:
    - Updates status to completed, sets `completed_at`
    - Calculates `badge_picks_earned` cumulatively: `floor(cumulative_total / BADGE_PICK_DIVISOR) - prior_picks_earned` (remainder dollars carry over across donations)
-   - Grants "Badge Artwork Patron" milestone + Discord role (first donation)
    - Sends receipt email, in-app notification, Discord webhook
 8. User redirected to `DonationSuccessView` (also attempts completion as backup)
 
@@ -106,7 +105,7 @@ Badge claiming uses `select_for_update()` on the Badge row to prevent race condi
 
 - [Payment Webhooks](../architecture/payment-webhooks.md): Donation events intercepted BEFORE subscription handlers in both `stripe_webhook` and `paypal_webhook`. Session `metadata.type='fundraiser_donation'` filters Stripe events.
 - [Notification System](../architecture/notification-system.md): `system_alert` notification type for donation/claim/artwork notifications. Rich sections with headers, icons, actions.
-- [Badge System](../architecture/badge-system.md): `DonationBadgeClaim.badge` OneToOneField. Milestone "Badge Artwork Patron" (criteria_type='manual').
+- [Badge System](../architecture/badge-system.md): `DonationBadgeClaim.badge` OneToOneField.
 - [Email System](../guides/email-setup.md): 3 email templates via EmailService with EmailLog tracking (donation_receipt, badge_claim_confirmation, artwork_complete).
 - Discord: Green embeds via `queue_webhook_send()` for donation announcements.
 - Context processor: `active_fundraiser()` provides banner data (60s cache). Only rendered for viewers who are logged in AND have a linked PSN profile — claiming badge artworks requires a profile, so the banner is noise for anonymous and not-yet-onboarded users.
@@ -130,7 +129,7 @@ The public fundraiser page surfaces every unclaimed badge series in a dedicated 
 - **DEBUG mode payment completion**: In development, `DonationSuccessView` calls `complete_donation()` on redirect because webhooks cannot reach localhost. This is disabled in production.
 - **Badge claim race condition**: `select_for_update()` + `OneToOneField` IntegrityError handling prevents double-claiming. Do not remove either guard.
 - **Denormalized series data on claims**: `series_name` and `series_slug` are stored at claim time because the Badge/series could theoretically be deleted or renamed later.
-- **Milestone idempotency**: `_grant_fundraiser_milestone()` delegates to the shared `award_manual_milestone()` service which uses `get_or_create()` and only increments `Milestone.earned_count` on first claim. Safe for repeat donors.
+- **No patron award**: donations used to grant a "Badge Artwork Patron" milestone + title. That rode on the legacy milestone engine, retired 2026-08 (Lane 2 Step 3), and was NOT replaced. Existing holders keep the title; new donors get the badge picks + receipt only.
 - **PayPal nested response structure**: Capture data is deeply nested in `purchase_units[0].payments.captures[0]`. The `custom_id` field links back to the Donation.
 - **Badge picks are Tier 1 only**: Users can only claim badges at their base tier (Tier 1). Validated in `claim_badge()`.
 - **Anonymous donations**: `is_anonymous` hides identity on donor wall but admin dashboard always shows full donor info.

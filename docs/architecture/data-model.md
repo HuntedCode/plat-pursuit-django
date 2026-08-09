@@ -159,41 +159,18 @@ the full model and flow.
 
 ## Challenge Models
 
-Challenges are long-running goals where players work toward completing sets of platinums under specific constraints.
+**RETIRED 2026-08.** The `Challenge`, `AZChallengeSlot`, `CalendarChallengeDay`, `GenreChallengeSlot`,
+and `GenreBonusSlot` models were dropped in migration `0281_drop_challenge_system`. Challenges will be
+rewritten from scratch; see [challenge-systems](../features/challenge-systems.md) for the design reference.
 
-### Challenge
-Base challenge model shared across all challenge types (`az`, `calendar`, `genre`). The `challenge_type` field determines which child slot model applies. Tracks progress via `total_items`, `filled_count`, `completed_count`, and `is_complete`. Supports soft deletion.
-
-Key relationships:
-- `profile` FK to `Profile`
-
-### AZChallengeSlot
-One of 26 letter slots (A-Z) for an A-Z Challenge. Each slot can hold one Game that the player must platinum.
-
-Key relationships:
-- `challenge` FK to `Challenge`
-- `game` FK to `Game` (nullable, SET_NULL)
-
-### CalendarChallengeDay
-One of 365 calendar day slots (Jan 1 through Dec 31, excluding Feb 29). Filled automatically when the player earns a platinum on that calendar day. Tracks `plat_count` for multiple platinums on the same day.
+### ArchivedAZChallenge
+Frozen A-Z challenge progress, preserved when the Challenge system was retired. One row per archived
+A-Z challenge, keyed on stable PSN ids (`psn_username` + per-slot `np_communication_id` inside the
+`slots` JSON) so a rebuilt system can re-import it. Read-only historical data, not wired into any live
+feature. Calendar and Genre progress were deliberately not preserved.
 
 Key relationships:
-- `challenge` FK to `Challenge`
-- `game` FK to `Game` (nullable, the first game whose platinum filled the day)
-
-### GenreChallengeSlot
-One genre slot in a Genre Challenge. Points to a Concept rather than a Game.
-
-Key relationships:
-- `challenge` FK to `Challenge`
-- `concept` FK to `Concept` (nullable)
-
-### GenreBonusSlot
-Bonus game slot for subgenre hunting in a Genre Challenge, with no genre restriction.
-
-Key relationships:
-- `challenge` FK to `Challenge`
-- `concept` FK to `Concept` (nullable)
+- `profile` FK to `Profile` (nullable, SET_NULL)
 
 ---
 
@@ -300,31 +277,18 @@ _(Not present in the model file as a separate model; checklist voting uses Check
 A cosmetic display title that appears on a user's profile (e.g., "Platinum Hunter"). Created once, shared across all earners.
 
 ### UserTitle
-Join table linking a Profile to a Title with source tracking (`source_type`: badge or milestone, `source_id`), earned timestamp, and `is_displayed` flag (one active at a time per profile).
+Join table linking a Profile to a Title with source tracking (`source_type`: badge, badge_series, or milestone -- the last being historical one-off awards from the retired legacy engine; `source_id`), earned timestamp, and `is_displayed` flag (one active at a time per profile).
 
 Key relationships:
 - `profile` FK to `Profile`
 - `title` FK to `Title`
 
-### Milestone
-An achievement milestone with various criteria types (plat count, discord linked, badge count, calendar progress, subscription months, etc.). Some are premium-only. Has an optional `title` FK to award and optional `discord_role_id`. `required_value` is auto-synced from `criteria_details.target`.
-
-Key relationships:
-- `title` FK to `Title` (nullable)
-
-### UserMilestone
-Records that a profile has earned a specific milestone.
-
-Key relationships:
-- `profile` FK to `Profile`
-- `milestone` FK to `Milestone`
-
-### UserMilestoneProgress
-Tracks in-progress milestone completion for a profile. Stores `progress_value` toward the milestone's `required_value`.
-
-Key relationships:
-- `profile` FK to `Profile`
-- `milestone` FK to `Milestone`
+**Milestone / UserMilestone / UserMilestoneProgress: RETIRED 2026-08.** The legacy milestone engine
+was dropped in migration `0282_drop_legacy_milestone_engine`. Milestones now live in the dedicated
+`milestones` app (`Milestone`, `MilestoneTier`, `EarnedMilestoneTier`, `UserMilestone` there); see
+[milestones-revamp](../design/milestones-revamp.md). The titles the legacy metric ladders granted were
+deleted with it; its one-off manual awards survive as `UserTitle` rows with `source_type='milestone'`
+and a now-dangling `source_id` (a plain integer, not an FK).
 
 ### UserTrophySelection
 Up to 10 hand-picked "showcase" trophies per profile. Enforces the 10-item limit at the model level.
@@ -487,8 +451,6 @@ Profile
   |-- 1:N --> UserBadge
   |-- 1:N --> UserBadgeProgress
   |-- 1:N --> UserTitle
-  |-- 1:N --> UserMilestone
-  |-- 1:N --> UserMilestoneProgress
   |-- 1:N --> UserTrophySelection
   |-- 1:N --> Comment
   |-- 1:N --> Review

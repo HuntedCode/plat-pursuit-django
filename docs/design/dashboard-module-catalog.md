@@ -48,7 +48,7 @@ The "Complete" count is the source of truth from `DASHBOARD_MODULES` in `trophie
 
 ## Category: Progress & Challenges
 
-All challenge modules show smart CTAs when no active challenge exists.
+(Challenge modules retired 2026-08 with the Challenge system.)
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|

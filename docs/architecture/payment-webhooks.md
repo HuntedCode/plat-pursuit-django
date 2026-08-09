@@ -6,7 +6,7 @@ PlatPursuit accepts payments through two providers (Stripe and PayPal) for two d
 
 The payment architecture has four key design decisions:
 
-1. **Two providers, one lifecycle.** Stripe and PayPal each have their own checkout and webhook flows, but both converge on `SubscriptionService.activate_subscription()` and `deactivate_subscription()` for state changes. This means premium tier assignment, Discord role management, email notifications, milestone checks, and `SubscriptionPeriod` tracking all live in exactly one place.
+1. **Two providers, one lifecycle.** Stripe and PayPal each have their own checkout and webhook flows, but both converge on `SubscriptionService.activate_subscription()` and `deactivate_subscription()` for state changes. This means premium tier assignment, Discord role management, email notifications, and `SubscriptionPeriod` tracking all live in exactly one place.
 
 2. **Two payment types sharing webhook endpoints.** Rather than separate webhook URLs for subscriptions vs. donations, each provider has a single endpoint (`/stripe/webhook/` and `/paypal/webhook/`). Donation events are identified by metadata and intercepted first; everything else falls through to subscription logic.
 
@@ -45,7 +45,7 @@ Payment-related fields on the user model:
 
 ### SubscriptionPeriod (users/models.py)
 
-Tracks continuous subscription windows for loyalty milestone calculations. A new period is created on activation; `ended_at` is set on deactivation. During payment recovery (past_due to active), the most recently closed period is reopened if it was closed within the last 14 days.
+Tracks continuous subscription windows, which feed the milestones app's `premium_months` ladder. A new period is created on activation; `ended_at` is set on deactivation. During payment recovery (past_due to active), the most recently closed period is reopened if it was closed within the last 14 days.
 
 ### Donation (fundraiser/models.py)
 
@@ -87,7 +87,7 @@ General-purpose audit trail for all platform emails. Every email sent or suppres
 3. User completes payment on Stripe's hosted page.
 4. Stripe fires `checkout.session.completed`. In `stripe_webhook()`, the routing logic checks metadata for `type == 'fundraiser_donation'` BEFORE passing to subscription handling.
 5. `DonationService.handle_stripe_payment_completed()` looks up the pending Donation by ID and calls `complete_donation()`.
-6. Completion: status set to `completed`, badge picks calculated, fundraiser milestone granted, receipt email sent, Discord notification posted.
+6. Completion: status set to `completed`, badge picks calculated, receipt email sent, Discord notification posted.
 
 ### Donation Checkout Flow (PayPal)
 
@@ -167,7 +167,6 @@ When a subscription becomes active (any provider, any event), `activate_subscrip
 4. Send Discord embed notification (new subscriptions only, not renewals)
 5. Assign Discord role via `notify_bot_role_earned()` (deferred via `on_commit`)
 6. Send welcome email (new subscriptions only)
-7. Check `is_premium` and `subscription_months` milestones
 
 ### deactivate_subscription() Side Effects
 
@@ -184,7 +183,7 @@ When a subscription becomes active (any provider, any event), `activate_subscrip
 | **Discord** | New subscription embed via `send_subscription_notification()`. Role assignment/removal via `notify_bot_role_earned/removed()`. Donation embeds via `queue_webhook_send()`. All deferred via `on_commit`. |
 | **Email** | All emails routed through `EmailService.send_html_email()` with `EmailLog` recording. Email preference checks (`EmailPreferenceService.should_send_email()`) gate every email. Suppressed emails are logged via `EmailService.log_suppressed()`. |
 | **Notifications** | In-app notifications for: payment failures, payment action required, subscription cancellation, donation receipts, badge claims, artwork completion. All via `NotificationService.create_notification()`. |
-| **Milestones** | `activate_subscription()` triggers `check_all_milestones_for_user()` for `is_premium` and `subscription_months` criteria. Donations trigger the "Badge Artwork Patron" manual milestone. |
+| **Milestones** | Premium tenure is recognized by the `milestones` app's `premium_months` ladder, recomputed by its nightly sweep off `SubscriptionPeriod` -- the webhooks no longer trigger milestone checks. |
 | **Admin Dashboard** | `/staff/subscriptions/` reads `SubscriptionPeriod`, payment failure notifications (with `next_payment_attempt` metadata), and `EmailLog` records. Admin actions include resend email/notification and force deactivate. |
 | **Fundraiser** | `/staff/fundraiser/` manages donation/claim tables. Claim status transitions trigger `send_artwork_complete_email()` and `send_artwork_complete_notification()`. |
 | **djstripe** | Stripe events are processed through `DJStripeEvent.process()` for record-keeping. `Subscription`, `Customer`, and `Price` models from djstripe are used for querying Stripe state. |
@@ -214,11 +213,11 @@ Getting these wrong either revokes access the user paid for or grants indefinite
 
 ### ad_free Tier Is Not Premium
 
-The `ad_free` tier exists in `PREMIUM_TIER_CHOICES` and has real Stripe/PayPal products, but `ACTIVE_PREMIUM_TIERS` only includes `premium_monthly`, `premium_yearly`, and `supporter`. The `ad_free` tier removes ads but does not set `profile.user_is_premium = True`, does not grant Discord roles, and does not trigger milestone checks. Code that checks `is_tier_premium()` will return False for `ad_free`.
+The `ad_free` tier exists in `PREMIUM_TIER_CHOICES` and has real Stripe/PayPal products, but `ACTIVE_PREMIUM_TIERS` only includes `premium_monthly`, `premium_yearly`, and `supporter`. The `ad_free` tier removes ads but does not set `profile.user_is_premium = True`, and does not grant Discord roles. Code that checks `is_tier_premium()` will return False for `ad_free`.
 
 ### SubscriptionPeriod Pause During past_due
 
-When a Stripe subscription enters `past_due` (payment failing, Stripe still retrying), `update_user_subscription()` closes the `SubscriptionPeriod` but keeps premium features active. This prevents milestone time from accumulating during an unpaid window. When payment succeeds (back to `active`), `activate_subscription()` attempts to reopen the most recently closed period (within 14 days) rather than creating a new one. This preserves the user's loyalty streak.
+When a Stripe subscription enters `past_due` (payment failing, Stripe still retrying), `update_user_subscription()` closes the `SubscriptionPeriod` but keeps premium features active. This prevents premium-tenure time from accumulating during an unpaid window. When payment succeeds (back to `active`), `activate_subscription()` attempts to reopen the most recently closed period (within 14 days) rather than creating a new one. This preserves the user's loyalty streak.
 
 ### Donation provider_transaction_id Lifecycle
 

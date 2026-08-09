@@ -133,12 +133,10 @@ Captures a snapshot of what was sent: notification_type, title, message, detail,
 |------|---------|----------------|-------|
 | `platinum_earned` | EarnedTrophy post_save (platinum, earned=True flip) | `notify_platinum_earned` signal | 2-day threshold, shovelware filter, deferred during sync |
 | `badge_awarded` | UserBadge post_save (created=True) | `notify_badge_awarded` signal | Always deferred for series consolidation |
-| `milestone_achieved` | Called from milestone_service.py | `create_milestone_notification()` function | Not a signal; called directly for batch consolidation. Context includes `title_name` for milestones with title rewards. |
 | `monthly_recap` | Monthly recap generation | Created externally | Monthly recap availability |
 | `subscription_created` | Subscription activation | Created externally | Welcome notification |
 | `subscription_updated` | Subscription change | Created externally | Plan change notification |
 | `discord_verified` | Profile post_save (is_discord_verified flip) | `notify_discord_linked` signal | Only on False->True transition |
-| `challenge_completed` | Challenge completion | Created externally | A-Z or Calendar challenge |
 | `review_reply` | Review reply received | `ReviewService.create_reply()` | Notifies review author when someone replies |
 | `review_milestone` | Helpful vote threshold hit | `ReviewService._check_helpful_milestones()` | Per-review: fires at 5/10/25/50 helpful votes |
 | `admin_announcement` | Staff admin panel | ScheduledNotificationService | Bulk targeted delivery |
@@ -218,9 +216,7 @@ Platinum share images are no longer rendered inside the notification inbox. The 
 | **Sync Pipeline** (`token_keeper.py`) | Calls `DeferredNotificationService` at game-sync and full-sync completion | Sync -> Notifications |
 | **Signal Suppression** (`sync_utils.py`) | `sync_signal_suppressor()` disables EarnedTrophy pre_save signal during sync batches | Sync -> Signals |
 | **Badge Service** (`check_profile_badges`) | Awards badges, triggering `post_save` on `UserBadge` | Badges -> Signals |
-| **Milestone Service** (`milestone_service.py`) | Calls `create_milestone_notification()` directly (not via signal) for consolidation | Milestones -> Notifications |
 | **Subscription System** (`users/views.py`) | Creates subscription/payment notifications and Discord webhooks | Subscriptions -> Notifications |
-| **Challenge System** | Creates `challenge_completed` notifications on completion | Challenges -> Notifications |
 | **Admin Panel** | Staff create/schedule/send notifications via ScheduledNotificationService | Admin -> Notifications |
 | **Discord** | Separate webhook system for platinums, badges, roles, subscriptions | Notifications -> Discord |
 | **XP/Gamification** (`xp_service.py`) | Badge notifications fetch fresh XP via `calculate_series_xp()` and `calculate_total_xp()` | Gamification -> Signals |
@@ -266,7 +262,7 @@ This prevents double-processing if the cron job overlaps (unlikely with hourly r
 
 ### 10. Milestone Notifications Bypass Signals
 
-`create_milestone_notification()` is a plain function, not a signal handler. It is called directly from `milestone_service.py` to allow batch consolidation (only the highest tier per criteria type gets a notification). If you refactor milestone processing, ensure this function is still called at the right consolidation point.
+**Milestone / challenge notifications retired (2026-08).** `create_milestone_notification()` and the `milestone_achieved` / `challenge_completed` types went with the legacy milestone engine and the Challenge system. The `milestones` app is deliberately quiet -- it sends no notification on a tier crossing. The type choices remain in `notifications/models.py` so historical rows still render.
 
 ### 11. Milestone Title Rewards in Detail View
 

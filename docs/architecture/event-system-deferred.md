@@ -9,7 +9,9 @@
 > - `trophies/services/event_service.py` (EventCollector + EventService recorders + PURSUIT_FEED_TYPES / TROPHY_FEED_TYPES constants)
 > - `trophies/managers.py:EventQuerySet` and `EventManager` (the `feed_visible()` and `for_profile()` filter helpers)
 > - `trophies/admin.py:EventAdmin` registration
-> - All emitter call sites in `psn_api_service.py`, `token_keeper.py`, `signals.py`, `review_service.py`, `verification_service.py`, `milestone_service.py`, `challenge_service.py`, `api/game_list_views.py`
+> - All emitter call sites in `psn_api_service.py`, `token_keeper.py`, `signals.py`, `review_service.py`, `verification_service.py`, `api/game_list_views.py`
+>
+> **NOTE (2026-08):** the planned `milestone_service.py` / `challenge_service.py` emitters are moot -- both systems were deleted. Milestone events would now come from the `milestones` app; challenge events would be defined by whatever replaces Challenges.
 > - `trophies/views/community_views.py:CommunityFeedView` and the `/community/feed/` URL
 > - The Activity tab on profile pages (7th profile tab → back to 6 tabs)
 > - The `pursuit_activity` dashboard module (replaced by restoring the legacy `recent_activity` and `recent_platinums` modules from before Phase 6)

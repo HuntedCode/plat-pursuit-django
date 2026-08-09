@@ -126,7 +126,7 @@ python manage.py createsuperuser
 ### 5. Seed Data (Optional)
 
 ```bash
-python manage.py populate_milestones     # Milestone definitions
+python manage.py seed_milestones         # Milestone ladders + tiers (milestones app)
 python manage.py populate_stat_types     # Gamification stat types
 ```
 

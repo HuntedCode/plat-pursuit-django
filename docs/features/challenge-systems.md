@@ -1,5 +1,16 @@
 # Challenge Systems
 
+> **RETIRED (2026-08).** The Challenge system was removed in the Lane 2 teardown: the `Challenge`,
+> `AZChallengeSlot`, `CalendarChallengeDay`, `GenreChallengeSlot`, and `GenreBonusSlot` models, the
+> service, pages, API, templates, and JS are all gone (migration `0281_drop_challenge_system`).
+> Challenges will be **rewritten from scratch** rather than revived, so this doc is kept as a
+> DESIGN REFERENCE for that rebuild, not as a description of live code.
+>
+> **Preserved data:** every A-Z challenge's progress (per-letter game + completion) was archived into
+> the `ArchivedAZChallenge` table before the drop, keyed on `psn_username` +
+> `np_communication_id` so a rebuilt system can re-import it. Calendar and Genre progress was
+> deliberately **not** preserved.
+
 Comprehensive documentation for Platinum Pursuit's three challenge types: A-Z Platinum Challenge, Platinum Calendar Challenge, and Genre Challenge. All three share a common `Challenge` base model and follow the same lifecycle (create, fill slots, sync-driven progress, completion, Hall of Fame).
 
 ---

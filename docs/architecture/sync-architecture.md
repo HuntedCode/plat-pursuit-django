@@ -124,7 +124,7 @@ _job_sync_complete(profile_id, ...):
       outside the sync path, see the `resync_trophy_groups` command.
   4. update_profile_games (with hide_hiddens fix)
   5. update_profile_trophy_counts
-  6. Badge eval, milestones, challenges (unchanged)
+  6. Badge eval, contracts, milestones (unchanged)
   7. Deferred notifications (unchanged)
   8. Cache invalidation (unchanged)
   9. set_sync_status('synced'), update last_synced
@@ -200,7 +200,7 @@ The refactor preserves every existing integration point in `sync_complete`. What
 | System | Hook | Change |
 |---|---|---|
 | Badge evaluation | `check_profile_badges()` in `sync_complete` | Unchanged. Still fires after stats are updated. Retroactive credit principle preserved. |
-| Milestones | `check_all_milestones_for_user()` | Unchanged. |
+| Milestones | `milestones.services.recompute_on_sync()` (in the `finishing` phase, after the trophy-count refresh) | Unchanged. |
 | Challenges (A-Z, Calendar, Genre) | Three check functions in `sync_complete` | Unchanged. |
 | Deferred notifications | Platinum during `sync_trophies`, badge consolidation in `sync_complete` | Unchanged. |
 | IGDB enrichment | `_drain_deferred_igdb_enrich()` at top of `sync_complete` | Unchanged. New concepts created during the walk still defer their enrichment to the same Redis queue. |
