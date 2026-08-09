@@ -17,6 +17,7 @@ import logging
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import F
 from django.db.models.functions import Lower
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
@@ -86,11 +87,17 @@ class PlatCardsView(LoginRequiredMixin, _RequireLinkedProfileMixin, HtmxListMixi
         ('name_desc', 'Game Z-A'),
     ]
     _SORTS = {
-        # `-last_trophy_at` is the completion moment. `trophy_group_id` is the total-order tiebreak:
-        # without it, rows sharing a timestamp can reorder between pages and infinite scroll skips or
-        # repeats a card (the same reason the leaderboard indexes carry a unique final key).
-        'recent': ('-last_trophy_at', '-trophy_group_id'),
-        'oldest': ('last_trophy_at', 'trophy_group_id'),
+        # `last_trophy_at` is the completion moment, and it is NULLABLE -- the grid renders "Date
+        # unknown" for those. `nulls_last` on BOTH directions is deliberate: Postgres defaults DESC to
+        # NULLS FIRST, which parked every date-less completion at the top of "Most recent", while ASC
+        # put them at the bottom -- the newest position in both directions. Undated now sorts last
+        # either way, matching the ordinal ladders, which also treat a NULL date as oldest.
+        #
+        # `trophy_group_id` is the total-order tiebreak: without it, rows sharing a timestamp can
+        # reorder between pages and infinite scroll skips or repeats a card (the same reason the
+        # leaderboard indexes carry a unique final key).
+        'recent': (F('last_trophy_at').desc(nulls_last=True), '-trophy_group_id'),
+        'oldest': (F('last_trophy_at').asc(nulls_last=True), 'trophy_group_id'),
         'name': (Lower('trophy_group__game__title_name'), 'trophy_group_id'),
         'name_desc': (Lower('trophy_group__game__title_name').desc(), 'trophy_group_id'),
     }
@@ -148,7 +155,6 @@ class PlatCardsView(LoginRequiredMixin, _RequireLinkedProfileMixin, HtmxListMixi
                 key: {
                     'background': t['background_css'],
                     'is_game_art': t.get('is_game_art', False),
-                    'source': t.get('game_image_source', ''),
                 }
                 for key, t in themes
             },

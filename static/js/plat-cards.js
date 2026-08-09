@@ -18,7 +18,7 @@
 (function () {
     var PP = window.PlatPursuit || {};
 
-    var scroller = null, revealHandle = null, handledGrid = null, countLast = null;
+    var scroller = null, revealHandle = null, handledGrid = null;
     var mbSearch = null, mbSort = null;
     var dlg = null, current = null, reqToken = 0;
 
@@ -52,7 +52,6 @@
         var newVal = parseFloat(grid.getAttribute('data-result-count'));
         var mbCount = document.querySelector('[data-minibar-count]');
         if (mbCount && !isNaN(newVal)) { mbCount.textContent = newVal.toLocaleString(); }
-        countLast = newVal;
     }
 
     // ── Mini-bar proxies (mirror the real toolbar; the toolbar survives grid swaps) ────────────────
@@ -88,7 +87,7 @@
         }
     }
 
-    // ── Share modal ───────────────────────────────────────────────────────────────────────────────
+    // -- Share modal ------------------------------------------------------------------------------
     var themeData = null;
     function cardThemes() {
         if (themeData) { return themeData; }
@@ -103,26 +102,37 @@
         var p = picked();
         return p && p.dataset.artIndex ? p.dataset.artIndex : null;
     }
+    function firstGround() { return dlg && dlg.querySelector('[data-share-theme]'); }
 
     // Art swatches are per-card: how many a game has, and what they look like, isn't known until one
-    // is opened. Rebuilt on every open so the picker never offers art the current card doesn't have.
+    // is opened. Rebuilding them wipes the checked radio if an art ground was selected -- they're one
+    // document-scoped group -- which left NOTHING checked, so picked() returned null, applyTheme()
+    // bailed, and the choice silently reverted. Fall back to the first fixed ground when that happens.
     function buildArtSwatches(options) {
         var slot = dlg && dlg.querySelector('[data-share-art-slot]');
         if (!slot) { return; }
+        var lostSelection = !!slot.querySelector('[data-share-theme]:checked');
         slot.innerHTML = '';
         (options || []).forEach(function (url, i) {
             var label = document.createElement('label');
             label.className = 'pc-theme pc-theme--art';
-            label.title = "Use the game's own art";
+            var name = options.length > 1 ? 'Art ' + (i + 1) : 'Game Art';
             label.innerHTML =
                 '<input type="radio" name="pc-theme" value="ppArt" class="sr-only" data-share-theme data-art-index="' + i + '" />' +
                 '<span class="pc-theme__swatch" aria-hidden="true"></span>' +
-                '<span class="pc-theme__name">' + (options.length > 1 ? 'Art ' + (i + 1) : 'Game Art') + '</span>';
+                '<span class="pc-theme__name"></span>';
+            label.querySelector('.pc-theme__name').textContent = name;
             // The swatch IS the image, so the choice is visible before it's made.
             label.querySelector('.pc-theme__swatch').style.backgroundImage = 'url("' + url + '")';
-            label.querySelector('[data-share-theme]').dataset.artUrl = url;
+            var input = label.querySelector('[data-share-theme]');
+            input.dataset.artUrl = url;
+            input.setAttribute('aria-label', name);
             slot.appendChild(label);
         });
+        if (lostSelection) {
+            var fallback = firstGround();
+            if (fallback) { fallback.checked = true; }
+        }
     }
 
     // The card renders at a fixed 1200x630; scale it to whatever the frame is, so the preview keeps
@@ -138,18 +148,24 @@
 
     function setBusy(on) {
         var l = dlg && dlg.querySelector('[data-share-loading]');
+        var stage = dlg && dlg.querySelector('[data-share-frame]');
         if (l) { l.hidden = !on; }
+        if (stage) { stage.setAttribute('aria-busy', on ? 'true' : 'false'); }
+        var go = dlg && dlg.querySelector('[data-share-download]');
+        if (go) { go.disabled = !!on; }        // nothing to download until the card exists
     }
     function showError(msg) {
         var e = dlg && dlg.querySelector('[data-share-error]');
         if (!e) { return; }
         e.hidden = !msg;
         e.textContent = msg || '';
+        var go = dlg && dlg.querySelector('[data-share-download]');
+        if (go && msg) { go.disabled = true; }
     }
 
     function loadPreview() {
         if (!current || !dlg) { return; }
-        var token = ++reqToken;                 // stale-response guard: theme clicks can outrun fetches
+        var token = ++reqToken;                 // stale-response guard: clicks can outrun fetches
         setBusy(true); showError('');
         PP.API.request('/api/v1/shareables/completion/' + current.groupId + '/html/')
             .then(function (data) {
@@ -158,7 +174,7 @@
                 if (scaler) { scaler.innerHTML = data.html; }
                 current.hasRating = !!data.has_rating;
                 current.conceptId = data.concept_id;
-                current.variant = data.variant;
+                current.playtime = data.playtime || '';
                 buildArtSwatches(data.art_options);
                 var label = dlg.querySelector('[data-share-download-label]');
                 if (label) { label.textContent = data.variant === 'platinum' ? 'Download platinum card' : 'Download 100% card'; }
@@ -174,8 +190,8 @@
             .finally(function () { if (token === reqToken) { setBusy(false); } });
     }
 
-    // The ground is applied server-side at download time, so switching it only needs to restyle the
-    // preview -- no refetch. The card's own scrim is an inner layer, so it survives this.
+    // The ground is applied server-side at download time, so switching it only restyles the preview --
+    // no refetch. The card's own scrim is an inner layer, so it survives this.
     function applyTheme() {
         var scaler = dlg && dlg.querySelector('[data-share-preview]');
         var card = scaler && scaler.querySelector('.share-image-content');
@@ -185,8 +201,10 @@
         if (!def) { return; }
         if (def.is_game_art) {
             var src = choice.dataset.artUrl || '';
+            // 0.45 matches what the renderer composites server-side, so preview and download agree on
+            // how heavily the art is knocked back.
             card.style.background = src
-                ? 'linear-gradient(rgba(5, 8, 12, 0.48), rgba(5, 8, 12, 0.48)), url("' + src + '")'
+                ? 'linear-gradient(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.45)), url("' + src + '")'
                 : def.background;
             card.style.backgroundSize = 'cover';
             card.style.backgroundPosition = 'center';
@@ -197,21 +215,25 @@
         }
     }
 
-    function open(trigger) {
-        if (!dlg) { return; }
-        current = {
-            groupId: trigger.dataset.trophyGroupId,
-            gameName: trigger.dataset.gameName || '',
-            gameImage: trigger.dataset.gameImage || '',
-            conceptBg: trigger.dataset.conceptBgUrl || '',
-            conceptId: trigger.dataset.conceptId || '',
-        };
+    function openFor(groupId, gameName) {
+        current = { groupId: groupId, gameName: gameName || '', conceptId: '', hasRating: true, playtime: '' };
         var sub = dlg.querySelector('[data-share-game]');
         if (sub) { sub.textContent = current.gameName; }
         var scaler = dlg.querySelector('[data-share-preview]');
         if (scaler) { scaler.innerHTML = ''; }
+        // Clear the PREVIOUS card's art options immediately. Leaving them up during the fetch let a
+        // download go out with art=<i> indexed against the old game's list, which the server clamps
+        // into range -- quietly shipping the wrong image.
+        buildArtSwatches([]);
+        var ground = firstGround();
+        if (ground) { ground.checked = true; }
         if (!dlg.open) { dlg.showModal(); }
+        fit();                                  // size the stage before the fetch, so it doesn't pop
         loadPreview();
+    }
+    function open(trigger) {
+        if (!dlg) { return; }
+        openFor(trigger.dataset.trophyGroupId, trigger.dataset.gameName);
     }
 
     function pngUrl() {
@@ -220,64 +242,133 @@
         return i === null ? url : url + '&art=' + encodeURIComponent(i);
     }
 
-    // Rate-before-download. The card carries the hunter's own stars, difficulty and fun, so an unrated
-    // game makes a visibly thinner card -- which is the honest reason to ask, and why the prompt only
-    // ever offers, never blocks. Asked at most once per opened card (`asked`), so it can't nag.
-    //
-    // Implemented against the shared #rate-before-download-modal directly. share-image.js had its own
-    // copy of this flow, but that file existed only for the page this one replaces, so extracting a
-    // module for a single caller would be ceremony.
-    var asked = false;
-
-    function submitRating(modal) {
-        var form = modal.querySelector('#rbd-rating-form');
-        if (!form) { return Promise.resolve(); }
-        var payload = {};
-        new FormData(form).forEach(function (v, k) { payload[k] = v; });
-        return PP.API.post('/api/v1/ratings/' + current.conceptId + '/group/default/rate/', payload);
+    // Fetch-then-save rather than navigating. location.href is fine while the endpoint returns an
+    // attachment, but its failure paths don't: a render error returns JSON and the 20/m rate limit
+    // returns an HTML 403, either of which would replace the page with a bare error document and take
+    // the open modal with it.
+    function saveCard() {
+        var go = dlg.querySelector('[data-share-download]');
+        if (go) { go.disabled = true; }
+        showError('');
+        fetch(pngUrl(), { credentials: 'same-origin' })
+            .then(function (res) {
+                if (!res.ok) { throw new Error(String(res.status)); }
+                return res.blob();
+            })
+            .then(function (blob) {
+                var a = document.createElement('a');
+                var href = URL.createObjectURL(blob);
+                a.href = href;
+                a.download = (current.gameName || 'plat-card').replace(/[^A-Za-z0-9 _-]/g, '').trim() + '.png';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(function () { URL.revokeObjectURL(href); }, 1000);
+            })
+            .catch(function (err) {
+                showError(err && err.message === '403'
+                    ? 'Too many cards at once. Give it a minute.'
+                    : "Couldn't render that card. Try again in a moment.");
+            })
+            .finally(function () { if (go) { go.disabled = false; } });
     }
 
-    function promptRating(then) {
+    // Rate-before-download. The card carries the hunter's own stars, difficulty and fun, so an unrated
+    // game makes a visibly thinner card -- the honest reason to ask, and why this only ever offers.
+    // Asked at most once per opened card.
+    //
+    // Driven against the shared #rate-before-download-modal. dashboard.js drives the same partial and
+    // is NOT loaded on this page, so everything it does for that modal has to happen here too: a reset
+    // between opens, live slider readouts, and the hours gate -- the form rejects a blank or zero
+    // hours_to_platinum with a 400, which is exactly why the template ships the submit disabled.
+    var asked = false;
+    var RBD_READOUTS = {
+        overall_rating: 'rbd-overall-value',
+        difficulty: 'rbd-difficulty-value',
+        grindiness: 'rbd-grindiness-value',
+        fun_ranking: 'rbd-fun-value',
+    };
+
+    function syncReadouts(form) {
+        Object.keys(RBD_READOUTS).forEach(function (name) {
+            var input = form.querySelector('[name="' + name + '"]');
+            var out = document.getElementById(RBD_READOUTS[name]);
+            if (input && out) {
+                out.textContent = name === 'overall_rating'
+                    ? parseFloat(input.value).toFixed(1) : input.value;
+            }
+        });
+    }
+
+    function promptRating(proceed) {
         var modal = document.getElementById('rate-before-download-modal');
-        if (!modal || !modal.showModal) { then(); return; }
+        var form = modal && modal.querySelector('#rbd-rating-form');
+        if (!modal || !form || !modal.showModal) { proceed(); return; }
         asked = true;
 
         var title = modal.querySelector('#rbd-game-title');
-        if (title) { title.textContent = current.gameName; }
+        if (title) { title.textContent = current.gameName || 'Rate this game'; }
+        form.reset();                       // otherwise card B opens on card A's slider positions
+        syncReadouts(form);
+
+        var hint = document.getElementById('rbd-playtime-hint');
+        if (hint) {
+            hint.textContent = current.playtime ? 'Your tracked playtime: ' + current.playtime : '';
+            hint.classList.toggle('hidden', !current.playtime);
+        }
+
         var submit = modal.querySelector('#rbd-submit-btn');
         var skip = modal.querySelector('#rbd-skip-btn');
-        if (submit) { submit.disabled = false; }
+        var hours = form.querySelector('[name="hours_to_platinum"]');
+        if (submit) { submit.disabled = true; }     // the form 400s on a blank hours value
 
-        function finish(didRate) {
-            modal.removeEventListener('close', onClose);
+        function onInput() { syncReadouts(form); }
+        function onHours() { if (submit) { submit.disabled = !(parseInt(hours.value, 10) >= 1); } }
+        function cleanup() {
+            form.removeEventListener('input', onInput);
+            if (hours) { hours.removeEventListener('input', onHours); }
             if (submit) { submit.removeEventListener('click', onSubmit); }
             if (skip) { skip.removeEventListener('click', onSkip); }
+            modal.removeEventListener('close', onDismiss);
+        }
+        // A DISMISS is not a skip. The close button and the backdrop are both form method="dialog", so
+        // both fire `close` -- treating that as "skip, then download" meant the universal
+        // get-me-out-of-here affordance handed you a file. Only the explicit buttons continue.
+        function finish(didRate, andDownload) {
+            cleanup();
             if (modal.open) { modal.close(); }
-            // A fresh rating changes what the card shows, so rebuild the preview before handing over.
             if (didRate) { current.hasRating = true; loadPreview(); }
-            then();
+            if (andDownload) { proceed(); }
         }
         function onSubmit(e) {
             e.preventDefault();
-            if (submit) { submit.disabled = true; }
-            submitRating(modal).then(function () { finish(true); }).catch(function () { finish(false); });
+            if (!(parseInt(hours && hours.value, 10) >= 1)) { return; }
+            submit.disabled = true;
+            var payload = {};
+            new FormData(form).forEach(function (v, k) { payload[k] = v; });
+            PP.API.post('/api/v1/ratings/' + current.conceptId + '/group/default/rate/', payload)
+                .then(function () { finish(true, true); })
+                .catch(function () {
+                    // Don't hand over a download while pretending the rating saved.
+                    submit.disabled = false;
+                    if (PP.ToastManager) { PP.ToastManager.error("Couldn't save that rating. Try again, or skip."); }
+                });
         }
-        function onSkip(e) { e.preventDefault(); finish(false); }
-        function onClose() { finish(false); }        // Esc / backdrop counts as skip
+        function onSkip(e) { e.preventDefault(); finish(false, true); }
+        function onDismiss() { finish(false, false); }
 
+        form.addEventListener('input', onInput);
+        if (hours) { hours.addEventListener('input', onHours); }
         if (submit) { submit.addEventListener('click', onSubmit); }
         if (skip) { skip.addEventListener('click', onSkip); }
-        modal.addEventListener('close', onClose);
+        modal.addEventListener('close', onDismiss);
         modal.showModal();
     }
 
     function download() {
         if (!current) { return; }
-        if (!current.hasRating && current.conceptId && !asked) {
-            promptRating(function () { window.location.href = pngUrl(); });
-            return;
-        }
-        window.location.href = pngUrl();
+        if (!current.hasRating && current.conceptId && !asked) { promptRating(saveCard); return; }
+        saveCard();
     }
 
     function close() { if (dlg && dlg.open) { dlg.close(); } }
@@ -285,8 +376,12 @@
     function wireModal(first) {
         dlg = document.getElementById('pc-share');
         if (!dlg) { return; }
-        if (!first) { return; }        // the dialog lives outside the swap, so wire it exactly once
 
+        // Bound EVERY boot, not only the first. The dialog is outside the HTMX filter swap, but NOT
+        // outside a history restore: base.html sets no hx-history-elt, so htmx replaces document.body
+        // wholesale and this is a fresh, unwired node. Guarding these behind `first` left the modal
+        // opening after a browser Back with Close, Download and every swatch inert. Listeners die with
+        // the node they're on, so re-binding can't double up.
         dlg.addEventListener('click', function (e) {
             if (e.target === dlg) { close(); }                       // backdrop
             if (e.target.closest('[data-share-close]')) { close(); }
@@ -296,46 +391,47 @@
             if (e.target.matches('[data-share-theme]')) { applyTheme(); }
         });
         dlg.addEventListener('close', function () { current = null; asked = false; });
-        window.addEventListener('resize', fit);
 
-        // Delegated so cards appended by infinite scroll work without re-binding.
-        document.body.addEventListener('click', function (e) {
-            var trigger = e.target.closest('[data-card-open]');
-            if (trigger) { open(trigger); }
-        });
+        if (first) {
+            window.addEventListener('resize', fit);
+            // Delegated so cards appended by infinite scroll work without re-binding.
+            document.body.addEventListener('click', function (e) {
+                var trigger = e.target.closest('[data-card-open]');
+                if (trigger) { open(trigger); }
+            });
+        }
     }
 
     // Deep links. `?c=` is the native form; `?et=` is what platinum-earned notifications already in
-    // the wild send, and it resolves through the legacy alias to the same card.
+    // the wild send. Neither hunts the DOM for the card: with paginate_by=24 the target usually isn't
+    // on page 1, and both endpoints are keyed on exactly these ids, so resolving through them works
+    // wherever the completion falls in the list.
     function autoOpen() {
         var params = new URLSearchParams(window.location.search);
         var groupId = params.get('c');
         var et = params.get('et');
         if (!groupId && !et) { return; }
-        var selector = groupId
-            ? '[data-card-open][data-trophy-group-id="' + CSS.escape(groupId) + '"]'
-            : null;
-        var trigger = selector && document.querySelector(selector);
-        if (trigger) {
-            open(trigger);
-        } else if (et) {
-            // The notification knows an EarnedTrophy, not a completion, and its game may not be on
-            // page 1 of the grid -- so resolve it through the alias rather than hunting the DOM.
-            dlg = document.getElementById('pc-share');
-            PP.API.request('/api/v1/shareables/platinum/' + encodeURIComponent(et) + '/html/')
-                .then(function (data) {
-                    var el = document.querySelector('[data-card-open][data-trophy-group-id="' + CSS.escape(String(data.trophy_group_id)) + '"]');
-                    if (el) { open(el); return; }
-                    current = { groupId: data.trophy_group_id, gameName: '', gameImage: '', conceptBg: '', conceptId: data.concept_id };
-                    if (dlg && !dlg.open) { dlg.showModal(); }
-                    loadPreview();
-                })
-                .catch(function () { /* stale notification link; leave the page as-is */ });
-        }
-        // Clean the param so a refresh doesn't reopen the modal.
+
+        // Strip the params first, so a refresh doesn't reopen and the InfiniteScroller (constructed
+        // after this) doesn't inherit them into every ?page fetch.
         params.delete('c'); params.delete('et');
         var qs = params.toString();
         window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
+
+        dlg = document.getElementById('pc-share');
+        if (!dlg) { return; }
+
+        function nameFor(id) {
+            var el = document.querySelector('[data-card-open][data-trophy-group-id="' + CSS.escape(String(id)) + '"]');
+            return el ? el.dataset.gameName : '';
+        }
+        if (groupId) { openFor(groupId, nameFor(groupId)); return; }
+
+        // The notification knows an EarnedTrophy, not a completion. One request to translate it, then
+        // the normal path.
+        PP.API.request('/api/v1/shareables/platinum/' + encodeURIComponent(et) + '/html/')
+            .then(function (data) { openFor(data.trophy_group_id, nameFor(data.trophy_group_id)); })
+            .catch(function () { /* stale notification link; leave the page as-is */ });
     }
 
     // ── Body-level listeners (bound once; body survives a history restore) ────────────────────────
@@ -372,13 +468,13 @@
         if (form) { form.addEventListener('change', onFormChangeDim); }
         wireMinibar();
         initReveal();
-        initScroller();
         wireModal(first);
+        if (first) { autoOpen(); }      // strips ?c= / ?et= BEFORE the scroller snapshots the query
+        initScroller();
         if (PP.StickyReveal) { PP.StickyReveal.init(); }
         if (first) {
             document.body.addEventListener('htmx:afterSwap', onAfterSwap);
             document.body.addEventListener('htmx:afterRequest', onAfterRequest);
-            autoOpen();
         }
     }
 

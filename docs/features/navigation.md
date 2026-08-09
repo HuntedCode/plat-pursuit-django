@@ -105,7 +105,7 @@ Six-column grid (`grid-cols-2 md:grid-cols-3 lg:grid-cols-6`), one column per st
 | Recently Added | Challenges | The Lab* | Membership (soon) | About | |
 | Flagged Games | Game Lists | Research Panel* | | Contact | |
 | Franchises | Leaderboards | Badges / Milestones / Titles* | | | |
-| Genres & Themes | | Shareables / Recap* | | | |
+| Genres & Themes | | Plat Cards / Recap* | | | |
 | Companies | | My Challenges / My Lists* | | | |
 | Engines | | | | | |
 
@@ -205,7 +205,7 @@ Profile pages live under `/community/profiles/<u>/`, so they show the Community 
 
 - **Sticky chrome stacks vertically — keep the budget honest.** On desktop the navbar (64px) + sub-nav (~46px) + hotbar (variable, ~80-110px when expanded) all pin to the top, and on mobile the bottom tab bar (56px) pins to the bottom. With everything visible the user gives up ~190-210px on desktop and ~250px on mobile. The hotbar's collapse toggle is the relief valve — users can shrink it to ~28px (just the toggle button) to reclaim the space. Adding any new sticky chrome (banners, status bars, announcement strips) means subtracting somewhere else. The budget was set deliberately during the Community Hub initiative; revisit `ia-and-subnav.md` before introducing more pinned elements.
 
-- **My Shareables is a landing-page-with-sub-pages distributor.** `/dashboard/shareables/` is the index page that shows 5 sub-feature cards (Platinum Cards, Platinum Grid, Profile Card, Monthly Recap, Challenge Cards). Each sub-page has its own URL and they all map back to `my_shareables` in the sub-nav active-state via `_URL_NAME_TO_SLUG_OVERRIDES` in `core/hub_subnav.py`. New shareable sub-pages must be added to that override map.
+- **My Shareables is one page, not a distributor** (rebuilt 2026-08). `/shareables/` IS the Plat Cards browse; the wayfinder landing and its sub-pages are gone (Platinum Grid and Profile Card retired, Challenge Cards died with the Challenge system, Recap lives at `/recap/` with its own subnav entry). `/shareables/platinums/` redirects to it and keeps its URL name, since platinum notifications deep-link it with `?et=`. The only surviving entry in `_URL_NAME_TO_SLUG_OVERRIDES` for this hub is `my_shareables_platinums`. See [share-images](share-images.md).
 
 ## Onboarding
 

@@ -139,17 +139,27 @@ def test_the_page_renders_for_a_hunter_with_nothing(client):
 
 
 def test_only_the_curated_grounds_reach_the_picker(client):
-    """The old page offered ~105 site gradients while the endpoint accepted 6 and silently fell back,
-    so 99 of them previewed one card and downloaded another."""
+    """The old page offered ~105 site gradients while the endpoint accepted a handful and silently
+    fell back, so most of them previewed one card and downloaded another.
+
+    Asserts the RENDERED radios, not just the context: a context-only check passes even if the
+    template drops its `is_game_art` guard (offering an art ground with no image) or stops marking one
+    checked."""
+    import re
     from trophies.themes import PLAT_CARD_THEME_KEYS
 
     profile = _hunter()
     _completed_game(profile, with_platinum=True)
 
-    ctx = _get(client, profile).context
+    resp = _get(client, profile)
+    content = resp.content.decode()
+    rendered = re.findall(r'name="pc-theme" value="([^"]+)"', content)
+    fixed = [k for k, t in resp.context['card_themes'] if not t.get('is_game_art')]
 
-    assert [key for key, _ in ctx['card_themes']] == PLAT_CARD_THEME_KEYS
-    assert set(ctx['card_theme_js']) == set(PLAT_CARD_THEME_KEYS)
+    assert rendered == fixed, 'the picker must render exactly the FIXED grounds; art is added per card'
+    assert 'ppArt' not in rendered, 'the art ground has no image until a card is opened'
+    assert content.count('checked') >= 1, 'one ground must start selected'
+    assert set(resp.context['card_theme_js']) == set(PLAT_CARD_THEME_KEYS)
 
 
 def test_the_old_browse_path_redirects_here(client):
@@ -163,14 +173,25 @@ def test_the_old_browse_path_redirects_here(client):
     assert resp['Location'].startswith(URL) and 'et=123' in resp['Location']
 
 
-def test_query_count_does_not_grow_with_the_page(django_assert_max_num_queries, client):
-    """One query for the grid however many cards it draws: the cover comes through the select_related
-    concept/igdb_match and the variant through the `plat_defined` annotation."""
-    profile = _hunter()
-    for _ in range(24):
-        _completed_game(profile, with_platinum=True)
-    client.force_login(profile.user)
-    client.get(URL)                                       # warm session/auth
+def test_query_count_does_not_grow_with_the_page(client):
+    """Two sizes, same count -- a single size against a fixed budget says nothing about growth.
 
-    with django_assert_max_num_queries(14):
-        assert client.get(URL).status_code == 200
+    One query for the grid however many cards it draws: the cover comes through the select_related
+    concept/igdb_match and the variant through the `plat_defined` annotation."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    def _measure(rows):
+        profile = _hunter()
+        for _ in range(rows):
+            _completed_game(profile, with_platinum=True)
+        client.force_login(profile.user)
+        client.get(URL)                                   # warm session/auth
+        with CaptureQueriesContext(connection) as ctx:
+            assert client.get(URL).status_code == 200
+        return len(ctx)
+
+    small, full = _measure(3), _measure(24)
+
+    assert small == full, f'query count grew with the page: {small} -> {full}'
+    assert full <= 14, f'{full} queries to draw one page'

@@ -76,8 +76,8 @@ Badges are a flagship feature with dedicated real estate.
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
-| 17 | Profile Card | Lazy (none) | **Done** | Client-side HTML preview via `/api/v1/profile-card/html/`, PNG download |
-| S1 | Latest Platinum | Lazy (10m) | **Done** | Live share card preview via `/api/v1/shareables/platinum/<id>/html/` |
+| 17 | Profile Card | Lazy (none) | **REMOVED 2026-08** | Deleted with the plat card rebuild; the Profile Card page is retired |
+| S1 | Latest Platinum | Lazy (10m) | **REMOVED 2026-08** | Was a second place to get a plat card; that now comes from `/shareables/` only |
 | S2 | Challenge Cards | Lazy (10m) | **Done** | Up to 3 challenge share card previews (A-Z, Calendar, Genre) |
 | S3 | Recap Card | Lazy (30m) | **Done** | Most recent finalized recap share card preview |
 | S4 | Platinum Grid CTA | Lazy (10m) | **Done** | Builds a shareable grid image of every platinum the user has earned |

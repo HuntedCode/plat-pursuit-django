@@ -80,8 +80,10 @@ Staff-authored platinum guides on game detail pages. Replaces the old Checklists
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/api/v1/shareables/platinum/<id>/html/` | Login | Platinum share card HTML |
-| GET | `/api/v1/shareables/platinum/<id>/png/` | Login | Platinum share card PNG |
+| GET | `/api/v1/shareables/completion/<trophy_group_id>/html/` | Login | Plat card preview markup + art options |
+| GET | `/api/v1/shareables/completion/<trophy_group_id>/png/?theme=&art=` | Login | Plat card PNG download |
+| GET | `/api/v1/shareables/platinum/<earned_trophy_id>/html/` | Login | Legacy alias for the pair above (notifications + external consumers) |
+| GET | `/api/v1/shareables/platinum/<earned_trophy_id>/png/` | Login | Legacy alias |
 | GET | `/api/v1/share-temp/<filename>` | No | Serve temp share image |
 
 ### Monthly Recaps

@@ -26,7 +26,7 @@ four hubs — resist a 5th. Gamification expands My Pursuit's strip; it does not
 The logged-in Home (`/`) IS the personal hub's **Overview** and carries the 8-item strip, grouped
 **5 progress + 3 tools** with a divider between:
 
-`Overview · Collection · Career · Milestones · Titles` **|** `My Shareables · Recap · Profile`
+`Overview · Collection · Career · Milestones · Titles` **|** `Plat Cards · Recap · Profile`
 
 (The Lab + Research Panel merged into **Career**. **My Stats** was pulled for the 1.0 launch — `/stats/`
 redirects to Home pending its rebuild; see [stats-page.md](../design/stats-page.md).)

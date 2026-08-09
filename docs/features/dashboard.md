@@ -12,7 +12,7 @@ The dashboard is the landing page of the **Dashboard hub** (one of the four hubs
 |--------------|-----|------------------|
 | Dashboard | `/` | The cockpit you're already on (active state) |
 | My Stats | `/dashboard/stats/` | The 120+ stat data dump page |
-| My Shareables | `/dashboard/shareables/` | Share-image generation, Platinum Grid wizard |
+| Plat Cards | `/shareables/` | Share-card generation (rebuilt 2026-08; the Grid + Profile Card sub-pages are retired) |
 | Recap | `/dashboard/recap/` | Spotify-Wrapped style monthly recap |
 
 This is the discoverability mechanism for personal-utility pages that used to live in the legacy "My Pursuit" navbar dropdown. The dropdown is gone (see [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the rationale); the sub-nav strip is now the canonical way to navigate between the dashboard cockpit and its companion utility pages. The strip is sticky on `lg:+` so it stays accessible during long scrolls, and collapses to a horizontal scroll strip on mobile.
@@ -40,7 +40,7 @@ The dashboard uses a **Module Registry** pattern with a **Tabbed Carousel** layo
 | 3 | Chart | Progress | `progress` | Challenge Hub |
 | 4 | Medal | Badges | `badges` | Badge Progress |
 | 5 | Star | Highlights | `highlights` | My Reviews, Rate My Games |
-| 6 | Share | Share & Export | `share` | Profile Card, Latest Platinum, Challenge Cards, Recap Card |
+| 6 | Share | Share & Export | `share` | Recap Card (the only one left -- see the note under the module table) |
 
 ### Custom Tabs (Premium only, max 6)
 
@@ -78,10 +78,12 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `advanced_badge_stats` | Advanced Badge Stats | premium | Lazy | 30m | Yes |
 | `badge_series_overview` | Badge Series Overview | premium | Lazy | 30m | Yes |
 | `badge_visualizations` | Badge Visualizations | premium | Lazy | 30m | Yes |
-| `profile_card_preview` | Profile Card | share | Lazy | None | No |
-| `recent_platinum_card` | Latest Platinum | share | Lazy | 10m | No |
 | `recap_share_card` | Recap Card | share | Lazy | 30m | No |
-| `platinum_grid_cta` | Platinum Grid | share | Lazy | 10m | No |
+
+> **Share category, 2026-08:** `profile_card_preview`, `recent_platinum_card` and `platinum_grid_cta` were
+> deleted with the plat card rebuild. Two fed retired pages; the third was a second place to get a plat
+> card, and that now comes from `/shareables/` only. `recap_share_card` is the last share module.
+
 | `library_health_alerts` | Library Health | highlights | Lazy | 30m | No |
 | `my_stats_teaser` | Your Stats | at_a_glance | Lazy | 10m | No |
 | `top_developers` | Top Studios | highlights | Lazy | 30m | No |
@@ -268,7 +270,7 @@ Free users see blurred previews of all premium modules using real data from the 
 - **Rate My Games ticker strip**: Auto-scrolling CSS animation with duplicated icons for seamless loop. Pauses on hover. Icons are clickable links to review_hub. Defensive slug check prevents crash on concepts without slugs.
 - **Rarity Showcase 2-column grid**: Shows trophy icon with overlapping game icon badge. Includes trophy description (`trophy_detail`). Even limit options (4/6/8). Filters `earn_rate > 0`. Uses `rarity_color_hex` filter.
 - **Share card preview pattern**: All share card modules (platinum, recap) use `_initShareCards()` in dashboard.js. Finds `.share-card-preview` containers by `data-share-html-url`, fetches HTML via API, scales to 1200x630 aspect ratio. Theme switching is client-side via `applyTheme()` (modifies DOM directly). Game art themes are excluded unless the preview has `data-supports-game-art="true"` (platinum card only). Clicking a preview opens a full-size modal (`<dialog>`). Download buttons use `data-share-png-url` with the selected theme key.
-- **Share card rating prompt**: The platinum card download button triggers a rate-before-download modal (same `#rate-before-download-modal` partial as shareables page) if the user hasn't rated the game. Rating metadata (`concept_id`, `has_rating`, `playtime`) is captured from the HTML API response and stored on the preview element's dataset. Prompted once per session per concept. Shovelware platinums are prompted too (rating shovelware is allowed; only the Rate My Games wizard hides shovelware by default).
+- **Share card rating prompt**: REMOVED from the dashboard with the `recent_platinum_card` module. The flow itself lives on, rebuilt, in `static/js/plat-cards.js` against the same `#rate-before-download-modal` partial -- see [share-images](share-images.md).
 - **Share card identity bars**: All share card templates (platinum, A-Z, calendar, genre, recap) include a rich identity bar with avatar (glow border, Plus subscriber badge), username, card type label, and "Platinum Pursuit" branding. Avatar and `is_plus` are passed from the view layer. `data-element` attributes are preserved for Playwright theme rendering.
 - **Share tab is last**: `DEFAULT_TAB_ORDER` places share at the end (after highlights).
 - **Staff-gated during dev**: Switch mixins to `LoginRequiredMixin` for production. Remove preview toggle UI.

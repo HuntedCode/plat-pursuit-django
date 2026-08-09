@@ -19,9 +19,6 @@ from the `plat_defined` annotation -- so the grid costs one query no matter how 
             data-card-open
             data-trophy-group-id="{{ c.trophy_group_id }}"
             data-game-name="{{ game.title_name }}"
-            data-game-image="{{ game.display_image_url }}"
-            data-concept-bg-url="{{ game.concept.landscape_url|default:'' }}"
-            data-concept-id="{{ game.concept_id|default:'' }}"
             aria-label="Make a card for {{ game.title_name }}">
 
         <span class="pcard__art">
@@ -57,9 +54,14 @@ from the `plat_defined` annotation -- so the grid costs one query no matter how 
     {% empty %}
     <div class="pcard-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><path d="M7 15h4"/></svg>
-        {% if request.GET.query or current_variant != 'all' %}
+        {% comment %}"Is a filter hiding this?" is answered by whether the hunter has ANY completions
+        at all, not by inspecting each control. Enumerating them missed `show_shovelware` -- a hunter
+        whose completions were all flagged got "No completions yet, go finish a game" directly under a
+        header reading "Platinums: 12" -- and adding it naively broke the other case, since shovelware
+        is hidden by DEFAULT. The career totals already know the answer.{% endcomment %}
+        {% if total_platinums or total_completions %}
         <p class="pcard-empty__title">Nothing matches</p>
-        <p class="pcard-empty__hint">Try a different search, or switch the card type back to All.</p>
+        <p class="pcard-empty__hint">Try a different search, switch the card type back to All, or show shovelware.</p>
         {% else %}
         <p class="pcard-empty__title">No completions yet</p>
         <p class="pcard-empty__hint">Finish a game's base trophy list and it turns up here, platinum or not.</p>

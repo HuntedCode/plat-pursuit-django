@@ -91,23 +91,23 @@ def build_card_context(profile, standing):
                 cached_layers.append(resolved)
         line['medallion_cached'] = cached_layers
 
-    # Art grounds: cache each candidate so the picker can show the REAL image as its swatch and the
-    # renderer has a local path for whichever one is chosen.
-    data['art_cached'] = [
-        cached for cached in (ShareImageCache.fetch_and_cache(url) for url in data['art_urls'] if url) if cached
-    ]
-
     data['playtime'] = _format_playtime(data['play_duration_seconds'])
     return data
 
 
 def _art_path(context, request):
-    """Filesystem path for the chosen art ground, or None.
+    """Local filesystem path for the CHOSEN art ground, or None.
 
-    `?art=<i>` indexes the card's own art list rather than naming a URL, so a request can only ever
-    select art the card already offers -- no arbitrary remote fetch from a query string.
+    Only the selected image is cached, and only on the download. Caching all of them up front turned
+    opening the modal -- the thing a hunter actually waits on -- into up to four extra synchronous
+    `requests.get(timeout=10)` calls on a cold cache, on top of the avatar, cover and trophy icon. The
+    picker doesn't need local copies anyway: its swatches are ordinary <img> backgrounds the browser
+    fetches itself.
+
+    `?art=<i>` INDEXES the card's own list rather than naming a URL, so a request can only select art
+    the card already offers -- the query string can't drive an arbitrary remote fetch.
     """
-    options = context.get('art_cached') or []
+    options = context.get('art_urls') or []
     if not options:
         return None
     try:
@@ -116,7 +116,7 @@ def _art_path(context, request):
         index = 0
     if not 0 <= index < len(options):
         index = 0
-    return resolve_temp_path(options[index])
+    return resolve_temp_path(ShareImageCache.fetch_and_cache(options[index]))
 
 
 class _CardViewBase(APIView):
@@ -159,9 +159,10 @@ class PlatCardHTMLView(_CardViewBase):
             'concept_id': context['concept_id'],
             'trophy_group_id': context['trophy_group_id'],
             'has_rating': context['user_rating'] is not None,
-            # The picker builds its art swatches from these -- so a game with no usable art simply
-            # isn't offered the art ground, instead of offering one that silently falls back.
-            'art_options': context['art_cached'],
+            # The picker builds its art swatches from these, as remote URLs the browser loads itself
+            # -- so a game with no usable art simply isn't offered the art ground, instead of being
+            # offered one that silently falls back. Only the CHOSEN image is cached, at download time.
+            'art_options': context['art_urls'],
             'playtime': context['playtime'],
         })
 

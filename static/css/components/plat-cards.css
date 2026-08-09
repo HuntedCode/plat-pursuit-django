@@ -120,8 +120,9 @@
 .pcard-empty__hint { font-size: 13px; color: var(--pp-text-dim); max-width: 42ch; }
 
 /* ── Share modal ───────────────────────────────────────────────────────────────────────────────────
- * Replaces the DaisyUI `.modal` + `color_grid_modal` swatch wall. Six designed grounds get named
- * cards rather than a palette: at this count "which one is this" matters more than "how many".
+ * Replaces the DaisyUI `.modal` + `color_grid_modal` swatch wall. The grounds get named cards rather
+ * than a palette: at this count "which one is this" matters more than "how many". Four are fixed; the
+ * art grounds are appended per card by the JS, one per image the game actually has.
  */
 /* `position: fixed; inset: 0; margin: auto` is how the house modals centre (see .gd-modal). A
    <dialog> relies on the UA's `margin: auto` for that, and the site reset zeroes it -- without this

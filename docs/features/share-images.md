@@ -1,207 +1,197 @@
 # Share Images System
 
-The share images system generates downloadable PNG cards that users can post on social media to show off their platinum trophies, badge progress, and monthly recaps. There are two rendering pipelines: a legacy Pillow-based renderer for notification-attached platinum images, and the primary Playwright-based renderer that screenshots HTML/CSS templates into pixel-perfect PNGs. All card types support landscape (1200x630, optimized for Discord/Twitter) and portrait (1080x1350, optimized for Instagram) formats.
+Downloadable PNG cards a hunter posts to show off what they've finished. Two card families exist:
+**plat cards** (a completed game) and the **monthly recap** card. Both render HTML through headless
+Chromium; nothing is stored.
 
-## Architecture Overview
+> **Rewritten 2026-08.** The plat card half of this system was rebuilt end to end: what earns a card,
+> how it's keyed, what it looks like, and the page it comes from. Anything you remember about platinum
+> `EarnedTrophy` keying, portrait format, a four-card wayfinder, or a 105-gradient picker is gone. The
+> recap card is untouched and still uses the older conventions.
 
-The rendering pipeline has three layers: data assembly, HTML generation, and PNG rendering.
+## What earns a plat card
 
-**Data assembly** is handled by `ShareableDataService`, which collects all the metadata needed for a share card from Django models. For platinum cards, this includes game info, trophy stats, earn rate, rarity, badge XP earned, tier 1 badge progress, and the user's personal rating. The service computes historical totals (e.g., "Platinum #47" at the time of earning) rather than current totals, so cards remain accurate even when generated weeks after the fact. Each share card type (recap, badge) has its own data assembly logic in its respective view.
+**A game's DEFAULT trophy group at 100%.** Not "has a platinum".
 
-**HTML generation** uses Django's `render_to_string()` with dedicated share card templates. These templates use fully inline styles (no Tailwind, no external CSS) with hex colors for maximum Playwright rendering compatibility. All cards follow a unified design language: rich identity bar (avatar with glow border, Plus subscriber badge, username, card type label, "Platinum Pursuit" branding), colored-tint stat boxes, and normalized footers. Font stack is `'Inter', 'Poppins', system-ui, -apple-system, sans-serif`. Images reference `/api/v1/share-temp/<hash>` URLs or `/static/` paths.
+That distinction is the whole point of the rebuild. The old rule anchored a card to a platinum
+`EarnedTrophy` row, so a game with no platinum could never produce one — excluding every
+100%-with-no-platinum completion, which is a real achievement with no way to share it. The default-group
+rule is a strict superset (a platinum lives in the default group, so a platinum implies the group is
+done), which is why one query yields both card variants:
 
-**PNG rendering** uses Playwright (headless Chromium) via `playwright_renderer.py`. Before handing HTML to Chromium, the renderer inlines all external resources as base64 data URIs: fonts become embedded `@font-face` rules, images from the share temp directory and `/static/` are converted to `data:` URIs. This is necessary because `page.set_content()` runs in an `about:blank` origin with no file system access. The renderer runs Playwright in a dedicated daemon thread (`ThreadPoolExecutor` with `max_workers=1`) to keep its asyncio event loop isolated from Django's synchronous ORM.
-
-**Image caching** is handled by `ShareImageCache`, which downloads external images (game covers, trophy icons, avatars) to a local `share_temp_images/` directory. Filenames are deterministic MD5 hashes of the source URL, so cached files persist across Gunicorn workers without shared state. An opportunistic cleanup runs with ~2% probability per fetch, deleting files older than 4 hours.
-
-There is only one rendering pipeline now (Playwright). The legacy Pillow-based `ShareImageService` and the in-notification share-card flow it served were removed in May 2026 along with the `PlatinumShareImage` S3-backed model: see "Notification deep-links" below for the replacement.
-
-### Notification deep-links
-
-When a user earns a platinum, the inbox notification at `/notifications/` no longer renders a share-card preview/download UI. Instead, the platinum-detail pane shows a "Download your share card" CTA that links to `/dashboard/shareables/platinums/?et=<earned_trophy_id>`. The platinums page (`shareable-manager.js:autoOpenSharedFromUrl`) reads `?et=<id>` on load, opens the share modal for that EarnedTrophy, and cleans the param out of the URL. This collapses the two share-card surfaces (notification + shareables) into one and removes a class of off-by-one bugs caused by the racy per-game count in the notification metadata.
-
-## My Shareables: User-Facing Surfaces
-
-The user-facing entry point for share image generation is `/dashboard/shareables/`, the **My Shareables landing page**. The landing is a 4-card wayfinder grid that distributes users to dedicated sub-pages for each share type. Each card has an icon, name, tagline, an example image (or gradient fallback), and a CTA button.
-
-The 4 sub-pages and their purposes:
-
-| Card / Sub-page | URL | What it does |
+| Variant | When | On the card |
 |---|---|---|
-| **Platinum Cards** | `/dashboard/shareables/platinums/` | Browse every platinum trophy you've earned, click any one to generate a themed share image. The original "My Shareables" experience before the landing-page restructure. |
-| **Platinum Grid** | `/dashboard/shareables/platinum-grid/` | Multi-platinum collage wizard. Pick platinums and a theme, generate a single combined image. |
-| **Profile Card** | `/dashboard/shareables/profile-card/` | Generate a share image showcasing your trophy profile, badges, and stats. All users have access to the full theme picker. |
-| **Monthly Recap** | `/dashboard/recap/` | Spotify-Wrapped style summary card for any month you've been hunting. (Lives in the recap feature, not under shareables, but the My Shareables landing card still surfaces it.) |
+| `platinum` | the game defines a platinum | the platinum trophy icon, "PLATINUM", `#N` from the platinum ladder |
+| `full` | the game defines none | a 100% mark, "100% COMPLETE", `#N` from its own separate ladder |
 
-The original My Shareables page was a single browse-all-platinums interface that hid the other share types. The landing-page restructure (piece 6c of the Community Hub initiative) split it so each share type has a dedicated home and the landing serves as a wayfinder for new users who don't know what's available. 
+Each variant counts its **own** ordinal ladder. A single shared ladder would have renumbered every
+platinum card already shared.
 
-### View architecture
+Eligibility is read from `ProfileTrophyGroup` — a per-sync denorm whose `progress` is floored, so it
+reads 100 iff every trophy in the group is earned. The new badge system uses the same read for its BASE
+bar (`badge_orchestrator.evaluate_with_catalog`), so this is a lookup, never a live aggregate over
+`EarnedTrophy`, which is what keeps it whale-safe.
 
-`MyShareablesView` is the lightweight landing page view (no per-user data, just renders the cards). The sub-pages each have their own view class:
+**DLC**: the card is scoped to the default group, which is what makes it safe to hand a platinum to
+someone whose DLC is outstanding. Whole-game figures (an "ALL DLC" mark and the full trophy total)
+appear only when the whole game is done. A partial figure is never shown beside a PLATINUM label.
 
-- `MyPlatinumSharesView` — query and group all the user's platinums by year (the same logic that used to live in `MyShareablesView` before the landing took over)
-- `MyProfileCardView` — load the user's `ProfileCardSettings` (theme + premium status) so the page renders with their saved theme
+## Architecture
 
-All three classes share a `_RequireLinkedProfileMixin` that redirects to the PSN linking flow if the user has no linked profile. The mixin lives in `trophies/views/shareables_views.py` alongside the views.
+Three layers: data assembly, HTML generation, PNG rendering.
 
-### JS init reuse
+**Data assembly** — `core/services/completion_card_service.py`. Decides eligibility, resolves the
+variant and ordinal, and builds the payload: game and cover, trophy tier breakdown, playtime, the
+hunter's own rating, the badge series + medallion, and the Job Board contract. Reads the NEW
+grouping-badge system (`BadgeSeries` / `SeriesBadgeStanding` / `UserTitle` with
+`source_type='badge_series'`); the legacy `Badge` / `UserBadgeProgress` tier-1 reads are gone, as is the
+legacy badge-XP number.
 
-The Profile Card sub-page reuses the dashboard module init code (`_initShareCards` and `_initProfileCardPreview`) without copying it. They include `static/js/dashboard.js`, instantiate a minimal `PlatPursuit.DashboardManager`, and manually invoke `dashboard._moduleInits[<slug>](moduleEl)` for each module element on the page. The pattern mirrors the existing premium preview module init in `templates/trophies/dashboard.html` lines 258-265.
+**HTML generation** — `render_to_string` on `templates/shareables/plat_card.html`, fully inline styles
+with hex colours. The `--pp-*` token *values* are ported by hand into that template, with a map in its
+header comment; there is no stylesheet at render time (see Gotchas).
 
-This avoids extracting the ~300 lines of share-card init logic into a standalone JS file. The trade-off is that the sub-pages load the full `dashboard.js` (~6000 lines) on first visit, but `dashboard.js` is already cached by anyone who has visited the dashboard, which is most users. The dashboard manager itself does nothing on the sub-pages because there are no tab elements to wire up — only the explicitly-invoked module init runs.
+**PNG rendering** — `core/services/playwright_renderer.py`. Inlines fonts and images as base64, injects
+the theme background, screenshots `.share-image-content`. Runs Playwright in a dedicated daemon thread
+(`ThreadPoolExecutor(max_workers=1)`) to keep its asyncio loop away from Django's sync ORM.
 
-### Example image assets
+**Image caching** — `ShareImageCache` downloads external images to `share_temp_images/` with
+deterministic MD5 filenames, so the cache is shared across gunicorn workers with no shared state.
 
-The landing cards each reference a static image at `static/images/shareables/landing-<slug>.png`. The CSS uses a layered background-image: the static PNG first, then a gradient as a fallback. If the PNG file doesn't exist (or fails to load), the gradient shows cleanly with no broken-image icon. Drop new asset PNGs into `static/images/shareables/` to replace the placeholders. See `static/images/shareables/README.md` for the file list and recommended dimensions.
+## The Plat Cards page (`/shareables/`)
+
+One page, one job: browse your completions and make a card from any of them.
+
+`PlatCardsView` (`HtmxListMixin` + `ListView`) — paginated, server-side filter and sort, infinite
+scroll. Built on the Browse Games / Franchises pattern: accented header + count-up career stats, a
+segmented variant filter (All / Platinum / 100%), a quiet toolbar (search, sort, shovelware), the
+`.pcard` grid, and a sticky mini-bar.
+
+- The variant toggle is **radios styled as `.pp-switch`**, a filter rather than a view island, so
+  switching preserves the active search and sort and browser Back stays correct with no JS.
+- **Shovelware is hidden by default here**, unlike Browse Games: these are the hunter's own
+  completions, and asset-flip platinums are what they least want to scroll past.
+- Header stats read the unfiltered ladders, so they describe the hunter rather than the toolbar.
+
+### What used to be here
+
+| Was | Now |
+|---|---|
+| `/shareables/` — a 4-card wayfinder landing | The Plat Cards page itself. Three of the four destinations no longer exist |
+| `/shareables/platinums/` — browse all platinums, every row in one response | Redirects to `/shareables/`. Keeps its URL name: platinum notifications deep-link it with `?et=` |
+| `/shareables/platinum-grid/` — multi-plat collage wizard | Retired. 302 to `/shareables/`; view parked unrouted |
+| `/shareables/profile-card/` — profile card builder | Retired. 302 to `/shareables/`; view parked unrouted |
+| Monthly Recap (surfaced as a wayfinder card) | Unchanged at `/recap/`, with its own subnav entry |
+
+The Game Detail hero also had a "Share Card" button. It was removed so a plat card comes from exactly
+one place — which also dropped `share-image.js`, `shareable-manager.js`, `color-grid-modal.js` and an
+inlined theme blob off the SEO-inbound page.
+
+## The share modal
+
+`templates/shareables/partials/share_modal.html` + `static/js/plat-cards.js`.
+
+The preview is the **real card markup** from the HTML endpoint, rendered at 1200x630 and scaled to fit
+with a transform. Preview and download therefore share one template and one theme list and cannot
+drift — which they repeatedly did under the old modal.
+
+**Grounds.** Four designed gradients (Substrate / Midnight / Ember / Aurora) plus one art ground per
+landscape image the game actually has. `Concept.landscape_urls()` is ordered by quality (trusted IGDB
+screenshots → artworks → PSN `bg_url`), so a game with several offers each as its own choice, capped at
+`ART_OPTION_CAP`. A game with **no** usable art is offered no art ground at all, rather than one that
+silently falls back. Art swatches show the actual image; gradient swatches show the actual gradient.
+
+There is no cover-blur ground: a 3:4 cover blown up to 1200x630 is mostly upscale.
+
+**Rate-before-download**: the card carries the hunter's own stars, difficulty and fun, so an unrated
+game makes a visibly thinner card. The prompt offers once per opened card and never blocks.
+
+## API Endpoints
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/v1/shareables/completion/<trophy_group_id>/html/` | Yes | Preview markup + `art_options`, `variant`, `has_rating` |
+| GET | `/api/v1/shareables/completion/<trophy_group_id>/png/?theme=&art=` | Yes | The download |
+| GET | `/api/v1/shareables/platinum/<earned_trophy_id>/html/` | Yes | **Legacy alias** — same card, keyed on a platinum EarnedTrophy |
+| GET | `/api/v1/shareables/platinum/<earned_trophy_id>/png/` | Yes | **Legacy alias** |
+| GET | `/api/v1/recap/<year>/<month>/html/` | Yes | Monthly recap preview |
+| GET | `/api/v1/recap/<year>/<month>/png/` | Yes | Monthly recap download |
+| GET | `/api/v1/share-temp/<filename>` | No | Serve a cached temp image |
+
+Cards are keyed on the game's **default `TrophyGroup`**, not the `ProfileTrophyGroup` row: TrophyGroup
+ids are stable where the denorm may legitimately be rebuilt, and ownership is then answered by the same
+predicate that builds the browse list, so a deep link can never render a card the page wouldn't show.
+
+The legacy pair stays because platinum notifications already sent deep-link by EarnedTrophy id, and
+because those endpoints carry `TokenAuthentication` — assume external consumers.
+
+`?art=<i>` **indexes the card's own art list** rather than naming a URL, so a request can only select
+art the card already offers.
 
 ## File Map
 
 | File | Purpose |
 |------|---------|
-| `core/services/playwright_renderer.py` | Playwright PNG rendering: base64 embedding, font faces, theme CSS, dedicated thread execution |
-| `core/services/share_image_cache.py` | Fetch and cache external images locally with deterministic filenames and opportunistic cleanup |
-| `core/services/shareable_data_service.py` | Centralized data collection for platinum share cards: metadata, badge XP, tier 1 progress, ratings, ordinal counts |
-| `api/shareable_views.py` | ShareableImageHTMLView, ShareableImagePNGView (EarnedTrophy-based, My Shareables page) |
-| `api/notification_views.py` | Notification list / read / rating endpoints (no share-image endpoints — those were removed) |
-| `api/recap_views.py` | RecapShareImageHTMLView, RecapShareImagePNGView |
-| `templates/partials/rate_before_download_modal.html` | Rating prompt modal shown before downloading if user hasn't rated |
-| `trophies/themes.py` | GRADIENT_THEMES dictionary: background CSS for each selectable theme |
-| `trophies/views/shareables_views.py` | The My Shareables page views: landing + platinums + profile-card |
-| `templates/shareables/landing.html` | Landing page (5-card grid wayfinder) at `/dashboard/shareables/` |
-| `templates/shareables/platinums.html` | Per-platinum browse page at `/dashboard/shareables/platinums/` |
-| `templates/shareables/profile_card.html` | Profile Card builder at `/dashboard/shareables/profile-card/` |
-| `static/images/shareables/` | Example image assets for the landing-page cards (with gradient fallback when files are missing) |
-| `static/js/shareable-manager.js` | `ShareableManager` class + `openShareModal()` + `autoOpenSharedFromUrl()` for `?et=<id>` deep-links |
-
-## Data Model
-
-The Playwright-based endpoints (My Shareables, recaps) return PNGs directly as HTTP responses without storing them. The previous `PlatinumShareImage` S3 model that the Pillow pipeline used was dropped in May 2026 along with the in-notification share-card flow (migration `0016_drop_platinum_share_image`). Old S3 files under `platinum-share-images/` are orphaned by the migration and need a one-off bucket cleanup; nothing in the running app references them.
-
-### Share Temp Directory
-
-Not a Django model. Local filesystem directory at `{BASE_DIR}/share_temp_images/`. Contains cached external images with deterministic filenames (MD5 hash of URL). Served via `/api/v1/share-temp/<filename>`. Files cleaned up after 4 hours.
-
-## Key Flows
-
-### Generating a Platinum Share Card (My Shareables / Playwright Pipeline)
-
-1. User clicks download on the My Shareables page (or follows a `?et=<id>` deep-link from a platinum-earned notification, which auto-opens the share modal for that EarnedTrophy)
-2. Client requests `/api/v1/shareables/platinum/<earned_trophy_id>/png/?image_format=landscape&theme=default`
-3. View calls `ShareableDataService.get_platinum_share_data(earned_trophy)` to collect metadata
-4. `ShareImageCache.fetch_and_cache()` downloads external images (game cover, trophy icon, avatar) to local temp directory
-5. `render_to_string()` generates the card HTML using the share card template
-6. `playwright_renderer.render_png()` wraps the HTML in a full document:
-   - Embeds fonts as base64 `@font-face` rules (cached after first build)
-   - Builds theme-specific background CSS (gradient or game art with overlay)
-   - Resolves all `/api/v1/share-temp/` and `/static/` URLs to base64 data URIs
-   - Share-temp images are resized to `image_max_size` px max (default 200; platinum card overrides to 1000 so the cover passes through without being downscaled and re-upscaled)
-7. The full HTML is submitted to the Playwright thread pool
-8. Playwright creates a page, sets the content, screenshots `.share-image-content` element
-9. PNG bytes returned as an HTTP response with `Content-Disposition: attachment`
-
-### Image Caching Flow (ShareImageCache)
-
-1. `fetch_and_cache(url)` checks in-memory cache (30-minute TTL, per-worker)
-2. If miss: checks filesystem with deterministic filename (`MD5(url).ext`)
-3. If file exists on disk: touch to refresh mtime, update in-memory cache, return serve path
-4. If not on disk: download from external URL, determine extension from Content-Type header, save to `share_temp_images/`
-5. ~2% probability per fetch: run cleanup of files older than 4 hours
-
-### Theme Application
-
-Themes are applied at two levels depending on context:
-
-**Server-side (PNG download via Playwright)**:
-1. `_get_background_css()` resolves the theme gradient or game art overlay
-2. `_get_banner_css()` resolves banner/header styles using `[data-element]` CSS selectors
-3. Both are injected into the full HTML document's `<style>` block with `!important`
-
-**Client-side (dashboard previews)**:
-1. `_initShareCards()` fetches default-themed HTML via API, then applies themes by modifying the DOM directly via `applyTheme()`
-2. Standard themes: sets `.share-image-content` background to the gradient CSS
-3. Game art themes (`requiresGameImage`): composites a dark overlay with the game cover URL (captured from the API response's `game_image_base64` / `concept_bg_base64` fields)
-4. Banner accent updated via `[data-element]` querySelector if theme provides `bannerBackground`
-5. Game art themes are only shown in swatch grids for cards that set `data-supports-game-art="true"` (platinum card only, since it has game images available)
-
-## API Endpoints
-
-### Playwright-Based (Primary)
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| GET | `/api/v1/shareables/platinum/<earned_trophy_id>/html/` | Yes | HTML preview for platinum card |
-| GET | `/api/v1/shareables/platinum/<earned_trophy_id>/png/` | Yes | PNG download for platinum card |
-| GET | `/api/v1/recap/<year>/<month>/html/` | Yes | HTML preview for monthly recap card |
-| GET | `/api/v1/recap/<year>/<month>/png/` | Yes | PNG download for monthly recap card |
-
-### Infrastructure
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| GET | `/api/v1/share-temp/<filename>` | No | Serve cached temp images (for HTML preview) |
-
-## Integration Points
-
-- **SiteEvent tracking**: `recap_share_generate` tracked server-side when recap HTML is fetched. `recap_image_download` tracked client-side on download button click.
-- **Theme system** (`trophies/themes.py`): `GRADIENT_THEMES` dictionary defines all available backgrounds. Share cards and the main site share the same theme definitions.
-- **Font system**: Share cards use Poppins and Inter fonts from `static/fonts/`. The Playwright renderer embeds them as base64 `@font-face` rules (cached per process). Available weights: Inter Regular (400), SemiBold (600), Bold (700); Poppins Regular (400), SemiBold (600), Bold (700). The site's Google Fonts link (`base.html`) loads matching weights so browser previews and Playwright PNGs render consistently.
-- **My Shareables page**: Centralized hub at `/my-shareables/` that lists all platinum trophies and recaps with share card generation for each.
-
-## Rate Before Download
-
-When a user clicks "Download Image" on a platinum share card, the system checks whether they have rated the game. If they haven't (and haven't been prompted already this session), a modal appears prompting them to rate before downloading. This leverages the natural motivation of wanting a complete-looking share card: rated cards show personalized stats pills, while unrated cards show a "No Rating Yet!" badge.
-
-### Flow
-
-**My Shareables** (ShareImageManager via ShareableManager):
-1. `ShareImageManager.generateAndDownload()` checks `this.ratingData.hasRating` (populated from the HTML API response during preview rendering)
-2. If unrated and not yet prompted: opens the `#rate-before-download-modal` dialog
-3. User can "Rate and Download" (submits rating via `/api/v1/reviews/<concept_id>/group/default/rate/`, refreshes preview, then downloads) or "Skip, just download"
-4. If already rated or already prompted: download proceeds immediately
-5. Prompted IDs are tracked in `ShareImageManager._promptedIds` (class-level `Set`) to avoid nagging
-
-**Dashboard** (DashboardManager):
-1. When the platinum card HTML is fetched, `concept_id`, `has_rating`, and `playtime` are captured from the API response and stored on the preview element's dataset
-2. Download button click checks these data attributes before proceeding
-3. If unrated: `_showRatingPrompt()` opens the same `#rate-before-download-modal`. Shovelware platinums are prompted too (rating shovelware is allowed; only the Rate My Games wizard hides shovelware by default)
-4. After rating submission (or skip), the PNG download URL is triggered via `window.location.href`
-5. Prompted IDs tracked in a local `Set` per `_initShareCards` call, scoped to the session
-
-### Key Files
-
-| File | Purpose |
-|------|---------|
-| `templates/partials/rate_before_download_modal.html` | Rating prompt modal with all 5 rating fields |
-| `static/js/share-image.js` | Interception logic in base `ShareImageManager` class |
-| `static/js/shareable-manager.js` | Passes `conceptId` from data attributes to manager |
-| `static/js/dashboard.js` | `_showRatingPrompt()` method for dashboard platinum card downloads |
-| `api/shareable_views.py` | Returns `has_rating`, `concept_id`, `playtime` in HTML API response |
-| `api/notification_views.py` | Same metadata in notification HTML API response |
-
-### Data Flow
-
-Rating metadata flows through two paths depending on the page:
-- **My Shareables / Notifications**: `data-concept-id` on share card elements provides `conceptId` at construction time. `has_rating` returned in HTML API response during `fetchCardHTML()`.
-- **Dashboard**: The platinum card HTML API response includes `has_rating`, `concept_id`, and `playtime`. These are stored as `data-*` attributes on the preview element after fetch, then read by the download button handler.
-
-In both cases, the JS knows the rating status before the user clicks download, with no extra API call.
+| `core/services/completion_card_service.py` | Eligibility, variant, ordinals, and the card payload |
+| `core/services/playwright_renderer.py` | PNG rendering: base64 embedding, font faces, theme CSS, thread isolation |
+| `core/services/share_image_cache.py` | Fetch + cache external images with deterministic filenames |
+| `core/services/share_card_utils.py` | `resolve_temp_path` (all that survives of the old helper set) |
+| `core/services/shareable_data_service.py` | `get_rarity_label` only — the notification pipeline shares it |
+| `api/shareable_views.py` | `PlatCard{HTML,PNG}View` + `LegacyPlatinumCard{HTML,PNG}View` |
+| `api/recap_views.py` | Recap card endpoints |
+| `trophies/views/shareables_views.py` | `PlatCardsView` (+ the parked `MyProfileCardView`) |
+| `templates/shareables/plat_card.html` | **The card.** Landscape 1200x630, both variants |
+| `templates/shareables/plat_cards.html` | The page |
+| `templates/shareables/partials/plat_card_results.html` | Grid partial (HTMX swaps + infinite-scroll pages) |
+| `templates/shareables/partials/share_modal.html` | The modal |
+| `static/js/plat-cards.js` | Page motion, infinite scroll, the modal, themes, deep links |
+| `static/css/components/plat-cards.css` | `.pcard` grid + `.pc-modal` |
+| `static/fonts/` | The only typefaces a card can use — see `static/fonts/README.md` |
+| `trophies/themes.py` | `GRADIENT_THEMES` + the curated `PLAT_CARD_THEME_KEYS` |
 
 ## Gotchas and Pitfalls
 
-- **Playwright thread isolation**: Playwright starts an asyncio event loop, which conflicts with Django's `SynchronousOnlyOperation` guard. All Playwright interaction must happen in the dedicated thread. The `_executor` ThreadPoolExecutor with `max_workers=1` serializes renders and keeps the event loop isolated.
-- **30-second timeout**: `future.result(timeout=30)` means renders that take longer will raise `TimeoutError`. Cards with many images are mitigated by resizing share-temp images via the `image_max_size` cap (default 200) before embedding.
-- **base64 HTML size and per-card image cap**: Embedding images as data URIs can produce massive HTML strings. `_resolve_urls()` compresses share-temp images (external game icons/avatars) to keep HTML under ~1MB. The cap is configurable per call via `render_png(..., image_max_size=...)`: the default 200 suits image-dense cards, but the platinum card has only ~3 images and a large cover slot, so it overrides to 1000. Pick a value that's at least the largest display dimension of any share-temp image on the card; a too-small cap downsamples then upscales and looks soft. Static assets (fonts, logos) are never resized.
-- **Deterministic cache filenames**: `MD5(url)` means the same external URL always maps to the same file. This is intentional for cross-worker cache sharing, but it also means a URL whose content changes (e.g., profile avatar updates) will serve the stale cached version until cleanup runs.
-- **Portrait vs. landscape game art positioning**: Portrait cards use `background-position: center top` so wide game art images show their upper portion (where logos and characters typically appear). Landscape cards use `center`.
-- **Legacy Pillow renderer limitations**: `_wrap_text()` is a naive implementation that truncates at 40 characters. The Pillow renderer also creates gradients pixel by pixel, which is slow for large images. New card types should always use the Playwright pipeline.
-- **Font loading is cached per process**: `_cached_font_faces` is a module-level global. Changing fonts requires a process restart (Gunicorn reload).
-- **Rate prompt is session-scoped**: `ShareImageManager._promptedIds` is a class-level `Set` that resets on page navigation. This is intentional: users should not be nagged across sessions, but a fresh page load gives one prompt opportunity per card.
-- **Identity bar `is_plus` must be passed by every view**: All share card HTML views pass `is_plus` from the profile to the template context. For `shareable_views.py`, the `profile` parameter on `_build_template_context()` is optional (defaults to `None`) to avoid breaking the notification view which calls it without a profile.
-- **Dashboard theme switching is client-side**: The share card HTML endpoints do NOT apply themes. Dashboard previews fetch default-styled HTML, then `applyTheme()` modifies the DOM. Only the PNG endpoint applies themes server-side (via Playwright CSS injection).
-- **Game art theme swatches update asynchronously**: Game art swatch buttons are created with the fallback gradient background. After the API response returns game image URLs, `updateGameArtSwatches()` updates them with the actual composited game cover. This avoids blocking swatch grid rendering on the API call.
-- **Platinum ordinal is a coupled pair**: The "#N" platinum number is computed in two places that must agree exactly: the listing order in `MyPlatinumSharesView` (`order_by(F('earned_date_time').desc(nulls_last=True), '-id')`) and the tuple-comparison count in `ShareableDataService.get_platinum_share_data`. Flipping one without the other silently desyncs the listing's ordinal from the rendered card. The current contract: valid-date platinums sort newest-first; NULL-date platinums (rare, PSN sometimes returns no timestamp) sort to the END of the timeline and get the LOWEST ordinals (e.g. #1, #2). The valid-date branch of the count includes every NULL-date platinum; the NULL-date branch counts only NULL-date plats with `id <= self.id`. The `-id` secondary sort breaks earned_date_time ties (PSN can return identical timestamps for plats popped the same second).
+- **The card renders with no stylesheet.** Playwright uses `page.set_content()` in an `about:blank`
+  origin: no CSS file, no custom properties, no network. Every style is inline and every colour is a
+  hand-ported hex. Keep the token map in `plat_card.html`'s header in sync with `input.css`.
+- **A font not in `static/fonts/` cannot appear on a card**, and a missing one is skipped *silently* —
+  the card renders in a Chromium fallback that looks almost right. The renderer reads **STATIC_ROOT**,
+  so a deploy that skips `collectstatic` degrades every card invisibly. Guarded by
+  `tests/engine/test_share_card_fonts.py`.
+- **The preview is injected into the live site; the download is not.** Anything relying on inherited
+  CSS lays out differently in the two — unset `line-height` caused exactly this, and the card now pins
+  it on every text node. If you add markup, pin its layout.
+- **`data-element="platinum-banner"` must stay OFF the plat card.** That hook lets a theme tint the old
+  card's identity strip; both consumers would wreck this one (the renderer injects `background` with
+  `!important`, and the preview JS paints the legacy theme's cyan tint onto it).
+- **The scrim is an INNER layer.** The renderer replaces `.share-image-content`'s background with
+  `!important`, so a scrim baked into the ground is blown away and text lands on raw art.
+- **Art is a theme, not a fixture.** Painting the backdrop unconditionally puts it on top of whatever
+  ground the theme set, making all the options render identically. It happened once.
+- **`ShareImageCache` rejects non-`http(s)` URLs.** Medallion layers include `static(...)` paths, so
+  routing them through the cache drops them silently, in every environment. Static paths go straight to
+  the renderer, which resolves `/static/` itself. Note it does **not** resolve `/media/`.
+- **Don't `exclude()` on a JSON key.** `exclude(defined_trophies__platinum__gt=0)` does not match rows
+  where the key is absent (`->` yields NULL, `NOT NULL` is NULL), so such rows fall out of *both* arms
+  of a filter. Cast to integer, as `variant_filter` and every other consumer does.
+- **The platinum ordinal is a coupled pair.** `_platinum_ordinal` counts `EarnedTrophy` rows with a
+  tuple comparison (`earned_date_time DESC NULLS LAST, -id`); NULL-date platinums sort to the END of the
+  timeline and take the LOWEST ordinals. The identity line's total must count the *same* population, or
+  a card can read "PLATINUM #47 … 35 platinums".
+- **`_full_ordinal` excludes games that define a platinum**, so the platinum-with-no-earned-row
+  downgrade is not in its own ladder and must be counted with `self_in_ladder=False`.
+- **Every render embeds all registered fonts**, used or not — ~2.5 MB of base64 per document. Cached
+  per process, but it's why the image budget is tight (`image_max_size`).
+- **`_resolve_urls` compresses share-temp images** to `image_max_size` (default 200). The plat card
+  overrides to 1000 for its cover; too small a cap downsamples then upscales and looks soft.
+- **Deterministic cache filenames** mean a URL whose content changes (an updated avatar) serves the
+  stale file until cleanup.
+- **The recap card still uses the older conventions** — Poppins, the `[data-element]` banner hook, the
+  full theme registry. It was not part of this rebuild and will look older next to a plat card until it
+  gets its own pass.
 
 ## Related Docs
 
-- [Mobile App](../guides/mobile-app.md): Mobile app may consume share image endpoints
-- [Dashboard](dashboard.md): Dashboard may include shareable statistics modules
+- [Badge System](../architecture/badge-system.md) — the medallion + series title the card shows
+- [Job Board Contracts](../design/rebuild/job-board-contracts.md) — the contract + jobs the card shows
+- [Rebuild Playbook](../design/rebuild/rebuild-playbook.md) — page status
