@@ -28,8 +28,8 @@ The logged-in Home (`/`) IS the personal hub's **Overview** and carries the 8-it
 
 `Overview · Collection · Career · Milestones · Titles` **|** `My Shareables · Recap · Profile`
 
-(The Lab + Research Panel merged into **Career**. **My Stats** was pulled for the 1.0 launch — the
-page is staff-gated pending its rebuild; see [stats-page.md](../design/stats-page.md).)
+(The Lab + Research Panel merged into **Career**. **My Stats** was pulled for the 1.0 launch — `/stats/`
+redirects to Home pending its rebuild; see [stats-page.md](../design/stats-page.md).)
 
 - **Root URLs.** The personal pages live at root: `/collection/`, `/lab/`, `/research-panel/`,
   `/milestones/`, `/titles/`, `/shareables/`, `/recap/` (+ `/profile-editor/`). The old

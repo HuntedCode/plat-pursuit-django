@@ -11,16 +11,17 @@ from trophies.services.stats_service import (
 
 
 class MyStatsView(StaffRequiredMixin, TemplateView):
-    """Personal stats page at /stats/.
+    """Personal stats page. PARKED (not routed) for the 1.0 launch.
 
-    HIDDEN FOR 1.0 (2026-08): re-gated to staff. The page is being renovated into an upgraded tool
-    (see docs/design/stats-page.md + the Data Intelligence arc), and shipping the current version at
-    launch would set the wrong bar. Staff keep access so the rebuild can be worked on in place;
-    everyone else is redirected home by StaffRequiredMixin, and the nav/footer entries are gone, so
-    nobody lands here by accident.
+    /stats/ now answers with a temporary redirect to Home (see plat_pursuit/urls.py) so bookmarks and
+    the old /my-stats/ + /tools/stats/ + /dashboard/stats/ paths land somewhere useful. This view is
+    kept, unrouted, because the page is coming back as an upgraded tool rather than being deleted:
+    see docs/design/stats-page.md + the Data Intelligence arc. Shipping the current 120+-stat dump at
+    launch, next to Career and Milestones, would set the wrong bar.
 
     It was public to all logged-in users between Phase 9 of the Community Hub initiative and this
-    change. Users without a linked profile are still redirected to the PSN linking flow.
+    change. The staff gate stays on the class so re-routing it during the rebuild can't accidentally
+    expose the old page; swap it for LoginRequiredMixin at relaunch.
     """
     template_name = 'trophies/my_stats.html'
 

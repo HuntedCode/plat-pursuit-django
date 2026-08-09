@@ -9,13 +9,18 @@ design language, and it was never taken through the three-part rebuild process. 
 dump at 1.0, right next to Career and Milestones, would set the wrong bar. So it is hidden rather than
 rebuilt-in-a-hurry or deleted:
 
-- `MyStatsView` is re-gated to `StaffRequiredMixin` (non-staff are redirected home; staff keep access so
-  the renovation can happen in place).
+- **`/stats/` answers with a redirect to Home** (`RedirectView`, `permanent=False`). Everyone gets the
+  same answer -- bookmarks, stale links, staff. It is deliberately a **302, not a 301**: browsers cache
+  a permanent redirect hard, and the page is coming back at this same URL.
+- The old `/my-stats/`, `/tools/stats/`, and `/dashboard/stats/` 301s stay, so they funnel into that
+  bounce instead of 404ing.
+- `MyStatsView` is **parked, not deleted** -- kept unrouted in `trophies/views/stats_views.py` (with its
+  staff gate still on the class, so re-routing it mid-rebuild can't accidentally expose the old page).
+  Its template, 13 partials, `stats_service.py`, and the `/api/v1/stats/premium/` endpoint are all kept
+  the same way; the endpoint is unreachable in practice with nothing rendering the page that calls it.
 - The My Pursuit sub-nav item and the `/stats/` hub prefix are removed from `core/hub_subnav.py`.
 - The footer link is removed, and the "My Stats (120+ Stats)" perk card/line is pulled from
   `subscribe.html` + `subscription_management.html` (a paid perk must not point at a page that bounces).
-- The old `/my-stats/`, `/tools/stats/`, and `/dashboard/stats/` redirects stay: inbound links land on
-  `/stats/` and hit the gate, rather than 404ing.
 - Pinned by `tests/engine/test_my_stats_hidden.py`.
 
 **Still marketing it:** the landing page's "Stats Worth Bragging About" section (SECTION 6) sells this
@@ -27,16 +32,16 @@ still markets the retired Challenge system) rather than handled here.
 the request path). When it comes back, it goes through the full rebuild process like any other page and
 gets a row in the [rebuild playbook](rebuild/rebuild-playbook.md).
 
-**To bring it back (mechanically):** swap `StaffRequiredMixin` → `LoginRequiredMixin`, restore the
-sub-nav item + `/stats/` prefix, the footer link, and the perk entries, and update
-`tests/engine/test_my_stats_hidden.py`.
+**To bring it back (mechanically):** re-route `/stats/` at `MyStatsView` (re-adding the import in
+`plat_pursuit/urls.py`), swap `StaffRequiredMixin` → `LoginRequiredMixin`, restore the sub-nav item +
+`/stats/` prefix, the footer link, and the perk entries, and update `tests/engine/test_my_stats_hidden.py`.
 
 ---
 
 ## What exists today
 
-**URL:** `/stats/`
-**View:** `MyStatsView` (StaffRequiredMixin + TemplateView)
+**URL:** `/stats/` (currently a redirect to Home -- see Status)
+**View:** `MyStatsView` (StaffRequiredMixin + TemplateView), parked/unrouted
 **Service:** `trophies/services/stats_service.py`
 **API:** `GET /api/v1/stats/premium/` (returns rendered premium sections HTML)
 **Template:** `templates/trophies/my_stats.html` + 13 partials in `templates/trophies/partials/stats/`

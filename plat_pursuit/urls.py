@@ -36,7 +36,7 @@ sitemaps = {
     'roadmaps': RoadmapSitemap,
     'lists': GameListSitemap,
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyProfileCardView, MyStatsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyProfileCardView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
@@ -172,7 +172,12 @@ urlpatterns = [
     # features that belong in the Dashboard hub (see ia-and-subnav.md). The
     # Platinum Grid wizard lives nested inside Shareables since it generates
     # one of the shareable image types.
-    path('stats/', MyStatsView.as_view(), name='my_stats'),
+    # My Stats is HIDDEN for the 1.0 launch (see docs/design/stats-page.md). Bookmarks and the older
+    # /my-stats/ + /tools/stats/ + /dashboard/stats/ redirects all land here, so this bounces to Home
+    # rather than 404ing or dumping the visitor on a login screen. TEMPORARY (302, not 301) on purpose:
+    # a permanent redirect gets cached by the browser, and this page is coming back rebuilt --
+    # `MyStatsView` is parked (unrouted) in trophies/views/stats_views.py until then.
+    path('stats/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_stats'),
     # Shareables: landing + dedicated sub-pages for each share type (moved from /dashboard/).
     # See trophies/views/shareables_views.py for the per-view docstrings.
     path('shareables/', MyShareablesView.as_view(), name='my_shareables'),

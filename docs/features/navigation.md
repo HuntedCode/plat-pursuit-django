@@ -16,7 +16,7 @@ The four hubs:
 
 | Hub | URL | Mental mode | Sub-nav items |
 |-----|-----|-------------|---------------|
-| **My Pursuit** (personal) | `/` (logged-in Home = Overview) | "my identity + progression" | Overview, Collection, Career, Milestones, Titles \| My Shareables, Recap, Profile (auth-gated strip). *My Stats was pulled for 1.0 — staff-gated pending rebuild.* |
+| **My Pursuit** (personal) | `/` (logged-in Home = Overview) | "my identity + progression" | Overview, Collection, Career, Milestones, Titles \| My Shareables, Recap, Profile (auth-gated strip). *My Stats was pulled for 1.0 — `/stats/` redirects to Home pending rebuild.* |
 | **Browse** | `/games/` | "find content" | Games, Trophies, Badges, Recently Added, Flagged Games, Franchises, Genres & Themes, Companies, Engines |
 | **Community** | `/community/` | "what's everyone doing" | Hub, Profiles, Rate My Games, Challenges, Lists, Leaderboards |
 | **Support** | `/support/` | "ways to support us" | (landing-focused — no strip; houses the fundraiser + the coming store) |
