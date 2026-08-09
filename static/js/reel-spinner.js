@@ -564,23 +564,6 @@ ReelSpinner.prototype._showResult = function() {
             object_id: 'knife_landed'
         }).catch(() => {});
 
-        // Claim the hidden milestone (idempotent: silent on repeat landings)
-        PlatPursuit.API.post('/api/v1/easter-eggs/claim/', {
-            easter_egg_id: 'knife_landed'
-        }).then(function(data) {
-            if (data.awarded) {
-                // Delay toast so it appears after the confetti settles
-                setTimeout(function() {
-                    var msg = 'Hidden milestone unlocked: ' + data.milestone_name + '!';
-                    if (data.title_name) {
-                        msg += ' You earned the title: ' + data.title_name;
-                    }
-                    PlatPursuit.ToastManager.success(msg, { duration: 8000 });
-                }, 2000);
-            }
-        }).catch(function(err) {
-            console.warn('Easter egg claim failed:', err);
-        });
     } else {
         // Normal game result
         resultIcon.innerHTML =

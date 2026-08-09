@@ -158,9 +158,6 @@ class GroupRatingView(APIView):
             RatingService.invalidate_cache(concept)
             RatingService.invalidate_group_cache(concept, ctg)
 
-            from trophies.services.milestone_service import check_all_milestones_for_user
-            check_all_milestones_for_user(profile, criteria_type='rating_count')
-
             updated_averages = RatingService.get_community_averages_for_group(concept, ctg)
 
             return Response({

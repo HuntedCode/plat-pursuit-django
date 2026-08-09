@@ -507,10 +507,6 @@ class NotificationRatingView(APIView):
                 # Get updated averages
                 updated_averages = RatingService.get_community_averages(concept)
 
-                # Check for rating milestones
-                from trophies.services.milestone_service import check_all_milestones_for_user
-                check_all_milestones_for_user(profile, criteria_type='rating_count')
-
                 return Response({
                     'success': True,
                     'message': 'Rating updated!' if existing_rating else 'Rating submitted successfully!',

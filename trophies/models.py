@@ -343,10 +343,6 @@ class Profile(models.Model):
         self.is_discord_verified = True
         self.save(update_fields=['discord_id', 'discord_linked_at', 'is_discord_verified'])
 
-        # Check for Discord linking milestones
-        from trophies.services.milestone_service import check_all_milestones_for_user
-        check_all_milestones_for_user(self, criteria_type='discord_linked')
-    
     def unlink_discord(self):
         # Collect all Discord roles to remove while discord_id is still set
         all_role_ids = set()

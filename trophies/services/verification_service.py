@@ -121,10 +121,6 @@ class VerificationService:
             is_premium = user.premium_tier in ['premium_monthly', 'premium_yearly', 'supporter']
             profile.update_profile_premium(is_premium)
 
-            # Check for PSN linking milestones
-            from trophies.services.milestone_service import check_all_milestones_for_user
-            check_all_milestones_for_user(profile, criteria_type='psn_linked')
-
             # Send one-time welcome email (idempotent, guards via EmailLog)
             try:
                 from core.services.email_service import send_welcome_email

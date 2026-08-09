@@ -19,7 +19,7 @@ from .recap_views import (
     RecapShareImagePNGView, RecapSlidePartialView
 )
 from .tracking_views import TrackSiteEventView
-from .easter_egg_views import RollEasterEggView, ClaimEasterEggView
+from .easter_egg_views import RollEasterEggView
 from .share_temp_views import serve_share_temp_image
 from .game_list_views import (
     GameListCreateView, GameListDetailView, GameListUpdateView, GameListDeleteView,
@@ -169,7 +169,6 @@ urlpatterns = [
 
     # Easter egg endpoints
     path('easter-eggs/roll/', RollEasterEggView.as_view(), name='easter-egg-roll'),
-    path('easter-eggs/claim/', ClaimEasterEggView.as_view(), name='easter-egg-claim'),
 
     # Temp share image serving
     path('share-temp/<str:filename>', serve_share_temp_image, name='share-temp-image'),

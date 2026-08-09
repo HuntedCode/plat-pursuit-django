@@ -18,8 +18,6 @@ from datetime import timedelta
 from trophies.psn_manager import PSNManager
 from trophies.util_modules.cache import redis_client
 from trophies.services.badge_service import initial_badge_check, sync_discord_roles
-from trophies.services.milestone_service import check_all_milestones_for_user
-from trophies.milestone_constants import ALL_CALENDAR_TYPES
 import time
 import math
 import logging
@@ -130,7 +128,6 @@ class VerifyView(APIView):
                 if profile.verify_code(profile.about_me):
                     profile.link_discord(discord_id)
                     initial_badge_check(profile)
-                    check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES)
                     # New milestones app: compute + grant the ladder roles they've already earned on link.
                     # Community members (site account OR the Discord link just made) earn milestones -- see
                     # milestones.services.member_q. Guarded so a hiccup never fails an otherwise-good link.

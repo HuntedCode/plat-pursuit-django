@@ -289,9 +289,6 @@ class DonationService:
             f"({donation.badge_picks_earned} badge picks)"
         )
 
-        # Grant fundraiser milestone (idempotent: safe for repeat donations)
-        DonationService._grant_fundraiser_milestone(donation)
-
         # Send receipt email + in-app notification
         DonationService._send_donation_receipt_email(donation)
         DonationService._send_donation_notification(donation)
@@ -369,29 +366,8 @@ class DonationService:
         DonationService._send_badge_claim_notification(claim)
         return claim
 
-    # ──────────────────────────────────────────────
-    # Milestone / Title / Discord Role
-    # ──────────────────────────────────────────────
-
-    @staticmethod
-    def _grant_fundraiser_milestone(donation):
-        """
-        Grant the fundraiser milestone, title, and Discord role.
-
-        Delegates to the shared award_manual_milestone() service.
-        Idempotent for repeat donors.
-        """
-        from trophies.models import Milestone
-        from trophies.services.milestone_service import award_manual_milestone
-
-        profile = donation.profile
-        if not profile:
-            return
-
-        try:
-            award_manual_milestone(profile, 'Badge Artwork Patron')
-        except Milestone.DoesNotExist:
-            logger.warning("Fundraiser milestone 'Badge Artwork Patron' not found. Run populate_milestones.")
+    # NOTE: the 'Badge Artwork Patron' milestone/title grant retired with the legacy milestone
+    # engine (Lane 2 Step 3). Existing holders keep the title; new donors aren't granted one.
 
     # ──────────────────────────────────────────────
     # Email Notifications
