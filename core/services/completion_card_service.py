@@ -57,6 +57,20 @@ JOB_ICON_PATHS = _JOB_ICONS
 #: cards and game detail use, so the surfaces can't disagree about what a game primarily is.
 _BADGE_RANK = {t: i for i, t in enumerate(BADGE_TYPE_DISPLAY_PRIORITY)}
 
+#: Medallion backing metals, per `.pp-med[data-tier]` in components/badge-medallion.css -- the
+#: source-of-truth hexes the whole badge system tints from (badge-detail.css says as much). Ported here
+#: because the card renders with no stylesheet. (`glow` is the lighter edge the site uses for rims and
+#: hover states; nothing on the card needs it yet, but it's kept so the map stays a faithful copy.)
+#:
+#: NOT the same thing as the trophy-tier dots in TIER_DISPLAY, which share the names bronze/silver/
+#: gold/platinum but describe TROPHIES, not a badge's backing metal.
+MEDALLION_COLOURS = {
+    'bronze':   {'c': '#cf9160', 'glow': '#e6ad74'},
+    'silver':   {'c': '#b9c6d6', 'glow': '#dae4f0'},
+    'gold':     {'c': '#e7c25c', 'glow': '#f4d778'},
+    'platinum': {'c': '#8fd2ea', 'glow': '#c4edfb'},
+}
+
 #: The five discipline colours (--disc-* in components/elements.css) as hex, because the card is
 #: rendered in a document with no stylesheet and no custom properties. Keep in sync with that file.
 DISCIPLINE_COLOURS = {
@@ -302,11 +316,15 @@ def _attach_medallion(line, concept):
     )
 
     tier, layers, is_avatar = group_medallion_layers(edition)
+    metal = MEDALLION_COLOURS.get(tier, MEDALLION_COLOURS['gold'])
     line.update({
         'edition': edition.platform_group.name,
         'medallion_tier': tier,
         'medallion_layers': layers,
         'medallion_is_avatar': is_avatar,
+        # The edition ("Ultra HD", "Legacy HD") wears its own backing metal, same as everywhere else
+        # the badge system names one -- so the label and the ring around the art agree.
+        'medallion_colour': metal['c'],
     })
 
 

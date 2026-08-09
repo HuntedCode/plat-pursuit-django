@@ -220,7 +220,7 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
             {% if badge_lines %}{% with line=badge_lines.0 %}
             <div style="display: flex; align-items: center; gap: 13px; min-width: 0;">
                 {% if line.medallion_cached %}
-                <div style="position: relative; width: 52px; height: 52px; flex-shrink: 0; border-radius: 50%; overflow: hidden; border: 2px solid {% if line.medallion_tier == 'platinum' %}#9fd8ea{% elif line.medallion_tier == 'gold' %}#e0b055{% elif line.medallion_tier == 'silver' %}#b9c2cc{% else %}#c07a4a{% endif %}; box-sizing: border-box; background: #232a31;">
+                <div style="position: relative; width: 52px; height: 52px; flex-shrink: 0; border-radius: 50%; overflow: hidden; border: 2px solid {{ line.medallion_colour|default:"#e7c25c" }}; box-sizing: border-box; background: #232a31;">
                     {% for layer in line.medallion_cached %}
                     <img src="{{ layer }}" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;{% if line.medallion_is_avatar and forloop.last %} padding: 6px; border-radius: 50%;{% endif %}" />
                     {% endfor %}
@@ -235,17 +235,20 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                         <span style="font-size: 20px; line-height: 1.3; font-weight: 700; color: #f0f6fd; overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</span>
                         {% endif %}
                         {% if line.edition %}
-                        <span style="font-size: 13px; line-height: 1.3; font-weight: 600; color: #8a939f; letter-spacing: 0.12em; text-transform: uppercase;">{{ line.edition }}</span>
+                        <span style="font-size: 13px; line-height: 1.3; font-weight: 700; color: {{ line.medallion_colour|default:"#8a939f" }}; letter-spacing: 0.12em; text-transform: uppercase;">{{ line.edition }}</span>
                         {% endif %}
                     </div>
 
                     {% if line.stages_total and line.stages_cleared < line.stages_total %}
                     {% comment %}The bar FLEXES so the row ends flush with the title+edition above it --
                     a short fixed bar left the column looking ragged. Its own max-content is tiny, so
-                    row 1 still sets the column width and the bar simply takes what's left.{% endcomment %}
+                    row 1 still sets the column width and the bar simply takes what's left. It fills in
+                    the badge's BACKING METAL, not the card's variant accent, matching
+                    `.bdh-progress[data-tier]` on badge detail -- this bar measures badge progress, so
+                    it belongs to the badge.{% endcomment %}
                     <div style="display: flex; align-items: center; gap: 9px; margin-top: 6px;">
                         <span style="position: relative; display: block; flex: 1; min-width: 60px; height: 5px; border-radius: 3px; background: #2f363f; overflow: hidden;">
-                            <span style="position: absolute; inset: 0; width: {% widthratio line.stages_cleared line.stages_total 100 %}%; background: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; border-radius: 3px;"></span>
+                            <span style="position: absolute; inset: 0; width: {% widthratio line.stages_cleared line.stages_total 100 %}%; background: {{ line.medallion_colour|default:"#e7c25c" }}; border-radius: 3px;"></span>
                         </span>
                         <span style="font-size: 14px; line-height: 1; font-weight: 600; color: #8a939f; flex-shrink: 0;">{{ line.stages_cleared }} of {{ line.stages_total }}</span>
                     </div>

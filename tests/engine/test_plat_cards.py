@@ -414,6 +414,22 @@ def test_the_badge_line_carries_real_medallion_art_and_its_edition():
     assert line['edition'] == 'Ultra HD'
     assert line['medallion_tier'] == 'platinum'      # ultra-hd backs platinum
     assert line['medallion_layers'], 'medallion should always resolve at least the default art'
+    # The edition label, the ring and the progress bar all wear the badge's backing metal -- the same
+    # source-of-truth hex as .pp-med[data-tier] in badge-medallion.css.
+    assert line['medallion_colour'] == '#8fd2ea'
+
+
+def test_a_legacy_hd_edition_wears_the_gold_metal():
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    series = BadgeSeriesFactory(name='Norse Saga')
+    GroupBadgeFactory(series=series, is_live=True, platform_group=PlatformGroupFactory(
+        name='Legacy HD', key='legacy-hd', platforms=['PS3', 'PS4', 'PS5']))
+    StageFactory(series_slug=series.series_slug).concepts.add(game.concept)
+
+    line = cards.get_card_data(profile, standing)['badge_lines'][0]
+
+    assert (line['medallion_tier'], line['medallion_colour']) == ('gold', '#e7c25c')
 
 
 def test_the_medallion_picks_the_edition_that_covers_this_game():
