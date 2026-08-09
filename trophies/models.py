@@ -4868,102 +4868,31 @@ class GameListLike(models.Model):
         return f"{self.profile.psn_username} likes {self.game_list.name}"
 
 
-# ─── Challenge System ───────────────────────────────────────────────────────────
+# ─── Archived A-Z Challenge data (retired Challenge system, Lane 2 teardown) ─────
 
-class Challenge(models.Model):
+class ArchivedAZChallenge(models.Model):
+    """Frozen A-Z Platinum Challenge progress, preserved when the Challenge system was retired.
+
+    One row per archived A-Z challenge, keyed on stable PSN ids (psn_username + per-slot
+    np_communication_id) so a future rebuilt Challenge system can re-import it. Read-only historical
+    data, not wired into any live feature. Populated by the teardown migration from the dropped
+    Challenge / AZChallengeSlot tables. Calendar/Genre progress was intentionally NOT preserved.
     """
-    Base challenge model. Houses shared fields for all challenge types.
-    challenge_type determines which related data (slots, tasks, etc.) applies.
-    """
-    CHALLENGE_TYPES = [
-        ('az', 'A-Z Platinum Challenge'),
-        ('calendar', 'Platinum Calendar'),
-        ('genre', 'Genre Challenge'),
-    ]
-
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='challenges')
-    challenge_type = models.CharField(max_length=30, choices=CHALLENGE_TYPES, db_index=True)
-    name = models.CharField(max_length=75)
-    description = models.TextField(blank=True, default='')
-
-    # Progress (meaning varies by type — for AZ: X/26)
-    total_items = models.PositiveIntegerField(default=0)
-    filled_count = models.PositiveIntegerField(default=0)
+    psn_username = models.CharField(max_length=32, db_index=True)
+    profile = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    name = models.CharField(max_length=75, blank=True, default='')
     completed_count = models.PositiveIntegerField(default=0)
-
-    # Stats
-    view_count = models.PositiveIntegerField(default=0)
-
-    # Display
-    cover_letter = models.CharField(max_length=1, blank=True, default='')
-    cover_genre = models.CharField(max_length=50, blank=True, default='')
-
-    # Genre challenge: unique subgenres collected from assigned concepts
-    subgenre_count = models.PositiveIntegerField(default=0)
-    platted_subgenre_count = models.PositiveIntegerField(default=0)
-    bonus_count = models.PositiveIntegerField(default=0)
-
-    # Status
     is_complete = models.BooleanField(default=False)
-    completed_at = models.DateTimeField(null=True, blank=True)
-
-    # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    # Soft delete
-    is_deleted = models.BooleanField(default=False)
-    deleted_at = models.DateTimeField(null=True, blank=True)
+    was_deleted = models.BooleanField(default=False, help_text="The source challenge was soft-deleted at archive time.")
+    created_at = models.DateTimeField(null=True, blank=True, help_text="Original challenge creation time.")
+    slots = models.JSONField(default=list, help_text="[{letter, game_np_communication_id, game_title, is_completed, completed_at}]")
+    archived_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        indexes = [
-            models.Index(fields=['profile', 'is_deleted', 'challenge_type'], name='challenge_profile_idx'),
-            models.Index(fields=['challenge_type', 'is_deleted', 'is_complete'], name='challenge_type_status_idx'),
-            models.Index(fields=['challenge_type', 'is_deleted', '-completed_count'], name='challenge_type_progress_idx'),
-        ]
-        ordering = ['-created_at']
+        ordering = ['psn_username']
 
     def __str__(self):
-        return f"{self.name} ({self.get_challenge_type_display()}) by {self.profile.psn_username}"
-
-    def soft_delete(self):
-        self.is_deleted = True
-        self.deleted_at = timezone.now()
-        self.save(update_fields=['is_deleted', 'deleted_at'])
-        # Invalidate dashboard cache so challenge hub reflects the deletion
-        from trophies.services.dashboard_service import invalidate_dashboard_cache
-        invalidate_dashboard_cache(self.profile_id)
-
-    @property
-    def progress_percentage(self):
-        if self.total_items == 0:
-            return 0
-        return int((self.completed_count / self.total_items) * 100)
-
-
-class AZChallengeSlot(models.Model):
-    """One of the 26 letter slots (A-Z) in an A-Z Challenge."""
-    challenge = models.ForeignKey(Challenge, on_delete=models.CASCADE, related_name='az_slots')
-    letter = models.CharField(max_length=1, db_index=True)
-    game = models.ForeignKey(
-        Game, on_delete=models.SET_NULL, null=True, blank=True, related_name='az_slots'
-    )
-
-    # Progress
-    is_completed = models.BooleanField(default=False)
-    completed_at = models.DateTimeField(null=True, blank=True)
-
-    # Timestamps
-    assigned_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        unique_together = ['challenge', 'letter']
-        ordering = ['letter']
-
-    def __str__(self):
-        status = 'completed' if self.is_completed else ('assigned' if self.game else 'empty')
-        game_name = self.game.title_name if self.game else 'empty'
-        return f"{self.letter}: {game_name} ({status})"
+        return f"Archived A-Z ({self.psn_username}, {self.completed_count}/26)"
 
 
 # Non-leap-year day counts per month (Feb 29 excluded from calendar challenge)
@@ -4971,117 +4900,6 @@ CALENDAR_DAYS_PER_MONTH = {
     1: 31, 2: 28, 3: 31, 4: 30, 5: 31, 6: 30,
     7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31,
 }
-
-
-class CalendarChallengeDay(models.Model):
-    """
-    One of 365 day slots (Jan 1 - Dec 31, no Feb 29) in a Platinum Calendar Challenge.
-    Filled automatically when the user earns a platinum on a matching calendar day.
-    """
-    challenge = models.ForeignKey(
-        Challenge, on_delete=models.CASCADE, related_name='calendar_days'
-    )
-    month = models.PositiveSmallIntegerField()   # 1-12
-    day = models.PositiveSmallIntegerField()      # 1-31
-
-    # The first game whose platinum filled this day
-    game = models.ForeignKey(
-        Game, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='calendar_day_slots'
-    )
-
-    # Fill status
-    is_filled = models.BooleanField(default=False)
-    filled_at = models.DateTimeField(null=True, blank=True)
-
-    # The actual earned_date_time of the platinum that filled this day
-    platinum_earned_at = models.DateTimeField(null=True, blank=True)
-
-    # Total platinums earned on this calendar day (month/day) across all years
-    plat_count = models.PositiveSmallIntegerField(default=0)
-
-    class Meta:
-        unique_together = ['challenge', 'month', 'day']
-        ordering = ['month', 'day']
-        indexes = [
-            models.Index(
-                fields=['challenge', 'is_filled'],
-                name='calday_challenge_filled_idx'
-            ),
-        ]
-
-    def __str__(self):
-        status = 'filled' if self.is_filled else 'empty'
-        game_name = self.game.title_name if self.game else 'none'
-        return f"{self.month:02d}/{self.day:02d}: {game_name} ({status})"
-
-
-class GenreChallengeSlot(models.Model):
-    """One genre slot in a Genre Challenge. Points to a Concept, not a Game."""
-    challenge = models.ForeignKey(
-        Challenge, on_delete=models.CASCADE, related_name='genre_slots'
-    )
-    genre = models.CharField(max_length=50, db_index=True)
-    genre_display = models.CharField(max_length=100, blank=True, default='')
-    concept = models.ForeignKey(
-        'Concept', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='genre_challenge_slots'
-    )
-
-    # Progress
-    is_completed = models.BooleanField(default=False)
-    completed_at = models.DateTimeField(null=True, blank=True)
-
-    # Timestamps
-    assigned_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        unique_together = ['challenge', 'genre']
-        ordering = ['genre']
-        indexes = [
-            models.Index(
-                fields=['challenge', 'is_completed'],
-                name='genreslot_chal_completed_idx'
-            ),
-        ]
-
-    def __str__(self):
-        concept_name = self.concept.unified_title if self.concept else 'empty'
-        status = 'done' if self.is_completed else 'pending'
-        return f"{self.genre_display}: {concept_name} ({status})"
-
-
-class GenreBonusSlot(models.Model):
-    """Bonus game slot for subgenre hunting in a Genre Challenge (no genre restriction)."""
-    challenge = models.ForeignKey(
-        Challenge, on_delete=models.CASCADE, related_name='bonus_slots'
-    )
-    concept = models.ForeignKey(
-        'Concept', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='genre_bonus_slots'
-    )
-
-    # Progress
-    is_completed = models.BooleanField(default=False)
-    completed_at = models.DateTimeField(null=True, blank=True)
-
-    # Timestamps
-    assigned_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ['challenge', 'concept']
-        ordering = ['assigned_at']
-        indexes = [
-            models.Index(
-                fields=['challenge', 'is_completed'],
-                name='bonusslot_chal_completed_idx'
-            ),
-        ]
-
-    def __str__(self):
-        concept_name = self.concept.unified_title if self.concept else 'empty'
-        status = 'done' if self.is_completed else 'pending'
-        return f"Bonus: {concept_name} ({status})"
 
 
 class DashboardConfig(models.Model):
