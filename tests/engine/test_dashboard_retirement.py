@@ -19,8 +19,8 @@ def test_root_resolves_to_my_pursuit_overview():
 
 def test_root_personal_pages_resolve_under_my_pursuit():
     """Moved-to-root pages highlight their sub-nav item; nested pages use url-name overrides."""
-    m = resolve_hub_subnav(_Req('/stats/', 'my_stats'))
-    assert m['hub'].key == 'my_pursuit' and m['active_slug'] == 'stats'
+    m = resolve_hub_subnav(_Req('/collection/', 'badge_collection'))
+    assert m['hub'].key == 'my_pursuit' and m['active_slug'] == 'collection'
     m = resolve_hub_subnav(_Req('/shareables/platinums/', 'my_shareables_platinums'))
     assert m['hub'].key == 'my_pursuit' and m['active_slug'] == 'shareables'
 
@@ -37,6 +37,6 @@ def test_community_not_shadowed_and_fundraiser_in_support():
 def test_my_pursuit_carries_the_expected_items():
     slugs = {i.slug for i in MY_PURSUIT_HUB.items}
     assert {'overview', 'collection', 'career', 'milestones', 'titles',
-            'stats', 'shareables', 'recap'} <= slugs
+            'shareables', 'recap'} <= slugs
     m = resolve_hub_subnav(_Req('/career/', 'career'))
     assert m['hub'].key == 'my_pursuit' and m['active_slug'] == 'career'

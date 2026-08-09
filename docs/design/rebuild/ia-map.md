@@ -15,7 +15,8 @@
 The expensive-to-change structure is decided and stable. Do not re-litigate it per page.
 
 - **3 hubs**: **Pursuit** (`/`, the spine + home), **Browse** (`/games/`), **Community** (`/community/`).
-- **Standalone utilities**: Stats (`/stats/`), Shareables (`/shareables/`), Recap (`/recap/`).
+- **Standalone utilities**: Stats (`/stats/` — hidden for 1.0, staff-gated pending rebuild),
+  Shareables (`/shareables/`), Recap (`/recap/`).
 - **Navbar (signed-in)**: `[Logo -> Pursuit home] [Browse] [Community] [My Profile]   [bell] [avatar]`. There is no separate "Pursuit" button; the logo is the Pursuit home link.
 - **URL convention**: flat top-level URLs for Pursuit sub-pages (no `/pursuit/` prefix; `/` is its home). Legacy paths 301 via the reverse-name redirect strategy.
 - **Sub-nav**: config-driven (`core/hub_subnav.py:HUB_SUBNAV_CONFIG`); add items as pages ship.

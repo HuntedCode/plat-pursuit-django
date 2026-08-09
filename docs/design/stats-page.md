@@ -1,20 +1,49 @@
 # My Stats Page - Design Document
 
-> Dedicated page at `/my-stats/` with a video game stats screen aesthetic showing every possible stat about the user's trophy hunting career. Career Overview is free; all other sections are premium-only. Currently staff-gated for testing.
+> Dedicated page at `/stats/` with a video game stats screen aesthetic showing every possible stat about the user's trophy hunting career. Career Overview is free; all other sections are premium-only.
 
-## Status: Implemented (Staff-Only)
+## Status: HIDDEN for the 1.0 launch (2026-08)
 
-**URL:** `/my-stats/`
+The page below is **built and working**, but it is the last surface still wearing the pre-rebuild
+design language, and it was never taken through the three-part rebuild process. Shipping a 120+-stat
+dump at 1.0, right next to Career and Milestones, would set the wrong bar. So it is hidden rather than
+rebuilt-in-a-hurry or deleted:
+
+- `MyStatsView` is re-gated to `StaffRequiredMixin` (non-staff are redirected home; staff keep access so
+  the renovation can happen in place).
+- The My Pursuit sub-nav item and the `/stats/` hub prefix are removed from `core/hub_subnav.py`.
+- The footer link is removed, and the "My Stats (120+ Stats)" perk card/line is pulled from
+  `subscribe.html` + `subscription_management.html` (a paid perk must not point at a page that bounces).
+- The old `/my-stats/`, `/tools/stats/`, and `/dashboard/stats/` redirects stay: inbound links land on
+  `/stats/` and hit the gate, rather than 404ing.
+- Pinned by `tests/engine/test_my_stats_hidden.py`.
+
+**Still marketing it:** the landing page's "Stats Worth Bragging About" section (SECTION 6) sells this
+page with a screenshot of it. That is a copy decision, batched with the other stale landing copy (it
+still markets the retired Challenge system) rather than handled here.
+
+**Relaunch:** as an upgraded tool, not this page re-skinned. It is the natural home of the
+[Data Intelligence arc](data-intelligence.md) (one insight engine, three interfaces, materialized off
+the request path). When it comes back, it goes through the full rebuild process like any other page and
+gets a row in the [rebuild playbook](rebuild/rebuild-playbook.md).
+
+**To bring it back (mechanically):** swap `StaffRequiredMixin` → `LoginRequiredMixin`, restore the
+sub-nav item + `/stats/` prefix, the footer link, and the perk entries, and update
+`tests/engine/test_my_stats_hidden.py`.
+
+---
+
+## What exists today
+
+**URL:** `/stats/`
 **View:** `MyStatsView` (StaffRequiredMixin + TemplateView)
 **Service:** `trophies/services/stats_service.py`
 **API:** `GET /api/v1/stats/premium/` (returns rendered premium sections HTML)
 **Template:** `templates/trophies/my_stats.html` + 13 partials in `templates/trophies/partials/stats/`
 **Cache:** `stats_page:{profile_id}`, 4-hour TTL, invalidated on sync completion
 
-**To launch publicly:**
-1. Change `StaffRequiredMixin` to `LoginRequiredMixin` in `trophies/views/stats_views.py:15`
-2. Remove the preview toggle button from `templates/trophies/my_stats.html`
-3. Re-add the "My Stats" link to `templates/partials/navbar.html` (My Pursuit dropdown) and `templates/partials/mobile_tabbar.html` (My Pursuit section). The links were stripped in commit `d85a4f0` for the staff-only window.
+(The old "to launch publicly" checklist is superseded by the hide above — the page is not launching in
+this form. See "To bring it back" in the Status section.)
 
 ## Architecture Decisions
 

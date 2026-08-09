@@ -23,13 +23,16 @@ four hubs — resist a 5th. Gamification expands My Pursuit's strip; it does not
 
 ## The personal hub (My Pursuit)
 
-The logged-in Home (`/`) IS the personal hub's **Overview** and carries the 10-item strip, grouped
-**6 core + 4 tools** with a divider between:
+The logged-in Home (`/`) IS the personal hub's **Overview** and carries the 8-item strip, grouped
+**5 progress + 3 tools** with a divider between:
 
-`Overview · Collection · The Lab · Research Panel · Milestones · Titles` **|** `My Stats · My Shareables · Recap · Profile`
+`Overview · Collection · Career · Milestones · Titles` **|** `My Shareables · Recap · Profile`
+
+(The Lab + Research Panel merged into **Career**. **My Stats** was pulled for the 1.0 launch — the
+page is staff-gated pending its rebuild; see [stats-page.md](../design/stats-page.md).)
 
 - **Root URLs.** The personal pages live at root: `/collection/`, `/lab/`, `/research-panel/`,
-  `/milestones/`, `/titles/`, `/stats/`, `/shareables/`, `/recap/` (+ `/profile-editor/`). The old
+  `/milestones/`, `/titles/`, `/shareables/`, `/recap/` (+ `/profile-editor/`). The old
   `/my-pursuit/*` and `/dashboard/*` paths 301-redirect to them
   (`RedirectView(pattern_name=…, permanent=True, query_string=True)`). URL `name=`s are unchanged,
   so no `{% url %}` calls moved. Bare `/my-pursuit/` and `/dashboard/` now redirect to `/`.

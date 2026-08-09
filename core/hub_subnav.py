@@ -150,7 +150,7 @@ MY_PURSUIT_HUB = HubSubnavConfig(
     icon='layers',   # matches the navbar's My Pursuit hub icon
     prefixes=(
         '/collection/', '/career/', '/milestones/', '/titles/',
-        '/profile-editor/', '/stats/', '/shareables/', '/recap/',
+        '/profile-editor/', '/shareables/', '/recap/',
     ),
     # Grouped rail: Progress = the gamification progression surfaces (Career merges the old Lab +
     # Research Panel); Tools = personal outputs. Profile is appended to Tools as a dynamic extra.
@@ -160,7 +160,6 @@ MY_PURSUIT_HUB = HubSubnavConfig(
         HubSubnavItem('career', 'Career', 'career', 'briefcase', auth_required=True, group='Progress'),
         HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag', group='Progress'),
         HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True, group='Progress'),
-        HubSubnavItem('stats', 'My Stats', 'my_stats', 'bar-chart-3', auth_required=True, group='Tools'),
         HubSubnavItem('shareables', 'My Shareables', 'my_shareables', 'image', auth_required=True, group='Tools'),
         HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True, group='Tools'),
     ),

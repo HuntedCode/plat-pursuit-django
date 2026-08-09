@@ -16,7 +16,7 @@ The four hubs:
 
 | Hub | URL | Mental mode | Sub-nav items |
 |-----|-----|-------------|---------------|
-| **My Pursuit** (personal) | `/` (logged-in Home = Overview) | "my identity + progression" | Overview, Collection, The Lab, Research Panel, Milestones, Titles \| My Stats, My Shareables, Recap, Profile (auth-gated strip) |
+| **My Pursuit** (personal) | `/` (logged-in Home = Overview) | "my identity + progression" | Overview, Collection, Career, Milestones, Titles \| My Shareables, Recap, Profile (auth-gated strip). *My Stats was pulled for 1.0 — staff-gated pending rebuild.* |
 | **Browse** | `/games/` | "find content" | Games, Trophies, Badges, Recently Added, Flagged Games, Franchises, Genres & Themes, Companies, Engines |
 | **Community** | `/community/` | "what's everyone doing" | Hub, Profiles, Rate My Games, Challenges, Lists, Leaderboards |
 | **Support** | `/support/` | "ways to support us" | (landing-focused — no strip; houses the fundraiser + the coming store) |
@@ -105,7 +105,7 @@ Six-column grid (`grid-cols-2 md:grid-cols-3 lg:grid-cols-6`), one column per st
 | Recently Added | Challenges | The Lab* | Membership (soon) | About | |
 | Flagged Games | Game Lists | Research Panel* | | Contact | |
 | Franchises | Leaderboards | Badges / Milestones / Titles* | | | |
-| Genres & Themes | | My Stats / Shareables / Recap* | | | |
+| Genres & Themes | | Shareables / Recap* | | | |
 | Companies | | My Challenges / My Lists* | | | |
 | Engines | | | | | |
 

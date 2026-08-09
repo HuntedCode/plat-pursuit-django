@@ -147,7 +147,10 @@ The dashboard is the synced-state home page for all users (see [Home Page Router
 
 ### Stats Page
 
-The `/my-stats/` premium stats page (12 sections, 120+ stats). See [Stats Page Inventory](stats-page-inventory.md).
+The `/stats/` premium stats page (12 sections, 120+ stats). See [Stats Page Inventory](stats-page-inventory.md).
+
+> **Hidden for 1.0 (2026-08):** the page itself is staff-gated pending its rebuild, so this endpoint is
+> only reachable by staff in practice. See [stats-page.md](../design/stats-page.md).
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
