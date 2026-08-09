@@ -21,7 +21,7 @@ from trophies.util_modules.constants import (
 )
 from trophies.managers import (
     ProfileManager, GameManager, ProfileGameManager,
-    BadgeManager, MilestoneManager, CommentManager, ChecklistManager,
+    BadgeManager, CommentManager, ChecklistManager,
 )
 import re
 
@@ -354,11 +354,10 @@ class Profile(models.Model):
             # Badges no longer grant Discord roles (retired); only milestone + premium
             # roles are managed now.
 
-            # Collect milestone roles
-            all_role_ids.update(
-                UserMilestone.objects.filter(profile=self, milestone__discord_role_id__isnull=False, milestone__is_active=True)
-                .values_list('milestone__discord_role_id', flat=True)
-            )
+            # Collect milestone roles (the milestones app owns these -- the roles the
+            # profile currently holds are exactly the ones to strip on unlink).
+            from milestones.services import desired_milestone_roles
+            all_role_ids.update(desired_milestone_roles(self))
 
             # Collect premium roles if applicable
             from django.conf import settings
@@ -3177,110 +3176,6 @@ class UserTitle(models.Model):
 
     def __str__(self):
         return f"{self.profile.psn_username} - {self.title.name}"
-
-class Milestone(models.Model):
-    CRITERIA_TYPES = [
-        ('manual', 'Manual Award'),
-        ('plat_count', 'Earned Plats'),
-        ('psn_linked', 'PSN Profile Linked'),
-        ('discord_linked', 'Discord Connected'),
-        ('rating_count', 'Games Rated'),
-        ('playtime_hours', 'Total Playtime (Hours)'),
-        ('trophy_count', 'Total Trophies Earned'),
-        ('checklist_upvotes', 'Checklist Upvotes Received'),
-        ('badge_count', 'Badge Tiers Earned'),
-        ('unique_badge_count', 'Unique Badges Earned'),
-        ('completion_count', 'Games 100% Completed'),
-        ('stage_count', 'Badge Stages Completed'),
-        ('az_progress', 'A-Z Challenge Letters'),
-        ('genre_progress', 'Genre Challenge Genres'),
-        ('subgenre_progress', 'Subgenre Collection'),
-        ('calendar_month_jan', 'Calendar: January Complete'),
-        ('calendar_month_feb', 'Calendar: February Complete'),
-        ('calendar_month_mar', 'Calendar: March Complete'),
-        ('calendar_month_apr', 'Calendar: April Complete'),
-        ('calendar_month_may', 'Calendar: May Complete'),
-        ('calendar_month_jun', 'Calendar: June Complete'),
-        ('calendar_month_jul', 'Calendar: July Complete'),
-        ('calendar_month_aug', 'Calendar: August Complete'),
-        ('calendar_month_sep', 'Calendar: September Complete'),
-        ('calendar_month_oct', 'Calendar: October Complete'),
-        ('calendar_month_nov', 'Calendar: November Complete'),
-        ('calendar_month_dec', 'Calendar: December Complete'),
-        ('calendar_months_total', 'Calendar Months Completed'),
-        ('calendar_complete', 'Calendar Challenge Complete'),
-        ('is_premium', 'Premium Subscriber'),
-        ('subscription_months', 'Subscription Months'),
-        ('review_count', 'Quality Reviews Written'),
-        ('review_helpful_count', 'Review Helpful Votes Received'),
-    ]
-
-    name = models.CharField(max_length=255, unique=True, help_text="Unique name")
-    description = models.TextField(blank=True, help_text="Description for display")
-    image = models.ImageField(upload_to='milestones/', blank=True, null=True, help_text='Visual icon')
-    title = models.ForeignKey(Title, on_delete=models.SET_NULL, null=True, blank=True, related_name='milestones')
-    discord_role_id = models.BigIntegerField(null=True, blank=True, help_text="Discord role ID to assign upon earning")
-    criteria_type = models.CharField(max_length=30, choices=CRITERIA_TYPES, default='manual')
-    criteria_details = models.JSONField(default=dict, blank=True, help_text="Flexible details")
-    premium_only = models.BooleanField(default=False, help_text="If True, can only be earned by current premium users")
-    is_active = models.BooleanField(default=True, db_index=True, help_text="If False the milestone is RETIRED: hidden from the milestones page and no longer awarded. Existing earned records persist. Retire via the retire_milestones command, which also removes the titles it granted.")
-    required_value = models.PositiveIntegerField(default=0, help_text="Target for milestone")
-    earned_count = models.PositiveIntegerField(default=0, help_text="Counter for user earns")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    objects = MilestoneManager()
-
-    class Meta:
-        ordering = ['name']
-        indexes = [
-            models.Index(fields=['criteria_type'], name='milestone_type_idx'),
-            models.Index(fields=['earned_count'],  name='milestone_earned_count_idx'),
-        ]
-        verbose_name = 'Milestone'
-        verbose_name_plural = 'Milestones'
-
-    def save(self, *args, **kwargs):
-        # Intentionally set on every save (not just creation) so required_value
-        # always stays in sync with criteria_details['target']. Admin edits to
-        # required_value alone will be overwritten: update criteria_details instead.
-        self.required_value = self.criteria_details.get('target', 0)
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return self.name
-    
-class UserMilestone(models.Model):
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='user_milestones')
-    milestone = models.ForeignKey(Milestone, on_delete=models.CASCADE, related_name='user_milestones')
-    earned_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ['profile', 'milestone']
-        indexes = [
-            models.Index(fields=['earned_at'], name='usermilestone_earned_at_idx'),
-        ]
-        verbose_name = 'User Milestone'
-        verbose_name_plural = 'User Milestones'
-
-    def __str__(self):
-        return f"{self.profile.psn_username} - {self.milestone.name}"
-    
-class UserMilestoneProgress(models.Model):
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='user_milestone_progress')
-    milestone = models.ForeignKey(Milestone, on_delete=models.CASCADE, related_name='milestone_progress')
-    progress_value = models.PositiveIntegerField(default=0, help_text="Current progress")
-    last_checked = models.DateTimeField(auto_now=True, help_text="Timestamp of last progress update")
-
-    class Meta:
-        unique_together = ['profile', 'milestone']
-        indexes = [
-            models.Index(fields=['last_checked'], name='usermilestoneprog_checked_idx'),
-        ]
-        verbose_name = 'User Milestone Progress'
-        verbose_name_plural = 'User Milestone Progress'
-    
-    def __str__(self):
-        return f"{self.profile.psn_username} - {self.milestone.name} Progress"
 
 
 class Median(models.Aggregate):

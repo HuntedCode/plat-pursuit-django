@@ -52,7 +52,6 @@ from django.views.generic import ListView, DetailView, TemplateView
 
 from ..models import (
     Profile, Badge, UserBadge,
-    Milestone, UserMilestone, UserMilestoneProgress,
     UserTitle, ProfileGamification, BadgeSeries, GroupBadge, UserGroupBadge, PlatformGroup,
 )
 from ..forms import BadgeSearchForm

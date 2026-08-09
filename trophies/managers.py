@@ -366,68 +366,6 @@ class BadgeManager(models.Manager):
         return self.get_queryset().with_most_recent_concept()
 
 
-class MilestoneQuerySet(models.QuerySet):
-    """Custom queryset for Milestone model."""
-
-    def by_criteria_type(self, criteria_type):
-        """
-        Filter milestones by criteria type.
-
-        Args:
-            criteria_type: Type of milestone criteria (e.g., 'plat_count', 'manual')
-
-        Returns:
-            QuerySet: Milestones of the specified criteria type
-        """
-        return self.filter(criteria_type=criteria_type)
-
-    def ordered_by_value(self):
-        """
-        Order milestones by their required value.
-
-        Returns:
-            QuerySet: Milestones ordered by required_value ascending
-        """
-        return self.order_by('required_value')
-
-    def premium_only(self):
-        """
-        Filter to premium-only milestones.
-
-        Returns:
-            QuerySet: Milestones that require premium subscription
-        """
-        return self.filter(premium_only=True)
-
-    def active(self):
-        """
-        Filter to live (non-retired) milestones.
-
-        Returns:
-            QuerySet: Milestones with is_active=True -- shown on the milestones page and
-            still awarded. Retired milestones (is_active=False) are excluded.
-        """
-        return self.filter(is_active=True)
-
-class MilestoneManager(models.Manager):
-    """Custom manager for Milestone model."""
-
-    def get_queryset(self):
-        """Return custom queryset."""
-        return MilestoneQuerySet(self.model, using=self._db)
-
-    def by_criteria_type(self, criteria_type):
-        """Proxy to queryset method."""
-        return self.get_queryset().by_criteria_type(criteria_type)
-
-    def ordered_by_value(self):
-        """Proxy to queryset method."""
-        return self.get_queryset().ordered_by_value()
-
-    def active(self):
-        """Proxy to queryset method."""
-        return self.get_queryset().active()
-
 class CommentQuerySet(models.QuerySet):
     """Custom queryset for Comment model."""
 

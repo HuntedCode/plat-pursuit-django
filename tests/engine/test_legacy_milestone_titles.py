@@ -1,0 +1,45 @@
+"""The legacy milestone engine's title fallout (Lane 2 Step 3).
+
+Migration 0282 deleted the titles its metric LADDERS granted and kept the one-off MANUAL awards
+(fundraiser patron, easter eggs). Those survivors have no source row anymore -- `source_id` is a
+plain integer, not an FK -- so these pin that they still resolve and still render as "Special".
+"""
+import pytest
+
+from trophies.models import Title, UserTitle
+from tests.factories import ProfileFactory
+
+pytestmark = pytest.mark.django_db
+
+
+def test_surviving_milestone_title_resolves_without_a_source_row():
+    """_resolve_title_source must not crash / must describe a sourceless milestone title."""
+    from api.review_views import _resolve_title_source
+
+    profile = ProfileFactory()
+    title = Title.objects.create(name='Badge Artwork Patron')
+    ut = UserTitle.objects.create(
+        profile=profile, title=title,
+        source_type='milestone', source_id=999999,   # dangling: the Milestone row is gone
+    )
+
+    assert _resolve_title_source(ut) == 'Earned from a special award'
+
+
+def test_titles_page_shows_surviving_awards_as_special(client):
+    """The Titles page groups sourceless milestone titles under Special, without a source row."""
+    profile = ProfileFactory()
+    title = Title.objects.create(name='Unboxed!')
+    UserTitle.objects.create(
+        profile=profile, title=title, source_type='milestone', source_id=999999,
+    )
+    client.force_login(profile.user)
+
+    resp = client.get('/titles/')
+
+    assert resp.status_code == 200
+    specials = resp.context['special_titles']
+    assert [e['title'].name for e in specials] == ['Unboxed!']
+    assert specials[0]['source'] is None       # no live source row to describe
+    assert specials[0]['earned'] is True
+    assert resp.context['total_earned'] == 1
