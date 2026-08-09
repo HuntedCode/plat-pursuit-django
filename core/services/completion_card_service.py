@@ -31,6 +31,7 @@ from trophies.models import (
     BadgeSeries, EarnedTrophy, ProfileGame, ProfileTrophyGroup, SeriesBadgeStanding, Stage,
     TrophyGroup, UserConceptRating, UserTitle,
 )
+from trophies.templatetags.job_icons import _ICONS as _JOB_ICONS
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,24 @@ VARIANT_LABELS = {
 #: How many badge series a card will ever name. The card renders at embed size (~450px wide in a
 #: Discord preview), so this is a layout constant, not a data limit.
 BADGE_LINE_CAP = 2
+
+#: Likewise for the contract's job icons -- a row of six becomes a smear at embed size.
+JOB_ICON_CAP = 3
+
+#: Raw Lucide path geometry per icon name, borrowed from the site's job-icon library so the card and
+#: the site draw the same glyphs from one source. (The tag itself is unusable here -- see the note in
+#: _contract_line.)
+JOB_ICON_PATHS = _JOB_ICONS
+
+#: The five discipline colours (--disc-* in components/elements.css) as hex, because the card is
+#: rendered in a document with no stylesheet and no custom properties. Keep in sync with that file.
+DISCIPLINE_COLOURS = {
+    'combat': '#fc5855',
+    'exploration': '#59d38c',
+    'mind': '#9c93ff',
+    'heart': '#ff68a0',
+    'finesse': '#fcb442',
+}
 
 
 # ── Eligibility ───────────────────────────────────────────────────────────────────────────────────
@@ -230,7 +249,51 @@ def _badge_lines(profile, concept):
         })
 
     lines.sort(key=lambda l: (not l['title_held'], -l['progress_pct'], l['series_name'].lower()))
-    return lines[:BADGE_LINE_CAP]
+    lines = lines[:BADGE_LINE_CAP]
+    if lines:
+        # Only the LEAD line gets art. Each medallion is two more images to cache and base64 into the
+        # render, and only one of them is big enough on the card to be worth the payload.
+        _attach_medallion(lines[0], concept)
+    return lines
+
+
+def _attach_medallion(line, concept):
+    """Give a badge line its real medallion art + edition, in place.
+
+    The card should show the badge OBJECT, not just its name -- it's the product's signature. The
+    edition matters too ("Ultra HD" vs "Legacy HD" are different badges to a hunter), and the art is
+    per-edition, so both come from the same GroupBadge.
+
+    Picks the edition whose platform group actually covers this game, falling back to the series' first
+    live edition -- a card for a PS5 completion shouldn't show the Legacy HD medallion.
+    """
+    from trophies.models import GroupBadge
+    from trophies.services.badge_detail_service import group_medallion_layers
+
+    editions = list(
+        GroupBadge.objects
+        .filter(series__series_slug=line['series_slug'], is_live=True)
+        .select_related('platform_group', 'series', 'series__submitted_by')
+        .order_by('id')
+    )
+    if not editions:
+        return
+
+    platforms = set()
+    for game in getattr(concept, 'games', None).all() if concept else []:
+        platforms.update(game.title_platform or [])
+    edition = next(
+        (e for e in editions if platforms & set(e.platform_group.platforms or [])),
+        editions[0],
+    )
+
+    tier, layers, is_avatar = group_medallion_layers(edition)
+    line.update({
+        'edition': edition.platform_group.name,
+        'medallion_tier': tier,
+        'medallion_layers': layers,
+        'medallion_is_avatar': is_avatar,
+    })
 
 
 def hunter_totals(profile):
@@ -277,7 +340,19 @@ def _contract_line(profile, concept):
     return {
         'name': contract.name,
         'slug': contract.slug,
-        'jobs': [j.name for j in contract.jobs.all()],
+        # Job glyphs travel as raw Lucide PATH geometry, not via the {% job_icon %} tag: that tag
+        # sizes itself with Tailwind classes (`w-5 h-5`), and the card is rendered in a document with
+        # no stylesheet, so its <svg> would come out unsized. The template wraps this in an <svg> with
+        # explicit width/height instead. Capped for the same reason the badge lines are -- a row of
+        # six icons is a smear at embed size.
+        'jobs': [
+            {
+                'name': job.name,
+                'icon_paths': JOB_ICON_PATHS.get(job.icon or '', ''),
+                'colour': DISCIPLINE_COLOURS.get(job.discipline, '#9da5b1'),
+            }
+            for job in contract.jobs.all()[:JOB_ICON_CAP]
+        ],
         'xp': xp,
         # Reached but not accepted: the XP is sitting there waiting to be claimed. Worth saying on the
         # card, since claiming is the action we want the hunter to go take.

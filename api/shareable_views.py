@@ -69,6 +69,14 @@ def build_card_context(profile, standing):
             logger.warning("[PLAT-CARD] failed to cache %s: %s", key, source)
         data[key] = cached or ''
 
+    # Badge medallion art is the same deal: the layers are static paths or MEDIA/PSN URLs, so they have
+    # to be local before the renderer can base64 them. Only the lead badge line carries art.
+    for line in data['badge_lines']:
+        layers = line.get('medallion_layers') or []
+        line['medallion_cached'] = [
+            cached for cached in (ShareImageCache.fetch_and_cache(url) for url in layers if url) if cached
+        ]
+
     data['playtime'] = _format_playtime(data['play_duration_seconds'])
     return data
 

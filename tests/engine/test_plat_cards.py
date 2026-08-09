@@ -349,8 +349,8 @@ def _contracted_game(profile, **kw):
     IGDBMatch.objects.create(concept=concept, igdb_id=4242, status=IGDBMatch.TRUSTED_STATUSES[0])
     contract = Contract.objects.create(name='Ragnarok', slug='ragnarok', igdb_id=4242, is_live=True)
     contract.jobs.add(
-        Job.objects.create(slug='berserker', name='Berserker', discipline='combat'),
-        Job.objects.create(slug='wayfarer', name='Wayfarer', discipline='exploration'),
+        Job.objects.create(slug='berserker', name='Berserker', discipline='combat', icon='swords'),
+        Job.objects.create(slug='wayfarer', name='Wayfarer', discipline='exploration', icon='compass'),
     )
     return game, group, standing, contract
 
@@ -364,7 +364,12 @@ def test_the_contract_and_its_jobs_reach_the_card():
     contract = cards.get_card_data(profile, standing)['contract']
 
     assert contract['name'] == 'Ragnarok'
-    assert sorted(contract['jobs']) == ['Berserker', 'Wayfarer']
+    assert sorted(j['name'] for j in contract['jobs']) == ['Berserker', 'Wayfarer']
+    # Discipline colour + real Lucide geometry, so the card draws the same glyph the site does.
+    by_name = {j['name']: j for j in contract['jobs']}
+    assert by_name['Berserker']['colour'] == '#fc5855'          # combat
+    assert by_name['Wayfarer']['colour'] == '#59d38c'           # exploration
+    assert by_name['Berserker']['icon_paths'].startswith('<')
 
 
 def test_banked_contract_xp_is_read_from_the_ledger():
@@ -417,3 +422,53 @@ def test_the_star_score_reaches_the_card_with_a_fill_percentage():
 
     assert rating['overall_rating'] == 4.5
     assert rating['stars_pct'] == 90.0
+
+
+def test_the_badge_line_carries_real_medallion_art_and_its_edition():
+    """The medallion is the product's signature object, so the card shows the badge rather than just
+    naming it -- and the EDITION, because Ultra HD and Legacy HD are different badges to a hunter."""
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    series = BadgeSeriesFactory(name='Norse Saga')
+    GroupBadgeFactory(
+        series=series,
+        platform_group=PlatformGroupFactory(name='Ultra HD', key='ultra-hd', platforms=['PS4', 'PS5']),
+        is_live=True,
+    )
+    StageFactory(series_slug=series.series_slug).concepts.add(game.concept)
+
+    line = cards.get_card_data(profile, standing)['badge_lines'][0]
+
+    assert line['edition'] == 'Ultra HD'
+    assert line['medallion_tier'] == 'platinum'      # ultra-hd backs platinum
+    assert line['medallion_layers'], 'medallion should always resolve at least the default art'
+
+
+def test_the_medallion_picks_the_edition_that_covers_this_game():
+    """A PS5 completion must not show the Legacy HD medallion."""
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)   # GameFactory defaults to PS5
+    series = BadgeSeriesFactory(name='Norse Saga')
+    GroupBadgeFactory(series=series, is_live=True, platform_group=PlatformGroupFactory(
+        name='Legacy HD', key='legacy-hd', platforms=['PS3', 'PSVITA']))
+    GroupBadgeFactory(series=series, is_live=True, platform_group=PlatformGroupFactory(
+        name='Ultra HD', key='ultra-hd', platforms=['PS4', 'PS5']))
+    StageFactory(series_slug=series.series_slug).concepts.add(game.concept)
+
+    assert cards.get_card_data(profile, standing)['badge_lines'][0]['edition'] == 'Ultra HD'
+
+
+def test_only_the_lead_badge_line_carries_art():
+    """Each medallion is two more images to cache and base64 into every render; only the one the card
+    actually draws is worth the payload."""
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    for name in ('Alpha Series', 'Beta Series'):
+        series = BadgeSeriesFactory(name=name)
+        GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
+        StageFactory(series_slug=series.series_slug).concepts.add(game.concept)
+
+    lines = cards.get_card_data(profile, standing)['badge_lines']
+
+    assert len(lines) == 2
+    assert lines[0].get('medallion_layers') and 'medallion_layers' not in lines[1]

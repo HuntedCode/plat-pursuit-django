@@ -60,7 +60,14 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
     <div style="position: relative; height: 630px; padding: 40px 46px; box-sizing: border-box; display: flex; flex-direction: column;">
 
         {# ── 1. Identity: the hunter, and the brand ── #}
-        <div data-element="platinum-banner" style="display: flex; align-items: center; gap: 17px; flex-shrink: 0; padding-bottom: 20px; box-sizing: content-box; border-bottom: 1px solid rgba(64, 72, 83, 0.55);">
+        {% comment %}Deliberately NOT tagged data-element="platinum-banner". That hook exists so a
+        theme can tint the OLD card's identity strip, and both consumers would wreck this one: the
+        renderer injects `background` + `border-color` with !important, and the preview JS paints
+        `theme.bannerBackground` straight onto the node. The legacy `default` theme's banner is a cyan
+        tint, so the preview was stamping a tinted box behind this bar that the PNG never had -- the
+        preview and the download disagreeing again. This bar is part of the composition, not a
+        themeable surface; leave the hook off.{% endcomment %}
+        <div style="display: flex; align-items: center; gap: 17px; flex-shrink: 0; padding-bottom: 20px; box-sizing: content-box; border-bottom: 1px solid rgba(64, 72, 83, 0.55);">
             {% if avatar_image %}
             <img src="{{ avatar_image }}" alt="" style="width: 58px; height: 58px; border-radius: 50%; object-fit: cover; border: 2px solid {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; box-sizing: border-box; flex-shrink: 0;" />
             {% else %}
@@ -88,7 +95,7 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
         <div style="flex: 1; display: flex; align-items: center; gap: 34px; min-height: 0; padding-top: 22px;">
 
             {# Cover, framed rather than bled: it's evidence, not the ground. #}
-            <div style="width: 290px; height: 387px; flex-shrink: 0; border-radius: 10px; overflow: hidden; background: #232a31; border: 1px solid #404853; box-sizing: border-box; box-shadow: 0 18px 40px rgba(5, 8, 12, 0.6);">
+            <div style="width: 262px; height: 349px; flex-shrink: 0; border-radius: 10px; overflow: hidden; background: #232a31; border: 1px solid #404853; box-sizing: border-box; box-shadow: 0 18px 40px rgba(5, 8, 12, 0.6);">
                 {% if game_image %}
                 <img src="{{ game_image }}" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: top;" />
                 {% endif %}
@@ -193,37 +200,73 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
             </div>
         </div>
 
-        {% comment %}── 3. The spine: what this completion fed. The two halves of the product --
+        {% comment %}── 3. The spine band: what this completion FED. The two halves of the product --
         badges are the collection, contracts are the career -- so showing one without the other tells
-        half the story of what a completion was worth.{% endcomment %}
+        half the story of what a completion was worth.
+
+        The badge side carries the real MEDALLION (backdrop + subject art, tier-ringed) rather than a
+        name, because the medallion is the product's signature object; and the EDITION, because "Ultra
+        HD" and "Legacy HD" are different badges to a hunter. The progress bar only appears while the
+        series is unfinished -- a full bar next to a title you already hold is noise, a partial one is
+        a reason to go back. The contract side uses the real Lucide job glyphs in their discipline
+        colours (the tag emits stroke="currentColor", so colour cascades from the wrapper).
+        {% endcomment %}
         {% if badge_lines or contract %}
-        <div style="flex-shrink: 0; display: flex; align-items: center; gap: 28px; padding-top: 15px; border-top: 1px solid rgba(64, 72, 83, 0.55); font-size: 19px; line-height: 1.3; color: #9da5b1; white-space: nowrap; overflow: hidden;">
+        <div style="flex-shrink: 0; display: flex; align-items: center; gap: 26px; padding-top: 15px; border-top: 1px solid rgba(64, 72, 83, 0.55); overflow: hidden;">
 
             {% if badge_lines %}{% with line=badge_lines.0 %}
-            <div style="display: flex; align-items: center; gap: 9px; min-width: 0;">
-                {% if line.title_held and line.title %}
-                <span style="color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; font-size: 17px; line-height: 1;">&#9670;</span>
-                <span style="font-weight: 700; color: #f0f6fd; overflow: hidden; text-overflow: ellipsis;">{{ line.title }}</span>
-                <span style="color: #8a939f;">&middot;</span>
-                <span style="color: #8a939f; overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</span>
-                {% else %}
-                <span style="color: #8a939f; overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</span>
-                {% if line.stages_total %}<span style="color: #8a939f;">{{ line.stages_cleared }}/{{ line.stages_total }}</span>{% endif %}
+            <div style="display: flex; align-items: center; gap: 13px; min-width: 0;">
+                {% if line.medallion_cached %}
+                <div style="position: relative; width: 52px; height: 52px; flex-shrink: 0; border-radius: 50%; overflow: hidden; border: 2px solid {% if line.medallion_tier == 'platinum' %}#9fd8ea{% elif line.medallion_tier == 'gold' %}#e0b055{% elif line.medallion_tier == 'silver' %}#b9c2cc{% else %}#c07a4a{% endif %}; box-sizing: border-box; background: #232a31;">
+                    {% for layer in line.medallion_cached %}
+                    <img src="{{ layer }}" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;{% if line.medallion_is_avatar and forloop.last %} padding: 6px; border-radius: 50%;{% endif %}" />
+                    {% endfor %}
+                </div>
                 {% endif %}
+
+                <div style="min-width: 0;">
+                    <div style="display: flex; align-items: baseline; gap: 9px; white-space: nowrap;">
+                        {% if line.title_held and line.title %}
+                        <span style="font-size: 20px; line-height: 1.3; font-weight: 700; color: #f0f6fd; overflow: hidden; text-overflow: ellipsis;">{{ line.title }}</span>
+                        {% else %}
+                        <span style="font-size: 20px; line-height: 1.3; font-weight: 700; color: #f0f6fd; overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</span>
+                        {% endif %}
+                        {% if line.edition %}
+                        <span style="font-size: 13px; line-height: 1.3; font-weight: 600; color: #8a939f; letter-spacing: 0.12em; text-transform: uppercase;">{{ line.edition }}</span>
+                        {% endif %}
+                    </div>
+
+                    {% if line.stages_total and line.stages_cleared < line.stages_total %}
+                    <div style="display: flex; align-items: center; gap: 9px; margin-top: 6px;">
+                        <span style="position: relative; display: inline-block; width: 116px; height: 5px; border-radius: 3px; background: #2f363f; overflow: hidden; flex-shrink: 0;">
+                            <span style="position: absolute; inset: 0; width: {% widthratio line.stages_cleared line.stages_total 100 %}%; background: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; border-radius: 3px;"></span>
+                        </span>
+                        <span style="font-size: 14px; line-height: 1; font-weight: 600; color: #8a939f;">{{ line.stages_cleared }} of {{ line.stages_total }}</span>
+                    </div>
+                    {% else %}
+                    <div style="font-size: 15px; line-height: 1.3; color: #8a939f; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</div>
+                    {% endif %}
+                </div>
             </div>
             {% endwith %}{% endif %}
 
-            {% comment %}Job Board contract: the jobs this completion levelled, and what it paid.{% endcomment %}
             {% if contract %}
-            <div style="display: flex; align-items: center; gap: 9px; min-width: 0; margin-left: auto;">
-                {% if contract.jobs %}
-                <span style="color: #8a939f; overflow: hidden; text-overflow: ellipsis;">{{ contract.jobs|join:" &middot; " }}</span>
-                {% endif %}
+            <div style="display: flex; align-items: center; gap: 16px; min-width: 0; margin-left: auto; flex-shrink: 0;">
+                {% for job in contract.jobs %}
+                <div style="display: flex; align-items: center; gap: 7px;">
+                    {% if job.icon_paths %}
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="{{ job.colour }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">{{ job.icon_paths|safe }}</svg>
+                    {% endif %}
+                    <span style="font-size: 17px; line-height: 1.3; font-weight: 600; color: #9da5b1; white-space: nowrap;">{{ job.name }}</span>
+                </div>
+                {% endfor %}
                 {% if contract.xp %}
-                <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-weight: 700; color: #f0f6fd;">+{{ contract.xp|intcomma }}</span>
-                <span style="font-size: 15px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase;">XP</span>
+                <div style="display: flex; align-items: baseline; gap: 6px;">
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 22px; line-height: 1.2; font-weight: 700; color: #f0f6fd;">+{{ contract.xp|intcomma }}</span>
+                    <span style="font-size: 14px; line-height: 1.2; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase;">XP</span>
+                </div>
                 {% elif contract.claimable %}
-                <span style="font-weight: 700; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %};">XP unclaimed</span>
+                <span style="font-size: 18px; line-height: 1.3; font-weight: 700; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; white-space: nowrap;">XP unclaimed</span>
                 {% endif %}
             </div>
             {% endif %}
