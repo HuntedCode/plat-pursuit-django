@@ -211,10 +211,23 @@ def _build_font_faces():
         return _cached_font_faces
 
     font_faces = []
+    # A card can only use a typeface listed here -- set_content() runs in an about:blank origin, so
+    # nothing loads from disk or the network at render time. Adding a weight means dropping the TTF in
+    # static/fonts/ AND adding it to this map. See static/fonts/README.md.
+    #
+    # The declared family name wins over the file's internal name, which matters for the SemiBold
+    # instances: Google Fonts names that file "Bricolage Grotesque SemiBold", and without this mapping
+    # it would register as a separate family that no template asks for.
     font_map = {
+        # Display -- the --pp-font-display voice, so cards speak in the site's own typeface.
+        'BricolageGrotesque-Regular.ttf': ('Bricolage Grotesque', 'normal', '400'),
+        'BricolageGrotesque-SemiBold.ttf': ('Bricolage Grotesque', 'normal', '600'),
+        'BricolageGrotesque-Bold.ttf': ('Bricolage Grotesque', 'normal', '700'),
+        # Body
         'Inter-Regular.ttf': ('Inter', 'normal', '400'),
         'Inter-SemiBold.ttf': ('Inter', 'normal', '600'),
         'Inter-Bold.ttf': ('Inter', 'normal', '700'),
+        # Legacy -- the recap card still asks for Poppins.
         'Poppins-Regular.ttf': ('Poppins', 'normal', '400'),
         'Poppins-SemiBold.ttf': ('Poppins', 'normal', '600'),
         'Poppins-Bold.ttf': ('Poppins', 'normal', '700'),

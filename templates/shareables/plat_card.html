@@ -29,10 +29,10 @@ properties. So the --pp-* token VALUES are ported by hand. Keep this map in sync
     --pp-primary     #27ebfe   (platinum variant accent)
     --pp-accent      #ff9350   (100% variant accent)
 
-FONT: Inter only. The renderer embeds Inter + Poppins from static/fonts/ and nothing else, so the
-site's display face (Bricolage Grotesque) is unavailable here. Dropping a Bricolage TTF into
-static/fonts/ and registering it in playwright_renderer._build_font_faces would let the card speak
-the real display voice; until then Inter Bold with tight tracking carries it.
+TYPE: the same two-voice pairing as the site -- Bricolage Grotesque (--pp-font-display) for the
+things you read first (username, variant label, game title, tallies), Inter (--pp-font-body) for
+labels and meta. Both are embedded by the renderer from static/fonts/; a face that isn't in that
+directory cannot render here at all, so keep the stacks to those two families.
 
 Context: see core/services/completion_card_service.get_card_data + api/shareable_views.build_card_context.
 {% endcomment %}
@@ -64,7 +64,7 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
             {% endif %}
 
             <div style="flex: 1; min-width: 0;">
-                <div style="font-size: 32px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.01em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ username }}</div>
+                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 32px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.01em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ username }}</div>
                 {% if display_title %}
                 <div style="font-size: 17px; font-weight: 600; color: #9da5b1; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ display_title }}</div>
                 {% endif %}
@@ -92,37 +92,37 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                     {% else %}
                     <div style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; border: 2px solid #ff9350; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #ff9350; letter-spacing: -0.02em;">100</div>
                     {% endif %}
-                    <span style="font-size: 22px; font-weight: 700; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; letter-spacing: 0.16em; text-transform: uppercase;">{% if variant == 'platinum' %}Platinum{% else %}100% Complete{% endif %}</span>
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 22px; font-weight: 700; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; letter-spacing: 0.16em; text-transform: uppercase;">{% if variant == 'platinum' %}Platinum{% else %}100% Complete{% endif %}</span>
                     {% if ordinal %}
-                    <span style="font-size: 22px; font-weight: 600; color: #8a939f; letter-spacing: 0.04em;">#{{ ordinal }}</span>
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 22px; font-weight: 600; color: #8a939f; letter-spacing: 0.04em;">#{{ ordinal }}</span>
                     {% endif %}
                 </div>
 
                 {# The game: the single dominant statement. #}
-                <div style="font-size: 54px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 14px; max-height: 116px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
+                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 54px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 14px; max-height: 116px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
 
                 <div style="height: 2px; width: 96px; background: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; margin-top: 22px; border-radius: 2px;"></div>
 
                 {# Three stats, maximum. Any more is mush at embed size. #}
                 <div style="display: flex; gap: 46px; margin-top: 24px;">
                     <div>
-                        <div style="font-size: 38px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ group_defined }}</div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 38px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ group_defined }}</div>
                         <div style="font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 7px;">Trophies</div>
                     </div>
                     {% if variant == 'platinum' and trophy_earn_rate %}
                     <div>
-                        <div style="font-size: 38px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ trophy_earn_rate }}%</div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 38px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ trophy_earn_rate }}%</div>
                         <div style="font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 7px;">{{ rarity_label|default:"Rarity" }}</div>
                     </div>
                     {% elif completed_at %}
                     <div>
-                        <div style="font-size: 38px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ completed_at|date:"M j" }}</div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 38px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ completed_at|date:"M j" }}</div>
                         <div style="font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 7px;">{{ completed_at|date:"Y" }}</div>
                     </div>
                     {% endif %}
                     {% if playtime %}
                     <div>
-                        <div style="font-size: 38px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ playtime }}</div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 38px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ playtime }}</div>
                         <div style="font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 7px;">Played</div>
                     </div>
                     {% endif %}
