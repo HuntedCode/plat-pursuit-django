@@ -54,7 +54,7 @@ def test_held_title_lands_in_yours_with_source_context(client):
     assert entry['series_name'] == 'Astro'                       # what earns it
     assert entry['url'].endswith(f'/{series.series_slug}/')      # links to the badge
     assert entry['frame'] is not None                            # medallion art composed
-    assert resp.context['held_count'] == 1
+    assert resp.context['yours_count'] == 1        # what the switcher chip shows
 
 
 def test_within_reach_is_unheld_with_progress_closest_first(client):
@@ -115,7 +115,6 @@ def test_equipped_title_and_holder_counts(client):
     resp = _get(client, p)
 
     assert resp.context['equipped_title'].name == 'Bot Wrangler'
-    assert resp.context['equipped_title_id'] == series.title_id
     assert resp.context['all_titles'][0]['holders'] == 2       # social proof
     assert resp.context['yours'][0]['is_displayed'] is True
 
@@ -128,6 +127,93 @@ def test_empty_state_for_a_hunter_with_nothing(client):
     assert resp.status_code == 200
     assert resp.context['yours'] == [] and resp.context['within_reach'] == []
     assert resp.context['equipped_title'] is None
+
+
+def test_legacy_badge_titles_are_not_surfaced(client):
+    """This page is the NEW badge system only -- legacy `source_type='badge'` grants (still written on
+    every sync until the cutover) must not appear."""
+    p = ProfileFactory()
+    UserTitle.objects.create(profile=p, title=Title.objects.create(name='Old Guard'),
+                             source_type='badge', source_id=1)
+
+    resp = _get(client, p)
+
+    assert resp.context['yours'] == []
+    assert 'Old Guard' not in resp.content.decode()
+
+
+def test_held_title_survives_its_series_going_off_live(client):
+    """A series taken off-live drops out of the catalogue -- but a title you already EARNED must not
+    vanish from the page whose job is showing what you hold."""
+    p = ProfileFactory()
+    series = _series_with_title('Dark', 'Ghost Walker', live=False)
+    UserTitle.objects.create(profile=p, title=series.title, source_type='badge_series',
+                             source_id=series.id)
+
+    resp = _get(client, p)
+
+    assert [e['name'] for e in resp.context['yours']] == ['Ghost Walker']
+    assert resp.context['all_titles'] == []          # not in the live catalogue
+    assert resp.context['yours'][0]['source_label'] == 'Badge title'
+
+
+def test_two_series_sharing_one_title_render_once(client):
+    """BadgeSeries.title has no unique constraint. One entry per SERIES would duplicate the row, inflate
+    the counts, and make the equip toggle flip two rows for a single title."""
+    p = ProfileFactory()
+    shared = Title.objects.create(name='Shared Word')
+    for name in ('AlphaSeries', 'BetaSeries'):
+        series = BadgeSeriesFactory(name=name, title=shared)
+        GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
+    UserTitle.objects.create(profile=p, title=shared, source_type='badge_series', source_id=1)
+
+    resp = _get(client, p)
+
+    assert [e['name'] for e in resp.context['all_titles']] == ['Shared Word']
+    assert resp.context['all_count'] == 1
+    assert resp.context['yours_count'] == 1
+
+
+def test_sub_one_percent_progress_still_counts_as_started(client):
+    """progress_pct rounds a sub-50bp standing to 0. Gating "started" on the rounded value told a hunter
+    with a cleared stage they hadn't begun."""
+    p = ProfileFactory()
+    series = _series_with_title('Huge', 'Long Haul')
+    SeriesBadgeStanding.objects.create(profile=p, series_slug=series.series_slug,
+                                       progress_bp=33, stages_cleared=1, stages_total=300)
+
+    resp = _get(client, p)
+
+    assert [e['name'] for e in resp.context['within_reach']] == ['Long Haul']
+    assert resp.context['within_reach'][0]['progress_pct'] == 0     # rounds to 0, but it HAS started
+
+
+def test_medallion_state_follows_the_viewer(client):
+    """An unowned badge rendered in the 'earned' state got the earned aura next to its own padlock."""
+    p = ProfileFactory()
+    held = _series_with_title('Owned', 'Held Title')
+    started = _series_with_title('Started', 'Partway')
+    _series_with_title('Untouched', 'Not Begun')
+    UserTitle.objects.create(profile=p, title=held.title, source_type='badge_series', source_id=held.id)
+    SeriesBadgeStanding.objects.create(profile=p, series_slug=started.series_slug,
+                                       progress_bp=5000, stages_cleared=2, stages_total=4)
+
+    states = {e['name']: e['frame']['state'] for e in _get(client, p).context['all_titles']}
+
+    assert states == {'Held Title': 'earned', 'Partway': 'in_progress', 'Not Begun': 'unearned'}
+
+
+def test_query_count_is_flat_as_the_catalogue_grows(django_assert_num_queries, client):
+    """The page must not N+1 per series -- art_layers() reads series.submitted_by for user-type series,
+    which was one extra query each until the prefetch covered it."""
+    p = ProfileFactory()
+    for i in range(6):
+        _series_with_title(f'Series {i}', f'Title {i}')
+    client.force_login(p.user)
+    client.get('/titles/')          # warm session/auth so the count reflects the view itself
+
+    with django_assert_num_queries(8):
+        client.get('/titles/')
 
 
 # ── Render ────────────────────────────────────────────────────────────────────────────────────────

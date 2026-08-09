@@ -12,6 +12,7 @@
     var ORDER = ['yours', 'reach', 'all'];
     var current = 'yours';
     var revealHandle = null;
+    var tablist = null;
 
     function panels() { return document.querySelectorAll('[data-ttl-panel]'); }
     function panelFor(view) { return document.querySelector('[data-ttl-panel="' + view + '"]'); }
@@ -45,6 +46,7 @@
         if (PP.slideViewIn) { PP.slideViewIn(panelFor(view), current, view, ORDER); }
         if (PP.syncViewParam) { PP.syncViewParam(view, { default: 'yours' }); }
         current = view;
+        if (tablist) { tablist.syncTabindex(); }
         reveal(view);
     }
 
@@ -56,6 +58,7 @@
         var has = !!name;
         nameEl.textContent = has ? name : 'No title equipped';
         nameEl.classList.toggle('ttl-plate__name--none', !has);
+        // --empty also drives which trailing control shows (Take it off / the hint) -- see titles.css.
         plate.classList.toggle('ttl-plate--empty', !has);
         if (has) {
             plate.classList.remove('is-flash');
@@ -74,7 +77,7 @@
     function equip(titleId, name, btn) {
         if (!PP.API) { return; }
         // Pending state: block the double-tap and say something on a slow network.
-        var buttons = document.querySelectorAll('[data-ttl-equip]');
+        var buttons = document.querySelectorAll('[data-ttl-equip], [data-ttl-unequip]');
         buttons.forEach(function (b) { b.disabled = true; });
         if (btn) { btn.textContent = 'Wearing…'; }
 
@@ -101,12 +104,19 @@
             document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); });
         }
 
+        // Re-derive the active view from the DOM. On an HTMX history restore the markup is a fresh
+        // snapshot while this module's `current` still holds the pre-navigation value -- reading it back
+        // keeps them in sync (a desync makes show() early-return, or slide the wrong way).
+        var activeChip = document.querySelector('[data-ttl-switch] .pp-switch__chip.is-active');
+        current = (activeChip && activeChip.dataset.view) || 'yours';
+
+        // ELEMENT wiring: re-run every restore, against the fresh nodes (the old bindings died with them).
         var chips = document.querySelectorAll('[data-ttl-switch] .pp-switch__chip');
         if (chips.length && PP.wireTablist) {
-            PP.wireTablist(chips, { ignite: true, onSelect: function (chip) { show(chip.dataset.view); } });
+            tablist = PP.wireTablist(chips, { ignite: true, onSelect: function (chip) { show(chip.dataset.view); } });
         }
 
-        // Land on ?view= when present (a shared/bookmarked link), else Yours.
+        // Land on ?view= when present (a shared/bookmarked link), else whatever is active.
         var wanted = new URLSearchParams(location.search).get('view');
         if (wanted && ORDER.indexOf(wanted) !== -1 && wanted !== current) {
             var chip = document.querySelector('[data-ttl-switch] .pp-switch__chip[data-view="' + wanted + '"]');
@@ -115,12 +125,15 @@
             reveal(current);
         }
 
-        // Delegated so rows re-rendered by a future partial swap keep working.
-        document.addEventListener('click', function (e) {
-            var eq = e.target.closest('[data-ttl-equip]');
-            if (eq) { equip(parseInt(eq.dataset.titleId, 10), eq.dataset.titleName, eq); return; }
-            if (e.target.closest('[data-ttl-unequip]')) { equip(null, null, null); }
-        });
+        // DOCUMENT-level listener: bind exactly ONCE (`document` survives a restore, so re-binding here
+        // would stack handlers and fire equip twice per click). Delegated so rows rendered later still work.
+        if (first) {
+            document.addEventListener('click', function (e) {
+                var eq = e.target.closest('[data-ttl-equip]');
+                if (eq) { equip(parseInt(eq.dataset.titleId, 10), eq.dataset.titleName, eq); return; }
+                if (e.target.closest('[data-ttl-unequip]')) { equip(null, null, null); }
+            });
+        }
     }
 
     if (PP.onPageReady) { PP.onPageReady(boot); }

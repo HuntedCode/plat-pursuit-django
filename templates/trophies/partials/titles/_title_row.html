@@ -11,7 +11,7 @@ One title entry. The TITLE is the hero; the series it was earned in is supportin
          data-ttl-row data-title-id="{{ entry.title.id }}">
 
     {# Source object: the medallion for a series title, a mark for a one-off award. #}
-    <span class="ttl-row__obj" aria-hidden="true">
+    <div class="ttl-row__obj" aria-hidden="true">
         {% if entry.frame %}
         {% include 'components/badge_medallion.html' with frame=entry.frame no_id=True no_count=True %}
         {% elif entry.is_special %}
@@ -19,13 +19,13 @@ One title entry. The TITLE is the hero; the series it was earned in is supportin
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="3"/></svg>
         </span>
         {% endif %}
-    </span>
+    </div>
 
     <div class="ttl-row__id">
         <h3 class="ttl-row__name">{{ entry.name }}</h3>
         <p class="ttl-row__from">
-            {% if entry.is_special %}
-            <span class="ttl-row__tag">Special award</span>
+            {% if entry.source_label %}
+            <span class="ttl-row__tag{% if not entry.is_special %} ttl-row__tag--quiet{% endif %}">{{ entry.source_label }}</span>
             {% else %}
             <a href="{{ entry.url }}" class="ttl-row__series">{{ entry.series_name }}</a>
             {% endif %}
@@ -48,7 +48,7 @@ One title entry. The TITLE is the hero; the series it was earned in is supportin
         {% endif %}
     </div>
 
-    <div class="ttl-row__trail">
+    {% if view != 'reach' %}<div class="ttl-row__trail">
         {% comment %}Both states are rendered; `.is-worn` on the row decides which shows (CSS). Equipping
         only has to toggle that ONE class for the marker and the button to swap correctly -- no DOM
         rebuilding, and the previously-worn row updates in the same beat.{% endcomment %}
@@ -74,5 +74,5 @@ One title entry. The TITLE is the hero; the series it was earned in is supportin
             </span>
             {% endif %}
         {% endif %}
-    </div>
+    </div>{% endif %}
 </article>

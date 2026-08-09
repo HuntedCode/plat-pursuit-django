@@ -37,9 +37,12 @@
 .ttl-plate__name--none { color: var(--pp-text-mute); font-style: italic; font-weight: 700; text-shadow: none; }
 .ttl-plate__hint { font-size: 11.5px; color: var(--pp-text-mute); }
 .ttl-plate--empty { --ttl-c: var(--pp-text-mute); border-style: dashed; }
+/* Both trailing controls ship; the state class picks one, so equipping is a single class toggle. */
+.ttl-plate--empty .ttl-plate__clear { display: none; }
+.ttl-plate:not(.ttl-plate--empty) .ttl-plate__hint { display: none; }
 .ttl-plate__clear {
     margin-top: 5px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
-    padding: 3px 11px; border-radius: 999px; font-size: 11px; font-weight: 700;
+    padding: 8px 13px; min-height: 36px; border-radius: 999px; font-size: 11px; font-weight: 700;
     color: var(--pp-text-dim); background: transparent; border: 1px solid var(--pp-border);
     transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
@@ -103,6 +106,11 @@
     background: color-mix(in oklab, var(--pp-accent) 13%, transparent);
     border: 1px solid color-mix(in oklab, var(--pp-accent) 26%, transparent);
 }
+.ttl-row__tag--quiet {
+    color: var(--pp-text-mute);
+    background: color-mix(in oklab, var(--pp-text) 6%, transparent);
+    border-color: var(--pp-border);
+}
 .ttl-row__wearers { font-variant-numeric: tabular-nums; }
 
 /* Progress toward an unearned title (Within reach only). */
@@ -117,7 +125,7 @@
 .ttl-row__trail:empty { display: none; }
 
 .ttl-row__equip {
-    cursor: pointer; padding: 5px 13px; border-radius: 999px; white-space: nowrap;
+    cursor: pointer; padding: 9px 15px; min-height: 40px; border-radius: 999px; white-space: nowrap;
     font-size: 11.5px; font-weight: 800; color: var(--pp-text-dim);
     background: transparent; border: 1px solid var(--pp-border);
     transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease, transform 0.1s ease;
