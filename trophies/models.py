@@ -1269,12 +1269,7 @@ class Concept(models.Model):
             cbundle.concepts.remove(other)
 
         # GameFamilyProposal M2M removed — proposal model deleted in Phase 2.6.
-
-        # Genre challenge slots
-        other.genre_challenge_slots.update(concept=self)
-
-        # Genre bonus slots
-        other.genre_bonus_slots.update(concept=self)
+        # Genre challenge/bonus slots removed — Challenge system retired (Lane 2 teardown).
 
         # GameFamily — inherit if this concept doesn't have one
         if other.family and not self.family:
