@@ -174,5 +174,8 @@ def test_equipped_row_is_marked_worn_and_others_offer_equip(client):
     content = _get(client, p).content.decode()
 
     assert 'is-worn' in content            # the equipped row carries the accent edge
-    assert 'data-ttl-equip' in content     # the other one offers "Wear this"
     assert 'data-ttl-unequip' in content   # the nameplate offers "Take it off"
+    # BOTH the "Wearing" marker and the "Wear this" button ship on EVERY row in this view -- CSS picks
+    # one off `.is-worn`, so equipping is a single class toggle and the old row flips back with it.
+    assert content.count('ttl-row__worn') == 2
+    assert content.count('data-ttl-equip') == 2

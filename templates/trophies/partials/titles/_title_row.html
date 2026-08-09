@@ -49,16 +49,16 @@ One title entry. The TITLE is the hero; the series it was earned in is supportin
     </div>
 
     <div class="ttl-row__trail">
+        {% comment %}Both states are rendered; `.is-worn` on the row decides which shows (CSS). Equipping
+        only has to toggle that ONE class for the marker and the button to swap correctly -- no DOM
+        rebuilding, and the previously-worn row updates in the same beat.{% endcomment %}
         {% if view == 'yours' %}
-            {% if entry.is_displayed %}
-            <span class="ttl-row__worn" data-ttl-worn>
+            <span class="ttl-row__worn">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
                 Wearing
             </span>
-            {% else %}
             <button type="button" class="ttl-row__equip" data-ttl-equip data-title-id="{{ entry.title.id }}"
                     data-title-name="{{ entry.name }}">Wear this</button>
-            {% endif %}
             {% if entry.earned_at %}<span class="ttl-row__date">{{ entry.earned_at|date:"M j, Y" }}</span>{% endif %}
         {% elif view == 'all' %}
             {% if entry.held %}

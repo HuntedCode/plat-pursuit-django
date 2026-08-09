@@ -71,20 +71,28 @@
         });
     }
 
-    function equip(titleId, name) {
+    function equip(titleId, name, btn) {
         if (!PP.API) { return; }
+        // Pending state: block the double-tap and say something on a slow network.
+        var buttons = document.querySelectorAll('[data-ttl-equip]');
+        buttons.forEach(function (b) { b.disabled = true; });
+        if (btn) { btn.textContent = 'Wearing…'; }
+
         PP.API.post('/api/v1/equip-title/', { title_id: titleId }).then(function () {
             setPlate(titleId === null ? null : name);
-            markWorn(titleId);
+            markWorn(titleId);            // one class toggle -- the marker/button swap follows in CSS
             if (PP.ToastManager) {
                 PP.ToastManager.success(titleId === null ? 'Title removed.' : 'Now wearing "' + name + '".');
             }
         }).catch(function (err) {
+            var say = function (m) { if (PP.ToastManager) { PP.ToastManager.error(m); } };
             var msg = 'Could not update your title.';
-            if (err && err.response) { err.response.json().then(function (d) {
-                if (PP.ToastManager) { PP.ToastManager.error((d && d.error) || msg); }
-            }).catch(function () { if (PP.ToastManager) { PP.ToastManager.error(msg); } }); }
-            else if (PP.ToastManager) { PP.ToastManager.error(msg); }
+            if (err && err.response) {
+                err.response.json().then(function (d) { say((d && d.error) || msg); }).catch(function () { say(msg); });
+            } else { say(msg); }
+        }).finally(function () {
+            buttons.forEach(function (b) { b.disabled = false; });
+            if (btn) { btn.textContent = 'Wear this'; }
         });
     }
 
@@ -110,8 +118,8 @@
         // Delegated so rows re-rendered by a future partial swap keep working.
         document.addEventListener('click', function (e) {
             var eq = e.target.closest('[data-ttl-equip]');
-            if (eq) { equip(parseInt(eq.dataset.titleId, 10), eq.dataset.titleName); return; }
-            if (e.target.closest('[data-ttl-unequip]')) { equip(null, null); }
+            if (eq) { equip(parseInt(eq.dataset.titleId, 10), eq.dataset.titleName, eq); return; }
+            if (e.target.closest('[data-ttl-unequip]')) { equip(null, null, null); }
         });
     }
 
