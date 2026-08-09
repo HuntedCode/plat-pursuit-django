@@ -101,40 +101,12 @@
     </section>
     {% endif %}
 
-    {# ── Milestone Titles ───────────────────────────────────────────────── #}
-    {% if milestone_titles %}
-    <section class="tt-card tt-section tt-section--ms" data-tt-section="milestone">
-        <div class="tt-section__head">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-            <h2>Milestone Titles</h2>
-            <span class="tt-section__tally"><span class="pp-tally">{{ milestone_earned }}</span><span class="tt-section__tally-sub">/ {{ milestone_total }}</span></span>
-        </div>
-        <p class="tt-section__sub">Won by the long climb. Unearned ones show how close you are.</p>
-        <div class="tt-toolbar">
-            <div class="tt-seg">
-                <button type="button" class="tt-seg__btn is-active" data-filter="all">All</button>
-                <button type="button" class="tt-seg__btn" data-filter="have">Have</button>
-                <button type="button" class="tt-seg__btn" data-filter="need">Need</button>
-            </div>
-            <select class="tt-sort" aria-label="Sort milestone titles">
-                <option value="closest">Closest first</option>
-                <option value="name">Name (A-Z)</option>
-                <option value="recent">Recently earned</option>
-            </select>
-        </div>
-        <div class="tt-ms-list" data-tt-items>
-            {% for entry in milestone_titles %}{% include 'trophies/partials/titles/_title_ms_row.html' with entry=entry premium=profile.user_is_premium %}{% endfor %}
-        </div>
-        <p class="tt-none" hidden>No milestone titles match this filter.</p>
-    </section>
-    {% endif %}
-
     {# ── Empty (no titles at all) ───────────────────────────────────────── #}
-    {% if not badge_titles and not milestone_titles and not special_titles %}
+    {% if not badge_titles and not special_titles %}
     <div class="tt-card tt-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4l3 12h14l3-12-5.5 3L12 1 7.5 7 2 4z"/><path d="M5 16v4h14v-4"/></svg>
         <p class="tt-empty__title">No titles available yet</p>
-        <p class="tt-empty__body">Earn badges and milestones to unlock titles.</p>
+        <p class="tt-empty__body">Earn badges to unlock titles.</p>
     </div>
     {% endif %}
 </div>

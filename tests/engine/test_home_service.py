@@ -157,19 +157,13 @@ def test_career_launcher_stat_shows_strongest_job():
     assert career['stat'] == 'Mage · Lv 20'
 
 
-def test_milestones_launcher_shows_earned_over_active_total():
-    """The Milestones tile shows earned/total, counting only ACTIVE milestones on both sides
-    (earned records for retired milestones survive but must not inflate the count past total)."""
-    from trophies.models import Milestone, UserMilestone
-    Milestone.objects.all().delete()   # isolate from any migration-seeded catalog
+def test_milestones_launcher_present_without_stat():
+    """The Milestones tile still routes to the (new-app) milestones page, but carries no glance
+    stat -- the legacy engine that fed 'earned/total' is retired."""
     profile = ProfileFactory()
-    active_earned = Milestone.objects.create(name='A', criteria_type='plat_count', criteria_details={'target': 1})
-    Milestone.objects.create(name='B', criteria_type='plat_count', criteria_details={'target': 2})
-    retired = Milestone.objects.create(name='C', criteria_type='plat_count', criteria_details={'target': 3}, is_active=False)
-    UserMilestone.objects.create(profile=profile, milestone=active_earned)   # active + earned -> counts
-    UserMilestone.objects.create(profile=profile, milestone=retired)         # retired -> excluded both sides
 
     launchers = home_service.build_home_context(profile)['launchers']
     milestones = next(l for l in launchers if l['label'] == 'Milestones')
 
-    assert milestones['stat'] == '1/2 earned'
+    assert milestones['url'] == '/milestones/'
+    assert milestones['stat'] is None
