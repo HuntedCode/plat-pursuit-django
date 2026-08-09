@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge
 
 
 # Register your models here.
@@ -2879,45 +2879,6 @@ class GameListLikeAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at']
     ordering = ['-created_at']
     date_hierarchy = 'created_at'
-
-
-class AZChallengeSlotInline(admin.TabularInline):
-    model = AZChallengeSlot
-    extra = 0
-    fields = ['letter', 'game', 'is_completed', 'completed_at', 'assigned_at']
-    readonly_fields = ['completed_at', 'assigned_at']
-    raw_id_fields = ['game']
-    ordering = ['letter']
-
-
-@admin.register(Challenge)
-class ChallengeAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'profile', 'challenge_type', 'filled_count', 'completed_count', 'is_complete', 'is_deleted', 'created_at']
-    list_select_related = ('profile',)
-    list_filter = ['challenge_type', 'is_complete', 'is_deleted']
-    search_fields = ['name', 'profile__psn_username', 'profile__display_psn_username']
-    raw_id_fields = ['profile']
-    readonly_fields = ['created_at', 'updated_at', 'completed_at', 'deleted_at', 'view_count']
-    ordering = ['-created_at']
-    date_hierarchy = 'created_at'
-    inlines = [AZChallengeSlotInline]
-
-
-@admin.register(AZChallengeSlot)
-class AZChallengeSlotAdmin(admin.ModelAdmin):
-    list_display = ['id', 'challenge', 'letter', 'game', 'is_completed', 'assigned_at']
-    list_select_related = ('challenge', 'game')
-    list_filter = ['is_completed', 'letter']
-    search_fields = [
-        'challenge__name',
-        'challenge__profile__psn_username',
-        'challenge__profile__display_psn_username',
-        'game__title_name',
-        'game__np_communication_id',
-    ]
-    raw_id_fields = ['challenge', 'game']
-    readonly_fields = ['completed_at', 'assigned_at']
-    ordering = ['challenge', 'letter']
 
 
 @admin.register(GameFamily)
