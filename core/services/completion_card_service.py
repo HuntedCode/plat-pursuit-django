@@ -472,6 +472,8 @@ def get_card_data(profile, standing):
         # hunter, and the worn title is how they present themselves everywhere else on the site.
         'display_title': _displayed_title(profile),
         'total_platinums': total_plats,
+        # Not drawn on the card (see the identity-line note in plat_card.html) -- kept because the
+        # browse page's header counts read the same helper.
         'total_completions': total_full,
 
         'game_name': game.title_name,
