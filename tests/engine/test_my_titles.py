@@ -158,6 +158,11 @@ def test_page_renders_the_three_views_and_the_nameplate(client):
     # Every populated panel carries a note line, so the first card sits at the same vertical
     # position in all three views -- switching must not jump.
     assert content.count('class="ttl-note"') == 3
+    # a11y: each tabpanel points back at its tab and carries an sr-only heading, so the h1 -> h3 jump
+    # doesn't skip a level and screen-reader users can navigate the three views by heading.
+    assert content.count('aria-labelledby="ttl-tab-') == 3
+    for heading in ("Titles you've earned", 'Titles within reach', 'Every title'):
+        assert '<h2 class="sr-only">%s</h2>' % heading in content
     # No unrendered template syntax leaked (multi-line {# #} is a known trap).
     assert '{%' not in content and '{#' not in content
 

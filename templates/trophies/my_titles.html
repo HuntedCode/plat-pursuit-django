@@ -37,20 +37,20 @@ server-rendered; JS only toggles.
 
             {# ── The nameplate: what you're wearing right now. ── #}
             <div class="ttl-plate{% if not equipped_title %} ttl-plate--empty{% endif %} mt-3 md:mt-4" data-ttl-plate>
-                <span class="ttl-plate__label">Currently wearing</span>
+                <span class="ttl-plate__label" id="ttl-plate-label">Currently wearing</span>
                 {% if equipped_title %}
-                <span class="ttl-plate__name" data-ttl-plate-name>{{ equipped_title.name }}</span>
+                <span class="ttl-plate__name" data-ttl-plate-name aria-live="polite" aria-labelledby="ttl-plate-label">{{ equipped_title.name }}</span>
                 <button type="button" class="ttl-plate__clear" data-ttl-unequip>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
                     Take it off
                 </button>
                 {% else %}
-                <span class="ttl-plate__name ttl-plate__name--none" data-ttl-plate-name>No title equipped</span>
+                <span class="ttl-plate__name ttl-plate__name--none" data-ttl-plate-name aria-live="polite" aria-labelledby="ttl-plate-label">No title equipped</span>
                 <span class="ttl-plate__hint">Pick one from Yours below</span>
                 {% endif %}
             </div>
 
-            <div class="grid grid-cols-3 gap-2 md:gap-3 mt-3 md:mt-4">
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 mt-3 md:mt-4">
                 <div class="scard">
                     <div class="scard__label">Yours</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ yours_count }}">{{ yours_count }}</div>
@@ -61,7 +61,7 @@ server-rendered; JS only toggles.
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ within_reach_count }}">{{ within_reach_count }}</div>
                     <div class="scard__sub">series in progress</div>
                 </div>
-                <div class="scard">
+                <div class="scard col-span-2 md:col-span-1">
                     <div class="scard__label">All titles</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ all_count }}">{{ all_count }}</div>
                     <div class="scard__sub">across every series</div>
@@ -75,15 +75,15 @@ server-rendered; JS only toggles.
     {# ── Switcher: the three ways in. All panels are SSR; JS only toggles. ── #}
     <div class="flex items-center justify-center md:justify-end mt-4 mb-3">
         <div class="pp-switch" role="tablist" aria-label="Title views" data-ttl-switch>
-            <button type="button" role="tab" aria-selected="true" aria-controls="ttl-yours" class="pp-switch__chip is-active" data-view="yours">
+            <button type="button" role="tab" aria-selected="true" id="ttl-tab-yours" aria-controls="ttl-yours" class="pp-switch__chip is-active" data-view="yours">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
                 <span class="pp-switch__lbl">Yours</span><span class="ml-1 text-[0.65rem] font-semibold opacity-60 tabular-nums">{{ yours_count }}</span>
             </button>
-            <button type="button" role="tab" aria-selected="false" aria-controls="ttl-reach" class="pp-switch__chip" data-view="reach">
+            <button type="button" role="tab" aria-selected="false" id="ttl-tab-reach" aria-controls="ttl-reach" class="pp-switch__chip" data-view="reach">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
                 <span class="pp-switch__lbl">Within reach</span><span class="ml-1 text-[0.65rem] font-semibold opacity-60 tabular-nums">{{ within_reach_count }}</span>
             </button>
-            <button type="button" role="tab" aria-selected="false" aria-controls="ttl-all" class="pp-switch__chip" data-view="all">
+            <button type="button" role="tab" aria-selected="false" id="ttl-tab-all" aria-controls="ttl-all" class="pp-switch__chip" data-view="all">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                 <span class="pp-switch__lbl">All</span><span class="ml-1 text-[0.65rem] font-semibold opacity-60 tabular-nums">{{ all_count }}</span>
             </button>
@@ -91,7 +91,8 @@ server-rendered; JS only toggles.
     </div>
 
     {# ── Yours ── #}
-    <div id="ttl-yours" role="tabpanel" class="ttl-panel" data-ttl-panel="yours">
+    <div id="ttl-yours" role="tabpanel" aria-labelledby="ttl-tab-yours" tabindex="0" class="ttl-panel" data-ttl-panel="yours">
+        <h2 class="sr-only">Titles you've earned</h2>
         {% if yours %}
         {% comment %}Every panel carries a note line -- it sets the sort AND keeps the first card at the
         same vertical position across all three, so switching views doesn't jump.{% endcomment %}
@@ -110,7 +111,8 @@ server-rendered; JS only toggles.
     </div>
 
     {# ── Within reach: unheld, already started, closest first. ── #}
-    <div id="ttl-reach" role="tabpanel" class="ttl-panel" data-ttl-panel="reach" hidden>
+    <div id="ttl-reach" role="tabpanel" aria-labelledby="ttl-tab-reach" tabindex="0" class="ttl-panel" data-ttl-panel="reach" hidden>
+        <h2 class="sr-only">Titles within reach</h2>
         {% if within_reach %}
         <p class="ttl-note">Series you've already put work into. Closest first.</p>
         <div class="ttl-list" data-ttl-grid>
@@ -127,7 +129,8 @@ server-rendered; JS only toggles.
     </div>
 
     {# ── All: the full vocabulary. ── #}
-    <div id="ttl-all" role="tabpanel" class="ttl-panel" data-ttl-panel="all" hidden>
+    <div id="ttl-all" role="tabpanel" aria-labelledby="ttl-tab-all" tabindex="0" class="ttl-panel" data-ttl-panel="all" hidden>
+        <h2 class="sr-only">Every title</h2>
         {% if all_titles %}
         <p class="ttl-note">Every title in circulation, and what it takes to earn one.</p>
         <div class="ttl-list" data-ttl-grid>
