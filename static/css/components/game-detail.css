@@ -250,7 +250,10 @@
     background: color-mix(in oklab, var(--gdpc) 28%, transparent);
     box-shadow: 0 0 16px -3px color-mix(in oklab, var(--gdpc) 65%, transparent);
 }
-.gd-btn--card:focus-visible { outline: 2px solid var(--gdpc); outline-offset: 2px; }
+/* Doubled class for specificity: the generic `.gd-btn:focus-visible` is declared LATER in this file, so
+   at equal specificity it would win and a 100% card would take the primary cyan ring instead of its own
+   accent. */
+.gd-btn.gd-btn--card:focus-visible { outline: 2px solid var(--gdpc); outline-offset: 2px; }
 .gd-btn--card-full { --gdpc: var(--pp-accent); }
 .gd-btn--ghost { background: transparent; border-color: var(--pp-border); color: var(--pp-text-dim); }
 .gd-btn--ghost:hover { background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); box-shadow: none; color: var(--pp-text); }

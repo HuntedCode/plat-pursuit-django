@@ -589,7 +589,12 @@ def get_card_data(profile, standing):
         # pk, so the id itself is no use to the caller -- the URL is built here where the Game is in hand
         # rather than reassembled from parts in JS. NOT used by the card template: the rendered PNG
         # leaves the site and cannot contain a link.
-        'game_url': reverse('game_detail', kwargs={'np_communication_id': game.np_communication_id}),
+        # Guarded because np_communication_id is nullable (models.Game): None reverses to the literal
+        # "/games/None/" -- a 404 link in the modal -- and '' raises NoReverseMatch, which would 500 BOTH
+        # card endpoints for a game they had been serving fine (build_card_context runs before their
+        # try/except). The modal simply doesn't render the link when it's absent.
+        'game_url': (reverse('game_detail', kwargs={'np_communication_id': game.np_communication_id})
+                     if game.np_communication_id else ''),
         'game_image': game.display_image_url_large,
         # Every landscape image the concept has, not just the best one. `landscape_urls` is already
         # ordered by quality (trusted IGDB screenshots -> artworks -> PSN bg_url), so a game with

@@ -791,9 +791,15 @@ def test_card_grounds_never_leak_into_the_site_theme_pickers():
     def card_grounds_in(keys):
         return [k for k in keys if GRADIENT_THEMES.get(k, {}).get('category') == PLAT_CARD_CATEGORY]
 
+    from trophies.themes import _generate_theme_choices
+
     assert not card_grounds_in(get_themes_for_js())
-    assert not card_grounds_in(k for k, _label in THEME_CHOICES if k)
     assert not card_grounds_in(key for key, _data in get_available_themes_for_grid())
+    # THEME_CHOICES is built at IMPORT, before the card grounds are added to the registry, so asserting
+    # against the constant proves nothing -- it passes on unfiltered code too. Re-running the generator
+    # now, post-registration, is the only context where its filter does any work.
+    assert not card_grounds_in(k for k, _label in _generate_theme_choices() if k)
+    assert not card_grounds_in(k for k, _label in THEME_CHOICES if k)
 
 
 def test_retro_wave_stays_a_site_theme_too():
@@ -880,6 +886,59 @@ def test_the_payload_carries_the_rating_so_an_edit_opens_prefilled(client):
     # Every field the form posts back must be present, or that axis silently resets on save.
     assert (r['overall_rating'], r['difficulty'], r['grindiness'], r['fun_ranking'],
             r['hours_to_platinum']) == (4.5, 8, 6, 10, 42)
+    # The blurb too. The payload ALWAYS sends this field, so an edit that opens without it CLEARS an
+    # existing quick take on save -- the one field whose absence is destructive rather than just wrong.
+    assert 'blurb' in r
+
+
+def test_a_staff_hidden_blurb_is_not_handed_back_to_the_form(client):
+    """`blurb_hidden` blanks the quick take server-side. The prefill payload is a separate path from the
+    rendered card, and re-injecting hidden text into the form would let the author simply re-save it."""
+    from trophies.models import UserConceptRating
+
+    profile = ProfileFactory()
+    game, group, _ = _completed_game(profile, with_platinum=True)
+    _rate(profile, game.concept, blurb='hidden by staff')
+    UserConceptRating.objects.filter(profile=profile, concept=game.concept).update(blurb_hidden=True)
+    client.force_login(profile.user)
+
+    body = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()
+
+    assert body['user_rating']['blurb'] == ''
+
+
+def test_the_payload_links_out_to_the_game(client):
+    """The share modal turns this into an <a href> with no client-side validation, so the guarantee that
+    it is a site-relative path is entirely server-side."""
+    from django.urls import reverse
+
+    profile = ProfileFactory()
+    game, group, _ = _completed_game(profile, with_platinum=True)
+    client.force_login(profile.user)
+
+    body = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()
+
+    assert body['game_name'] == game.title_name
+    assert body['game_url'] == reverse('game_detail',
+                                       kwargs={'np_communication_id': game.np_communication_id})
+    assert body['game_url'].startswith('/')
+
+
+def test_a_game_with_no_np_id_yields_no_link_rather_than_a_broken_one(client):
+    """np_communication_id is nullable. None reverses to the literal /games/None/ (a 404 link) and an
+    empty string raises NoReverseMatch -- which would 500 BOTH card endpoints for a game they had been
+    serving fine, since build_card_context runs before their try/except."""
+    from trophies.models import Game
+
+    profile = ProfileFactory()
+    game, group, _ = _completed_game(profile, with_platinum=True)
+    Game.objects.filter(pk=game.pk).update(np_communication_id=None)
+    client.force_login(profile.user)
+
+    resp = client.get(f'/api/v1/shareables/completion/{group.id}/html/')
+
+    assert resp.status_code == 200, 'a missing np id must not 500 the endpoint'
+    assert resp.json()['game_url'] == ''
 
 
 def test_an_unrated_card_reports_no_rating_to_prefill_from(client):

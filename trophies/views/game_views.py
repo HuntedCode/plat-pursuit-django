@@ -21,7 +21,7 @@ from django.views.generic import ListView, DetailView
 from urllib.parse import urlencode
 from trophies.mixins import HtmxListMixin
 from ..constants import CACHE_TIMEOUT_IMAGES
-from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Concept, FeaturedGuide, Stage, UserConceptRating, ConceptFranchise
+from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, ProfileTrophyGroup, TrophyGroup, Concept, FeaturedGuide, Stage, UserConceptRating, ConceptFranchise
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 from .browse_helpers import (
@@ -464,14 +464,36 @@ class GameDetailView(DetailView):
             # a second copy of it here is exactly the drift the rebuild removed.
             # `self.request` via getattr: this method is also exercised directly in unit tests, where the
             # view has no request bound. No request means no viewer, which correctly yields no CTA.
+            #
+            # `is_linked` is part of the gate, not decoration: the IMPLICIT /games/<np>/ route already
+            # requires it (_get_target_profile), but the explicit /games/<np>/<username>/ route does not,
+            # and the destination hard-requires it (_RequireLinkedProfileMixin redirects to link_psn).
+            # Without this an unlinked-but-claimed profile gets a button that bounces to the link flow.
             request = getattr(self, 'request', None)
             user = getattr(request, 'user', None)
             viewer = getattr(user, 'profile', None) if (user is not None and user.is_authenticated) else None
-            if viewer and profile.pk == viewer.pk:
-                completion = cards.eligible_completions(profile).filter(trophy_group__game=game).first()
-                if completion:
+            if viewer and viewer.is_linked and profile.pk == viewer.pk:
+                # NOT cards.eligible_completions(): that is built for the browse page and carries an OR'd
+                # `game_id IN (profile's 100% ProfileGames)` subquery, four select_related joins and a JSON
+                # cast. Postgres short-circuits the OR left-to-right, so on an UNFINISHED game -- the common
+                # case on this page -- the left arm is false and the subplan runs, hashing every one of the
+                # viewer's ProfileGames to answer "no". That is a whale-scaled cost on the site's
+                # highest-traffic page, for a boolean.
+                #
+                # Same predicate, narrowly: this group's own progress, plus the whole-game percentage the
+                # page already fetched above. `ProfileGame.progress == 100` implies every trophy including
+                # DLC, so it implies the base list -- which is the staleness guard the OR arm exists for.
+                # Two unique-index seeks, no subplan, no joins.
+                row = (
+                    ProfileTrophyGroup.objects
+                    .filter(profile=profile, trophy_group__game=game,
+                            trophy_group__trophy_group_id='default')
+                    .values_list('trophy_group_id', 'progress')
+                    .first()
+                )
+                if row and (row[1] == 100 or profile_game.progress == 100):
                     context['plat_card'] = {
-                        'url': f"{reverse('my_shareables')}?c={completion.trophy_group_id}",
+                        'url': f"{reverse('my_shareables')}?c={row[0]}",
                         'variant': cards.resolve_variant(game),
                     }
 

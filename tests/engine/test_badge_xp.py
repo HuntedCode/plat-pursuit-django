@@ -261,3 +261,34 @@ def test_standing_removed_when_progress_regresses_to_zero():
     evaluate_and_apply(p, [gb])
     assert not SeriesBadgeStanding.objects.filter(profile=p, series_slug='gow').exists()
     assert not ProfileBadgeStanding.objects.filter(profile=p).exists()
+
+
+def test_an_unearnable_edition_can_never_report_cleared_stages():
+    """The invariant the read-model's gate rests on.
+
+    `recompute_standing` now stores an entry per edition with `gating_count > 0`, replacing a gate on
+    `base_satisfied_count > 0`. That is only a pure widening if `gating_count == 0` implies
+    `base_satisfied_count == 0` -- otherwise editions would have been dropped that used to be stored,
+    silently flipping them from in_progress to unearned on the wall.
+
+    It holds by construction: `evaluate_group_badge` computes `base_ok` by summing over the GATING list,
+    so an empty gating list can only produce 0. Pinned here because the gate's correctness depends on it
+    and the two live far apart."""
+    from trophies.services.badge_engine import (
+        evaluate_group_badge, GameState, GroupInput, SeriesInput, StageInput,
+    )
+
+    series = SeriesInput(completion_policy='all')
+    group = GroupInput(platforms=frozenset({'PS3'}), exclude_delisted=False)
+    # A stage whose only game is PS5: it cannot gate a PS3 group, and the hunter has FINISHED it -- which
+    # is what makes this the interesting case rather than a trivially-zero one.
+    stage = StageInput(stage_number=1, games=(
+        GameState(game_id=1, platforms=frozenset({'PS5'}), is_obtainable=True, is_delisted=False,
+                  base_complete=True, full_complete=True),
+    ))
+
+    result = evaluate_group_badge(series, group, [stage])
+
+    assert result.gating_count == 0
+    assert result.base_satisfied_count == 0, 'an unearnable edition cannot report cleared gating stages'
+    assert result.base_earned is False

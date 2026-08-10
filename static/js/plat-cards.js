@@ -246,6 +246,10 @@
         e.hidden = !msg;
         e.textContent = msg || '';
         if (msg) { previewBlocked = true; syncDownloadEnabled(); }
+        // Re-fit: the error line is an IN-FLOW sibling of the frame, so showing it eats room fit()
+        // already handed to the preview. The box is overflow:hidden, so without this the swatch row is
+        // clipped with no scrollbar -- silently, and only on the failure path.
+        fit();
     }
 
     // Two things independently want the download button disabled -- the preview still loading (or
@@ -442,7 +446,11 @@
         // the editor would silence the prompt for a hunter who then skipped rating.
         if (!edit) { asked = true; }
 
-        PP.QuickRate.open({
+        // If the controller can't open -- script failed to load, or the modal isn't on the page -- the
+        // DOWNLOAD must still happen. The pre-consolidation driver did exactly this; routing it through a
+        // callback instead meant a missing dialog silently ate the click.
+        if (!PP.QuickRate) { proceed(); return; }
+        var opened = PP.QuickRate.open({
             conceptId: current.conceptId,
             groupId: 'default',                       // the card is always the base list
             existing: edit ? current.rating : null,
@@ -452,8 +460,21 @@
             // In PROMPT mode the secondary action is "skip, just download"; in EDIT mode a plain cancel.
             cancelLabel: edit ? 'Cancel' : 'Skip, just download',
             playtimeHint: current.playtime ? 'Your tracked playtime: ' + current.playtime : '',
-            onSaved: function () {
+            onSaved: function (data, payload) {
                 current.hasRating = true;
+                // Take the new scores from the PAYLOAD, not from the refetch. loadPreview() below
+                // repopulates current.rating, but it is async and can fail -- and until it resolves, a
+                // second "Edit rating" would prefill from the PREVIOUS scores and save them straight back
+                // over the ones just written. That is the exact bug prefilling exists to prevent.
+                current.rating = {
+                    difficulty: payload.difficulty, grindiness: payload.grindiness,
+                    fun_ranking: payload.fun_ranking, overall_rating: payload.overall_rating,
+                    hours_to_platinum: payload.hours_to_platinum,
+                    // Prefer the server-echoed stored blurb (sanitized) over the raw typed text, so a
+                    // re-open shows what everyone else will see.
+                    blurb: (data && data.blurb !== undefined && data.blurb !== null) ? data.blurb : payload.blurb,
+                };
+                syncRateButton();       // "Rate this game" -> "Edit rating", without waiting on the fetch
                 // The card RENDERS the rating, so the cached copy is now the wrong card. Without this
                 // loadPreview() is handed the stale entry straight back and the preview never changes.
                 invalidatePreview(current.groupId);
@@ -465,6 +486,7 @@
             // explicit secondary button continues.
             onCancel: function () { if (!edit) { proceed(); } },
         });
+        if (!opened) { proceed(); }     // same reason as the guard above
     }
 
     function download() {

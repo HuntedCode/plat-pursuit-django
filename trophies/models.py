@@ -3127,7 +3127,11 @@ class SeriesBadgeStanding(models.Model):
     the series' group badges; stages_cleared/total describe that best group for display.
 
     group_progress is the per-EDITION read-model: {platform_group_key: [stages_cleared, gating_count]} for every
-    edition the profile has partial progress on. It's a materialized read-model (same pattern as stages_cleared/
+    EARNABLE edition of the series -- started or not. An untouched edition is stored as [0, gating] rather than
+    omitted, because the Collection needs its DENOMINATOR to offer "0 / 5 stages"; gating is per edition, so no
+    series-level count can stand in for it. Editions with gating_count == 0 (not offered in that platform group)
+    stay out: an unearnable edition must advertise no chase. Presence never means "started" -- only cleared > 0
+    does, via edition_display_state. It's a materialized read-model (same pattern as stages_cleared/
     total -- factual, recompute-from-scratch here, so it can't drift), NOT a leaderboard key. It exists so the
     Collection wall can render each edition's OWN progress for MANY series in one cheap read, instead of live-
     evaluating the badge engine per page load. The badge-detail page still live-evals (it needs the full stage
@@ -3141,8 +3145,9 @@ class SeriesBadgeStanding(models.Model):
     stages_total = models.PositiveIntegerField(default=0)
     group_progress = models.JSONField(
         default=dict, blank=True,
-        help_text="Per-edition read-model {platform_group_key: [stages_cleared, gating_count]} for editions with "
-                  "partial progress -- lets the Collection show each edition's own progress without a live eval.",
+        help_text="Per-edition read-model {platform_group_key: [stages_cleared, gating_count]} for every EARNABLE "
+                  "edition (gating_count > 0), started or not -- so an untouched edition still carries its "
+                  "denominator. Lets the Collection show each edition's own progress without a live eval.",
     )
     updated_at = models.DateTimeField(auto_now=True)
 

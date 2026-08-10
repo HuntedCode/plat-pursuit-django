@@ -548,6 +548,21 @@ def _detail(client, game):
     return client.get(url).content.decode()
 
 
+def _detail_for(client, game, profile):
+    """The profile-scoped route, /games/<np>/<username>/.
+
+    The CF-Ray header is REQUIRED, not decoration: CloudflareOriginGuardMiddleware guards exactly these
+    profile-scoped detail URLs and 302s anything reaching the origin without it. Without the header the
+    body is empty, so any `assert 'x' not in content` on this route passes for the wrong reason -- which
+    is how the "another hunter's card" test below was silently passing before."""
+    url = reverse('game_detail_with_profile',
+                  kwargs={'np_communication_id': game.np_communication_id,
+                          'psn_username': profile.psn_username})
+    resp = client.get(url, HTTP_CF_RAY='test-ray')
+    assert resp.status_code == 200, f'profile route did not render ({resp.status_code})'
+    return resp.content.decode()
+
+
 def test_game_detail_renders_related_badge_editions(client):
     # The badges spine + modal render the specific EDITIONS this game is part of, each linking to its edition
     # tab (?group=<key>). Guards the template's dict fields (name / type_display / group_key / group_name).
@@ -665,10 +680,7 @@ def test_another_hunters_completion_is_never_offered_as_your_card(client):
     game, _ = _finished(them, with_platinum=True)
     client.force_login(me.user)
 
-    url = reverse('game_detail_with_profile',
-                  kwargs={'np_communication_id': game.np_communication_id,
-                          'psn_username': them.psn_username})
-    content = client.get(url).content.decode()
+    content = _detail_for(client, game, them)
 
     assert 'gd-btn--card' not in content
 
@@ -678,3 +690,81 @@ def test_an_anonymous_visitor_sees_no_card_cta(client):
     game, _ = _finished(profile, with_platinum=True)
 
     assert 'gd-btn--card' not in _detail(client, game)
+
+
+def test_a_dlc_incomplete_game_still_offers_its_card(client):
+    """The headline of the card rebuild: eligibility is the DEFAULT group, not the whole game. A hunter
+    who finished the base list but has DLC outstanding has earned a card, and the CTA must say so --
+    otherwise the page denies a card /shareables/ would happily hand over."""
+    from tests.factories import ProfileTrophyGroupFactory, TrophyGroupFactory
+
+    profile = ProfileFactory(is_linked=True)
+    defined = {'bronze': 10, 'platinum': 1}
+    game = GameFactory(concept=ConceptFactory(), defined_trophies=defined)
+    group = TrophyGroupFactory(game=game, trophy_group_id='default', defined_trophies=defined)
+    ProfileGameFactory(profile=profile, game=game, progress=61, has_plat=True)   # DLC outstanding
+    ProfileTrophyGroupFactory(profile=profile, trophy_group=group, progress=100)  # base list done
+    client.force_login(profile.user)
+
+    assert 'gd-btn--card' in _detail(client, game)
+
+
+def test_a_stale_group_row_does_not_hide_the_card(client):
+    """The other arm of the predicate. Whole-game 100% implies the base list, so a lagging group row must
+    not deny a card the hunter can see they earned -- the same rescue eligible_completions performs."""
+    from tests.factories import ProfileTrophyGroupFactory, TrophyGroupFactory
+
+    profile = ProfileFactory(is_linked=True)
+    defined = {'bronze': 10, 'platinum': 1}
+    game = GameFactory(concept=ConceptFactory(), defined_trophies=defined)
+    group = TrophyGroupFactory(game=game, trophy_group_id='default', defined_trophies=defined)
+    ProfileGameFactory(profile=profile, game=game, progress=100, has_plat=True)
+    ProfileTrophyGroupFactory(profile=profile, trophy_group=group, progress=0)    # stale denorm
+    client.force_login(profile.user)
+
+    assert 'gd-btn--card' in _detail(client, game)
+
+
+def test_your_own_profile_route_still_offers_the_card(client):
+    """/games/<np>/<username>/ pointed at YOURSELF is the viewer's own page by another URL. The gate is
+    pk equality, not which route resolved the profile."""
+    profile = ProfileFactory(is_linked=True)
+    game, group = _finished(profile, with_platinum=True)
+    client.force_login(profile.user)
+
+    content = _detail_for(client, game, profile)
+
+    assert 'gd-btn--card' in content and f'?c={group.id}' in content
+
+
+def test_an_unlinked_profile_is_not_offered_a_card(client):
+    """The destination hard-requires a linked profile (_RequireLinkedProfileMixin redirects to link_psn),
+    so offering the button here would hand out a link that bounces. The implicit route already refuses an
+    unlinked viewer; the explicit /<username>/ route does not, which is why the gate checks is_linked
+    itself rather than relying on how the profile was resolved."""
+    profile = ProfileFactory(is_linked=False)
+    game, _ = _finished(profile, with_platinum=True)
+    client.force_login(profile.user)
+
+    assert 'gd-btn--card' not in _detail_for(client, game, profile)
+
+
+def test_the_cta_costs_one_bounded_query(client):
+    """This is the site's highest-traffic page. The CTA must not reintroduce eligible_completions, whose
+    OR'd `game_id IN (profile's 100% games)` subquery hashes the viewer's whole library to answer a
+    boolean -- and does so on the UNFINISHED path, which is most page views."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    profile = ProfileFactory(is_linked=True)
+    game, _ = _finished(profile, with_platinum=True)
+    client.force_login(profile.user)
+    _detail(client, game)                       # warm any first-call one-offs
+
+    with CaptureQueriesContext(connection) as ctx:
+        _detail(client, game)
+
+    plat = [q['sql'] for q in ctx.captured_queries if 'trophy_group_id' in q['sql'] and 'progress' in q['sql']]
+    assert plat, 'the CTA query should be visible'
+    assert not any('IN (SELECT' in q.upper().replace('IN (  SELECT', 'IN (SELECT') for q in plat), \
+        'the CTA must not carry a subquery over the profile library'

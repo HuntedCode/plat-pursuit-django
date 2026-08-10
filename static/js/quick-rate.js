@@ -85,10 +85,15 @@
         var modal = el('gd-qr-modal');
         var form = el('gd-qr-form');
         if (!modal || !form || !modal.showModal) {
-            // No modal on the page: treat it as an immediate dismissal so callers don't hang.
-            if (o.onDismiss) { o.onDismiss(); }
+            // No modal on the page. Report it and let the caller decide -- a host that gates something
+            // on this (the share flow gates a DOWNLOAD) must not have that swallowed by a missing
+            // dialog. Callers check the return value; nothing is invoked here.
             return false;
         }
+        // Already open: bail rather than binding a SECOND set of listeners. showModal() on an open modal
+        // dialog is a silent no-op, so without this the listeners below would stack and one submit would
+        // fire two POSTs -- two downloads on the share flow.
+        if (modal.open) { return false; }
 
         var submit = form.querySelector('[data-gd-qr-submit]');
         var cancel = form.querySelector('[data-gd-qr-cancel]');
@@ -139,7 +144,16 @@
             modal.removeEventListener('close', onClosed);
             if (o.onClose) { o.onClose(); }
         }
-        function onClosed() { teardown(); }
+        function onClosed() {
+            // The swipe path closes the dialog directly, so this is where it lands. Route it through the
+            // same dismissal callback as the X and the backdrop -- the header comment promises that, and
+            // a host that clears state on abandonment must hear about every abandonment.
+            var swiped = modal.dataset.qrSwiped === '1';
+            delete modal.dataset.qrSwiped;
+            var wasTorn = torn;
+            teardown();
+            if (swiped && !wasTorn && o.onDismiss) { o.onDismiss(); }
+        }
         function close() { if (modal.close && modal.open) { modal.close(); } else { teardown(); } }
 
         function onCancel(e) { e.preventDefault(); close(); if (o.onCancel) { o.onCancel(); } }
@@ -200,9 +214,20 @@
         modal.addEventListener('click', onBackdrop);
         modal.addEventListener('close', onClosed);
 
+        // Swipe-to-dismiss. Routed through onDismiss() like the X and the backdrop -- it IS a dismissal,
+        // and a host that un-sets state on abandonment would otherwise never hear about this one path.
+        // Wired once per element; the flag dies with the node on an htmx restore, so a fresh dialog
+        // rewires correctly.
         if (PP.dismissableSheet && !modal.dataset.qrSwipeWired) {
             modal.dataset.qrSwipeWired = '1';
-            PP.dismissableSheet(modal, { onClose: function () { if (modal.close && modal.open) { modal.close(); } } });
+            PP.dismissableSheet(modal, {
+                onClose: function () {
+                    // `swiped` is read by onClosed below: teardown runs from the `close` event either
+                    // way, and this tells it the close was a dismissal rather than a bare unmount.
+                    modal.dataset.qrSwiped = '1';
+                    if (modal.close && modal.open) { modal.close(); }
+                },
+            });
         }
 
         // Native showModal() scrolls the page to the dialog on mobile; put the scroll back.

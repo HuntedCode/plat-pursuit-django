@@ -47,14 +47,22 @@ from collections import defaultdict
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import Min, OuterRef, Subquery
+from django.db.models import F, Min, OuterRef, Subquery
+from django.db.models.functions import Coalesce
 
 from trophies.models import BadgeSeries, UserGroupBadge, UserTitle
 from trophies.services.badge_adapters import LEGACY_TITLE_SOURCE, TITLE_SOURCE
 
 #: bulk_create emits ONE statement per batch. Unbounded, a large backfill builds a multi-megabyte INSERT
-#: and can trip the 60s statement_timeout partway through.
+#: and can trip the 60s statement_timeout partway through. The UPDATEs are chunked on the SAME size --
+#: batching only the insert left `profile_id__in=<every id>` on the two updates, which is a bigger
+#: statement than the insert the batching was added to split.
 BATCH = 2000
+
+
+def _chunks(seq, size=BATCH):
+    for i in range(0, len(seq), size):
+        yield seq[i:i + size]
 
 
 class Command(BaseCommand):
@@ -88,7 +96,7 @@ class Command(BaseCommand):
             self.stdout.write("No title-granting series.")
             return
 
-        granted = adopted = pruned = 0
+        granted = adopted = pruned = skipped = 0
         for title_id, series_group in sorted(by_title.items(), key=lambda kv: kv[1][0].title.name):
             title = series_group[0].title
             # Earliest badge earn per profile across every series granting this title -- the honest
@@ -121,12 +129,21 @@ class Command(BaseCommand):
             # would reclassify a hunter's award and overwrite the source_id pointing at what granted it.
             adopt = sorted(pid for pid in earned if existing.get(pid) == LEGACY_TITLE_SOURCE)
             orphaned = sorted(ours - set(earned))
+            # Holds the badge and a row this system will NOT claim (a one-off award). Skipping them is
+            # right; skipping them SILENTLY is not -- they keep the exact symptom this command exists to
+            # cure (uncountable holder, "Be the first" on a worn title) with nothing to point at. Counted
+            # and reported so the operator can decide, rather than discovered later as a rarity anomaly.
+            unclaimable = sorted(
+                pid for pid in earned
+                if pid in existing and existing[pid] not in (TITLE_SOURCE, LEGACY_TITLE_SOURCE)
+            )
 
-            if missing or adopt or orphaned:
+            if missing or adopt or orphaned or unclaimable:
                 self.stdout.write(
                     f"  {title.name}: {len(earned)} hold a badge, {len(ours)} countable"
                     f" -> +{len(missing)} granted, +{len(adopt)} adopted"
                     + (f", {len(orphaned)} orphaned" if orphaned else "")
+                    + (f", {len(unclaimable)} held under another source (left alone)" if unclaimable else "")
                 )
 
             # ONE transaction per title. The insert and the earned_at correction MUST commit together:
@@ -140,9 +157,10 @@ class Command(BaseCommand):
                     if adopt:
                         # earned_at left alone: a real date from a real earn. A bookkeeping correction, not
                         # a re-grant -- rewriting it would move the title in the "Yours" ordering.
-                        UserTitle.objects.filter(title_id=title_id, profile_id__in=adopt).update(
-                            source_type=TITLE_SOURCE, source_id=series_group[0].id,
-                        )
+                        for batch in _chunks(adopt):
+                            UserTitle.objects.filter(title_id=title_id, profile_id__in=batch).update(
+                                source_type=TITLE_SOURCE, source_id=series_group[0].id,
+                            )
                     if missing:
                         # source_id: the first series granting it. Advisory only -- nothing reads it to
                         # decide whether the title is held, and a shared title has no single source.
@@ -160,11 +178,18 @@ class Command(BaseCommand):
                             .filter(profile_id=OuterRef('profile_id'), group_badge__series__in=series_group)
                             .values('profile_id').annotate(m=Min('earned_at')).values('m')
                         )
-                        UserTitle.objects.filter(
-                            title_id=title_id, profile_id__in=missing, source_type=TITLE_SOURCE,
-                        ).update(earned_at=Subquery(first_earn))
+                        # Coalesce because earned_at is NOT NULL: if a concurrent revoke deletes the
+                        # profile's last hold between the read above and this write, the Subquery yields
+                        # NULL and the UPDATE would raise, rolling back this title's inserts too. Falling
+                        # back to the row's own value leaves the backfill stamp, which the next run's
+                        # report still surfaces -- better than an aborted batch.
+                        for batch in _chunks(missing):
+                            UserTitle.objects.filter(
+                                title_id=title_id, profile_id__in=batch, source_type=TITLE_SOURCE,
+                            ).update(earned_at=Coalesce(Subquery(first_earn), F('earned_at')))
             granted += len(missing)
             adopted += len(adopt)
+            skipped += len(unclaimable)
 
             if orphaned and prune:
                 if not dry:
@@ -177,5 +202,12 @@ class Command(BaseCommand):
         if prune:
             line += f", {'would prune' if dry else 'pruned'} {pruned}"
         self.stdout.write(self.style.SUCCESS(line + "."))
+        if skipped:
+            # Not an error, and not fixable from here: a one-off award and a series title share one row,
+            # and this system does not get to reclassify the award. Named so it can be judged.
+            self.stdout.write(self.style.WARNING(
+                f"{skipped} hunter(s) hold a badge but their title row belongs to another source "
+                f"(a one-off award). Left as-is: they stay uncountable for rarity."
+            ))
         if not prune:
             self.stdout.write("(orphaned titles left alone; pass --prune to remove them)")

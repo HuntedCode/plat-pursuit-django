@@ -1702,7 +1702,21 @@ window.PlatPursuit.onPageReady = onPageReady;
  *
  * Idempotent: safe to call from several page controllers, and a no-op when the sheet isn't on the page.
  */
+var _guidelinesDelegateBound = false;
 function wireGuidelinesSheet() {
+    // The open delegate is on DOCUMENT, which survives an htmx body swap -- so it must be bound ONCE per
+    // page load, not once per sheet element. Guarding it on the element (which is replaced by the swap)
+    // added a listener per restore, each holding a detached dialog and throwing InvalidStateError on
+    // every click. It resolves the sheet at call time for that reason.
+    if (!_guidelinesDelegateBound) {
+        _guidelinesDelegateBound = true;
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest('[data-gd-guidelines-open]')) { return; }
+            var live = document.getElementById('gd-guidelines-modal');
+            if (live && live.showModal && !live.open) { live.showModal(); }
+        });
+    }
+    // Element-level wiring dies with the node, so this half IS per element.
     var sheet = document.getElementById('gd-guidelines-modal');
     if (!sheet || sheet.dataset.wired === '1') { return; }
     sheet.dataset.wired = '1';
@@ -1711,10 +1725,6 @@ function wireGuidelinesSheet() {
     sheet.addEventListener('click', function (e) { if (e.target === sheet) { close(); } });
     sheet.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
     if (window.PlatPursuit.dismissableSheet) { window.PlatPursuit.dismissableSheet(sheet, { onClose: close }); }
-    document.addEventListener('click', function (e) {
-        if (!e.target.closest('[data-gd-guidelines-open]')) { return; }
-        if (sheet.showModal && !sheet.open) { sheet.showModal(); }
-    });
 }
 window.PlatPursuit.wireGuidelinesSheet = wireGuidelinesSheet;
 
