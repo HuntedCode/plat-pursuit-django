@@ -355,9 +355,12 @@ def test_a_series_with_no_pursuers_yet_gets_no_grade(client):
     assert entry['rarity_class'] == '' and entry['rarity_pct'] is None
 
 
-def test_the_grade_reaches_the_plate_with_its_shared_colour_and_icon(client):
-    """The named grade, the --pp-rarity-* class and the shared #rarity-* sprite all have to ship --
-    a material with no label is decoration, not information."""
+def test_the_grade_reaches_the_plate_through_the_shared_component(client):
+    """Titles must render rarity from components/rarity_grade.html, never its own copy.
+
+    Asserting the SHARED markup rather than a `ttl-` class is the point: this page hand-rolled its own
+    grade colours until the primitive was extracted, so a page-local class reappearing here is exactly
+    the regression worth catching."""
     p = ProfileFactory()
     series = _series_with_title('Crash', 'Crate Crusher')
     _pursuers(series, 100)
@@ -365,7 +368,9 @@ def test_the_grade_reaches_the_plate_with_its_shared_colour_and_icon(client):
 
     content = _get(client, p).content.decode()
 
-    assert 'ttl-plate__grade--mythic' in content
+    assert 'class="pp-rarity"' in content, 'the shared grade component did not render'
     assert 'data-rarity="mythic"' in content
     assert '#rarity-sparkle' in content
     assert 'Mythic' in content
+    assert 'pp-rarity-surface' in content, 'the plate must take its material from the shared scale'
+    assert 'ttl-plate__grade' not in content, 'a page-local grade class means the copy came back'

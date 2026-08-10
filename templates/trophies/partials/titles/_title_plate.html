@@ -21,7 +21,7 @@ one title read two different rarities depending on which page you were standing 
 `data-ttl-row` / `data-title-id` are unchanged from the old row: titles.js finds plates by those, and
 equipping is still a single `.is-worn` class toggle.
 {% endcomment %}
-<article class="ttl-plate ttl-plate--tile{% if entry.held %} is-held{% endif %}{% if entry.is_displayed %} is-worn{% endif %}{% if entry.is_special %} is-special{% endif %}{% if not entry.held and entry.progress_pct %} is-progress{% endif %}"
+<article class="ttl-plate ttl-plate--tile pp-rarity-surface{% if entry.held %} is-held{% endif %}{% if entry.is_displayed %} is-worn{% endif %}{% if entry.is_special %} is-special{% endif %}{% if not entry.held and entry.progress_pct %} is-progress{% endif %}"
          {% if entry.rarity_class %}data-rarity="{{ entry.rarity_class }}"{% elif not entry.holders and not entry.is_special %}data-rarity="unearned"{% endif %}
          data-ttl-row data-title-id="{{ entry.title.id }}">
 
@@ -36,26 +36,10 @@ equipping is still a single `.is-worn` class toggle.
                 {% endif %}
             </p>
 
-            {% comment %}The grade, in the site's shared rarity vocabulary (badge_rarity.group_rarity ->
-            common/uncommon/rare/mythic, the --pp-rarity-* tokens, and the #rarity-* sprite that Frame and
-            badge detail already draw). Naming it here rather than leaving the plate's material to carry
-            it silently: a material you can't name is decoration, not information.
-
-            No grade when nobody holds the title yet -- 0 earners is unearned, not an achievement, so it
-            gets the "Be the first" nudge the browse gallery uses instead.{% endcomment %}
-            {% if entry.rarity_class %}
-            <p class="ttl-plate__grade ttl-plate__grade--{{ entry.rarity_class }}">
-                {% if entry.rarity_class == 'uncommon' %}<svg viewBox="0 0 12 12" aria-hidden="true"><use href="#rarity-dot"/></svg>
-                {% elif entry.rarity_class == 'rare' %}<svg viewBox="0 0 12 12" aria-hidden="true"><use href="#rarity-diamond"/></svg>
-                {% elif entry.rarity_class == 'mythic' %}<svg viewBox="0 0 12 12" aria-hidden="true"><use href="#rarity-sparkle"/></svg>{% endif %}
-                <span>{{ entry.rarity_class|title }}</span>
-                {% if entry.rarity_pct is not None %}<span class="ttl-plate__pctof">{{ entry.rarity_pct }}% of pursuers</span>{% endif %}
-            </p>
-            {% elif not entry.holders and not entry.is_special %}
-            <p class="ttl-plate__grade ttl-plate__grade--unearned">
-                <span>Be the first</span>
-            </p>
-            {% endif %}
+            {% comment %}The grade, from the shared component -- same markup, colours, glyphs and
+            percentage as badge detail, the browse gallery, Frame and the series list. The plate itself
+            carries `data-rarity`, so the label and the surface material read one declaration.{% endcomment %}
+            {% include 'components/rarity_grade.html' with rarity_class=entry.rarity_class pct=entry.rarity_pct unearned=entry.unearned %}
         </div>
 
         {% comment %}Provenance stamp: the series' SUBJECT ART, bare.

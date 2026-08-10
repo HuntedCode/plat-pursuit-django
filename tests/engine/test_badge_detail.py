@@ -435,8 +435,12 @@ def test_view_renders_community_band(client):
     assert 'bd2-comm' in body and 'Rarity &amp; Community' in body   # the band renders
     assert body.count('bd2-comm__group') >= 2                        # one cell per group
     assert 'of pursuers' in body                                     # pursuer-relative phrasing (not "Top X%")
-    assert 'bd2-comm__gem--rare' in body and 'bd2-comm__gem--common' in body    # the rarity GEM per grade
-    assert 'bd2-comm__rar--rare' in body and 'bd2-comm__rar--common' in body    # legacy 10% -> rare, ultra 50% -> common
+    # Grade now comes from the SHARED rarity scale (components/rarity.css) via data-rarity, not from
+    # per-surface classes -- badge detail was one of five surfaces hand-rolling its own copy.
+    assert body.count('data-rarity="rare"') and body.count('data-rarity="common"')
+    assert 'pp-rarity-gem' in body                                   # the rarity GEM per grade
+    assert 'bd2-comm__rar' in body                                   # legacy 10% -> rare, ultra 50% -> common
+    assert 'bd2-comm__rar--' not in body, 'a page-local grade class means the copy came back'
     assert '50%' in body                                             # ultra 5/10 pursuer-completion
     # Earners bars = the shared Horizon primitive, scaled off community_max_earned (ultra 5/5 = 100%).
     assert 'pp-horizon bd2-comm__bar' in body and '--horizon-progress: 100%' in body

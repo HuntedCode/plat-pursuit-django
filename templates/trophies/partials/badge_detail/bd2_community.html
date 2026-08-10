@@ -38,15 +38,15 @@ has no pursuers yet (a group with pursuers but zero earners shows an honest 0%, 
                 the series, how many earned THIS group's badge; lower = rarer). Pending until the series has any
                 pursuers; a pursued-but-unearned group shows an honest 0% with a dim, ungraded gem. {% endcomment %}
                 <div class="bd2-comm__grade">
-                    <span class="bd2-comm__gem bd2-comm__gem--{% firstof g.rarity_class 'none' %}" aria-hidden="true">
+                    <span class="bd2-comm__gem pp-rarity-gem{% if g.rarity_class %} pp-rarity-gem--lit{% endif %}"{% if g.rarity_class %} data-rarity="{{ g.rarity_class }}"{% endif %} aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9Z"/><path d="m11 3-3 6 4 13 4-13-3-6"/><path d="M2 9h20"/></svg>
                     </span>
                     <span class="bd2-comm__grade-txt">
                         {% if g.rarity_pct is not None %}
-                        <span class="bd2-comm__rar bd2-comm__rar--{% firstof g.rarity_class 'none' %}">{% if g.rarity_class %}{{ g.rarity_class|title }}{% else %}Unearned{% endif %}</span>
+                        <span class="bd2-comm__rar"{% if g.rarity_class %} data-rarity="{{ g.rarity_class }}"{% endif %}>{% if g.rarity_class %}{{ g.rarity_class|title }}{% else %}Unearned{% endif %}</span>
                         <span class="bd2-comm__grade-sub">earned by {{ g.rarity_pct|floatformat:"-1" }}% of pursuers</span>
                         {% else %}
-                        <span class="bd2-comm__rar bd2-comm__rar--none">Rarity pending</span>
+                        <span class="bd2-comm__rar">Rarity pending</span>
                         <span class="bd2-comm__grade-sub">no pursuers yet</span>
                         {% endif %}
                     </span>

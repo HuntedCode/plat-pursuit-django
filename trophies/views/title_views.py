@@ -145,6 +145,9 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
                 'holders': holders.get(series.title_id, 0),
                 'rarity_pct': rarity_pct,
                 'rarity_class': rarity_class,
+                # Nobody holds it yet -> the "Be the first" nudge instead of a grade. 0 earners is
+                # unearned, not an achievement, so it must never wear a prestige grade.
+                'unearned': not holders.get(series.title_id, 0),
             })
 
         # ── 6. Held titles the live vocabulary can't describe, but which the hunter genuinely owns:
@@ -180,6 +183,9 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
                     # carries the flavour instead.
                     'rarity_pct': None,
                     'rarity_class': '',
+                    # The hunter IS holding this one -- it just sits outside the live catalogue, so
+                    # there is no pursuer base to grade it against. Never the "be the first" nudge.
+                    'unearned': False,
                 }
                 for ut in user_titles
                 if ut.source_type in _RESCUED and ut.title_id not in catalogue_title_ids

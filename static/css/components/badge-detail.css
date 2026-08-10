@@ -981,29 +981,19 @@
 /* Rarity GRADE -- the prestige hero: a gem that glows by grade (mythic shimmers) + the class headline + the
    pursuer-completion caption. */
 .bd2-comm__grade { margin-top: 10px; display: flex; align-items: center; gap: 11px; }
-.bd2-comm__gem { --gem-c: var(--pp-text-mute); flex: none; width: 34px; height: 34px; color: var(--gem-c); }
+/* Colour + glow come from the shared rarity scale (components/rarity.css) via data-rarity; the gem
+   opts into .pp-rarity-gem--lit for the drop-shadow, including mythic's pulse (a filter keyframe --
+   pp-mythic-pulse animates text-shadow, a no-op on an SVG). The gem is the sole pulsing element in the
+   cell, so a mythic cell reads as one calm beat and not two. Sizing stays local. */
+.bd2-comm__gem { flex: none; width: 34px; height: 34px; }
 .bd2-comm__gem svg { width: 100%; height: 100%; }
-.bd2-comm__gem--uncommon { --gem-c: var(--pp-rarity-uncommon); filter: drop-shadow(0 0 5px color-mix(in oklab, var(--pp-rarity-uncommon) 55%, transparent)); }
-.bd2-comm__gem--rare     { --gem-c: var(--pp-rarity-rare); filter: drop-shadow(0 0 6px var(--pp-rarity-rare-glow)); }
-/* The mythic gem breathes its GLOW (a filter keyframe) -- pp-mythic-pulse animates text-shadow, a no-op on an
-   SVG, so the gem needs its own drop-shadow pulse. The gem is the sole pulsing element in the cell (the
-   headline keeps a static glow), so the mythic cell reads as one calm beat, not two. */
-@keyframes pp-gem-mythic {
-    0%, 100% { filter: drop-shadow(0 0 5px var(--pp-rarity-mythic-glow)); }
-    50%      { filter: drop-shadow(0 0 11px var(--pp-rarity-mythic-glow)); }
-}
-.bd2-comm__gem--mythic   { --gem-c: var(--pp-rarity-mythic); filter: drop-shadow(0 0 9px var(--pp-rarity-mythic-glow)); animation: pp-gem-mythic 2.6s ease-in-out infinite; }
-.bd2-comm__gem--common   { --gem-c: var(--pp-rarity-common); }
-.bd2-comm__gem--none     { --gem-c: var(--pp-text-mute); opacity: 0.45; }
+.bd2-comm__gem:not([data-rarity]) { color: var(--pp-text-mute); opacity: 0.45; }
 .bd2-comm__grade-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .bd2-comm__grade-sub { font-size: 0.66rem; font-weight: 600; color: var(--pp-text-mute); }
-/* Rarity colours use the shared --pp-rarity-* tokens (same source as frame.css), so a recolor stays in one place. */
-.bd2-comm__rar { font-size: 0.86rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1; }
-.bd2-comm__rar--common   { color: var(--pp-rarity-common); font-weight: 700; }
-.bd2-comm__rar--uncommon { color: var(--pp-rarity-uncommon); }
-.bd2-comm__rar--rare     { color: var(--pp-rarity-rare); text-shadow: 0 0 5px var(--pp-rarity-rare-glow); }
-.bd2-comm__rar--mythic   { color: var(--pp-rarity-mythic); text-shadow: 0 0 7px var(--pp-rarity-mythic-glow); }   /* static glow; the gem carries the pulse */
-.bd2-comm__rar--none     { color: var(--pp-text-mute); }
+/* The headline keeps a STATIC glow -- the gem carries the pulse. */
+.bd2-comm__rar { font-size: 0.86rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1; color: var(--pp-text-mute); }
+.bd2-comm__rar[data-rarity] { color: var(--rar-c); text-shadow: 0 0 6px var(--rar-glow); }
+.bd2-comm__rar[data-rarity="common"] { font-weight: 700; }
 
 .bd2-comm__earnrow { margin-top: 11px; display: flex; align-items: baseline; gap: 8px; font-size: 0.74rem; color: var(--pp-text-mute); }
 .bd2-comm__earners b { color: var(--pp-text-dim); }
@@ -1018,7 +1008,7 @@
 .bd2-comm--anim .bd2-comm__group { opacity: 0; transform: translateY(10px); transition: opacity 0.5s ease, transform 0.55s cubic-bezier(0.34, 1.2, 0.64, 1); transition-delay: calc(var(--reveal-i, 0) * 90ms); }   /* damped spring settle (slight overshoot), not a flat decel */
 .bd2-comm--anim.is-revealed .bd2-comm__group { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
-    .bd2-comm__gem--mythic, .bd2-comm__rar--mythic { animation: none; }
+    .bd2-comm__gem[data-rarity="mythic"] { animation: none; }
     .bd2-comm__lb, .bd2-comm__action { transition: none; }
     .bd2-comm__bar .pp-horizon__fill { transition: none; }
     .bd2-comm--anim .bd2-comm__group { opacity: 1; transform: none; transition: none; }

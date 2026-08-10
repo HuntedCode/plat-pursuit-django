@@ -279,17 +279,12 @@
     letter-spacing: 0.02em;
 }
 .pp-frame__rarity svg { width: 12px; height: 12px; flex-shrink: 0; }
-.pp-frame__rarity--common   { color: var(--pp-rarity-common); font-weight: 600; }
-.pp-frame__rarity--uncommon { color: var(--pp-rarity-uncommon); }
-.pp-frame__rarity--rare {
-    color: var(--pp-rarity-rare);
-    text-shadow: 0 0 5px var(--pp-rarity-rare-glow);
-}
-.pp-frame__rarity--mythic {
-    color: var(--pp-rarity-mythic);
-    text-shadow: 0 0 6px var(--pp-rarity-mythic-glow);
-    animation: pp-mythic-pulse 2.6s ease-in-out infinite;
-}
+/* Colour comes from the shared rarity scale (components/rarity.css) via data-rarity on this element
+   or an ancestor. This used to be four hand-rolled rules. The two behaviours that were NOT just
+   colour -- common's lighter weight and mythic's pulse -- stay, rehung on the new hook. */
+.pp-frame__rarity[data-rarity] { color: var(--rar-c); text-shadow: 0 0 5px var(--rar-glow); }
+.pp-frame__rarity[data-rarity="common"] { font-weight: 600; }
+.pp-frame__rarity[data-rarity="mythic"] { animation: pp-mythic-pulse 2.6s ease-in-out infinite; }
 @keyframes pp-mythic-pulse {
     0%, 100% { opacity: 0.88; text-shadow: 0 0 4px rgba(180, 220, 255, 0.4); }
     50%      { opacity: 1;    text-shadow: 0 0 10px rgba(180, 220, 255, 0.75); }
@@ -929,7 +924,7 @@
  * pinned-accent pulse — anything that signals "active"). The
  * card's own hover gleam is suppressed (badge isn't active).
  * ============================================================ */
-.pp-frame--maintenance .pp-frame__rarity--mythic,
+.pp-frame--maintenance .pp-frame__rarity[data-rarity="mythic"],
 .pp-frame--maintenance.pp-frame--platinum::before,
 .pp-frame--maintenance.pp-frame--platinum::after,
 .pp-frame--maintenance.pp-frame--platinum > .pp-frame__corner-bl,
@@ -3024,7 +3019,7 @@
     .pp-frame--platinum > .pp-frame__corner-bl,
     .pp-frame--platinum > .pp-frame__corner-br,
     .pp-frame--pinned-accent,
-    .pp-frame__rarity--mythic,
+    .pp-frame__rarity[data-rarity="mythic"],
     .pp-frame__engraving--first .pp-frame__engraving-num,
     .pp-frame__fab-banner {
         animation: none !important;

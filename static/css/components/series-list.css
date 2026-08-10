@@ -292,10 +292,9 @@
 .pp-scard__grade { font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
 /* "Be the first" (no earners yet): an inviting primary-tinted italic, not the muted count grey. */
 .pp-scard__grade--cta { color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-text-mute)); font-style: italic; }
-.pp-scard__grade--common   { color: var(--pp-rarity-common); }
-.pp-scard__grade--uncommon { color: var(--pp-rarity-uncommon); }
-.pp-scard__grade--rare     { color: var(--pp-rarity-rare); }
-.pp-scard__grade--mythic   { color: var(--pp-rarity-mythic); }
+/* Colour comes from the shared rarity scale (components/rarity.css) via data-rarity on this
+   element or an ancestor. This used to be four hand-rolled rules per surface. */
+.pp-scard__grade[data-rarity] { color: var(--rar-c); }
 
 /* Empty state (no series match the filters). Spans the whole tile grid. Its fade+rise entrance animation
    (ppResultsEmptyIn) is shared with the Gallery's empty panel and lives in browse-gallery.css. */

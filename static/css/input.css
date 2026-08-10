@@ -4,6 +4,8 @@
 @import "./components/chrome.css";
 @import "./components/motion.css";
 @import "./components/switcher.css";
+/* Before every surface that grades something -- it declares the --rar-* scale they all read from. */
+@import "./components/rarity.css";
 @import "./components/frame.css";
 @import "./components/badge-medallion.css";
 @import "./components/tally.css";

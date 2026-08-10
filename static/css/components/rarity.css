@@ -1,0 +1,117 @@
+/* ============================================================
+ * RARITY -- one presentation for every gradeable thing.
+ *
+ * Five surfaces (badge detail, browse gallery, Frame, series list, Titles) each hand-rolled their own
+ * grade colours off two shared tokens, which is how one grade ended up with five slightly different
+ * treatments. This is the single source; those copies are deleted.
+ *
+ * THE HOOK IS `data-rarity`, NOT A MODIFIER CLASS. It declares the --rar-* custom properties, and
+ * custom properties inherit -- so a card can carry `data-rarity` once and both the label inside it and
+ * the card's own material read the same declaration. No surface has to keep them in sync by hand.
+ *
+ * Two things a surface can opt into, independently:
+ *   .pp-rarity          the label: glyph + name + the honest percentage
+ *   .pp-rarity-surface  the material: tint, edge, and how the surface handles light
+ *
+ * RARITY IS TINT *AND* MATERIAL. Hue gives the fast, cold read (which grade is this, at a glance);
+ * finish gives the premium one (this object is made of something better). They climb the same axis, so
+ * nothing is learned twice. Colour alone made the plate a coloured rectangle; material alone was
+ * slower to sort and pushed the whole fast read onto the glyphs.
+ * ============================================================ */
+
+/* ---- The scale. Every value a surface needs, declared once per grade. ---- */
+[data-rarity] {
+    --rar-c: var(--pp-text-mute);   /* the grade's hue */
+    --rar-glow: transparent;        /* text/icon glow, top grades only */
+    --rar-tint: 0%;                 /* how much hue washes into the surface */
+    --rar-edge: 12%;                /* how much hue reaches the border */
+    --rar-spec: 0;                  /* specular band strength -- the "finish" */
+    --rar-inset: 0.03;              /* top-edge catch light */
+    --rar-lift: 0%;                 /* how far the surface sits off the ground */
+}
+[data-rarity="common"]   { --rar-c: var(--pp-rarity-common);   --rar-tint: 0%;  --rar-edge: 10%; --rar-spec: 0;     --rar-inset: 0.03; --rar-lift: 0%; }
+[data-rarity="uncommon"] { --rar-c: var(--pp-rarity-uncommon); --rar-tint: 8%;  --rar-edge: 32%; --rar-spec: 0.04;  --rar-inset: 0.07; --rar-lift: 1%; }
+[data-rarity="rare"]     { --rar-c: var(--pp-rarity-rare);     --rar-glow: var(--pp-rarity-rare-glow);
+                           --rar-tint: 14%; --rar-edge: 52%; --rar-spec: 0.085; --rar-inset: 0.12; --rar-lift: 2%; }
+[data-rarity="mythic"]   { --rar-c: var(--pp-rarity-mythic);   --rar-glow: var(--pp-rarity-mythic-glow);
+                           --rar-tint: 20%; --rar-edge: 72%; --rar-spec: 0.13;  --rar-inset: 0.18; --rar-lift: 3.5%; }
+/* Not a grade. Nobody holds this yet, so it wears the CTA tint rather than a prestige colour. */
+[data-rarity="unearned"] { --rar-c: var(--pp-primary); --rar-tint: 3%; --rar-edge: 20%; }
+
+/* ---- The label ---- */
+.pp-rarity {
+    display: inline-flex; align-items: center; gap: 5px; min-width: 0;
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--rar-c); text-shadow: 0 0 6px var(--rar-glow);
+}
+.pp-rarity svg { width: 10px; height: 10px; flex-shrink: 0; fill: currentColor; }
+.pp-rarity__name { white-space: nowrap; }
+/* The percentage is the continuous truth the four-word scale throws away, so it rides along -- but
+   quietly, because the grade is the headline. */
+.pp-rarity__pct {
+    font-weight: 600; letter-spacing: 0.02em; text-transform: none; text-shadow: none;
+    color: var(--pp-text-mute); font-variant-numeric: tabular-nums;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+[data-rarity="common"] .pp-rarity__name,
+.pp-rarity[data-rarity="common"] .pp-rarity__name { font-weight: 700; }
+
+/* ---- The material ----------------------------------------------------------------------------
+ * A surface that opts in gets its ground, edge and finish from the same --rar-* declaration as the
+ * label. Callers supply --rar-base (the surface it sits on); everything else follows the grade.
+ */
+.pp-rarity-surface {
+    --rar-base: var(--pp-bg-2);
+    position: relative; overflow: hidden; isolation: isolate;
+    background: linear-gradient(180deg,
+        color-mix(in oklab, var(--rar-c) var(--rar-tint), color-mix(in oklab, #fff var(--rar-lift), var(--rar-base))) 0%,
+        var(--rar-base) 78%);
+    border: 1px solid color-mix(in oklab, var(--rar-c) var(--rar-edge), var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, var(--rar-inset)), 0 3px 10px rgba(0, 0, 0, 0.20);
+}
+
+/* The specular band. A gradient is light BEHAVIOUR, not a texture bitmap -- the visual identity rules
+   out replicating brushed metal, not obeying how it catches light. Stays white on a tinted surface:
+   light is white, and colouring the highlight muddies the hue instead of lighting it. */
+.pp-rarity-surface::before {
+    content: ''; position: absolute; inset: -40%; pointer-events: none; z-index: 0;
+    background: linear-gradient(104deg, transparent 34%,
+        rgba(255, 255, 255, var(--rar-spec)) 48%,
+        rgba(255, 255, 255, calc(var(--rar-spec) * 0.55)) 53%, transparent 68%);
+}
+
+/* Content must be lifted above the specular layers. Sinking the decoration with z-index:-1 instead
+   lets the animated sweep composite OVER the content once its transform promotes it to its own layer,
+   which blanks the card outright. */
+.pp-rarity-surface > * { position: relative; z-index: 1; }
+
+/* Only the top grade moves, so the flourish stays meaningful. Iridescence is a hue SHIFT across the
+   sweep, never a hue assignment -- the surface is still its own colour at rest. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-rarity-surface[data-rarity="mythic"]::after {
+        content: ''; position: absolute; inset: -40%; pointer-events: none; z-index: 0;
+        background: linear-gradient(104deg, transparent 40%,
+            rgba(120, 220, 255, 0.05) 47%, rgba(190, 150, 255, 0.06) 52%,
+            rgba(255, 210, 140, 0.05) 57%, transparent 64%);
+        transform: translateX(-38%);
+        animation: ppRaritySweep 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    @keyframes ppRaritySweep {
+        0%, 62% { transform: translateX(-38%); }
+        100%    { transform: translateX(38%); }
+    }
+}
+
+/* ---- The gem: an icon tinted by grade (badge detail's community band) ----
+ * The gem's halo derives from --rar-c, NOT --rar-glow. --rar-glow is deliberately absent below Rare so
+ * text doesn't glow at every grade, but a gem is an object and reads flat without one -- uncommon
+ * included. Two different jobs, so two different sources. */
+.pp-rarity-gem { color: var(--rar-c); }
+.pp-rarity-gem--lit { filter: drop-shadow(0 0 6px color-mix(in oklab, var(--rar-c) 55%, transparent)); }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-rarity-gem--lit[data-rarity="mythic"] { animation: ppRarityGem 2.6s ease-in-out infinite; }
+    @keyframes ppRarityGem {
+        0%, 100% { filter: drop-shadow(0 0 5px var(--pp-rarity-mythic-glow)); }
+        50%      { filter: drop-shadow(0 0 11px var(--pp-rarity-mythic-glow)); }
+    }
+}

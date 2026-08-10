@@ -90,7 +90,7 @@
             <span>{% if frame.stages_total %}{{ frame.stages_done|default:0 }} of {{ frame.stages_total }} stages{% endif %}</span>
         {% endif %}
         {% if frame.rarity_class and frame.rarity_pct is not None %}
-            <span class="pp-frame__rarity pp-frame__rarity--{{ frame.rarity_class }}">
+            <span class="pp-frame__rarity" data-rarity="{{ frame.rarity_class }}">
                 {% if frame.rarity_class == 'uncommon' %}<svg><use href="#rarity-dot"/></svg>{% endif %}
                 {% if frame.rarity_class == 'rare' %}<svg><use href="#rarity-diamond"/></svg>{% endif %}
                 {% if frame.rarity_class == 'mythic' %}<svg><use href="#rarity-sparkle"/></svg>{% endif %}

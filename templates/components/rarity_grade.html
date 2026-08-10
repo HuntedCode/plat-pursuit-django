@@ -1,0 +1,33 @@
+{% comment %}
+The rarity grade: label + glyph + the honest percentage. One component for every surface.
+
+Five surfaces used to hand-roll this off two shared tokens, which is how the same grade ended up with
+five slightly different treatments. Rendering it from here means a sixth surface is an include, not a
+seventh copy.
+
+Params:
+  rarity_class  'common' | 'uncommon' | 'rare' | 'mythic' | '' (no grade yet)
+  pct           the live percentage of the eligible population (optional; omit to show the label alone)
+  denom         what the percentage is OF -- "pursuers", "owners" (optional; default "pursuers")
+  unearned      True to render the "Be the first" nudge when nothing holds a grade yet
+
+`data-rarity` carries the class rather than a modifier class: it defines the --rar-* custom properties
+(see components/rarity.css), so a parent can set it once and BOTH this label and the surface material
+read from the same declaration. Setting it here as well keeps the component standalone.
+
+The glyphs are symbols from `_frame_rarity_sprite.html`, auto-mounted in base.html. Common has none on
+purpose -- the baseline grade should not announce itself.
+{% endcomment %}
+{% if rarity_class %}
+<span class="pp-rarity" data-rarity="{{ rarity_class }}">
+    {% if rarity_class == 'uncommon' %}<svg viewBox="0 0 12 12" aria-hidden="true"><use href="#rarity-dot"/></svg>
+    {% elif rarity_class == 'rare' %}<svg viewBox="0 0 12 12" aria-hidden="true"><use href="#rarity-diamond"/></svg>
+    {% elif rarity_class == 'mythic' %}<svg viewBox="0 0 12 12" aria-hidden="true"><use href="#rarity-sparkle"/></svg>{% endif %}
+    <span class="pp-rarity__name">{{ rarity_class|title }}</span>
+    {% if pct is not None %}<span class="pp-rarity__pct">{{ pct }}% of {{ denom|default:"pursuers" }}</span>{% endif %}
+</span>
+{% elif unearned %}
+<span class="pp-rarity" data-rarity="unearned">
+    <span class="pp-rarity__name">Be the first</span>
+</span>
+{% endif %}

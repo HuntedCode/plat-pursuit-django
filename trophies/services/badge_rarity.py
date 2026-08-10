@@ -1,44 +1,33 @@
-"""Badge rarity: derived LIVE, no cron, no stored fields (see docs/design/rebuild/badge-backend-rebuild.md).
+"""Badge rarity: the BADGE-SPECIFIC half. The vocabulary and grading live in `services/rarity.py`.
 
-Rarity is a pure function of two live values: the group badge's maintained `earned_count` denorm (owned by
-badge_apply) and the series' PURSUER base -- the count of SeriesBadgeStanding rows for the series, which
-recompute_standing keeps to profiles with real progress (zero-progress rows are deleted). So rarity is
-"of everyone making progress on this series, what fraction earned this group's badge" -- a meaningful
-completion-rarity, unlike a whole-userbase ratio where almost every badge would read Mythic.
+What is badge-specific is the population: rarity here is "of everyone making progress on this series,
+what fraction earned this group's badge". The numerator is the group badge's maintained `earned_count`
+denorm (owned by badge_apply); the denominator is the series' PURSUER base -- the count of
+SeriesBadgeStanding rows, which recompute_standing keeps to profiles with real progress (zero-progress
+rows are deleted). A whole-userbase ratio would read Mythic for almost every badge.
 
-This matches the sealed system's live-read philosophy (badge_leaderboards): derive from indexed denorm at read
-time, never a rebuild cron. Earners are a subset of pursuers in the normal path (earning a badge banks XP, so
-the earner has a SeriesBadgeStanding row), so the percentage stays <=100 -- but earned_count is a manual denorm
-that a cascade profile-delete can leave stale, so we clamp defensively rather than trust the bound as hard.
+Derived live from indexed denorms at read time, never a rebuild cron -- the sealed system's philosophy
+(see badge_leaderboards). Earners are a subset of pursuers in the normal path (earning a badge banks XP,
+so the earner has a standing row), so the percentage stays <=100 -- but earned_count is a manual denorm
+that a cascade profile-delete can leave stale, so `rarity_for` clamps defensively.
 
-NOTE: both platform groups in a series share ONE pursuer denominator (the series' standings aren't split by
-platform), a deliberate simplification -- so the two groups' percentages are "of all series pursuers", not
-strictly cross-comparable. The display frames it that way ("% of pursuers earned it").
+NOTE: both platform groups in a series share ONE pursuer denominator (standings are not split by
+platform), a deliberate simplification -- so the two groups' percentages are "of all series pursuers",
+not strictly cross-comparable. The display frames it that way ("% of pursuers earned it").
 """
-
-# % of a series' pursuers who earned the badge -> rarity class (below the ceiling wins; else common). Tuned
-# for the PURSUER-relative denominator (of people making progress, how many finished), NOT the whole userbase.
-RARITY_THRESHOLDS = ((5.0, 'mythic'), (15.0, 'rare'), (35.0, 'uncommon'))
-
-
-def rarity_class_for(pct: float) -> str:
-    """Bucket a pursuer-completion percentage; lower = rarer."""
-    for ceiling, name in RARITY_THRESHOLDS:
-        if pct < ceiling:
-            return name
-    return 'common'
+from trophies.services.rarity import (  # noqa: F401  (re-exported: long-standing import surface)
+    RARITY_CLASSES, RARITY_FILTER_CHOICES, RARITY_THRESHOLDS, RARITY_UNEARNED,
+    rarity_class_for, rarity_for,
+)
 
 
-RARITY_CLASSES = ('common', 'uncommon', 'rare', 'mythic')
-# "Be the first" filter value: badges nobody has earned yet (earned_count == 0 -> no rarity class). Kept OUT of
-# RARITY_CLASSES so it's handled specially (it matches earned_count == 0, exactly like the card's nudge, not a
-# bucket). Lets rarity filtering be a complete set + doubles as a "badges I could be first on" finder.
-RARITY_UNEARNED = 'unearned'
-# Chip order for the filter UI: rarest earned first, then the not-yet-earned nudge at the end.
-RARITY_FILTER_CHOICES = [
-    ('mythic', 'Mythic'), ('rare', 'Rare'), ('uncommon', 'Uncommon'), ('common', 'Common'),
-    (RARITY_UNEARNED, 'Be the first'),
-]
+def group_rarity(earned_count: int, participants: int, floor_pct=None):
+    """(pct, class) for a group badge, given its earners + the series' pursuer count.
+
+    Thin badge-flavoured name over `rarity.rarity_for`; the grading rules are shared with every other
+    surface so a badge and its title cannot disagree about what "Rare" means.
+    """
+    return rarity_for(earned_count, participants, floor_pct=floor_pct)
 
 
 def annotate_group_rarity(gb_qs):
@@ -81,15 +70,3 @@ def annotate_group_rarity(gb_qs):
             output_field=CharField(),
         ))
     )
-
-
-def group_rarity(earned_count: int, participants: int):
-    """(pct, class) for a group badge given its earners + the series' pursuer count.
-      - No pursuer base yet (participants == 0)  -> (None, '')  -> the caller renders 'rarity pending'.
-      - Pursuers exist but nobody's earned it    -> (0.0, '')   -> honest "0% earned", but NO rarity class:
-        0 earners is unearned, not a Mythic achievement, so it must not wear the prestige chip.
-      - Otherwise the real percentage + its bucket."""
-    if not participants:
-        return None, ''
-    pct = round(min(100.0, 100.0 * earned_count / participants), 1)
-    return pct, (rarity_class_for(pct) if earned_count else '')
