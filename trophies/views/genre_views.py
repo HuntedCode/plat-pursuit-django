@@ -120,9 +120,15 @@ class GenreThemeListView(HtmxListMixin, ListView):
             return items.annotate(
                 stat_plats=_through_subquery(
                     IntegerField(),
-                    c=Count('concept__games__played_by',
-                            filter=Q(concept__games__played_by__has_plat=True),
-                            distinct=True),
+                    # Sums the DENORM instead of joining ProfileGame. Game.plats_earned_count is
+                    # `Count(ProfileGame, filter=has_plat)` per game (recalc_earn_rates), which is
+                    # exactly what the live version counted -- same population, same grain -- so this
+                    # is arithmetic over a column rather than an aggregate over the join.
+                    #
+                    # NOTE the neighbouring 'players' sort canNOT do this: it counts DISTINCT
+                    # PROFILES, and summing a per-game column would count a hunter once per game they
+                    # own in the tag.
+                    c=Sum('concept__games__plats_earned_count'),
                 ),
             ).order_by(F('stat_plats').desc(nulls_last=True), Lower('name'))
         return items.order_by(Lower('name'))

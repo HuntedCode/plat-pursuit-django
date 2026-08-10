@@ -293,3 +293,46 @@ def test_query_count_is_bounded(client, django_assert_max_num_queries):
     with django_assert_max_num_queries(12):
         resp = client.get(reverse('genres_list'))
     assert resp.status_code == 200
+
+
+# ── The plats sort reads a denorm, not the join ───────────────────────────────────────────────────
+
+def test_plats_sort_matches_what_the_live_join_counted(client):
+    """`Game.plats_earned_count` is `Count(ProfileGame, filter=has_plat)` per game, so summing it over
+    a tag's games is exactly what the old live aggregate counted -- same population, same grain. This
+    pins that equivalence, because the denorm is refreshed by a nightly cron and a drift in its
+    definition would silently reorder this page.
+
+    Deliberately also covers the SIBLING trap: the neighbouring 'players' sort counts DISTINCT
+    profiles, so it can NOT be swapped the same way -- a hunter owning several games in a tag would be
+    counted once per game.
+    """
+    from django.core.management import call_command
+    from trophies.models import Game, ProfileGame
+
+    genre = GenreFactory(name='Soulslike', slug='soulslike')
+    hunter, other = ProfileFactory(), ProfileFactory()
+    for i in range(2):
+        game = GameFactory(defined_trophies={'platinum': 1})
+        ConceptGenreFactory(concept=game.concept, genre=genre)
+        # The same hunter plats BOTH games; `other` plats one.
+        ProfileGame.objects.create(profile=hunter, game=game, has_plat=True, progress=100)
+        if i == 0:
+            ProfileGame.objects.create(profile=other, game=game, has_plat=True, progress=100)
+
+    # What the live join used to produce, computed here as the reference.
+    live = ProfileGame.objects.filter(
+        game__concept__concept_genres__genre=genre, has_plat=True,
+    ).count()
+
+    call_command('recalc_earn_rates', verbosity=0)
+
+    denormed = sum(Game.objects.filter(concept__concept_genres__genre=genre)
+                   .values_list('plats_earned_count', flat=True))
+
+    assert denormed == live == 3, f'denorm {denormed} != live {live}'
+    # ...and the distinct-profile count is genuinely different, which is why 'players' stays a join.
+    distinct_players = ProfileGame.objects.filter(
+        game__concept__concept_genres__genre=genre,
+    ).values('profile').distinct().count()
+    assert distinct_players == 2 != denormed
