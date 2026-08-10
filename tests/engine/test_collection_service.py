@@ -407,15 +407,14 @@ def test_gallery_in_progress_cell_carries_stage_count_in_the_caption():
     assert 'pp-med__count' not in html     # no under-the-bar count (no_count) -> card height unchanged
 
 
-def test_an_unstarted_edition_still_shows_its_chase_count():
+def test_an_unstarted_edition_carries_its_own_gating_count():
     """0 cleared is 'unearned', not 'in_progress', so the stage count used to vanish for exactly the
-    edition where "0 / 5" is most motivating -- inside a series the hunter IS pursuing. The gating total
-    is known there (the standing carries it), so it must read."""
+    edition where "0 / 5" is most motivating -- inside a series the hunter IS pursuing."""
     from django.template.loader import render_to_string
 
     profile = ProfileFactory()
     _series('rs-unstarted')
-    # Pursuing the series (ultra-hd underway) but legacy-hd untouched -- its total is still known.
+    # What recompute_standing now writes: an entry per EARNABLE edition, started or not.
     _standing(profile, 'rs-unstarted', group_progress={'ultra-hd': [2, 5], 'legacy-hd': [0, 4]})
 
     ctx = build_collection_context(profile)
@@ -428,26 +427,53 @@ def test_an_unstarted_edition_still_shows_its_chase_count():
     assert 'data-stages="0 / 4"' in html
 
 
-def test_chase_count_survives_an_edition_missing_from_the_read_model():
-    """The case that kept reading blank after the first fix.
+def test_the_chase_count_is_per_edition_never_the_series_stage_count():
+    """The regression this file exists to prevent.
 
-    `recompute_standing` only materializes group_progress for editions with cleared > 0, so an edition
-    you have NEVER touched has no entry -- not [0, n]. Reading the total from the read-model therefore
-    gave 0 and printed nothing. The stage count is viewer-independent, so it comes from the series."""
-    from django.template.loader import render_to_string
-
+    A stage only GATES an edition if some game in it runs on that platform group, so the series' Stage
+    count is not the edition's denominator. Deriving it that way (briefly shipped) told a Legacy HD
+    hunter "0 / 8" for a series whose extra stages are PS5-only -- and then SHRANK it to "1 / 5" the
+    moment they cleared one, a goal that gets smaller as you approach it. Only the read-model knows."""
     profile = ProfileFactory()
-    _series('rs-untouched')
+    _series('rs-split')
+    for n in (1, 2, 3, 4, 5, 6, 7, 8):          # eight stages in the series...
+        StageFactory(series_slug='rs-split', stage_number=n)
+    # ...but only five of them gate the Legacy HD edition, which is what the engine materialized.
+    _standing(profile, 'rs-split', group_progress={'legacy-hd': [0, 5], 'ultra-hd': [0, 8]})
+
+    frames = _frames_by_edition(build_collection_context(profile))
+
+    assert frames['legacy-hd']['chase_total'] == 5, 'must be the edition gating count, not 8 stages'
+    assert frames['ultra-hd']['chase_total'] == 8
+
+
+def test_an_edition_that_cannot_be_earned_advertises_no_chase():
+    """gating_count == 0 means the badge is not offered in that platform group at all (its games are
+    delisted or unobtainable there), so recompute_standing stores no entry. The card must stay blank
+    rather than inviting a hunter into a chase with no finish line."""
+    profile = ProfileFactory()
+    _series('rs-unoffered')
     for n in (1, 2, 3):
-        StageFactory(series_slug='rs-untouched', stage_number=n)
-    _standing(profile, 'rs-untouched', bp=0)   # engaged, but group_progress is {} -- no edition started
+        StageFactory(series_slug='rs-unoffered', stage_number=n)
+    _standing(profile, 'rs-unoffered', group_progress={'ultra-hd': [1, 3]})   # legacy-hd absent
 
-    ctx = build_collection_context(profile)
-    frame = _frames_by_edition(ctx)['ultra-hd']
+    frames = _frames_by_edition(build_collection_context(profile))
 
-    assert frame['state'] == 'unearned'
-    assert (frame['chase_done'], frame['chase_total']) == (0, 3)
-    assert 'data-stages="0 / 3"' in render_to_string('components/collection_gallery.html', ctx)
+    assert frames['legacy-hd']['chase_total'] == 0
+    assert frames['legacy-hd']['state'] == 'unearned'
+
+
+def test_a_malformed_read_model_row_stays_blank():
+    """The shape guard degrades a corrupt entry to "no progress for THIS badge, never raise". It must
+    not then be rescued into a confident wrong number by a fallback."""
+    profile = ProfileFactory()
+    _series('rs-corrupt')
+    StageFactory(series_slug='rs-corrupt', stage_number=1)
+    _standing(profile, 'rs-corrupt', group_progress={'ultra-hd': 'nonsense'})
+
+    frames = _frames_by_edition(build_collection_context(profile))
+
+    assert frames['ultra-hd']['chase_total'] == 0
 
 
 def test_an_earned_edition_has_nothing_left_to_chase():

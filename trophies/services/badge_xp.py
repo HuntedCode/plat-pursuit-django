@@ -113,13 +113,23 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     positive = {slug: s for slug, s in standings.items() if s.xp > 0}
     zeroed = [slug for slug, s in standings.items() if s.xp == 0]
 
-    # Per-EDITION read-model {slug: {platform_group_key: [cleared, gating]}} for editions with partial progress.
+    # Per-EDITION read-model {slug: {platform_group_key: [cleared, gating]}} for every EARNABLE edition.
     # The engine already computed these per-group results; materializing them lets the Collection wall read each
     # edition's OWN progress without re-evaluating. Same recompute-from-scratch seam as the rest of the standing.
+    #
+    # Gated on `gating_count > 0`, NOT on `base_satisfied_count > 0`. Storing only STARTED editions left the
+    # wall with no denominator for one you had not touched, so "0 / 5 stages" -- the most motivating number on
+    # the card -- had nothing to render and went blank. Deriving that total from the series' Stage count instead
+    # was tried and is wrong: gating is PER EDITION (a stage only gates if some game in it runs on that
+    # platform group), so a series with 8 stages, 3 of them PS5-only, would tell a Legacy HD hunter "0 / 8" and
+    # then drop to "1 / 5" the moment they cleared one -- a denominator that shrinks as you progress.
+    #
+    # `gating_count == 0` means the badge is not offered in that group at all (every stage's games delisted or
+    # unobtainable there), so it is deliberately still skipped: an unearnable edition must advertise no chase.
     group_prog = defaultdict(dict)
     for gb in group_badges:
         r = desired.get(gb.id)
-        if r is not None and r.base_satisfied_count > 0:
+        if r is not None and r.gating_count > 0:
             group_prog[gb.series.series_slug][gb.platform_group.key] = [r.base_satisfied_count, r.gating_count]
 
     for slug, s in positive.items():

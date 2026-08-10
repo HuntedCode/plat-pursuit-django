@@ -137,8 +137,13 @@ def test_standing_partial_progress_writes_xp_and_progress():
 @pytest.mark.django_db
 def test_standing_materializes_per_edition_group_progress():
     """recompute_standing writes the per-edition read-model the Collection reads: group_progress maps each
-    edition's platform_group key -> [cleared, gating], and ONLY editions with real progress appear (an edition
-    the viewer has 0% on is absent, so the wall reads it as unearned instead of the series furthest-along)."""
+    edition's platform_group key -> [cleared, gating], for every EARNABLE edition -- started or not.
+
+    An untouched edition is stored as [0, gating] rather than omitted. It used to be omitted, which left the
+    Collection wall with no denominator for a chase the hunter had not begun, so "0 / 5 stages" rendered blank.
+    The total cannot be recovered from the series: gating is PER EDITION, so any series-level count would lie
+    for an edition whose stages don't all run on its platforms. Only cleared > 0 flips the state to in_progress
+    (edition_display_state), so storing the zero row changes the denominator, never the state."""
     from trophies.services.badge_apply import evaluate_and_apply
     from trophies.models import SeriesBadgeStanding
     from tests.factories import (
@@ -161,7 +166,38 @@ def test_standing_materializes_per_edition_group_progress():
     evaluate_and_apply(p, [ultra, legacy])
 
     sbs = SeriesBadgeStanding.objects.get(profile=p, series_slug='gow')
-    assert sbs.group_progress == {'ultra-hd': [1, 2]}   # Ultra materialized; Legacy (0 progress) absent
+    assert sbs.group_progress == {'ultra-hd': [1, 2], 'legacy-hd': [0, 2]}
+    # ...and the zero row must NOT read as started -- state still comes from cleared, not from presence.
+    from trophies.services.badge_xp import edition_display_state
+    assert edition_display_state(False, *sbs.group_progress['legacy-hd']) == ('unearned', 0)
+
+
+@pytest.mark.django_db
+def test_an_unearnable_edition_is_still_omitted():
+    """gating_count == 0 means the badge is not offered in that platform group at all (no stage has a
+    qualifying, obtainable game there). It must stay OUT of the read-model: storing [0, 0] would put an
+    edition with no path to completion on the wall advertising a chase."""
+    from trophies.services.badge_apply import evaluate_and_apply
+    from trophies.models import SeriesBadgeStanding
+    from tests.factories import (
+        ProfileFactory, BadgeSeriesFactory, StageFactory, ConceptFactory, GameFactory,
+        PlatformGroupFactory, GroupBadgeFactory,
+    )
+    series = BadgeSeriesFactory(series_slug='ps5only')
+    ultra = GroupBadgeFactory(series=series, is_live=True,
+                              platform_group=PlatformGroupFactory(key='ultra-hd', name='Ultra', platforms=['PS4', 'PS5']))
+    legacy = GroupBadgeFactory(series=series, is_live=True,
+                               platform_group=PlatformGroupFactory(key='legacy-hd', name='Legacy', platforms=['PS3']))
+    st = StageFactory(series_slug='ps5only', stage_number=1)
+    c = ConceptFactory(); st.concepts.add(c)
+    game = GameFactory(concept=c, title_platform=['PS5'])      # nothing this badge needs exists on PS3
+    p = ProfileFactory()
+    _complete(p, game)
+    evaluate_and_apply(p, [ultra, legacy])
+
+    sbs = SeriesBadgeStanding.objects.get(profile=p, series_slug='ps5only')
+    assert 'legacy-hd' not in sbs.group_progress, 'an unearnable edition must advertise no chase'
+    assert sbs.group_progress['ultra-hd'] == [1, 1]
 
 
 @pytest.mark.django_db

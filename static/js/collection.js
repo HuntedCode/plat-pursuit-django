@@ -352,30 +352,45 @@
         // completed badges use for "Top X%"), so the stage count reads without growing the card.
         // Returns [text, isRarity]. The flag is separate because only the rarity reading takes the grade
         // colour -- the same slot also shows earn dates and progress, which must stay neutral.
-        function statText(cell, key) {
-            var st = cell.getAttribute('data-state');
-            // Any UNEARNED edition with a known gating count, not just one with cleared stages. Keying
-            // this on state === 'in_progress' meant an edition you had not started showed nothing, so
-            // "0 / 5" -- the most motivating number on the card -- was the one case that stayed blank.
-            // data-stages is only populated when the total is actually known (see collection_service).
-            if (st !== 'earned') {
-                var stages = cell.getAttribute('data-stages');
-                if (stages) return [stages + ' stages', false];
-            }
-            if (key === 'earned') return [cell.getAttribute('data-earned-label') || '', false];
-            if (key === 'progress') {
-                if (st === 'earned') return ['Complete', false];
-                var p = parseFloat(cell.getAttribute('data-progress')) || 0;
-                return [p ? p + '%' : '', false];
-            }
+        //
+        // The slot REFLECTS THE SORT, with two exceptions, and the order matters:
+        //   1. An in-progress badge always shows its chase count, whatever you sorted by. Pre-existing:
+        //      while you're working a badge, "3 / 5 stages" beats every other reading of it.
+        //   2. Anything else that comes out EMPTY falls back -- chase count, then grade. That is what
+        //      fixes the reported blank: under the default progress sort an unearned badge is 0%, which
+        //      rendered as nothing at all.
+        // It's a fallback, deliberately not a second override: making every unearned cell show stages
+        // would have pushed the grade off the wall entirely under "Rarest first", since most of a
+        // collection is unearned.
+        function chase(cell) {
+            var stages = cell.getAttribute('data-stages');   // only set when the total is genuinely known
+            return stages ? stages + ' stages' : '';
+        }
+        function grade(cell) {
             // The GRADE, not "Top X%". rarity_pct is the share of hunters who HAVE the badge, so a badge
             // 40% of the community owns rendered as "Top 40%" -- which sounds exclusive and means the
             // reverse. The named grade is the site's rarity vocabulary and cannot be read backwards; the
             // exact percentage lives on the badge's own page.
             var cls = cell.getAttribute('data-rarity');
-            if (cls) { return [cls.charAt(0).toUpperCase() + cls.slice(1), true]; }
-            var rarity = parseFloat(cell.getAttribute('data-rarity-pct')) || 0;
-            return [rarity ? rarity + '% of hunters' : '', false];
+            return cls ? cls.charAt(0).toUpperCase() + cls.slice(1) : '';
+        }
+        function statText(cell, key) {
+            var st = cell.getAttribute('data-state');
+            if (st === 'in_progress') {
+                var c = chase(cell);
+                if (c) { return [c, false]; }
+            }
+            var text = '';
+            if (key === 'earned') { text = cell.getAttribute('data-earned-label') || ''; }
+            else if (key === 'progress') {
+                if (st === 'earned') { text = 'Complete'; }
+                else {
+                    var p = parseFloat(cell.getAttribute('data-progress')) || 0;
+                    text = p ? p + '%' : '';
+                }
+            } else { return [grade(cell), true]; }
+            if (text) { return [text, false]; }
+            return chase(cell) ? [chase(cell), false] : [grade(cell), true];
         }
         function applySort(animate) {
             var spec = ((sortSel && sortSel.value) || DEFAULT_SORT).split(':');
