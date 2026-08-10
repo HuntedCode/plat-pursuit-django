@@ -402,6 +402,11 @@ class MonthlyRecapManager {
             this.animatedSlides.add(index);
             // Small delay to let the slide transition start
             setTimeout(() => {
+                // Interactivity FIRST and unconditionally: triggerSlideAnimations early-returns under
+                // prefers-reduced-motion, and the calendar's platinum-day click handlers used to be
+                // registered inside its animation loop -- so asking for less motion silently removed a
+                // feature rather than just its movement.
+                this.wireSlideInteractions(slideEl, slideType);
                 this.triggerSlideAnimations(slideEl, slideType);
 
                 // Initialize quiz if this is a quiz slide
@@ -432,6 +437,19 @@ class MonthlyRecapManager {
         // Quiz slides handle their own button updates after initialization
         if (!this.quizManager.isQuizSlide(slideType)) {
             this.updateNavigationButtons();
+        }
+    }
+
+    /**
+     * Per-slide interactivity. Runs for EVERY viewer, motion preference included -- anything registered
+     * here must be behaviour the slide needs to work, not decoration.
+     */
+    wireSlideInteractions(slideEl, slideType) {
+        if (!slideEl) return;
+        if (slideType === 'activity_calendar') {
+            slideEl.querySelectorAll('.calendar-day.platinum-day').forEach((day) => {
+                day.addEventListener('click', () => this.showPlatinumDetails(day));
+            });
         }
     }
 
@@ -621,12 +639,8 @@ class MonthlyRecapManager {
                 }
             }, index * delay);
 
-            // Add click handler for days with platinums
-            if (day.classList.contains('platinum-day')) {
-                day.addEventListener('click', () => {
-                    this.showPlatinumDetails(day);
-                });
-            }
+            // NB: the platinum-day click handler is NOT registered here. It lives in
+            // wireSlideInteractions, which runs regardless of motion preference.
         });
     }
 

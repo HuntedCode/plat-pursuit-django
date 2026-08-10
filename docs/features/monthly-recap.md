@@ -123,6 +123,7 @@ Immutable pattern: once `is_finalized=True`, regeneration is skipped even with `
 
 ## Gotchas and Pitfalls
 
+- **Reduced motion must remove MOVEMENT, never content or behaviour.** Two bugs lived here: `.stagger-item` rests at `opacity: 0` and is revealed BY its animation, so `animation: none` left every platinum card, badge row and calendar day permanently invisible; and the calendar's platinum-day click handlers were registered inside `animateCalendarSlide`, which the preference skips -- so it removed a feature, not just its motion. **The restore must be declared AFTER the `opacity: 0` rule**: the first fix put it in the main reduced-motion block higher up the file, where equal specificity meant the base rule won and the fix silently did nothing. Caught by rendering with the preference on, not by reading. Pinned by `test_recap_reduced_motion.py`.
 - **Timezone conversion edge case**: Month boundaries in UTC may not align with user's local calendar month. Solution: convert boundaries from user's local midnight to UTC using `pytz`, with ±14 hour buffer for batch queries.
 - **Finalized lock**: Once `is_finalized=True`, the recap will NOT regenerate even with `force_regenerate=True`. This is intentional for data immutability.
 - **Quiz data insufficiency**: Each quiz type needs minimum 2-4 options. Returns None if too few items (e.g., user only played 1 game). Frontend skips quiz slides with None data.

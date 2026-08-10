@@ -224,6 +224,22 @@
         }
     }
 
+    /* `.stagger-item` rests at opacity 0 and is revealed BY its animation, so the `animation: none`
+       above left it permanently INVISIBLE for anyone who asked for less motion -- every platinum card,
+       badge row, personal-best chip and calendar day. A reduced-motion preference means "show me this
+       without movement", never "hide it".
+
+       This override lives HERE, immediately after the rule it beats, and not up in the main
+       reduced-motion block: that block is declared earlier in the file, so at equal specificity the
+       base `opacity: 0` below simply won and the fix silently did nothing. Verified by rendering with
+       the preference on, not by reading. Keep the two adjacent. */
+    @media (prefers-reduced-motion: reduce) {
+        .stagger-item {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
     /* Trophy type colors */
     .trophy-bronze { color: #cd7f32; }
     .trophy-silver { color: #c0c0c0; }
