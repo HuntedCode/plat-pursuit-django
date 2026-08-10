@@ -1,13 +1,11 @@
 """Shared helpers for browse page views (Games, Genre/Theme Detail, Flagged Games)."""
 
-from datetime import timedelta
 
 from django.db.models import (
     Q, F, Subquery, OuterRef, Value, IntegerField, FloatField, Avg, Case,
     When, Count, OrderBy, Exists,
 )
 from django.db.models.functions import Coalesce, Lower, Cast
-from django.utils import timezone
 
 from trophies.models import (
     BadgeSeries, Trophy, UserConceptRating, Stage, ConceptGenre, ConceptTheme,
@@ -461,14 +459,19 @@ def apply_game_browse_sort(qs, sort_val, annotations_applied=None):
 
     # --- Trending (recent trophy activity in last 30 days) ---
     elif sort_val == 'trending':
-        thirty_days_ago = timezone.now() - timedelta(days=30)
-        qs = qs.annotate(
-            _trending_count=Count(
-                'played_by',
-                filter=Q(played_by__most_recent_trophy_date__gte=thirty_days_ago),
-            ),
-        )
-        order = ['-_trending_count', '-played_count'] + _ALPHA_SECONDARY
+        # Reads the denorm rather than aggregating ProfileGame per game. The ORDER BY forces that
+        # aggregate over the ENTIRE filtered catalogue before pagination, which made this the most
+        # expensive sort a browse visitor could pick.
+        #
+        # `monthly_earners_count` is maintained with exactly the predicate this used
+        # (most_recent_trophy_date within 30 days), so the ordering is unchanged -- it is deliberately
+        # NOT monthly_players_count, which counts owners who merely LAUNCHED the game and would have
+        # quietly redefined what "trending" means.
+        #
+        # `-played_count` stays the secondary key, which also makes the pre-backfill window harmless:
+        # a freshly-migrated column is 0 everywhere, and the sort degrades to popularity rather than
+        # to arbitrary order.
+        order = ['-monthly_earners_count', '-played_count'] + _ALPHA_SECONDARY
 
     # --- Release date (from Concept, nulls last) ---
     elif sort_val in ('release_date', 'release_date_inv'):

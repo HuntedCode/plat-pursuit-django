@@ -1,6 +1,6 @@
 """Site-wide recompute of Trophy.earned_count / Trophy.earn_rate / Game.played_count and the game's
 denormalized community stats (plats_earned_count / full_completion_count / avg_completion /
-monthly_players_count / total_earns_count).
+monthly_players_count / monthly_earners_count / total_earns_count).
 
 Runs as a daily cron (see docs/guides/cron-jobs.md). Replaces the per-profile
 inline recompute that used to live in `psn_api_service.update_profilegame_stats`
@@ -29,8 +29,9 @@ from trophies.util_modules.cache import redis_client
 
 logger = logging.getLogger(__name__)
 
-# Window for Game.monthly_players_count. Matches the "active players" stat the
-# game-detail header has always shown; it just used to be computed per request.
+# Window for Game.monthly_players_count AND Game.monthly_earners_count. Matches the
+# "active players" stat the game-detail header has always shown; it just used to be
+# computed per request.
 MONTHLY_PLAYER_WINDOW = timedelta(days=30)
 
 # Resume cursor: the highest Game id fully processed by the previous run. Without it, a
@@ -53,7 +54,8 @@ STATEMENT_TIMEOUT_MS = 600_000  # 10 minutes per statement
 class Command(BaseCommand):
     help = (
         'Recompute played_count + community stats (plats_earned_count, '
-        'full_completion_count, avg_completion, monthly_players_count, total_earns_count) '
+        'full_completion_count, avg_completion, monthly_players_count, monthly_earners_count, '
+        'total_earns_count) '
         'on Games, and earned_count + earn_rate on Trophies, using bulk GROUP BY '
         'aggregates. Designed for daily cron use.'
     )
@@ -232,6 +234,9 @@ class Command(BaseCommand):
                     completions=Count('id', filter=Q(progress=100)),
                     avg=Avg('progress'),
                     monthly=Count('id', filter=Q(last_played_date_time__gte=monthly_since)),
+                    # Trending's signal: EARNED a trophy here in the window, not merely launched it.
+                    # A second filtered Count on the same scan, so it costs nothing beyond the column.
+                    earners=Count('id', filter=Q(most_recent_trophy_date__gte=monthly_since)),
                 )
             )
         }
@@ -269,6 +274,7 @@ class Command(BaseCommand):
                 full_completion_count=s['completions'] if s else 0,
                 avg_completion=round(s['avg'], 1) if (s and s['avg'] is not None) else 0.0,
                 monthly_players_count=s['monthly'] if s else 0,
+                monthly_earners_count=s['earners'] if s else 0,
                 # Free: earned_counts is already in memory for the earn-rate pass below, so the
                 # game-wide total is a sum over this game's trophies rather than a new query.
                 total_earns_count=sum(earned_counts.get(t.id, 0) for t in game_trophies),
@@ -286,7 +292,7 @@ class Command(BaseCommand):
             if game_updates:
                 Game.objects.bulk_update(game_updates, [
                     'played_count', 'plats_earned_count', 'full_completion_count', 'avg_completion',
-                    'monthly_players_count', 'total_earns_count',
+                    'monthly_players_count', 'monthly_earners_count', 'total_earns_count',
                 ])
             if trophy_updates:
                 Trophy.objects.bulk_update(trophy_updates, ['earned_count', 'earn_rate'])

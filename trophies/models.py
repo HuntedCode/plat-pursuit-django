@@ -521,6 +521,13 @@ class Game(models.Model):
     # Recomputed nightly by recalc_earn_rates alongside the four above.
     total_earns_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of earned trophies across all of this game's trophies.")
     monthly_players_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that played this game in the last 30 days.")
+    # Trending's signal, and the reason it is a SEPARATE column from monthly_players_count: this counts
+    # owners who EARNED A TROPHY here in the window, not owners who merely launched it. On a trophy
+    # site those differ -- booting a game and bouncing is not trending activity -- so the browse sort
+    # would quietly change meaning if it read monthly_players_count instead. Costs nothing extra to
+    # maintain: it is one more filtered Count on the ProfileGame GROUP BY recalc_earn_rates already
+    # runs. Indexed because Trending ORDERS BY it across the whole filtered catalogue.
+    monthly_earners_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that earned a trophy in this game in the last 30 days.")
     view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
     is_regional = models.BooleanField(default=False)
     region_lock = models.BooleanField(default=False, help_text="Admin region override lock - won't be automatically updated.")
@@ -553,6 +560,10 @@ class Game(models.Model):
         indexes = [
             models.Index(fields=["np_communication_id", "title_name"], name="game_idx"),
             models.Index(fields=['played_count'], name='game_played_count_idx'),
+            # Trending sorts on this across the catalogue before pagination. The other denormed
+            # community stats are deliberately NOT indexed -- nothing orders by them, and every
+            # index here is re-churned by the nightly full rewrite of these columns.
+            models.Index(fields=['-monthly_earners_count'], name='game_monthly_earners_idx'),
             models.Index(fields=['title_name'], name='game_title_idx'),
             GinIndex(fields=['title_platform'], name='game_platform_gin_idx'),
             models.Index(fields=['created_at'], name='game_created_idx'),

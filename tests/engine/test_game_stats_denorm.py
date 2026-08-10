@@ -18,7 +18,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from tests.factories import (
-    EarnedTrophyFactory, GameFactory, ProfileGameFactory, TrophyFactory,
+    EarnedTrophyFactory, GameFactory, ProfileFactory, ProfileGameFactory, TrophyFactory,
 )
 pytestmark = pytest.mark.django_db
 
@@ -189,3 +189,61 @@ def test_dry_run_does_not_advance_the_cursor(monkeypatch):
     call_command('recalc_earn_rates', dry_run=True)
 
     assert stored['v'] == 999
+
+
+# ── monthly_earners_count: the Trending signal ────────────────────────────────────────────────────
+
+def test_monthly_earners_counts_trophy_activity_not_launches():
+    """The reason this is a SEPARATE column from monthly_players_count.
+
+    `monthly_players_count` counts owners who LAUNCHED the game in the window; this counts owners who
+    EARNED A TROPHY in it. On a trophy site those differ -- booting a game and bouncing is not trending
+    activity -- so reading the wrong one would quietly redefine the Trending sort.
+    """
+    from trophies.models import ProfileGame
+
+    game = GameFactory()
+    recent = timezone.now() - timedelta(days=3)
+    stale = timezone.now() - timedelta(days=90)
+
+    # Played recently AND earned recently -> counts for both.
+    ProfileGame.objects.create(profile=ProfileFactory(), game=game,
+                               last_played_date_time=recent, most_recent_trophy_date=recent)
+    # Launched recently but hasn't earned anything in months -> a player, NOT an earner.
+    ProfileGame.objects.create(profile=ProfileFactory(), game=game,
+                               last_played_date_time=recent, most_recent_trophy_date=stale)
+    # Dormant on both counts.
+    ProfileGame.objects.create(profile=ProfileFactory(), game=game,
+                               last_played_date_time=stale, most_recent_trophy_date=stale)
+
+    call_command('recalc_earn_rates', verbosity=0)
+    game.refresh_from_db()
+
+    assert game.monthly_players_count == 2
+    assert game.monthly_earners_count == 1, 'the bouncer must not count as trending activity'
+
+
+def test_monthly_earners_matches_what_trending_used_to_compute():
+    """Pins the swap: Trending ordered by a live Count over ProfileGame filtered on
+    most_recent_trophy_date, and now orders by this column. If the denorm's predicate ever drifts, the
+    browse page reorders silently."""
+    from django.db.models import Count, Q
+    from trophies.models import Game, ProfileGame
+
+    since = timezone.now() - timedelta(days=30)
+    game = GameFactory()
+    for days in (1, 10, 29, 31, 400):
+        ProfileGame.objects.create(
+            profile=ProfileFactory(), game=game,
+            most_recent_trophy_date=timezone.now() - timedelta(days=days),
+        )
+
+    live = (
+        Game.objects.filter(pk=game.pk)
+        .annotate(c=Count('played_by', filter=Q(played_by__most_recent_trophy_date__gte=since)))
+        .values_list('c', flat=True).first()
+    )
+    call_command('recalc_earn_rates', verbosity=0)
+    game.refresh_from_db()
+
+    assert game.monthly_earners_count == live == 3
