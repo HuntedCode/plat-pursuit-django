@@ -2,6 +2,7 @@ import json
 import logging
 import math
 
+from core.services import completion_card_service as cards
 from core.services.tracking import track_page_view, track_site_event
 from core.services.site_heartbeat import get_cached_heartbeat
 from datetime import datetime, timedelta
@@ -446,6 +447,33 @@ class GameDetailView(DetailView):
             # hours-to-platinum). Often absent (not every game/user reports it) -- the modal has a fallback.
             pd = profile_game.play_duration
             context['user_play_hours'] = round(pd.total_seconds() / 3600) if pd and pd.total_seconds() >= 3600 else None
+
+            # Plat card CTA -- shown only when the VIEWER has earned a card for this game.
+            #
+            # Gated on the profile being the viewer's own: this page also renders another hunter's
+            # progress at /games/<np>/<username>/, and a card is personal. Linking someone else's
+            # completion would send the viewer to their OWN shareables page with a group id it will
+            # refuse, because the destination re-checks ownership with this same predicate.
+            #
+            # That predicate is `eligible_completions` -- the one the browse page and every card
+            # endpoint use -- so this link can never offer a card they would deny, or hide one they
+            # would show. One indexed read on the viewer's own default-group standings.
+            #
+            # It DEEP-LINKS to /shareables/?c=<group>, which opens the card there. Deliberately not a
+            # modal on this page: the share flow is a whole surface (preview, theme picker, rating), and
+            # a second copy of it here is exactly the drift the rebuild removed.
+            # `self.request` via getattr: this method is also exercised directly in unit tests, where the
+            # view has no request bound. No request means no viewer, which correctly yields no CTA.
+            request = getattr(self, 'request', None)
+            user = getattr(request, 'user', None)
+            viewer = getattr(user, 'profile', None) if (user is not None and user.is_authenticated) else None
+            if viewer and profile.pk == viewer.pk:
+                completion = cards.eligible_completions(profile).filter(trophy_group__game=game).first()
+                if completion:
+                    context['plat_card'] = {
+                        'url': f"{reverse('my_shareables')}?c={completion.trophy_group_id}",
+                        'variant': cards.resolve_variant(game),
+                    }
 
             if has_trophies:
                 # Get earned trophies data
@@ -1337,10 +1365,14 @@ class GameDetailView(DetailView):
             context['profile_group_totals'] = profile_context['profile_group_totals']
             context['timeline_events'] = profile_context['timeline_events']
             context['user_play_hours'] = profile_context.get('user_play_hours')
+            # NOTE: this merge is key-by-key, not a context.update() -- a new key added inside
+            # _build_profile_context does NOT reach the template until it is listed here.
+            context['plat_card'] = profile_context.get('plat_card')
         else:
             context['profile'] = None
             context['profile_progress'] = None
             context['user_play_hours'] = None
+            context['plat_card'] = None
             context['profile_earned'] = {}
             context['profile_trophy_totals'] = {}
             context['profile_group_totals'] = {}

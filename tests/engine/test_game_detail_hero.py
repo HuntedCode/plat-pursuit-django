@@ -593,3 +593,84 @@ def test_game_detail_about_panel_shows_empty_state(client):
     content = _detail(client, GameFactory(concept=ConceptFactory()))
 
     assert 'No extended info yet' in content
+
+
+# ── Plat card CTA ─────────────────────────────────────────────────────────
+
+def _finished(profile, *, with_platinum=True):
+    """A game whose DEFAULT trophy group this profile has finished -- the card's eligibility bar.
+
+    NOTE the caller must pass a LINKED profile: `_get_target_profile` only resolves the viewer's own
+    profile when `is_linked`, and ProfileFactory leaves that False. An unlinked profile renders the
+    anonymous hero, so none of this context is built at all."""
+    from tests.factories import ProfileTrophyGroupFactory, TrophyGroupFactory
+
+    defined = {'bronze': 10, 'silver': 3, 'gold': 1, 'platinum': 1 if with_platinum else 0}
+    game = GameFactory(concept=ConceptFactory(), defined_trophies=defined)
+    group = TrophyGroupFactory(game=game, trophy_group_id='default', defined_trophies=defined)
+    ProfileGameFactory(profile=profile, game=game, progress=100, has_plat=with_platinum)
+    ProfileTrophyGroupFactory(profile=profile, trophy_group=group, progress=100)
+    return game, group
+
+
+def test_a_finished_game_offers_its_plat_card(client):
+    """The reward for finishing: a LINK to the share surface, deep-linked to this completion. Not a
+    modal here -- the share flow is a whole page (preview, theme picker, rating), and a second copy of
+    it on game detail is the drift the rebuild removed."""
+    profile = ProfileFactory(is_linked=True)
+    game, group = _finished(profile, with_platinum=True)
+    client.force_login(profile.user)
+
+    content = _detail(client, game)
+
+    assert 'gd-platcard' in content
+    assert f'?c={group.id}' in content, 'must deep-link this completion, not the bare page'
+    assert 'You platinumed this' in content
+    assert 'gd-platcard--full' not in content
+
+
+def test_a_100_percent_clear_offers_the_full_variant(client):
+    profile = ProfileFactory(is_linked=True)
+    game, _ = _finished(profile, with_platinum=False)
+    client.force_login(profile.user)
+
+    content = _detail(client, game)
+
+    assert 'gd-platcard--full' in content and 'You finished this 100%' in content
+
+
+def test_an_unfinished_game_offers_no_card(client):
+    """`eligible_completions` is the gate, so the CTA can never offer a card the share page would deny."""
+    from tests.factories import ProfileTrophyGroupFactory, TrophyGroupFactory
+
+    profile = ProfileFactory(is_linked=True)
+    game = GameFactory(concept=ConceptFactory(), defined_trophies=_DEFINED)
+    group = TrophyGroupFactory(game=game, trophy_group_id='default', defined_trophies=_DEFINED)
+    ProfileGameFactory(profile=profile, game=game, progress=61)
+    ProfileTrophyGroupFactory(profile=profile, trophy_group=group, progress=61)
+    client.force_login(profile.user)
+
+    assert 'gd-platcard' not in _detail(client, game)
+
+
+def test_another_hunters_completion_is_never_offered_as_your_card(client):
+    """This page also renders someone else's progress at /games/<np>/<username>/. A card is personal, so
+    linking THEIR completion would send the viewer to their own share page with a group id it refuses --
+    the destination re-checks ownership with the same predicate."""
+    them, me = ProfileFactory(is_linked=True), ProfileFactory(is_linked=True)
+    game, _ = _finished(them, with_platinum=True)
+    client.force_login(me.user)
+
+    url = reverse('game_detail_with_profile',
+                  kwargs={'np_communication_id': game.np_communication_id,
+                          'psn_username': them.psn_username})
+    content = client.get(url).content.decode()
+
+    assert 'gd-platcard' not in content
+
+
+def test_an_anonymous_visitor_sees_no_card_cta(client):
+    profile = ProfileFactory(is_linked=True)
+    game, _ = _finished(profile, with_platinum=True)
+
+    assert 'gd-platcard' not in _detail(client, game)

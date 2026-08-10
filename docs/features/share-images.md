@@ -128,6 +128,14 @@ close affordance. Each host passes `onSaved` / `onCancel` / `onDismiss` (and `on
 page chrome). Game Detail's live panel update and the share modal's preview refresh are the only
 page-specific parts left.
 
+**Game Detail links IN**, both ways round now. A finished game shows a `gd-platcard` CTA under the
+trophy haul, deep-linking to `/shareables/?c=<trophy_group_id>` so the card opens on the surface built
+for it. Deliberately a link, not a modal on that page: the share flow is a whole surface (preview,
+theme picker, rating controls) and a second copy of it there is the drift the rebuild removed. The CTA
+asks `eligible_completions` -- the same predicate the browse page and every endpoint use -- so it can
+never offer a card they would refuse, and it is gated on the profile being the VIEWER's own, since the
+page also renders another hunter's progress at `/games/<np>/<username>/`.
+
 **The modal's header links out to the game** (`game_url` on the HTML payload). It is built server-side
 because `game_detail` keys on `np_communication_id`, not a pk, so JS has nothing to assemble it from --
 and it is deliberately absent from the CARD template, since a rendered PNG leaves the site and cannot
