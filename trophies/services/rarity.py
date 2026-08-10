@@ -13,8 +13,10 @@ nothing here takes a profile.
 pursuers (profiles with real progress); for anything else it is whoever could plausibly have earned it.
 Against the whole userbase almost everything reads Mythic, which makes the scale useless.
 
-**Grading is derived, never stored** -- except for the ratchet floor (see `effective_pct`), which exists
-so a grade can rise but never fall.
+**Grading is derived, never stored.** The thresholds below are fixed; the population underneath them is
+not. So a grade CAN change as a community grows into something -- a title earned by 3% of pursuers at
+launch may read Uncommon a year later. That is intended: the grade describes the thing as it stands
+today, and a fixed scale over a live population is the whole model. Don't "fix" it by freezing grades.
 """
 
 #: Percentage of the eligible population that earned it -> class. First ceiling under wins; else common.
@@ -51,38 +53,20 @@ def rarity_class_for(pct: float) -> str:
     return 'common'
 
 
-def effective_pct(current_pct, floor_pct=None):
-    """The percentage a grade is computed from, honouring the ratchet.
-
-    A grade may rise but never fall. Rarity is derived from a denominator that only grows, so without
-    this a hunter's Mythic silently becomes Rare as more people earn it -- the grade stops describing
-    the thing and becomes a weather report that can take something away. `floor_pct` is the lowest
-    percentage the thing has ever reached; grading from it keeps the best grade it ever held.
-
-    Still community-level: the floor is a property of the THING, identical for everyone. (Freezing per
-    hunter at earn time would be worse -- two people would see different grades on the same item.)
-    """
-    if current_pct is None:
-        return None
-    if floor_pct is None:
-        return current_pct
-    return min(current_pct, floor_pct)
-
-
-def rarity_for(earned_count: int, eligible_count: int, floor_pct=None):
+def rarity_for(earned_count: int, eligible_count: int):
     """(pct, class) for anything gradeable.
 
       - No eligible population yet  -> (None, '')  -> callers render "rarity pending".
       - Population exists, 0 earners -> (0.0, '')  -> an honest 0%, but NO class: unearned is not
         an achievement and must not wear the prestige grade.
-      - Otherwise the real percentage and its bucket, ratcheted by `floor_pct`.
+      - Otherwise the real percentage and its bucket.
 
-    The percentage returned is the LIVE one (what is true right now, and what surfaces print); only the
-    class honours the floor. Showing a ratcheted percentage would be a lie about the community.
+    Both are LIVE. The thresholds are fixed, the population moves, so a grade genuinely can change over
+    time -- see the note on drift in the module docstring.
     """
     if not eligible_count:
         return None, ''
     pct = round(min(100.0, 100.0 * earned_count / eligible_count), 1)
     if not earned_count:
         return pct, ''
-    return pct, rarity_class_for(effective_pct(pct, floor_pct))
+    return pct, rarity_class_for(pct)

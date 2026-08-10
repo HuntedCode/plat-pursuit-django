@@ -35,25 +35,20 @@ from the one displayed is how a card ends up reading "Mythic · 44,210 wearing".
 
 ---
 
-## The ratchet
+## Grades drift, and that is intended
 
-**A grade may rise, but never fall.**
+The thresholds are **fixed**; the population underneath them is not. Both numbers grow, but the
+denominator grows faster as more hunters start a series, so a percentage climbs over time and a grade
+can fall with it — a title earned by 3% of pursuers at launch may read Uncommon a year later.
 
-Rarity is derived from a denominator that only grows, so without a floor a grade drifts downward as
-more people earn the thing: a hunter logs in and their Mythic has become Rare. That makes the grade a
-weather report rather than a property of the item, and it can quietly take something away.
+This is the model, not a bug. The grade describes the thing **as it stands today**, and "under 5% of
+the people who tried it" means the same thing in year three as it did in week one. A fixed scale over a
+live population is the whole point.
 
-`GroupBadge.rarity_floor_pct` and `Title.rarity_floor_pct` store the lowest percentage each has ever
-reached. `rarity.effective_pct` grades from `min(live, floor)`.
-
-The floor is still community-level — it belongs to the thing and is identical for everyone. Freezing
-per-hunter at earn time would be *worse*: two people would see different grades for the same item,
-which is not how anyone reads rarity.
-
-**The percentage shown is always the live one.** Only the *class* honours the floor. A ratcheted
-percentage would be a lie about the community: the number says how many, the grade says how rare.
-
-Maintained nightly by [`recalc_rarity_floors`](../guides/cron-jobs.md#recalc_rarity_floors).
+It was briefly built the other way (a stored floor, so a grade could rise but never fall) and removed
+before it shipped: it added a column, a nightly job and a migration to preserve a number that is less
+true than the live one. **Don't re-add it without a deliberate decision** — if a grade "wrongly" drops,
+the answer is to revisit `RARITY_THRESHOLDS`, not to freeze history.
 
 ---
 
@@ -61,7 +56,7 @@ Maintained nightly by [`recalc_rarity_floors`](../guides/cron-jobs.md#recalc_rar
 
 | Piece | Where | What it owns |
 |---|---|---|
-| Vocabulary + grading | `trophies/services/rarity.py` | classes, thresholds, labels, icon map, `rarity_for()`, `effective_pct()` |
+| Vocabulary + grading | `trophies/services/rarity.py` | classes, thresholds, labels, icon map, `rarity_for()` |
 | Badge-specific population | `trophies/services/badge_rarity.py` | `group_rarity()` (a badge-flavoured name), `annotate_group_rarity()` for DB-side filtering |
 | The grade label | `templates/components/rarity_grade.html` | glyph + name + percentage, for the standard composition |
 | The scale + material | `static/css/components/rarity.css` | `--rar-*` per grade, `.pp-rarity`, `.pp-rarity-surface`, `.pp-rarity-gem` |
@@ -118,16 +113,13 @@ re-declaring four grade colours.
 - **Green now means rarity.** `--pp-success` is emerald, so a green "done"/"yours" marker sitting beside
   a grade reads as the same signal. Titles' "Yours" moved to `--pp-text-dim` for exactly this. Check any
   new surface that puts a success state next to a grade.
-- **A floor of `NULL` means "no floor", not zero.** Until `recalc_rarity_floors` first runs, everything
-  grades live. Correct, not broken.
 - **`GroupBadge.rarity_pct` / `rarity_rank` / `rarity_class` are dead scaffolding**, kept only because
-  they are surfaced read-only in admin. They are NOT the ratchet floor and nothing reads them for
-  display. Don't wire new code to them.
+  they are surfaced read-only in admin. Nothing reads them for display — grading is live. Don't wire
+  new code to them, and don't mistake them for a stored grade.
 
 ---
 
 ## Related Docs
 
-- [cron-jobs](../guides/cron-jobs.md#recalc_rarity_floors) — the nightly floor sweep
 - [design-system](design-system.md) — where rarity sits in the wider token set
 - [badge-backend-rebuild](../design/rebuild/badge-backend-rebuild.md) — the live-read philosophy this follows

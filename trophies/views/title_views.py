@@ -122,9 +122,6 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
             # 0 earners is unearned, not an achievement, so it must not wear the prestige grade.
             rarity_pct, rarity_class = group_rarity(
                 holders.get(series.title_id, 0), pursuers.get(series.series_slug, 0),
-                # The ratchet: a grade may rise but never fall, so a hunter's Mythic is not
-                # silently demoted as the community catches up.
-                floor_pct=series.title.rarity_floor_pct,
             )
 
             entries.append({

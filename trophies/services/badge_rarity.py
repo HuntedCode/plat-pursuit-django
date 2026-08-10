@@ -21,13 +21,13 @@ from trophies.services.rarity import (  # noqa: F401  (re-exported: long-standin
 )
 
 
-def group_rarity(earned_count: int, participants: int, floor_pct=None):
+def group_rarity(earned_count: int, participants: int):
     """(pct, class) for a group badge, given its earners + the series' pursuer count.
 
     Thin badge-flavoured name over `rarity.rarity_for`; the grading rules are shared with every other
     surface so a badge and its title cannot disagree about what "Rare" means.
     """
-    return rarity_for(earned_count, participants, floor_pct=floor_pct)
+    return rarity_for(earned_count, participants)
 
 
 def annotate_group_rarity(gb_qs):
