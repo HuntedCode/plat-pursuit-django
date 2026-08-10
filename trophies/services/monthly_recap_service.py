@@ -769,10 +769,13 @@ class MonthlyRecapService:
         offered, so it was never opened, so it never got a row. That chicken-and-egg was the actual thing
         blocking full history -- not the premium checks.
 
-        DB-aggregated: one grouped COUNT, `TruncMonth` in the hunter's own timezone so a trophy earned at
-        23:00 on the 31st belongs to the month they experienced it in, not the UTC one. Bounded by the
-        profile's earned trophies via the (profile, earned, earned_date_time) composite index, and it
-        returns at most one row per month -- never the trophies themselves.
+        DB-aggregated: `TruncMonth` in the hunter's own timezone, GROUPed in Postgres, so a trophy earned
+        at 23:00 on the 31st belongs to the month they experienced it in rather than the UTC one. Served
+        by the partial (profile, earned, earned_date_time) index, and it returns at most one row per
+        month -- never the trophies themselves.
+
+        Scan cost is still O(that profile's trophies), so call it ONCE per render and pass `user_tz` in;
+        a whale's 250k rows is a cheap index scan but not a free one.
 
         Returns: set of (year, month).
         """
@@ -784,7 +787,7 @@ class MonthlyRecapService:
             .filter(profile=profile, earned=True, earned_date_time__isnull=False)
             .annotate(bucket=TruncMonth('earned_date_time', tzinfo=user_tz))
             .values('bucket')
-            .annotate(n=Count('id'))
+            .annotate(n=Count('id'))       # forces the GROUP BY; the count itself is not selected
             .values_list('bucket', flat=True)
         )
         return {(dt.year, dt.month) for dt in rows if dt}
@@ -877,26 +880,22 @@ class MonthlyRecapService:
         # row was never offered, never opened, and so never got a row. See `months_with_activity`.
         active_months = cls.months_with_activity(profile, user_tz=user_tz)
 
-        # Determine earliest year based on user's first earned trophy
-        from trophies.models import EarnedTrophy
-
-        first_trophy = EarnedTrophy.objects.filter(
-            profile=profile,
-            earned=True,
-            earned_date_time__isnull=False
-        ).order_by('earned_date_time').first()
-
-        if first_trophy and first_trophy.earned_date_time:
-            earliest_year = first_trophy.earned_date_time.year
-            earliest_month = first_trophy.earned_date_time.month
+        # Earliest month, derived from `active_months` -- the SAME local-time source as has_data below.
+        #
+        # This used to read `first_trophy.earned_date_time.year/.month` straight off the UTC value while
+        # active_months was bucketed in local time, and the two disagreed for any hunter west of UTC
+        # whose first trophy landed in the opening hours of a UTC month. A Los Angeles hunter whose first
+        # trophy was 2024-03-01 03:00Z earned it on 2024-02-29 locally: the flat list offered February
+        # while the calendar marked it `is_before_first_trophy` and disabled it. Worse, if that first
+        # trophy fell on 1 January UTC the whole preceding local year was never even emitted by the year
+        # range below, so December vanished from the calendar entirely while the flat list listed it.
+        if active_months:
+            earliest_year, earliest_month = min(active_months)
+        elif profile.created_at:
+            created_local = profile.created_at.astimezone(user_tz)
+            earliest_year, earliest_month = created_local.year, created_local.month
         else:
-            # Fallback: use profile creation date or current year
-            if profile.created_at:
-                earliest_year = profile.created_at.year
-                earliest_month = profile.created_at.month
-            else:
-                earliest_year = current_year
-                earliest_month = 1
+            earliest_year, earliest_month = current_year, 1
 
         # Build year-by-year structure
         years_data = []

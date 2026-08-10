@@ -2620,6 +2620,19 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
         from django.utils import timezone
         from users.services.email_preference_service import EmailPreferenceService
 
+        # Honour the same kill switch the cron command does. This is a SECOND send path, and while it is
+        # staff-only it renders the same emails/monthly_recap.html -- so leaving it open would mean "the
+        # recap email is off" was true of the cron and false of the admin. Nothing should go out carrying
+        # the design being replaced, whoever presses the button.
+        if not getattr(settings, 'MONTHLY_RECAP_SEND_ENABLED', False):
+            self.message_user(
+                request,
+                "Monthly recap sends are disabled (MONTHLY_RECAP_SEND_ENABLED is False) while the recap "
+                "is being rebuilt. No emails were sent.",
+                level=messages.WARNING,
+            )
+            return
+
         # Filter to only finalized recaps with linked users
         valid_recaps = queryset.filter(
             is_finalized=True,

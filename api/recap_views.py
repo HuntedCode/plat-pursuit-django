@@ -20,8 +20,7 @@ from django_ratelimit.decorators import ratelimit
 from trophies.models import MonthlyRecap
 from trophies.services.monthly_recap_service import MonthlyRecapService
 from trophies.recap_utils import (
-    get_user_local_now, get_most_recent_completed_month,
-    is_most_recent_completed_month, check_sync_freshness,
+    get_user_local_now, is_most_recent_completed_month, check_sync_freshness, MIN_RECAP_YEAR,
 )
 from core.services.share_image_cache import ShareImageCache
 
@@ -40,6 +39,27 @@ def _check_profile_synced(request):
         return Response(
             {'error': 'Profile sync not complete.', 'sync_gate': profile.sync_status},
             status=http_status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
+def _check_month_bounds(year, month, now_local):
+    """Returns a 400 Response if year/month cannot describe a real past month. None otherwise.
+
+    Shared because it was NOT shared: only RecapDetailView validated the year, and the premium 403 was
+    incidentally doing the job on the other three -- `is_recent_or_current` is false for year 0, so a
+    non-premium request was rejected before it could reach the date maths. Removing the gate exposed the
+    crash: /html/, /png/ and /slide/ each 500'd with an unhandled ValueError on `/api/v1/recap/0/1/...`.
+    """
+    if year < MIN_RECAP_YEAR or not (1 <= month <= 12):
+        return Response(
+            {'error': 'Invalid year or month.'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+    if (year > now_local.year) or (year == now_local.year and month > now_local.month):
+        return Response(
+            {'error': 'Cannot view recap for future months.'},
+            status=http_status.HTTP_400_BAD_REQUEST,
         )
     return None
 
@@ -125,7 +145,7 @@ class RecapAvailableView(APIView):
     GET /api/v1/recap/available/
 
     Returns list of months with available recaps for the authenticated user.
-    Respects premium gating - non-premium users only see current month.
+    Every month the hunter earned a trophy in; no gating.
     """
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication, TokenAuthentication]
@@ -146,7 +166,7 @@ class RecapDetailView(APIView):
     GET /api/v1/recap/<year>/<month>/
 
     Returns recap data for slides rendering.
-    Includes premium gating - past months require premium.
+    No gating: any past month with activity is viewable.
     """
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication, TokenAuthentication]
@@ -159,40 +179,14 @@ class RecapDetailView(APIView):
         profile = request.user.profile
         now_local = get_user_local_now(request)
 
-        # Validate month
-        if not 1 <= month <= 12:
-            return Response(
-                {'error': 'Invalid month. Must be 1-12.'},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
-
-        # No premium gate: every month a hunter earned a trophy in is theirs to look back at.
-        recent_year, recent_month = get_most_recent_completed_month(now_local)
-        is_recent_or_current = (
-            (year == now_local.year and month == now_local.month) or
-            (year == recent_year and month == recent_month)
-        )
+        bounds = _check_month_bounds(year, month, now_local)
+        if bounds:
+            return bounds
 
         # Check sync freshness for the most recent completed month
         stale_gate = _check_sync_freshness_api(profile, year, month, now_local)
         if stale_gate:
             return stale_gate
-
-        # Sanity floor only. This used to be a hard `year < 2023`, which is not a fact about any hunter
-        # -- PSN trophies date to 2008, and the real lower bound is the hunter's own first trophy. That
-        # bound is enforced where it belongs: `get_or_generate_recap` returns None for a month with no
-        # activity, which is already handled below as "no activity found". This keeps only a guard
-        # against nonsense values reaching date arithmetic.
-        if year < 2006:
-            return Response(
-                {'error': 'Invalid year.'},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
-        if (year > now_local.year) or (year == now_local.year and month > now_local.month):
-            return Response(
-                {'error': 'Cannot view recap for future months.'},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
 
         # Get or generate the recap
         recap = MonthlyRecapService.get_or_generate_recap(profile, year, month)
@@ -239,13 +233,6 @@ class RecapRegenerateView(APIView):
             return gate
         profile = request.user.profile
         now_local = get_user_local_now(request)
-
-        # Validate month
-        if not 1 <= month <= 12:
-            return Response(
-                {'error': 'Invalid month. Must be 1-12.'},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
 
         # Only allow regeneration of current month
         is_current_month = (year == now_local.year and month == now_local.month)
@@ -303,20 +290,9 @@ class RecapShareImageHTMLView(APIView):
 
         logger.info(f"[RECAP-HTML] Request for {profile.psn_username} - {year}/{month}")
 
-        # Validate month
-        if not 1 <= month <= 12:
-            return Response(
-                {'error': 'Invalid month. Must be 1-12.'},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
-
-        # No premium gate: every month a hunter earned a trophy in is theirs to look back at.
-        recent_year, recent_month = get_most_recent_completed_month(now_local)
-        is_recent_or_current = (
-            (year == now_local.year and month == now_local.month) or  # Current calendar month
-            (year == recent_year and month == recent_month)           # Most recent completed month
-        )
-
+        bounds = _check_month_bounds(year, month, now_local)
+        if bounds:
+            return bounds
 
         # Check sync freshness for the most recent completed month
         stale_gate = _check_sync_freshness_api(profile, year, month, now_local)
@@ -442,13 +418,10 @@ class RecapShareImagePNGView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        # No premium gate: every month a hunter earned a trophy in is theirs to look back at.
-        recent_year, recent_month = get_most_recent_completed_month(now_local)
-        is_recent_or_current = (
-            (year == now_local.year and month == now_local.month) or
-            (year == recent_year and month == recent_month)
-        )
 
+        bounds = _check_month_bounds(year, month, now_local)
+        if bounds:
+            return bounds
 
         # Check sync freshness for the most recent completed month
         stale_gate = _check_sync_freshness_api(profile, year, month, now_local)
@@ -546,20 +519,9 @@ class RecapSlidePartialView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        # Validate month
-        if not 1 <= month <= 12:
-            return Response(
-                {'error': 'Invalid month. Must be 1-12.'},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
-
-        # No premium gate: every month a hunter earned a trophy in is theirs to look back at.
-        recent_year, recent_month = get_most_recent_completed_month(now_local)
-        is_recent_or_current = (
-            (year == now_local.year and month == now_local.month) or  # Current calendar month
-            (year == recent_year and month == recent_month)           # Most recent completed month
-        )
-
+        bounds = _check_month_bounds(year, month, now_local)
+        if bounds:
+            return bounds
 
         # Check sync freshness for the most recent completed month
         stale_gate = _check_sync_freshness_api(profile, year, month, now_local)

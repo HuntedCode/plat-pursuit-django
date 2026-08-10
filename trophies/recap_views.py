@@ -13,7 +13,7 @@ from core.services.tracking import track_page_view, track_site_event
 from trophies.services.monthly_recap_service import MonthlyRecapService
 from trophies.mixins import RecapSyncGateMixin
 from trophies.recap_utils import (
-    get_user_local_now, get_most_recent_completed_month, check_sync_freshness,
+    get_user_local_now, get_most_recent_completed_month, check_sync_freshness, MIN_RECAP_YEAR,
 )
 from trophies.themes import get_available_themes_for_grid
 
@@ -100,9 +100,13 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         profile = request.user.profile
         now_local = get_user_local_now(request)
 
-        # Validate month
-        if not 1 <= month <= 12:
-            raise Http404("Invalid month")
+        # Validate month AND year. The year floor matters as much as the month: `<int:year>` matches 0,
+        # and get_month_date_range does `datetime(year, month, 1)`, which raises for year 0 -- a 500 from
+        # a URL. The API gained a shared bounds helper for exactly this; the page needs the same floor.
+        # MIN_RECAP_YEAR is a sanity bound, not a claim about any hunter: their real floor is their own
+        # first trophy, which enforces itself (a month with no activity has no recap).
+        if not 1 <= month <= 12 or year < MIN_RECAP_YEAR:
+            raise Http404("Invalid year or month")
 
         # Block access to current month (in-progress) for all users
         # Recaps are only for completed months
@@ -194,11 +198,10 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
 
         context['recap_json'] = json.dumps(recap_data)
 
-        # Get available months for bottom month picker (backward compatibility)
-        is_current_month = (year == now_local.year and month == now_local.month)
-        available_months = MonthlyRecapService.get_available_months(profile)
-        context['available_months'] = available_months
-        context['is_current_month'] = is_current_month
+        # NOT available_months here: only recap_index.html renders that list, and computing it on this
+        # page meant a SECOND whale-scale aggregate over EarnedTrophy per render, feeding a context
+        # variable no template on this page reads. The calendar below is this page's month picker.
+        context['is_current_month'] = (year == now_local.year and month == now_local.month)
 
         # Add available themes for color grid modal (no game art for recaps)
         context['available_themes'] = get_available_themes_for_grid(include_game_art=False, grouped=True)

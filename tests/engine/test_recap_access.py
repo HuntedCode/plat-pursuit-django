@@ -24,8 +24,12 @@ pytestmark = pytest.mark.django_db
 
 
 def _hunter(*, premium=False, synced=True):
-    """A linked, synced hunter -- the state every recap gate assumes before it does anything."""
-    profile = ProfileFactory(is_linked=True, sync_status='synced')
+    """A linked, synced hunter -- the state every recap gate assumes before it does anything.
+
+    `premium` is a real field (Profile.user_is_premium), set here so the tests below can assert that it
+    makes NO difference. An earlier version took the argument and ignored it, which made the headline
+    test of this change pass only because the factory happens to default to non-premium."""
+    profile = ProfileFactory(is_linked=True, sync_status='synced', user_is_premium=premium)
     if synced:
         profile.last_synced = timezone.now()
         profile.save(update_fields=['last_synced'])
@@ -114,18 +118,22 @@ def test_opening_a_recap_marks_it_viewed(client):
 # ── The gate that is being removed ────────────────────────────────────────────
 
 
-def test_a_free_hunter_can_open_an_old_month(client):
+@pytest.mark.parametrize('premium', [False, True], ids=['free', 'premium'])
+def test_any_hunter_can_open_an_old_month(client, premium):
     """THE change. Previously any month older than the most recent completed one redirected a
     non-premium hunter to the index. Recaps are a record of what someone did; charging to look back at
-    your own history is the wrong thing to sell."""
-    profile = _hunter(premium=False)
+    your own history is the wrong thing to sell.
+
+    Parametrized over the real `user_is_premium` field so this asserts the actual claim -- that the two
+    hunters are treated IDENTICALLY -- rather than passing because the factory defaults to non-premium."""
+    profile = _hunter(premium=premium)
     now = timezone.now()
     old_year, old_month = (now.year - 1, 6)
     _recap(profile, old_year, old_month)
 
     resp = _get(client, profile, old_year, old_month)
 
-    assert resp.status_code == 200, 'an old month must open for a free hunter'
+    assert resp.status_code == 200, 'an old month must open regardless of premium'
 
 
 def test_a_free_hunter_can_still_open_the_recent_month(client):
@@ -135,3 +143,47 @@ def test_a_free_hunter_can_still_open_the_recent_month(client):
     _recap(profile, year, month)
 
     assert _get(client, profile, year, month).status_code == 200
+
+
+# ── The API's month bounds ────────────────────────────────────────────────────
+
+RECAP_ENDPOINTS = [
+    '/api/v1/recap/{y}/{m}/',
+    '/api/v1/recap/{y}/{m}/html/',
+    '/api/v1/recap/{y}/{m}/png/',
+    '/api/v1/recap/{y}/{m}/slide/intro/',
+]
+
+
+@pytest.mark.parametrize('url', RECAP_ENDPOINTS)
+def test_an_out_of_range_year_is_rejected_not_a_crash(client, url):
+    """Regression. Only RecapDetailView validated the year -- on the other three the premium 403 was
+    incidentally doing the job, because `is_recent_or_current` is false for year 0. Removing the gate
+    exposed the real hole: `datetime(0, 1, 1)` raises deep inside get_month_date_range, so every
+    logged-in hunter could 500 three endpoints with a URL."""
+    profile = _hunter()
+    client.force_login(profile.user)
+
+    resp = client.get(url.format(y=0, m=1))
+
+    assert resp.status_code == 400, 'must be rejected at the gate, not raise'
+
+
+@pytest.mark.parametrize('url', RECAP_ENDPOINTS)
+def test_a_future_month_is_rejected_on_every_endpoint(client, url):
+    """The same non-uniformity: only one of the four checked. The bounds helper is shared now."""
+    profile = _hunter()
+    client.force_login(profile.user)
+    now = timezone.now()
+
+    resp = client.get(url.format(y=now.year + 1, m=1))
+
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize('url', RECAP_ENDPOINTS)
+def test_an_invalid_month_is_rejected_on_every_endpoint(client, url):
+    profile = _hunter()
+    client.force_login(profile.user)
+
+    assert client.get(url.format(y=2025, m=13)).status_code == 400

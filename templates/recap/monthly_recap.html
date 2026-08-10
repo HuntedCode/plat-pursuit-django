@@ -421,7 +421,11 @@
                  style="display: {% if year_data.year == year %}grid{% else %}none{% endif %};">
 
                 {% for month_data in year_data.months %}
-                {% if month_data.is_future or month_data.is_current or month_data.is_before_first_trophy %}
+                {% comment %}`not has_data` is part of the gate, not decoration: a month the hunter earned
+                no trophies in has no recap to open, and offering it lands them on "No Activity This
+                Month". The aria-label below has always claimed to cover that case; the condition never
+                did.{% endcomment %}
+                {% if month_data.is_future or month_data.is_current or month_data.is_before_first_trophy or not month_data.has_data %}
                     {# Disabled button for future months, current month (in-progress), or months before first trophy #}
                     <button class="btn btn-sm btn-ghost opacity-50"
                             disabled
