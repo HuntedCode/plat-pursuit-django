@@ -37,9 +37,12 @@
 [data-rarity="common"]   { --rar-c: var(--pp-rarity-common);   --rar-tint: 0%;  --rar-edge: 10%; --rar-spec: 0;     --rar-inset: 0.03; --rar-lift: 0%; }
 [data-rarity="uncommon"] { --rar-c: var(--pp-rarity-uncommon); --rar-tint: 8%;  --rar-edge: 32%; --rar-spec: 0.04;  --rar-inset: 0.07; --rar-lift: 1%; }
 [data-rarity="rare"]     { --rar-c: var(--pp-rarity-rare);     --rar-glow: var(--pp-rarity-rare-glow);
-                           --rar-tint: 14%; --rar-edge: 52%; --rar-spec: 0.085; --rar-inset: 0.12; --rar-lift: 2%; }
+                           --rar-tint: 11%; --rar-edge: 46%; --rar-spec: 0.085; --rar-inset: 0.12; --rar-lift: 2%; }
+/* Tint/edge are lower than the emerald ramp's were at the same rung. These are PERCENTAGES OF A HUE, so
+   a higher-chroma colour lands heavier at the identical number -- magenta at the old 20% washed the plate
+   pink enough to outshout its own label. Tuned by rendering the real plate, not by matching the numbers. */
 [data-rarity="mythic"]   { --rar-c: var(--pp-rarity-mythic);   --rar-glow: var(--pp-rarity-mythic-glow);
-                           --rar-tint: 20%; --rar-edge: 72%; --rar-spec: 0.13;  --rar-inset: 0.18; --rar-lift: 3.5%; }
+                           --rar-tint: 14%; --rar-edge: 60%; --rar-spec: 0.13;  --rar-inset: 0.18; --rar-lift: 3.5%; }
 /* Not a grade. Nobody holds this yet, so it wears the CTA tint rather than a prestige colour. */
 [data-rarity="unearned"] { --rar-c: var(--pp-primary); --rar-tint: 3%; --rar-edge: 20%; }
 
@@ -95,9 +98,11 @@
 @media (prefers-reduced-motion: no-preference) {
     .pp-rarity-surface[data-rarity="mythic"]::after {
         content: ''; position: absolute; inset: -40%; pointer-events: none; z-index: 0;
+        /* Shifts through mythic's own neighbourhood (violet -> pink -> cyan). The warm gold that used to
+           sit in here reads as the GOLD TIER now that mythic is magenta rather than green. */
         background: linear-gradient(104deg, transparent 40%,
-            rgba(120, 220, 255, 0.05) 47%, rgba(190, 150, 255, 0.06) 52%,
-            rgba(255, 210, 140, 0.05) 57%, transparent 64%);
+            rgba(190, 150, 255, 0.06) 47%, rgba(255, 150, 220, 0.06) 52%,
+            rgba(120, 220, 255, 0.05) 57%, transparent 64%);
         transform: translateX(-38%);
         animation: ppRaritySweep 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     }

@@ -146,19 +146,32 @@
   --pp-info: oklch(0.74 0.16 245);
   /* Badge rarity (shared by the Frame primitive + the badge-detail community band, so a recolor stays in one
      place). Mirrors the frame.css scale: common dim -> mythic glow. */
-  /* Rarity: ONE ramp, mint -> emerald, deepening as it climbs. The old set was four unrelated hues
-     (white / pale green / gold / near-white) and it INVERTED at the top: mythic sat at 94% lightness,
-     back toward where common lives, so the loudest grade on the site was rare -- the second-rarest.
-     A single axis cannot invert, and lightness carrying the signal (96 -> 89 -> 81 -> 72) means the
-     order survives every form of colour blindness, which green-versus-gold did not.
-     Paired with the material ladder in components/rarity.css: hue gives the fast cold read, finish
-     gives the premium one. */
-  --pp-rarity-common: oklch(0.96 0.006 195);
-  --pp-rarity-uncommon: oklch(0.89 0.075 182);
-  --pp-rarity-rare: oklch(0.81 0.135 168);
-  --pp-rarity-rare-glow: oklch(0.81 0.135 168 / 0.38);
-  --pp-rarity-mythic: oklch(0.72 0.185 156);
-  --pp-rarity-mythic-glow: oklch(0.72 0.185 156 / 0.62);
+  /* Rarity: neutral -> teal -> indigo -> magenta. HUE does the separating (~90 degrees per step) while
+     chroma and glow climb with it, so the ramp still escalates monotonically.
+
+     Two earlier sets failed, in opposite directions. Four unrelated hues (white / pale green / gold /
+     near-white) INVERTED at the top -- mythic sat at 94% lightness, back where common lives, so the
+     loudest grade on the site was rare. Replacing it with one mint->emerald ramp fixed the inversion but
+     separated grades by LIGHTNESS ALONE, which collapses at chip size: on a dense wall uncommon and
+     mythic both read as "greenish", and because mythic was the darkest step it read QUIETER than the
+     second-commonest grade. Verified by rendering 32 mixed cells, not by reading values.
+
+     Every hue here clears the four tier metals -- gold (90), platinum's pale cyan, bronze's tan, silver's
+     grey -- because rarity sits ON cards that already colour themselves by tier. It also gets rarity off
+     --pp-success (162), so green can go back to meaning "done/yours" alone. Rare deliberately lands on
+     --pp-secondary's hue: a house colour, not an invention.
+
+     Colour is never the only channel: the grade is always spelled out and each wears its own glyph
+     (dot / diamond / sparkle), which is what carries the scale under colour blindness.
+
+     Paired with the material ladder in components/rarity.css: hue gives the fast cold read, finish gives
+     the premium one. */
+  --pp-rarity-common: oklch(0.70 0.015 256);     /* neutral -- the baseline must not announce itself */
+  --pp-rarity-uncommon: oklch(0.82 0.100 195);   /* teal */
+  --pp-rarity-rare: oklch(0.75 0.190 285);       /* indigo (--pp-secondary's hue) */
+  --pp-rarity-rare-glow: oklch(0.75 0.190 285 / 0.48);
+  --pp-rarity-mythic: oklch(0.72 0.240 350);     /* magenta */
+  --pp-rarity-mythic-glow: oklch(0.72 0.240 350 / 0.70);
   /* Rating star: the bright, inviting yellow-gold for USER-RATING stars (game-card, game-detail score +
      quick-take cards) -- distinct from the muted metallic --color-trophy-gold used for gold TROPHIES. */
   --pp-rating-star: oklch(0.86 0.17 90);

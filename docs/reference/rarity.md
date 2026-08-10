@@ -89,11 +89,32 @@ Rarity is **tint *and* material**, on one axis. Hue gives the fast cold read (wh
 glance); finish gives the premium one (this object is made of something better). Both climb together
 and both hang off the same `data-rarity`, so they cannot disagree.
 
-The ramp runs **mint → emerald**, deepening as it climbs (96 → 89 → 81 → 72 lightness). It replaced
-four unrelated hues (white / pale green / gold / near-white) that **inverted at the top**: mythic sat
-at 94% lightness, back toward where common lives, so the loudest grade on the site was *rare* — the
-second-rarest. A single axis cannot invert. Lightness carrying the signal also means the order survives
-every form of colour blindness, which green-versus-gold did not.
+The ramp runs **neutral → teal → indigo → magenta**. Hue does the separating (~90° per step) while
+chroma and glow climb with it, so the scale still escalates monotonically.
+
+Two earlier palettes failed, in opposite directions, and both are worth remembering:
+
+1. **Four unrelated hues** (white / pale green / gold / near-white) **inverted at the top** — mythic sat
+   at 94% lightness, back toward where common lives, so the loudest grade on the site was *rare*.
+2. **One mint→emerald ramp** fixed the inversion but separated grades by **lightness alone**, which
+   collapses at chip size: on a dense wall uncommon and mythic both read as "greenish", and because
+   mythic was the *darkest* step it read **quieter** than the second-commonest grade.
+
+Both were caught by rendering 32 mixed cells at wall scale, neither by reading the values. A palette
+that sorts fine as four big swatches can be unusable as forty small ones — always judge it at the
+density it will actually be seen.
+
+Every hue clears the four **tier metals** (gold, platinum's pale cyan, bronze's tan, silver's grey),
+which matters because rarity sits *on cards that already colour themselves by tier*. It also vacates
+`--pp-success` (162), so green can go back to meaning "done / yours" alone. Rare deliberately lands on
+`--pp-secondary`'s hue: a house colour rather than an invention.
+
+Colour is never the only channel. The grade is always spelled out and each wears its own glyph
+(dot / diamond / sparkle) — that, not the hue, is what carries the scale under colour blindness.
+
+**Tint and edge percentages are not transferable between palettes.** They are percentages *of a hue*, so
+a higher-chroma colour lands heavier at an identical number: magenta at the emerald ramp's 20% washed the
+plate pink enough to outshout its own label. Re-tune by rendering when the palette moves.
 
 ### Using it
 
@@ -131,9 +152,10 @@ re-declaring four grade colours.
 - **The gem's halo derives from `--rar-c`, not `--rar-glow`.** `--rar-glow` is deliberately absent below
   Rare so text doesn't glow at every grade — but a gem is an object and reads flat without one,
   uncommon included. Two jobs, two sources.
-- **Green now means rarity.** `--pp-success` is emerald, so a green "done"/"yours" marker sitting beside
-  a grade reads as the same signal. Titles' "Yours" moved to `--pp-text-dim` for exactly this. Check any
-  new surface that puts a success state next to a grade.
+- **Rarity no longer borrows green — keep it that way.** The emerald ramp collided with `--pp-success`,
+  so a "done"/"yours" marker beside a grade read as the same signal (Titles' "Yours" moved to
+  `--pp-text-dim` because of it, and can stay there). Any future palette should stay off 162, and off the
+  four tier metals, for the same reason: rarity is never the only thing on the card.
 - **A filtered numerator is only as good as the rows behind it.** Titles grade on `UserTitle` rows with
   `source_type='badge_series'`, but the *held* check on the same page filters nothing — so a title
   granted under another source showed as yours, equippable, and graded **"Be the first"** at the same
