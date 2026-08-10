@@ -95,7 +95,8 @@ The preview is the **real card markup** from the HTML endpoint, rendered at 1200
 with a transform. Preview and download therefore share one template and one theme list and cannot
 drift — which they repeatedly did under the old modal.
 
-**Grounds.** Four designed gradients (Substrate / Midnight / Ember / Aurora) plus one art ground per
+**Grounds.** Eight designed gradients, as four pairs -- a dark ground and its lifted sibling
+(Substrate/Fog, Midnight/Tide, Ember/Clay, Aurora/Retro Wave) -- plus one art ground per
 landscape image the game actually has. `Concept.landscape_urls()` is ordered by quality (trusted IGDB
 screenshots → artworks → PSN `bg_url`), so a game with several offers each as its own choice, capped at
 `ART_OPTION_CAP`. A game with **no** usable art is offered no art ground at all, rather than one that
@@ -161,6 +162,17 @@ art the card already offers.
 - **The preview is injected into the live site; the download is not.** Anything relying on inherited
   CSS lays out differently in the two — unset `line-height` caused exactly this, and the card now pins
   it on every text node. If you add markup, pin its layout.
+- **A card ground can be lighter, never light.** Every text colour in `plat_card.html` is a hardcoded
+  light hex (`#f0f6fd` headings, `#9da5b1` / `#8a939f` sub-text) because the card is inline-styled for
+  Playwright and has no tokens. A pale ground puts near-white text on near-white. "Lighter" means
+  raising the floor off `#05080c`, not inverting the card.
+- **Put a lifted ground's hot spot on the LEFT.** The top-right corner holds the wordmark and the
+  `platpursuit.com` link, drawn in the variant accent (`#27ebfe` platinum / `#ff9350` 100%). The dark
+  grounds can light that corner (Aurora does) because nothing competes at that value; a lifted one
+  washes the link out. Tide was drawn top-right first and had to move.
+- **A curated key that doesn't resolve fails SILENTLY.** `get_plat_card_themes` skips a key missing
+  from `GRADIENT_THEMES` rather than raising, so a typo just removes the ground from the picker with no
+  error anywhere. Pinned by `test_every_curated_key_resolves_to_a_real_theme`.
 - **`data-element="platinum-banner"` must stay OFF the plat card.** That hook lets a theme tint the old
   card's identity strip; both consumers would wreck this one (the renderer injects `background` with
   `!important`, and the preview JS paints the legacy theme's cyan tint onto it).

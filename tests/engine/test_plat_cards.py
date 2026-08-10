@@ -745,6 +745,33 @@ def test_the_cover_blur_ground_is_gone():
     assert 'gameArtBlur' not in PLAT_CARD_THEME_KEYS
 
 
+def test_every_curated_key_resolves_to_a_real_theme():
+    """`get_plat_card_themes` SKIPS a key it can't find rather than raising, so a typo doesn't break the
+    page -- the ground just silently never appears in the picker. That is exactly the failure nobody
+    notices, so the list and the registry are pinned to each other here."""
+    from trophies.themes import PLAT_CARD_THEME_KEYS, get_plat_card_themes
+
+    resolved = get_plat_card_themes()
+
+    assert [k for k, _ in resolved] == PLAT_CARD_THEME_KEYS, 'a key failed to resolve'
+    for key, entry in resolved:
+        assert entry['name'] and entry['background_css'], f'{key} resolved without a ground'
+
+
+def test_the_curated_set_reuses_the_existing_retro_wave_theme():
+    """Retro Wave is a SITE theme (category 'retro'), pulled into the card's curation unchanged rather
+    than redrawn for it -- a card-local copy would drift from the one the site pickers show. It is also
+    the one curated ground whose background is multi-layer, so it guards `_clean_css` handling that
+    the single-gradient house grounds never exercise."""
+    from trophies.themes import GRADIENT_THEMES, PLAT_CARD_THEME_KEYS, get_plat_card_themes
+
+    assert 'retroWave' in PLAT_CARD_THEME_KEYS
+    assert GRADIENT_THEMES['retroWave']['category'] == 'retro', 'reused in place, not recategorised'
+
+    css = dict(get_plat_card_themes())['retroWave']['background_css']
+    assert css.count('gradient(') >= 2 and '\n' not in css
+
+
 # ── The hunter's verdict: three axes + their own words ────────────────────────────────────────────
 
 def _rate(profile, concept, **kw):

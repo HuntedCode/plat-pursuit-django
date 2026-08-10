@@ -1688,6 +1688,22 @@ PLAT_CARD_THEME_KEYS = [
     'ppMidnight',
     'ppEmber',
     'ppAurora',
+    # ── The lighter half (team ask, 2026-08) ──────────────────────────────────────────────────────
+    # One LIFTED sibling per dark ground, so the picker reads as four pairs rather than eight
+    # unrelated options: Fog lifts Substrate, Tide lifts Midnight, Clay lifts Ember, and Retro Wave
+    # covers the violet end (which is why there is no lighter Aurora -- it would have been a third
+    # purple). `retroWave` is the EXISTING site theme, reused unchanged: it was already popular, and
+    # rendered on the real card it beat the replacement drawn for it.
+    #
+    # "Lighter" here can only mean LIFTED, never a light card. Every text colour in
+    # shareables/plat_card.html is a hardcoded light hex (#f0f6fd headings, #9da5b1 / #8a939f
+    # sub-text) because the card is an inline-styled Playwright render with no tokens -- a pale
+    # ground would put near-white text on near-white. These raise the floor off #05080c and let more
+    # colour through while keeping every text region dark enough to read.
+    'ppFog',
+    'ppTide',
+    'ppClay',
+    'retroWave',
     'ppArt',
 ]
 
@@ -1727,6 +1743,39 @@ GRADIENT_THEMES.update({
         'description': 'Violet into deep teal',
         'accent_color': '#a191ff',
         'background': 'radial-gradient(110% 90% at 78% 8%, #2a2044 0%, #141a2e 44%, #05080c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    # ── The lighter half ──────────────────────────────────────────────────────────────────────────
+    # Their hot spots are all LEFT, and that placement is load-bearing rather than taste: the card's
+    # top-right corner holds the wordmark and the `platpursuit.com` link, and the link is drawn in the
+    # variant accent (#27ebfe platinum / #ff9350 100%). The dark grounds can put their light there
+    # (Aurora does) because nothing competes at that value; a lifted ground washes the link out. Tide
+    # was drawn top-right first and cost the cyan link its pop, which is what moved all three.
+    'ppFog': {
+        'name': 'Fog',
+        'description': 'Lifted slate',
+        'accent_color': '#27ebfe',
+        'background': 'radial-gradient(125% 100% at 10% 98%, #4a5563 0%, #2b333d 44%, #131920 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    'ppTide': {
+        'name': 'Tide',
+        'description': 'Bright water',
+        'accent_color': '#27ebfe',
+        'background': 'radial-gradient(125% 100% at 14% 4%, #2f7d90 0%, #1c4a5e 44%, #0d2130 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    'ppClay': {
+        'name': 'Clay',
+        'description': 'Warm stone',
+        'accent_color': '#ff9350',
+        'background': 'radial-gradient(122% 98% at 16% 2%, #8a5a4a 0%, #4e3330 46%, #241a1c 100%)',
         'banner_background': 'transparent',
         'banner_border_color': '#404853',
         'category': 'plat_card',
