@@ -205,14 +205,19 @@ def test_medallion_state_follows_the_viewer(client):
 
 def test_query_count_is_flat_as_the_catalogue_grows(django_assert_num_queries, client):
     """The page must not N+1 per series -- art_layers() reads series.submitted_by for user-type series,
-    which was one extra query each until the prefetch covered it."""
+    which was one extra query each until the prefetch covered it.
+
+    9, not 8: the rarity grade added ONE grouped COUNT for the pursuer denominator. Both it and the
+    holder count are viewer-independent aggregates over indexed columns, bounded by the badge
+    catalogue rather than by anyone's trophies. If this number climbs again, the grade has started
+    querying per title."""
     p = ProfileFactory()
     for i in range(6):
         _series_with_title(f'Series {i}', f'Title {i}')
     client.force_login(p.user)
     client.get('/titles/')          # warm session/auth so the count reflects the view itself
 
-    with django_assert_num_queries(8):
+    with django_assert_num_queries(9):
         client.get('/titles/')
 
 
@@ -275,85 +280,92 @@ def test_equipped_plate_is_marked_worn_and_others_offer_equip(client):
     assert content.count('data-ttl-equip') == 2
 
 
-# ── Rarity: the plate's material ──────────────────────────────────────────────────────────────────
+# ── Rarity: the site's grade, not a second scheme ─────────────────────────────────────────────────
 #
-# How many hunters wear a title escalates how its plate LOOKS. The rule is relative (a percentile over
-# the claimed catalogue) rather than absolute, so it stays meaningful as the site grows -- fixed
-# thresholds rot, and rarity as a share of all profiles reproduces the PSN problem where every number
-# reads ultra-rare. Computed live and never stored: relative standings go stale and unfair.
+# A title's rarity comes from badge_rarity.group_rarity -- the SAME function badge detail and the browse
+# gallery use -- so one title cannot read two different rarities depending on which page you're on.
+# Denominator: the series' PURSUERS (SeriesBadgeStanding rows), because against the whole userbase almost
+# every badge reads Mythic. Numerator: TITLE holders, because that is the number printed beside the grade.
 
-def _bands(counts):
-    """rarity_bands over a synthetic catalogue. `counts` is title_id -> holder count."""
-    from trophies.views.title_views import rarity_bands
-    return rarity_bands(list(counts), counts)
-
-
-def test_scarcer_titles_land_in_scarcer_bands():
-    order = ['scarce', 'uncommon', 'common', 'widespread']
-    counts = {i: (i + 1) * 10 for i in range(20)}       # 10, 20, ... 200 holders
-
-    bands = _bands(counts)
-
-    ranks = [order.index(bands[i]) for i in sorted(counts, key=counts.get)]
-    assert ranks == sorted(ranks), f'bands are not monotonic with holder count: {ranks}'
-    assert bands[0] == 'scarce' and bands[19] == 'widespread'
+def _pursuers(series, n):
+    """n profiles making progress on the series (the rarity denominator)."""
+    for _ in range(n):
+        SeriesBadgeStanding.objects.create(profile=ProfileFactory(), series_slug=series.series_slug,
+                                           progress_bp=1000, stages_cleared=1, stages_total=5)
 
 
-def test_titles_with_equal_holders_share_a_band():
-    """Splitting a tie would hand one of two equally-rare titles a richer plate for no reason."""
-    counts = {i: 50 for i in range(10)}
-    counts[99] = 1                                       # one genuinely scarce title to spread against
-
-    bands = _bands(counts)
-
-    assert len({bands[i] for i in range(10)}) == 1
+def _wearers(series, n):
+    for _ in range(n):
+        UserTitle.objects.create(profile=ProfileFactory(), title=series.title,
+                                 source_type='badge_series', source_id=series.id)
 
 
-def test_an_unheld_title_is_unclaimed_not_legendary():
-    """A newly released series has no holders because it is NEW. Dressing that as the page's most
-    prestigious object would be a lie, so it gets its own state outside the ranking."""
-    counts = {i: i + 1 for i in range(12)}
-    counts[99] = 0
-
-    bands = _bands(counts)
-
-    assert bands[99] == 'unclaimed'
-    assert bands[0] == 'scarce', 'the zero-holder title must not displace the real scarcest one'
-
-
-def test_a_small_catalogue_ranks_nothing():
-    """With four titles, one of them is "the scarcest 10%" by arithmetic alone. Under the floor every
-    plate renders at the base material, which is the honest answer: we can't rank them yet."""
-    bands = _bands({1: 5, 2: 40, 3: 900})
-
-    assert set(bands.values()) == {''}
-
-
-def test_rarity_reaches_the_plate(client):
-    """The band has to survive as far as the markup -- it is what selects the plate's material."""
+@pytest.mark.parametrize('wearers, pursuers, expected', [
+    (1, 100, 'mythic'),      # 1%   -> under the 5% ceiling
+    (10, 100, 'rare'),       # 10%  -> under 15
+    (30, 100, 'uncommon'),   # 30%  -> under 35
+    (80, 100, 'common'),     # 80%
+])
+def test_a_title_wears_the_sites_rarity_grade(client, wearers, pursuers, expected):
     p = ProfileFactory()
-    holders = [ProfileFactory() for _ in range(3)]
-    for i in range(10):
-        series = _series_with_title(f'Series {i}', f'Title {i}')
-        # Spread the holders so the catalogue has a real distribution to rank against.
-        for h in holders[:(i % 3) + 1]:
-            UserTitle.objects.create(profile=h, title=series.title, source_type='badge_series',
-                                     source_id=series.id)
+    series = _series_with_title('Crash', 'Crate Crusher')
+    _pursuers(series, pursuers)
+    _wearers(series, wearers)
+
+    entry = _get(client, p).context['all_titles'][0]
+
+    assert entry['rarity_class'] == expected
+
+
+def test_the_grade_counts_title_holders_not_badge_earners(client):
+    """A title is granted by ANY live edition, so it is strictly easier than any single edition -- and
+    the plate prints "N wearing" right beside the grade. Grading a different population from the one
+    displayed is how a card ends up reading "Mythic - 44,210 wearing"."""
+    p = ProfileFactory()
+    series = _series_with_title('Crash', 'Crate Crusher')
+    _pursuers(series, 100)
+    _wearers(series, 40)
+
+    entry = _get(client, p).context['all_titles'][0]
+
+    assert entry['holders'] == 40
+    assert entry['rarity_pct'] == 40.0, 'the percentage must describe the number shown next to it'
+
+
+def test_a_title_nobody_holds_gets_no_grade(client):
+    """0 earners is unearned, not an achievement -- it must not wear the prestige grade. The page shows
+    the "Be the first" nudge instead, the same treatment the browse gallery gives an unearned badge."""
+    p = ProfileFactory()
+    series = _series_with_title('Crash', 'Crate Crusher')
+    _pursuers(series, 40)
+
+    resp = _get(client, p)
+
+    assert resp.context['all_titles'][0]['rarity_class'] == ''
+    assert 'Be the first' in resp.content.decode()
+
+
+def test_a_series_with_no_pursuers_yet_gets_no_grade(client):
+    """Nothing to grade against -- group_rarity returns (None, '') rather than dividing by zero."""
+    p = ProfileFactory()
+    _series_with_title('Crash', 'Crate Crusher')
+
+    entry = _get(client, p).context['all_titles'][0]
+
+    assert entry['rarity_class'] == '' and entry['rarity_pct'] is None
+
+
+def test_the_grade_reaches_the_plate_with_its_shared_colour_and_icon(client):
+    """The named grade, the --pp-rarity-* class and the shared #rarity-* sprite all have to ship --
+    a material with no label is decoration, not information."""
+    p = ProfileFactory()
+    series = _series_with_title('Crash', 'Crate Crusher')
+    _pursuers(series, 100)
+    _wearers(series, 1)                                  # 1% -> mythic
 
     content = _get(client, p).content.decode()
 
-    assert 'data-rarity=' in content
-    assert 'wearing' in content, 'the honest holder count is the visible text; the material is the signal'
-
-
-def test_rarity_adds_no_queries(django_assert_num_queries, client):
-    """Rarity is derived from the `holders` grouped COUNT the page already ran. If this budget moves,
-    the band computation has started hitting the database per title."""
-    p = ProfileFactory()
-    for i in range(6):
-        _series_with_title(f'Series {i}', f'Title {i}')
-    client.force_login(p.user)
-    client.get('/titles/')
-
-    with django_assert_num_queries(8):
-        client.get('/titles/')
+    assert 'ttl-plate__grade--mythic' in content
+    assert 'data-rarity="mythic"' in content
+    assert '#rarity-sparkle' in content
+    assert 'Mythic' in content

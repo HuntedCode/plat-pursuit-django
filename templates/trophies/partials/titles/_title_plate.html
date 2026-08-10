@@ -9,6 +9,10 @@ about words you have earned rendered its words smaller than a thumbnail it said 
 The medallion survives as the plate's STAMP -- a provenance mark in the corner, which is the role
 visual-identity assigns it, and the only thing that names the series at a glance.
 
+Rarity comes from `badge_rarity.group_rarity`, the SAME grade badge detail and the browse gallery show,
+in the same --pp-rarity-* colours and the same #rarity-* sprite. A second private scheme here would let
+one title read two different rarities depending on which page you were standing on.
+
 `view` adapts only the footer, so all three panels read as one family:
   yours -> equip control (or the Wearing marker)
   reach -> a Horizon toward the title + "N of M stages"
@@ -18,7 +22,7 @@ visual-identity assigns it, and the only thing that names the series at a glance
 equipping is still a single `.is-worn` class toggle.
 {% endcomment %}
 <article class="ttl-plate ttl-plate--tile{% if entry.held %} is-held{% endif %}{% if entry.is_displayed %} is-worn{% endif %}{% if entry.is_special %} is-special{% endif %}{% if not entry.held and entry.progress_pct %} is-progress{% endif %}"
-         {% if entry.rarity %}data-rarity="{{ entry.rarity }}"{% endif %}
+         {% if entry.rarity_class %}data-rarity="{{ entry.rarity_class }}"{% elif not entry.holders and not entry.is_special %}data-rarity="unearned"{% endif %}
          data-ttl-row data-title-id="{{ entry.title.id }}">
 
     <div class="ttl-plate__head">
@@ -31,6 +35,27 @@ equipping is still a single `.is-worn` class toggle.
                 <a href="{{ entry.url }}" class="ttl-plate__series">{{ entry.series_name }}</a>
                 {% endif %}
             </p>
+
+            {% comment %}The grade, in the site's shared rarity vocabulary (badge_rarity.group_rarity ->
+            common/uncommon/rare/mythic, the --pp-rarity-* tokens, and the #rarity-* sprite that Frame and
+            badge detail already draw). Naming it here rather than leaving the plate's material to carry
+            it silently: a material you can't name is decoration, not information.
+
+            No grade when nobody holds the title yet -- 0 earners is unearned, not an achievement, so it
+            gets the "Be the first" nudge the browse gallery uses instead.{% endcomment %}
+            {% if entry.rarity_class %}
+            <p class="ttl-plate__grade ttl-plate__grade--{{ entry.rarity_class }}">
+                {% if entry.rarity_class == 'uncommon' %}<svg viewBox="0 0 12 12" aria-hidden="true"><use href="#rarity-dot"/></svg>
+                {% elif entry.rarity_class == 'rare' %}<svg viewBox="0 0 12 12" aria-hidden="true"><use href="#rarity-diamond"/></svg>
+                {% elif entry.rarity_class == 'mythic' %}<svg viewBox="0 0 12 12" aria-hidden="true"><use href="#rarity-sparkle"/></svg>{% endif %}
+                <span>{{ entry.rarity_class|title }}</span>
+                {% if entry.rarity_pct is not None %}<span class="ttl-plate__pctof">{{ entry.rarity_pct }}% of pursuers</span>{% endif %}
+            </p>
+            {% elif not entry.holders and not entry.is_special %}
+            <p class="ttl-plate__grade ttl-plate__grade--unearned">
+                <span>Be the first</span>
+            </p>
+            {% endif %}
         </div>
 
         {% comment %}Provenance stamp: the series' SUBJECT ART, bare.
@@ -77,12 +102,12 @@ equipping is still a single `.is-worn` class toggle.
         {% if entry.earned_at %}<span class="ttl-plate__date">{{ entry.earned_at|date:"M j, Y" }}</span>{% endif %}
 
         {% else %}
-        {% comment %}The honest number carries the rarity; the plate's material is the signal. Naming an
-        invented tier at the reader would be anti-reference #4.{% endcomment %}
+        {% comment %}The raw count, underneath the named grade in the head -- the grade says how rare,
+        this says how many.{% endcomment %}
         {% if entry.holders %}
         <span class="ttl-plate__wear"><strong class="pp-tally pp-tally--xs">{{ entry.holders|intcomma }}</strong> wearing</span>
         {% else %}
-        <span class="ttl-plate__wear ttl-plate__wear--none">Unclaimed &middot; be the first</span>
+        <span class="ttl-plate__wear ttl-plate__wear--none">Nobody wears this yet</span>
         {% endif %}
         {% if entry.held %}
         <span class="ttl-plate__have">

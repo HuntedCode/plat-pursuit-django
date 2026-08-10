@@ -10,11 +10,14 @@
  * row had this backwards: a 42px medallion column its own comment called "small on purpose", next to a
  * 1.02rem title.
  *
- * RARITY IS THE MATERIAL. How many hunters wear a title escalates the plate's tint, edge and light
- * (data-rarity, set in title_views.rarity_bands). One accent, four steps of intensity -- not four
- * different colours, and never a shouted tier name. The visible text stays the honest holder count.
+ * RARITY IS THE MATERIAL, in the SITE'S rarity vocabulary -- badge_rarity.group_rarity's
+ * common/uncommon/rare/mythic (+ "Be the first"), the shared --pp-rarity-* tokens, and the #rarity-*
+ * sprite that Frame and badge detail already draw. data-rarity drives both the named grade and the
+ * plate's tint/edge/glow, so the material and the label can never disagree, and a title reads the same
+ * grade here as its series does on badge detail.
+ *
  * Deliberately NOT the medallion metals (bronze/silver/gold/platinum): those describe a badge's
- * backing and reusing them here would claim a relationship that doesn't exist.
+ * backing, and reusing them for rarity would claim a relationship that doesn't exist.
  *
  * Mobile-first: base = 375 (one column, plate keeps its title legible), md: 2 columns, lg: 3.
  * No color-mix() inside @keyframes -- lightningcss silently drops those frames; hoist to a custom
@@ -122,6 +125,23 @@
     border-color: var(--pp-border);
 }
 
+/* The named grade. Same vocabulary, colours and sprite as badge detail (.bd2-comm__rar) and the browse
+   gallery (.pp-bgal__grade), so one title cannot read two rarities on two pages. */
+.ttl-plate__grade {
+    display: flex; align-items: center; gap: 5px; margin-top: 5px;
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.ttl-plate__grade svg { width: 10px; height: 10px; flex-shrink: 0; fill: currentColor; }
+.ttl-plate__pctof {
+    font-weight: 600; letter-spacing: 0.02em; text-transform: none;
+    color: var(--pp-text-mute); font-variant-numeric: tabular-nums;
+}
+.ttl-plate__grade--common   { color: var(--pp-rarity-common); font-weight: 700; }
+.ttl-plate__grade--uncommon { color: var(--pp-rarity-uncommon); }
+.ttl-plate__grade--rare     { color: var(--pp-rarity-rare); text-shadow: 0 0 5px var(--pp-rarity-rare-glow); }
+.ttl-plate__grade--mythic   { color: var(--pp-rarity-mythic); text-shadow: 0 0 7px var(--pp-rarity-mythic-glow); }
+.ttl-plate__grade--unearned { color: var(--pp-primary); }
+
 /* Provenance stamp. Supporting context, not the object -- Collection is where medallions are the hero. */
 .ttl-plate__stamp { flex-shrink: 0; display: grid; place-items: center; width: 46px; height: 46px; }
 .ttl-plate__art { width: 100%; height: 100%; object-fit: contain; }
@@ -179,32 +199,27 @@
  * title_views.TITLE_RARITY_BANDS; below the catalogue floor no plate carries data-rarity at all and
  * everything renders at the base material above.
  */
-.ttl-plate--tile[data-rarity="widespread"] { --ttl-tint: 0%;  --ttl-edge: 8%;  }
-.ttl-plate--tile[data-rarity="common"]     { --ttl-tint: 7%;  --ttl-edge: 26%; }
-.ttl-plate--tile[data-rarity="uncommon"]   { --ttl-tint: 15%; --ttl-edge: 50%; --ttl-glow: 30%; }
-.ttl-plate--tile[data-rarity="scarce"]     { --ttl-tint: 26%; --ttl-edge: 85%; --ttl-glow: 55%; }
+.ttl-plate--tile[data-rarity="common"]   { --ttl-c: var(--pp-rarity-common);   --ttl-tint: 0%;  --ttl-edge: 10%; }
+.ttl-plate--tile[data-rarity="uncommon"] { --ttl-c: var(--pp-rarity-uncommon); --ttl-tint: 9%;  --ttl-edge: 34%; }
+.ttl-plate--tile[data-rarity="rare"]     { --ttl-c: var(--pp-rarity-rare);     --ttl-tint: 15%; --ttl-edge: 52%; --ttl-glow: 32%; }
+.ttl-plate--tile[data-rarity="mythic"]   { --ttl-c: var(--pp-rarity-mythic);   --ttl-tint: 20%; --ttl-edge: 70%; --ttl-glow: 50%; }
+/* "Be the first" wears the CTA tint, matching the browse gallery's unearned chip. */
+.ttl-plate--tile[data-rarity="unearned"] { --ttl-c: var(--pp-primary); --ttl-tint: 3%; --ttl-edge: 20%; border-style: dashed; }
 
-/* The glow only exists on the top two bands, so it stays a signal rather than page-wide decoration. */
-.ttl-plate--tile[data-rarity="uncommon"],
-.ttl-plate--tile[data-rarity="scarce"] {
+/* The glow only exists on the top two grades, so it stays a signal rather than page-wide decoration. */
+.ttl-plate--tile[data-rarity="rare"],
+.ttl-plate--tile[data-rarity="mythic"] {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
                 0 3px 10px rgba(0, 0, 0, 0.20),
                 0 0 26px -12px color-mix(in oklab, var(--ttl-c) var(--ttl-glow), transparent);
 }
 
-/* An unclaimed title is NEW, not legendary -- a ghost plate waiting for someone, not the richest
-   object on the wall. (title_views deliberately doesn't rank it into the scarcest band.) */
-.ttl-plate--tile[data-rarity="unclaimed"] {
-    --ttl-c: var(--pp-text-mute); --ttl-tint: 4%; --ttl-edge: 18%;
-    border-style: dashed;
-}
-
-/* Only the scarcest band gets a sheen, and only on a plate you actually hold -- a slow pass of light
-   across the material. Reserved so it stays meaningful; celebrating everything is anti-reference #4.
+/* Only Mythic gets a sheen, and only on a plate you actually hold -- a slow pass of light across the
+   material. Reserved so it stays meaningful; celebrating everything is anti-reference #4.
    The colour is hoisted to a custom property because lightningcss drops keyframes containing
    color-mix(). */
 @media (prefers-reduced-motion: no-preference) {
-    .ttl-plate--tile[data-rarity="scarce"].is-held::after {
+    .ttl-plate--tile[data-rarity="mythic"].is-held::after {
         content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
         --ttl-sheen: color-mix(in oklab, var(--ttl-c) 26%, transparent);
         background: linear-gradient(105deg, transparent 38%, var(--ttl-sheen) 50%, transparent 62%);
