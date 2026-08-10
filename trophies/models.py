@@ -563,7 +563,10 @@ class Game(models.Model):
             # Trending sorts on this across the catalogue before pagination. The other denormed
             # community stats are deliberately NOT indexed -- nothing orders by them, and every
             # index here is re-churned by the nightly full rewrite of these columns.
-            models.Index(fields=['-monthly_earners_count'], name='game_monthly_earners_idx'),
+            # Plain, not DESC: Postgres scans a btree backwards, so an ascending index serves
+            # `ORDER BY ... DESC` identically for a single column, and this matches
+            # game_played_count_idx above (which is also ascending while its sorts are descending).
+            models.Index(fields=['monthly_earners_count'], name='game_monthly_earners_idx'),
             models.Index(fields=['title_name'], name='game_title_idx'),
             GinIndex(fields=['title_platform'], name='game_platform_gin_idx'),
             models.Index(fields=['created_at'], name='game_created_idx'),
