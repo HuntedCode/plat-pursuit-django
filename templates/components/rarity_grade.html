@@ -7,9 +7,13 @@ seventh copy.
 
 Params:
   rarity_class  'common' | 'uncommon' | 'rare' | 'mythic' | '' (no grade yet)
-  pct           the live percentage of the eligible population (optional; omit to show the label alone)
-  denom         what the percentage is OF -- "pursuers", "owners" (optional; default "pursuers")
+  pct           the live percentage of the community (optional; omit to show the label alone)
   unearned      True to render the "Be the first" nudge when nothing holds a grade yet
+
+The denominator is NOT a parameter. It is the whole community for everything gradeable (see
+services/rarity.community_size), so a per-surface override could only ever be wrong -- and was: this
+carried a `denom` default of "pursuers" from before the denominator changed, which every surface
+inherited because none of them passed one. One denominator, one word for it.
 
 `data-rarity` carries the class rather than a modifier class: it defines the --rar-* custom properties
 (see components/rarity.css), so a parent can set it once and BOTH this label and the surface material
@@ -24,7 +28,7 @@ purpose -- the baseline grade should not announce itself.
     {% elif rarity_class == 'rare' %}<svg viewBox="0 0 12 12" aria-hidden="true"><use href="#rarity-diamond"/></svg>
     {% elif rarity_class == 'mythic' %}<svg viewBox="0 0 12 12" aria-hidden="true"><use href="#rarity-sparkle"/></svg>{% endif %}
     <span class="pp-rarity__name">{{ rarity_class|title }}</span>
-    {% if pct is not None %}<span class="pp-rarity__pct">{{ pct }}% of {{ denom|default:"pursuers" }}</span>{% endif %}
+    {% if pct is not None %}<span class="pp-rarity__pct">{{ pct }}% of hunters</span>{% endif %}
 </span>
 {% elif unearned %}
 <span class="pp-rarity" data-rarity="unearned">

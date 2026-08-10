@@ -441,7 +441,10 @@ def test_view_renders_community_band(client):
     body = client.get(reverse('badge_detail', kwargs={'series_slug': 'comm'})).content.decode()
     assert 'bd2-comm' in body and 'Rarity &amp; Community' in body   # the band renders
     assert body.count('bd2-comm__group') >= 2                        # one cell per group
-    assert 'of pursuers' in body                                     # pursuer-relative phrasing (not "Top X%")
+    # The caption must name the population the percentage is actually OF. It said "of pursuers" long
+    # after the denominator became the whole community -- the number was right and the label described a
+    # population we had stopped using, the same defect as "N wearing" on Titles.
+    assert 'of hunters' in body and 'of pursuers' not in body
     # Grade now comes from the SHARED rarity scale (components/rarity.css) via data-rarity, not from
     # per-surface classes -- badge detail was one of five surfaces hand-rolling its own copy.
     assert body.count('data-rarity="uncommon"') and body.count('data-rarity="common"')

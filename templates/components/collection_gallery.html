@@ -93,6 +93,7 @@ collection-gallery.css, wired by collection.js (initGallery).
            data-badge="{{ badge.badge_name|lower }}"
            data-set-number="{{ badge.set_number|default:0 }}"
            data-rarity-pct="{{ badge.rarity_pct|default:0 }}"
+           data-rarity="{{ badge.rarity_class }}"
            data-progress="{{ badge.progress_pct|default:0 }}"
            data-stages="{% if badge.stages_total %}{{ badge.stages_done }} / {{ badge.stages_total }}{% endif %}"
            data-earned="{{ badge.earned_ts|default:0 }}"

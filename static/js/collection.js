@@ -350,20 +350,28 @@
         // metal + state, so this surfaces the ONE stat the object doesn't.
         // Exception: an IN-PROGRESS badge always shows its "X / Y stages" chase count here (the caption slot
         // completed badges use for "Top X%"), so the stage count reads without growing the card.
+        // Returns [text, isRarity]. The flag is separate because only the rarity reading takes the grade
+        // colour -- the same slot also shows earn dates and progress, which must stay neutral.
         function statText(cell, key) {
             var st = cell.getAttribute('data-state');
             if (st === 'in_progress') {
                 var stages = cell.getAttribute('data-stages');
-                if (stages) return stages + ' stages';
+                if (stages) return [stages + ' stages', false];
             }
-            if (key === 'earned') return cell.getAttribute('data-earned-label') || '';
+            if (key === 'earned') return [cell.getAttribute('data-earned-label') || '', false];
             if (key === 'progress') {
-                if (st === 'earned') return 'Complete';
+                if (st === 'earned') return ['Complete', false];
                 var p = parseFloat(cell.getAttribute('data-progress')) || 0;
-                return p ? p + '%' : '';
+                return [p ? p + '%' : '', false];
             }
+            // The GRADE, not "Top X%". rarity_pct is the share of hunters who HAVE the badge, so a badge
+            // 40% of the community owns rendered as "Top 40%" -- which sounds exclusive and means the
+            // reverse. The named grade is the site's rarity vocabulary and cannot be read backwards; the
+            // exact percentage lives on the badge's own page.
+            var cls = cell.getAttribute('data-rarity');
+            if (cls) { return [cls.charAt(0).toUpperCase() + cls.slice(1), true]; }
             var rarity = parseFloat(cell.getAttribute('data-rarity-pct')) || 0;
-            return rarity ? 'Top ' + rarity + '%' : '';
+            return [rarity ? rarity + '% of hunters' : '', false];
         }
         function applySort(animate) {
             var spec = ((sortSel && sortSel.value) || DEFAULT_SORT).split(':');
@@ -371,7 +379,10 @@
             if (animate) flip(reorder); else reorder();
             cells.forEach(function (c) {
                 var el = c.querySelector('[data-gallery-stat]');
-                if (el) el.textContent = statText(c, spec[0]);
+                if (!el) { return; }
+                var stat = statText(c, spec[0]);
+                el.textContent = stat[0];
+                el.classList.toggle('is-rarity', stat[1]);
             });
             syncURL();
         }

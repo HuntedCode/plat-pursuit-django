@@ -28,8 +28,9 @@
                 </span>
                 {# Platform group, tinted in its medallion metal (matches the detail-page switcher). #}
                 <span class="pp-scard__pg">{{ card.platform_group.name }}</span>
-                {% comment %} Live rarity grade (coloured) once the series has pursuers; the earner count once it
-                has earners; and a "be the first" nudge while no one has earned it yet (instead of a lonely 0). {% endcomment %}
+                {% comment %} Live rarity grade (coloured) once there is a community to grade against; the earner
+                count once it has earners; and a "be the first" nudge while no one has earned it yet (instead of a
+                lonely 0). The grade is a share of the whole community, not of the series' pursuers. {% endcomment %}
                 <span class="pp-scard__grade{% if not card.rarity_class and not card.earned_count %} pp-scard__grade--cta{% endif %}"{% if card.rarity_class %} data-rarity="{{ card.rarity_class }}"{% endif %}>
                     {% if card.rarity_class %}{{ card.rarity_class|title }}{% elif card.earned_count %}{{ card.earned_count|intcomma }}{% else %}Be the first{% endif %}
                 </span>
