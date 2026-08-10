@@ -281,10 +281,19 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
 
             {% if badge_lines %}{% with line=badge_lines.0 %}
             <div style="display: flex; align-items: center; gap: 13px; min-width: 0;">
+                {% comment %}The badge art stands on its own -- no ring, no plate, no circle mask.
+                Framing it cost more than it added: `border-radius: 50%` + `object-fit: cover` cropped
+                the points off every shield, so distinct badges all resolved into the same gold disc at
+                card size. Unmasked and CONTAINED, the silhouette survives and each badge is
+                recognisable. Bigger too, because contained art occupies less of its box than a
+                cover-cropped fill does; the edition's backing metal still reads on the label beside it.
+
+                An avatar subject is the exception and keeps a circle: a square PSN photo shown raw is
+                a photo, not a badge.{% endcomment %}
                 {% if line.medallion_cached %}
-                <div style="position: relative; width: 52px; height: 52px; flex-shrink: 0; border-radius: 50%; overflow: hidden; border: 2px solid {{ line.medallion_colour|default:"#e7c25c" }}; box-sizing: border-box; background: #232a31;">
+                <div style="position: relative; width: 64px; height: 64px; flex-shrink: 0;">
                     {% for layer in line.medallion_cached %}
-                    <img src="{{ layer }}" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;{% if line.medallion_is_avatar and forloop.last %} padding: 6px; border-radius: 50%;{% endif %}" />
+                    <img src="{{ layer }}" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%;{% if line.medallion_is_avatar %} object-fit: cover; border-radius: 50%;{% else %} object-fit: contain;{% endif %}" />
                     {% endfor %}
                 </div>
                 {% endif %}

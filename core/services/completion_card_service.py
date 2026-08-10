@@ -350,12 +350,20 @@ def _attach_medallion(line, concept, game):
 
     tier, layers, is_avatar = group_medallion_layers(edition)
     metal = MEDALLION_COLOURS.get(tier, MEDALLION_COLOURS['gold'])
+
+    # SUBJECT ART ONLY. group_medallion_layers returns [backdrop_plate, subject]; the plate exists to
+    # sit behind a circle mask, and the card doesn't mask -- it shows the badge's own silhouette. Left
+    # in, the plate renders as its own shape behind a shield and reads as a stray sliver of metal.
+    # An avatar subject keeps its circle (a raw square PSN photo is not a badge), so it needs no plate
+    # either. `main` is never empty (art_layers falls back to a static default), so [-1:] is safe.
+    art = layers[-1:]
+
     line.update({
         'edition': edition.platform_group.name,
-        'medallion_layers': layers,
+        'medallion_layers': art,
         'medallion_is_avatar': is_avatar,
         # The edition ("Ultra HD", "Legacy HD") wears its own backing metal, same as everywhere else
-        # the badge system names one -- so the label and the ring around the art agree.
+        # the badge system names one -- so the edition label agrees with the badge's own colouring.
         'medallion_colour': metal['c'],
     })
 

@@ -620,6 +620,42 @@ def test_the_medallion_actually_reaches_the_rendered_card(client):
     assert 'Norse Saga' in html
 
 
+def test_the_card_draws_the_badge_subject_without_its_backdrop_plate(client):
+    """The card shows the badge's own silhouette, so it carries no plate and no circle mask.
+
+    `group_medallion_layers` returns [backdrop_plate, subject]. The plate exists to sit behind a circle
+    mask on the badge pages; unmasked it renders as its own shape behind a shield and reads as a stray
+    sliver of metal. The badge PAGES keep both layers -- this trim is the card's alone."""
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    series = BadgeSeriesFactory(name='Norse Saga')
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
+    StageFactory(series_slug=series.series_slug).concepts.add(game.concept)
+
+    line = cards.get_card_data(profile, standing)['badge_lines'][0]
+
+    assert len(line['medallion_layers']) == 1, 'the plate should have been dropped'
+    assert 'backdrop' not in line['medallion_layers'][0]
+
+
+def test_the_medallion_is_contained_and_unframed(client):
+    """Cropping was the bug: `border-radius: 50%` + `object-fit: cover` cut the points off every
+    shield, so distinct badges all resolved into the same disc at card size."""
+    profile = ProfileFactory()
+    game, group, _ = _completed_game(profile, with_platinum=True)
+    series = BadgeSeriesFactory(name='Norse Saga')
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
+    StageFactory(series_slug=series.series_slug).concepts.add(game.concept)
+    client.force_login(profile.user)
+
+    html = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()['html']
+
+    assert 'object-fit: contain' in html, 'the art must not be cropped to fill'
+    # The edition label still wears the backing metal, so the colour itself is expected in the HTML --
+    # what must be gone is a border drawn around the art.
+    assert 'border-radius: 50%; overflow: hidden; border:' not in html
+
+
 # ── Art grounds are offered only when the game HAS art ────────────────────────────────────────────
 
 def test_a_game_with_no_art_offers_no_art_ground(client):
