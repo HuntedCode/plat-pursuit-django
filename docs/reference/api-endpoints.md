@@ -80,7 +80,7 @@ Staff-authored platinum guides on game detail pages. Replaces the old Checklists
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/api/v1/shareables/completion/<trophy_group_id>/html/` | Login | Plat card preview markup + art options |
+| GET | `/api/v1/shareables/completion/<trophy_group_id>/html/` | Login | Plat card preview markup + art options, plus what the share modal's chrome needs: `game_name` / `game_url` (the link out), `has_rating` + `user_rating` (so the rate form opens prefilled), `playtime` |
 | GET | `/api/v1/shareables/completion/<trophy_group_id>/png/?theme=&art=` | Login | Plat card PNG download |
 | GET | `/api/v1/shareables/platinum/<earned_trophy_id>/html/` | Login | Legacy alias for the pair above (notifications + external consumers) |
 | GET | `/api/v1/shareables/platinum/<earned_trophy_id>/png/` | Login | Legacy alias |

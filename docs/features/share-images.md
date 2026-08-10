@@ -105,11 +105,11 @@ silently falls back. Art swatches show the actual image; gradient swatches show 
 There is no cover-blur ground: a 3:4 cover blown up to 1200x630 is mostly upscale.
 
 **Rating**: the card carries the hunter's own stars, difficulty, grind and fun, so an unrated game
-makes a visibly thinner card. Two ways in, both driving the SAME `rate_before_download_modal`:
+makes a visibly thinner card. Two ways in, both driving the same modal through the same controller:
 
 - **The prompt** offers once per opened card on download, and never blocks.
 - **The Rate / Edit button** in the modal's action row is permanent, opens PREFILLED from the
-  hunter's existing scores, and downloads nothing. `plat-cards.js` relabels the shared modal for it
+  hunter's existing scores, and downloads nothing. The controller is relabelled for it
   ("Save rating", and the skip becomes a plain Cancel), since neither of the prompt's labels is
   true on that path.
 

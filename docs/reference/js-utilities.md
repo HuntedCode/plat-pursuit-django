@@ -243,6 +243,48 @@ can't FLIP its disc back from a dragged-off position, so on swipe it instead **r
 the source medallion reappears in the grid with a subtle materialize settle -- while the tap/close button
 keeps the grow/shrink "put-down". Both routes send the object back to its slot.
 
+### PlatPursuit.wireGuidelinesSheet
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `wireGuidelinesSheet()` | none | Wires the Community Guidelines sheet (`#gd-guidelines-modal`) -- close affordances + the `[data-gd-guidelines-open]` open delegate |
+
+Opens the sheet OVER whatever compose surface is showing, so reading the rules never loses an
+in-progress quick take. Idempotent and a no-op when the sheet isn't on the page, so every page that
+composes a surface linking to it can just call it. Read-only: agreement is recorded on submit, not here.
+
+### PlatPursuit.QuickRate
+
+Lives in its own file (`static/js/quick-rate.js`), not `utils.js` -- it is one feature's controller
+rather than a general utility, and only the two pages that compose the modal load it.
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `QuickRate.open(opts)` | see below | Opens + drives the quick-rate modal (`#gd-qr-modal`, `quick_rate_modal.html`) |
+
+```js
+PlatPursuit.QuickRate.open({
+    conceptId, groupId,          // required -- the POST target
+    existing,                    // {difficulty, grindiness, fun_ranking, overall_rating,
+                                 //  hours_to_platinum} or null
+    blurb,                       // existing quick take
+    title, submitLabel, cancelLabel, hoursLabel, playtimeHint,
+    onSaved(data, payload),      // the save landed (the modal has already closed)
+    onCancel(),                  // the explicit secondary button -- NOT a dismiss
+    onDismiss(),                 // X / backdrop / Esc / swipe
+    onOpen(), onClose(),         // lifecycle, for page chrome (e.g. the recede)
+});
+```
+
+The controller owns **everything except what happens after a save**: prefill (including the blurb),
+slider readouts, the character counter, the hours gate, agree-to-guidelines-on-submit, the POST, error
+surfacing, and every close affordance. Hosts: the Game Detail Ratings tab (its `onSaved` live-updates
+the community panel) and the plat-card share modal (its `onSaved` invalidates the preview cache).
+
+`onCancel` and `onDismiss` are **deliberately separate**. The share flow opens this as a pre-download
+prompt where the secondary button means "skip, just download" -- so a dismiss must never fire it, or the
+universal get-me-out-of-here affordance hands you a file.
+
 ## Namespace Pattern
 
 All utilities are declared as `const` or `class` at module scope, then exported at the bottom:
@@ -259,6 +301,9 @@ To add a new utility: define it above the export block, then add a `window.PlatP
 ## Gotchas and Pitfalls
 
 - **`ZoomAwareObserver` is now a thin wrapper over native `IntersectionObserver`** (its ZoomScaler reason was removed). New code can use `IntersectionObserver` directly; existing `ZoomAwareObserver` callers are fine as-is.
+- **A modal that rebinds listeners per open must tear down on the dialog's `close` event**, not only
+  on its explicit paths. `dismissableSheet`'s swipe bypasses them, so the next open double-binds and a
+  single submit fires twice. `QuickRate` binds an idempotent teardown to `close` for this reason.
 - **`PlatPursuit.API.request()` throws an `Error` with a `.response` property** (raw Response object) on non-ok status. Extract messages with `await error.response?.json().catch(() => null)`. Pass `{}` as body for no-body POSTs.
 - **Don't migrate binary fetches** (blob/image downloads) to `PlatPursuit.API`. It's designed for JSON APIs.
 
