@@ -1,6 +1,12 @@
 """
 Management command to send monthly recap emails and in-app notifications to users.
 
+DISABLED (2026-08) while the recap is rebuilt: `settings.MONTHLY_RECAP_SEND_ENABLED` defaults to False and
+handle() returns immediately. This stops the in-app notification as well as the email -- the notification is
+dispatched from inside the email loop, so the two cannot be separated without lifting it out. That is the
+intent for now: nothing should go out carrying the old design. The recap PAGE is unaffected and stays live.
+The Render cron should be paused as well; the flag is the fail-safe if it fires anyway.
+
 This command finds all finalized recaps that haven't had emails/notifications sent yet,
 and sends personalized HTML emails and in-app notifications to users with links to their full recap.
 
@@ -88,6 +94,22 @@ class Command(BaseCommand):
         self.stdout.write("=" * 70)
         self.stdout.write("Monthly Recap Email Sender")
         self.stdout.write("=" * 70)
+
+        # OFF while the recap is rebuilt. The gate is here, at the top of handle(), rather than inside
+        # _send_recap_email on purpose: the in-app notification is dispatched from inside the email loop
+        # (_send_emails calls _send_recap_notification on both the success and the failure branch), so a
+        # guard further down would keep firing notifications while silently "failing" every email and
+        # inflating the failure counter. Stopping here stops both, which is the intent.
+        #
+        # --dry-run is still allowed through: it writes nothing and sends nothing, and staying able to
+        # preview the queryset is the whole point of having it.
+        if not getattr(settings, 'MONTHLY_RECAP_SEND_ENABLED', False) and not dry_run:
+            self.stdout.write(self.style.WARNING(
+                "Monthly recap sends are DISABLED (settings.MONTHLY_RECAP_SEND_ENABLED is False).\n"
+                "No emails and no in-app notifications will be sent. The recap page itself is unaffected.\n"
+                "Re-enable via the environment once the rebuilt email ships; --dry-run still previews."
+            ))
+            return
 
         if dry_run:
             self.stdout.write(self.style.WARNING("DRY RUN MODE - No emails will be sent"))

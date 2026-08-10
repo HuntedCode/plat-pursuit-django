@@ -478,6 +478,12 @@ CACHES = {
 # Notification System Feature Flags
 NOTIFICATION_CACHE_ENABLED = os.getenv('NOTIFICATION_CACHE_ENABLED', 'True') == 'True'
 
+# Monthly Recap: the monthly send (email AND the in-app notification, which is dispatched from inside the
+# same loop) is OFF while the recap is rebuilt -- nothing should go out carrying the old design. The Render
+# cron should be paused too; this flag exists so the command fails safe if it fires anyway.
+# Flip to True via the environment when the rebuilt email ships.
+MONTHLY_RECAP_SEND_ENABLED = os.getenv('MONTHLY_RECAP_SEND_ENABLED', 'False') == 'True'
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/

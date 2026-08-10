@@ -68,6 +68,15 @@ Immutable pattern: once `is_finalized=True`, regeneration is skipped even with `
 
 ### Email Sending
 
+> **OFF since 2026-08.** `settings.MONTHLY_RECAP_SEND_ENABLED` defaults to `False` and
+> `send_monthly_recap_emails.handle()` returns immediately, so **no email and no in-app notification** goes
+> out while the recap is being rebuilt. The notification is dispatched from inside the email loop
+> (`_send_emails` calls `_send_recap_notification` on both the success and the failure branch), so the two
+> cannot be stopped separately without lifting it out -- stopping both is the intent for now. `--dry-run`
+> still previews. The recap PAGE is unaffected. Re-enable via the environment when the rebuilt email ships;
+> the Render cron is paused as well.
+
+
 1. `send_monthly_recap_emails` finds finalized recaps with `email_sent=False`
 2. Checks email preferences via `EmailPreferenceService` (skips opted-out users)
 3. Builds context via `MonthlyRecapMessageService.build_email_context()`

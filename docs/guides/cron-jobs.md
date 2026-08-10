@@ -28,7 +28,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | Weekly (Sunday) | `cleanup_old_analytics --force` | Weekly | None |
 | Weekly (Monday 08:00 UTC) | `send_weekly_digest` | Weekly | None |
 | 3rd of month, 00:05 UTC | `generate_monthly_recaps --finalize` | Monthly | All profile syncs for the previous month should be complete |
-| 3rd of month, 06:00 UTC | `send_monthly_recap_emails` | Monthly | `generate_monthly_recaps` must have completed first |
+| ~~3rd of month, 06:00 UTC~~ | ~~`send_monthly_recap_emails`~~ | **PAUSED (2026-08)** | Monthly recap rebuild in progress. `MONTHLY_RECAP_SEND_ENABLED` defaults to False, so the command no-ops even if the job runs. Stops the in-app notification too (dispatched from inside the email loop). |
 
 ---
 
