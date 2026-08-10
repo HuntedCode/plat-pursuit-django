@@ -376,44 +376,51 @@ def test_view_renders_requirements_preview_with_completion(client):
 
 
 def _pursuers(series_slug, n):
-    """n profiles with a real SeriesBadgeStanding (xp>0) -> the series' pursuer base for rarity."""
+    """n LINKED profiles with a real SeriesBadgeStanding (xp>0).
+
+    Linked because the rarity denominator is now the whole community, not this base -- a pursuer is
+    by definition a community member, so seeding both from one helper keeps the two numbers
+    coherent. The standings themselves still drive series_size and the series rank's "of N"."""
     from trophies.models import SeriesBadgeStanding
     for _ in range(n):
         SeriesBadgeStanding.objects.create(
-            profile=ProfileFactory(), series_slug=series_slug,
+            profile=ProfileFactory(is_linked=True), series_slug=series_slug,
             xp=100, progress_bp=1000, stages_cleared=1, stages_total=1,
         )
 
 
-def test_service_rarity_is_pursuer_relative():
-    # Rarity is derived LIVE: earned_count / pursuers (SeriesBadgeStanding count), bucketed. No stored fields.
+def test_service_rarity_is_community_relative():
+    # Rarity is derived LIVE: earned_count / the whole community (linked accounts), bucketed. No
+    # stored fields. NOT the pursuer base -- that shrinks when people abandon a series.
     from trophies.models import GroupBadge
     series = BadgeSeriesFactory(series_slug='rar', name='Rarity')
     _stage(series, 1, ['PS5'])
     ultra = _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
     GroupBadge.objects.filter(id=ultra.id).update(earned_count=1)
-    _pursuers('rar', 20)                              # 1 of 20 pursuers earned it -> 5.0% -> rare (< 15)
+    _pursuers('rar', 50)                              # 1 of 50 in the community -> 2.0% -> rare (< 5)
     grp = get_badge_detail(series, None).groups[0]
-    assert grp.rarity_pct == 5.0 and grp.rarity_class == 'rare'
+    assert grp.rarity_pct == 2.0 and grp.rarity_class == 'rare'
 
 
-def test_service_rarity_pending_without_pursuers():
+def test_service_rarity_pending_without_a_community():
     series = BadgeSeriesFactory(series_slug='rp', name='RarPend')
     _stage(series, 1, ['PS5'])
     _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
-    grp = get_badge_detail(series, None).groups[0]   # no SeriesBadgeStanding rows -> no pursuer base
+    grp = get_badge_detail(series, None).groups[0]   # no linked profiles -> nothing to grade against
     assert grp.rarity_pct is None and grp.rarity_class == ''
 
 
 def test_group_rarity_buckets_clamp_and_zero_earners():
     # Pure derivation across every branch (a Mythic prestige chip must never sit on a zero-earner badge).
     from trophies.services.badge_rarity import group_rarity
-    assert group_rarity(0, 0) == (None, '')            # no pursuers -> pending
-    assert group_rarity(0, 5) == (0.0, '')             # pursuers but 0 earners -> honest 0%, NO class (not Mythic)
-    assert group_rarity(1, 100) == (1.0, 'mythic')     # 1% -> mythic
-    assert group_rarity(5, 20) == (25.0, 'uncommon')   # 25% -> uncommon
-    assert group_rarity(1, 20) == (5.0, 'rare')        # boundary: exactly 5% is rare, not mythic
-    assert group_rarity(5, 2) == (100.0, 'common')     # clamp: earned>pursuers (stale denorm) -> 100% common
+    assert group_rarity(0, 0) == (None, '')            # no community -> pending
+    # 0 earners: 0% is under every ceiling, so the arithmetic would say Mythic. It must not.
+    assert group_rarity(0, 5) == (0.0, '')             # honest 0%, NO class -- 'Be the first' instead
+    assert group_rarity(1, 200) == (0.5, 'mythic')     # 0.5% -> mythic
+    assert group_rarity(1, 100) == (1.0, 'rare')       # boundary: exactly 1% is rare, not mythic
+    assert group_rarity(1, 20) == (5.0, 'uncommon')    # boundary: exactly 5% is uncommon, not rare
+    assert group_rarity(1, 5) == (20.0, 'common')      # boundary: exactly 20% is common, not uncommon
+    assert group_rarity(5, 2) == (100.0, 'common')     # clamp: earned>community (stale denorm) -> 100%
 
 
 def test_view_renders_community_band(client):
@@ -426,7 +433,7 @@ def test_view_renders_community_band(client):
     ultra = _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
     GroupBadge.objects.filter(id=legacy.id).update(earned_count=1)
     GroupBadge.objects.filter(id=ultra.id).update(earned_count=5)
-    _pursuers('comm', 10)                             # legacy 1/10=10% -> rare; ultra 5/10=50% -> common
+    _pursuers('comm', 10)                             # legacy 1/10=10% -> uncommon; ultra 5/10=50% -> common
 
     detail = get_badge_detail(series, None)
     assert detail.series_size == 10 and detail.community_max_earned == 5
@@ -437,7 +444,7 @@ def test_view_renders_community_band(client):
     assert 'of pursuers' in body                                     # pursuer-relative phrasing (not "Top X%")
     # Grade now comes from the SHARED rarity scale (components/rarity.css) via data-rarity, not from
     # per-surface classes -- badge detail was one of five surfaces hand-rolling its own copy.
-    assert body.count('data-rarity="rare"') and body.count('data-rarity="common"')
+    assert body.count('data-rarity="uncommon"') and body.count('data-rarity="common"')
     assert 'pp-rarity-gem' in body                                   # the rarity GEM per grade
     assert 'bd2-comm__rar' in body                                   # legacy 10% -> rare, ultra 50% -> common
     assert 'bd2-comm__rar--' not in body, 'a page-local grade class means the copy came back'

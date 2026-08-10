@@ -7,6 +7,30 @@ wiring is needed here. Fixtures below are convenience wrappers over the factorie
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _clear_rarity_cache():
+    """Drop the cached rarity denominator between tests.
+
+    settings_test uses LocMemCache, which lives for the whole run, so anything cached inside one test
+    leaks into every test after it. `rarity.community_size` counts linked profiles once an hour, so
+    without this the FIRST test to grade anything would fix the denominator for the entire session and
+    every later rarity assertion would be measured against the wrong population.
+
+    Deliberately ONE KEY, not `cache.clear()`. A full clear is the better isolation and was tried first
+    -- but it fails four unrelated tests (company list/detail, franchise detail, milestones) that assert
+    query counts and currently pass only because an earlier test happened to warm a cache for them.
+    That order-dependence is real and pre-existing (they fail in isolation on unchanged code too), but
+    it is not this change's to fix. Widen this to cache.clear() when those four are made self-contained.
+    """
+    from django.core.cache import cache
+
+    from trophies.services.rarity import COMMUNITY_SIZE_CACHE_KEY
+
+    cache.delete(COMMUNITY_SIZE_CACHE_KEY)
+    yield
+    cache.delete(COMMUNITY_SIZE_CACHE_KEY)
+
+
 @pytest.fixture
 def user(db):
     """A saved CustomUser."""

@@ -24,6 +24,7 @@ from django.utils import timezone
 from trophies.models import GroupBadge, UserGroupBadge, SeriesBadgeStanding
 from trophies.services.badge_detail_service import group_medallion_layers
 from trophies.services.badge_rarity import group_rarity
+from trophies.services.rarity import community_size
 from trophies.services.badge_xp import edition_display_state
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,7 @@ def _badge_frame(gb, holds, standings, participants):
     # Only an in-progress edition carries the "X / Y stages" count (earned/unearned show none).
     stages_done, stages_total = (cleared, gating) if state == 'in_progress' else (0, 0)
 
-    pct, cls = group_rarity(gb.earned_count, participants.get(series.series_slug, 0))
+    pct, cls = group_rarity(gb.earned_count, participants)
     return {
         'tier': tier,
         'state': state,
@@ -146,12 +147,9 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         if not group_badges:
             return context
 
-        # Live rarity denominator: the series' pursuer base (one indexed count over all engaged series' slugs).
-        slugs = {gb.series.series_slug for gb in group_badges}
-        participants = dict(
-            SeriesBadgeStanding.objects.filter(series_slug__in=slugs)
-            .values('series_slug').annotate(n=Count('id')).values_list('series_slug', 'n')
-        )
+        # Live rarity denominator: the whole community, one cached scalar (was a grouped per-series
+        # pursuer count -- one query fewer on a page that grades every engaged badge).
+        participants = community_size()
         recent_cutoff = timezone.now() - timedelta(days=_RECENT_DAYS)
 
         # Palette per badge type (for the Set filter theme swatches), in section order.

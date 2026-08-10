@@ -28,6 +28,7 @@ from django.views.generic import TemplateView
 from ..models import BadgeSeries, GroupBadge, SeriesBadgeStanding, UserTitle
 from trophies.services.badge_detail_service import group_medallion_layers
 from trophies.services.badge_rarity import group_rarity
+from trophies.services.rarity import community_size
 
 
 class MyTitlesView(LoginRequiredMixin, TemplateView):
@@ -74,9 +75,13 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
         }
 
         # ── 4. Social proof: how many hunters wear each title. One grouped COUNT over the catalogue.
+        # `source_type='badge_series'` on purpose: this page surfaces the NEW badge system only (see the
+        # module docstring), so counting a legacy 'badge' or one-off 'milestone' grant here would inflate
+        # the numerator against a denominator that knows nothing about them -- making the title read
+        # more common than the system it belongs to says it is.
         holders = dict(
             UserTitle.objects
-            .filter(title_id__in=[s.title_id for s in series_list])
+            .filter(title_id__in=[s.title_id for s in series_list], source_type='badge_series')
             .values('title_id').annotate(c=Count('id'))
             .values_list('title_id', 'c')
         )
@@ -85,21 +90,16 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
         # title's grade here agrees with its series' grade on badge detail and in the browse gallery
         # instead of being a second, private scheme.
         #
-        # The denominator is the series' PURSUERS (profiles with a SeriesBadgeStanding row), not the whole
-        # userbase -- badge_rarity's module note explains why: against the whole userbase almost every
-        # badge reads Mythic. One grouped COUNT over an indexed column, viewer-independent and bounded by
-        # the catalogue, exactly like `holders` above.
+        # The denominator is the whole COMMUNITY -- every PSN-linked account -- not the series' pursuers.
+        # A pursuer base shrinks when people abandon a series (the standing row is deleted at zero
+        # progress), so a title could have become rarer because people gave up on it. One cached scalar,
+        # shared with every other gradeable thing.
         #
         # The NUMERATOR is title holders, not the badge's earned_count. A title is granted by earning ANY
         # live edition, so it is strictly easier than any single edition -- and the plate prints "N
         # wearing" right next to the grade. Grading a different population from the one displayed is how
         # you end up with a card that reads "Mythic - 44,210 wearing".
-        pursuers = dict(
-            SeriesBadgeStanding.objects
-            .filter(series_slug__in=[s.series_slug for s in series_list])
-            .values('series_slug').annotate(n=Count('id'))
-            .values_list('series_slug', 'n')
-        )
+        community = community_size()
 
         # ── 5. Build one entry per TITLE. Keyed by title_id, not by series: BadgeSeries.title has no
         # unique constraint, so two series can point at one Title -- one entry each would duplicate the
@@ -120,9 +120,7 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
             progress_pct = round(progress_bp / 100)
             # ('' class) when the series has no pursuer base yet, or when nobody holds the title --
             # 0 earners is unearned, not an achievement, so it must not wear the prestige grade.
-            rarity_pct, rarity_class = group_rarity(
-                holders.get(series.title_id, 0), pursuers.get(series.series_slug, 0),
-            )
+            rarity_pct, rarity_class = group_rarity(holders.get(series.title_id, 0), community)
 
             entries.append({
                 'title': series.title,

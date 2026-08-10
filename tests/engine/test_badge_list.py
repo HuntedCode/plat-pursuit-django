@@ -36,9 +36,11 @@ def _series_groups(slug, name, groups, **series_kw):
 
 
 def _pursuers(series_slug, n):
+    """n LINKED profiles with a standing -- the rarity denominator is the whole community now, and
+    a pursuer is by definition part of it."""
     for _ in range(n):
         SeriesBadgeStanding.objects.create(
-            profile=ProfileFactory(), series_slug=series_slug, xp=100, progress_bp=1000,
+            profile=ProfileFactory(is_linked=True), series_slug=series_slug, xp=100, progress_bp=1000,
             stages_cleared=1, stages_total=1,
         )
 
@@ -49,12 +51,12 @@ def test_build_list_cards_shape_and_live_rarity():
     series = BadgeSeriesFactory(series_slug='gow', name='God of War')
     ultra = _group(series, 'ultra-hd', 'Ultra HD')
     GroupBadge.objects.filter(id=ultra.id).update(earned_count=1)
-    _pursuers('gow', 4)                              # 1 of 4 pursuers earned it -> 25% -> uncommon
+    _pursuers('gow', 4)                              # 1 of 4 in the community -> 25% -> common
     cards = build_list_cards(GroupBadge.objects.filter(id=ultra.id).select_related(*_SR), None)
     assert len(cards) == 1
     c = cards[0]
     assert c['earned'] is False and c['earned_count'] == 1
-    assert c['rarity_pct'] == 25.0 and c['rarity_class'] == 'uncommon'
+    assert c['rarity_pct'] == 25.0 and c['rarity_class'] == 'common'
     assert c['frame']['state'] == 'earned' and c['frame']['art_layers']   # showcase frame is built
 
 
@@ -435,17 +437,20 @@ def test_series_toolbar_is_the_shared_collapsible(client):
 
 
 # ------------------------------------------------------------------ rarity filter ------------------------
-# Rarity is live-derived (pct of the series' pursuers who earned the badge). The filter reproduces that in the
-# DB so it stays whale-safe + paginated. participants=21 + earned=1 -> ~4.8% -> mythic; earned=15 -> ~71% ->
-# common (see badge_rarity.RARITY_THRESHOLDS).
+# Rarity is live-derived (pct of the whole COMMUNITY who earned the badge). The filter reproduces that in
+# the DB so it stays whale-safe + paginated.
+#
+# The community is ONE number shared by both series, so the pair has to be calibrated against the total,
+# not per-series. And with a 1% mythic ceiling a mythic badge needs >100 accounts to exist at all -- hence
+# the deliberately large seed. See rarity.RARITY_THRESHOLDS.
 
 def _rarity_pair():
     myth = _series_groups('myth', 'Myth', [('ultra-hd', 'Ultra HD')])[0]
     comm = _series_groups('comm', 'Comm', [('ultra-hd', 'Ultra HD')])[0]
-    _pursuers('myth', 21)
-    _pursuers('comm', 21)
-    GroupBadge.objects.filter(id=myth.id).update(earned_count=1)    # ~4.8% -> mythic
-    GroupBadge.objects.filter(id=comm.id).update(earned_count=15)   # ~71% -> common
+    _pursuers('myth', 60)
+    _pursuers('comm', 60)                                           # community = 120
+    GroupBadge.objects.filter(id=myth.id).update(earned_count=1)    # 0.8% -> mythic
+    GroupBadge.objects.filter(id=comm.id).update(earned_count=30)   # 25%  -> common
 
 
 def test_gallery_rarity_filter_is_db_side(client):

@@ -145,6 +145,17 @@ Incrementally updated via signals, fully rebuilt by `update_leaderboards` cron e
 
 Django auto-prefixes all keys with `{KEY_PREFIX}:1:` from settings. The patterns below show application-level names before prefixing.
 
+### Rarity
+
+| Key Pattern | TTL | Purpose |
+|-------------|-----|---------|
+| `rarity:community_size` | 3600s | PSN-linked account count — the denominator every rarity grade divides by |
+
+Viewer-independent and slow-moving, so an hour of staleness cannot change a grade noticeably. It
+replaced a grouped per-series `COUNT` on every page that grades badges, so this is a query *saved*, not
+added. **Tests must delete this key between cases** (`conftest` does, autouse) — otherwise the first
+test to grade anything fixes the denominator for the whole session.
+
 ### Homepage (Cron-Managed)
 
 | Key Pattern | TTL | Purpose |

@@ -9,9 +9,13 @@ badge-specific (the queryset annotation), and every other consumer reads from he
 Mythic title is Mythic whether or not you hold it, and it reads the same for every hunter. That is why
 nothing here takes a profile.
 
-**The denominator is the eligible population, not the whole userbase.** For badges that is the series'
-pursuers (profiles with real progress); for anything else it is whoever could plausibly have earned it.
-Against the whole userbase almost everything reads Mythic, which makes the scale useless.
+**The denominator is the whole community** -- every PSN-linked account (`community_size`). Not "people
+who started this series": a pursuer base SHRINKS when someone abandons a series (the standing row is
+deleted at zero progress), so a badge could become rarer because people gave up on it, which says
+nothing about the badge. A linked-account base only grows, so the number moves for real reasons only.
+
+This is also the denominator the legacy `Badge` model always used, and the one PSN itself uses for
+trophy rarity -- so "2.1%" means here what hunters already read it as meaning everywhere else.
 
 **Grading is derived, never stored.** The thresholds below are fixed; the population underneath them is
 not. So a grade CAN change as a community grows into something -- a title earned by 3% of pursuers at
@@ -19,9 +23,11 @@ launch may read Uncommon a year later. That is intended: the grade describes the
 today, and a fixed scale over a live population is the whole model. Don't "fix" it by freezing grades.
 """
 
-#: Percentage of the eligible population that earned it -> class. First ceiling under wins; else common.
-#: Tuned for an eligible-population denominator, NOT the whole userbase.
-RARITY_THRESHOLDS = ((5.0, 'mythic'), (15.0, 'rare'), (35.0, 'uncommon'))
+#: Percentage of the COMMUNITY that earned it -> class. First ceiling under wins; else common.
+#: Calibrated for a whole-community denominator (matching the legacy Badge model and PSN's own trophy
+#: rarity language). The previous set -- 5/15/35 -- was tuned for "of people who tried it"; against the
+#: full community it would grade almost everything Mythic and the scale would carry no information.
+RARITY_THRESHOLDS = ((1.0, 'mythic'), (5.0, 'rare'), (20.0, 'uncommon'))
 
 #: Rarest first. `unearned` is deliberately NOT in here -- 0 earners is unearned, not an achievement,
 #: so it must never wear a prestige grade. It is handled as its own state by callers.
@@ -44,6 +50,28 @@ RARITY_FILTER_CHOICES = [(c, RARITY_LABELS[c]) for c in RARITY_CLASSES] + [
     (RARITY_UNEARNED, RARITY_LABELS[RARITY_UNEARNED]),
 ]
 
+#: See docs/reference/redis-keys.md.
+COMMUNITY_SIZE_CACHE_KEY = 'rarity:community_size'
+COMMUNITY_SIZE_TTL = 3600
+
+
+def community_size():
+    """Every PSN-linked account: the rarity denominator, shared by every gradeable thing.
+
+    ONE scalar for the whole site, so a page grading many things counts once rather than running a
+    grouped aggregate per series (this is cheaper than the per-series pursuer counts it replaced).
+    Cached for an hour: it is viewer-independent, moves slowly, and a stale-by-minutes denominator
+    cannot change a grade in any way a reader would notice.
+    """
+    from django.core.cache import cache
+    from trophies.models import Profile
+
+    size = cache.get(COMMUNITY_SIZE_CACHE_KEY)
+    if size is None:
+        size = Profile.objects.filter(is_linked=True).count()
+        cache.set(COMMUNITY_SIZE_CACHE_KEY, size, COMMUNITY_SIZE_TTL)
+    return size
+
 
 def rarity_class_for(pct: float) -> str:
     """Bucket an earned-percentage; lower is rarer."""
@@ -53,20 +81,21 @@ def rarity_class_for(pct: float) -> str:
     return 'common'
 
 
-def rarity_for(earned_count: int, eligible_count: int):
+def rarity_for(earned_count: int, community_count: int):
     """(pct, class) for anything gradeable.
 
-      - No eligible population yet  -> (None, '')  -> callers render "rarity pending".
-      - Population exists, 0 earners -> (0.0, '')  -> an honest 0%, but NO class: unearned is not
-        an achievement and must not wear the prestige grade.
+      - No community yet (a fresh install) -> (None, '') -> callers render "rarity pending".
+      - Community exists, 0 earners        -> (0.0, '')  -> an honest 0%, but NO class. 0% is under
+        every threshold, so the arithmetic would say Mythic; unearned is not an achievement, and the
+        "Be the first" nudge is a better use of the space than a prestige grade nobody has earned.
       - Otherwise the real percentage and its bucket.
 
     Both are LIVE. The thresholds are fixed, the population moves, so a grade genuinely can change over
     time -- see the note on drift in the module docstring.
     """
-    if not eligible_count:
+    if not community_count:
         return None, ''
-    pct = round(min(100.0, 100.0 * earned_count / eligible_count), 1)
+    pct = round(min(100.0, 100.0 * earned_count / community_count), 1)
     if not earned_count:
         return pct, ''
     return pct, rarity_class_for(pct)

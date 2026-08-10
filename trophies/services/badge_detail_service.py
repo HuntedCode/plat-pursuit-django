@@ -14,6 +14,7 @@ from trophies.models import UserGroupBadge, SeriesBadgeStanding, Game, ProfileGa
 from trophies.services.badge_orchestrator import build_catalog, evaluate_with_catalog
 from trophies.services.badge_xp import compute_series_standings, edition_display_state, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS
 from trophies.services.badge_rarity import group_rarity
+from trophies.services.rarity import community_size
 from trophies.services.rating_service import RatingService
 from trophies.services import badge_leaderboards as lb
 
@@ -326,9 +327,11 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
     rank = lb.earners_rank(target_profile.id, gb.id) if (hold and target_profile) else None
     stats = _group_stats(gb, result, catalog, ratings_map)
     journey = _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map)
-    # Rarity is derived LIVE from the maintained earned_count over the series' pursuer base -- no stored fields,
-    # no cron (the gb.rarity_* columns are dead scaffolding, pending removal). See badge_rarity.
-    rarity_pct, rarity_class = group_rarity(gb.earned_count, participants)
+    # Rarity is derived LIVE from the maintained earned_count over the whole COMMUNITY -- no stored
+    # fields, no cron (the gb.rarity_* columns are dead scaffolding). Note this is NOT `participants`:
+    # that is the series' pursuer base, which still drives series_size / the series rank's "of N".
+    # See badge_rarity.
+    rarity_pct, rarity_class = group_rarity(gb.earned_count, community_size())
     gv = GroupView(
         group_badge=gb, platform_group=gb.platform_group, art=gb.art_layers(),
         state=state, is_holo=is_holo, earned_at=(hold.earned_at if hold else None),
@@ -379,9 +382,10 @@ def get_badge_detail(series, target_profile) -> BadgeDetail:
                 for pg in ProfileGame.objects.filter(profile=target_profile, game_id__in=catalog['game_ids'])
             }
 
-    # The series' PURSUER base: profiles with a SeriesBadgeStanding (recompute_standing keeps only xp>0 rows,
-    # so this is "made real progress", not "synced once"). One bounded indexed count -- the live rarity
-    # denominator AND the series-rank's "of N". Computed always (cheap), including for anon.
+    # The series' PURSUER base: profiles with a SeriesBadgeStanding (recompute_standing keeps only xp>0
+    # rows, so this is "made real progress", not "synced once"). One bounded indexed count, driving
+    # series_size and the series rank's "of N". No longer the rarity denominator -- that is the whole
+    # community now. Computed always (cheap), including for anon.
     participants = SeriesBadgeStanding.objects.filter(series_slug=series.series_slug).count()
 
     groups = [_group_view(gb, desired.get(gb.id), holds.get(gb.id), target_profile, series, catalog,

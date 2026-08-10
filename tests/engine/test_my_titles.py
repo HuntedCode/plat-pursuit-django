@@ -207,17 +207,17 @@ def test_query_count_is_flat_as_the_catalogue_grows(django_assert_num_queries, c
     """The page must not N+1 per series -- art_layers() reads series.submitted_by for user-type series,
     which was one extra query each until the prefetch covered it.
 
-    9, not 8: the rarity grade added ONE grouped COUNT for the pursuer denominator. Both it and the
-    holder count are viewer-independent aggregates over indexed columns, bounded by the badge
-    catalogue rather than by anyone's trophies. If this number climbs again, the grade has started
-    querying per title."""
+    Back to 8: the rarity denominator is now one cached site-wide scalar rather than a grouped COUNT
+    per series, so grading costs nothing on a warm cache. The holder count remains a single
+    viewer-independent aggregate over an indexed column, bounded by the badge catalogue rather than by
+    anyone's trophies. If this number climbs, the grade has started querying per title."""
     p = ProfileFactory()
     for i in range(6):
         _series_with_title(f'Series {i}', f'Title {i}')
     client.force_login(p.user)
     client.get('/titles/')          # warm session/auth so the count reflects the view itself
 
-    with django_assert_num_queries(9):
+    with django_assert_num_queries(8):
         client.get('/titles/')
 
 
@@ -283,38 +283,57 @@ def test_equipped_plate_is_marked_worn_and_others_offer_equip(client):
 # ── Rarity: the site's grade, not a second scheme ─────────────────────────────────────────────────
 #
 # A title's rarity comes from badge_rarity.group_rarity -- the SAME function badge detail and the browse
-# gallery use -- so one title cannot read two different rarities depending on which page you're on.
-# Denominator: the series' PURSUERS (SeriesBadgeStanding rows), because against the whole userbase almost
-# every badge reads Mythic. Numerator: TITLE holders, because that is the number printed beside the grade.
+# gallery use -- so one title cannot read two different rarities on two pages.
+#
+# Denominator: the whole COMMUNITY (every PSN-linked account). Not the series' pursuers -- that base
+# SHRINKS when someone abandons a series, so a title could have become rarer because people gave up on
+# it. Numerator: badge_series title holders, because that is the number printed beside the grade.
 
-def _pursuers(series, n):
-    """n profiles making progress on the series (the rarity denominator)."""
-    for _ in range(n):
-        SeriesBadgeStanding.objects.create(profile=ProfileFactory(), series_slug=series.series_slug,
-                                           progress_bp=1000, stages_cleared=1, stages_total=5)
+def _community(n):
+    """n PSN-linked accounts: the rarity denominator. Returns them so wearers can be drawn from the
+    community rather than added alongside it, which is how it works in reality."""
+    return [ProfileFactory(is_linked=True) for _ in range(n)]
 
 
-def _wearers(series, n):
-    for _ in range(n):
-        UserTitle.objects.create(profile=ProfileFactory(), title=series.title,
+def _wearers(series, profiles):
+    for profile in profiles:
+        UserTitle.objects.create(profile=profile, title=series.title,
                                  source_type='badge_series', source_id=series.id)
 
 
-@pytest.mark.parametrize('wearers, pursuers, expected', [
-    (1, 100, 'mythic'),      # 1%   -> under the 5% ceiling
-    (10, 100, 'rare'),       # 10%  -> under 15
-    (30, 100, 'uncommon'),   # 30%  -> under 35
-    (80, 100, 'common'),     # 80%
+@pytest.mark.parametrize('wearers, expected', [
+    (1, 'mythic'),      # 0.5% of 200 -> under the 1% ceiling
+    (6, 'rare'),        # 3.0%        -> under 5
+    (20, 'uncommon'),   # 10.0%       -> under 20
+    (100, 'common'),    # 50.0%
 ])
-def test_a_title_wears_the_sites_rarity_grade(client, wearers, pursuers, expected):
+def test_a_title_wears_the_sites_rarity_grade(client, wearers, expected):
     p = ProfileFactory()
     series = _series_with_title('Crash', 'Crate Crusher')
-    _pursuers(series, pursuers)
-    _wearers(series, wearers)
+    community = _community(200)
+    _wearers(series, community[:wearers])
 
     entry = _get(client, p).context['all_titles'][0]
 
     assert entry['rarity_class'] == expected
+
+
+def test_legacy_and_one_off_grants_are_not_counted(client):
+    """The page surfaces the NEW badge system only, so counting a legacy 'badge' or one-off 'milestone'
+    grant would inflate the numerator against a denominator that knows nothing about them -- making the
+    title read more common than the system it belongs to says it is."""
+    p = ProfileFactory()
+    series = _series_with_title('Crash', 'Crate Crusher')
+    community = _community(200)
+    _wearers(series, community[:2])
+    for profile, source in zip(community[2:12], ['badge'] * 5 + ['milestone'] * 5):
+        UserTitle.objects.create(profile=profile, title=series.title, source_type=source,
+                                 source_id=series.id)
+
+    entry = _get(client, p).context['all_titles'][0]
+
+    assert entry['holders'] == 2, 'only badge_series grants count'
+    assert entry['rarity_pct'] == 1.0
 
 
 def test_the_grade_counts_title_holders_not_badge_earners(client):
@@ -323,8 +342,8 @@ def test_the_grade_counts_title_holders_not_badge_earners(client):
     displayed is how a card ends up reading "Mythic - 44,210 wearing"."""
     p = ProfileFactory()
     series = _series_with_title('Crash', 'Crate Crusher')
-    _pursuers(series, 100)
-    _wearers(series, 40)
+    community = _community(100)
+    _wearers(series, community[:40])
 
     entry = _get(client, p).context['all_titles'][0]
 
@@ -337,7 +356,7 @@ def test_a_title_nobody_holds_gets_no_grade(client):
     the "Be the first" nudge instead, the same treatment the browse gallery gives an unearned badge."""
     p = ProfileFactory()
     series = _series_with_title('Crash', 'Crate Crusher')
-    _pursuers(series, 40)
+    _community(40)
 
     resp = _get(client, p)
 
@@ -345,9 +364,9 @@ def test_a_title_nobody_holds_gets_no_grade(client):
     assert 'Be the first' in resp.content.decode()
 
 
-def test_a_series_with_no_pursuers_yet_gets_no_grade(client):
-    """Nothing to grade against -- group_rarity returns (None, '') rather than dividing by zero."""
-    p = ProfileFactory()
+def test_no_community_yet_gets_no_grade(client):
+    """Nothing to grade against -- rarity_for returns (None, '') rather than dividing by zero."""
+    p = ProfileFactory()          # not linked, so the community is empty
     _series_with_title('Crash', 'Crate Crusher')
 
     entry = _get(client, p).context['all_titles'][0]
@@ -363,8 +382,7 @@ def test_the_grade_reaches_the_plate_through_the_shared_component(client):
     the regression worth catching."""
     p = ProfileFactory()
     series = _series_with_title('Crash', 'Crate Crusher')
-    _pursuers(series, 100)
-    _wearers(series, 1)                                  # 1% -> mythic
+    _wearers(series, _community(200)[:1])                # 0.5% -> mythic
 
     content = _get(client, p).content.decode()
 

@@ -14,24 +14,40 @@ Adding rarity to a sixth surface meant writing a seventh copy. This is the extra
 Mythic title is Mythic whether or not you hold it, and it reads identically for every hunter. Nothing
 in the grading path takes a profile.
 
-**The denominator is the eligible population, not the whole userbase.** For badges that is the series'
-*pursuers* (profiles with a `SeriesBadgeStanding` row — real progress). Against the whole userbase
-almost everything reads Mythic, which makes the scale useless.
+**The denominator is the whole community** — every PSN-linked account (`rarity.community_size`). One
+cached scalar, shared by everything gradeable.
+
+It replaced a per-series *pursuer* base, and the reason matters: a pursuer row is **deleted** when a
+profile's progress in a series drops to zero, so that denominator could *shrink* — letting a badge look
+rarer because people abandoned the series, which says nothing about the badge. A linked-account base
+only grows, so the number moves for real reasons only. It is also what the legacy `Badge` model always
+used, and what PSN's own trophy rarity means, so "2.1%" reads here the way hunters already read it
+everywhere else.
 
 **The numerator is whatever the surface actually prints.** For a group badge that is its
 `earned_count`; for a *title* it is the title's holders, because a title is granted by earning **any**
 live edition and is therefore strictly easier than any single edition. Grading a different population
 from the one displayed is how a card ends up reading "Mythic · 44,210 wearing".
 
+Title holders count **`source_type='badge_series'` only**. The Titles page surfaces the new badge system
+alone, so a legacy `'badge'` or one-off `'milestone'` grant in the numerator would be measured against a
+denominator that knows nothing about it.
+
 | Grade | Earned by | Glyph |
 |---|---|---|
-| Mythic | < 5% of the eligible population | sparkle |
-| Rare | < 15% | diamond |
-| Uncommon | < 35% | dot |
+| Mythic | < 1% of the community | sparkle |
+| Rare | < 5% | diamond |
+| Uncommon | < 20% | dot |
 | Common | everything else | none |
 | *Be the first* | 0 earners — **not a grade** | none |
 
-`0` earners is unearned, not an achievement, so it never wears a prestige grade.
+These are calibrated for a whole-community denominator (and match both the legacy `Badge` model and
+PSN's trophy rarity). The previous 5/15/35 set was tuned for "of people who tried it"; against the full
+community it would grade almost everything Mythic.
+
+`0` earners is unearned, not an achievement — and note 0% is under *every* ceiling, so the arithmetic
+would happily call it Mythic. It gets the "Be the first" nudge instead, which is a better use of the
+space and a small CTA into engaging with the badge.
 
 ---
 
@@ -113,6 +129,11 @@ re-declaring four grade colours.
 - **Green now means rarity.** `--pp-success` is emerald, so a green "done"/"yours" marker sitting beside
   a grade reads as the same signal. Titles' "Yours" moved to `--pp-text-dim` for exactly this. Check any
   new surface that puts a success state next to a grade.
+- **A mythic badge needs >100 accounts to exist.** With a 1% ceiling, one earner in a community of 80
+  is 1.25% — Rare, not Mythic. Tests that want a Mythic fixture have to seed a community past 100.
+- **The denominator is cached for an hour** (`rarity:community_size`). Viewer-independent and slow-moving,
+  so staleness cannot change a grade noticeably — but tests must clear the key between cases or the first
+  one to grade anything fixes the denominator for the whole session. `conftest` does this autouse.
 - **`GroupBadge.rarity_pct` / `rarity_rank` / `rarity_class` are dead scaffolding**, kept only because
   they are surfaced read-only in admin. Nothing reads them for display — grading is live. Don't wire
   new code to them, and don't mistake them for a stored grade.

@@ -69,8 +69,9 @@ def _standing(profile, slug, bp=0, xp=100, group_progress=None):
 
 
 def _pursuers(slug, n):
+    """n LINKED profiles with a standing -- the rarity denominator is the whole community now."""
     for _ in range(n):
-        _standing(ProfileFactory(), slug, bp=1000)
+        _standing(ProfileFactory(is_linked=True), slug, bp=1000)
 
 
 def _frames_by_edition(ctx):
@@ -284,19 +285,19 @@ def test_recent_window_flags_new_and_counts():
 # --- rarity + sort + themes ----------------------------------------------------
 
 
-def test_rarity_from_earned_count_and_participants():
-    """Live rarity is earned_count over the series' pursuer count -- 1 of 4 -> 25% -> uncommon."""
-    profile = ProfileFactory()
+def test_rarity_from_earned_count_over_the_community():
+    """Live rarity is earned_count over the whole community -- 1 of 4 -> 25% -> common."""
+    profile = ProfileFactory(is_linked=True)
     _, groups = _series('rs-rare')
     _hold(profile, groups['ultra-hd'])
     _standing(profile, 'rs-rare', bp=10000)   # the viewer is a pursuer too (holders always have a standing)
     GroupBadge.objects.filter(id=groups['ultra-hd'].id).update(earned_count=1)
-    _pursuers('rs-rare', 3)   # +3 other pursuers -> 4 total; 1 of 4 earned -> 25%
+    _pursuers('rs-rare', 3)   # +3 others -> a community of 4; 1 of 4 earned -> 25%
 
     frame = _frames_by_edition(build_collection_context(profile))['ultra-hd']
 
     assert frame['rarity_pct'] == 25.0
-    assert frame['rarity_class'] == 'uncommon'
+    assert frame['rarity_class'] == 'common'
 
 
 def test_sort_options_and_invalid_fallback():

@@ -15,6 +15,7 @@ from django.db.models import Count
 from trophies.models import GroupBadge, SeriesBadgeStanding, UserGroupBadge
 from trophies.services.badge_detail_service import group_medallion_layers
 from trophies.services.badge_rarity import group_rarity
+from trophies.services.rarity import community_size
 
 
 def _list_frame(gb, tier, layers, is_avatar, held, is_holo) -> dict:
@@ -47,13 +48,9 @@ def build_list_cards(group_badges, profile) -> list:
     if not group_badges:
         return []
 
-    # Live-rarity denominator: pursuers per series (SeriesBadgeStanding rows = xp>0 progress), one grouped query.
-    slugs = {gb.series.series_slug for gb in group_badges}
-    participants = dict(
-        SeriesBadgeStanding.objects.filter(series_slug__in=slugs)
-        .values('series_slug').annotate(n=Count('id'))
-        .values_list('series_slug', 'n')
-    )
+    # Live-rarity denominator: the whole community, one cached scalar (was a grouped per-series
+    # pursuer count -- one query fewer, and it cannot disagree with the badge detail page).
+    community = community_size()
 
     # The viewer's holds (earned + holo), one query. Anonymous -> no holds -> everything reads as not-earned.
     holds = {}
@@ -68,7 +65,7 @@ def build_list_cards(group_badges, profile) -> list:
         held = gb.id in holds
         is_holo = bool(holds.get(gb.id, False))
         tier, layers, is_avatar = group_medallion_layers(gb)
-        pct, cls = group_rarity(gb.earned_count, participants.get(gb.series.series_slug, 0))
+        pct, cls = group_rarity(gb.earned_count, community)
         cards.append({
             'group_badge': gb,
             'series': gb.series,
