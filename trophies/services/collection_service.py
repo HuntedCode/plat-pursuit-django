@@ -92,7 +92,8 @@ def _badge_frame(gb, holds, standings, participants):
     # Only an in-progress edition carries the "X / Y stages" count (earned/unearned show none).
     stages_done, stages_total = (cleared, gating) if state == 'in_progress' else (0, 0)
 
-    pct, cls = group_rarity(gb.earned_count, participants.get(series.series_slug, 0))
+    pct, cls = group_rarity(gb.earned_count, participants.get(series.series_slug, 0),
+                            floor_pct=gb.rarity_floor_pct)  # floor -> the ratchet: a grade may rise, never fall (see services/rarity.effective_pct)
     return {
         'tier': tier,
         'state': state,

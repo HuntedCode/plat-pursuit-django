@@ -3019,6 +3019,14 @@ class GroupBadge(models.Model):
     rarity_pct = models.FloatField(null=True, blank=True)
     rarity_rank = models.PositiveIntegerField(null=True, blank=True)
     rarity_class = models.CharField(max_length=10, blank=True, default='', choices=RARITY_CLASSES)
+    #: The lowest rarity percentage this has ever reached -- the RATCHET floor. Rarity is derived
+    #: from a denominator that only grows, so without this a grade drifts DOWN as more people earn
+    #: it: log in one day and your Mythic is Rare. Grading from the floor means a grade can rise but
+    #: never fall. Still community-level and identical for everyone -- it is a property of the thing,
+    #: not of any one hunter. Maintained nightly by `recalc_rarity_floors`; null until first run,
+    #: which reads as "no floor yet" and grades live.
+    rarity_floor_pct = models.FloatField(null=True, blank=True, editable=False)
+
 
     # Overrides (null => inherit the series default).
     badge_image_override = models.ImageField(upload_to='badges/group/', null=True, blank=True, help_text="Per-group subject artwork; null inherits BadgeSeries.badge_image.")
@@ -3165,6 +3173,15 @@ class TitleManager(models.Manager):
 class Title(models.Model):
     name = models.CharField(max_length=100, unique=True, help_text="The title text.")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    #: The lowest rarity percentage this has ever reached -- the RATCHET floor. Rarity is derived
+    #: from a denominator that only grows, so without this a grade drifts DOWN as more people earn
+    #: it: log in one day and your Mythic is Rare. Grading from the floor means a grade can rise but
+    #: never fall. Still community-level and identical for everyone -- it is a property of the thing,
+    #: not of any one hunter. Maintained nightly by `recalc_rarity_floors`; null until first run,
+    #: which reads as "no floor yet" and grades live.
+    rarity_floor_pct = models.FloatField(null=True, blank=True, editable=False)
+
 
     objects = TitleManager()
 

@@ -328,7 +328,8 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
     journey = _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map)
     # Rarity is derived LIVE from the maintained earned_count over the series' pursuer base -- no stored fields,
     # no cron (the gb.rarity_* columns are dead scaffolding, pending removal). See badge_rarity.
-    rarity_pct, rarity_class = group_rarity(gb.earned_count, participants)
+    rarity_pct, rarity_class = group_rarity(gb.earned_count, participants,
+                                            floor_pct=gb.rarity_floor_pct)  # floor -> the ratchet: a grade may rise, never fall (see services/rarity.effective_pct)
     gv = GroupView(
         group_badge=gb, platform_group=gb.platform_group, art=gb.art_layers(),
         state=state, is_holo=is_holo, earned_at=(hold.earned_at if hold else None),

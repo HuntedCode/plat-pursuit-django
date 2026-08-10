@@ -20,6 +20,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 03:45 UTC daily | `recompute_tag_covers` | Daily | None |
 | 04:30 UTC daily | `detect_dlc_and_refresh` | Daily | TrophyGroups synced (TokenKeeper current) |
 | 05:00 UTC daily | `audit_badge_coverage` | Daily | None |
+| 05:15 UTC daily | `recalc_rarity_floors` | Daily | Badge earn counts + standings current |
 | 05:30 UTC daily | `recompute_milestones` | Daily | Profile counters current (`recalc_profile_counters` at 03:30) |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
@@ -110,6 +111,23 @@ job replaces it; linking happens inline on every match acceptance. A
 one-shot backfill (`backfill_game_families_from_igdb`) exists for the
 historical pass after Phase 3's rematch run.
 - **Failure impact**: New cross-generation game relationships are not automatically discovered. Existing families remain intact.
+
+### recalc_rarity_floors
+
+- **Command**: `python manage.py recalc_rarity_floors`
+- **Schedule**: Daily, 05:15 UTC (after `audit_badge_coverage`)
+- **What it does**: lowers the rarity RATCHET floor -- the rarest each group badge and title has ever
+  been -- on `GroupBadge.rarity_floor_pct` and `Title.rarity_floor_pct`.
+- **Why it exists**: rarity is derived from a denominator that only grows, so a grade drifts DOWN over
+  time: a hunter logs in and their Mythic has become Rare. Grading from the floor means a grade can rise
+  but never fall. The floor is community-level -- a property of the badge or title, identical for every
+  hunter -- so it does NOT make two people see different grades for the same thing.
+- **Safe to re-run**: yes. It only ever moves a floor DOWN, so an extra pass can never inflate a grade.
+  `--dry-run` reports without writing.
+- **Gotcha**: sampling daily means a brief intra-day dip can be missed. That is deliberate -- rarity
+  moves slowly, and the alternative is writing to the database on every read.
+- **Gotcha**: until the first run, every floor is NULL, which reads as "no floor" and grades live. That
+  is correct behaviour, not a bug: nothing has been demoted yet because nothing has been recorded yet.
 
 ### recalc_earn_rates
 

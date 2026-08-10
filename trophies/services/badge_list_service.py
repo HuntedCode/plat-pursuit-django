@@ -68,7 +68,8 @@ def build_list_cards(group_badges, profile) -> list:
         held = gb.id in holds
         is_holo = bool(holds.get(gb.id, False))
         tier, layers, is_avatar = group_medallion_layers(gb)
-        pct, cls = group_rarity(gb.earned_count, participants.get(gb.series.series_slug, 0))
+        pct, cls = group_rarity(gb.earned_count, participants.get(gb.series.series_slug, 0),
+                                floor_pct=gb.rarity_floor_pct)  # floor -> the ratchet: a grade may rise, never fall (see services/rarity.effective_pct)
         cards.append({
             'group_badge': gb,
             'series': gb.series,

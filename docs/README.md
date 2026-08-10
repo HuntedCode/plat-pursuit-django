@@ -107,6 +107,7 @@ Quick-lookup tables for mid-task reference.
 | [JS Utilities](reference/js-utilities.md) | utils.js shared library (API, ToastManager, InfiniteScroller, etc.) |
 | [Template Architecture](reference/template-architecture.md) | base.html, zoom wrapper, templatetags, context processors, mixins, themes |
 | [Settings Overview](reference/settings-overview.md) | Key Django settings, environment variables, constants files |
+| [Rarity](reference/rarity.md) | The one rarity model: grading, the ratchet, and the shared tint+material component |
 | [Redis Keys](reference/redis-keys.md) | Complete key map for raw Redis and Django cache |
 | [Shovelware Detection](reference/shovelware-detection.md) | Detection algorithm, thresholds, management commands |
 | [Homepage Services](reference/homepage-services.md) | Featured content, What's New, community stats |
