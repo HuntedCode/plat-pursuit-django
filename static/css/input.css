@@ -146,12 +146,19 @@
   --pp-info: oklch(0.74 0.16 245);
   /* Badge rarity (shared by the Frame primitive + the badge-detail community band, so a recolor stays in one
      place). Mirrors the frame.css scale: common dim -> mythic glow. */
-  --pp-rarity-common: rgba(255, 255, 255, 0.5);
-  --pp-rarity-uncommon: rgba(170, 220, 195, 0.9);
-  --pp-rarity-rare: rgba(245, 205, 105, 1);
-  --pp-rarity-rare-glow: rgba(240, 200, 100, 0.35);
-  --pp-rarity-mythic: rgba(225, 245, 255, 1);
-  --pp-rarity-mythic-glow: rgba(180, 220, 255, 0.55);
+  /* Rarity: ONE ramp, mint -> emerald, deepening as it climbs. The old set was four unrelated hues
+     (white / pale green / gold / near-white) and it INVERTED at the top: mythic sat at 94% lightness,
+     back toward where common lives, so the loudest grade on the site was rare -- the second-rarest.
+     A single axis cannot invert, and lightness carrying the signal (96 -> 89 -> 81 -> 72) means the
+     order survives every form of colour blindness, which green-versus-gold did not.
+     Paired with the material ladder in components/rarity.css: hue gives the fast cold read, finish
+     gives the premium one. */
+  --pp-rarity-common: oklch(0.96 0.006 195);
+  --pp-rarity-uncommon: oklch(0.89 0.075 182);
+  --pp-rarity-rare: oklch(0.81 0.135 168);
+  --pp-rarity-rare-glow: oklch(0.81 0.135 168 / 0.38);
+  --pp-rarity-mythic: oklch(0.72 0.185 156);
+  --pp-rarity-mythic-glow: oklch(0.72 0.185 156 / 0.62);
   /* Rating star: the bright, inviting yellow-gold for USER-RATING stars (game-card, game-detail score +
      quick-take cards) -- distinct from the muted metallic --color-trophy-gold used for gold TROPHIES. */
   --pp-rating-star: oklch(0.86 0.17 90);

@@ -19,8 +19,13 @@
  * slower to sort and pushed the whole fast read onto the glyphs.
  * ============================================================ */
 
-/* ---- The scale. Every value a surface needs, declared once per grade. ---- */
-[data-rarity] {
+/* ---- The scale. Every value a surface needs, declared once per grade. ----
+ * The defaults are declared on the COMPONENTS as well as on [data-rarity], because plenty of things
+ * are gradeable but ungraded: a one-off award, a series with no pursuer base yet. Without a default
+ * here their custom properties are undefined, the color-mix() below is invalid, and the surface paints
+ * no background at all -- it vanishes into the page. Grade rules come after, so they still win.
+ */
+[data-rarity], .pp-rarity, .pp-rarity-surface, .pp-rarity-gem {
     --rar-c: var(--pp-text-mute);   /* the grade's hue */
     --rar-glow: transparent;        /* text/icon glow, top grades only */
     --rar-tint: 0%;                 /* how much hue washes into the surface */
