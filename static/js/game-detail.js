@@ -1781,17 +1781,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // ── Community Guidelines sheet. Opens OVER the compose modal from its notice's [data-gd-guidelines-open]
         //    link, so reading the rules never loses the in-progress take. Read-only; agreement is recorded on
         //    submit. Stacking a second <dialog>.showModal() puts it on top; closing returns focus to the modal. ──
-        const guidelines = document.getElementById('gd-guidelines-modal');
-        if (guidelines) {
-            const closeGuide = () => { if (guidelines.close && guidelines.open) guidelines.close(); };
-            guidelines.querySelectorAll('[data-gd-modal-close]').forEach((b) => b.addEventListener('click', closeGuide));
-            guidelines.addEventListener('click', (e) => { if (e.target === guidelines) closeGuide(); });
-            guidelines.addEventListener('cancel', (e) => { e.preventDefault(); closeGuide(); });
-            if (PlatPursuit.dismissableSheet) PlatPursuit.dismissableSheet(guidelines, { onClose: closeGuide });
-            document.addEventListener('click', (e) => {
-                if (!e.target.closest('[data-gd-guidelines-open]')) return;
-                if (guidelines.showModal && !guidelines.open) guidelines.showModal();
-            });
-        }
+        //    Moved to utils (PlatPursuit.wireGuidelinesSheet) once the quick-rate modal gained a second
+        //    host -- the plat-card share modal -- since its notice links here from both.
+        if (PlatPursuit.wireGuidelinesSheet) PlatPursuit.wireGuidelinesSheet();
     })();
 });

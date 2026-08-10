@@ -113,6 +113,14 @@ makes a visibly thinner card. Two ways in, both driving the SAME `rate_before_do
   ("Save rating", and the skip becomes a plain Cancel), since neither of the prompt's labels is
   true on that path.
 
+Both drive **`trophies/partials/game_detail/quick_rate_modal.html`** — the same modal as the Game Detail
+Ratings tab, so the two rating surfaces cannot drift. This page shipped with the legacy
+`rate_before_download_modal.html`, which predates the rebuild: DaisyUI colours and, more importantly, **no
+blurb field**, so the card rendered a quick take the only form that could set it never offered. That
+partial still exists for `dashboard.html`; it is no longer used here. The guidelines sheet is composed
+alongside it because the modal's notice links there, wired by the shared
+`PlatPursuit.wireGuidelinesSheet()`.
+
 Either way, a successful save **invalidates the preview cache** for that completion and refetches.
 
 ## API Endpoints
@@ -182,6 +190,9 @@ art the card already offers.
   hunter's rating. `loadPreview()` was already called after a save and was handed the stale entry
   straight back, so the preview never changed. Anything else that can alter a card must invalidate
   too.
+- **The blurb must be prefilled, not just the numbers.** The payload always sends `blurb`, so opening
+  the form with an empty textarea and saving CLEARS an existing quick take. That only became possible
+  when this page moved to the modal that has the field.
 - **An edit form must open prefilled.** The HTML payload carries `user_rating` for exactly this. An
   edit that opens on the form's defaults and saves overwrites real scores with 3/5/5/5 — a control
   that destroys the thing it claims to edit.

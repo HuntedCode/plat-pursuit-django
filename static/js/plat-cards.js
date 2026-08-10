@@ -402,31 +402,58 @@
             });
     }
 
-    // Rate-before-download. The card carries the hunter's own stars, difficulty and fun, so an unrated
-    // game makes a visibly thinner card -- the honest reason to ask, and why this only ever offers.
-    // Asked at most once per opened card.
+    // ── Rating ────────────────────────────────────────────────────────────────────────────────────
+    // Drives the SAME quick-rate modal as the Game Detail Ratings tab (#gd-qr-modal), not the legacy
+    // rate_before_download_modal this page shipped with. That one predates the rebuild -- DaisyUI colours
+    // and no blurb field at all, so the card rendered a quick take the only form that could set it never
+    // offered.
     //
-    // Driven against the shared #rate-before-download-modal. dashboard.js drives the same partial and
-    // is NOT loaded on this page, so everything it does for that modal has to happen here too: a reset
-    // between opens, live slider readouts, and the hours gate -- the form rejects a blank or zero
-    // hours_to_platinum with a 400, which is exactly why the template ships the submit disabled.
+    // Two entry points, one modal:
+    //   PROMPT -- offered once per opened card when an unrated card is downloaded. The card carries the
+    //             hunter's own stars, difficulty, grind and fun, so an unrated game makes a visibly
+    //             thinner card; that is the honest reason to ask, and why this only ever offers.
+    //   EDIT   -- the modal's own Rate/Edit button. Nothing downloads, and it opens prefilled.
+    //
+    // game-detail.js is NOT loaded here, so every behaviour it gives that modal has to happen here too:
+    // slider readouts, the blurb counter, prefill, the guidelines agree-on-submit, and close wiring.
     var asked = false;
-    var RBD_READOUTS = {
-        overall_rating: 'rbd-overall-value',
-        difficulty: 'rbd-difficulty-value',
-        grindiness: 'rbd-grindiness-value',
-        fun_ranking: 'rbd-fun-value',
-    };
+    var QR_SLIDERS = ['difficulty', 'grindiness', 'fun_ranking', 'overall_rating'];
+    var BLURB_MAX = 140;
 
-    function syncReadouts(form) {
-        Object.keys(RBD_READOUTS).forEach(function (name) {
-            var input = form.querySelector('[name="' + name + '"]');
-            var out = document.getElementById(RBD_READOUTS[name]);
-            if (input && out) {
-                out.textContent = name === 'overall_rating'
-                    ? parseFloat(input.value).toFixed(1) : input.value;
-            }
+    function qrField(form, name) { return form.querySelector('[name="' + name + '"]'); }
+
+    function qrSetVal(form, name) {
+        var out = form.querySelector('[data-gd-qr-val="' + name + '"]');
+        var input = qrField(form, name);
+        if (!out || !input) { return; }
+        out.textContent = name === 'overall_rating' ? parseFloat(input.value).toFixed(1) : String(input.value);
+    }
+
+    function qrRefreshCount(form) {
+        var area = form.querySelector('[data-gd-qr-blurb]');
+        var count = form.querySelector('[data-gd-qr-count]');
+        if (!area || !count) { return; }
+        var left = BLURB_MAX - area.value.length;
+        count.textContent = String(left);
+        count.classList.toggle('is-low', left <= 20);
+    }
+
+    // Prefill from the hunter's existing scores. Without this an edit opens on the form's defaults and
+    // saving overwrites real scores with 3/5/5/5 -- a control that destroys the thing it claims to edit.
+    // The blurb is prefilled too now that the form HAS one: leaving it empty would silently clear a quick
+    // take on every save, since the payload always sends the field.
+    function qrPrefill(form, rating) {
+        var d = { difficulty: 5, grindiness: 5, fun_ranking: 5, overall_rating: 3, hours_to_platinum: '' };
+        Object.keys(d).forEach(function (name) {
+            var input = qrField(form, name);
+            if (!input) { return; }
+            var v = rating && rating[name] !== null && rating[name] !== undefined ? rating[name] : d[name];
+            input.value = v;
         });
+        var area = form.querySelector('[data-gd-qr-blurb]');
+        if (area) { area.value = (rating && rating.blurb) || ''; }
+        QR_SLIDERS.forEach(function (n) { qrSetVal(form, n); });
+        qrRefreshCount(form);
     }
 
     // The card's stats ARE the hunter's rating, so let them fix it without leaving the modal. Hidden
@@ -440,101 +467,123 @@
         if (label) { label.textContent = current && current.hasRating ? 'Edit rating' : 'Rate this game'; }
     }
 
-    // Prefill from the hunter's existing scores. Without this an "edit" opens on the form's defaults and
-    // saving silently overwrites real scores with 3/5/5/5 -- an edit control that destroys the thing it
-    // claims to edit. `blurb` is deliberately not touched: the form has no field for it, so a round-trip
-    // through here must not be able to clear it (the API only writes the keys it's sent).
-    function prefill(form, rating) {
-        if (!rating) { return; }
-        ['overall_rating', 'difficulty', 'grindiness', 'fun_ranking', 'hours_to_platinum'].forEach(function (name) {
-            var input = form.querySelector('[name="' + name + '"]');
-            if (input && rating[name] !== null && rating[name] !== undefined) { input.value = rating[name]; }
-        });
-    }
-
     function promptRating(proceed, opts) {
         var edit = !!(opts && opts.edit);
-        var modal = document.getElementById('rate-before-download-modal');
-        var form = modal && modal.querySelector('#rbd-rating-form');
+        var modal = document.getElementById('gd-qr-modal');
+        var form = document.getElementById('gd-qr-form');
         if (!modal || !form || !modal.showModal) { proceed(); return; }
         // Only the DOWNLOAD prompt is once-per-card. An explicit edit must never consume that, or opening
         // the editor would silence the prompt for a hunter who then skipped rating.
         if (!edit) { asked = true; }
 
-        var title = modal.querySelector('#rbd-game-title');
-        if (title) { title.textContent = current.gameName || 'Rate this game'; }
-        form.reset();                       // otherwise card B opens on card A's slider positions
-        if (edit) { prefill(form, current.rating); }
-        syncReadouts(form);
+        qrPrefill(form, edit ? current.rating : null);
 
-        var hint = document.getElementById('rbd-playtime-hint');
+        var title = document.getElementById('gd-qr-title');
+        var submit = form.querySelector('[data-gd-qr-submit]');
+        var cancel = form.querySelector('[data-gd-qr-cancel]');
+        var closers = modal.querySelectorAll('[data-gd-modal-close]:not([data-gd-qr-cancel])');
+        if (title) { title.textContent = edit ? 'Update your rating' : 'Rate this game'; }
+        if (submit) {
+            submit.disabled = false;
+            submit.textContent = edit ? 'Save rating' : 'Rate and download';
+        }
+        // In PROMPT mode the secondary action is "skip, just download"; in EDIT mode it is a plain cancel.
+        if (cancel) { cancel.textContent = edit ? 'Cancel' : 'Skip, just download'; }
+
+        // The hint is SSR'd for Game Detail, where playtime is a page-level fact. Here it is per card.
+        var hint = form.querySelector('.gd-qr__hint');
         if (hint) {
-            hint.textContent = current.playtime ? 'Your tracked playtime: ' + current.playtime : '';
-            hint.classList.toggle('hidden', !current.playtime);
+            hint.textContent = current.playtime
+                ? 'Your tracked playtime: ' + current.playtime
+                : "We don't have your playtime for this game.";
+            hint.classList.toggle('gd-qr__hint--muted', !current.playtime);
         }
 
-        var submit = modal.querySelector('#rbd-submit-btn');
-        var skip = modal.querySelector('#rbd-skip-btn');
-        var hours = form.querySelector('[name="hours_to_platinum"]');
-        // The shared modal is written for the download prompt ("Rate and Download" / "Skip, just
-        // download"). Neither is true of an explicit edit -- nothing downloads -- so both are relabelled
-        // and the skip becomes a plain cancel. Restored on close, since the same element serves both.
-        var submitLabel = submit && submit.querySelector('[data-rbd-submit-label]');
-        if (submitLabel) { submitLabel.textContent = edit ? 'Save rating' : 'Rate and Download'; }
-        if (skip) { skip.textContent = edit ? 'Cancel' : 'Skip, just download'; }
-        var blurb = modal.querySelector('#rbd-prompt-copy');
-        if (blurb) { blurb.hidden = edit; }
-        // Prefilled hours already satisfy the gate; leaving it disabled would make an edit look broken.
-        if (submit) { submit.disabled = !(parseInt(hours && hours.value, 10) >= 1); }
-
-        function onInput() { syncReadouts(form); }
-        function onHours() { if (submit) { submit.disabled = !(parseInt(hours.value, 10) >= 1); } }
+        function onSlider(e) { if (e.target.matches('[data-gd-qr-slider]')) { qrSetVal(form, e.target.name); } }
+        function onBlurbInput(e) { if (e.target.matches('[data-gd-qr-blurb]')) { qrRefreshCount(form); } }
+        // Idempotent, and also bound to the dialog's native `close` -- which fires HOWEVER it closes,
+        // including the swipe-to-dismiss `pp-dismissable` gives it on mobile. Relying on finish() alone
+        // meant a swipe left every listener attached, so the next open double-bound them and a single
+        // submit fired twice.
+        var torn = false;
         function cleanup() {
-            form.removeEventListener('input', onInput);
-            if (hours) { hours.removeEventListener('input', onHours); }
-            if (submit) { submit.removeEventListener('click', onSubmit); }
-            if (skip) { skip.removeEventListener('click', onSkip); }
-            modal.removeEventListener('close', onDismiss);
+            if (torn) { return; }
+            torn = true;
+            form.removeEventListener('input', onSlider);
+            form.removeEventListener('input', onBlurbInput);
+            form.removeEventListener('submit', onSubmit);
+            if (cancel) { cancel.removeEventListener('click', onCancel); }
+            closers.forEach(function (b) { b.removeEventListener('click', onDismiss); });
+            modal.removeEventListener('cancel', onEsc);
+            modal.removeEventListener('click', onBackdrop);
+            modal.removeEventListener('close', cleanup);
         }
-        // A DISMISS is not a skip. The close button and the backdrop are both form method="dialog", so
-        // both fire `close` -- treating that as "skip, then download" meant the universal
-        // get-me-out-of-here affordance handed you a file. Only the explicit buttons continue.
+        // A DISMISS is not a skip. The header X, the backdrop and Esc are the universal get-me-out-of-here
+        // affordance; treating any of them as "skip, then download" meant closing the modal handed you a
+        // file. Only the two explicit buttons continue.
         function finish(didRate, andDownload) {
             cleanup();
-            if (modal.open) { modal.close(); }
+            if (modal.close && modal.open) { modal.close(); }
             if (didRate) {
                 current.hasRating = true;
                 // The card RENDERS the rating, so the cached copy is now the wrong card. Without this
-                // loadPreview() is handed the stale entry straight back and the preview never changes --
-                // the reload was always here, the invalidation was not.
+                // loadPreview() is handed the stale entry straight back and the preview never changes.
                 invalidatePreview(current.groupId);
                 loadPreview();
             }
             if (andDownload) { proceed(); }
         }
+        function onCancel(e) { e.preventDefault(); finish(false, !edit); }
+        function onDismiss() { finish(false, false); }
+        function onEsc(e) { e.preventDefault(); finish(false, false); }
+        function onBackdrop(e) { if (e.target === modal) { finish(false, false); } }
+
         function onSubmit(e) {
             e.preventDefault();
-            if (!(parseInt(hours && hours.value, 10) >= 1)) { return; }
-            submit.disabled = true;
-            var payload = {};
-            new FormData(form).forEach(function (v, k) { payload[k] = v; });
-            PP.API.post('/api/v1/ratings/' + current.conceptId + '/group/default/rate/', payload)
-                .then(function () { finish(true, true); })
-                .catch(function () {
-                    // Don't hand over a download while pretending the rating saved.
-                    submit.disabled = false;
-                    if (PP.ToastManager) { PP.ToastManager.error("Couldn't save that rating. Try again, or skip."); }
-                });
+            var hoursEl = qrField(form, 'hours_to_platinum');
+            var hours = parseInt(hoursEl && hoursEl.value, 10);
+            if (!hours || hours < 1) {
+                if (PP.ToastManager) { PP.ToastManager.show('Enter the hours it took you.', 'warning'); }
+                return;
+            }
+            var area = form.querySelector('[data-gd-qr-blurb]');
+            var blurb = area ? area.value.trim() : '';
+            var payload = {
+                difficulty: parseInt(qrField(form, 'difficulty').value, 10),
+                grindiness: parseInt(qrField(form, 'grindiness').value, 10),
+                fun_ranking: parseInt(qrField(form, 'fun_ranking').value, 10),
+                overall_rating: parseFloat(qrField(form, 'overall_rating').value),
+                hours_to_platinum: hours,
+                blurb: blurb,
+            };
+            if (submit) { submit.disabled = true; submit.textContent = 'Saving...'; }
+            // Posting a public quick take records guidelines agreement (the notice above the action IS the
+            // fine print). Done FIRST so the rate call can't 403 with needs_guidelines. Idempotent.
+            var agreed = form.dataset.guidelinesAgreed === '1';
+            var pre = (blurb && !agreed)
+                ? PP.API.post('/api/v1/guidelines/agree/', {})
+                    .then(function () { form.dataset.guidelinesAgreed = '1'; })
+                    .catch(function () { /* the rate call surfaces needs_guidelines if this failed */ })
+                : Promise.resolve();
+            pre.then(function () {
+                return PP.API.post('/api/v1/ratings/' + current.conceptId + '/group/default/rate/', payload);
+            }).then(function () {
+                finish(true, !edit);
+            }).catch(function () {
+                // Don't hand over a download while pretending the rating saved.
+                if (submit) { submit.disabled = false; submit.textContent = edit ? 'Save rating' : 'Rate and download'; }
+                if (PP.ToastManager) { PP.ToastManager.error("Couldn't save that rating. Try again, or skip."); }
+            });
         }
-        // In edit mode the secondary button is a CANCEL, so it must not fall through to a download.
-        function onSkip(e) { e.preventDefault(); finish(false, !edit); }
-        function onDismiss() { finish(false, false); }
 
-        form.addEventListener('input', onInput);
-        if (hours) { hours.addEventListener('input', onHours); }
-        if (submit) { submit.addEventListener('click', onSubmit); }
-        if (skip) { skip.addEventListener('click', onSkip); }
-        modal.addEventListener('close', onDismiss);
+        form.addEventListener('input', onSlider);
+        form.addEventListener('input', onBlurbInput);
+        form.addEventListener('submit', onSubmit);
+        if (cancel) { cancel.addEventListener('click', onCancel); }
+        closers.forEach(function (b) { b.addEventListener('click', onDismiss); });
+        modal.addEventListener('cancel', onEsc);
+        modal.addEventListener('click', onBackdrop);
+        modal.addEventListener('close', cleanup);
         modal.showModal();
     }
 
@@ -699,6 +748,9 @@
         wireMinibar();
         initReveal();
         wireModal(first);
+        // The quick-rate modal's notice links to the guidelines sheet, so the sheet has to be wired
+        // wherever that modal is composed. Idempotent + no-op when the sheet isn't on the page.
+        if (PP.wireGuidelinesSheet) { PP.wireGuidelinesSheet(); }
         if (first) { autoOpen(); }      // strips ?c= / ?et= BEFORE the scroller snapshots the query
         initScroller();
         if (PP.StickyReveal) { PP.StickyReveal.init(); }

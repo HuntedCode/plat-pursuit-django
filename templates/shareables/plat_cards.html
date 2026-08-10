@@ -143,7 +143,13 @@ native `checked` keeps browser Back correct with no JS (the Franchises-list patt
 </div>
 
 {% include 'shareables/partials/share_modal.html' %}
-{% include 'partials/rate_before_download_modal.html' %}
+{% comment %}The SAME quick-rate modal the Game Detail Ratings tab uses, not the legacy
+`rate_before_download_modal.html` this page shipped with. That one predates the rebuild: DaisyUI colours
+and, more importantly, NO blurb field -- so the card renders a quick take the only form that could set it
+never offered. Reusing this one means the two rating surfaces cannot drift, and the guidelines sheet
+comes with it because the notice links to it.{% endcomment %}
+{% include 'trophies/partials/game_detail/quick_rate_modal.html' %}
+{% include 'trophies/partials/game_detail/guidelines_sheet.html' %}
 {% endblock %}
 
 {% block js_scripts %}

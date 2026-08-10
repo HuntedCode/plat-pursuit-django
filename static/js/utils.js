@@ -1692,6 +1692,33 @@ window.PlatPursuit.dismissableSheet = dismissableSheet;
 window.PlatPursuit.onPageReady = onPageReady;
 
 /**
+ * wireGuidelinesSheet -- the Community Guidelines sheet (`#gd-guidelines-modal`), opened OVER whatever
+ * compose surface is showing from that surface's `[data-gd-guidelines-open]` link, so reading the rules
+ * never loses an in-progress quick take. Read-only; agreement is recorded on submit, not here.
+ *
+ * Shared because the quick-rate modal is now composed on more than one page (Game Detail's Ratings tab
+ * and the plat-card share modal), and its notice links here from both. Stacking a second
+ * <dialog>.showModal() puts it on top; closing returns focus to the modal underneath.
+ *
+ * Idempotent: safe to call from several page controllers, and a no-op when the sheet isn't on the page.
+ */
+function wireGuidelinesSheet() {
+    var sheet = document.getElementById('gd-guidelines-modal');
+    if (!sheet || sheet.dataset.wired === '1') { return; }
+    sheet.dataset.wired = '1';
+    var close = function () { if (sheet.close && sheet.open) { sheet.close(); } };
+    sheet.querySelectorAll('[data-gd-modal-close]').forEach(function (b) { b.addEventListener('click', close); });
+    sheet.addEventListener('click', function (e) { if (e.target === sheet) { close(); } });
+    sheet.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
+    if (window.PlatPursuit.dismissableSheet) { window.PlatPursuit.dismissableSheet(sheet, { onClose: close }); }
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('[data-gd-guidelines-open]')) { return; }
+        if (sheet.showModal && !sheet.open) { sheet.showModal(); }
+    });
+}
+window.PlatPursuit.wireGuidelinesSheet = wireGuidelinesSheet;
+
+/**
  * discPopovers -- the OPEN/CLOSE mechanics for a `.rp-disc` discipline-dropdown group (the shared look
  * from elements.css, used by the Career contracts board + Browse Games). Owns ONLY the popover behavior:
  * a `.rp-disc__trigger` click toggles its sibling `.rp-pop` (one open at a time), viewport-edge flip

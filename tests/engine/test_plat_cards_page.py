@@ -162,6 +162,24 @@ def test_only_the_curated_grounds_reach_the_picker(client):
     assert set(resp.context['card_theme_js']) == set(PLAT_CARD_THEME_KEYS)
 
 
+def test_the_share_page_uses_the_rebuilt_quick_rate_modal(client):
+    """The page shipped with `rate_before_download_modal.html` -- a pre-rebuild DaisyUI form with NO
+    blurb field, so the card rendered a quick take the only form that could set it never offered. It now
+    composes the SAME modal as the Game Detail Ratings tab, which means the two rating surfaces cannot
+    drift, and the guidelines sheet comes with it because the notice links there."""
+    profile = _hunter()
+    _completed_game(profile, with_platinum=True)
+
+    content = _get(client, profile).content.decode()
+
+    assert 'id="gd-qr-modal"' in content, 'the rebuilt quick-rate modal must be composed here'
+    assert 'id="gd-guidelines-modal"' in content, 'its notice links to the sheet'
+    assert 'rate-before-download-modal' not in content, 'the legacy modal must be gone'
+    # The whole point of the swap: a blurb field, on the site's own classes.
+    assert 'data-gd-qr-blurb' in content and 'gd-qr__area' in content
+    assert 'range-warning' not in content, 'no legacy DaisyUI rating controls'
+
+
 def test_the_old_browse_path_redirects_here(client):
     """Platinum-earned notifications already in the wild deep-link /shareables/platinums/?et=<id>."""
     profile = _hunter()

@@ -909,17 +909,18 @@ def test_the_share_modal_offers_a_rating_control(client):
     assert 'hidden' in html.split('data-share-rate')[1].split('>')[0], 'must start hidden'
 
 
-def test_the_rate_modal_exposes_the_hooks_the_share_flow_relabels(client):
-    """The shared modal is written for the download prompt ("Rate and Download" / "Skip, just
-    download"). Neither is true of an explicit edit, so plat-cards.js swaps both -- which needs the
-    submit label in its own element rather than as a bare text node beside the icon."""
+def test_the_quick_rate_modal_marks_its_secondary_action(client):
+    """The share modal opens this as a pre-download prompt, where the secondary button means "skip, just
+    download" -- which must be distinguishable from the header X and the backdrop, since a dismiss must
+    never hand over a file. Game Detail ignores the extra hook and treats it as a plain close."""
     from django.template.loader import render_to_string
 
-    html = render_to_string('partials/rate_before_download_modal.html')
+    html = render_to_string('trophies/partials/game_detail/quick_rate_modal.html')
 
-    assert 'data-rbd-submit-label' in html
-    assert 'id="rbd-prompt-copy"' in html
-    assert 'id="rbd-skip-btn"' in html
+    assert 'data-gd-qr-cancel' in html
+    # Still a close for Game Detail's wiring, which binds every [data-gd-modal-close].
+    cancel = html.split('data-gd-qr-cancel')[0].rsplit('<button', 1)[1]
+    assert 'data-gd-modal-close' in cancel
 
 
 def test_the_rating_values_wear_the_sites_tone_colours(client):
