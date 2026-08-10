@@ -646,41 +646,6 @@ class GameDetailView(DetailView):
             logger.exception(f"Game images cache failed for {game.np_communication_id}")
             return {}
 
-    def _build_game_stats_context(self, game):
-        """
-        Build the community stats row in the game-detail header. Pure denorm reads off the
-        already-loaded Game: SIX columns, ZERO queries, no cache.
-
-        This used to run five live per-game aggregates behind an hourly cache. Every one of
-        them scaled with the game's POPULARITY rather than its size, and `total_earns` counted
-        EarnedTrophy across every trophy in the game (players x trophies rows) -- for a popular
-        title that is millions of rows per call, which on a cold cache could outlast the
-        gunicorn worker timeout outright.
-
-        The cache never covered the real traffic pattern either. Its key carried the hour, so
-        the whole catalogue went cold on the hour, and a crawler walking distinct games misses
-        by construction. All six values are now recomputed nightly by recalc_earn_rates.
-
-        `plats_earned` now reads ProfileGame.has_plat (via plats_earned_count) instead of
-        counting platinum EarnedTrophy rows. Same population, and it is the same number the
-        game cards and franchise/company pages already show, so the two agree where they
-        previously could drift apart.
-
-        Args:
-            game: Game instance
-
-        Returns:
-            dict: Game statistics
-        """
-        return {
-            'total_players': game.played_count,
-            'monthly_players': game.monthly_players_count,
-            'plats_earned': game.plats_earned_count,
-            'total_earns': game.total_earns_count,
-            'completes': game.full_completion_count,
-            'avg_progress': game.avg_completion,
-        }
-
     def _build_trophy_context(self, game, form, profile_earned):
         """
         Build trophy data with groups, filtering, and sorting.
@@ -1399,8 +1364,11 @@ class GameDetailView(DetailView):
         # Build game images context
         context['image_urls'] = self._build_images_context(game)
 
-        # Build game statistics context
-        context['game_stats'] = self._build_game_stats_context(game)
+        # `game_stats` is gone: the rebuilt hero and ratings panel read the denormed Game
+        # columns (played_count / plats_earned_count / full_completion_count /
+        # avg_completion) straight off the object, so the wrapper dict had no consumer left
+        # once the old header partial was replaced. Its provider survived on `main` only
+        # because the pre-rebuild header still rendered it.
 
         # Build trophy context with filtering/sorting
         form = GameDetailForm(self.request.GET)

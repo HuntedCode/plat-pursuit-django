@@ -1,13 +1,16 @@
-"""The game-detail community stats row must be pure denorm reads.
+"""The game's community stats must come from denormed columns, never live aggregates.
 
-`_build_game_stats_context` used to run five live per-game aggregates behind an hourly
-cache. `total_earns` counted EarnedTrophy across every trophy in the game (players x
-trophies rows), which on a cold cache could outlast the gunicorn worker timeout on a
-popular title -- and the hourly cache key meant the whole catalogue went cold on the
-hour, so a crawler walking distinct games missed by construction.
+These stats used to be computed per request behind an hourly cache. `total_earns`
+counted EarnedTrophy across every trophy in the game (players x trophies rows), which on
+a cold cache could outlast the gunicorn worker timeout on a popular title -- and the
+hourly cache key meant the whole catalogue went cold on the hour, so a crawler walking
+distinct games missed by construction.
 
-The query-count test is the load-bearing one: it fails the moment somebody reintroduces
-a live aggregate here, which is exactly how this regressed the first time.
+The rebuilt hero and ratings panel now read the Game columns directly, so the
+`_build_game_stats_context` wrapper (and its zero-query test) is gone on this branch; it
+survives on `main` only until the pre-rebuild header partial is retired. What remains
+worth pinning is that `recalc_earn_rates` actually populates the columns those templates
+read, and that a budget-capped run resumes instead of leaving the tail at 0 forever.
 """
 import pytest
 from django.core.management import call_command
@@ -17,33 +20,7 @@ from datetime import timedelta
 from tests.factories import (
     EarnedTrophyFactory, GameFactory, ProfileGameFactory, TrophyFactory,
 )
-from trophies.views.game_views import GameDetailView
-
 pytestmark = pytest.mark.django_db
-
-
-def test_game_stats_context_issues_no_queries(django_assert_num_queries):
-    """Every value reads off the already-loaded Game instance."""
-    game = GameFactory(
-        played_count=1200,
-        monthly_players_count=90,
-        plats_earned_count=300,
-        total_earns_count=45000,
-        full_completion_count=250,
-        avg_completion=61.4,
-    )
-
-    with django_assert_num_queries(0):
-        stats = GameDetailView()._build_game_stats_context(game)
-
-    assert stats == {
-        'total_players': 1200,
-        'monthly_players': 90,
-        'plats_earned': 300,
-        'total_earns': 45000,
-        'completes': 250,
-        'avg_progress': 61.4,
-    }
 
 
 def test_recalc_populates_total_earns_across_all_trophies():
