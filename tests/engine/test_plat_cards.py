@@ -671,3 +671,79 @@ def test_the_cover_blur_ground_is_gone():
 
     assert 'ppArtCover' not in PLAT_CARD_THEME_KEYS
     assert 'gameArtBlur' not in PLAT_CARD_THEME_KEYS
+
+
+# ── The hunter's verdict: three axes + their own words ────────────────────────────────────────────
+
+def _rate(profile, concept, **kw):
+    from trophies.models import UserConceptRating
+    fields = dict(difficulty=9, grindiness=7, fun_ranking=9, hours_to_platinum=40, overall_rating=4.5)
+    fields.update(kw)
+    return UserConceptRating.objects.create(profile=profile, concept=concept, **fields)
+
+
+def test_all_three_rating_axes_reach_the_card(client):
+    """Grindiness was collected all along (the rate-before-download prompt asks for it) and never
+    shown, which left the stats row stopping short with a visible void after it."""
+    profile = ProfileFactory()
+    game, group, standing = _completed_game(profile, with_platinum=True)
+    _rate(profile, game.concept)
+    client.force_login(profile.user)
+
+    rating = cards.get_card_data(profile, standing)['user_rating']
+    html = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()['html']
+
+    assert (rating['difficulty'], rating['grindiness'], rating['fun_ranking']) == (9, 7, 9)
+    assert 'Difficulty' in html and 'Grind' in html and 'Fun' in html
+
+
+def test_the_rating_values_wear_the_sites_tone_colours(client):
+    """Uses the same `rating_tone` filter the Ratings tab does, so the two surfaces can't drift.
+    Note the polarity is consumer-advice polarity: a HARD game is `bad`/red here, not a flex."""
+    profile = ProfileFactory()
+    game, group, _ = _completed_game(profile, with_platinum=True)
+    _rate(profile, game.concept, difficulty=9, fun_ranking=9)
+    client.force_login(profile.user)
+
+    html = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()['html']
+
+    assert '#ff5860' in html, 'difficulty 9 should carry the `bad` tone'
+    assert '#3add9e' in html, 'fun 9 should carry the `good` tone'
+
+
+def test_the_blurb_reaches_the_card(client):
+    """The one thing on the card no other hunter's card can have."""
+    profile = ProfileFactory()
+    game, group, standing = _completed_game(profile, with_platinum=True)
+    _rate(profile, game.concept, blurb='Brutal, but the combat never stopped being satisfying.')
+    client.force_login(profile.user)
+
+    html = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()['html']
+
+    assert 'Brutal, but the combat never stopped being satisfying.' in html
+
+
+def test_a_staff_hidden_blurb_never_renders(client):
+    """`blurb_hidden` is the staff soft-hide for an inappropriate quick take. The card is an image
+    that leaves the site, so this is the one place a missed moderation flag can't be taken back."""
+    profile = ProfileFactory()
+    game, group, standing = _completed_game(profile, with_platinum=True)
+    _rate(profile, game.concept, blurb='something unpleasant', blurb_hidden=True)
+    client.force_login(profile.user)
+
+    assert cards.get_card_data(profile, standing)['user_rating']['blurb'] == ''
+    assert 'something unpleasant' not in client.get(
+        f'/api/v1/shareables/completion/{group.id}/html/').json()['html']
+
+
+def test_the_card_holds_up_with_no_blurb(client):
+    """Most ratings carry none, so the blurb is the uncommon case -- the layout has to stand without
+    it rather than being sized around it."""
+    profile = ProfileFactory()
+    game, group, _ = _completed_game(profile, with_platinum=True)
+    _rate(profile, game.concept, blurb='')
+    client.force_login(profile.user)
+
+    html = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()['html']
+
+    assert '&ldquo;' not in html and 'Grind' in html

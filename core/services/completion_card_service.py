@@ -447,6 +447,10 @@ def _user_rating(profile, concept):
     if not rating:
         return None
     return {
+        # The hunter's own words about the game -- 140 chars, already auto-filtered on submit,
+        # reportable, and staff-soft-hideable via `blurb_hidden`, which is why it's safe to render on
+        # an image that leaves the site. Optional, so the card must look right without it.
+        'blurb': '' if rating.blurb_hidden else (rating.blurb or ''),
         'overall_rating': rating.overall_rating,
         # Percentage fill for the card's star row. `overall_rating` is a 0.5-5.0 FLOAT (unlike
         # difficulty/grindiness/fun, which are 1-10 ints), so half stars are real and the row is drawn

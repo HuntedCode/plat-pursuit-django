@@ -1,4 +1,4 @@
-{% load static humanize %}{% comment %}
+{% load static humanize custom_filters %}{% comment %}
 Plat card -- the share image for a game completion. Landscape only, 1200x630.
 
 TWO VARIANTS, one layout. `variant` is 'platinum' (the game defines a platinum, so finishing the
@@ -108,7 +108,7 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
         <div style="flex: 1; display: flex; align-items: center; gap: 34px; min-height: 0; padding-top: 22px;">
 
             {# Cover, framed rather than bled: it's evidence, not the ground. #}
-            <div style="width: 262px; height: 349px; flex-shrink: 0; border-radius: 10px; overflow: hidden; background: #232a31; border: 1px solid #404853; box-sizing: border-box; box-shadow: 0 18px 40px rgba(5, 8, 12, 0.6);">
+            <div style="width: 296px; height: 395px; flex-shrink: 0; border-radius: 10px; overflow: hidden; background: #232a31; border: 1px solid #404853; box-sizing: border-box; box-shadow: 0 18px 40px rgba(5, 8, 12, 0.6);">
                 {% if game_image %}
                 <img src="{{ game_image }}" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: top;" />
                 {% endif %}
@@ -147,7 +147,7 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                 </div>
 
                 {# The game: the single dominant statement. #}
-                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 50px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 12px; max-height: 108px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
+                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 54px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 12px; max-height: 116px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
 
                 {% if platform_label or completed_at or user_rating.overall_rating %}
                 <div style="display: flex; align-items: center; gap: 16px; margin-top: 11px;">
@@ -208,19 +208,54 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                     {% endif %}
                     {% comment %}Their own verdict -- data nobody else on the card has, and the reason
                     the download flow nudges for a rating first.{% endcomment %}
+                    {% comment %}Difficulty and Fun wear the SITE's rating_tone, via the same filter the
+                    Ratings tab uses, so the two surfaces can't drift apart. Note the polarity is
+                    consumer-advice polarity -- LOW difficulty is `good`/green, HIGH is `bad`/red -- so a
+                    hard-won 9/10 reads as a warning colour here rather than as a flex. That's a
+                    deliberate call to stay consistent with the rest of the site; the alternative was a
+                    card-only intensity ramp that would have coloured the same number differently in two
+                    places.{% endcomment %}
                     {% if user_rating.difficulty %}
+                    {% with tone=user_rating.difficulty|rating_tone:'difficulty' %}
                     <div>
-                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ user_rating.difficulty }}<span style="font-size: 20px; color: #8a939f;">/10</span></div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: {% if tone == 'good' %}#3add9e{% elif tone == 'warn' %}#fcca21{% elif tone == 'high' %}#ff9350{% else %}#ff5860{% endif %}; line-height: 1; letter-spacing: -0.02em;">{{ user_rating.difficulty }}<span style="font-size: 20px; color: #8a939f;">/10</span></div>
                         <div style="line-height: 1.2; font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Difficulty</div>
                     </div>
+                    {% endwith %}
+                    {% endif %}
+                    {% comment %}Grindiness completes the trio the hunter actually rated -- it was
+                    collected all along (the rate-before-download prompt asks for it) and simply never
+                    shown, which left the stats row stopping around 60% of the width with a visible
+                    void after it. Difficulty / Grind / Fun read as one verdict rather than two
+                    numbers and a gap.{% endcomment %}
+                    {% if user_rating.grindiness %}
+                    {% with tone=user_rating.grindiness|rating_tone:'grindiness' %}
+                    <div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: {% if tone == 'good' %}#3add9e{% elif tone == 'warn' %}#fcca21{% elif tone == 'high' %}#ff9350{% else %}#ff5860{% endif %}; line-height: 1; letter-spacing: -0.02em;">{{ user_rating.grindiness }}<span style="font-size: 20px; color: #8a939f;">/10</span></div>
+                        <div style="line-height: 1.2; font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Grind</div>
+                    </div>
+                    {% endwith %}
                     {% endif %}
                     {% if user_rating.fun_ranking %}
+                    {% with tone=user_rating.fun_ranking|rating_tone:'fun' %}
                     <div>
-                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ user_rating.fun_ranking }}<span style="font-size: 20px; color: #8a939f;">/10</span></div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: {% if tone == 'good' %}#3add9e{% elif tone == 'warn' %}#fcca21{% elif tone == 'high' %}#ff9350{% else %}#ff5860{% endif %}; line-height: 1; letter-spacing: -0.02em;">{{ user_rating.fun_ranking }}<span style="font-size: 20px; color: #8a939f;">/10</span></div>
                         <div style="line-height: 1.2; font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Fun</div>
                     </div>
+                    {% endwith %}
                     {% endif %}
                 </div>
+
+                {% comment %}Their own take, in their own words -- the one thing on the card that no
+                other hunter's card can have, and the reason this space is worth filling with a
+                sentence instead of a fifth number. Optional (most ratings carry none), so the layout
+                above is sized to stand without it.{% endcomment %}
+                {% if user_rating.blurb %}
+                <div style="display: flex; align-items: flex-start; gap: 11px; margin-top: 24px; max-width: 760px;">
+                    <span style="flex-shrink: 0; font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; line-height: 0.8; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %};">&ldquo;</span>
+                    <span style="font-size: 20px; line-height: 1.35; color: #9da5b1; font-style: italic; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; padding-right: 4px;">{{ user_rating.blurb }}</span>
+                </div>
+                {% endif %}
             </div>
         </div>
 
