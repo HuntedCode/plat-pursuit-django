@@ -295,9 +295,10 @@
         window.PLAT_GRID_CONFIG = {
             platinums: {{ platinum_data_json|safe }},
             maxIcons: {{ max_icons }},
-            {# RETIRED 2026-08: these endpoints are unrouted (api/platinum_grid_views.py is parked with
-               this page). Left as literal paths so reviving the view isn't an instant NoReverseMatch --
-               re-register the routes and these work again. See docs/features/share-images.md. #}
+            {% comment %}RETIRED 2026-08: these endpoints are unrouted (api/platinum_grid_views.py is
+            parked with this page). Left as literal paths so reviving the view isn't an instant
+            NoReverseMatch -- re-register the routes and these work again. See
+            docs/features/share-images.md.{% endcomment %}
             htmlUrl: '/api/v1/shareables/platinum-grid/html/',
             pngUrl: '/api/v1/shareables/platinum-grid/png/',
         };
