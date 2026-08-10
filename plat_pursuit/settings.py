@@ -358,6 +358,28 @@ WSGI_APPLICATION = "plat_pursuit.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# Per-process statement timeout.
+#
+# This MUST sit below the gunicorn worker timeout on the web service. When it sits
+# above it (it was a flat 60s against a 30s gunicorn timeout), a slow query kills the
+# worker first: gunicorn SIGABRTs mid-render, the traceback points at the socket write
+# instead of the query, the worker holds its allocation until it dies, and Postgres
+# keeps grinding on a statement whose result nobody will ever read. Timing out in
+# Postgres first turns that into a clean QueryCanceled naming the actual SQL.
+#
+# It is an env var, not a constant, because the ceiling is genuinely per-process:
+#   web service    -> 15000  (must abort before gunicorn's timeout)
+#   worker service -> leave at the default; sync jobs legitimately run for minutes
+#   migrate / one-off commands -> leave at the default; a large CREATE INDEX or a
+#                                 recalc_earn_rates chunk will exceed any web ceiling
+# Defaulting to the old 60s keeps every non-web process behaving exactly as before, so
+# only the service that sets the var changes behaviour.
+DB_STATEMENT_TIMEOUT_MS = int(os.getenv('DB_STATEMENT_TIMEOUT_MS', '60000'))
+DB_LOCK_TIMEOUT_MS = int(os.getenv('DB_LOCK_TIMEOUT_MS', '30000'))
+_DB_TIMEOUT_OPTIONS = (
+    f'-c statement_timeout={DB_STATEMENT_TIMEOUT_MS} -c lock_timeout={DB_LOCK_TIMEOUT_MS}'
+)
+
 database_url = os.getenv('DATABASE_URL')
 if database_url:
     DATABASES = {
@@ -367,7 +389,7 @@ if database_url:
     DATABASES['default'].setdefault('OPTIONS', {})
     DATABASES['default']['OPTIONS'].update({
         'connect_timeout': 10,
-        'options': '-c statement_timeout=60000 -c lock_timeout=30000',  # 60s statement, 30s lock
+        'options': _DB_TIMEOUT_OPTIONS,
     })
 else:
     DATABASES = {
@@ -382,7 +404,7 @@ else:
             "CONN_HEALTH_CHECKS": True,
             "OPTIONS": {
                 'connect_timeout': 10,
-                'options': '-c statement_timeout=60000 -c lock_timeout=30000',  # 60s statement, 30s lock
+                'options': _DB_TIMEOUT_OPTIONS,
             },
         }
     }

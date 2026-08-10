@@ -161,12 +161,22 @@ Django auto-prefixes all keys with `{KEY_PREFIX}:1:` from settings. The patterns
 
 All homepage keys use 2x TTL as safety margin (cron refreshes before expiry). Date/hour keying ensures seamless rotation without stale data windows.
 
+### Cron Watermarks / Cursors
+
+Position markers, not caches: they carry no payload and losing one costs coverage or a re-scan, never correctness.
+
+| Key Pattern | TTL | Purpose |
+|-------------|-----|---------|
+| `recalc_earn_rates:cursor` | None | Highest `Game.id` fully processed by the last budget-capped `recalc_earn_rates` run. The next run resumes just past it and wraps, so a job that always hits `--max-minutes` still sweeps the whole catalogue round-robin instead of restarting at id 0 and never reaching the tail. Cleared on a completed pass. Deliberately left alone by `--game-ids` and `--dry-run`. |
+| `dlc_detection:last_run` | None | Timestamp watermark for `detect_dlc_and_refresh`; falls back to a 3-day lookback when missing. |
+
+**Files**: `core/management/commands/recalc_earn_rates.py`, `trophies/management/commands/detect_dlc_and_refresh.py`
+
 ### Game Detail Page
 
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
 | `game:imageurls:{np_communication_id}` | `CACHE_TIMEOUT_IMAGES` | Image URLs (background, screenshots, content rating) |
-| `game:stats:{np_communication_id}:{YYYY-MM-DD}:{HH}` | 3600s (1h) | Game stats (owners, completers, average progress) |
 
 **Files**: `trophies/views/game_views.py`, `trophies/models.py`
 
@@ -262,7 +272,7 @@ The `redis_admin.py` management command provides targeted flush operations for o
 | Flag | Keys Flushed |
 |------|-------------|
 | `--flush-index` | All homepage keys: `featured_games_*`, `playing_now_*`, `featured_badges_*`, `featured_checklists_*`, `whats_new_*`, `latest_badges_*` |
-| `--flush-game-page {np_id}` | `game:imageurls:{np_id}`, `game:stats:{np_id}:*` |
+| `--flush-game-page {np_id}` | `game:imageurls:{np_id}` |
 | `--flush-token-keeper` | All 5 job queues + `profile_jobs:*`, `deferred_jobs:*`, `pending_sync_complete:*`, `sync_started_at:*`, `sync_trophies_lock:*`, `shovelware_concept_lock:*`, `sync_orchestrator_pending:*`, `sync_queued_games:*`, `sync_complete_in_progress:*`, `finalize_phase:*`, `active_profiles`, `site:high_sync_volume`, `site:psn_outage`, `psn:5xx_timestamps` |
 | `--clear-psn-outage` | `site:psn_outage`, `psn:5xx_timestamps` |
 | `--flush-complete-lock {profile_id}` | `pending_sync_complete:{id}`, `sync_started_at:{id}`, `sync_orchestrator_pending:{id}`, `sync_queued_games:{id}`, `sync_complete_in_progress:{id}`, `finalize_phase:{id}` |

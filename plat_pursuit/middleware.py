@@ -145,8 +145,20 @@ _BOT_REDIRECT_RULES = (
 # profile-scoped detail views that dominate crash-time traffic in Render logs;
 # other routes (home, static assets, health checks on `/`) are intentionally
 # left alone so a misconfigured proxy cannot lock us out of our own site.
+#
+# The profile page itself joined this list after the 2026-08-09 incident. It is the
+# one enumerable expensive page that had NO guard of any kind: it is not a profile-
+# scoped VARIANT of a canonical page (it IS the canonical page, so it has nothing to
+# redirect to), which is exactly why it fell through _BOT_REDIRECT_RULES. A crawler
+# walking the profile index was the first domino in that outage.
 _CLOUDFLARE_GUARDED_PATH_RE = re.compile(
-    r'^/(?:games/[^/]+|(?:my-pursuit/badges|badges|achievements/badges)/[^/]+)/[^/]+/?$'
+    r'^/(?:'
+    # Profile-scoped variants: /games/<np>/<user>/, /badges/<slug>/<user>/, ...
+    r'(?:games/[^/]+|(?:my-pursuit/badges|badges|achievements/badges)/[^/]+)/[^/]+'
+    # Profile pages themselves, plus sub-pages such as /trophy-case/. The list page
+    # at /community/profiles/ has no trailing segment and so stays unguarded.
+    r'|community/profiles/[^/]+(?:/[^/]+)*'
+    r')/?$'
 )
 
 # Public front door. Direct-origin requests for guarded paths are bounced

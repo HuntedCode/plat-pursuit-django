@@ -1,12 +1,12 @@
 # Profile Showcases
 
-Steam-style profile customization. Users pick showcase types to feature on their profile between the identity header and the game list tabs. Up to 2 slots for free users, 5 for premium. Each showcase type can only be used once per profile. Free users get access to Platinum Trophy Case and Favorite Games; premium unlocks Badge, Rarest Trophies, Recent Platinums, Review, and Title showcases.
+Steam-style profile customization. Users pick showcase types to feature on their profile between the identity header and the game list tabs. Up to 2 slots for free users, 5 for premium. Each showcase type can only be used once per profile. Free users get access to Platinum Trophy Case and Favorite Games; premium unlocks Badge, Recent Platinums, and Title showcases.
 
 ## Architecture Overview
 
 The system uses a registry pattern (similar to `DASHBOARD_MODULES`): each showcase type is defined as a descriptor with metadata, a provider function that fetches display data, and an optional picker for user-controlled item selection. Adding a new showcase type means registering a descriptor, implementing a provider, and creating a template partial — no model changes.
 
-Storage is split by complexity. Showcases with dedicated per-item tables (`UserTrophySelection`, `ProfileBadgeShowcase`) reuse those tables as-is; the `ProfileShowcase.config` JSONField stays empty for those types. Showcases with small fixed-size selection lists (favorite games, reviews, titles) store selected IDs in the JSON config. Automatic showcases (Rarest Trophies, Recent Platinums) have empty configs and derive items from earned trophies.
+Storage is split by complexity. Showcases with dedicated per-item tables (`UserTrophySelection`, `ProfileBadgeShowcase`) reuse those tables as-is; the `ProfileShowcase.config` JSONField stays empty for those types. Showcases with small fixed-size selection lists (favorite games, reviews, titles) store selected IDs in the JSON config. Automatic showcases (Recent Platinums) have empty configs and derive items from earned trophies.
 
 Premium gating happens at the slot-add layer (not at view time). Users can configure their showcases while premium, then keep enjoying them after downgrade — but premium-only showcases become `is_active=False` and can't be re-activated or reordered until they re-subscribe. Anyone can view anyone else's showcases regardless of their own subscription status.
 
@@ -22,7 +22,7 @@ Premium gating happens at the slot-add layer (not at view time). Users can confi
 | `templates/trophies/profile_editor.html` | Two-column editor with drag-reorder and per-type pickers |
 | `templates/trophies/partials/profile_detail/profile_showcases_section.html` | Container rendered on the profile page |
 | `templates/trophies/partials/profile_showcases/*.html` | Per-type display templates (7 files) |
-| `static/js/profile-editor.js` | Editor JS: add/remove/reorder + 4 batched pickers + rarest options |
+| `static/js/profile-editor.js` | Editor JS: add/remove/reorder + 4 batched pickers |
 | `users/services/subscription_service.py` | Calls `handle_premium_downgrade()` on cancel |
 
 ## Data Model
@@ -46,7 +46,6 @@ Premium gating happens at the slot-add layer (not at view time). Users can confi
 | `platinum_case` | No | 20 | `{}` | `UserTrophySelection` |
 | `favorite_games` | No | 6 | `{"game_ids": [...]}` | JSON |
 | `badge_showcase` | Yes | 5 | `{}` | `ProfileBadgeShowcase` |
-| `rarest_trophies` | Yes | 6 | `{"one_per_game": bool}` | Derived |
 | `recent_platinums` | Yes | 6 | `{}` | Derived |
 | `review_showcase` | Yes | 2 | `{"review_ids": [...]}` | JSON |
 | `title_showcase` | Yes | 6 | `{"user_title_ids": [...]}` | JSON |
@@ -113,7 +112,8 @@ All endpoints resolve premium status via `profile.user_is_premium`.
 - **`json_script` rendering context**: Pickers rely on `{{ data|json_script:"id" }}` which only emits the block if the context variable is non-None. Gate each block with `{% if ... %}` so anonymous/non-eligible states skip cleanly.
 - **ProfileBadgeShowcase has its own max-5 constraint** enforced in its `save()` method — respect this if you bulk-insert badges programmatically.
 - **Platinum Trophy Case cap changed from 10 to 20**: `UserTrophySelection.save()` enforces 20 now. If you see older code referencing 10, check whether it's legitimate.
-- **Automatic showcase validators**: Rarest Trophies has a validator (for its `one_per_game` toggle) even though it's user-controlled in terms of display options only. `is_automatic: True` in the registry is purely cosmetic (skips the Configure button fallback) — it's not a behavioral flag.
+- **`is_automatic` is cosmetic.** It only skips the Configure-button fallback in the editor; it is not a behavioral flag and nothing in the service branches on it.
+- **A derived showcase must stay bounded.** `rarest_trophies` was retired in 2026-08 (migration `0275`) because it was the one type whose item set came from ranking the profile's ENTIRE earned set, on a joined column (`trophy__trophy_earn_rate`) that no index could serve. One showcase cost more than the other five combined on a large account, and it ran on every profile render including anonymous ones. `recent_platinums` is also derived but stays cheap because it reads a date-ordered index and stops at 6. Before adding a derived type, ask what it costs on a 250K-trophy profile: if the answer scales with the account rather than with the slot count, it does not belong here.
 - **Challenge showcase (deferred)**: `SHOWCASE_CHALLENGE` is still a model constant, but not registered. Any old `ProfileShowcase` row with this type will be skipped at render (logged as a warning). Re-registering it in the future will instantly light up any preserved rows.
 
 ## Related Docs

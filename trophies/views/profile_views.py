@@ -859,10 +859,30 @@ class ProfileDetailView(DetailView):
         # Build shared context (header stats + timeline)
         context['header_stats'] = self._build_header_stats(profile)
 
-        # Profile showcases (Steam-style customization)
+        # Showcases render for everyone, anonymous included: a shared profile link is
+        # mostly opened logged-out, which is exactly the audience the customization is
+        # for. Every remaining provider is bounded by config or by a small owned table
+        # (<= 20 selected platinums, <= 6 game ids, <= 5 badges, <= 6 titles, 6
+        # date-indexed platinums), so the whole set is cheap regardless of account size.
+        # The one provider that was NOT bounded -- Rarest Trophies, which ranked the
+        # profile's entire earned set on a joined column -- was removed outright rather
+        # than gated, because its cost came from "rank everything I own" and not from
+        # who was looking. See showcase_service.py and migration 0275.
         from trophies.services.showcase_service import ProfileShowcaseService
         context['rendered_showcases'] = ProfileShowcaseService.get_rendered_showcases(profile)
-        if profile.psn_history_public:
+
+        # The timeline IS still gated. It is cached per profile, so a crawler
+        # enumerating distinct profiles has a 0% hit rate by construction -- per-entity
+        # caching cannot protect an enumerable URL space, only gating can. The partial
+        # (profile_timeline.html) self-hides on an empty value, so the anonymous page
+        # loses a section rather than gaining a hole.
+        #
+        # The four Platinum Highlight cards in the header are deliberately NOT gated:
+        # they render a "None" empty state when absent, so skipping them would misreport
+        # the profile to logged-out visitors instead of hiding a section. They are also
+        # cheap (two denormed FKs, plus two lookups bounded by the profile's
+        # ProfileGame rows).
+        if self.request.user.is_authenticated and profile.psn_history_public:
             context['timeline_events'] = self._build_timeline(profile)
 
         # Public game lists count (shown in tab header regardless of active tab)

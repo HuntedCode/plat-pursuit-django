@@ -179,7 +179,6 @@ JOB_PRIORITIES = [
 
 # Redis Key Prefixes
 REDIS_PREFIX_GAME_IMAGES = 'game:imageurls'
-REDIS_PREFIX_GAME_STATS = 'game:stats'
 REDIS_PREFIX_CONCEPT_AVERAGES = 'concept:averages'
 REDIS_PREFIX_LEADERBOARD = 'leaderboard'
 REDIS_PREFIX_PROFILE_STATS = 'profile:stats'

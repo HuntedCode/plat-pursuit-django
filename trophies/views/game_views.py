@@ -4,7 +4,7 @@ import math
 
 from core.services.tracking import track_page_view, track_site_event
 from core.services.site_heartbeat import get_cached_heartbeat
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 from django.core.cache import cache
 from django.contrib import messages
 from django.db.models import Q, F, Prefetch, Subquery, OuterRef, Value, IntegerField, FloatField, BooleanField, Avg, Case, When, Count
@@ -648,48 +648,38 @@ class GameDetailView(DetailView):
 
     def _build_game_stats_context(self, game):
         """
-        Build game statistics including player counts, completions, and average progress.
+        Build the community stats row in the game-detail header. Pure denorm reads off the
+        already-loaded Game: SIX columns, ZERO queries, no cache.
+
+        This used to run five live per-game aggregates behind an hourly cache. Every one of
+        them scaled with the game's POPULARITY rather than its size, and `total_earns` counted
+        EarnedTrophy across every trophy in the game (players x trophies rows) -- for a popular
+        title that is millions of rows per call, which on a cold cache could outlast the
+        gunicorn worker timeout outright.
+
+        The cache never covered the real traffic pattern either. Its key carried the hour, so
+        the whole catalogue went cold on the hour, and a crawler walking distinct games misses
+        by construction. All six values are now recomputed nightly by recalc_earn_rates.
+
+        `plats_earned` now reads ProfileGame.has_plat (via plats_earned_count) instead of
+        counting platinum EarnedTrophy rows. Same population, and it is the same number the
+        game cards and franchise/company pages already show, so the two agree where they
+        previously could drift apart.
 
         Args:
             game: Game instance
 
         Returns:
-            dict: Game statistics or empty dict on error
+            dict: Game statistics
         """
-        today = date.today().isoformat()
-        now_utc = timezone.now()
-        stats_cache_key = f"game:stats:{game.np_communication_id}:{today}:{now_utc.hour:02d}"
-        stats_timeout = 3600  # 1 hour
-
-        try:
-            cached_stats = cache.get(stats_cache_key)
-            if cached_stats:
-                return json.loads(cached_stats)
-
-            stats = {
-                'total_players': game.played_count,
-                'monthly_players': ProfileGame.objects.filter(
-                    game=game,
-                    last_played_date_time__gte=timezone.now() - timedelta(days=30)
-                ).count(),
-                'plats_earned': EarnedTrophy.objects.filter(
-                    trophy__game=game,
-                    trophy__trophy_type='platinum',
-                    earned=True
-                ).count(),
-                'total_earns': EarnedTrophy.objects.filter(
-                    trophy__game=game,
-                    earned=True
-                ).count(),
-                'completes': ProfileGame.objects.filter(game=game).completed().count(),
-                'avg_progress': ProfileGame.objects.filter(game=game).aggregate(avg=Avg('progress'))['avg'] or 0.0
-            }
-            cache.set(stats_cache_key, json.dumps(stats), timeout=stats_timeout)
-            return stats
-
-        except Exception as e:
-            logger.exception(f"Game stats cache failed for {game.np_communication_id}")
-            return {}
+        return {
+            'total_players': game.played_count,
+            'monthly_players': game.monthly_players_count,
+            'plats_earned': game.plats_earned_count,
+            'total_earns': game.total_earns_count,
+            'completes': game.full_completion_count,
+            'avg_progress': game.avg_completion,
+        }
 
     def _build_trophy_context(self, game, form, profile_earned):
         """

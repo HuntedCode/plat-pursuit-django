@@ -78,6 +78,10 @@ def provide_platinum_case(profile, config):
             'earned_trophy__trophy__game__concept',
             'earned_trophy__trophy__game__concept__igdb_match',
         )
+        # CLAUDE.md pairs a defer with every igdb_match select_related: raw_response is a
+        # ~30 KB API blob no cover-art render reads. At 20 selections that is ~600 KB of
+        # dead JSON per profile render, and these now render for anonymous visitors too.
+        .defer('earned_trophy__trophy__game__concept__igdb_match__raw_response')
         .order_by('-earned_trophy__earned_date_time')[:max_items]
     )
     # Display size: 1 row (10) if count <= 10, else 2 rows (20)
@@ -146,6 +150,8 @@ def provide_badge_showcase(profile, config):
             'badge', 'badge__base_badge',
             'badge__most_recent_concept', 'badge__most_recent_concept__igdb_match',
         )
+        # See provide_platinum_case: raw_response is dead weight on a cover-art render.
+        .defer('badge__most_recent_concept__igdb_match__raw_response')
         .order_by('display_order')[:max_items]
     )
 
@@ -177,80 +183,6 @@ def provide_badge_showcase(profile, config):
     }
 
 
-def provide_rarest_trophies(profile, config):
-    """Rarest Trophies: top 6 earned non-platinum trophies by rarity.
-
-    Ordering: PSN global earn rate ascending (rarer first), then PP earn rate
-    ascending as tiebreaker. Platinums are excluded because they're always the
-    rarest in their stack and would dominate the list.
-
-    Config options:
-      - `one_per_game` (bool, default True): enforce unique game per trophy
-        with graceful fallback to fill remaining slots if not enough games.
-    """
-    from trophies.models import EarnedTrophy
-
-    max_items = 6
-    one_per_game = (config or {}).get('one_per_game', True)
-
-    base_qs = (
-        EarnedTrophy.objects
-        .filter(
-            profile=profile, earned=True,
-            trophy__trophy_earn_rate__gt=0,
-        )
-        .exclude(trophy__trophy_type='platinum')
-        .exclude(
-            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
-        )
-        .select_related(
-            'trophy',
-            'trophy__game',
-            'trophy__game__concept',
-            'trophy__game__concept__igdb_match',
-        )
-        .order_by('trophy__trophy_earn_rate', 'trophy__earn_rate')
-    )
-
-    if one_per_game:
-        # Two-pass: fill from unique games first, then top up with duplicates
-        # if the user doesn't have enough unique games.
-        candidates = list(base_qs[:max_items * 6])  # small overfetch cap
-        unique_picks = []
-        seen_games = set()
-        leftovers = []
-        for et in candidates:
-            game_id = et.trophy.game_id
-            if game_id in seen_games:
-                leftovers.append(et)
-                continue
-            seen_games.add(game_id)
-            unique_picks.append(et)
-            if len(unique_picks) >= max_items:
-                break
-
-        if len(unique_picks) < max_items:
-            # Graceful fallback: fill remaining slots from the rest
-            needed = max_items - len(unique_picks)
-            unique_picks.extend(leftovers[:needed])
-            if len(unique_picks) < max_items:
-                # Still not enough from overfetch; pull more ignoring dedup
-                extra = base_qs.exclude(
-                    pk__in=[et.pk for et in unique_picks]
-                )[: max_items - len(unique_picks)]
-                unique_picks.extend(extra)
-
-        rarest = unique_picks[:max_items]
-    else:
-        rarest = list(base_qs[:max_items])
-
-    return {
-        'items': rarest,
-        'has_items': bool(rarest),
-        'max_items': max_items,
-    }
-
-
 def provide_recent_platinums(profile, config):
     """Recent Platinums: most recent 6 earned platinums."""
     from trophies.models import EarnedTrophy
@@ -265,6 +197,8 @@ def provide_recent_platinums(profile, config):
             'trophy__game__concept',
             'trophy__game__concept__igdb_match',
         )
+        # See provide_platinum_case: raw_response is dead weight on a cover-art render.
+        .defer('trophy__game__concept__igdb_match__raw_response')
         .order_by('-earned_date_time')[:max_items]
     )
     return {
@@ -276,6 +210,14 @@ def provide_recent_platinums(profile, config):
 
 # provide_review_showcase removed 2026-05 (Review Showcase type retired
 # when text reviews were archived).
+
+# provide_rarest_trophies removed 2026-08. It was the only DERIVED showcase -- every
+# other type renders a bounded, user-selected set (<= 20 ids from config or a small
+# owned table), while this one ranked the profile's ENTIRE earned set by a joined
+# column (trophy__trophy_earn_rate) with no index able to serve the sort. That made
+# one showcase cost more than the other five combined on a large account, and it ran
+# on every profile render including anonymous ones. Removed rather than gated: the
+# cost was intrinsic to "rank everything I own", not to who was looking.
 
 
 def provide_title_showcase(profile, config):
@@ -307,15 +249,8 @@ def provide_title_showcase(profile, config):
 # Config validation
 # ──────────────────────────────────────────────────────────────────────
 
-def _validate_rarest_trophies_config(profile, config):
-    """Validate the rarest_trophies config. Only `one_per_game` (bool) is allowed."""
-    one_per_game = config.get('one_per_game', True)
-    if not isinstance(one_per_game, bool):
-        raise ShowcaseInvalidConfig("one_per_game must be a boolean.")
-    return {'one_per_game': one_per_game}
-
-
 # _validate_review_showcase_config removed 2026-05 (Review Showcase retired).
+# _validate_rarest_trophies_config removed 2026-08 (Rarest Trophies retired).
 
 
 def _validate_title_showcase_config(profile, config):
@@ -407,18 +342,6 @@ SHOWCASE_REGISTRY = {
         'requires_premium': True,
         'is_automatic': False,
         'max_items': 5,
-    },
-    ProfileShowcase.SHOWCASE_RAREST: {
-        'slug': ProfileShowcase.SHOWCASE_RAREST,
-        'name': 'Rarest Trophies',
-        'description': 'Your 6 rarest earned trophies (excludes platinums).',
-        'template': 'trophies/partials/profile_showcases/showcase_rarest_trophies.html',
-        'editor_template': None,
-        'provider': provide_rarest_trophies,
-        'validator': _validate_rarest_trophies_config,
-        'requires_premium': True,
-        'is_automatic': False,
-        'max_items': 6,
     },
     ProfileShowcase.SHOWCASE_RECENT_PLATS: {
         'slug': ProfileShowcase.SHOWCASE_RECENT_PLATS,
