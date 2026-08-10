@@ -39,7 +39,7 @@ def test_footer_pursuit_column_merged_for_authed(client):
     # Personal-hub pages that used to live in the Dashboard column now sit under My Pursuit.
     assert b'>Overview</a>' in resp.content
     assert b'>Career</a>' in resp.content
-    assert b'>My Shareables</a>' in resp.content
+    assert b'>Plat Cards</a>' in resp.content
 
 
 def test_footer_hides_personal_cockpit_from_anon(client):

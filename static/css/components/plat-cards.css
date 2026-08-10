@@ -228,3 +228,53 @@
     .pc-modal__actions { flex-direction: column-reverse; }
     .pc-btn { justify-content: center; width: 100%; }
 }
+
+/* ── Modal motion + skeleton ───────────────────────────────────────────────────────────────────────
+ * Entrance/exit follow .gd-modal's keyframes (game-detail.css) rather than new ones, so every modal
+ * in the product settles the same way. The backdrop fades on its own timing -- a backdrop that snaps
+ * while the box eases reads as two separate events.
+ */
+.pc-modal[open] { animation: pcModalIn 0.22s var(--pp-ease) both; }
+@keyframes pcModalIn { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+.pc-modal[open]::backdrop { animation: pcBackdropIn 0.22s ease both; }
+@keyframes pcBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+
+.pc-modal.is-closing { animation: pcModalOut 0.16s var(--pp-ease) both; }
+@keyframes pcModalOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px) scale(0.98); } }
+.pc-modal.is-closing::backdrop { animation: pcBackdropOut 0.16s ease both; }
+@keyframes pcBackdropOut { from { opacity: 1; } to { opacity: 0; } }
+
+/* The card fades in rather than popping. Generation takes long enough that a hard swap reads as a
+   glitch; 160ms is enough to register as "it arrived" without adding perceived wait. */
+.pc-modal__scaler { opacity: 0; transition: opacity 0.16s ease; }
+.pc-modal__scaler.is-in { opacity: 1; }
+
+/* SKELETON, not a spinner. The card's shape is known ahead of time, so showing that shape sets the
+   expectation of what's coming and makes the wait feel shorter than an indeterminate spinner does.
+   Mirrors the real layout: cover block left, title + meta + stat rows right. */
+.pc-skel { position: absolute; inset: 0; display: flex; gap: 3%; padding: 6% 4%; }
+.pc-skel__bar { border-radius: 6px; background: var(--pp-bg-2); position: relative; overflow: hidden; }
+.pc-skel__bar::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--pp-text) 7%, transparent), transparent);
+    transform: translateX(-100%);
+    animation: pcShimmer 1.25s ease-in-out infinite;
+}
+@keyframes pcShimmer { to { transform: translateX(100%); } }
+.pc-skel__cover { width: 24%; flex-shrink: 0; }
+.pc-skel__col { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4%; }
+.pc-skel__col .pc-skel__bar:nth-child(1) { height: 9%;  width: 34%; }
+.pc-skel__col .pc-skel__bar:nth-child(2) { height: 19%; width: 78%; }
+.pc-skel__col .pc-skel__bar:nth-child(3) { height: 7%;  width: 46%; }
+.pc-skel__col .pc-skel__bar:nth-child(4) { height: 11%; width: 92%; }
+.pc-skel__col .pc-skel__bar:nth-child(5) { height: 13%; width: 68%; }
+
+/* Download feedback: the file save is invisible, so the button says so itself. */
+.pc-btn--go.is-done { background: var(--pp-success); border-color: var(--pp-success); }
+
+@media (prefers-reduced-motion: reduce) {
+    .pc-modal[open], .pc-modal.is-closing,
+    .pc-modal[open]::backdrop, .pc-modal.is-closing::backdrop { animation: none; }
+    .pc-modal__scaler { transition: none; opacity: 1; }
+    .pc-skel__bar::after { animation: none; }
+}

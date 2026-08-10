@@ -144,7 +144,7 @@ class DeferredNotificationService:
             # Per-platinum totals (user_total_platinums, yearly_plats) used to
             # be stored here, but the count was racy when multiple plats from
             # one sync were processed in non-chronological order. The inbox
-            # links to the My Shareables page where the count is computed
+            # links to the Plat Cards page where the count is computed
             # live, so it isn't needed in the frozen metadata anymore.
 
             # Build context (replicates logic from signals.py)

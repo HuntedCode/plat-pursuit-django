@@ -187,7 +187,7 @@ urlpatterns = [
     # regains siblings this path is where the browse would live again.
     path('shareables/', PlatCardsView.as_view(), name='my_shareables'),
     path('shareables/platinums/', RedirectView.as_view(pattern_name='my_shareables', permanent=False, query_string=True), name='my_shareables_platinums'),
-    # Profile Card + Platinum Grid are RETIRED (2026-08): My Shareables now serves plat cards only.
+    # Profile Card + Platinum Grid are RETIRED (2026-08): this surface serves plat cards only.
     # Both bounce to the shareables landing rather than 404ing, and stay TEMPORARY (302) because the
     # views/templates/JS are parked for a possible revival under the new card design -- a cached 301
     # would strand returning users. See docs/features/share-images.md.

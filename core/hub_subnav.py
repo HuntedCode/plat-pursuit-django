@@ -160,7 +160,7 @@ MY_PURSUIT_HUB = HubSubnavConfig(
         HubSubnavItem('career', 'Career', 'career', 'briefcase', auth_required=True, group='Progress'),
         HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag', group='Progress'),
         HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True, group='Progress'),
-        HubSubnavItem('shareables', 'My Shareables', 'my_shareables', 'image', auth_required=True, group='Tools'),
+        HubSubnavItem('shareables', 'Plat Cards', 'my_shareables', 'image', auth_required=True, group='Tools'),
         HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True, group='Tools'),
     ),
 )

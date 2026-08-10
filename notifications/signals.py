@@ -331,7 +331,7 @@ def notify_platinum_earned(sender, instance, created, **kwargs):
                 # Per-platinum totals (user_total_platinums, yearly_plats) used to
                 # be stored here, but the count was racy when multiple plats from
                 # one sync were processed in non-chronological order. The inbox
-                # links to the My Shareables page where the count is computed
+                # links to the Plat Cards page where the count is computed
                 # live, so it isn't needed in the frozen metadata anymore.
                 NotificationService.create_from_template(
                     recipient=profile.user,

@@ -34,8 +34,20 @@ six is what ships -- scoped to this element instead of a global.{% endcomment %}
             <div class="pc-modal__frame" data-share-frame>
                 <div class="pc-modal__scaler" data-share-preview></div>
             </div>
+            {% comment %}A skeleton in the CARD's shape, not a spinner. Generation takes long enough
+            that an indeterminate spinner just reads as "waiting"; showing the shape that's coming sets
+            the expectation and makes the same wait feel shorter.{% endcomment %}
             <div class="pc-modal__loading" data-share-loading aria-live="polite" aria-label="Building your card">
-                <span class="pp-gbrowse__spinner" aria-hidden="true"></span>
+                <div class="pc-skel" aria-hidden="true">
+                    <div class="pc-skel__bar pc-skel__cover"></div>
+                    <div class="pc-skel__col">
+                        <div class="pc-skel__bar"></div>
+                        <div class="pc-skel__bar"></div>
+                        <div class="pc-skel__bar"></div>
+                        <div class="pc-skel__bar"></div>
+                        <div class="pc-skel__bar"></div>
+                    </div>
+                </div>
             </div>
             <p class="pc-modal__error" data-share-error role="alert" hidden></p>
         </div>

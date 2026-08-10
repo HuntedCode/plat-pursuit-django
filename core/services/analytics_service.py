@@ -51,7 +51,7 @@ PAGE_TYPE_CHOICES = [
     ("overall_leaderboard", "Overall Leaderboard"),
     ("trophy_case", "Trophy Case"),
     ("my_guides", "My Guides"),
-    ("my_shareables", "My Shareables"),
+    ("my_shareables", "Plat Cards"),        # key kept: renaming it would orphan the recorded history
     ("guide_edit", "Guide Edit"),
     ("settings", "Settings"),
     ("subscription", "Subscription"),

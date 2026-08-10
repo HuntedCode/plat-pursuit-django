@@ -22,6 +22,36 @@
     var mbSearch = null, mbSort = null;
     var dlg = null, current = null, reqToken = 0;
 
+    var REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // The house "page steps back" cue, same as the Game Detail modals and the claim ceremony use
+    // (#page-recede inside #zoom-container). Pivoting on the viewport centre keeps it a scale-in-place
+    // at any scroll depth instead of yanking the page toward its own top.
+    function pageRecede(on) {
+        if (REDUCE) { return; }
+        var zoom = document.getElementById('zoom-container');
+        var pr = document.getElementById('page-recede');
+        if (on && pr) {
+            pr.style.transformOrigin = '50% ' + (window.innerHeight / 2 - pr.getBoundingClientRect().top) + 'px';
+        }
+        if (zoom) { zoom.classList.toggle('pp-receded', on); }
+    }
+
+    // Previews are immutable for a given completion, so a card fetched once never needs fetching
+    // again -- which is what makes hover prefetching worth doing rather than just noisy.
+    var previewCache = Object.create(null);
+    var inflight = Object.create(null);
+
+    function fetchPreview(groupId) {
+        if (previewCache[groupId]) { return Promise.resolve(previewCache[groupId]); }
+        if (inflight[groupId]) { return inflight[groupId]; }
+        var p = PP.API.request('/api/v1/shareables/completion/' + groupId + '/html/')
+            .then(function (data) { previewCache[groupId] = data; delete inflight[groupId]; return data; })
+            .catch(function (err) { delete inflight[groupId]; throw err; });
+        inflight[groupId] = p;
+        return p;
+    }
+
     // ── Grid motion ───────────────────────────────────────────────────────────────────────────────
     function initReveal() {
         if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
@@ -167,11 +197,11 @@
         if (!current || !dlg) { return; }
         var token = ++reqToken;                 // stale-response guard: clicks can outrun fetches
         setBusy(true); showError('');
-        PP.API.request('/api/v1/shareables/completion/' + current.groupId + '/html/')
+        fetchPreview(current.groupId)
             .then(function (data) {
                 if (token !== reqToken) { return; }
                 var scaler = dlg.querySelector('[data-share-preview]');
-                if (scaler) { scaler.innerHTML = data.html; }
+                if (scaler) { scaler.innerHTML = data.html; scaler.classList.add('is-in'); }
                 current.hasRating = !!data.has_rating;
                 current.conceptId = data.concept_id;
                 current.playtime = data.playtime || '';
@@ -220,14 +250,14 @@
         var sub = dlg.querySelector('[data-share-game]');
         if (sub) { sub.textContent = current.gameName; }
         var scaler = dlg.querySelector('[data-share-preview]');
-        if (scaler) { scaler.innerHTML = ''; }
+        if (scaler) { scaler.innerHTML = ''; scaler.classList.remove('is-in'); }
         // Clear the PREVIOUS card's art options immediately. Leaving them up during the fetch let a
         // download go out with art=<i> indexed against the old game's list, which the server clamps
         // into range -- quietly shipping the wrong image.
         buildArtSwatches([]);
         var ground = firstGround();
         if (ground) { ground.checked = true; }
-        if (!dlg.open) { dlg.showModal(); }
+        if (!dlg.open) { dlg.showModal(); pageRecede(true); }
         fit();                                  // size the stage before the fetch, so it doesn't pop
         loadPreview();
     }
@@ -264,6 +294,15 @@
                 a.click();
                 document.body.removeChild(a);
                 setTimeout(function () { URL.revokeObjectURL(href); }, 1000);
+                // A file landing in the downloads folder is invisible from here, and the render takes
+                // long enough that silence reads as failure. The button confirms it, then reverts.
+                var label = dlg.querySelector('[data-share-download-label]');
+                if (go && label) {
+                    var was = label.textContent;
+                    go.classList.add('is-done');
+                    label.textContent = 'Saved';
+                    setTimeout(function () { go.classList.remove('is-done'); label.textContent = was; }, 2200);
+                }
             })
             .catch(function (err) {
                 showError(err && err.message === '403'
@@ -371,7 +410,24 @@
         saveCard();
     }
 
-    function close() { if (dlg && dlg.open) { dlg.close(); } }
+    // Exits are choreographed as carefully as entrances: a native close() is instant, which reads as
+    // the modal being yanked away. Play the exit, then close for real. The page un-recedes on the same
+    // beat so the two read as one movement.
+    function close() {
+        if (!dlg || !dlg.open || dlg.classList.contains('is-closing')) { return; }
+        pageRecede(false);
+        if (REDUCE) { dlg.close(); return; }
+        dlg.classList.add('is-closing');
+        var done = false;
+        function finish() {
+            if (done) { return; }
+            done = true;
+            dlg.classList.remove('is-closing');
+            dlg.close();
+        }
+        dlg.addEventListener('animationend', finish, { once: true });
+        setTimeout(finish, 260);                // the animation may never fire (hidden tab, etc.)
+    }
 
     function wireModal(first) {
         dlg = document.getElementById('pc-share');
@@ -390,7 +446,11 @@
         dlg.addEventListener('change', function (e) {
             if (e.target.matches('[data-share-theme]')) { applyTheme(); }
         });
-        dlg.addEventListener('close', function () { current = null; asked = false; });
+        // Esc dismisses natively without going through close(), so the recede is undone here as well.
+        dlg.addEventListener('close', function () { current = null; asked = false; pageRecede(false); });
+        dlg.addEventListener('cancel', function () { dlg.classList.remove('is-closing'); });
+
+        if (PP.dismissableSheet) { PP.dismissableSheet(dlg, { onClose: close }); }
 
         if (first) {
             window.addEventListener('resize', fit);
@@ -399,6 +459,25 @@
                 var trigger = e.target.closest('[data-card-open]');
                 if (trigger) { open(trigger); }
             });
+
+            // Warm the card on hover INTENT. Generating a preview is the slowest step in this flow, so
+            // starting it while the pointer settles usually means the modal opens with the card already
+            // there. Dwell-gated and cached, so sweeping across the grid doesn't fire a request per tile,
+            // and skipped entirely on touch (no hover, and it would waste a request on every scroll).
+            if (window.matchMedia && window.matchMedia('(hover: hover)').matches) {
+                var warmTimer = null;
+                document.body.addEventListener('mouseover', function (e) {
+                    var trigger = e.target.closest('[data-card-open]');
+                    if (!trigger) { return; }
+                    clearTimeout(warmTimer);
+                    warmTimer = setTimeout(function () {
+                        fetchPreview(trigger.dataset.trophyGroupId).catch(function () { /* opening will surface it */ });
+                    }, 180);
+                });
+                document.body.addEventListener('mouseout', function (e) {
+                    if (e.target.closest('[data-card-open]')) { clearTimeout(warmTimer); }
+                });
+            }
         }
     }
 
