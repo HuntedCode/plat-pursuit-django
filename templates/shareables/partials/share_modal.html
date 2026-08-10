@@ -73,11 +73,23 @@ six is what ships -- scoped to this element instead of a global.{% endcomment %}
 
             <div class="pc-modal__actions">
                 <button type="button" class="pc-btn pc-btn--ghost" data-share-close>Close</button>
+                {% comment %}Three states in one button, swapped by class rather than by rebuilding it:
+                idle, busy (the PNG render is the slowest step in this flow and used to be silent), and
+                done. The icon slot holds all three glyphs; CSS shows one.{% endcomment %}
                 <button type="button" class="pc-btn pc-btn--go" data-share-download>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span class="pc-btn__icons" aria-hidden="true">
+                        <svg class="pc-btn__i pc-btn__i--idle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span class="pc-btn__i pc-btn__i--busy"></span>
+                        <svg class="pc-btn__i pc-btn__i--done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                    </span>
                     <span data-share-download-label>Download</span>
                 </button>
             </div>
         </div>
+
+        {% comment %}Toast host. ToastManager looks for this inside the open dialog and shows it as a
+        top-layer popover -- without it a toast fired while the modal is open renders BEHIND the
+        backdrop. Same pattern as the quick-rate and blurb-report modals.{% endcomment %}
+        <div class="modal-toast-container" popover="manual"></div>
     </div>
 </dialog>

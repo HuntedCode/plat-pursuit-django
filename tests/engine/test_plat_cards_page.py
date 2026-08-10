@@ -195,3 +195,33 @@ def test_query_count_does_not_grow_with_the_page(client):
 
     assert small == full, f'query count grew with the page: {small} -> {full}'
     assert full <= 14, f'{full} queries to draw one page'
+
+
+def test_share_modal_hosts_its_own_toast_container(client):
+    """A toast fired while the modal is open renders BEHIND its backdrop without this host.
+
+    ToastManager only escapes to the top layer when it finds a `.modal-toast-container` inside the open
+    dialog and can showPopover() it, so both the class and the popover attribute are load-bearing."""
+    profile = _hunter()
+    _completed_game(profile, with_platinum=True)
+    client.force_login(profile.user)
+
+    html = client.get(URL).content.decode()
+
+    assert 'modal-toast-container' in html
+    assert 'popover="manual"' in html
+
+
+def test_download_button_carries_all_three_states(client):
+    """Idle, busy and done glyphs all ship in the markup; CSS picks one.
+
+    The busy state is the load-bearing one: the PNG render is slow, so a button that only goes
+    `disabled` reads as a dead click."""
+    profile = _hunter()
+    _completed_game(profile, with_platinum=True)
+    client.force_login(profile.user)
+
+    html = client.get(URL).content.decode()
+
+    for glyph in ('pc-btn__i--idle', 'pc-btn__i--busy', 'pc-btn__i--done'):
+        assert glyph in html, f'{glyph} missing from the download button'

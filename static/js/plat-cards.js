@@ -181,16 +181,25 @@
         var stage = dlg && dlg.querySelector('[data-share-frame]');
         if (l) { l.hidden = !on; }
         if (stage) { stage.setAttribute('aria-busy', on ? 'true' : 'false'); }
-        var go = dlg && dlg.querySelector('[data-share-download]');
-        if (go) { go.disabled = !!on; }        // nothing to download until the card exists
+        previewBlocked = !!on;                 // nothing to download until the card exists
+        syncDownloadEnabled();
     }
     function showError(msg) {
         var e = dlg && dlg.querySelector('[data-share-error]');
         if (!e) { return; }
         e.hidden = !msg;
         e.textContent = msg || '';
+        if (msg) { previewBlocked = true; syncDownloadEnabled(); }
+    }
+
+    // Two things independently want the download button disabled -- the preview still loading (or
+    // failed), and a download already in flight -- so `disabled` is derived from both rather than
+    // written by each. They used to race: a theme swap re-disabled the button while the "Saved" revert
+    // timer was still queued to re-enable it, and whichever fired last won.
+    var previewBlocked = false, downloading = false;
+    function syncDownloadEnabled() {
         var go = dlg && dlg.querySelector('[data-share-download]');
-        if (go && msg) { go.disabled = true; }
+        if (go) { go.disabled = previewBlocked || downloading; }
     }
 
     function loadPreview() {
@@ -249,6 +258,7 @@
         current = { groupId: groupId, gameName: gameName || '', conceptId: '', hasRating: true, playtime: '' };
         var sub = dlg.querySelector('[data-share-game]');
         if (sub) { sub.textContent = current.gameName; }
+        setDownloadState('idle');       // never greet a new card with the previous one's "Saved"
         var scaler = dlg.querySelector('[data-share-preview]');
         if (scaler) { scaler.innerHTML = ''; scaler.classList.remove('is-in'); }
         // Clear the PREVIOUS card's art options immediately. Leaving them up during the fetch let a
@@ -276,9 +286,31 @@
     // attachment, but its failure paths don't: a render error returns JSON and the 20/m rate limit
     // returns an HTML 403, either of which would replace the page with a bare error document and take
     // the open modal with it.
+    // Download button state machine. The PNG is rendered by headless Chromium on the server and takes
+    // a beat, so `busy` is the load-bearing state here: without it the button just goes inert and the
+    // click reads as having done nothing. `done` then confirms the save, which is otherwise invisible
+    // from the page -- the file lands in a folder we can't see.
+    var revertTimer = null;
+    var DL_LABELS = { idle: 'Download', busy: 'Processing...', done: 'Saved' };
+
+    function setDownloadState(state) {
+        clearTimeout(revertTimer);
+        var go = dlg && dlg.querySelector('[data-share-download]');
+        var label = dlg && dlg.querySelector('[data-share-download-label]');
+        if (!go) { return; }
+        go.classList.toggle('is-busy', state === 'busy');
+        go.classList.toggle('is-done', state === 'done');
+        downloading = state === 'busy';
+        syncDownloadEnabled();
+        if (label) { label.textContent = DL_LABELS[state]; }
+        // Swapping the label mid-press is a change a screen reader should hear; the button is the only
+        // progress indicator, so it has to announce like one.
+        go.setAttribute('aria-busy', state === 'busy' ? 'true' : 'false');
+        if (state === 'done') { revertTimer = setTimeout(function () { setDownloadState('idle'); }, 2400); }
+    }
+
     function saveCard() {
-        var go = dlg.querySelector('[data-share-download]');
-        if (go) { go.disabled = true; }
+        setDownloadState('busy');
         showError('');
         fetch(pngUrl(), { credentials: 'same-origin' })
             .then(function (res) {
@@ -294,22 +326,18 @@
                 a.click();
                 document.body.removeChild(a);
                 setTimeout(function () { URL.revokeObjectURL(href); }, 1000);
-                // A file landing in the downloads folder is invisible from here, and the render takes
-                // long enough that silence reads as failure. The button confirms it, then reverts.
-                var label = dlg.querySelector('[data-share-download-label]');
-                if (go && label) {
-                    var was = label.textContent;
-                    go.classList.add('is-done');
-                    label.textContent = 'Saved';
-                    setTimeout(function () { go.classList.remove('is-done'); label.textContent = was; }, 2200);
-                }
+                setDownloadState('done');
+                // Second, louder confirmation. ToastManager routes this into the modal's own
+                // .modal-toast-container (a top-layer popover) rather than the page container, so it
+                // lands ABOVE the dialog instead of behind its backdrop.
+                if (PP.ToastManager) { PP.ToastManager.show('Card saved to your downloads.', 'success', 3200); }
             })
             .catch(function (err) {
+                setDownloadState('idle');
                 showError(err && err.message === '403'
                     ? 'Too many cards at once. Give it a minute.'
                     : "Couldn't render that card. Try again in a moment.");
-            })
-            .finally(function () { if (go) { go.disabled = false; } });
+            });
     }
 
     // Rate-before-download. The card carries the hunter's own stars, difficulty and fun, so an unrated
