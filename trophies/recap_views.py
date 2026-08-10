@@ -72,14 +72,10 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         profile = self.request.user.profile
 
-        # Get available months
-        available_months = MonthlyRecapService.get_available_months(
-            profile,
-            include_premium_only=profile.user_is_premium
-        )
+        # Every month this hunter earned a trophy in -- no gating. See months_with_activity.
+        available_months = MonthlyRecapService.get_available_months(profile)
 
         context['available_months'] = available_months
-        context['is_premium'] = profile.user_is_premium
         context['no_activity'] = len(available_months) == 0
         context['user_timezone'] = self.request.user.user_timezone or 'UTC'
 
@@ -114,15 +110,10 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         if is_current_month:
             raise Http404("Cannot view recap for current month (in-progress)")
 
-        # Check premium gating for past months
-        # Non-premium users can access the most recent completed month only
-        # Anything older requires premium
+        # No premium gate. A recap is a record of what this hunter did; charging to look back at your
+        # own history was the wrong thing to sell. Every completed month with activity is open.
         recent_year, recent_month = get_most_recent_completed_month(now_local)
-        is_recent = (year == recent_year and month == recent_month)  # Most recent completed month only
-
-        if not is_recent and not profile.user_is_premium:
-            # Trying to access older month without premium
-            return redirect('recap_index')
+        is_recent = (year == recent_year and month == recent_month)
 
         # Check sync freshness for the most recent completed month
         if is_recent and not check_sync_freshness(profile, now_local):
@@ -162,7 +153,6 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         context['year'] = year
         context['month'] = month
         context['month_name'] = calendar.month_name[month]
-        context['is_premium'] = profile.user_is_premium
         context['user_timezone'] = self.request.user.user_timezone or 'UTC'
 
         context['breadcrumb'] = [
@@ -172,10 +162,7 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         ]
 
         # Calendar month selector
-        calendar_data = MonthlyRecapService.get_available_months_by_year(
-            profile,
-            include_premium_only=profile.user_is_premium
-        )
+        calendar_data = MonthlyRecapService.get_available_months_by_year(profile)
         calendar_data['years_json'] = json.dumps(calendar_data['years'])
         context['calendar_data'] = calendar_data
 
@@ -209,10 +196,7 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
 
         # Get available months for bottom month picker (backward compatibility)
         is_current_month = (year == now_local.year and month == now_local.month)
-        available_months = MonthlyRecapService.get_available_months(
-            profile,
-            include_premium_only=profile.user_is_premium
-        )
+        available_months = MonthlyRecapService.get_available_months(profile)
         context['available_months'] = available_months
         context['is_current_month'] = is_current_month
 

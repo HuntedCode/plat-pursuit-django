@@ -135,16 +135,9 @@ class RecapAvailableView(APIView):
         if gate:
             return gate
         profile = request.user.profile
-        is_premium = profile.user_is_premium
-
-        months = MonthlyRecapService.get_available_months(
-            profile,
-            include_premium_only=is_premium
-        )
 
         return Response({
-            'months': months,
-            'is_premium': is_premium,
+            'months': MonthlyRecapService.get_available_months(profile),
         })
 
 
@@ -173,31 +166,24 @@ class RecapDetailView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        # Check premium gating for past months
-        # Non-premium users can access the most recent completed month + literal current month
-        # Anything older requires premium
+        # No premium gate: every month a hunter earned a trophy in is theirs to look back at.
         recent_year, recent_month = get_most_recent_completed_month(now_local)
         is_recent_or_current = (
-            (year == now_local.year and month == now_local.month) or  # Current calendar month
-            (year == recent_year and month == recent_month)           # Most recent completed month
+            (year == now_local.year and month == now_local.month) or
+            (year == recent_year and month == recent_month)
         )
-
-        if not is_recent_or_current and not profile.user_is_premium:
-            return Response(
-                {
-                    'error': 'Premium subscription required to view past recaps.',
-                    'is_premium_required': True,
-                },
-                status=http_status.HTTP_403_FORBIDDEN
-            )
 
         # Check sync freshness for the most recent completed month
         stale_gate = _check_sync_freshness_api(profile, year, month, now_local)
         if stale_gate:
             return stale_gate
 
-        # Validate year range
-        if year < 2023:
+        # Sanity floor only. This used to be a hard `year < 2023`, which is not a fact about any hunter
+        # -- PSN trophies date to 2008, and the real lower bound is the hunter's own first trophy. That
+        # bound is enforced where it belongs: `get_or_generate_recap` returns None for a month with no
+        # activity, which is already handled below as "no activity found". This keeps only a guard
+        # against nonsense values reaching date arithmetic.
+        if year < 2006:
             return Response(
                 {'error': 'Invalid year.'},
                 status=http_status.HTTP_400_BAD_REQUEST
@@ -230,7 +216,6 @@ class RecapDetailView(APIView):
             'username': profile.display_psn_username or profile.psn_username,
             'avatar_url': profile.avatar_url or '',
             'is_finalized': recap.is_finalized,
-            'is_premium_required': not is_recent_or_current,
             'slides': slides,
             'generated_at': recap.generated_at.isoformat() if recap.generated_at else None,
             'updated_at': recap.updated_at.isoformat() if recap.updated_at else None,
@@ -325,20 +310,13 @@ class RecapShareImageHTMLView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        # Check premium gating for past months
-        # Non-premium users can access the most recent completed month + literal current month
-        # Anything older requires premium
+        # No premium gate: every month a hunter earned a trophy in is theirs to look back at.
         recent_year, recent_month = get_most_recent_completed_month(now_local)
         is_recent_or_current = (
             (year == now_local.year and month == now_local.month) or  # Current calendar month
             (year == recent_year and month == recent_month)           # Most recent completed month
         )
 
-        if not is_recent_or_current and not profile.user_is_premium:
-            return Response(
-                {'error': 'Premium subscription required to share past recaps.'},
-                status=http_status.HTTP_403_FORBIDDEN
-            )
 
         # Check sync freshness for the most recent completed month
         stale_gate = _check_sync_freshness_api(profile, year, month, now_local)
@@ -464,18 +442,13 @@ class RecapShareImagePNGView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        # Check premium gating
+        # No premium gate: every month a hunter earned a trophy in is theirs to look back at.
         recent_year, recent_month = get_most_recent_completed_month(now_local)
         is_recent_or_current = (
             (year == now_local.year and month == now_local.month) or
             (year == recent_year and month == recent_month)
         )
 
-        if not is_recent_or_current and not profile.user_is_premium:
-            return Response(
-                {'error': 'Premium subscription required to share past recaps.'},
-                status=http_status.HTTP_403_FORBIDDEN
-            )
 
         # Check sync freshness for the most recent completed month
         stale_gate = _check_sync_freshness_api(profile, year, month, now_local)
@@ -580,20 +553,13 @@ class RecapSlidePartialView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        # Check premium gating for past months
-        # Non-premium users can access the most recent completed month + literal current month
-        # Anything older requires premium
+        # No premium gate: every month a hunter earned a trophy in is theirs to look back at.
         recent_year, recent_month = get_most_recent_completed_month(now_local)
         is_recent_or_current = (
             (year == now_local.year and month == now_local.month) or  # Current calendar month
             (year == recent_year and month == recent_month)           # Most recent completed month
         )
 
-        if not is_recent_or_current and not profile.user_is_premium:
-            return Response(
-                {'error': 'Premium subscription required.'},
-                status=http_status.HTTP_403_FORBIDDEN
-            )
 
         # Check sync freshness for the most recent completed month
         stale_gate = _check_sync_freshness_api(profile, year, month, now_local)

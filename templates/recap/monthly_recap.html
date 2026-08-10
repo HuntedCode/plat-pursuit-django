@@ -388,11 +388,6 @@
         <!-- Section Header -->
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold">Select a Month</h3>
-            {% if not is_premium %}
-            <div class="tooltip tooltip-left" data-tip="Premium users can view any month">
-                <span class="badge badge-warning badge-sm">PRO Feature</span>
-            </div>
-            {% endif %}
         </div>
 
         <!-- Year Navigation Header -->
@@ -436,20 +431,13 @@
                 {% else %}
                     {# Active link for selectable months #}
                     <a href="/recap/{{ year_data.year }}/{{ month_data.month }}/"
-                       class="btn btn-sm {% if month_data.month == month and year_data.year == year %}btn-primary{% else %}btn-ghost{% endif %}
-                              {% if month_data.is_premium_required %}premium-locked{% endif %}"
+                       class="btn btn-sm {% if month_data.month == month and year_data.year == year %}btn-primary{% else %}btn-ghost{% endif %}"
                        data-year="{{ year_data.year }}"
                        data-month="{{ month_data.month }}"
-                       data-is-premium-required="{{ month_data.is_premium_required }}"
-                       {% if month_data.is_premium_required %}data-month-name="{{ month_data.month_name }} {{ year_data.year }}"{% endif %}
                        aria-label="{{ month_data.month_name }} {{ year_data.year }}">
                         <span>{{ month_data.short_month_name }}</span>
                         {% if month_data.is_current %}
                             <span class="badge badge-xs badge-info ml-1">Now</span>
-                        {% elif month_data.is_recent and not is_premium %}
-                            <span class="badge badge-xs badge-success ml-1">Free</span>
-                        {% elif month_data.is_premium_required %}
-                            <span class="badge badge-xs badge-warning ml-1">PRO</span>
                         {% endif %}
                     </a>
                 {% endif %}
@@ -458,18 +446,6 @@
             {% endfor %}
         </div>
 
-        {# Premium Upsell (non-premium users only) #}
-        {% if not is_premium %}
-        <div class="mt-4 p-3 bg-white/[0.03] border border-base-content/5 rounded-lg">
-            <p class="text-xs text-base-content/50 mb-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <strong>Last month is free!</strong> Upgrade to Premium to view your full recap history!
-            </p>
-            <a href="{% url 'subscribe' %}" class="btn btn-xs btn-primary">Upgrade to Premium</a>
-        </div>
-        {% endif %}
         </div>{# /card-body #}
     </div>
     {% endif %}
@@ -538,8 +514,7 @@
             window.monthSelector = new PlatPursuit.MonthSelector(
                 calendarData,
                 {{ year }},
-                {{ month }},
-                {{ is_premium|yesno:"true,false" }}
+                {{ month }}
             );
         } catch (e) {
             console.error('Error initializing month selector:', e);

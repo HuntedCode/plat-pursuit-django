@@ -13,7 +13,7 @@ import pytz
 from datetime import datetime, timedelta
 from django.db import transaction
 from django.db.models import Count, Min, Q, F
-from django.db.models.functions import TruncDate
+from django.db.models.functions import TruncDate, TruncMonth
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -760,49 +760,69 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def get_available_months(cls, profile, include_premium_only=True):
-        """
-        Get list of months that have recap data available.
+    def months_with_activity(cls, profile, user_tz=None):
+        """Every (year, month) this hunter earned a trophy in, in THEIR local time.
 
-        Args:
-            profile: Profile instance
-            include_premium_only: If False, only returns current month
+        This is what "months you can open" means, and it is deliberately NOT "months we have already
+        stored a MonthlyRecap row for". Rows are created BY opening a month (`get_or_generate_recap`),
+        so sourcing the picker from stored rows made history unreachable: a month with no row was never
+        offered, so it was never opened, so it never got a row. That chicken-and-egg was the actual thing
+        blocking full history -- not the premium checks.
+
+        DB-aggregated: one grouped COUNT, `TruncMonth` in the hunter's own timezone so a trophy earned at
+        23:00 on the 31st belongs to the month they experienced it in, not the UTC one. Bounded by the
+        profile's earned trophies via the (profile, earned, earned_date_time) composite index, and it
+        returns at most one row per month -- never the trophies themselves.
+
+        Returns: set of (year, month).
+        """
+        from trophies.models import EarnedTrophy
+
+        user_tz = user_tz or cls._resolve_user_tz(profile)
+        rows = (
+            EarnedTrophy.objects
+            .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+            .annotate(bucket=TruncMonth('earned_date_time', tzinfo=user_tz))
+            .values('bucket')
+            .annotate(n=Count('id'))
+            .values_list('bucket', flat=True)
+        )
+        return {(dt.year, dt.month) for dt in rows if dt}
+
+    @classmethod
+    def get_available_months(cls, profile):
+        """
+        Every month this hunter can open a recap for, newest first.
+
+        Sourced from `months_with_activity`, NOT from stored MonthlyRecap rows -- see that method for
+        why. The current (in-progress) month is excluded: a recap is a retrospective, and the page 404s
+        it anyway, so listing it only ever offered a door that does not open.
 
         Returns:
-            list: [{year, month, month_name, is_current, is_premium_required}, ...]
+            list: [{year, month, month_name, short_month_name}, ...]
         """
-        from trophies.models import MonthlyRecap
-
         user_tz = cls._resolve_user_tz(profile)
         now_local = timezone.now().astimezone(user_tz)
-        current_year, current_month = now_local.year, now_local.month
+        current = (now_local.year, now_local.month)
 
-        # Get all months with recaps
-        recaps = MonthlyRecap.objects.filter(
-            profile=profile
-        ).values('year', 'month').order_by('-year', '-month')
-
-        result = []
-        for recap in recaps:
-            is_current = (recap['year'] == current_year and recap['month'] == current_month)
-
-            # Skip past months if not including premium content
-            if not include_premium_only and not is_current:
-                continue
-
-            result.append({
-                'year': recap['year'],
-                'month': recap['month'],
-                'month_name': calendar.month_name[recap['month']],
-                'short_month_name': calendar.month_abbr[recap['month']],
-                'is_current': is_current,
-                'is_premium_required': not is_current,
-            })
+        months = sorted(
+            (ym for ym in cls.months_with_activity(profile, user_tz=user_tz) if ym != current),
+            reverse=True,
+        )
+        result = [
+            {
+                'year': year,
+                'month': month,
+                'month_name': calendar.month_name[month],
+                'short_month_name': calendar.month_abbr[month],
+            }
+            for year, month in months
+        ]
 
         return result
 
     @classmethod
-    def get_available_months_by_year(cls, profile, include_premium_only=True):
+    def get_available_months_by_year(cls, profile):
         """
         Get available months grouped by year for calendar display.
 
@@ -811,7 +831,7 @@ class MonthlyRecapService:
 
         Args:
             profile: Profile instance
-            include_premium_only: If False, marks old months as premium-required
+            (no gating argument: every month with activity is openable by any linked hunter)
 
         Returns:
             {
@@ -826,7 +846,6 @@ class MonthlyRecapService:
                                 'has_data': True,
                                 'is_current': False,
                                 'is_recent': True,  # Most recent completed month
-                                'is_premium_required': False,
                                 'is_future': False
                             },
                             # ... 11 more months
@@ -841,8 +860,6 @@ class MonthlyRecapService:
                 'recent_month': 1
             }
         """
-        from trophies.models import MonthlyRecap
-
         # Get user timezone and current datetime
         user_tz = cls._resolve_user_tz(profile)
         now_local = timezone.now().astimezone(user_tz)
@@ -855,14 +872,12 @@ class MonthlyRecapService:
         else:
             recent_year, recent_month = current_year, current_month - 1
 
-        # Get all existing recaps for this profile
-        existing_recaps = MonthlyRecap.objects.filter(
-            profile=profile
-        ).values_list('year', 'month')
-        existing_set = set(existing_recaps)
+        # Which months this hunter can actually open. Trophy activity, NOT stored MonthlyRecap rows:
+        # a row is created BY opening a month, so sourcing the picker from rows meant a month with no
+        # row was never offered, never opened, and so never got a row. See `months_with_activity`.
+        active_months = cls.months_with_activity(profile, user_tz=user_tz)
 
         # Determine earliest year based on user's first earned trophy
-        # This allows premium users to generate recaps for any month since they started earning trophies
         from trophies.models import EarnedTrophy
 
         first_trophy = EarnedTrophy.objects.filter(
@@ -891,7 +906,7 @@ class MonthlyRecapService:
         for year in range(current_year, earliest_year - 1, -1):
             months = []
             for month in range(1, 13):
-                has_data = (year, month) in existing_set
+                has_data = (year, month) in active_months
                 is_current = (year == current_year and month == current_month)
                 is_recent = (year == recent_year and month == recent_month)
                 is_future = (year > current_year or
@@ -900,11 +915,6 @@ class MonthlyRecapService:
                 # Check if month is before first earned trophy
                 is_before_first_trophy = (year == earliest_year and month < earliest_month)
 
-                # Premium gating logic
-                is_free_month = is_current or is_recent
-                is_premium_required = (has_data and
-                                      not is_free_month and
-                                      not include_premium_only)
 
                 months.append({
                     'month': month,
@@ -913,7 +923,6 @@ class MonthlyRecapService:
                     'has_data': has_data,
                     'is_current': is_current,
                     'is_recent': is_recent,
-                    'is_premium_required': is_premium_required,
                     'is_future': is_future,
                     'is_before_first_trophy': is_before_first_trophy,
                 })

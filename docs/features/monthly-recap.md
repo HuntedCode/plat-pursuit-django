@@ -131,7 +131,9 @@ Immutable pattern: once `is_finalized=True`, regeneration is skipped even with `
 - **Staleness check scope**: Only applies to the current (incomplete) month. Past months are immutable once finalized.
 - **Badge progress quiz**: Uses `UserBadgeProgress.last_checked` as proxy for "earned by month end". This is a denormalized snapshot, not a live query.
 - **Share card image caching**: `ShareImageCache` downloads external images (PSN avatars, game icons) to temp files. These are ephemeral and re-fetched as needed.
-- **Premium gating**: Free users see current month + most recent completed month. All other months require premium. Enforced at view + API + template level.
+- **No premium gating (2026-08).** Every month a hunter earned a trophy in is theirs to open. A recap is a record of what someone did; charging to look back at your own history was the wrong thing to sell. The gate was duplicated in five places (four in `api/recap_views.py`, one in `trophies/recap_views.py`) plus the templates and `month-selector.js`; all removed.
+- **The month list comes from TROPHY ACTIVITY, not stored recap rows** (`months_with_activity`). This is the one that unlocked history: rows are created BY opening a month, so a picker sourced from rows never offered a month that had no row, so it was never opened, so it never got a row. `TruncMonth` in the hunter's own timezone, DB-aggregated, one row per month.
+- **The current month is still closed** (page 404s it). A live month is a stats lookup, which is the opposite of the experience. It is also no longer listed -- the old free-tier list contained *only* the current month, i.e. exclusively the one month the page refuses to open.
 - **Cron timing**: Generate recaps at 00:05 UTC on 3rd, send emails at 06:00 UTC on 3rd. The 7-hour gap allows generation to complete before emails fire.
 
 ## Management Commands

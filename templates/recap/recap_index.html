@@ -83,24 +83,12 @@
             <div class="flex flex-wrap gap-2 justify-center">
                 {% for m in available_months %}
                 <a href="{% url 'recap_view' year=m.year month=m.month %}"
-                   class="btn btn-sm {% if m.is_current %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">
+                   class="btn btn-sm btn-ghost border border-base-300">
                     {{ m.short_month_name }} {{ m.year }}
-                    {% if m.is_premium_required and not is_premium %}
-                    <span class="badge badge-warning badge-xs ml-1">PRO</span>
-                    {% endif %}
                 </a>
                 {% endfor %}
             </div>
 
-            {% if not is_premium %}
-            <div class="mt-6 p-3 bg-white/[0.03] border border-base-content/5 rounded-lg w-full max-w-md">
-                <p class="text-xs text-base-content/50 mb-2">
-                    <span class="badge badge-warning badge-xs mr-1">PRO</span>
-                    Past recaps are available with Premium
-                </p>
-                <a href="{% url 'subscribe' %}" class="btn btn-xs btn-primary">Upgrade to Premium</a>
-            </div>
-            {% endif %}
         </div>
     </div>
 
