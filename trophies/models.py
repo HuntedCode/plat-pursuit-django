@@ -518,6 +518,14 @@ class Game(models.Model):
     plats_earned_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have earned this game's platinum.")
     full_completion_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles at 100% completion (progress=100).")
     avg_completion = models.FloatField(default=0.0, help_text="Denormalized average of profiles' completion progress (0-100).")
+    # The remaining two stats on the game-detail header row. These were the last live
+    # aggregates on that page and both scaled with the game's popularity rather than its
+    # size: total_earns counted EarnedTrophy across EVERY trophy in the game (players x
+    # trophies rows, heap-fetched because `earned` is not covered by the trophy_id index),
+    # which is the single most expensive query the anonymous game page could issue.
+    # Recomputed nightly by recalc_earn_rates alongside the four above.
+    total_earns_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of earned trophies across all of this game's trophies.")
+    monthly_players_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that played this game in the last 30 days.")
     view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
     is_regional = models.BooleanField(default=False)
     region_lock = models.BooleanField(default=False, help_text="Admin region override lock - won't be automatically updated.")

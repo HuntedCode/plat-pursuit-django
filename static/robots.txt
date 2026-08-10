@@ -69,3 +69,10 @@ Disallow: /my-guides/
 # /games/<np_id>/ and /my-pursuit/badges/<badge>/ pages remain crawlable.
 Disallow: /games/*/*
 Disallow: /my-pursuit/badges/*/*
+
+# Filtered / paginated / tabbed variants of a profile. The canonical
+# /community/profiles/<username>/ page stays crawlable -- profiles are the free
+# floor of the product and should keep their search and share value -- but the
+# ?tab= / ?page= / ?sort= permutations are duplicates of it on axes that multiply
+# out into an unbounded crawl space, and each one costs a real query.
+Disallow: /community/profiles/*?*

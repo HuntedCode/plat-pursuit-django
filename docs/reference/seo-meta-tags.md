@@ -143,7 +143,8 @@ Query strings (e.g. `?tier=3` on badge detail) are preserved through the redirec
 - **UA regex failure mode is graceful.** If a new bot slips through the list, it just hits the full page (same as pre-middleware behavior). No false throttling.
 - **Not cloaking.** Google explicitly endorses canonical redirects for duplicate content. This is the textbook solution.
 - **Do not extend to pages without a canonical non-profile variant.** `/community/profiles/<user>/*` has no canonical strip-to; the profile IS the page. The current regex correctly ignores those paths.
-- **Tests live in `plat_pursuit/tests/test_middleware.py`.** Add cases here when extending the regex.
+- **That exclusion is exactly how the 2026-08-09 outage started.** Having no redirect target is a reason this middleware cannot help the profile page, NOT a reason the page is safe. It fell through every guard and was the first URL to time out. Profiles are now covered by the origin guard below, plus a render-cost gate in the view (see [Anonymous Render Cost](#anonymous-render-cost)). When adding a new expensive page, ask which of the three layers covers it; "none, but it has no canonical variant" is not an answer.
+- **Tests live in `tests/engine/test_cloudflare_guard_paths.py`.** Add cases here when extending either regex.
 
 ## Crawler Policy: Cloudflare Origin Guard
 
@@ -163,9 +164,31 @@ Deliberately narrow — only the profile-scoped patterns covered by `_CLOUDFLARE
 | `/my-pursuit/badges/<slug>/<username>/` | 302 → `https://platpursuit.com/<path>` |
 | `/badges/<slug>/<username>/` (legacy) | 302 → `https://platpursuit.com/<path>` |
 | `/achievements/badges/<slug>/<username>/` (legacy) | 302 → `https://platpursuit.com/<path>` |
-| Everything else (`/`, static, browse, etc.) | Unaffected — passes through |
+| `/community/profiles/<username>/` (+ sub-pages such as `/trophy-case/`) | 302 → `https://platpursuit.com/<path>` |
+| Everything else (`/`, static, browse, `/community/profiles/`, etc.) | Unaffected — passes through |
 
-The narrow scope is intentional: Render's internal health checks hit `/` without a `CF-Ray` header, and a broader guard would trip them and cause false restarts.
+The narrow scope is intentional: Render's internal health checks hit `/` without a `CF-Ray` header, and a broader guard would trip them and cause false restarts. The profile LIST page (`/community/profiles/`, no trailing username) is deliberately outside the guard: it is cheap and paginated, and it is the page a legitimate crawler should be walking.
+
+Profiles joined this list after 2026-08-09. Because the profile page has no canonical variant to redirect to, the origin guard is the ONLY request-entry protection it can have — everything else has to come from making the render itself cheap.
+
+## Anonymous Render Cost
+
+Guards keep crawlers off a page; they do not make the page affordable when a crawler gets through one (a spoofed UA defeats the bot rule, and only direct-origin hits trip the CF guard). The profile page therefore also gates its two unbounded costs on `request.user.is_authenticated`, in `ProfileDetailView.get_context_data`:
+
+| Work | Anonymous | Authenticated |
+|------|-----------|---------------|
+| Header stats (incl. all four Platinum Highlight cards) | ✅ runs | ✅ runs |
+| Games/trophies/badges tab (paginated) | ✅ runs | ✅ runs |
+| Showcase providers (`get_rendered_showcases`) | ❌ skipped | ✅ runs |
+| Timeline (`_build_timeline`) | ❌ skipped | ✅ runs (if `psn_history_public`) |
+
+The rarest-trophies showcase provider sorts the profile's **entire** earned-trophy set on a joined column (`trophy__trophy_earn_rate`), so for a 250K-trophy profile it is a full join plus top-N sort on every render. The timeline is cached per profile, which means a crawler enumerating distinct profiles has a 0% hit rate **by construction** — per-entity caching cannot protect an enumerable URL space, only gating can.
+
+### Gotchas
+
+- **Gate before the provider, not around its output.** This is the same rule as the premium-preview pattern in CLAUDE.md. A version that computes the data and hides it in the template looks correct and still takes the site down. `tests/engine/test_anon_profile_render.py` asserts on the CALL, not the context value, for exactly this reason.
+- **The four Platinum Highlight cards are deliberately NOT gated.** They render a "None" empty state when absent, so skipping them for anonymous visitors would *misreport* the profile rather than hide a section. They are also cheap (two denormed FKs plus two lookups bounded by the profile's `ProfileGame` rows).
+- **Profiles stay indexable.** `robots.txt` disallows only the query-string permutations (`/community/profiles/*?*` — the `?tab=` / `?page=` / `?sort=` axes that multiply into an unbounded crawl space). The canonical profile page keeps its search and share value; profiles are the free floor of the product.
 
 ### Diagnostics
 

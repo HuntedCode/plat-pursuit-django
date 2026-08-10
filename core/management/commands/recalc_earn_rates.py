@@ -1,5 +1,6 @@
 """Site-wide recompute of Trophy.earned_count / Trophy.earn_rate / Game.played_count and the game's
-denormalized community completion stats (plats_earned_count / full_completion_count / avg_completion).
+denormalized community stats (plats_earned_count / full_completion_count / avg_completion /
+monthly_players_count / total_earns_count).
 
 Runs as a daily cron (see docs/guides/cron-jobs.md). Replaces the per-profile
 inline recompute that used to live in `psn_api_service.update_profilegame_stats`
@@ -15,18 +16,25 @@ truth.
 """
 import time
 from collections import defaultdict
+from datetime import timedelta
 
 from django.core.management.base import BaseCommand
 from django.db.models import Count, Q, Avg
+from django.utils import timezone
 
 from trophies.models import Game, Trophy, ProfileGame, EarnedTrophy
+
+# Window for Game.monthly_players_count. Matches the "active players" stat the
+# game-detail header has always shown; it just used to be computed per request.
+MONTHLY_PLAYER_WINDOW = timedelta(days=30)
 
 
 class Command(BaseCommand):
     help = (
-        'Recompute played_count + community completion stats (plats_earned_count, '
-        'full_completion_count, avg_completion) on Games, and earned_count + earn_rate '
-        'on Trophies, using bulk GROUP BY aggregates. Designed for daily cron use.'
+        'Recompute played_count + community stats (plats_earned_count, '
+        'full_completion_count, avg_completion, monthly_players_count, total_earns_count) '
+        'on Games, and earned_count + earn_rate on Trophies, using bulk GROUP BY '
+        'aggregates. Designed for daily cron use.'
     )
 
     def add_arguments(self, parser):
@@ -104,9 +112,12 @@ class Command(BaseCommand):
 
     def _process_chunk(self, game_ids, dry_run):
         """Recompute one chunk of games. Three bulk queries, two bulk updates."""
-        # 1. Community stats per game (one GROUP BY across ProfileGame): played_count PLUS the three denormed
-        #    completion stats (plats earned / 100% completions / avg completion). All four share this single
-        #    aggregate + population (ALL ProfileGame rows, incl. user_hidden) so the denominator is consistent.
+        # 1. Community stats per game (one GROUP BY across ProfileGame): played_count PLUS the four denormed
+        #    completion stats (plats earned / 100% completions / avg completion / monthly players). All five
+        #    share this single aggregate + population (ALL ProfileGame rows, incl. user_hidden) so the
+        #    denominator is consistent. `monthly` is a filtered Count on the same scan rather than its own
+        #    query -- it rides along for free.
+        monthly_since = timezone.now() - MONTHLY_PLAYER_WINDOW
         game_stats = {
             row['game_id']: row
             for row in (
@@ -117,6 +128,7 @@ class Command(BaseCommand):
                     plats=Count('id', filter=Q(has_plat=True)),
                     completions=Count('id', filter=Q(progress=100)),
                     avg=Avg('progress'),
+                    monthly=Count('id', filter=Q(last_played_date_time__gte=monthly_since)),
                 )
             )
         }
@@ -146,15 +158,20 @@ class Command(BaseCommand):
         for game_id in game_ids:
             s = game_stats.get(game_id)
             new_played = s['cnt'] if s else 0
+            game_trophies = trophies_by_game.get(game_id, [])
             game_updates.append(Game(
                 id=game_id,
                 played_count=new_played,
                 plats_earned_count=s['plats'] if s else 0,
                 full_completion_count=s['completions'] if s else 0,
                 avg_completion=round(s['avg'], 1) if (s and s['avg'] is not None) else 0.0,
+                monthly_players_count=s['monthly'] if s else 0,
+                # Free: earned_counts is already in memory for the earn-rate pass below, so the
+                # game-wide total is a sum over this game's trophies rather than a new query.
+                total_earns_count=sum(earned_counts.get(t.id, 0) for t in game_trophies),
             ))
 
-            for trophy in trophies_by_game.get(game_id, []):
+            for trophy in game_trophies:
                 new_earned = earned_counts.get(trophy.id, 0)
                 new_rate = new_earned / new_played if new_played > 0 else 0.0
                 if trophy.earned_count != new_earned or trophy.earn_rate != new_rate:
@@ -166,6 +183,7 @@ class Command(BaseCommand):
             if game_updates:
                 Game.objects.bulk_update(game_updates, [
                     'played_count', 'plats_earned_count', 'full_completion_count', 'avg_completion',
+                    'monthly_players_count', 'total_earns_count',
                 ])
             if trophy_updates:
                 Trophy.objects.bulk_update(trophy_updates, ['earned_count', 'earn_rate'])

@@ -209,6 +209,10 @@ def provide_rarest_trophies(profile, config):
             'trophy__game__concept',
             'trophy__game__concept__igdb_match',
         )
+        # Defer the ~30 KB IGDB raw blob -- the CLAUDE.md rule pairs it with every
+        # igdb_match select_related. It is never read here, and the overfetch below pulls
+        # up to 36 rows, so leaving it in drags ~1 MB of unused JSON through each render.
+        .defer('trophy__game__concept__igdb_match__raw_response')
         .order_by('trophy__trophy_earn_rate', 'trophy__earn_rate')
     )
 

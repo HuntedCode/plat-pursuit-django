@@ -105,21 +105,6 @@ class CacheKeyMixin:
         return f"game:imageurls:{np_comm_id}"
 
     @staticmethod
-    def game_stats_key(np_comm_id, date_str, hour):
-        """
-        Generate cache key for game statistics.
-
-        Args:
-            np_comm_id: PSN communication ID for the game
-            date_str: Date string in YYYY-MM-DD format
-            hour: Hour of the day (0-23)
-
-        Returns:
-            str: Cache key for game statistics
-        """
-        return f"game:stats:{np_comm_id}:{date_str}:{hour:02d}"
-
-    @staticmethod
     def leaderboard_key(leaderboard_type, date_str=None):
         """
         Generate cache key for leaderboard data.
