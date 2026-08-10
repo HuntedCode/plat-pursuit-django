@@ -278,3 +278,17 @@
     .pc-modal__scaler { transition: none; opacity: 1; }
     .pc-skel__bar::after { animation: none; }
 }
+
+/* Swipe-to-close grabber (dismissableSheet adds .pp-dismissable; the pill itself is the shared
+   .pp-dismissable::before in badge-inspect.css). The pill is absolutely positioned 9px from the
+   dialog's top, which lands on the title -- so the header gets the same nudge .gd-modal gives it. */
+@media (hover: none) and (pointer: coarse) {
+    .pc-modal.pp-dismissable .pc-modal__head { padding-top: 20px; }
+}
+/* The shared fade-out is scoped to .pp-detail-modal, so this modal has to opt in or the handle would
+   sit there while the sheet animates away. (On a DRAG close no .is-closing is set, so the handle
+   correctly rides the sheet off instead.) */
+@media (hover: none) and (pointer: coarse) and (prefers-reduced-motion: no-preference) {
+    .pc-modal.is-closing .pp-dismissable::before,
+    .pc-modal.is-closing::before { animation: ppGrabOut 0.18s ease forwards; }
+}
