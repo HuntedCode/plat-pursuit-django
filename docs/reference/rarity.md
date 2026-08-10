@@ -134,6 +134,17 @@ re-declaring four grade colours.
 - **Green now means rarity.** `--pp-success` is emerald, so a green "done"/"yours" marker sitting beside
   a grade reads as the same signal. Titles' "Yours" moved to `--pp-text-dim` for exactly this. Check any
   new surface that puts a success state next to a grade.
+- **A filtered numerator is only as good as the rows behind it.** Titles grade on `UserTitle` rows with
+  `source_type='badge_series'`, but the *held* check on the same page filters nothing — so a title
+  granted under another source showed as yours, equippable, and graded **"Be the first"** at the same
+  time. Two causes, both now fixed: `grant_series_title` fires only on the `award` branch (a badge earned
+  before its series had a title never got one, and re-running `evaluate_badges` can't help — the diff is
+  empty), and `get_or_create` returned a legacy row on a shared Title without recording anything. It now
+  adopts; `sync_series_titles` backfills the history. **Whenever a numerator is filtered more narrowly
+  than the display that sits beside it, that gap will eventually be a wrong grade.**
+- **A grade can't be rarer than the easiest way to get the thing.** A title is the UNION of its editions'
+  earners, so a title reading 0.7% while one of its editions reads 78% is arithmetically impossible and
+  means the numerator is under-recorded — a useful smoke test on any new gradeable surface.
 - **A mythic badge needs >100 accounts to exist.** With a 1% ceiling, one earner in a community of 80
   is 1.25% — Rare, not Mythic. Tests that want a Mythic fixture have to seed a community past 100.
 - **The denominator is cached for an hour** (`rarity:community_size`). Viewer-independent and slow-moving,

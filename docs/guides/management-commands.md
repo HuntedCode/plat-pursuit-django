@@ -18,7 +18,8 @@ PlatPursuit has **71 custom management commands** spread across 5 Django apps: `
 | `check_profile_badge_series` | Check and award badges for a single profile within a specific badge series. | `--username` (required), `--series` (required) | `python manage.py check_profile_badge_series --username Jlowe --series trophy-hunter` |
 | `populate_badges` | Run initial badge check for one or all profiles. Evaluates and awards all applicable badges. | `--username`, `--notify` | `python manage.py populate_badges` |
 | `populate_region_asian_titles` | Detect and flag Asian-language games without concepts, setting `is_regional` and assigning region codes. | (none) | `python manage.py populate_region_asian_titles` |
-| `populate_user_titles` | Backfill UserTitle records for existing badge and milestone awards. | `--dry-run`, `--badges-only`, `--milestones-only` | `python manage.py populate_user_titles --dry-run` |
+| `populate_user_titles` | Backfill UserTitle records for existing badge and milestone awards. **LEGACY** (writes `source_type='badge'`); for the new badge system use `sync_series_titles`. | `--dry-run`, `--badges-only`, `--milestones-only` | `python manage.py populate_user_titles --dry-run` |
+| `sync_series_titles` | Reconcile `UserTitle` against the group badges actually held (NEW badge system). Grants titles the one-shot `award` path missed, and adopts rows another system wrote on a shared Title. Fixes under-counted title rarity and "Be the first" on a title you hold. | `--series`, `--dry-run`, `--prune` | `python manage.py sync_series_titles --dry-run` |
 | `populate_banned_words` | Seed the BannedWord table with a default list of inappropriate words and spam indicators. | `--clear`, `--dry-run` | `python manage.py populate_banned_words --dry-run` |
 | `refresh_badge_series` | Re-evaluate a badge series for all eligible profiles and send consolidated badge notifications. | `--series <slug>` or `--all`, `--no-notifications` (silence Discord + on-site + email for bulk runs) | `python manage.py refresh_badge_series --all --no-notifications` |
 | `lock_admin_concepts` | Lock `concept_lock` on games whose concept has an admin-duplicate suffix (`-1`, `-2`, etc.) or `PP_` stub prefix. | `--dry-run` | `python manage.py lock_admin_concepts --dry-run` |
@@ -179,7 +180,8 @@ Commands that were run once (or a few times) for data migration. They remain in 
 | `populate_profile_plats` | Recalculate platinum counts for all profiles |
 | `populate_profilegame_stats` | Recalculate per-game stats for a profile |
 | `populate_region_asian_titles` | Detect and tag Asian-language games |
-| `populate_user_titles` | Backfill UserTitle records from badge/milestone awards |
+| `populate_user_titles` | Backfill UserTitle records from badge/milestone awards (legacy system) |
+| `sync_series_titles` | Reconcile UserTitle against held group badges (new badge system) |
 | `populate_banned_words` | Seed banned words for content moderation |
 | `recalculate_profile_counts` | Full profile trophy count recalculation |
 | `recalculate_gamification` | Full gamification XP recalculation |

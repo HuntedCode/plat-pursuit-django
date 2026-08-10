@@ -62,6 +62,24 @@ def test_award_writes_denorm_and_title():
     assert UserTitle.objects.filter(profile=profile, title=title, source_type='badge_series').exists()
 
 
+def test_award_adopts_a_title_row_another_system_already_wrote():
+    """UserTitle is unique on (profile, title) WITHOUT source_type, so when a series reuses a legacy
+    Badge's Title, get_or_create returns the existing row. Left as-is, the grant records NOTHING: the
+    hunter holds the title but no count filtered to 'badge_series' can see them, and the orphan revoke
+    can never clean it up. That shipped -- titles showed "Be the first" to the hunter wearing them."""
+    series, game, title = _one_stage_series('adopt')
+    gb = GroupBadgeFactory(series=series, platform_group=_ultra())
+    profile = ProfileFactory()
+    UserTitle.objects.create(profile=profile, title=title, source_type='badge', source_id=1)
+    _complete(profile, game)
+
+    evaluate_and_apply(profile, [gb])
+
+    rows = UserTitle.objects.filter(profile=profile, title=title)
+    assert rows.count() == 1, 'adopted in place, not duplicated'
+    assert rows.first().source_type == 'badge_series'
+
+
 def test_earned_count_reconciled_on_profile_delete():
     # A Profile deletion cascade-drops the UserGroupBadge hold WITHOUT going through apply's revoke, so the
     # pre_delete reconcile signal must decrement earned_count (else the denorm inflates and rarity / the
