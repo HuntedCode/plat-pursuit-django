@@ -89,3 +89,63 @@ def test_recalc_zeroes_new_stats_for_untouched_game():
     game.refresh_from_db()
     assert game.total_earns_count == 0
     assert game.monthly_players_count == 0
+
+
+# --- resume cursor -----------------------------------------------------------
+#
+# These matter because the game-detail header now READS these columns. Before, a game
+# the budget never reached just meant stale-but-recomputed-on-demand stats; now it would
+# serve 0 forever. A budget-capped run must therefore resume rather than restart.
+
+def test_budget_capped_run_resumes_from_the_cursor(monkeypatch):
+    """A run that stops early records its position, and the next run starts past it."""
+    from core.management.commands import recalc_earn_rates as cmd
+
+    games = [GameFactory() for _ in range(6)]
+    ids = sorted(g.id for g in games)
+
+    stored = {}
+    monkeypatch.setattr(cmd.Command, '_get_cursor', lambda self: stored.get('v'))
+    monkeypatch.setattr(cmd.Command, '_set_cursor', lambda self, gid: stored.update(v=gid))
+
+    # Deadline trips after the first chunk, leaving the rest unprocessed.
+    ticks = iter([0, 0, 0, 10_000, 10_000, 10_000, 10_000, 10_000])
+    monkeypatch.setattr(cmd.time, 'monotonic', lambda: next(ticks, 10_000))
+
+    call_command('recalc_earn_rates', chunk_size=2, max_minutes=1)
+
+    assert stored['v'] == ids[1], 'cursor should sit on the last game of the processed chunk'
+
+    # Second run: no deadline pressure, so it sweeps the remainder and completes the pass.
+    monkeypatch.setattr(cmd.time, 'monotonic', lambda: 0)
+    call_command('recalc_earn_rates', chunk_size=2, max_minutes=30)
+
+    assert stored['v'] is None, 'a completed pass clears the cursor'
+
+
+def test_explicit_game_ids_run_does_not_touch_the_cursor(monkeypatch):
+    """An ad-hoc --game-ids pass must not perturb the nightly sweep's position."""
+    from core.management.commands import recalc_earn_rates as cmd
+
+    game = GameFactory()
+    stored = {'v': 12345}
+    monkeypatch.setattr(cmd.Command, '_get_cursor', lambda self: stored.get('v'))
+    monkeypatch.setattr(cmd.Command, '_set_cursor', lambda self, gid: stored.update(v=gid))
+
+    call_command('recalc_earn_rates', game_ids=[game.id])
+
+    assert stored['v'] == 12345
+
+
+def test_dry_run_does_not_advance_the_cursor(monkeypatch):
+    """--dry-run reports without writing, cursor included."""
+    from core.management.commands import recalc_earn_rates as cmd
+
+    GameFactory()
+    stored = {'v': 999}
+    monkeypatch.setattr(cmd.Command, '_get_cursor', lambda self: stored.get('v'))
+    monkeypatch.setattr(cmd.Command, '_set_cursor', lambda self, gid: stored.update(v=gid))
+
+    call_command('recalc_earn_rates', dry_run=True)
+
+    assert stored['v'] == 999

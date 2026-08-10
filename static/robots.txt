@@ -75,4 +75,9 @@ Disallow: /my-pursuit/badges/*/*
 # floor of the product and should keep their search and share value -- but the
 # ?tab= / ?page= / ?sort= permutations are duplicates of it on axes that multiply
 # out into an unbounded crawl space, and each one costs a real query.
-Disallow: /community/profiles/*?*
+#
+# The `/` before `?` is load-bearing: `*` matches the empty string, so the simpler
+# /community/profiles/*?* would also match /community/profiles/?page=2 and block the
+# profile INDEX's pagination -- the very thing a crawler should walk to discover
+# profiles. Requiring a path segment first confines this to profile detail URLs.
+Disallow: /community/profiles/*/?*
