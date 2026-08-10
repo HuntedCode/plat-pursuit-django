@@ -862,6 +862,66 @@ def test_all_three_rating_axes_reach_the_card(client):
     assert 'Difficulty' in html and 'Grind' in html and 'Fun' in html
 
 
+def test_the_payload_carries_the_rating_so_an_edit_opens_prefilled(client):
+    """The share modal can reopen the rate form to CHANGE a rating, and it has to open on the hunter's
+    real scores. The payload used to carry only `has_rating`, so an edit would have opened on the form's
+    defaults and saving would have silently overwritten their scores with 3/5/5/5 -- an edit control that
+    destroys the thing it edits."""
+    profile = ProfileFactory()
+    game, group, _ = _completed_game(profile, with_platinum=True)
+    _rate(profile, game.concept, difficulty=8, grindiness=6, fun_ranking=10, overall_rating=4.5,
+          hours_to_platinum=42)
+    client.force_login(profile.user)
+
+    body = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()
+
+    assert body['has_rating'] is True
+    r = body['user_rating']
+    # Every field the form posts back must be present, or that axis silently resets on save.
+    assert (r['overall_rating'], r['difficulty'], r['grindiness'], r['fun_ranking'],
+            r['hours_to_platinum']) == (4.5, 8, 6, 10, 42)
+
+
+def test_an_unrated_card_reports_no_rating_to_prefill_from(client):
+    """`user_rating` is None rather than a zeroed dict, so the form keeps its own defaults."""
+    profile = ProfileFactory()
+    _, group, _ = _completed_game(profile, with_platinum=True)
+    client.force_login(profile.user)
+
+    body = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()
+
+    assert body['has_rating'] is False
+    assert body['user_rating'] is None
+
+
+def test_the_share_modal_offers_a_rating_control(client):
+    """The card's stats ARE the hunter's rating, so it can be fixed without leaving. Ships hidden --
+    there is nothing to rate until a card loads, and the previous card's label would otherwise offer to
+    edit a rating belonging to a different game."""
+    from django.template.loader import render_to_string
+    from trophies.themes import get_plat_card_themes
+
+    themes = get_plat_card_themes()
+    html = render_to_string('shareables/partials/share_modal.html',
+                            {'card_themes': themes, 'card_theme_js': {}})
+
+    assert 'data-share-rate' in html and 'data-share-rate-label' in html
+    assert 'hidden' in html.split('data-share-rate')[1].split('>')[0], 'must start hidden'
+
+
+def test_the_rate_modal_exposes_the_hooks_the_share_flow_relabels(client):
+    """The shared modal is written for the download prompt ("Rate and Download" / "Skip, just
+    download"). Neither is true of an explicit edit, so plat-cards.js swaps both -- which needs the
+    submit label in its own element rather than as a bare text node beside the icon."""
+    from django.template.loader import render_to_string
+
+    html = render_to_string('partials/rate_before_download_modal.html')
+
+    assert 'data-rbd-submit-label' in html
+    assert 'id="rbd-prompt-copy"' in html
+    assert 'id="rbd-skip-btn"' in html
+
+
 def test_the_rating_values_wear_the_sites_tone_colours(client):
     """Uses the same `rating_tone` filter the Ratings tab does, so the two surfaces can't drift.
     Note the polarity is consumer-advice polarity: a HARD game is `bad`/red here, not a flex."""

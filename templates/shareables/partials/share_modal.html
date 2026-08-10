@@ -72,6 +72,15 @@ so that is what ships -- scoped to this element instead of a global.{% endcommen
             </div>
 
             <div class="pc-modal__actions">
+                {% comment %}The hunter's own scores are the biggest thing the card carries, so being able
+                to fix them without leaving is worth a permanent control -- the download prompt only ever
+                offers, and only once per opened card. It drives the SAME shared rate modal, relabelled
+                for the context (saving here doesn't hand over a file). Lives in the existing actions row
+                rather than its own, so it costs the preview no height.{% endcomment %}
+                <button type="button" class="pc-btn pc-btn--ghost pc-btn--rate" data-share-rate hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 3.5 14 9l6 .8-4.4 4.1 1.2 5.9-5.3-3-5.3 3 1.2-5.9L3 9.8 9 9z"/></svg>
+                    <span data-share-rate-label>Rate this game</span>
+                </button>
                 <button type="button" class="pc-btn pc-btn--ghost" data-share-close>Close</button>
                 {% comment %}Three states in one button, swapped by class rather than by rebuilding it:
                 idle, busy (the PNG render is the slowest step in this flow and used to be silent), and

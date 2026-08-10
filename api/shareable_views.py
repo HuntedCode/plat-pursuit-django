@@ -162,6 +162,10 @@ class PlatCardHTMLView(_CardViewBase):
             'concept_id': context['concept_id'],
             'trophy_group_id': context['trophy_group_id'],
             'has_rating': context['user_rating'] is not None,
+            # The rating itself, so the share modal's rate form can open PREFILLED when a hunter edits
+            # one. Without it an "edit" opens on the slider defaults and quietly overwrites their real
+            # scores with 3/5/5/5 the moment they save. None when unrated (the form's own defaults).
+            'user_rating': context['user_rating'],
             # The picker builds its art swatches from these, as remote URLs the browser loads itself
             # -- so a game with no usable art simply isn't offered the art ground, instead of being
             # offered one that silently falls back. Only the CHOSEN image is cached, at download time.

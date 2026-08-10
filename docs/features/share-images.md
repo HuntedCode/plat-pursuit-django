@@ -104,8 +104,16 @@ silently falls back. Art swatches show the actual image; gradient swatches show 
 
 There is no cover-blur ground: a 3:4 cover blown up to 1200x630 is mostly upscale.
 
-**Rate-before-download**: the card carries the hunter's own stars, difficulty and fun, so an unrated
-game makes a visibly thinner card. The prompt offers once per opened card and never blocks.
+**Rating**: the card carries the hunter's own stars, difficulty, grind and fun, so an unrated game
+makes a visibly thinner card. Two ways in, both driving the SAME `rate_before_download_modal`:
+
+- **The prompt** offers once per opened card on download, and never blocks.
+- **The Rate / Edit button** in the modal's action row is permanent, opens PREFILLED from the
+  hunter's existing scores, and downloads nothing. `plat-cards.js` relabels the shared modal for it
+  ("Save rating", and the skip becomes a plain Cancel), since neither of the prompt's labels is
+  true on that path.
+
+Either way, a successful save **invalidates the preview cache** for that completion and refetches.
 
 ## API Endpoints
 
@@ -169,6 +177,14 @@ art the card already offers.
   8 grounds + `ART_OPTION_CAP` still land on one row, and auto-fit collapses the empty tracks so a card
   with no art stretches its 8 instead of leaving a gap. A ninth ground needs the floor lowered in the
   same change -- `test_the_picker_still_fits_on_one_row` says so out loud.
+- **The preview cache must be invalidated when a rating is saved.** `previewCache` keys on the
+  completion and its comment used to call previews "immutable" — they are not: the card RENDERS the
+  hunter's rating. `loadPreview()` was already called after a save and was handed the stale entry
+  straight back, so the preview never changed. Anything else that can alter a card must invalidate
+  too.
+- **An edit form must open prefilled.** The HTML payload carries `user_rating` for exactly this. An
+  edit that opens on the form's defaults and saves overwrites real scores with 3/5/5/5 — a control
+  that destroys the thing it claims to edit.
 - **No minimum preview size.** `fit()` clamps the scale at 0, not at a floor. A floor looks harmless and is not: the box is `overflow: hidden` and the frame carries an inline height, so any floor above the room available makes the preview PAINT OVER the swatch row — measured at 57-82px of overlap on landscape phones, where the picker became unreachable. That is strictly worse than the scrollbar the height budget exists to remove. The card yields to nothing before a ground goes off screen.
 - **`fit()` must reset the frame's width before measuring it.** It sets both dimensions from the scale, so reading `clientWidth` without clearing first feeds each run the previous run's answer and ratchets the card smaller on every resize. Same self-referential trap as measuring the box's own height for the budget.
 - **Card grounds must not reach the site theme pickers.** They live in the shared `GRADIENT_THEMES` registry so the card can reuse the rendering pipeline, but they are drawn for one 1200x630 layout. Every exporter feeding a site-wide picker filters on `PLAT_CARD_CATEGORY`; only `get_available_themes_for_grid` did until 2026-08, so `get_themes_for_js` (which ships as `window.GRADIENT_THEMES`) was offering them as Monthly Recap backgrounds. The reverse also matters: **don't recategorise `retroWave` to `plat_card` for tidiness** — that filter would delete it from every site picker it has always appeared in. Both directions are tested.

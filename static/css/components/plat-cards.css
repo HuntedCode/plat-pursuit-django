@@ -218,6 +218,9 @@
 .pc-theme input:focus-visible ~ .pc-theme__swatch { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
 
 .pc-modal__actions { display: flex; gap: 10px; justify-content: flex-end; }
+/* Pushed to the far left, away from the Close/Download pair: it acts on the CARD, not on the dialog,
+   so grouping it with the two exit controls would read as a third way out. */
+.pc-btn--rate { margin-right: auto; }
 .pc-btn {
     display: inline-flex; align-items: center; gap: 8px;
     padding: 10px 18px; border-radius: 10px;
@@ -237,9 +240,17 @@
 
 @media (prefers-reduced-motion: reduce) { .pc-btn { transition: color 0.15s ease, background 0.15s ease; } .pc-btn:active { transform: none; } }
 
+/* Mobile: the primary action takes its own full-width row, and the two SECONDARY controls share the one
+   below. Stacking all three cost 53px of preview height on a 375px phone (169 -> 123) for no gain --
+   Rate and Close are both short labels and read fine at half width, and pairing them says they're the
+   same rank. Grid rather than the old column-reverse: with three buttons the source order and the
+   reading order stop agreeing, and explicit placement is clearer than reversing to fix it. */
 @media (max-width: 639px) {
-    .pc-modal__actions { flex-direction: column-reverse; }
+    .pc-modal__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .pc-btn { justify-content: center; width: 100%; }
+    .pc-btn--go { grid-column: 1 / -1; grid-row: 1; }
+    .pc-btn--rate { grid-row: 2; margin-right: 0; }
+    .pc-modal__actions [data-share-close] { grid-row: 2; }
 }
 
 /* ── Modal motion + skeleton ───────────────────────────────────────────────────────────────────────

@@ -37,10 +37,20 @@
         if (zoom) { zoom.classList.toggle('pp-receded', on); }
     }
 
-    // Previews are immutable for a given completion, so a card fetched once never needs fetching
-    // again -- which is what makes hover prefetching worth doing rather than just noisy.
+    // A preview is stable for a given completion, so a card fetched once is reused -- which is what
+    // makes hover prefetching worth doing rather than just noisy.
+    //
+    // "Stable", NOT immutable: the card renders the hunter's own rating (stars, difficulty, grind, fun,
+    // their blurb), so rating a game changes it. This cache used to say immutable and had no invalidation
+    // at all, which is why the preview kept showing the pre-rating card after a save -- loadPreview()
+    // re-ran and was handed the stale entry straight back.
     var previewCache = Object.create(null);
     var inflight = Object.create(null);
+
+    function invalidatePreview(groupId) {
+        delete previewCache[groupId];
+        delete inflight[groupId];
+    }
 
     function fetchPreview(groupId) {
         if (previewCache[groupId]) { return Promise.resolve(previewCache[groupId]); }
@@ -260,7 +270,9 @@
                 current.hasRating = !!data.has_rating;
                 current.conceptId = data.concept_id;
                 current.playtime = data.playtime || '';
+                current.rating = data.user_rating || null;
                 buildArtSwatches(data.art_options);
+                syncRateButton();
                 var label = dlg.querySelector('[data-share-download-label]');
                 if (label) { label.textContent = data.variant === 'platinum' ? 'Download platinum card' : 'Download 100% card'; }
                 // The card ships with its own inline ground; paint the SELECTED one over it straight
@@ -301,10 +313,14 @@
     }
 
     function openFor(groupId, gameName) {
-        current = { groupId: groupId, gameName: gameName || '', conceptId: '', hasRating: true, playtime: '' };
+        current = { groupId: groupId, gameName: gameName || '', conceptId: '', hasRating: true,
+                    playtime: '', rating: null };
         var sub = dlg.querySelector('[data-share-game]');
         if (sub) { sub.textContent = current.gameName; }
         setDownloadState('idle');       // never greet a new card with the previous one's "Saved"
+        // Hidden until the card loads: there is nothing to rate yet, and the PREVIOUS card's label
+        // would otherwise sit there offering to edit a rating that belongs to a different game.
+        syncRateButton();
         var scaler = dlg.querySelector('[data-share-preview]');
         if (scaler) { scaler.innerHTML = ''; scaler.classList.remove('is-in'); }
         // Clear the PREVIOUS card's art options immediately. Leaving them up during the fetch let a
@@ -413,15 +429,42 @@
         });
     }
 
-    function promptRating(proceed) {
+    // The card's stats ARE the hunter's rating, so let them fix it without leaving the modal. Hidden
+    // until a card is loaded (there's nothing to rate before then), and relabelled once one exists --
+    // "Rate this game" and "Edit rating" are different offers.
+    function syncRateButton() {
+        var btn = dlg && dlg.querySelector('[data-share-rate]');
+        var label = dlg && dlg.querySelector('[data-share-rate-label]');
+        if (!btn) { return; }
+        btn.hidden = !(current && current.conceptId);
+        if (label) { label.textContent = current && current.hasRating ? 'Edit rating' : 'Rate this game'; }
+    }
+
+    // Prefill from the hunter's existing scores. Without this an "edit" opens on the form's defaults and
+    // saving silently overwrites real scores with 3/5/5/5 -- an edit control that destroys the thing it
+    // claims to edit. `blurb` is deliberately not touched: the form has no field for it, so a round-trip
+    // through here must not be able to clear it (the API only writes the keys it's sent).
+    function prefill(form, rating) {
+        if (!rating) { return; }
+        ['overall_rating', 'difficulty', 'grindiness', 'fun_ranking', 'hours_to_platinum'].forEach(function (name) {
+            var input = form.querySelector('[name="' + name + '"]');
+            if (input && rating[name] !== null && rating[name] !== undefined) { input.value = rating[name]; }
+        });
+    }
+
+    function promptRating(proceed, opts) {
+        var edit = !!(opts && opts.edit);
         var modal = document.getElementById('rate-before-download-modal');
         var form = modal && modal.querySelector('#rbd-rating-form');
         if (!modal || !form || !modal.showModal) { proceed(); return; }
-        asked = true;
+        // Only the DOWNLOAD prompt is once-per-card. An explicit edit must never consume that, or opening
+        // the editor would silence the prompt for a hunter who then skipped rating.
+        if (!edit) { asked = true; }
 
         var title = modal.querySelector('#rbd-game-title');
         if (title) { title.textContent = current.gameName || 'Rate this game'; }
         form.reset();                       // otherwise card B opens on card A's slider positions
+        if (edit) { prefill(form, current.rating); }
         syncReadouts(form);
 
         var hint = document.getElementById('rbd-playtime-hint');
@@ -433,7 +476,16 @@
         var submit = modal.querySelector('#rbd-submit-btn');
         var skip = modal.querySelector('#rbd-skip-btn');
         var hours = form.querySelector('[name="hours_to_platinum"]');
-        if (submit) { submit.disabled = true; }     // the form 400s on a blank hours value
+        // The shared modal is written for the download prompt ("Rate and Download" / "Skip, just
+        // download"). Neither is true of an explicit edit -- nothing downloads -- so both are relabelled
+        // and the skip becomes a plain cancel. Restored on close, since the same element serves both.
+        var submitLabel = submit && submit.querySelector('[data-rbd-submit-label]');
+        if (submitLabel) { submitLabel.textContent = edit ? 'Save rating' : 'Rate and Download'; }
+        if (skip) { skip.textContent = edit ? 'Cancel' : 'Skip, just download'; }
+        var blurb = modal.querySelector('#rbd-prompt-copy');
+        if (blurb) { blurb.hidden = edit; }
+        // Prefilled hours already satisfy the gate; leaving it disabled would make an edit look broken.
+        if (submit) { submit.disabled = !(parseInt(hours && hours.value, 10) >= 1); }
 
         function onInput() { syncReadouts(form); }
         function onHours() { if (submit) { submit.disabled = !(parseInt(hours.value, 10) >= 1); } }
@@ -450,7 +502,14 @@
         function finish(didRate, andDownload) {
             cleanup();
             if (modal.open) { modal.close(); }
-            if (didRate) { current.hasRating = true; loadPreview(); }
+            if (didRate) {
+                current.hasRating = true;
+                // The card RENDERS the rating, so the cached copy is now the wrong card. Without this
+                // loadPreview() is handed the stale entry straight back and the preview never changes --
+                // the reload was always here, the invalidation was not.
+                invalidatePreview(current.groupId);
+                loadPreview();
+            }
             if (andDownload) { proceed(); }
         }
         function onSubmit(e) {
@@ -467,7 +526,8 @@
                     if (PP.ToastManager) { PP.ToastManager.error("Couldn't save that rating. Try again, or skip."); }
                 });
         }
-        function onSkip(e) { e.preventDefault(); finish(false, true); }
+        // In edit mode the secondary button is a CANCEL, so it must not fall through to a download.
+        function onSkip(e) { e.preventDefault(); finish(false, !edit); }
         function onDismiss() { finish(false, false); }
 
         form.addEventListener('input', onInput);
@@ -516,6 +576,10 @@
             if (e.target === dlg) { close(); }                       // backdrop
             if (e.target.closest('[data-share-close]')) { close(); }
             if (e.target.closest('[data-share-download]')) { download(); }
+            // An explicit edit: no download follows, so the "proceed" callback is a no-op.
+            if (e.target.closest('[data-share-rate]') && current && current.conceptId) {
+                promptRating(function () {}, { edit: true });
+            }
         });
         dlg.addEventListener('change', function (e) {
             if (e.target.matches('[data-share-theme]')) { applyTheme(); }
