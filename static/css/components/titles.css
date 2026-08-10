@@ -1,45 +1,62 @@
 /* ============================================================
  * TITLES (.ttl-) -- what you've earned the right to be called.
  *
- * The TITLE is the subject of this page, so it carries the display face and the size everywhere: huge on
- * the nameplate, still the largest thing in a row. The badge medallion is deliberately small supporting
- * context -- Collection is where medallions are the object; here they only name the series the title
- * was earned in.
+ * THE WALL. One component -- the plate -- at two scales: a hero for the title you're wearing, and a
+ * tile for every other title. The page is self-similar rather than "a nameplate, then a list of
+ * something else", which is what the old .ttl-row stack was.
  *
- * Three views share ONE row component; only the trailing slot changes (equip control / progress / wearers),
- * so switching views never feels like landing on a different page.
+ * Titles own TYPOGRAPHY AS MATERIAL, the way Collection owns medallions as objects. So the title name
+ * is the largest thing on a plate and the medallion is demoted to a corner provenance STAMP. The old
+ * row had this backwards: a 42px medallion column its own comment called "small on purpose", next to a
+ * 1.02rem title.
  *
- * Mobile-first: base = 375 (row collapses its trailing slot under the title), md: restores the 3-column
- * grid. No color-mix inside @keyframes (lightningcss drops those frames).
+ * RARITY IS THE MATERIAL. How many hunters wear a title escalates the plate's tint, edge and light
+ * (data-rarity, set in title_views.rarity_bands). One accent, four steps of intensity -- not four
+ * different colours, and never a shouted tier name. The visible text stays the honest holder count.
+ * Deliberately NOT the medallion metals (bronze/silver/gold/platinum): those describe a badge's
+ * backing and reusing them here would claim a relationship that doesn't exist.
+ *
+ * Mobile-first: base = 375 (one column, plate keeps its title legible), md: 2 columns, lg: 3.
+ * No color-mix() inside @keyframes -- lightningcss silently drops those frames; hoist to a custom
+ * property and var() it (see the sheen below).
  * ============================================================ */
 
-/* ---- The nameplate: the title you're wearing right now ---- */
+/* ---- The plate: shared material for both scales ---- */
 .ttl-plate {
     --ttl-c: var(--pp-primary);
-    position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
-    padding: 14px 16px 15px; border-radius: var(--pp-radius-lg);
-    /* Nested inside the base-200 header, so it steps UP the surface ladder (bg-1 -> bg-2) with the soft
-       nested lift -- otherwise it dissolves into the header. See playbook Shared Elements Sec 4. */
-    background: linear-gradient(180deg, color-mix(in oklab, var(--ttl-c) 14%, var(--pp-bg-2)) 0%, var(--pp-bg-2) 74%);
-    border: 1px solid color-mix(in oklab, var(--ttl-c) 32%, var(--pp-border));
+    --ttl-tint: 6%;                 /* rarity escalates these three, and only these three */
+    --ttl-edge: 26%;
+    --ttl-glow: 0%;
+    position: relative;
+    border-radius: var(--pp-radius-lg);
+    background: linear-gradient(180deg, color-mix(in oklab, var(--ttl-c) var(--ttl-tint), var(--pp-bg-2)) 0%, var(--pp-bg-2) 74%);
+    border: 1px solid color-mix(in oklab, var(--ttl-c) var(--ttl-edge), var(--pp-border));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 3px 10px rgba(0, 0, 0, 0.20);
+}
+
+/* ---- Hero: the title you're wearing, at the top of the page ---- */
+.ttl-plate--hero {
+    --ttl-tint: 14%;
+    --ttl-edge: 32%;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 14px 16px 15px;
     text-align: center;
 }
 .ttl-plate__label {
     font-size: 9.5px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase;
     color: color-mix(in oklab, var(--ttl-c) 75%, var(--pp-text-mute));
 }
-.ttl-plate__name {
-    font-family: var(--pp-font-display); font-weight: 800; line-height: 1.05;
+.ttl-plate--hero .ttl-plate__name {
     font-size: clamp(1.5rem, 6.5vw, 2.25rem); letter-spacing: -0.015em;
-    color: var(--pp-text); text-shadow: 0 0 28px color-mix(in oklab, var(--ttl-c) 30%, transparent);
+    text-shadow: 0 0 28px color-mix(in oklab, var(--ttl-c) 30%, transparent);
+    white-space: normal;
 }
 .ttl-plate__name--none { color: var(--pp-text-mute); font-style: italic; font-weight: 700; text-shadow: none; }
 .ttl-plate__hint { font-size: 11.5px; color: var(--pp-text-mute); }
-.ttl-plate--empty { --ttl-c: var(--pp-text-mute); border-style: dashed; }
+.ttl-plate--empty { --ttl-c: var(--pp-text-mute); --ttl-tint: 5%; border-style: dashed; }
 /* Both trailing controls ship; the state class picks one, so equipping is a single class toggle. */
 .ttl-plate--empty .ttl-plate__clear { display: none; }
-.ttl-plate:not(.ttl-plate--empty) .ttl-plate__hint { display: none; }
+.ttl-plate--hero:not(.ttl-plate--empty) .ttl-plate__hint { display: none; }
 .ttl-plate__clear {
     margin-top: 5px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
     padding: 8px 13px; min-height: 36px; border-radius: 999px; font-size: 11px; font-weight: 700;
@@ -52,110 +69,161 @@
 }
 .ttl-plate__clear:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
-/* ---- Panels + list ---- */
+/* ---- The wall ---- */
 .ttl-panel[hidden] { display: none; }
 .ttl-note { font-size: 11.5px; color: var(--pp-text-mute); font-style: italic; margin: 0 2px 9px; }
-.ttl-list { display: flex; flex-direction: column; gap: 8px; }
+.ttl-wall { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 768px) { .ttl-wall { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; } }
+@media (min-width: 1024px) { .ttl-wall { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
 
-/* ---- One row: object · title · trailing state ---- */
-.ttl-row {
-    display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 11px;
-    padding: 11px 13px; border-radius: var(--pp-radius-lg);
-    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
+/* ---- Tile: every other title ---- */
+.ttl-plate--tile {
+    display: flex; flex-direction: column; justify-content: space-between; gap: 14px;
+    padding: 13px 14px 12px; overflow: hidden;
     transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
-@media (min-width: 768px) { .ttl-row { grid-template-columns: auto 1fr auto; padding: 12px 15px; } }
 @media (hover: hover) {
-    .ttl-row:hover {
-        border-color: color-mix(in oklab, var(--pp-primary) 26%, var(--pp-border));
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 12px 28px -14px color-mix(in oklab, var(--pp-primary) 34%, #000);
-        transform: translateY(-1px);
+    .ttl-plate--tile:hover {
+        border-color: color-mix(in oklab, var(--ttl-c) 52%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 12px 28px -14px color-mix(in oklab, var(--ttl-c) 40%, #000);
+        transform: translateY(-2px);
     }
 }
-/* The title you're wearing gets the accent edge -- one row on the page can have it. */
-.ttl-row.is-worn {
-    border-color: color-mix(in oklab, var(--pp-primary) 48%, var(--pp-border));
-    box-shadow: inset 3px 0 0 var(--pp-primary), inset 0 1px 0 rgba(255, 255, 255, 0.07),
-                0 10px 26px -14px color-mix(in oklab, var(--pp-primary) 45%, #000);
-}
 
-/* The source object: small on purpose. Collection is where medallions are the hero. */
-.ttl-row__obj { display: grid; place-items: center; width: 42px; }
-.ttl-row__obj .pp-med { --sz: 42px; }
-.ttl-row__spark {
-    display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%;
-    color: var(--pp-accent); background: color-mix(in oklab, var(--pp-accent) 14%, transparent);
-    border: 1px solid color-mix(in oklab, var(--pp-accent) 30%, var(--pp-border));
-}
-.ttl-row__spark svg { width: 18px; height: 18px; }
+.ttl-plate__head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.ttl-plate__id { min-width: 0; flex: 1; }
 
-.ttl-row__id { min-width: 0; }
-.ttl-row__name {
-    font-family: var(--pp-font-display); font-weight: 800; font-size: 1.02rem; line-height: 1.15;
-    color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 1px;
+/* The title. Largest thing on the plate, in the display face -- the page's whole subject. */
+.ttl-plate__name {
+    font-family: var(--pp-font-display); font-weight: 800; line-height: 1.12;
+    color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; padding-right: 1px;
 }
-.ttl-row:not(.is-held) .ttl-row__name { color: var(--pp-text-dim); }
-.ttl-row__from { font-size: 11.5px; color: var(--pp-text-mute); margin-top: 1px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
-.ttl-row__series { color: var(--pp-text-dim); text-decoration: none; border-bottom: 1px solid transparent; }
-@media (hover: hover) { .ttl-row__series:hover { color: var(--pp-primary); border-bottom-color: color-mix(in oklab, var(--pp-primary) 45%, transparent); } }
-.ttl-row__series:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 3px; }
-.ttl-row__tag {
+.ttl-plate--tile .ttl-plate__name {
+    font-size: 1.22rem; letter-spacing: -0.012em;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+}
+/* An unearned title is still legible -- knowing what you COULD be called is the pull. It is simply
+   not engraved yet. */
+.ttl-plate--tile:not(.is-held) .ttl-plate__name { color: var(--pp-text-dim); }
+
+.ttl-plate__from { font-size: 11.5px; color: var(--pp-text-mute); margin-top: 3px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.ttl-plate__series { color: var(--pp-text-dim); text-decoration: none; border-bottom: 1px solid transparent; }
+@media (hover: hover) { .ttl-plate__series:hover { color: var(--ttl-c); border-bottom-color: color-mix(in oklab, var(--ttl-c) 45%, transparent); } }
+.ttl-plate__series:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 3px; }
+.ttl-plate__tag {
     font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--pp-accent); padding: 1px 7px; border-radius: 999px;
     background: color-mix(in oklab, var(--pp-accent) 13%, transparent);
     border: 1px solid color-mix(in oklab, var(--pp-accent) 26%, transparent);
 }
-.ttl-row__tag--quiet {
+.ttl-plate__tag--quiet {
     color: var(--pp-text-mute);
     background: color-mix(in oklab, var(--pp-text) 6%, transparent);
     border-color: var(--pp-border);
 }
-.ttl-row__wearers { font-variant-numeric: tabular-nums; }
 
-/* Progress toward an unearned title (Within reach only). */
-.ttl-row__prog { display: flex; align-items: center; gap: 9px; margin-top: 7px; }
-.ttl-row__prog .pp-horizon { flex: 1; min-width: 0; }
-.ttl-row__prog-cap { font-size: 10.5px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ttl-row__prog-cap strong { color: var(--pp-text-dim); font-weight: 800; }
+/* Provenance stamp. Supporting context, not the object -- Collection is where medallions are the hero. */
+.ttl-plate__stamp { flex-shrink: 0; display: grid; place-items: center; width: 46px; height: 46px; }
+.ttl-plate__art { width: 100%; height: 100%; object-fit: contain; }
+/* An unearned series' art is present but not yet yours -- dimmed, not hidden, so the plate still says
+   which series it belongs to. */
+.ttl-plate--tile:not(.is-held) .ttl-plate__art { opacity: 0.42; filter: grayscale(0.55); }
+.ttl-plate__spark {
+    display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%;
+    color: var(--pp-accent); background: color-mix(in oklab, var(--pp-accent) 14%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-accent) 30%, var(--pp-border));
+}
+.ttl-plate__spark svg { width: 16px; height: 16px; }
 
-/* Trailing slot. On mobile it drops under the title rather than squeezing the row. */
-.ttl-row__trail { grid-column: 2; display: flex; align-items: center; gap: 9px; margin-top: 8px; }
-@media (min-width: 768px) { .ttl-row__trail { grid-column: auto; justify-content: flex-end; margin-top: 0; } }
-.ttl-row__trail:empty { display: none; }
+/* ---- Footer: the slot that adapts per view ---- */
+.ttl-plate__foot { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; min-width: 0; }
+.ttl-plate__foot .pp-horizon { flex: 1; min-width: 60px; }
+.ttl-plate__cap, .ttl-plate__wear { font-size: 10.5px; color: var(--pp-text-mute); white-space: nowrap; }
+.ttl-plate__cap strong, .ttl-plate__wear strong { color: var(--pp-text-dim); }
+.ttl-plate__wear { flex: 1; }
+.ttl-plate__wear--none { font-style: italic; opacity: 0.85; }
 
-.ttl-row__equip {
-    cursor: pointer; padding: 9px 15px; min-height: 40px; border-radius: 999px; white-space: nowrap;
+.ttl-plate__equip {
+    cursor: pointer; padding: 8px 14px; min-height: 38px; border-radius: 999px; white-space: nowrap;
     font-size: 11.5px; font-weight: 800; color: var(--pp-text-dim);
-    background: transparent; border: 1px solid var(--pp-border);
+    background: transparent; border: 1px solid var(--pp-border); margin-left: auto;
     transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease, transform 0.1s ease;
 }
 @media (hover: hover) {
-    .ttl-row__equip:hover {
-        color: var(--pp-primary); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
-        background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
+    .ttl-plate__equip:hover {
+        color: var(--ttl-c); border-color: color-mix(in oklab, var(--ttl-c) 50%, var(--pp-border));
+        background: color-mix(in oklab, var(--ttl-c) 10%, transparent);
     }
 }
-.ttl-row__equip:active { transform: translateY(1px); }
-.ttl-row__equip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-.ttl-row__equip[disabled] { opacity: 0.55; cursor: default; transform: none; }
+.ttl-plate__equip:active { transform: translateY(1px); }
+.ttl-plate__equip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.ttl-plate__equip[disabled] { opacity: 0.55; cursor: default; transform: none; }
 
-/* Both the marker and the button ship in the markup; the row's .is-worn state picks one, so equipping
-   is a single class toggle (and the row losing it flips back in the same beat). */
-.ttl-row:not(.is-worn) .ttl-row__worn { display: none; }
-.ttl-row.is-worn .ttl-row__equip { display: none; }
+/* Marker and button both ship; .is-worn picks one, so equipping toggles a single class. */
+.ttl-plate--tile:not(.is-worn) .ttl-plate__worn { display: none; }
+.ttl-plate--tile.is-worn .ttl-plate__equip { display: none; }
 
-.ttl-row__worn, .ttl-row__have {
+.ttl-plate__worn, .ttl-plate__have {
     display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
     font-size: 11px; font-weight: 800; letter-spacing: 0.03em;
 }
-.ttl-row__worn svg, .ttl-row__have svg { width: 12px; height: 12px; }
-.ttl-row__worn { color: var(--pp-primary); }
-.ttl-row__have { color: var(--pp-success, var(--pp-primary)); opacity: 0.8; }
-.ttl-row__date { font-size: 10.5px; color: var(--pp-text-mute); white-space: nowrap; }
-.ttl-row__pct { font-size: 12px; font-weight: 800; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
-.ttl-row__locked { color: var(--pp-text-mute); opacity: 0.45; display: grid; place-items: center; }
-.ttl-row__locked svg { width: 15px; height: 15px; }
+.ttl-plate__worn svg, .ttl-plate__have svg { width: 12px; height: 12px; }
+.ttl-plate__worn { color: var(--pp-primary); margin-left: auto; }
+.ttl-plate__have { color: var(--pp-success, var(--pp-primary)); opacity: 0.85; margin-left: auto; }
+.ttl-plate__date { font-size: 10.5px; color: var(--pp-text-mute); white-space: nowrap; }
+.ttl-plate__pct { font-size: 12px; color: var(--pp-text-dim); margin-left: auto; }
+
+/* ---- Rarity: the material ----------------------------------------------------------------------
+ * One accent, four steps. Escalating INTENSITY rather than four hues keeps the wall calm and stops a
+ * common title from looking like a different product than a scarce one. Cut-points live in
+ * title_views.TITLE_RARITY_BANDS; below the catalogue floor no plate carries data-rarity at all and
+ * everything renders at the base material above.
+ */
+.ttl-plate--tile[data-rarity="widespread"] { --ttl-tint: 0%;  --ttl-edge: 8%;  }
+.ttl-plate--tile[data-rarity="common"]     { --ttl-tint: 7%;  --ttl-edge: 26%; }
+.ttl-plate--tile[data-rarity="uncommon"]   { --ttl-tint: 15%; --ttl-edge: 50%; --ttl-glow: 30%; }
+.ttl-plate--tile[data-rarity="scarce"]     { --ttl-tint: 26%; --ttl-edge: 85%; --ttl-glow: 55%; }
+
+/* The glow only exists on the top two bands, so it stays a signal rather than page-wide decoration. */
+.ttl-plate--tile[data-rarity="uncommon"],
+.ttl-plate--tile[data-rarity="scarce"] {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                0 3px 10px rgba(0, 0, 0, 0.20),
+                0 0 26px -12px color-mix(in oklab, var(--ttl-c) var(--ttl-glow), transparent);
+}
+
+/* An unclaimed title is NEW, not legendary -- a ghost plate waiting for someone, not the richest
+   object on the wall. (title_views deliberately doesn't rank it into the scarcest band.) */
+.ttl-plate--tile[data-rarity="unclaimed"] {
+    --ttl-c: var(--pp-text-mute); --ttl-tint: 4%; --ttl-edge: 18%;
+    border-style: dashed;
+}
+
+/* Only the scarcest band gets a sheen, and only on a plate you actually hold -- a slow pass of light
+   across the material. Reserved so it stays meaningful; celebrating everything is anti-reference #4.
+   The colour is hoisted to a custom property because lightningcss drops keyframes containing
+   color-mix(). */
+@media (prefers-reduced-motion: no-preference) {
+    .ttl-plate--tile[data-rarity="scarce"].is-held::after {
+        content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+        --ttl-sheen: color-mix(in oklab, var(--ttl-c) 26%, transparent);
+        background: linear-gradient(105deg, transparent 38%, var(--ttl-sheen) 50%, transparent 62%);
+        transform: translateX(-120%);
+        animation: ttlSheen 7s var(--pp-ease, ease-out) infinite;
+    }
+    @keyframes ttlSheen {
+        0%, 72% { transform: translateX(-120%); }
+        100%    { transform: translateX(120%); }
+    }
+}
+
+/* The title you're wearing outranks its own rarity -- one plate on the page carries the accent edge. */
+.ttl-plate--tile.is-worn {
+    --ttl-c: var(--pp-primary);
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    box-shadow: inset 3px 0 0 var(--pp-primary), inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                0 10px 26px -14px color-mix(in oklab, var(--pp-primary) 45%, #000);
+}
 
 /* ---- Empty states ---- */
 .ttl-empty {
@@ -177,7 +245,7 @@
 
 /* ---- Equip flash: the "it's mine" beat when a title becomes the one you wear ---- */
 @media (prefers-reduced-motion: no-preference) {
-    .ttl-plate.is-flash { --ttl-flash: color-mix(in oklab, var(--pp-primary) 60%, transparent); animation: ttlFlash 0.62s var(--pp-ease, ease-out); }
+    .ttl-plate--hero.is-flash { --ttl-flash: color-mix(in oklab, var(--pp-primary) 60%, transparent); animation: ttlFlash 0.62s var(--pp-ease, ease-out); }
     @keyframes ttlFlash {
         0% { box-shadow: 0 0 0 0 var(--ttl-flash); }
         60% { box-shadow: 0 0 0 10px transparent; }

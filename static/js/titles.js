@@ -24,7 +24,7 @@
         var grid = panel.querySelector('[data-ttl-grid]');
         if (!grid) { return; }
         revealHandle = PP.staggerReveal({
-            grid: grid, cardSelector: '.ttl-row', step: 22,
+            grid: grid, cardSelector: '.ttl-plate--tile', step: 22,
             reveal: function (el, delay) {
                 if (!el.animate) { return; }
                 el.animate([{ opacity: 0 }, { opacity: 1 }],
@@ -51,6 +51,8 @@
     }
 
     // ---- Equip / unequip -------------------------------------------------
+    // The hero plate. Its class list carries --hero (the shared material) and --empty (which picks
+    // the trailing control), so this only ever touches --empty and the flash.
     function setPlate(name) {
         var plate = document.querySelector('[data-ttl-plate]');
         var nameEl = document.querySelector('[data-ttl-plate-name]');

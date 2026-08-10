@@ -18,6 +18,8 @@ Three views behind the switcher:
 Whale-safe by construction: every query is bounded by the badge catalogue or the viewer's own title
 count. Nothing iterates trophies.
 """
+from bisect import bisect_left
+
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Prefetch
 from django.db.models.functions import Lower
@@ -27,6 +29,54 @@ from django.views.generic import TemplateView
 
 from ..models import BadgeSeries, GroupBadge, SeriesBadgeStanding, UserTitle
 from trophies.services.badge_detail_service import group_medallion_layers
+
+#: Rarity bands, scarcest first, as percentile cut-points over the CLAIMED catalogue. Relative rather
+#: than absolute: fixed thresholds ("under 100 holders is rare") rot as the site grows, and rarity as a
+#: share of all profiles reproduces the PSN problem where every number reads ultra-rare. A percentile is
+#: self-normalising and always produces a spread.
+#:
+#: These keys never reach the reader -- they select the plate's MATERIAL, while the visible text stays
+#: the honest holder count. Invented tier names shouted at the user are anti-reference #4.
+TITLE_RARITY_BANDS = (
+    ('scarce', 0.10),
+    ('uncommon', 0.30),
+    ('common', 0.60),
+    ('widespread', 1.01),      # > 1 so the last band is a genuine catch-all for pct == 1.0
+)
+
+#: Below this many claimed titles a percentile is noise -- with four titles in a dev database, one of
+#: them is "the scarcest 10%" by arithmetic alone. Under the floor every plate renders at the base
+#: material, which is honest: we don't know enough to rank them yet.
+TITLE_RARITY_MIN_CATALOGUE = 8
+
+
+def rarity_bands(title_ids, holders):
+    """title_id -> band key, for the plate's material.
+
+    RELATIVE data, so it is computed live on every render and never stored -- the same rule the badge
+    system applies to rank and rarity (materialize facts, keep relative standings live, or they go
+    stale and unfair). It costs no query: `holders` is already fetched as one grouped COUNT, and the
+    loop is bounded by the badge catalogue, never by anyone's trophies.
+
+    A title nobody holds is `unclaimed`, NOT the rarest band. A newly released series has no holders
+    because it is new, and dressing that as the page's most prestigious object would be a lie.
+    """
+    counts = {tid: holders.get(tid, 0) for tid in title_ids}
+    claimed = sorted(c for c in counts.values() if c > 0)
+    if len(claimed) < TITLE_RARITY_MIN_CATALOGUE:
+        return {tid: '' for tid in counts}
+
+    bands = {}
+    for tid, count in counts.items():
+        if not count:
+            bands[tid] = 'unclaimed'
+            continue
+        # Share of the claimed catalogue strictly scarcer than this title. bisect_left (not _right)
+        # makes ties share a band -- two titles held by 40 hunters are equally rare, and splitting them
+        # on list order would hand one a richer plate for no reason.
+        pct = bisect_left(claimed, count) / len(claimed)
+        bands[tid] = next(key for key, cut in TITLE_RARITY_BANDS if pct < cut)
+    return bands
 
 
 class MyTitlesView(LoginRequiredMixin, TemplateView):
@@ -80,6 +130,9 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
             .values_list('title_id', 'c')
         )
 
+        # Rarity band per title -- the plate's material. Derived from `holders` above, so no extra query.
+        bands = rarity_bands([s.title_id for s in series_list], holders)
+
         # ── 5. Build one entry per TITLE. Keyed by title_id, not by series: BadgeSeries.title has no
         # unique constraint, so two series can point at one Title -- one entry each would duplicate the
         # row, inflate the counts, and make the equip toggle flip two rows for a single title.
@@ -117,6 +170,7 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
                 'stages_cleared': standing.stages_cleared if standing else 0,
                 'stages_total': standing.stages_total if standing else 0,
                 'holders': holders.get(series.title_id, 0),
+                'rarity': bands.get(series.title_id, ''),
             })
 
         # ── 6. Held titles the live vocabulary can't describe, but which the hunter genuinely owns:
@@ -147,6 +201,10 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
                     'stages_cleared': 0,
                     'stages_total': 0,
                     'holders': 0,
+                    # NOT 'unclaimed' -- the hunter is holding it. These sit outside the live catalogue
+                    # (a one-off award, or a series taken off-live), so there is nothing to rank them
+                    # against; they render at the base material and `is_special` carries the flavour.
+                    'rarity': '',
                 }
                 for ut in user_titles
                 if ut.source_type in _RESCUED and ut.title_id not in catalogue_title_ids

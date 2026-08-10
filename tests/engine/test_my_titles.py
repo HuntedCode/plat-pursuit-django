@@ -229,8 +229,11 @@ def test_page_renders_the_three_views_and_the_nameplate(client):
 
     content = _get(client, p).content.decode()
 
-    # The word you're wearing is the page's subject.
-    assert 'ttl-plate' in content and 'Bot Wrangler' in content
+    # The word you're wearing is the page's subject, on the hero scale of the shared plate.
+    assert 'ttl-plate--hero' in content and 'Bot Wrangler' in content
+    # ...and every other title is the SAME component at tile scale -- the page is self-similar.
+    assert 'ttl-plate--tile' in content
+    assert content.count('class="ttl-wall"') == 3
     # All three panels are server-rendered behind the switcher.
     assert 'data-ttl-panel="yours"' in content
     assert 'data-ttl-panel="reach"' in content
@@ -253,7 +256,7 @@ def test_page_renders_the_three_views_and_the_nameplate(client):
     assert '{%' not in content and '{#' not in content
 
 
-def test_equipped_row_is_marked_worn_and_others_offer_equip(client):
+def test_equipped_plate_is_marked_worn_and_others_offer_equip(client):
     p = ProfileFactory()
     worn = _series_with_title('Astro', 'Bot Wrangler')
     spare = _series_with_title('Ratchet', 'Lombax Legend')
@@ -264,9 +267,93 @@ def test_equipped_row_is_marked_worn_and_others_offer_equip(client):
 
     content = _get(client, p).content.decode()
 
-    assert 'is-worn' in content            # the equipped row carries the accent edge
+    assert 'is-worn' in content            # the equipped plate carries the accent edge
     assert 'data-ttl-unequip' in content   # the nameplate offers "Take it off"
-    # BOTH the "Wearing" marker and the "Wear this" button ship on EVERY row in this view -- CSS picks
-    # one off `.is-worn`, so equipping is a single class toggle and the old row flips back with it.
-    assert content.count('ttl-row__worn') == 2
+    # BOTH the "Wearing" marker and the "Wear this" button ship on EVERY plate in this view -- CSS picks
+    # one off `.is-worn`, so equipping is a single class toggle and the old plate flips back with it.
+    assert content.count('ttl-plate__worn') == 2
     assert content.count('data-ttl-equip') == 2
+
+
+# ── Rarity: the plate's material ──────────────────────────────────────────────────────────────────
+#
+# How many hunters wear a title escalates how its plate LOOKS. The rule is relative (a percentile over
+# the claimed catalogue) rather than absolute, so it stays meaningful as the site grows -- fixed
+# thresholds rot, and rarity as a share of all profiles reproduces the PSN problem where every number
+# reads ultra-rare. Computed live and never stored: relative standings go stale and unfair.
+
+def _bands(counts):
+    """rarity_bands over a synthetic catalogue. `counts` is title_id -> holder count."""
+    from trophies.views.title_views import rarity_bands
+    return rarity_bands(list(counts), counts)
+
+
+def test_scarcer_titles_land_in_scarcer_bands():
+    order = ['scarce', 'uncommon', 'common', 'widespread']
+    counts = {i: (i + 1) * 10 for i in range(20)}       # 10, 20, ... 200 holders
+
+    bands = _bands(counts)
+
+    ranks = [order.index(bands[i]) for i in sorted(counts, key=counts.get)]
+    assert ranks == sorted(ranks), f'bands are not monotonic with holder count: {ranks}'
+    assert bands[0] == 'scarce' and bands[19] == 'widespread'
+
+
+def test_titles_with_equal_holders_share_a_band():
+    """Splitting a tie would hand one of two equally-rare titles a richer plate for no reason."""
+    counts = {i: 50 for i in range(10)}
+    counts[99] = 1                                       # one genuinely scarce title to spread against
+
+    bands = _bands(counts)
+
+    assert len({bands[i] for i in range(10)}) == 1
+
+
+def test_an_unheld_title_is_unclaimed_not_legendary():
+    """A newly released series has no holders because it is NEW. Dressing that as the page's most
+    prestigious object would be a lie, so it gets its own state outside the ranking."""
+    counts = {i: i + 1 for i in range(12)}
+    counts[99] = 0
+
+    bands = _bands(counts)
+
+    assert bands[99] == 'unclaimed'
+    assert bands[0] == 'scarce', 'the zero-holder title must not displace the real scarcest one'
+
+
+def test_a_small_catalogue_ranks_nothing():
+    """With four titles, one of them is "the scarcest 10%" by arithmetic alone. Under the floor every
+    plate renders at the base material, which is the honest answer: we can't rank them yet."""
+    bands = _bands({1: 5, 2: 40, 3: 900})
+
+    assert set(bands.values()) == {''}
+
+
+def test_rarity_reaches_the_plate(client):
+    """The band has to survive as far as the markup -- it is what selects the plate's material."""
+    p = ProfileFactory()
+    holders = [ProfileFactory() for _ in range(3)]
+    for i in range(10):
+        series = _series_with_title(f'Series {i}', f'Title {i}')
+        # Spread the holders so the catalogue has a real distribution to rank against.
+        for h in holders[:(i % 3) + 1]:
+            UserTitle.objects.create(profile=h, title=series.title, source_type='badge_series',
+                                     source_id=series.id)
+
+    content = _get(client, p).content.decode()
+
+    assert 'data-rarity=' in content
+    assert 'wearing' in content, 'the honest holder count is the visible text; the material is the signal'
+
+
+def test_rarity_adds_no_queries(django_assert_num_queries, client):
+    """Rarity is derived from the `holders` grouped COUNT the page already ran. If this budget moves,
+    the band computation has started hitting the database per title."""
+    p = ProfileFactory()
+    for i in range(6):
+        _series_with_title(f'Series {i}', f'Title {i}')
+    client.force_login(p.user)
+    client.get('/titles/')
+
+    with django_assert_num_queries(8):
+        client.get('/titles/')
