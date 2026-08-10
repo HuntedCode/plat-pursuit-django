@@ -30,7 +30,7 @@ from trophies.models import GroupBadge, PlatformGroup, SeriesBadgeStanding, User
 from trophies.services import collection_service
 from trophies.services.collection_service import DEFAULT_SORT, build_collection_context
 from tests.factories import (
-    BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory, ProfileFactory,
+    BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory, ProfileFactory, StageFactory,
 )
 
 pytestmark = pytest.mark.django_db
@@ -426,6 +426,28 @@ def test_an_unstarted_edition_still_shows_its_chase_count():
 
     html = render_to_string('components/collection_gallery.html', ctx)
     assert 'data-stages="0 / 4"' in html
+
+
+def test_chase_count_survives_an_edition_missing_from_the_read_model():
+    """The case that kept reading blank after the first fix.
+
+    `recompute_standing` only materializes group_progress for editions with cleared > 0, so an edition
+    you have NEVER touched has no entry -- not [0, n]. Reading the total from the read-model therefore
+    gave 0 and printed nothing. The stage count is viewer-independent, so it comes from the series."""
+    from django.template.loader import render_to_string
+
+    profile = ProfileFactory()
+    _series('rs-untouched')
+    for n in (1, 2, 3):
+        StageFactory(series_slug='rs-untouched', stage_number=n)
+    _standing(profile, 'rs-untouched', bp=0)   # engaged, but group_progress is {} -- no edition started
+
+    ctx = build_collection_context(profile)
+    frame = _frames_by_edition(ctx)['ultra-hd']
+
+    assert frame['state'] == 'unearned'
+    assert (frame['chase_done'], frame['chase_total']) == (0, 3)
+    assert 'data-stages="0 / 3"' in render_to_string('components/collection_gallery.html', ctx)
 
 
 def test_an_earned_edition_has_nothing_left_to_chase():

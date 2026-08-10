@@ -21,7 +21,7 @@ from datetime import timedelta
 from django.db.models import Count
 from django.utils import timezone
 
-from trophies.models import GroupBadge, UserGroupBadge, SeriesBadgeStanding
+from trophies.models import GroupBadge, Stage, UserGroupBadge, SeriesBadgeStanding
 from trophies.services.badge_detail_service import group_medallion_layers
 from trophies.services.badge_rarity import group_rarity
 from trophies.services.rarity import community_size
@@ -69,7 +69,7 @@ def _engaged_series(profile):
     return (held_slugs | set(standings)), holds, earned_at, standings
 
 
-def _badge_frame(gb, holds, standings, participants):
+def _badge_frame(gb, holds, standings, participants, stage_counts=None):
     """A collection Gallery frame for one group badge (edition), with the viewer's PER-EDITION state layered on.
     Progress is READ from the series' materialized SeriesBadgeStanding.group_progress read-model (per-edition
     {platform_group_key: [cleared, gating]}), then run through the shared badge_xp.edition_display_state -- the
@@ -92,6 +92,13 @@ def _badge_frame(gb, holds, standings, participants):
     is_holo = bool(holds.get(gb.id)) if held else False
     # Only an in-progress edition carries the "X / Y stages" count (earned/unearned show none).
     stages_done, stages_total = (cleared, gating) if state == 'in_progress' else (0, 0)
+    # How many stages this edition takes, INDEPENDENT of the viewer. `group_progress` only materializes
+    # editions with cleared > 0 (see badge_xp.recompute_standing), so an untouched edition has no entry
+    # at all and `gating` above is 0 -- which is why the caption went blank rather than reading "0 / 5".
+    # Same precedence badge_detail_service uses, including the reason for the last term: GroupBadge
+    # .required_stages is a declared column that NOTHING writes, so it is 0 in practice and the series'
+    # numbered Stage count is what actually answers.
+    chase_total = gating or gb.required_stages or (stage_counts or {}).get(series.series_slug, 0)
 
     pct, cls = group_rarity(gb.earned_count, participants)
     return {
@@ -116,12 +123,10 @@ def _badge_frame(gb, holds, standings, participants):
         'stages_total': stages_total,   # medallion renders "stages_done / stages_total" below the meter when > 0
         # The CAPTION's chase count, deliberately separate from stages_* above. `edition_display_state`
         # calls zero cleared stages 'unearned', not 'in_progress', so stages_* zeroes out and an edition
-        # you have not started read as blank -- even in a series you are actively pursuing, where the
-        # gating total is known and "0 / 5 stages" is the whole point. Survives at zero cleared; still
-        # empty for an earned badge (nothing left to chase) and for a series with no standing at all,
-        # where `gating` is genuinely unknown rather than zero.
+        # you have not started read as blank -- exactly where "0 / 5 stages" is the most motivating thing
+        # on the card. Empty only for an earned badge: nothing left to chase.
         'chase_done': cleared if not held else 0,
-        'chase_total': gating if not held else 0,
+        'chase_total': chase_total if not held else 0,
         'rarity_pct': pct or 0,
         'rarity_class': cls,
     }
@@ -170,10 +175,21 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
 
         catalog_total = GroupBadge.objects.filter(is_live=True).count()   # the whole earnable catalog (denominator)
 
+        # Stages per engaged series: the viewer-independent "how long is this chase". ONE grouped count
+        # over the engaged scope (not per badge), so it stays flat as the wall grows. Needed because the
+        # per-edition read-model only stores editions you have STARTED, leaving untouched ones with no
+        # total to print. Series-level rather than per-edition: platform routing can drop a stage for a
+        # given edition, so this is the same approximation badge detail falls back to.
+        stage_counts = dict(
+            Stage.objects.filter(series_slug__in=engaged, stage_number__gt=0)
+            .values('series_slug').annotate(c=Count('id'))
+            .values_list('series_slug', 'c')
+        )
+
         list_badges, edition_counts = [], {}
         earned = in_progress = recent = holo = 0
         for gb in group_badges:
-            fr = _badge_frame(gb, holds, standings, participants)
+            fr = _badge_frame(gb, holds, standings, participants, stage_counts)
             btype = gb.series.badge_type
             fr['theme'] = _SECTION_LABELS.get(btype, btype.title())
             fr['palette'] = palette_of.get(btype, _PALETTES[0])
