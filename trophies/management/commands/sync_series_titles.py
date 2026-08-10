@@ -21,8 +21,14 @@ community holds can read 0.7% and grade Mythic. Case 2 goes further and shows "B
 the viewer is wearing.
 
 This walks the other direction: every profile holding a badge in a title-granting series SHOULD hold
-that title, as a `badge_series` row. Set-based (a few id reads and bulk writes per title), so it does not
-care how many hunters there are.
+that title, as a `badge_series` row.
+
+COST, honestly: writes are set-based (bulk_create + two UPDATEs per title, batched), but the DIFF is
+computed in Python, so it materializes two dicts keyed by profile for each title -- memory scales with a
+title's holder count, not just the catalogue. Fine for a one-off backfill at current scale; if a single
+title ever reaches six figures of holders this wants rewriting as `INSERT ... SELECT`. (An earlier
+docstring here claimed it "does not care how many hunters there are." It does, and saying otherwise is
+how the next reader skips the check.)
 
     python manage.py sync_series_titles --dry-run           # report the gap, write nothing
     python manage.py sync_series_titles                     # grant what is missing
@@ -39,11 +45,16 @@ during re-authoring -- a re-author would silently strip titles from everyone who
 """
 from collections import defaultdict
 
-from django.core.management.base import BaseCommand
-from django.db.models import Min
+from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
+from django.db.models import Min, OuterRef, Subquery
 
 from trophies.models import BadgeSeries, UserGroupBadge, UserTitle
-from trophies.services.badge_adapters import TITLE_SOURCE
+from trophies.services.badge_adapters import LEGACY_TITLE_SOURCE, TITLE_SOURCE
+
+#: bulk_create emits ONE statement per batch. Unbounded, a large backfill builds a multi-megabyte INSERT
+#: and can trip the 60s statement_timeout partway through.
+BATCH = 2000
 
 
 class Command(BaseCommand):
@@ -63,8 +74,11 @@ class Command(BaseCommand):
         if opts['series']:
             title_ids = set(series_qs.filter(series_slug=opts['series']).values_list('title_id', flat=True))
             if not title_ids:
-                self.stderr.write(f"No title-granting series '{opts['series']}'.")
-                return
+                # CommandError, not stderr + exit 0: a deploy script reads the exit code, and "no such
+                # slug" must not be indistinguishable from "nothing to do".
+                raise CommandError(
+                    f"No title-granting series '{opts['series']}' -- unknown slug, or it grants no title."
+                )
             series_qs = series_qs.filter(title_id__in=title_ids)
 
         by_title = defaultdict(list)
@@ -81,24 +95,31 @@ class Command(BaseCommand):
             # earned_at. auto_now_add would stamp the backfill date on every row, so a hunter's Titles
             # page would claim they earned a five-year-old title this morning, and "Yours" (most recent
             # first) would order by when the backfill ran.
+            # READ ORDER IS LOAD-BEARING: existing rows FIRST, badge holders second. The live engine grants
+            # a title the instant a badge is earned, so a hunter earning one BETWEEN these two reads would
+            # otherwise be absent from `earned` but present in `existing` -- landing in `orphaned`, where
+            # --prune deletes the row the engine just wrote. In this order such a hunter is missing from
+            # both sets, so the worst case is that the next run grants them.
+            existing = dict(
+                UserTitle.objects.filter(title_id=title_id).values_list('profile_id', 'source_type')
+            )
             earned = dict(
                 UserGroupBadge.objects
                 .filter(group_badge__series__in=series_group)
                 .values('profile_id').annotate(first=Min('earned_at'))
                 .values_list('profile_id', 'first')
             )
-            # ALL rows on this Title, whatever created them -- the legacy ones are the second bug.
-            existing = dict(
-                UserTitle.objects.filter(title_id=title_id).values_list('profile_id', 'source_type')
-            )
             ours = {pid for pid, src in existing.items() if src == TITLE_SOURCE}
 
             missing = sorted(set(earned) - set(existing))
-            # Holds the badge AND a row, but the row belongs to another system -- adopt it. The hunter
-            # earned this through the new system; the row just predates it (or was returned untouched by
-            # get_or_create). Leaving it means they stay uncountable and see "Be the first" on a title
-            # they are wearing.
-            adopt = sorted(pid for pid in earned if existing.get(pid, TITLE_SOURCE) != TITLE_SOURCE)
+            # Holds the badge AND a LEGACY row -- adopt it. The hunter earned this through the new system;
+            # the row just predates it (or was returned untouched by get_or_create). Leaving it means they
+            # stay uncountable and see "Be the first" on a title they are wearing.
+            #
+            # Legacy ONLY, deliberately not "anything that isn't ours": a 'milestone' row is a one-off
+            # award with its own label ("Special award") and its own dashboard bucket, so claiming one
+            # would reclassify a hunter's award and overwrite the source_id pointing at what granted it.
+            adopt = sorted(pid for pid in earned if existing.get(pid) == LEGACY_TITLE_SOURCE)
             orphaned = sorted(ours - set(earned))
 
             if missing or adopt or orphaned:
@@ -108,33 +129,42 @@ class Command(BaseCommand):
                     + (f", {len(orphaned)} orphaned" if orphaned else "")
                 )
 
-            if adopt and not dry:
-                # earned_at is left alone: it is a real date from a real earn, and this is a bookkeeping
-                # correction, not a re-grant. Rewriting it would move the title in the "Yours" ordering.
-                UserTitle.objects.filter(title_id=title_id, profile_id__in=adopt).update(
-                    source_type=TITLE_SOURCE, source_id=series_group[0].id,
-                )
-            adopted += len(adopt)
-
-            if missing and not dry:
-                # source_id: the first series granting it. Advisory only -- nothing reads it to decide
-                # whether the title is held, and a shared title has no single source by construction.
-                UserTitle.objects.bulk_create([
-                    UserTitle(profile_id=pid, title_id=title_id, source_type=TITLE_SOURCE,
-                              source_id=series_group[0].id)
-                    for pid in missing
-                ], ignore_conflicts=True)   # `missing` is rows that do not exist, so this is a race guard
-                                            # only -- a concurrent sync granting the same title mid-run
-                                            # must not abort every other grant in the batch.
-                # earned_at is auto_now_add, so bulk_create stamped it with now(); correct it to the badge
-                # date. Grouped by timestamp so this is a handful of UPDATEs, not one per profile.
-                by_date = defaultdict(list)
-                for pid in missing:
-                    by_date[earned[pid]].append(pid)
-                for when, pids in by_date.items():
-                    UserTitle.objects.filter(title_id=title_id, profile_id__in=pids,
-                                             source_type=TITLE_SOURCE).update(earned_at=when)
+            # ONE transaction per title. The insert and the earned_at correction MUST commit together:
+            # `earned_at` is auto_now_add, so bulk_create stamps every row with now() and a second pass
+            # fixes it -- and if the process died between the two, the surviving rows kept the BACKFILL
+            # CLOCK forever. A re-run could not repair them either: they are in `existing` by then, so they
+            # appear in neither `missing` nor `adopt`. The command could never converge, which is the one
+            # thing a backfill has to be able to do.
+            if (adopt or missing) and not dry:
+                with transaction.atomic():
+                    if adopt:
+                        # earned_at left alone: a real date from a real earn. A bookkeeping correction, not
+                        # a re-grant -- rewriting it would move the title in the "Yours" ordering.
+                        UserTitle.objects.filter(title_id=title_id, profile_id__in=adopt).update(
+                            source_type=TITLE_SOURCE, source_id=series_group[0].id,
+                        )
+                    if missing:
+                        # source_id: the first series granting it. Advisory only -- nothing reads it to
+                        # decide whether the title is held, and a shared title has no single source.
+                        UserTitle.objects.bulk_create([
+                            UserTitle(profile_id=pid, title_id=title_id, source_type=TITLE_SOURCE,
+                                      source_id=series_group[0].id)
+                            for pid in missing
+                        ], ignore_conflicts=True, batch_size=BATCH)   # conflicts = concurrent-run guard
+                        # Correct the auto_now_add stamp to the badge date in ONE statement. This was a
+                        # loop grouped by timestamp, described in its own comment as "a handful of UPDATEs,
+                        # not one per profile" -- but earned_at is microsecond-precision, so every profile
+                        # WAS its own group. It was one query per row wearing a reassuring comment.
+                        first_earn = (
+                            UserGroupBadge.objects
+                            .filter(profile_id=OuterRef('profile_id'), group_badge__series__in=series_group)
+                            .values('profile_id').annotate(m=Min('earned_at')).values('m')
+                        )
+                        UserTitle.objects.filter(
+                            title_id=title_id, profile_id__in=missing, source_type=TITLE_SOURCE,
+                        ).update(earned_at=Subquery(first_earn))
             granted += len(missing)
+            adopted += len(adopt)
 
             if orphaned and prune:
                 if not dry:

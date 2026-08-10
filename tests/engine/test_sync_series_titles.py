@@ -160,6 +160,49 @@ def test_adoption_keeps_the_original_earned_at():
     assert UserTitle.objects.get(profile=p).earned_at == original
 
 
+def test_a_one_off_award_is_never_adopted():
+    """Adoption is for the RETIRING legacy badge system only. A 'milestone' row is a one-off award with its
+    own meaning: the Titles page labels it "Special award" and the dashboard counts it separately, so
+    claiming one would silently reclassify a hunter's award and overwrite the source_id that records what
+    granted it. Adopting "anything that isn't ours" was the first version of this."""
+    p = ProfileFactory()
+    series = _series('Spider-Man', 'Web Slinger')
+    _hold(p, _edition(series))
+    UserTitle.objects.create(profile=p, title=series.title, source_type='milestone', source_id=7)
+
+    call_command('sync_series_titles')
+
+    row = UserTitle.objects.get(profile=p)
+    assert (row.source_type, row.source_id) == ('milestone', 7), 'the award kept its identity'
+
+
+def test_running_twice_converges():
+    """A backfill has to be re-runnable. The insert and the earned_at correction were two statements with
+    no transaction: a crash between them left rows stamped with the BACKFILL clock forever, because on a
+    re-run they are in `existing` and so land in neither `missing` nor `adopt`."""
+    p = ProfileFactory()
+    series = _series('Spider-Man', 'Web Slinger')
+    old = timezone.now() - timezone.timedelta(days=900)
+    _hold(p, _edition(series), when=old)
+
+    call_command('sync_series_titles')
+    call_command('sync_series_titles')
+
+    assert UserTitle.objects.filter(profile=p).count() == 1
+    assert UserTitle.objects.get(profile=p).earned_at == old
+
+
+def test_an_unknown_series_slug_is_an_error_not_a_quiet_success():
+    """Exit code 0 on a typo'd slug reads as "nothing to do" to a deploy script."""
+    import pytest as _pytest
+    from django.core.management.base import CommandError
+
+    _series('Spider-Man', 'Web Slinger')
+
+    with _pytest.raises(CommandError):
+        call_command('sync_series_titles', '--series', 'no-such-series')
+
+
 def test_a_legacy_row_with_no_badge_behind_it_is_left_alone():
     """Adoption is justified by the HELD BADGE, not by the title existing. Someone whose only claim is a
     retired legacy badge has not earned it under the new system, and claiming their row would inflate the
