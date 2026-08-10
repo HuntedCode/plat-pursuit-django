@@ -169,8 +169,21 @@ art the card already offers.
 - **Art is a theme, not a fixture.** Painting the backdrop unconditionally puts it on top of whatever
   ground the theme set, making all the options render identically. It happened once.
 - **`ShareImageCache` rejects non-`http(s)` URLs.** Medallion layers include `static(...)` paths, so
-  routing them through the cache drops them silently, in every environment. Static paths go straight to
-  the renderer, which resolves `/static/` itself. Note it does **not** resolve `/media/`.
+  routing them through the cache drops them silently, in every environment. Local paths go straight to
+  the renderer, which resolves **both** `/static/` and `/media/` into data URIs.
+- **A local path that isn't inlined renders as nothing, and only in the download.** `set_content()`
+  runs in an `about:blank` origin, so a root-relative `src` has no base to resolve against — no
+  exception, no console error we see. The *preview* is a real page on the site origin, so the same card
+  looks complete there. `/media/` went unhandled for exactly this reason: a badge's backdrop plate (a
+  `static(...)` fallback) rendered while its custom subject art (a FileField `.url`) vanished from
+  every downloaded card. Guarded by `tests/engine/test_render_local_images.py`.
+- **`/media/` is capped at `MEDIA_MAX_PX` (256); `/static/` is never resized.** Static is our own
+  right-sized art; media is whatever a contributor uploaded (badge art is commonly 850x850, and the
+  card's medallion is 52px). Uncapped it added up to ~647 KB of base64 per layer. Alpha survives the
+  resize — the resizer only drops to JPEG for images that have none.
+- **Both local passes are anchored against matching mid-URL.** `https://cdn.example.com/media/x.png`
+  *contains* `/media/x.png`; without the lookbehind the substitution splices a data URI into the middle
+  of the href and corrupts the `src` rather than merely missing it.
 - **Don't `exclude()` on a JSON key.** `exclude(defined_trophies__platinum__gt=0)` does not match rows
   where the key is absent (`->` yields NULL, `NOT NULL` is NULL), so such rows fall out of *both* arms
   of a filter. Cast to integer, as `variant_filter` and every other consumer does.

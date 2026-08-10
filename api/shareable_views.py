@@ -74,8 +74,11 @@ def build_card_context(profile, standing):
     # everything through it dropped every static layer in every environment -- a badge with no custom
     # image rendered with no medallion at all, silently.
     #
-    # The renderer already resolves /static/ itself, so those pass through untouched. Only genuinely
-    # remote URLs need caching.
+    # The renderer resolves BOTH /static/ and /media/ into data URIs itself, so those pass through
+    # untouched. Only genuinely remote URLs need caching. (/media/ resolution was added after custom
+    # badge art turned up in the preview but not in the PNG -- the preview is a real page on the site
+    # origin, where a root-relative src resolves; the PNG is set_content() in about:blank, where it
+    # does not.)
     for line in data['badge_lines']:
         cached_layers = []
         for url in line.get('medallion_layers') or []:
