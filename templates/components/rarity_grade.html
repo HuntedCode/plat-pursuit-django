@@ -1,9 +1,14 @@
 {% comment %}
-The rarity grade: label + glyph + the honest percentage. One component for every surface.
+The rarity grade: label + glyph + the honest percentage. The STANDARD composition.
 
 Five surfaces used to hand-roll this off two shared tokens, which is how the same grade ended up with
-five slightly different treatments. Rendering it from here means a sixth surface is an include, not a
-seventh copy.
+five slightly different treatments. This is the composition a new surface should reach for first.
+
+Honest scope: only Titles includes it today. Badge detail pairs the grade with a gem and its own
+sub-line, and Collection builds its caption in JS, so both still assemble their own -- what those share
+is the SCALE (`--rar-*`, `rarity.css`) and the vocabulary, not this markup. That is the intended
+division (see docs/reference/rarity.md, "Composition is deliberately per-surface"), but it does mean
+this file is not yet the single renderer its name suggests.
 
 Params:
   rarity_class  'common' | 'uncommon' | 'rare' | 'mythic' | '' (no grade yet)

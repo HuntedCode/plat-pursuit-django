@@ -777,6 +777,53 @@ def test_the_picker_still_fits_on_one_row():
     )
 
 
+def test_card_grounds_never_leak_into_the_site_theme_pickers():
+    """The card's grounds are drawn for ONE artifact at 1200x630. They live in the shared registry so the
+    card can reuse the rendering pipeline, but every exporter feeding a site-wide picker must filter them
+    out. Only `get_available_themes_for_grid` did: `get_themes_for_js` ships as window.GRADIENT_THEMES and
+    the Monthly Recap builds its background dropdown by iterating it, so every card ground was offered as
+    a recap background -- four of them, then seven once the lighter grounds landed."""
+    from trophies.themes import (
+        GRADIENT_THEMES, PLAT_CARD_CATEGORY, THEME_CHOICES, get_available_themes_for_grid,
+        get_themes_for_js,
+    )
+
+    def card_grounds_in(keys):
+        return [k for k in keys if GRADIENT_THEMES.get(k, {}).get('category') == PLAT_CARD_CATEGORY]
+
+    assert not card_grounds_in(get_themes_for_js())
+    assert not card_grounds_in(k for k, _label in THEME_CHOICES if k)
+    assert not card_grounds_in(key for key, _data in get_available_themes_for_grid())
+
+
+def test_retro_wave_stays_a_site_theme_too():
+    """The counterpart risk: pulling retroWave into the card's curation is exactly the change that tempts
+    someone to recategorise it to `plat_card` for tidiness -- which the filter above would then delete
+    from every site picker it has always appeared in."""
+    from trophies.themes import THEME_CHOICES, get_themes_for_js
+
+    assert 'retroWave' in get_themes_for_js()
+    assert 'retroWave' in dict(THEME_CHOICES)
+
+
+def test_the_modal_height_budget_matches_the_css_cap():
+    """`fit()` budgets the preview against `window.innerHeight * 0.92` and `.pc-modal__box` caps at 92vh.
+    If the CSS drops below the JS figure, the box hits the smaller cap while JS still hands out the
+    larger one -- and since the box is `overflow: hidden`, the swatch row is clipped with NO scrollbar.
+    Silent, and only on short viewports. Two files, one number, nothing else connecting them."""
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    js = (root / 'static/js/plat-cards.js').read_text(encoding='utf-8')
+    css = (root / 'static/css/components/plat-cards.css').read_text(encoding='utf-8')
+
+    js_vh = float(re.search(r'var BOX_VH = ([\d.]+)', js).group(1))
+    css_vh = float(re.search(r'\.pc-modal__box\s*\{[^}]*?max-height:\s*(\d+)vh', css, re.S).group(1)) / 100
+
+    assert js_vh == css_vh, f'fit() budgets {js_vh:.0%} but .pc-modal__box caps at {css_vh:.0%}'
+
+
 def test_the_curated_set_reuses_the_existing_retro_wave_theme():
     """Retro Wave is a SITE theme (category 'retro'), pulled into the card's curation unchanged rather
     than redrawn for it -- a card-local copy would drift from the one the site pickers show. It is also

@@ -167,6 +167,7 @@ re-declaring four grade colours.
 - **A grade can't be rarer than the easiest way to get the thing.** A title is the UNION of its editions'
   earners, so a title reading 0.7% while one of its editions reads 78% is arithmetically impossible and
   means the numerator is under-recorded — a useful smoke test on any new gradeable surface.
+- **A denominator must never shrink as a hunter progresses.** The Collection chase count briefly derived its total from the series' Stage count when the read-model had no entry; gating is PER EDITION, so it read "0 / 8" and dropped to "1 / 5" on the first clear. If a total can move, it has to move the same way for everyone looking at the same thing — otherwise it isn't a denominator, it's a guess.
 - **A mythic badge needs >100 accounts to exist.** With a 1% ceiling, one earner in a community of 80
   is 1.25% — Rare, not Mythic. Tests that want a Mythic fixture have to seed a community past 100.
 - **The denominator is cached for an hour** (`rarity:community_size`). Viewer-independent and slow-moving,

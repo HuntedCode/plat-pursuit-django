@@ -149,7 +149,7 @@ class PlatCardsView(LoginRequiredMixin, _RequireLinkedProfileMixin, HtmxListMixi
             'current_sort': self._sort(),
             'show_shovelware': bool(self.request.GET.get('show_shovelware')),
             'card_themes': themes,
-            # The same six, shaped for the preview's client-side restyle. The download applies the
+            # The same curated set, shaped for the preview's client-side restyle. The download applies the
             # ground server-side, so this only has to make the PREVIEW agree with it.
             'card_theme_js': {
                 key: {

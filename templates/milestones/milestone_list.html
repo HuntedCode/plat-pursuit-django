@@ -49,7 +49,7 @@
                     <span class="msc-spot__body">
                         <span class="msc-spot__label">Rarest feat</span>
                         <span class="msc-spot__name">{{ ms_rarest.name }} &middot; {{ ms_rarest.threshold|intcomma }}</span>
-                        <span class="msc-spot__rare-line"><strong class="pp-tally">Top {{ ms_rarest.rarity_pct }}%</strong> of hunters</span>
+                        <span class="msc-spot__rare-line"><strong class="pp-tally">{{ ms_rarest.rarity_pct }}%</strong> of hunters</span>
                     </span>
                     {% if ms_rarest.action_url %}<svg class="msc-spot__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>{% endif %}
                 </a>

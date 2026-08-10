@@ -9,6 +9,13 @@ in share-image.js reads from window.GRADIENT_THEMES which is populated
 from this registry.
 """
 
+#: Grounds drawn for the PLAT CARD specifically (1200x630, one fixed layout). They live in this same
+#: registry so the card can share the rendering pipeline, but they must not be offered as SITE themes --
+#: every exporter that feeds a site-wide picker filters on this. Kept as a constant because it was a
+#: bare string in one exporter and simply absent from two others, which is how the card's grounds ended
+#: up selectable as Monthly Recap backgrounds and in the settings form.
+PLAT_CARD_CATEGORY = 'plat_card'
+
 # Theme definitions
 # Each theme has: name, description, accent_color, background (CSS gradient)
 # Some themes have additional properties like background_size, background_position
@@ -1553,9 +1560,13 @@ def _generate_theme_choices():
     """Generate sorted theme choices for form fields."""
     choices = [('', 'None')]
 
-    # Get all themes except default
+    # Get all themes except default. `plat_card` grounds are excluded for the same reason
+    # get_available_themes_for_grid excludes them: they are drawn for ONE artifact at 1200x630, and this
+    # feeds the site-wide `selected_theme` picker. They leaked here until 2026-08 (four of them, then
+    # seven once the lighter grounds landed), which is how the omission got noticed.
     other_themes = [(key, data['name']) for key, data in GRADIENT_THEMES.items()
-                    if key != 'default' and not data.get('requires_game_image')]
+                    if key != 'default' and not data.get('requires_game_image')
+                    and data.get('category') != PLAT_CARD_CATEGORY]
 
     # Sort alphabetically by name
     other_themes.sort(key=lambda x: x[1])
@@ -1582,6 +1593,12 @@ def get_themes_for_js():
     """
     js_themes = {}
     for key, theme in GRADIENT_THEMES.items():
+        # `plat_card` grounds never reach the global. This blob ships as window.GRADIENT_THEMES and the
+        # Monthly Recap builds its background dropdown by iterating it, so every card ground was offered
+        # as a recap background -- for a layout they were never drawn for. The card picker reads its own
+        # scoped `card_theme_js`, not this, so nothing on that side depends on them being here.
+        if theme.get('category') == PLAT_CARD_CATEGORY:
+            continue
         js_themes[key] = {
             'name': theme['name'],
             'description': theme['description'],
@@ -1631,7 +1648,7 @@ def get_available_themes_for_grid(include_game_art=False, grouped=False):
         # and are drawn for one 1200x630 layout. They must not appear in the SITE theme pickers. The
         # grouped path can't be relied on to drop them -- it funnels unknown categories into `general`
         # rather than skipping them -- so exclude them here, where both paths pass.
-        if data.get('category') == 'plat_card':
+        if data.get('category') == PLAT_CARD_CATEGORY:
             continue
 
         theme_entry = {
@@ -1673,8 +1690,8 @@ def get_available_themes_for_grid(include_game_art=False, grouped=False):
 # ── Plat card: the curated set ────────────────────────────────────────────────────────────────────
 #
 # The card is DESIGNED, so it does not accept all 105 site gradients -- most were drawn for a
-# different layout and would fight the one it has. These six are the whole picker: four grounds built
-# from the rebuild palette, plus the two game-art backings.
+# different layout and would fight the one it has. The picker is EIGHT designed grounds (four dark
+# plus a lifted sibling for each) and one game-art backing.
 #
 # `ppSubstrate` is the card's own ground, duplicated here on purpose: the renderer always injects a
 # background with !important (falling back to `default`, which is drawn from the pre-rebuild palette),

@@ -7,12 +7,12 @@ format toggle, a theme-nudge flow, per-swatch game-art compositing and a rating 
 lines for a card that now has one format and a handful of grounds.
 
 The grounds get named cards, not swatches: at this count "which one is this" matters more than
-"how many are there". Four are fixed; the art grounds are per-card (see below). The preview is the REAL card markup from the HTML endpoint, so what you see
+"how many are there". Eight are fixed; the art grounds are per-card (see below). The preview is the REAL card markup from the HTML endpoint, so what you see
 is what downloads -- the two share one template and one theme list.
 {% endcomment %}
-{% comment %}Only the SIX curated grounds reach the JS. The old page dumped all ~105 site gradients
-into a `window.GRADIENT_THEMES` global for a picker that offered all of them; the card renders six, so
-six is what ships -- scoped to this element instead of a global.{% endcomment %}
+{% comment %}Only the CURATED grounds reach the JS. The old page dumped all ~105 site gradients into a
+`window.GRADIENT_THEMES` global for a picker that offered all of them; the card renders the curated set,
+so that is what ships -- scoped to this element instead of a global.{% endcomment %}
 {{ card_theme_js|json_script:"pc-theme-data" }}
 
 <dialog id="pc-share" class="pc-modal" aria-labelledby="pc-share-title">

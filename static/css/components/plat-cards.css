@@ -121,7 +121,7 @@
 
 /* ── Share modal ───────────────────────────────────────────────────────────────────────────────────
  * Replaces the DaisyUI `.modal` + `color_grid_modal` swatch wall. The grounds get named cards rather
- * than a palette: at this count "which one is this" matters more than "how many". Four are fixed; the
+ * than a palette: at this count "which one is this" matters more than "how many". Eight are fixed; the
  * art grounds are appended per card by the JS, one per image the game actually has.
  */
 /* `position: fixed; inset: 0; margin: auto` is how the house modals centre (see .gd-modal). A
@@ -165,7 +165,10 @@
 /* Stage: the card renders at its real 1200x630 and is scaled down by JS, so the preview is the
    artifact rather than a reimplementation of it that can drift. */
 .pc-modal__stage { flex: 1 1 auto; min-height: 0; position: relative; padding: 16px 18px; }
-.pc-modal__frame { position: relative; width: 100%; overflow: hidden; border-radius: 10px; background: var(--pp-bg-0); }
+/* `width` is a starting value only -- fit() sets both dimensions from the scale, because when HEIGHT is
+   the binding constraint a full-width frame leaves the card flush-left against a dead gutter. margin-inline
+   auto keeps the narrowed frame centred in the stage. */
+.pc-modal__frame { position: relative; width: 100%; max-width: 100%; margin-inline: auto; overflow: hidden; border-radius: 10px; background: var(--pp-bg-0); }
 .pc-modal__scaler { width: 1200px; height: 630px; transform-origin: top left; }
 .pc-modal__loading {
     position: absolute; inset: 16px 18px;

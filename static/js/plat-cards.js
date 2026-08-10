@@ -8,7 +8,7 @@
  *
  * REPLACES share-image.js + shareable-manager.js for this page. Those carried a format toggle
  * (portrait is gone), a theme-nudge flow, per-swatch game-art compositing and their own rating prompt
- * -- ~1,200 lines for a card that now has one format and six grounds. The preview here is the REAL
+ * -- ~1,200 lines for a card that now has one format and a curated handful of grounds. The preview here is the REAL
  * card markup from the HTML endpoint, so preview and download share one template and one theme list
  * and cannot drift.
  *
@@ -176,27 +176,50 @@
     // The budget is computed from the VIEWPORT and the chrome, never from the box's current height:
     // the box is sized by its content, so measuring it here would feed this function its own last
     // answer. Header and controls are independent of the frame, so they can be measured directly.
-    var MIN_SCALE = 0.2;   // absurdly short viewports get a small preview, still never a scrollbar
+    // Must match .pc-modal__box's max-height in plat-cards.css. If CSS drops below this the box hits the
+    // smaller cap while JS still budgets 92vh, and since the box is `overflow: hidden` the controls are
+    // clipped with no scrollbar -- a silent failure. Pinned by test_the_modal_height_budget_matches_css.
+    var BOX_VH = 0.92;
     function fit() {
-        var frame = dlg && dlg.querySelector('[data-share-frame]');
-        var scaler = dlg && dlg.querySelector('[data-share-preview]');
+        // The resize listener is bound for the page's life, but a closed <dialog> is display:none, so
+        // clientWidth is 0 and this would write scale(0) onto hidden nodes on every resize event.
+        if (!dlg || !dlg.open) { return; }
+        var frame = dlg.querySelector('[data-share-frame]');
+        var scaler = dlg.querySelector('[data-share-preview]');
         if (!frame || !scaler) { return; }
 
+        // Reset the width BEFORE measuring. fit() narrows the frame at the end, so reading clientWidth
+        // without clearing it first would feed each run the previous run's answer and ratchet the card
+        // smaller on every resize -- the same self-referential trap as measuring the box's own height.
+        frame.style.width = '';
         var scale = Math.min(1, frame.clientWidth / 1200);
         var stage = frame.parentElement;
         var head = dlg.querySelector('.pc-modal__head');
         var controls = dlg.querySelector('.pc-modal__controls');
+        var err = dlg.querySelector('[data-share-error]');
         if (stage && head && controls) {
             var pad = window.getComputedStyle(stage);
             var chrome = head.offsetHeight + controls.offsetHeight
                 + parseFloat(pad.paddingTop) + parseFloat(pad.paddingBottom)
                 + 2;                                        // the box's 1px borders
-            var room = (window.innerHeight * 0.92) - chrome;   // 92vh matches .pc-modal__box's cap
-            scale = Math.max(MIN_SCALE, Math.min(scale, room / 630));
+            // The error line is an in-flow sibling of the frame, so it eats the stage's room when shown.
+            if (err && !err.hidden) { chrome += err.offsetHeight; }
+            var room = (window.innerHeight * BOX_VH) - chrome;
+            // Clamped at 0, NOT at a minimum preview size. A floor here looks harmless and is not: the box
+            // is `overflow: hidden` and the frame carries an inline height, so any floor above the room
+            // available makes the preview PAINT OVER the swatch row -- measured at 57-82px of overlap on
+            // landscape phones, where the picker became unreachable. That is strictly worse than the
+            // scrollbar this whole function exists to remove. The card yields all the way to nothing
+            // before a single ground goes off screen.
+            scale = Math.max(0, Math.min(scale, room / 630));
         }
 
         scaler.style.transform = 'scale(' + scale + ')';
         frame.style.height = Math.round(630 * scale) + 'px';
+        // Width too, or a height-bound card sits flush-left (transform-origin: top left) in a full-width
+        // frame and opens a dead --pp-bg-0 gutter down the right. Height binds on every short viewport now,
+        // so this is the common case rather than the edge one.
+        frame.style.width = Math.round(1200 * scale) + 'px';
     }
 
     function setBusy(on) {

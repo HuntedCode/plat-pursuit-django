@@ -24,7 +24,7 @@ WHY IT LOOKS LIKE THIS
     thing you see after the game.
   - Game art BACKS the card, it never leads it -- and it is a THEME, not a fixture. Painting the
     backdrop unconditionally (as this did at first) put it on top of whatever ground the theme set, so
-    all six options rendered identically. The ground is now owned entirely by the theme: the designed
+    every option rendered identically. The ground is now owned entirely by the theme: the designed
     gradients, or one of the art grounds the renderer composites from `concept_bg_path`.
     Concept.get_landscape_url() resolves to an IGDB screenshot -> artwork -> PSN bg_url -> nothing, so
     the art is uncurated and often absent, and the card has to be complete without it.
@@ -56,7 +56,7 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
     {% comment %}Scrim: an INNER layer, so it survives a theme replacing the ground with `!important`.
 
     Tuned for a DESIGNED ground, not for raw art. It was originally set for the latter (0.95 -> 0.64)
-    and crushed all four gradient grounds to the same near-black -- picking a different one changed
+    and crushed every gradient ground to the same near-black -- picking a different one changed
     almost nothing. The art grounds don't need that strength from here anyway: the renderer already
     lays its own 0.45-0.55 black over an image before this layer ever applies, so heavy values here
     were darkening art twice and everything else once too many.{% endcomment %}
