@@ -354,7 +354,11 @@
         // colour -- the same slot also shows earn dates and progress, which must stay neutral.
         function statText(cell, key) {
             var st = cell.getAttribute('data-state');
-            if (st === 'in_progress') {
+            // Any UNEARNED edition with a known gating count, not just one with cleared stages. Keying
+            // this on state === 'in_progress' meant an edition you had not started showed nothing, so
+            // "0 / 5" -- the most motivating number on the card -- was the one case that stayed blank.
+            // data-stages is only populated when the total is actually known (see collection_service).
+            if (st !== 'earned') {
                 var stages = cell.getAttribute('data-stages');
                 if (stages) return [stages + ' stages', false];
             }

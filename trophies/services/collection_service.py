@@ -114,6 +114,14 @@ def _badge_frame(gb, holds, standings, participants):
         'progress_pct': progress_pct,
         'stages_done': stages_done,
         'stages_total': stages_total,   # medallion renders "stages_done / stages_total" below the meter when > 0
+        # The CAPTION's chase count, deliberately separate from stages_* above. `edition_display_state`
+        # calls zero cleared stages 'unearned', not 'in_progress', so stages_* zeroes out and an edition
+        # you have not started read as blank -- even in a series you are actively pursuing, where the
+        # gating total is known and "0 / 5 stages" is the whole point. Survives at zero cleared; still
+        # empty for an earned badge (nothing left to chase) and for a series with no standing at all,
+        # where `gating` is genuinely unknown rather than zero.
+        'chase_done': cleared if not held else 0,
+        'chase_total': gating if not held else 0,
         'rarity_pct': pct or 0,
         'rarity_class': cls,
     }

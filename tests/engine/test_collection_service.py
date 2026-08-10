@@ -407,6 +407,41 @@ def test_gallery_in_progress_cell_carries_stage_count_in_the_caption():
     assert 'pp-med__count' not in html     # no under-the-bar count (no_count) -> card height unchanged
 
 
+def test_an_unstarted_edition_still_shows_its_chase_count():
+    """0 cleared is 'unearned', not 'in_progress', so the stage count used to vanish for exactly the
+    edition where "0 / 5" is most motivating -- inside a series the hunter IS pursuing. The gating total
+    is known there (the standing carries it), so it must read."""
+    from django.template.loader import render_to_string
+
+    profile = ProfileFactory()
+    _series('rs-unstarted')
+    # Pursuing the series (ultra-hd underway) but legacy-hd untouched -- its total is still known.
+    _standing(profile, 'rs-unstarted', group_progress={'ultra-hd': [2, 5], 'legacy-hd': [0, 4]})
+
+    ctx = build_collection_context(profile)
+    frames = _frames_by_edition(ctx)
+    assert frames['legacy-hd']['state'] == 'unearned'
+    assert frames['legacy-hd']['stages_total'] == 0, 'the medallion count stays off for unearned'
+    assert (frames['legacy-hd']['chase_done'], frames['legacy-hd']['chase_total']) == (0, 4)
+
+    html = render_to_string('components/collection_gallery.html', ctx)
+    assert 'data-stages="0 / 4"' in html
+
+
+def test_an_earned_edition_has_nothing_left_to_chase():
+    """The chase count is about what is LEFT. An earned badge must not caption "5 / 5 stages" where its
+    rarity grade belongs."""
+    profile = ProfileFactory()
+    _, groups = _series('rs-done')
+    _hold(profile, groups['ultra-hd'])
+    _standing(profile, 'rs-done', group_progress={'ultra-hd': [5, 5]})
+
+    frame = _frames_by_edition(build_collection_context(profile))['ultra-hd']
+
+    assert frame['state'] == 'earned'
+    assert (frame['chase_done'], frame['chase_total']) == (0, 0)
+
+
 def test_collection_page_is_a_single_gallery_with_stat_grid(client):
     """The page ships as one Gallery: no Case, no view toggle -- a Career-style .scard stat grid in the header
     (editions + in-progress + holographic) over the wall, with the full catalog as the collected denominator."""
