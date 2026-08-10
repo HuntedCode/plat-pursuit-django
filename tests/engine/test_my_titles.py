@@ -290,28 +290,30 @@ def test_equipped_plate_is_marked_worn_and_others_offer_equip(client):
 # it. Numerator: badge_series title holders, because that is the number printed beside the grade.
 
 def _community(n):
-    """n PSN-linked accounts: the rarity denominator. Returns them so wearers can be drawn from the
+    """n PSN-linked accounts: the rarity denominator. Returns them so holders can be drawn from the
     community rather than added alongside it, which is how it works in reality."""
     return [ProfileFactory(is_linked=True) for _ in range(n)]
 
 
-def _wearers(series, profiles):
+def _holders(series, profiles):
+    """Grant the title -- these hunters have EARNED it. Deliberately not `is_displayed`: holding is the
+    population rarity grades, wearing is one selected title per hunter."""
     for profile in profiles:
         UserTitle.objects.create(profile=profile, title=series.title,
                                  source_type='badge_series', source_id=series.id)
 
 
-@pytest.mark.parametrize('wearers, expected', [
+@pytest.mark.parametrize('holders, expected', [
     (1, 'mythic'),      # 0.5% of 200 -> under the 1% ceiling
     (6, 'rare'),        # 3.0%        -> under 5
     (20, 'uncommon'),   # 10.0%       -> under 20
     (100, 'common'),    # 50.0%
 ])
-def test_a_title_wears_the_sites_rarity_grade(client, wearers, expected):
+def test_a_title_wears_the_sites_rarity_grade(client, holders, expected):
     p = ProfileFactory()
     series = _series_with_title('Crash', 'Crate Crusher')
     community = _community(200)
-    _wearers(series, community[:wearers])
+    _holders(series, community[:holders])
 
     entry = _get(client, p).context['all_titles'][0]
 
@@ -325,7 +327,7 @@ def test_legacy_and_one_off_grants_are_not_counted(client):
     p = ProfileFactory()
     series = _series_with_title('Crash', 'Crate Crusher')
     community = _community(200)
-    _wearers(series, community[:2])
+    _holders(series, community[:2])
     for profile, source in zip(community[2:12], ['badge'] * 5 + ['milestone'] * 5):
         UserTitle.objects.create(profile=profile, title=series.title, source_type=source,
                                  source_id=series.id)
@@ -338,17 +340,40 @@ def test_legacy_and_one_off_grants_are_not_counted(client):
 
 def test_the_grade_counts_title_holders_not_badge_earners(client):
     """A title is granted by ANY live edition, so it is strictly easier than any single edition -- and
-    the plate prints "N wearing" right beside the grade. Grading a different population from the one
-    displayed is how a card ends up reading "Mythic - 44,210 wearing"."""
+    the plate prints "N earned" right beside the grade. Grading a different population from the one
+    displayed is how a card ends up reading "Mythic - 44,210 earned"."""
     p = ProfileFactory()
     series = _series_with_title('Crash', 'Crate Crusher')
     community = _community(100)
-    _wearers(series, community[:40])
+    _holders(series, community[:40])
 
     entry = _get(client, p).context['all_titles'][0]
 
     assert entry['holders'] == 40
     assert entry['rarity_pct'] == 40.0, 'the percentage must describe the number shown next to it'
+
+
+def test_the_count_is_holders_not_wearers(client):
+    """EARNED it, not equipped it right now.
+
+    A hunter can wear only ONE title at a time (`is_displayed`, one row per profile), so grading on that
+    flag would measure which title people currently like best rather than who earned it -- collapsing the
+    numerator toward 1 and reading almost everything as Mythic for reasons that have nothing to do with
+    difficulty. Here 30 of 100 hold the title and exactly one is wearing it: the grade must say 30."""
+    p = ProfileFactory()
+    series = _series_with_title('Crash', 'Crate Crusher')
+    community = _community(100)
+    _holders(series, community[:30])
+    UserTitle.objects.filter(profile=community[0], title=series.title).update(is_displayed=True)
+
+    resp = _get(client, p)
+    entry = resp.context['all_titles'][0]
+
+    assert entry['holders'] == 30, 'equipping is a display choice, not the population'
+    assert entry['rarity_pct'] == 30.0 and entry['rarity_class'] == 'common'
+    # ...and the plate must SAY earned. Labelling an accurate holder count "wearing" is how a correct
+    # number reads as a wrong one.
+    assert '</strong> earned</span>' in resp.content.decode()
 
 
 def test_a_title_nobody_holds_gets_no_grade(client):
@@ -382,7 +407,7 @@ def test_the_grade_reaches_the_plate_through_the_shared_component(client):
     the regression worth catching."""
     p = ProfileFactory()
     series = _series_with_title('Crash', 'Crate Crusher')
-    _wearers(series, _community(200)[:1])                # 0.5% -> mythic
+    _holders(series, _community(200)[:1])                # 0.5% -> mythic
 
     content = _get(client, p).content.decode()
 

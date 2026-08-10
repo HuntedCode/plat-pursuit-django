@@ -141,10 +141,12 @@
 /* ---- Footer: the slot that adapts per view ---- */
 .ttl-plate__foot { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; min-width: 0; }
 .ttl-plate__foot .pp-horizon { flex: 1; min-width: 60px; }
-.ttl-plate__cap, .ttl-plate__wear { font-size: 10.5px; color: var(--pp-text-mute); white-space: nowrap; }
-.ttl-plate__cap strong, .ttl-plate__wear strong { color: var(--pp-text-dim); }
-.ttl-plate__wear { flex: 1; }
-.ttl-plate__wear--none { font-style: italic; opacity: 0.85; }
+/* __holders is how many hunters EARNED the title; __worn (below) is the one hunter wearing it. Two
+   different populations, so they get two names that can't be misread for each other. */
+.ttl-plate__cap, .ttl-plate__holders { font-size: 10.5px; color: var(--pp-text-mute); white-space: nowrap; }
+.ttl-plate__cap strong, .ttl-plate__holders strong { color: var(--pp-text-dim); }
+.ttl-plate__holders { flex: 1; }
+.ttl-plate__holders--none { font-style: italic; opacity: 0.85; }
 
 .ttl-plate__equip {
     cursor: pointer; padding: 8px 14px; min-height: 38px; border-radius: 999px; white-space: nowrap;

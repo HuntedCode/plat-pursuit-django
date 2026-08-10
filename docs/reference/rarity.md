@@ -25,9 +25,14 @@ used, and what PSN's own trophy rarity means, so "2.1%" reads here the way hunte
 everywhere else.
 
 **The numerator is whatever the surface actually prints.** For a group badge that is its
-`earned_count`; for a *title* it is the title's holders, because a title is granted by earning **any**
-live edition and is therefore strictly easier than any single edition. Grading a different population
-from the one displayed is how a card ends up reading "Mythic · 44,210 wearing".
+`earned_count`; for a *title* it is the title's **holders** — everyone granted it — because a title is
+granted by earning **any** live edition and is therefore strictly easier than any single edition.
+Grading a different population from the one displayed is how a card ends up reading "Mythic · 44,210
+earned".
+
+Holders, never *wearers*. Only one of a hunter's titles can be equipped at a time, so counting
+`is_displayed` would measure which title people currently like best, not who earned it — and would grade
+almost everything Mythic for a reason that has nothing to do with difficulty.
 
 Title holders count **`source_type='badge_series'` only**. The Titles page surfaces the new badge system
 alone, so a legacy `'badge'` or one-off `'milestone'` grant in the numerator would be measured against a

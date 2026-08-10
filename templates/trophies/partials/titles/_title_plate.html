@@ -16,7 +16,7 @@ one title read two different rarities depending on which page you were standing 
 `view` adapts only the footer, so all three panels read as one family:
   yours -> equip control (or the Wearing marker)
   reach -> a Horizon toward the title + "N of M stages"
-  all   -> how many hunters wear it
+  all   -> how many hunters have EARNED it (holders, not wearers -- see the footer)
 
 `data-ttl-row` / `data-title-id` are unchanged from the old row: titles.js finds plates by those, and
 equipping is still a single `.is-worn` class toggle.
@@ -87,11 +87,16 @@ equipping is still a single `.is-worn` class toggle.
 
         {% else %}
         {% comment %}The raw count, underneath the named grade in the head -- the grade says how rare,
-        this says how many.{% endcomment %}
+        this says how many.
+
+        EARNED, not worn. `entry.holders` counts UserTitle rows, and only one of a hunter's titles can
+        be `is_displayed` at a time -- so "wearing" would describe a far smaller population than the
+        number shown, and would make an accurate count read as a wrong one. Wearing is the equip state,
+        and it lives in the `yours` branch above.{% endcomment %}
         {% if entry.holders %}
-        <span class="ttl-plate__wear"><strong class="pp-tally pp-tally--xs">{{ entry.holders|intcomma }}</strong> wearing</span>
+        <span class="ttl-plate__holders"><strong class="pp-tally pp-tally--xs">{{ entry.holders|intcomma }}</strong> earned</span>
         {% else %}
-        <span class="ttl-plate__wear ttl-plate__wear--none">Nobody wears this yet</span>
+        <span class="ttl-plate__holders ttl-plate__holders--none">Nobody has earned this yet</span>
         {% endif %}
         {% if entry.held %}
         <span class="ttl-plate__have">

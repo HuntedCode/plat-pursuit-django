@@ -13,7 +13,8 @@ Three views behind the switcher:
                          one-off award, or a series whose editions were taken off-live).
   - **Within reach**  -- unearned titles you have real progress toward, CLOSEST FIRST. Ranked off the
                          materialized `SeriesBadgeStanding.progress_bp`, so it's a read, not a computation.
-  - **All**           -- the full live catalogue, each with what earns it + how many hunters wear it.
+  - **All**           -- the full live catalogue, each with what earns it + how many hunters have
+                         EARNED it. Holders, not wearers: only one title per hunter can be worn.
 
 Whale-safe by construction: every query is bounded by the badge catalogue or the viewer's own title
 count. Nothing iterates trophies.
@@ -74,7 +75,14 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
             for s in SeriesBadgeStanding.objects.filter(profile=profile)
         }
 
-        # ── 4. Social proof: how many hunters wear each title. One grouped COUNT over the catalogue.
+        # ── 4. Social proof: how many hunters have EARNED each title. One grouped COUNT over the
+        # catalogue.
+        #
+        # HOLDERS, not wearers. A UserTitle row is the grant; `is_displayed` is the separate equip flag
+        # and only one of a hunter's rows can carry it. So filtering on it would count the far smaller
+        # population of people who happen to have this title selected right now -- which says something
+        # about fashion, not about achievement, and would make every title look vanishingly rare.
+        #
         # `source_type='badge_series'` on purpose: this page surfaces the NEW badge system only (see the
         # module docstring), so counting a legacy 'badge' or one-off 'milestone' grant here would inflate
         # the numerator against a denominator that knows nothing about them -- making the title read
@@ -97,8 +105,8 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
         #
         # The NUMERATOR is title holders, not the badge's earned_count. A title is granted by earning ANY
         # live edition, so it is strictly easier than any single edition -- and the plate prints "N
-        # wearing" right next to the grade. Grading a different population from the one displayed is how
-        # you end up with a card that reads "Mythic - 44,210 wearing".
+        # earned" right next to the grade. Grading a different population from the one displayed is how
+        # you end up with a card that reads "Mythic - 44,210 earned".
         community = community_size()
 
         # ── 5. Build one entry per TITLE. Keyed by title_id, not by series: BadgeSeries.title has no
