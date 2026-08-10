@@ -165,16 +165,15 @@ class Command(BaseCommand):
         cache_config = settings.CACHES['default']
         prefix = f"{cache_config['KEY_PREFIX']}:1:"
 
+        # game:stats:* is gone -- the community stats row reads denormed Game columns
+        # now (recomputed nightly by recalc_earn_rates), so there is no cache to flush.
         exact_keys = [
             f"{prefix}game:imageurls:{np_communication_id}",
         ]
-        stats_pattern = f"{prefix}game:stats:{np_communication_id}:*"
 
         try:
             deleted_count = 0
             for key in exact_keys:
-                deleted_count += redis_client.delete(key)
-            for key in redis_client.scan_iter(match=stats_pattern):
                 deleted_count += redis_client.delete(key)
             logger.info(f"Flushed {deleted_count} index-related keys.")
             self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} keys for game {np_communication_id} page."))
@@ -196,7 +195,7 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Found {len(np_ids)} game(s) for concept {concept_id}: {', '.join(filter(None, np_ids))}")
 
-        if not self._confirm_action(f"flush image/trophy/stats caches for these {len(np_ids)} game(s)"):
+        if not self._confirm_action(f"flush image caches for these {len(np_ids)} game(s)"):
             self.stdout.write(self.style.ERROR("Operation cancelled."))
             return
 
@@ -211,8 +210,6 @@ class Command(BaseCommand):
                 deleted_count += redis_client.delete(
                     f"{prefix}game:imageurls:{np_id}",
                 )
-                for key in redis_client.scan_iter(match=f"{prefix}game:stats:{np_id}:*"):
-                    deleted_count += redis_client.delete(key)
             logger.info(f"Flushed {deleted_count} keys for concept {concept_id}.")
             self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} keys for concept {concept_id}."))
         except Exception as e:

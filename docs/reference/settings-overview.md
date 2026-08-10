@@ -11,6 +11,8 @@ Key Django settings, third-party integrations, and constants files used across P
 | `DJANGO_SETTINGS_MODULE` | `plat_pursuit.settings` | Single settings file (no dev/prod split) |
 | `DEBUG` | Env var | Controls email backend, error display, payment completion flow |
 | `DATABASES` | PostgreSQL 15 | `DATABASE_URL` takes priority over individual `DB_*` vars |
+| `DB_STATEMENT_TIMEOUT_MS` | `60000` default | **Per-service.** Must sit BELOW the gunicorn worker timeout on the web service (set `15000` there). See [Per-process DB timeouts](#per-process-db-timeouts) |
+| `DB_LOCK_TIMEOUT_MS` | `30000` default | Postgres `lock_timeout`, same per-service mechanism |
 | `CACHES` | `django-redis` | Single cache backend at `REDIS_URL` |
 | `EMAIL_BACKEND` | SendGrid (prod) / Console (debug) | `django-sendgrid-v5` in production |
 | `STATIC_FILES_STORAGE` | WhiteNoise | S3 via `django-storages` optional |
@@ -31,6 +33,20 @@ Key Django settings, third-party integrations, and constants files used across P
 ### Payment Mode Switching
 
 Stripe and PayPal each have test/live modes controlled by `STRIPE_MODE` and `PAYPAL_MODE` env vars. Each mode has its own set of keys, secrets, and webhook IDs. The settings file selects the correct set based on the mode value.
+
+### Per-process DB timeouts
+
+`DB_STATEMENT_TIMEOUT_MS` / `DB_LOCK_TIMEOUT_MS` feed Postgres `statement_timeout` / `lock_timeout` through the connection `OPTIONS`. They are env vars rather than constants because the correct ceiling genuinely differs per process:
+
+| Service | `DB_STATEMENT_TIMEOUT_MS` | Why |
+|---------|--------------------------|-----|
+| **web** | `15000` | Must abort BELOW the gunicorn worker timeout |
+| **worker** | unset (60000 default) | Sync jobs legitimately run for minutes |
+| **migrate / one-off commands** | unset (60000 default) | A large `CREATE INDEX` or a `recalc_earn_rates` chunk will exceed any web-appropriate ceiling |
+
+**Why the web value must be lower than the gunicorn timeout.** It used to be a flat 60s against a 30s gunicorn timeout, so a slow query always killed the worker first. That failure mode is actively misleading: gunicorn `SIGABRT`s mid-render, so the traceback points at `sock.sendall` in the WSGI writer instead of at the query; the worker holds its full allocation until it dies (which under fan-out is what pushes the container into the OOM killer); and Postgres keeps executing a statement whose result nobody will ever read. Timing out in Postgres first converts all of that into a clean `QueryCanceled` naming the actual SQL. This was a contributing factor in the 2026-08-09 outage.
+
+**Gotcha:** the default deliberately stays at the old 60000 so that only the service which explicitly sets the var changes behavior. If you add a new service, think about which column above it belongs in — inheriting the default is the safe choice for anything that is not serving web requests.
 
 ## Constants Files
 
