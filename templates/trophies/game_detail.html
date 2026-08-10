@@ -240,6 +240,10 @@
 
 {% block js_scripts %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
+    {% comment %}Shared quick-rate controller (PlatPursuit.QuickRate) -- the form behaviour for
+    quick_rate_modal.html, which this page and the plat-card share modal both compose. Must load
+    BEFORE the page controller that calls it.{% endcomment %}
+    <script src="{% static 'js/quick-rate.js' %}"></script>
     <script src="{% static 'js/game-detail.js' %}"></script>
     <script src="{% static 'js/submit_shimmer.js' %}"></script>
     {% if user.is_authenticated and user.profile %}

@@ -152,6 +152,26 @@
     font-size: 13px; color: var(--pp-text-dim); margin-top: 3px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* The game name doubles as the way out to its page. Quiet at rest -- it sits under the title as a
+   subtitle first and a link second -- with the arrow and the accent arriving on hover/focus. */
+.pc-modal__gamelink {
+    display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+    color: inherit; text-decoration: none;
+    transition: color 0.15s ease;
+}
+.pc-modal__gamelink > span {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px;
+    transition: text-decoration-color 0.15s ease;
+}
+.pc-modal__gamelink svg { width: 12px; height: 12px; flex-shrink: 0; opacity: 0.55; transition: opacity 0.15s ease; }
+.pc-modal__gamelink:hover, .pc-modal__gamelink:focus-visible { color: var(--pp-primary); }
+.pc-modal__gamelink:hover > span, .pc-modal__gamelink:focus-visible > span { text-decoration-color: currentColor; }
+.pc-modal__gamelink:hover svg, .pc-modal__gamelink:focus-visible svg { opacity: 1; }
+.pc-modal__gamelink:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) {
+    .pc-modal__gamelink, .pc-modal__gamelink > span, .pc-modal__gamelink svg { transition: none; }
+}
 .pc-modal__x {
     margin-left: auto; flex-shrink: 0;
     width: 32px; height: 32px; border-radius: 8px;

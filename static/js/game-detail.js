@@ -1460,73 +1460,30 @@ document.addEventListener('DOMContentLoaded', () => {
         // ── Quick-rate modal. Opens from any .quick-rate-btn (SSR'd per group), prefills from data-existing,
         //    POSTs the rating, and live-updates the source group's bars/values without a reload. The endpoint
         //    and the form input names are the API contract (see quick_rate_modal.html). ──
-        const modal = document.getElementById('gd-qr-modal');
-        const form = document.getElementById('gd-qr-form');
-        if (!modal || !form) return;
+        // The form mechanics -- prefill, slider readouts, the blurb counter, the hours gate, the
+        // guidelines agree-on-submit, the POST and every close affordance -- live in the SHARED
+        // PlatPursuit.QuickRate (quick-rate.js), because the plat-card share modal composes this same
+        // dialog. This file keeps only what is specific to this page: which button was clicked, and the
+        // live panel update afterwards.
+        if (!PlatPursuit.QuickRate) return;
 
-        const SLIDER_KEYS = ['difficulty', 'grindiness', 'fun_ranking', 'overall_rating'];
-        const fmt = (name, v) => name === 'overall_rating' ? parseFloat(v).toFixed(1) : String(v);
-        const setVal = (name) => {
-            const o = form.querySelector('[data-gd-qr-val="' + name + '"]');
-            const inp = form.querySelector('[name="' + name + '"]');
-            if (o && inp) o.textContent = fmt(name, inp.value);
-        };
-        form.querySelectorAll('[data-gd-qr-slider]').forEach((s) => s.addEventListener('input', () => setVal(s.name)));
-
-        // Blurb: live char counter. (The guidelines notice is now a persistent SSR line, always shown, not a
-        // JS toggle -- posting is the agreement, recorded server-side on submit.)
-        const MAX_BLURB = 140;
-        const area = form.querySelector('[data-gd-qr-blurb]');
-        const countEl = form.querySelector('[data-gd-qr-count]');
-        const alreadyAgreed = () => form.dataset.guidelinesAgreed === '1';
-        function refreshBlurbUi() {
-            if (!area || !countEl) return;
-            const left = MAX_BLURB - area.value.length;
-            countEl.textContent = String(left);
-            countEl.classList.toggle('is-low', left <= 20);
-        }
-        if (area) area.addEventListener('input', refreshBlurbUi);
-
-        let srcBtn = null, conceptId = null, groupId = null;
-
-        // gd-modal close affordances (button / backdrop / Esc / swipe) + page recede -- same as the page's
-        // other modals. Keep the scroll put: native <dialog>.showModal() jumps to the dialog on mobile.
-        function closeQr() { pageRecede(false); if (modal.close && modal.open) modal.close(); }
-        modal.querySelectorAll('[data-gd-modal-close]').forEach((b) => b.addEventListener('click', closeQr));
-        modal.addEventListener('click', (e) => { if (e.target === modal) closeQr(); });
-        modal.addEventListener('cancel', (e) => { e.preventDefault(); closeQr(); });
-        if (PlatPursuit.dismissableSheet) PlatPursuit.dismissableSheet(modal, { onClose: closeQr });
+        let srcBtn = null;
 
         document.addEventListener('click', (e) => {
             const btn = e.target.closest('.quick-rate-btn');
             if (!btn) return;
             srcBtn = btn;
-            conceptId = btn.dataset.conceptId;
-            groupId = btn.dataset.groupId;
-
-            const hoursLbl = form.querySelector('[data-gd-qr-hours-label]');
-            if (hoursLbl) hoursLbl.textContent = btn.dataset.hoursLabel || 'Hours to Platinum';
-
             const ex = btn.dataset.existing ? JSON.parse(btn.dataset.existing) : null;
-            form.querySelector('[name="difficulty"]').value = ex ? ex.difficulty : 5;
-            form.querySelector('[name="grindiness"]').value = ex ? ex.grindiness : 5;
-            form.querySelector('[name="hours_to_platinum"]').value = ex ? ex.hours_to_platinum : '';
-            form.querySelector('[name="fun_ranking"]').value = ex ? ex.fun_ranking : 5;
-            form.querySelector('[name="overall_rating"]').value = ex ? ex.overall_rating : 3;
-            SLIDER_KEYS.forEach(setVal);
-            if (area) { area.value = btn.dataset.existingBlurb || ''; refreshBlurbUi(); }
-
-            const title = document.getElementById('gd-qr-title');
-            if (title) title.textContent = ex ? 'Update your rating' : 'Rate this game';
-            const submit = form.querySelector('[data-gd-qr-submit]');
-            if (submit) submit.textContent = ex ? 'Update rating' : 'Submit rating';
-
-            if (modal.showModal && !modal.open) {
-                const y = window.scrollY;
-                modal.showModal();
-                if (window.scrollY !== y) window.scrollTo(0, y);
-                pageRecede(true);
-            }
+            PlatPursuit.QuickRate.open({
+                conceptId: btn.dataset.conceptId,
+                groupId: btn.dataset.groupId,
+                existing: ex,
+                blurb: btn.dataset.existingBlurb || '',
+                hoursLabel: btn.dataset.hoursLabel || 'Hours to Platinum',
+                onOpen: () => pageRecede(true),
+                onClose: () => pageRecede(false),
+                onSaved: (data, payload) => applyRating(data, payload),
+            });
         });
 
         // Tone + bar-fill thresholds MIRROR core/templatetags/custom_filters.py rating_tone + the SSR widthratio
@@ -1555,102 +1512,65 @@ document.addEventListener('DOMContentLoaded', () => {
             return diff + ', ' + grind + ', ' + conj + ' ' + fun + '.';
         }
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const hours = parseInt(form.querySelector('[name="hours_to_platinum"]').value, 10);
-            if (!hours || hours < 1) { PlatPursuit.ToastManager.show('Enter the hours it took you.', 'warning'); return; }
-
-            const submit = form.querySelector('[data-gd-qr-submit]');
-            if (submit) { submit.disabled = true; submit.textContent = 'Saving…'; }
-            const blurbVal = area ? area.value.trim() : '';
-            const payload = {
-                difficulty: parseInt(form.querySelector('[name="difficulty"]').value, 10),
-                grindiness: parseInt(form.querySelector('[name="grindiness"]').value, 10),
-                hours_to_platinum: hours,
-                fun_ranking: parseInt(form.querySelector('[name="fun_ranking"]').value, 10),
-                overall_rating: parseFloat(form.querySelector('[name="overall_rating"]').value),
-                blurb: blurbVal,
-            };
-            try {
-                // Posting a quick take records guidelines agreement (the fine print is the notice). Idempotent,
-                // and done first so the rate call doesn't 403 with needs_guidelines.
-                if (blurbVal && !alreadyAgreed()) {
-                    try { await PlatPursuit.API.post('/api/v1/guidelines/agree/', {}); form.dataset.guidelinesAgreed = '1'; }
-                    catch (_) { /* fall through; the rate call surfaces needs_guidelines if this failed */ }
-                }
-                const data = await PlatPursuit.API.post('/api/v1/ratings/' + conceptId + '/group/' + groupId + '/rate/', payload);
-                const savedMsg = data.message || 'Rating saved!';
-
-                // Live-update the source group's panel in place (no reload): hero verdict/score/count, the
-                // hours callout, and each quality's marker + verdict. Handles empty -> filled (drop --empty).
-                const avg = data.community_averages;
-                const panel = srcBtn && srcBtn.closest('[data-rate-panel]');
-                const card = panel && panel.querySelector('[data-rate-grid]');
-                if (avg && card) {
-                    card.classList.remove('gd-cond--empty');
-                    const summary = card.querySelector('[data-cond-summary]'); if (summary) summary.textContent = summaryOf(avg);
-                    const sc = card.querySelector('[data-cond-score]'); if (sc) { countTo(sc, avg.avg_rating, 1); sc.classList.add('pp-tally--glow'); }
-                    const st = card.querySelector('[data-cond-stars]');
-                    if (st) { st.style.setProperty('--fill', (avg.avg_rating / 5 * 100) + '%'); st.setAttribute('aria-label', avg.avg_rating.toFixed(1) + ' out of 5'); }
-                    const ct = card.querySelector('[data-rate-count]');
-                    if (ct && avg.count != null) ct.textContent = avg.count.toLocaleString() + ' rating' + (avg.count === 1 ? '' : 's');
-                    const hrs = card.querySelector('[data-cond-hours]'); if (hrs && avg.avg_hours != null) countTo(hrs, Math.round(avg.avg_hours), 0);
-                    const byStat = { difficulty: avg.avg_difficulty, grindiness: avg.avg_grindiness, fun: avg.avg_fun };
-                    Object.keys(byStat).forEach((kind) => {
-                        const v = byStat[kind];
-                        const tile = card.querySelector('.gd-cond__tile[data-stat="' + kind + '"]');
-                        if (!tile || v == null) return;
-                        tile.dataset.tone = toneOf(kind, v);
-                        const vd = tile.querySelector('[data-cond-verdict]'); if (vd) vd.textContent = verdictOf(kind, v);
-                        const nm = tile.querySelector('[data-cond-num]'); if (nm) countTo(nm, v, 1);
+        // Everything that happens AFTER a save lands. The controller has already closed the modal.
+        function applyRating(data, payload) {
+            const savedMsg = data.message || 'Rating saved!';
+            const avg = data.community_averages;
+            // Live-update the source group's panel in place (no reload): hero verdict/score/count, the
+            // hours callout, and each quality's marker + verdict. Handles empty -> filled (drop --empty).
+            const panel = srcBtn && srcBtn.closest('[data-rate-panel]');
+            const card = panel && panel.querySelector('[data-rate-grid]');
+            if (avg && card) {
+                card.classList.remove('gd-cond--empty');
+                const summary = card.querySelector('[data-cond-summary]'); if (summary) summary.textContent = summaryOf(avg);
+                const sc = card.querySelector('[data-cond-score]'); if (sc) { countTo(sc, avg.avg_rating, 1); sc.classList.add('pp-tally--glow'); }
+                const st = card.querySelector('[data-cond-stars]');
+                if (st) { st.style.setProperty('--fill', (avg.avg_rating / 5 * 100) + '%'); st.setAttribute('aria-label', avg.avg_rating.toFixed(1) + ' out of 5'); }
+                const ct = card.querySelector('[data-rate-count]');
+                if (ct && avg.count != null) ct.textContent = avg.count.toLocaleString() + ' rating' + (avg.count === 1 ? '' : 's');
+                const hrs = card.querySelector('[data-cond-hours]'); if (hrs && avg.avg_hours != null) countTo(hrs, Math.round(avg.avg_hours), 0);
+                const byStat = { difficulty: avg.avg_difficulty, grindiness: avg.avg_grindiness, fun: avg.avg_fun };
+                Object.keys(byStat).forEach((kind) => {
+                    const v = byStat[kind];
+                    const tile = card.querySelector('.gd-cond__tile[data-stat="' + kind + '"]');
+                    if (!tile || v == null) return;
+                    tile.dataset.tone = toneOf(kind, v);
+                    const vd = tile.querySelector('[data-cond-verdict]'); if (vd) vd.textContent = verdictOf(kind, v);
+                    const nm = tile.querySelector('[data-cond-num]'); if (nm) countTo(nm, v, 1);
+                });
+                // Live-update the rating-spread chart bars + per-bar counts (10 columns keyed on the
+                // integer half-step 1..10). Empty count -> clear to '' so the :empty label hides.
+                if (avg.distribution) {
+                    avg.distribution.forEach((row) => {
+                        const el = card.querySelector('.gd-dist__col[data-dist-step="' + row.step + '"]');
+                        if (!el) return;
+                        const fill = el.querySelector('[data-dist-fill]'); if (fill) fill.style.height = row.bar + '%';
+                        const dn = el.querySelector('[data-dist-n]'); if (dn) dn.textContent = row.count || '';
                     });
-                    // Live-update the rating-spread chart bars + per-bar counts (10 columns keyed on the
-                    // integer half-step 1..10). Empty count -> clear to '' so the :empty label hides.
-                    if (avg.distribution) {
-                        avg.distribution.forEach((row) => {
-                            const el = card.querySelector('.gd-dist__col[data-dist-step="' + row.step + '"]');
-                            if (!el) return;
-                            const fill = el.querySelector('[data-dist-fill]'); if (fill) fill.style.height = row.bar + '%';
-                            const dn = el.querySelector('[data-dist-n]'); if (dn) dn.textContent = row.count || '';
-                        });
-                    }
                 }
-                // Live-sync the viewer's "Your take" comparison band (add / update / remove).
-                if (card && avg) syncYouTake(card, payload, avg);
-                // Live-sync the viewer's own quick take in this group's strip (add / replace / remove). Prefer
-                // the server-echoed stored blurb (sanitized) over the raw typed text so the live card matches
-                // what everyone else -- and the author on reload -- will see.
-                syncOwnBlurb(panel, data.blurb ?? blurbVal, payload.overall_rating);
-                if (srcBtn) {
-                    // Keep data-existing purely numeric (the prefill contract); the blurb rides its own attr.
-                    srcBtn.dataset.existing = JSON.stringify({
-                        difficulty: payload.difficulty, grindiness: payload.grindiness,
-                        hours_to_platinum: payload.hours_to_platinum, fun_ranking: payload.fun_ranking,
-                        overall_rating: payload.overall_rating,
-                    });
-                    srcBtn.dataset.existingBlurb = blurbVal;
-                    const lbl = srcBtn.querySelector('span');
-                    if (lbl) lbl.textContent = 'Update rating';
-                }
-                closeQr();
-                // Toast AFTER close so it lands on the viewport #toast-container, not the modal's popover
-                // (which the dialog takes down on close). The in-place live-update above is the primary
-                // feedback; this is the persistent confirmation once the modal is gone.
-                PlatPursuit.ToastManager.show(savedMsg, 'success');
-            } catch (error) {
-                let msg = 'Failed to save rating.';
-                // The rate endpoint returns field validation (e.g. a banned-word blurb) under `errors` (a
-                // {field: [msgs]} dict); every other failure uses `error`. Surface the first field message so
-                // a rejected quick take explains itself instead of showing the generic fallback.
-                try {
-                    const ed = await error.response?.json();
-                    msg = ed?.error || (ed?.errors && Object.values(ed.errors)[0]?.[0]) || msg;
-                } catch (_) { /* ignore */ }
-                PlatPursuit.ToastManager.show(msg, 'error');
-            } finally {
-                if (submit) { submit.disabled = false; submit.textContent = srcBtn?.dataset.existing ? 'Update rating' : 'Submit rating'; }
             }
-        });
+            // Live-sync the viewer's "Your take" comparison band (add / update / remove).
+            if (card && avg) syncYouTake(card, payload, avg);
+            // Live-sync the viewer's own quick take in this group's strip (add / replace / remove). Prefer
+            // the server-echoed stored blurb (sanitized) over the raw typed text so the live card matches
+            // what everyone else -- and the author on reload -- will see.
+            syncOwnBlurb(panel, data.blurb ?? payload.blurb, payload.overall_rating);
+            if (srcBtn) {
+                // Keep data-existing purely numeric (the prefill contract); the blurb rides its own attr.
+                srcBtn.dataset.existing = JSON.stringify({
+                    difficulty: payload.difficulty, grindiness: payload.grindiness,
+                    hours_to_platinum: payload.hours_to_platinum, fun_ranking: payload.fun_ranking,
+                    overall_rating: payload.overall_rating,
+                });
+                srcBtn.dataset.existingBlurb = payload.blurb;
+                const lbl = srcBtn.querySelector('span');
+                if (lbl) lbl.textContent = 'Update rating';
+            }
+            // Toast AFTER close so it lands on the viewport #toast-container, not the modal's popover
+            // (which the dialog takes down on close). The in-place live-update above is the primary
+            // feedback; this is the persistent confirmation once the modal is gone.
+            PlatPursuit.ToastManager.show(savedMsg, 'success');
+        }
 
         // Build the viewer's own quick-take card (matches _blurb_card.html, You variant, no report). Name and
         // text go in via textContent -- never innerHTML -- so the viewer's own blurb can't inject markup.

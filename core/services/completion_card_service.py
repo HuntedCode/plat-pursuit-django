@@ -27,6 +27,7 @@ import logging
 
 from django.db.models import F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
+from django.urls import reverse
 
 from trophies.models import (
     BadgeSeries, EarnedTrophy, ProfileGame, ProfileTrophyGroup, SeriesBadgeStanding, Stage,
@@ -584,6 +585,11 @@ def get_card_data(profile, standing):
         'game_name': game.title_name,
         'concept_id': concept.id if concept else None,
         'trophy_group_id': group.id,
+        # For the share modal's link out to the game. `game_detail` keys on np_communication_id, not the
+        # pk, so the id itself is no use to the caller -- the URL is built here where the Game is in hand
+        # rather than reassembled from parts in JS. NOT used by the card template: the rendered PNG
+        # leaves the site and cannot contain a link.
+        'game_url': reverse('game_detail', kwargs={'np_communication_id': game.np_communication_id}),
         'game_image': game.display_image_url_large,
         # Every landscape image the concept has, not just the best one. `landscape_urls` is already
         # ordered by quality (trusted IGDB screenshots -> artworks -> PSN bg_url), so a game with

@@ -39,10 +39,44 @@ def test_no_multiline_hash_comments():
     )
 
 
+STATIC_JS = Path(__file__).resolve().parents[2] / 'static' / 'js'
+
+
+def test_the_quick_rate_hosts_do_not_re_implement_the_driver():
+    """The quick-rate modal (`#gd-qr-modal`) is composed on two surfaces -- Game Detail's Ratings tab and
+    the plat-card share modal -- and each used to carry its own driver. They had already drifted: only
+    Game Detail surfaced the endpoint's field-level `errors`, so a blurb rejected for a banned word
+    explained itself on one page and failed generically on the other.
+
+    Both now call `PlatPursuit.QuickRate`, so neither may POST the rating itself. Scoped to these two
+    files on purpose -- other surfaces (the dashboard's legacy prompt, Rate My Games, the review hub)
+    legitimately post ratings from their own forms and are not what this guards."""
+    for name in ('game-detail.js', 'plat-cards.js'):
+        src = (STATIC_JS / name).read_text(encoding='utf-8')
+        assert '/group/' not in src or '/rate/' not in src, (
+            f'{name} posts a rating directly again -- it should call PlatPursuit.QuickRate'
+        )
+        assert 'QuickRate' in src, f'{name} no longer uses the shared controller'
+
+
+def test_both_hosts_load_the_shared_controller():
+    """`quick-rate.js` defines PlatPursuit.QuickRate and must load BEFORE the page controller that calls
+    it, or the rate button is silently inert."""
+    root = Path(__file__).resolve().parents[2] / 'templates'
+    for page, controller in [
+        ('trophies/game_detail.html', 'js/game-detail.js'),
+        ('shareables/plat_cards.html', 'js/plat-cards.js'),
+    ]:
+        html = (root / page).read_text(encoding='utf-8')
+        assert 'js/quick-rate.js' in html, page
+        assert html.index('js/quick-rate.js') < html.index(controller), f'{page}: load order'
+
+
 @pytest.mark.parametrize('name', [
     'shareables/partials/share_modal.html',
     'partials/rate_before_download_modal.html',
     'shareables/plat_card.html',
+    'trophies/partials/game_detail/quick_rate_modal.html',
 ])
 def test_share_flow_templates_have_balanced_comment_tags(name):
     """An unclosed `{% comment %}` swallows the rest of the file instead of erroring -- controls simply

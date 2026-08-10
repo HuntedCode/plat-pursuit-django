@@ -18,9 +18,18 @@ so that is what ships -- scoped to this element instead of a global.{% endcommen
 <dialog id="pc-share" class="pc-modal" aria-labelledby="pc-share-title">
     <div class="pc-modal__box">
         <header class="pc-modal__head">
+            {% comment %}The subtitle IS the link out to the game -- the game's name was already the only
+            thing there, and making the existing text the affordance costs no height in a modal that has
+            none to give. Rendered as a link only once a card loads (the JS fills href + text together),
+            because an <a> with no href is a dead control.{% endcomment %}
             <div class="min-w-0">
                 <h2 id="pc-share-title" class="pc-modal__title">Your card</h2>
-                <p class="pc-modal__sub" data-share-game></p>
+                <p class="pc-modal__sub">
+                    <a class="pc-modal__gamelink" data-share-game hidden>
+                        <span data-share-game-name></span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+                    </a>
+                </p>
             </div>
             <button type="button" class="pc-modal__x" data-share-close aria-label="Close">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>

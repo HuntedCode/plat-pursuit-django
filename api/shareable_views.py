@@ -161,6 +161,8 @@ class PlatCardHTMLView(_CardViewBase):
             'variant': context['variant'],
             'concept_id': context['concept_id'],
             'trophy_group_id': context['trophy_group_id'],
+            'game_name': context['game_name'],
+            'game_url': context['game_url'],
             'has_rating': context['user_rating'] is not None,
             # The rating itself, so the share modal's rate form can open PREFILLED when a hunter edits
             # one. Without it an "edit" opens on the slider defaults and quietly overwrites their real

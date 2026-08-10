@@ -271,6 +271,16 @@
                 current.conceptId = data.concept_id;
                 current.playtime = data.playtime || '';
                 current.rating = data.user_rating || null;
+                // Now the link has a destination. Name from the payload too, so the modal agrees with
+                // the card rather than with whatever the tile's data attribute said.
+                var glink = dlg.querySelector('[data-share-game]');
+                var gname = dlg.querySelector('[data-share-game-name]');
+                if (gname && data.game_name) { gname.textContent = data.game_name; }
+                if (glink && data.game_url) {
+                    glink.href = data.game_url;
+                    glink.title = 'Open ' + (data.game_name || 'this game') + "'s page";
+                    glink.hidden = false;
+                }
                 buildArtSwatches(data.art_options);
                 syncRateButton();
                 var label = dlg.querySelector('[data-share-download-label]');
@@ -315,8 +325,12 @@
     function openFor(groupId, gameName) {
         current = { groupId: groupId, gameName: gameName || '', conceptId: '', hasRating: true,
                     playtime: '', rating: null };
-        var sub = dlg.querySelector('[data-share-game]');
-        if (sub) { sub.textContent = current.gameName; }
+        // The name is known from the card tile, but the URL isn't until the payload lands -- so show the
+        // text now and only turn it into a link once there's somewhere to go.
+        var name = dlg.querySelector('[data-share-game-name]');
+        var link = dlg.querySelector('[data-share-game]');
+        if (name) { name.textContent = current.gameName; }
+        if (link) { link.hidden = !current.gameName; link.removeAttribute('href'); }
         setDownloadState('idle');       // never greet a new card with the previous one's "Saved"
         // Hidden until the card loads: there is nothing to rate yet, and the PREVIOUS card's label
         // would otherwise sit there offering to edit a rating that belongs to a different game.
@@ -403,58 +417,13 @@
     }
 
     // ── Rating ────────────────────────────────────────────────────────────────────────────────────
-    // Drives the SAME quick-rate modal as the Game Detail Ratings tab (#gd-qr-modal), not the legacy
-    // rate_before_download_modal this page shipped with. That one predates the rebuild -- DaisyUI colours
-    // and no blurb field at all, so the card rendered a quick take the only form that could set it never
-    // offered.
-    //
-    // Two entry points, one modal:
+    // The form itself is PlatPursuit.QuickRate (quick-rate.js), shared with the Game Detail Ratings tab.
+    // This page only decides WHEN to open it and what happens after:
     //   PROMPT -- offered once per opened card when an unrated card is downloaded. The card carries the
     //             hunter's own stars, difficulty, grind and fun, so an unrated game makes a visibly
     //             thinner card; that is the honest reason to ask, and why this only ever offers.
     //   EDIT   -- the modal's own Rate/Edit button. Nothing downloads, and it opens prefilled.
-    //
-    // game-detail.js is NOT loaded here, so every behaviour it gives that modal has to happen here too:
-    // slider readouts, the blurb counter, prefill, the guidelines agree-on-submit, and close wiring.
     var asked = false;
-    var QR_SLIDERS = ['difficulty', 'grindiness', 'fun_ranking', 'overall_rating'];
-    var BLURB_MAX = 140;
-
-    function qrField(form, name) { return form.querySelector('[name="' + name + '"]'); }
-
-    function qrSetVal(form, name) {
-        var out = form.querySelector('[data-gd-qr-val="' + name + '"]');
-        var input = qrField(form, name);
-        if (!out || !input) { return; }
-        out.textContent = name === 'overall_rating' ? parseFloat(input.value).toFixed(1) : String(input.value);
-    }
-
-    function qrRefreshCount(form) {
-        var area = form.querySelector('[data-gd-qr-blurb]');
-        var count = form.querySelector('[data-gd-qr-count]');
-        if (!area || !count) { return; }
-        var left = BLURB_MAX - area.value.length;
-        count.textContent = String(left);
-        count.classList.toggle('is-low', left <= 20);
-    }
-
-    // Prefill from the hunter's existing scores. Without this an edit opens on the form's defaults and
-    // saving overwrites real scores with 3/5/5/5 -- a control that destroys the thing it claims to edit.
-    // The blurb is prefilled too now that the form HAS one: leaving it empty would silently clear a quick
-    // take on every save, since the payload always sends the field.
-    function qrPrefill(form, rating) {
-        var d = { difficulty: 5, grindiness: 5, fun_ranking: 5, overall_rating: 3, hours_to_platinum: '' };
-        Object.keys(d).forEach(function (name) {
-            var input = qrField(form, name);
-            if (!input) { return; }
-            var v = rating && rating[name] !== null && rating[name] !== undefined ? rating[name] : d[name];
-            input.value = v;
-        });
-        var area = form.querySelector('[data-gd-qr-blurb]');
-        if (area) { area.value = (rating && rating.blurb) || ''; }
-        QR_SLIDERS.forEach(function (n) { qrSetVal(form, n); });
-        qrRefreshCount(form);
-    }
 
     // The card's stats ARE the hunter's rating, so let them fix it without leaving the modal. Hidden
     // until a card is loaded (there's nothing to rate before then), and relabelled once one exists --
@@ -469,122 +438,33 @@
 
     function promptRating(proceed, opts) {
         var edit = !!(opts && opts.edit);
-        var modal = document.getElementById('gd-qr-modal');
-        var form = document.getElementById('gd-qr-form');
-        if (!modal || !form || !modal.showModal) { proceed(); return; }
         // Only the DOWNLOAD prompt is once-per-card. An explicit edit must never consume that, or opening
         // the editor would silence the prompt for a hunter who then skipped rating.
         if (!edit) { asked = true; }
 
-        qrPrefill(form, edit ? current.rating : null);
-
-        var title = document.getElementById('gd-qr-title');
-        var submit = form.querySelector('[data-gd-qr-submit]');
-        var cancel = form.querySelector('[data-gd-qr-cancel]');
-        var closers = modal.querySelectorAll('[data-gd-modal-close]:not([data-gd-qr-cancel])');
-        if (title) { title.textContent = edit ? 'Update your rating' : 'Rate this game'; }
-        if (submit) {
-            submit.disabled = false;
-            submit.textContent = edit ? 'Save rating' : 'Rate and download';
-        }
-        // In PROMPT mode the secondary action is "skip, just download"; in EDIT mode it is a plain cancel.
-        if (cancel) { cancel.textContent = edit ? 'Cancel' : 'Skip, just download'; }
-
-        // The hint is SSR'd for Game Detail, where playtime is a page-level fact. Here it is per card.
-        var hint = form.querySelector('.gd-qr__hint');
-        if (hint) {
-            hint.textContent = current.playtime
-                ? 'Your tracked playtime: ' + current.playtime
-                : "We don't have your playtime for this game.";
-            hint.classList.toggle('gd-qr__hint--muted', !current.playtime);
-        }
-
-        function onSlider(e) { if (e.target.matches('[data-gd-qr-slider]')) { qrSetVal(form, e.target.name); } }
-        function onBlurbInput(e) { if (e.target.matches('[data-gd-qr-blurb]')) { qrRefreshCount(form); } }
-        // Idempotent, and also bound to the dialog's native `close` -- which fires HOWEVER it closes,
-        // including the swipe-to-dismiss `pp-dismissable` gives it on mobile. Relying on finish() alone
-        // meant a swipe left every listener attached, so the next open double-bound them and a single
-        // submit fired twice.
-        var torn = false;
-        function cleanup() {
-            if (torn) { return; }
-            torn = true;
-            form.removeEventListener('input', onSlider);
-            form.removeEventListener('input', onBlurbInput);
-            form.removeEventListener('submit', onSubmit);
-            if (cancel) { cancel.removeEventListener('click', onCancel); }
-            closers.forEach(function (b) { b.removeEventListener('click', onDismiss); });
-            modal.removeEventListener('cancel', onEsc);
-            modal.removeEventListener('click', onBackdrop);
-            modal.removeEventListener('close', cleanup);
-        }
-        // A DISMISS is not a skip. The header X, the backdrop and Esc are the universal get-me-out-of-here
-        // affordance; treating any of them as "skip, then download" meant closing the modal handed you a
-        // file. Only the two explicit buttons continue.
-        function finish(didRate, andDownload) {
-            cleanup();
-            if (modal.close && modal.open) { modal.close(); }
-            if (didRate) {
+        PP.QuickRate.open({
+            conceptId: current.conceptId,
+            groupId: 'default',                       // the card is always the base list
+            existing: edit ? current.rating : null,
+            blurb: edit && current.rating ? current.rating.blurb : '',
+            title: edit ? 'Update your rating' : 'Rate this game',
+            submitLabel: edit ? 'Save rating' : 'Rate and download',
+            // In PROMPT mode the secondary action is "skip, just download"; in EDIT mode a plain cancel.
+            cancelLabel: edit ? 'Cancel' : 'Skip, just download',
+            playtimeHint: current.playtime ? 'Your tracked playtime: ' + current.playtime : '',
+            onSaved: function () {
                 current.hasRating = true;
                 // The card RENDERS the rating, so the cached copy is now the wrong card. Without this
                 // loadPreview() is handed the stale entry straight back and the preview never changes.
                 invalidatePreview(current.groupId);
                 loadPreview();
-            }
-            if (andDownload) { proceed(); }
-        }
-        function onCancel(e) { e.preventDefault(); finish(false, !edit); }
-        function onDismiss() { finish(false, false); }
-        function onEsc(e) { e.preventDefault(); finish(false, false); }
-        function onBackdrop(e) { if (e.target === modal) { finish(false, false); } }
-
-        function onSubmit(e) {
-            e.preventDefault();
-            var hoursEl = qrField(form, 'hours_to_platinum');
-            var hours = parseInt(hoursEl && hoursEl.value, 10);
-            if (!hours || hours < 1) {
-                if (PP.ToastManager) { PP.ToastManager.show('Enter the hours it took you.', 'warning'); }
-                return;
-            }
-            var area = form.querySelector('[data-gd-qr-blurb]');
-            var blurb = area ? area.value.trim() : '';
-            var payload = {
-                difficulty: parseInt(qrField(form, 'difficulty').value, 10),
-                grindiness: parseInt(qrField(form, 'grindiness').value, 10),
-                fun_ranking: parseInt(qrField(form, 'fun_ranking').value, 10),
-                overall_rating: parseFloat(qrField(form, 'overall_rating').value),
-                hours_to_platinum: hours,
-                blurb: blurb,
-            };
-            if (submit) { submit.disabled = true; submit.textContent = 'Saving...'; }
-            // Posting a public quick take records guidelines agreement (the notice above the action IS the
-            // fine print). Done FIRST so the rate call can't 403 with needs_guidelines. Idempotent.
-            var agreed = form.dataset.guidelinesAgreed === '1';
-            var pre = (blurb && !agreed)
-                ? PP.API.post('/api/v1/guidelines/agree/', {})
-                    .then(function () { form.dataset.guidelinesAgreed = '1'; })
-                    .catch(function () { /* the rate call surfaces needs_guidelines if this failed */ })
-                : Promise.resolve();
-            pre.then(function () {
-                return PP.API.post('/api/v1/ratings/' + current.conceptId + '/group/default/rate/', payload);
-            }).then(function () {
-                finish(true, !edit);
-            }).catch(function () {
-                // Don't hand over a download while pretending the rating saved.
-                if (submit) { submit.disabled = false; submit.textContent = edit ? 'Save rating' : 'Rate and download'; }
-                if (PP.ToastManager) { PP.ToastManager.error("Couldn't save that rating. Try again, or skip."); }
-            });
-        }
-
-        form.addEventListener('input', onSlider);
-        form.addEventListener('input', onBlurbInput);
-        form.addEventListener('submit', onSubmit);
-        if (cancel) { cancel.addEventListener('click', onCancel); }
-        closers.forEach(function (b) { b.addEventListener('click', onDismiss); });
-        modal.addEventListener('cancel', onEsc);
-        modal.addEventListener('click', onBackdrop);
-        modal.addEventListener('close', cleanup);
-        modal.showModal();
+                if (!edit) { proceed(); }
+            },
+            // A DISMISS is not a skip: the X, the backdrop and Esc are the universal get-me-out-of-here
+            // affordance, and treating any of them as "skip, then download" handed you a file. Only the
+            // explicit secondary button continues.
+            onCancel: function () { if (!edit) { proceed(); } },
+        });
     }
 
     function download() {
