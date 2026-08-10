@@ -97,6 +97,32 @@ def test_recalc_zeroes_new_stats_for_untouched_game():
 # the budget never reached just meant stale-but-recomputed-on-demand stats; now it would
 # serve 0 forever. A budget-capped run must therefore resume rather than restart.
 
+def _patch_cursor(monkeypatch, cmd, stored):
+    monkeypatch.setattr(cmd.Command, '_get_cursor', lambda self: stored.get('v'))
+    monkeypatch.setattr(cmd.Command, '_set_cursor', lambda self, gid: stored.update(v=gid))
+
+
+def _burn_budget_after_n_chunks(monkeypatch, cmd, n):
+    """Drive Command._now() off chunk completions rather than real time.
+
+    Patching stdlib time.monotonic would be shared with psycopg/redis, so any incidental
+    call shifts a fixed tick sequence and the assertion flips. Advancing only when a chunk
+    finishes is deterministic no matter how many times the clock is read.
+    """
+    clock = {'t': 0.0, 'done': 0}
+    monkeypatch.setattr(cmd.Command, '_now', staticmethod(lambda: clock['t']))
+    real_process = cmd.Command._process_chunk
+
+    def counting_process(self, ids, dry):
+        result = real_process(self, ids, dry)
+        clock['done'] += 1
+        if clock['done'] >= n:
+            clock['t'] += 10_000     # budget exhausted from here on
+        return result
+
+    monkeypatch.setattr(cmd.Command, '_process_chunk', counting_process)
+
+
 def test_budget_capped_run_resumes_from_the_cursor(monkeypatch):
     """A run that stops early records its position, and the next run starts past it."""
     from core.management.commands import recalc_earn_rates as cmd
@@ -105,22 +131,59 @@ def test_budget_capped_run_resumes_from_the_cursor(monkeypatch):
     ids = sorted(g.id for g in games)
 
     stored = {}
-    monkeypatch.setattr(cmd.Command, '_get_cursor', lambda self: stored.get('v'))
-    monkeypatch.setattr(cmd.Command, '_set_cursor', lambda self, gid: stored.update(v=gid))
-
-    # Deadline trips after the first chunk, leaving the rest unprocessed.
-    ticks = iter([0, 0, 0, 10_000, 10_000, 10_000, 10_000, 10_000])
-    monkeypatch.setattr(cmd.time, 'monotonic', lambda: next(ticks, 10_000))
+    _patch_cursor(monkeypatch, cmd, stored)
+    _burn_budget_after_n_chunks(monkeypatch, cmd, 1)
 
     call_command('recalc_earn_rates', chunk_size=2, max_minutes=1)
 
     assert stored['v'] == ids[1], 'cursor should sit on the last game of the processed chunk'
 
     # Second run: no deadline pressure, so it sweeps the remainder and completes the pass.
-    monkeypatch.setattr(cmd.time, 'monotonic', lambda: 0)
+    monkeypatch.setattr(cmd.Command, '_now', staticmethod(lambda: 0.0))
     call_command('recalc_earn_rates', chunk_size=2, max_minutes=30)
 
     assert stored['v'] is None, 'a completed pass clears the cursor'
+
+
+def test_zero_chunk_run_leaves_the_cursor_intact(monkeypatch):
+    """A budget that trips before the FIRST chunk must not clear the stored cursor.
+
+    Writing None here would send the next run back to game id 0, reinstating the
+    never-reach-the-tail bug the cursor exists to prevent.
+    """
+    from core.management.commands import recalc_earn_rates as cmd
+
+    for _ in range(4):
+        GameFactory()
+
+    stored = {'v': 4242}
+    _patch_cursor(monkeypatch, cmd, stored)
+    # The first read establishes `start`; every read after it is past the deadline, so the
+    # loop breaks on its very first check. Safe to count calls here precisely because
+    # _now() is a seam on the command -- psycopg and redis never reach it.
+    reads = {'n': 0}
+
+    def clock():
+        reads['n'] += 1
+        return 0.0 if reads['n'] == 1 else 10_000.0
+
+    monkeypatch.setattr(cmd.Command, '_now', staticmethod(clock))
+
+    call_command('recalc_earn_rates', chunk_size=2, max_minutes=1)
+
+    assert stored['v'] == 4242, 'a zero-chunk run must leave the cursor untouched'
+
+
+def test_empty_catalogue_clears_the_cursor(monkeypatch):
+    """Zero games is a legitimately completed pass, so the cursor resets."""
+    from core.management.commands import recalc_earn_rates as cmd
+
+    stored = {'v': 4242}
+    _patch_cursor(monkeypatch, cmd, stored)
+
+    call_command('recalc_earn_rates')
+
+    assert stored['v'] is None
 
 
 def test_explicit_game_ids_run_does_not_touch_the_cursor(monkeypatch):

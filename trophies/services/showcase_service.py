@@ -78,6 +78,10 @@ def provide_platinum_case(profile, config):
             'earned_trophy__trophy__game__concept',
             'earned_trophy__trophy__game__concept__igdb_match',
         )
+        # CLAUDE.md pairs a defer with every igdb_match select_related: raw_response is a
+        # ~30 KB API blob no cover-art render reads. At 20 selections that is ~600 KB of
+        # dead JSON per profile render, and these now render for anonymous visitors too.
+        .defer('earned_trophy__trophy__game__concept__igdb_match__raw_response')
         .order_by('-earned_trophy__earned_date_time')[:max_items]
     )
     # Display size: 1 row (10) if count <= 10, else 2 rows (20)
@@ -146,6 +150,8 @@ def provide_badge_showcase(profile, config):
             'badge', 'badge__base_badge',
             'badge__most_recent_concept', 'badge__most_recent_concept__igdb_match',
         )
+        # See provide_platinum_case: raw_response is dead weight on a cover-art render.
+        .defer('badge__most_recent_concept__igdb_match__raw_response')
         .order_by('display_order')[:max_items]
     )
 
@@ -191,6 +197,8 @@ def provide_recent_platinums(profile, config):
             'trophy__game__concept',
             'trophy__game__concept__igdb_match',
         )
+        # See provide_platinum_case: raw_response is dead weight on a cover-art render.
+        .defer('trophy__game__concept__igdb_match__raw_response')
         .order_by('-earned_date_time')[:max_items]
     )
     return {

@@ -161,6 +161,17 @@ Django auto-prefixes all keys with `{KEY_PREFIX}:1:` from settings. The patterns
 
 All homepage keys use 2x TTL as safety margin (cron refreshes before expiry). Date/hour keying ensures seamless rotation without stale data windows.
 
+### Cron Watermarks / Cursors
+
+Position markers, not caches: they carry no payload and losing one costs coverage or a re-scan, never correctness.
+
+| Key Pattern | TTL | Purpose |
+|-------------|-----|---------|
+| `recalc_earn_rates:cursor` | None | Highest `Game.id` fully processed by the last budget-capped `recalc_earn_rates` run. The next run resumes just past it and wraps, so a job that always hits `--max-minutes` still sweeps the whole catalogue round-robin instead of restarting at id 0 and never reaching the tail. Cleared on a completed pass. Deliberately left alone by `--game-ids` and `--dry-run`. |
+| `dlc_detection:last_run` | None | Timestamp watermark for `detect_dlc_and_refresh`; falls back to a 3-day lookback when missing. |
+
+**Files**: `core/management/commands/recalc_earn_rates.py`, `trophies/management/commands/detect_dlc_and_refresh.py`
+
 ### Game Detail Page
 
 | Key Pattern | TTL | Purpose |

@@ -82,7 +82,7 @@ class Command(BaseCommand):
         max_seconds = options['max_minutes'] * 60
         explicit_ids = options['game_ids']
 
-        start = time.monotonic()
+        start = self._now()
         deadline = start + max_seconds
 
         self._widen_statement_timeout()
@@ -123,7 +123,7 @@ class Command(BaseCommand):
 
         last_done_id = None
         for chunk_start in range(0, total_games, chunk_size):
-            if time.monotonic() >= deadline:
+            if self._now() >= deadline:
                 self.stdout.write(self.style.WARNING(
                     f'Hit max-minutes budget after {chunks_processed}/{chunks_total} chunks. '
                     f'Remaining {chunks_total - chunks_processed} chunks resume from game id '
@@ -138,7 +138,7 @@ class Command(BaseCommand):
             chunks_processed += 1
             last_done_id = chunk_ids[-1]
 
-            elapsed = time.monotonic() - start
+            elapsed = self._now() - start
             self.stdout.write(
                 f'chunk {chunks_processed}/{chunks_total} '
                 f'(games {chunk_start + 1}-{chunk_start + len(chunk_ids)}): '
@@ -148,17 +148,35 @@ class Command(BaseCommand):
 
         # Advance the cursor only for a full-catalogue, non-dry run. A completed pass
         # clears it so the next run starts from the top with a fresh ordering.
+        #
+        # `last_done_id is not None` matters: a run that finishes ZERO chunks (a budget so
+        # tight it trips before the first chunk) must leave the stored cursor alone. Writing
+        # None there would DELETE it and send the next run back to id 0 -- reinstating the
+        # never-reach-the-tail bug this cursor exists to prevent. An empty catalogue is the
+        # one zero-chunk case that legitimately clears, and it satisfies completed_pass.
         if not dry_run and not explicit_ids:
-            completed_pass = chunks_processed == chunks_total
-            self._set_cursor(None if completed_pass else last_done_id)
+            if chunks_processed == chunks_total:
+                self._set_cursor(None)
+            elif last_done_id is not None:
+                self._set_cursor(last_done_id)
 
-        elapsed_total = time.monotonic() - start
+        elapsed_total = self._now() - start
         verb = 'Would update' if dry_run else 'Updated'
         self.stdout.write(self.style.SUCCESS(
             f'recalc_earn_rates complete in {elapsed_total:.1f}s. '
             f'{verb} {total_games_updated} Games and {total_trophies_updated} Trophies '
             f'across {chunks_processed} chunks.'
         ))
+
+    @staticmethod
+    def _now():
+        """Monotonic wall clock, as a seam.
+
+        Exists so the budget can be driven deterministically in tests without patching
+        `time.monotonic` process-wide -- psycopg and Redis also call it, so a global patch
+        both shifts under any incidental call and freezes their timeouts for the duration.
+        """
+        return time.monotonic()
 
     def _widen_statement_timeout(self):
         """Raise statement_timeout for this connection only (see STATEMENT_TIMEOUT_MS)."""
