@@ -18,7 +18,6 @@
         initDragReorder();
         initFavoriteGamesPicker();
         initBadgePicker();
-        initRarestTrophiesOptions();
         initReviewPicker();
         initTitlePicker();
     });
@@ -357,53 +356,6 @@
         }, 150));
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // Rarest Trophies options (simple boolean toggle)
-    // ──────────────────────────────────────────────────────────────
-    function initRarestTrophiesOptions() {
-        const modal = document.getElementById('rarest-trophies-modal');
-        const toggle = document.getElementById('rarest-one-per-game');
-        const saveBtn = document.getElementById('rarest-trophies-save');
-        const configureBtns = document.querySelectorAll('.configure-btn[data-showcase-slug="rarest_trophies"]');
-
-        if (!modal || !toggle || !saveBtn || configureBtns.length === 0) return;
-
-        configureBtns.forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                // Read current value from button's data attr
-                toggle.checked = btn.dataset.onePerGame !== 'false';
-                modal.showModal();
-            });
-        });
-
-        saveBtn.addEventListener('click', async function () {
-            saveBtn.disabled = true;
-            const originalText = saveBtn.textContent;
-            saveBtn.textContent = 'Saving...';
-            try {
-                await PlatPursuit.API.post(
-                    '/api/v1/profile/showcases/rarest_trophies/config/',
-                    { config: { one_per_game: toggle.checked } }
-                );
-                PlatPursuit.ToastManager.show('Settings saved!', 'success');
-                // Update all matching buttons' data attr so re-opening reflects the new value
-                configureBtns.forEach(function (btn) {
-                    btn.dataset.onePerGame = toggle.checked ? 'true' : 'false';
-                });
-                modal.close();
-            } catch (error) {
-                let msg = 'Failed to save.';
-                try {
-                    const errData = await error.response?.json();
-                    if (errData?.error) msg = errData.error;
-                } catch (_) {}
-                PlatPursuit.ToastManager.show(msg, 'error');
-            } finally {
-                saveBtn.disabled = false;
-                saveBtn.textContent = originalText;
-            }
-        });
-    }
 
     // ──────────────────────────────────────────────────────────────
     // Shared batched picker helper: used for Reviews, Challenges, Titles.

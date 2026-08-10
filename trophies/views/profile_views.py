@@ -867,32 +867,31 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         # Build shared context (header stats + timeline)
         context['header_stats'] = self._build_header_stats(profile)
 
-        # Showcases and the timeline are the two UNBOUNDED costs on this page, and
-        # both are skipped for anonymous visitors.
+        # Showcases render for everyone, anonymous included: a shared profile link is
+        # mostly opened logged-out, which is exactly the audience the customization is
+        # for. Every remaining provider is bounded by config or by a small owned table
+        # (<= 20 selected platinums, <= 6 game ids, <= 5 badges, <= 6 titles, 6
+        # date-indexed platinums), so the whole set is cheap regardless of account size.
+        # The one provider that was NOT bounded -- Rarest Trophies, which ranked the
+        # profile's entire earned set on a joined column -- was removed outright rather
+        # than gated, because its cost came from "rank everything I own" and not from
+        # who was looking. See showcase_service.py and migration 0275.
+        from trophies.services.showcase_service import ProfileShowcaseService
+        context['rendered_showcases'] = ProfileShowcaseService.get_rendered_showcases(profile)
+
+        # The timeline IS still gated. It is cached per profile, so a crawler
+        # enumerating distinct profiles has a 0% hit rate by construction -- per-entity
+        # caching cannot protect an enumerable URL space, only gating can. The partial
+        # (profile_timeline.html) self-hides on an empty value, so the anonymous page
+        # loses a section rather than gaining a hole.
         #
-        # `get_rendered_showcases` runs every active showcase provider; the rarest-
-        # trophies provider sorts the profile's ENTIRE earned set on a joined column
-        # (trophy__trophy_earn_rate), so for a 250K-trophy profile it is a full join +
-        # top-N sort per render. `_build_timeline` is cached per profile, which means a
-        # crawler enumerating distinct profiles has a 0% hit rate by construction --
-        # caching cannot protect an enumerable URL space, only gating can.
-        #
-        # This is the same rule as the premium-preview pattern in CLAUDE.md: the gate is
-        # checked BEFORE the provider runs, not around its output. Both template partials
-        # (profile_showcases_section.html, profile_timeline.html) already self-hide on an
-        # empty value, so the anonymous page loses two sections rather than gaining holes.
-        #
-        # The four Platinum Highlight cards in the header are deliberately NOT gated: they
-        # render a "None" empty state when absent, so skipping them would misreport the
-        # profile to logged-out visitors instead of hiding a section. They are also cheap
-        # (two denormed FKs, plus two lookups bounded by the profile's ProfileGame rows).
-        viewer_is_authenticated = self.request.user.is_authenticated
-        context['rendered_showcases'] = []
-        if viewer_is_authenticated:
-            from trophies.services.showcase_service import ProfileShowcaseService
-            context['rendered_showcases'] = ProfileShowcaseService.get_rendered_showcases(profile)
-            if profile.psn_history_public:
-                context['timeline_events'] = self._build_timeline(profile)
+        # The four Platinum Highlight cards in the header are deliberately NOT gated:
+        # they render a "None" empty state when absent, so skipping them would misreport
+        # the profile to logged-out visitors instead of hiding a section. They are also
+        # cheap (two denormed FKs, plus two lookups bounded by the profile's
+        # ProfileGame rows).
+        if self.request.user.is_authenticated and profile.psn_history_public:
+            context['timeline_events'] = self._build_timeline(profile)
 
         # Public game lists count (shown in tab header regardless of active tab)
         public_lists_qs = GameList.objects.filter(profile=profile, is_public=True, is_deleted=False)

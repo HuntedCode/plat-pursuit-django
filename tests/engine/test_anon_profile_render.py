@@ -6,14 +6,16 @@ enumerable page with no guard of any kind -- it is the canonical page, so it had
 nothing to redirect to and fell through the bot-redirect rules that protect
 /games/<np>/<user>/ and /badges/<slug>/<user>/.
 
-The two unbounded costs on that page are the showcase providers (the rarest-trophies
-provider sorts the profile's ENTIRE earned set on a joined column) and the timeline
-builder. Both are now skipped for anonymous visitors.
+Two things were unbounded on that page. The Rarest Trophies showcase sorted the
+profile's ENTIRE earned set on a joined column; it was removed outright (migration 0275)
+rather than gated, because its cost came from "rank everything I own" and not from who
+was looking. The timeline is still gated: it is cached per profile, so a crawler
+enumerating distinct profiles has a 0% hit rate by construction.
 
 What these tests pin is the thing that actually regressed in production: the gate is
-checked BEFORE the provider is invoked, not around its output. A version that renders
-the data and then hides it in the template passes a "context is empty" assertion and
-still takes the site down, so every test here asserts on the CALL, not the value.
+checked BEFORE the work is invoked, not around its output. A version that renders the
+data and then hides it in the template passes a "context is empty" assertion and still
+takes the site down, so the gate tests assert on the CALL, not the value.
 """
 import pytest
 from django.contrib.auth.models import AnonymousUser
@@ -59,14 +61,27 @@ def _build_context(profile, user, monkeypatch):
     return view.get_context_data(object=profile), calls
 
 
-def test_anonymous_render_does_not_run_showcase_providers(monkeypatch):
-    """The whale killer. An anon visitor must not cause a single showcase provider to run."""
+def test_anonymous_render_still_runs_showcases(monkeypatch):
+    """Showcases are NOT auth-gated: a shared profile link is mostly opened logged-out,
+    which is the audience the customization exists for. Every remaining provider is
+    bounded by config or a small owned table, so this stays cheap at any account size."""
     profile = ProfileFactory(psn_history_public=True)
 
-    context, calls = _build_context(profile, AnonymousUser(), monkeypatch)
+    _, calls = _build_context(profile, AnonymousUser(), monkeypatch)
 
-    assert 'showcases' not in calls
-    assert context['rendered_showcases'] == []
+    assert 'showcases' in calls
+
+
+def test_rarest_trophies_showcase_type_is_gone():
+    """The unbounded provider must stay deleted, not merely unregistered. It ranked the
+    profile's whole earned set on a joined column; re-adding it re-adds the outage."""
+    from trophies.models import ProfileShowcase
+    from trophies.services import showcase_service
+
+    assert not hasattr(ProfileShowcase, 'SHOWCASE_RAREST')
+    assert 'rarest_trophies' not in dict(ProfileShowcase.SHOWCASE_TYPES)
+    assert 'rarest_trophies' not in showcase_service.SHOWCASE_REGISTRY
+    assert not hasattr(showcase_service, 'provide_rarest_trophies')
 
 
 def test_anonymous_render_does_not_build_timeline(monkeypatch):
@@ -80,13 +95,13 @@ def test_anonymous_render_does_not_build_timeline(monkeypatch):
     assert not context.get('timeline_events')
 
 
-def test_authenticated_render_still_runs_both(monkeypatch):
-    """The gate keys on the VIEWER, not the profile: a logged-in visitor still gets the
-    full page. Without this, the fix would silently delete the feature for everyone."""
+def test_authenticated_render_runs_both(monkeypatch):
+    """The timeline gate keys on the VIEWER, not the profile: a logged-in visitor still
+    gets the full page. Without this, the fix would delete the feature for everyone."""
     profile = ProfileFactory(psn_history_public=True)
     viewer = UserFactory()
 
-    context, calls = _build_context(profile, viewer, monkeypatch)
+    _, calls = _build_context(profile, viewer, monkeypatch)
 
     assert 'showcases' in calls
     assert 'timeline' in calls
@@ -94,7 +109,7 @@ def test_authenticated_render_still_runs_both(monkeypatch):
 
 def test_private_history_still_skips_timeline_when_authenticated(monkeypatch):
     """psn_history_public=False must keep winning for logged-in viewers. The anon gate is
-    an ADDITIONAL condition, not a replacement for the privacy one."""
+    an ADDITIONAL condition on the timeline, not a replacement for the privacy one."""
     profile = ProfileFactory(psn_history_public=False)
     viewer = UserFactory()
 

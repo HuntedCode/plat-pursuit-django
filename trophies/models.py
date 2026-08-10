@@ -2354,10 +2354,15 @@ class ProfileShowcase(models.Model):
     SHOWCASE_PLATINUM_CASE = 'platinum_case'
     SHOWCASE_FAVORITE_GAMES = 'favorite_games'
     SHOWCASE_BADGE = 'badge_showcase'
-    SHOWCASE_RAREST = 'rarest_trophies'
     SHOWCASE_RECENT_PLATS = 'recent_platinums'
     # SHOWCASE_REVIEW removed 2026-05 (text reviews archived). Existing
     # 'review_showcase' rows are deleted by migration 0237.
+    # SHOWCASE_RAREST removed 2026-08. Unlike every other showcase, its item set was
+    # DERIVED rather than user-selected, which meant sorting the profile's entire earned
+    # set on a joined column (trophy__trophy_earn_rate) on every profile render -- a full
+    # join + top-N sort over 250K rows for a heavy account, and the single most expensive
+    # thing an anonymous visitor could trigger. Existing 'rarest_trophies' rows are
+    # deleted by migration 0275.
     SHOWCASE_CHALLENGE = 'challenge_showcase'
     SHOWCASE_TITLE = 'title_showcase'
 
@@ -2365,7 +2370,6 @@ class ProfileShowcase(models.Model):
         (SHOWCASE_PLATINUM_CASE, 'Platinum Trophy Case'),
         (SHOWCASE_FAVORITE_GAMES, 'Favorite Games'),
         (SHOWCASE_BADGE, 'Badge Showcase'),
-        (SHOWCASE_RAREST, 'Rarest Trophies'),
         (SHOWCASE_RECENT_PLATS, 'Recent Platinums'),
         (SHOWCASE_CHALLENGE, 'Challenge Showcase'),
         (SHOWCASE_TITLE, 'Title Showcase'),

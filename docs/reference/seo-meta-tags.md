@@ -180,14 +180,17 @@ Guards keep crawlers off a page; they do not make the page affordable when a cra
 | Header stats (incl. all four Platinum Highlight cards) | ✅ runs | ✅ runs |
 | Games / trophies tab (paginated, 50/page) | ✅ runs | ✅ runs |
 | Badges tab (**not** paginated — see gotcha) | ✅ runs | ✅ runs |
-| Showcase providers (`get_rendered_showcases`) | ❌ skipped | ✅ runs |
+| Showcase providers (`get_rendered_showcases`) | ✅ runs | ✅ runs |
 | Timeline (`_build_timeline`) | ❌ skipped | ✅ runs (if `psn_history_public`) |
 
-The rarest-trophies showcase provider sorts the profile's **entire** earned-trophy set on a joined column (`trophy__trophy_earn_rate`), so for a 250K-trophy profile it is a full join plus top-N sort on every render. The timeline is cached per profile, which means a crawler enumerating distinct profiles has a 0% hit rate **by construction** — per-entity caching cannot protect an enumerable URL space, only gating can.
+Showcases are deliberately **not** gated: a shared profile link is mostly opened logged-out, which is the audience the customization exists for, and every remaining provider is bounded by config or by a small owned table (≤20 selected platinums, ≤6 game ids, ≤5 badges, ≤6 titles, 6 date-indexed platinums). The one provider that was *not* bounded — Rarest Trophies, which ranked the profile's entire earned set on a joined column — was **removed outright** (migration `0275`) rather than gated, because its cost came from "rank everything I own" and would have remained a liability for signed-in views of large profiles.
+
+The timeline is still gated because it is cached per profile, which means a crawler enumerating distinct profiles has a 0% hit rate **by construction** — per-entity caching cannot protect an enumerable URL space, only gating can.
 
 ### Gotchas
 
-- **Gate before the provider, not around its output.** This is the same rule as the premium-preview pattern in CLAUDE.md. A version that computes the data and hides it in the template looks correct and still takes the site down. `tests/engine/test_anon_profile_render.py` asserts on the CALL, not the context value, for exactly this reason.
+- **Gate before the work, not around its output.** This is the same rule as the premium-preview pattern in CLAUDE.md. A version that computes the data and hides it in the template looks correct and still takes the site down. `tests/engine/test_anon_profile_render.py` asserts on the CALL, not the context value, for exactly this reason.
+- **Prefer deleting an unbounded feature to gating it.** Gating only moves the cost to signed-in traffic. If a feature's cost scales with the account rather than with what it displays, that is a design problem, not an access-control problem.
 - **The four Platinum Highlight cards are deliberately NOT gated.** They render a "None" empty state when absent, so skipping them for anonymous visitors would *misreport* the profile rather than hide a section. They are also cheap (two denormed FKs plus two lookups bounded by the profile's `ProfileGame` rows).
 - **Profiles stay indexable.** `robots.txt` disallows only the query-string permutations (`/community/profiles/*/?*` — the `?tab=` / `?page=` / `?sort=` axes that multiply into an unbounded crawl space). The canonical profile page keeps its search and share value; profiles are the free floor of the product. Note the `/` before `?`: `*` matches the empty string, so the shorter `/community/profiles/*?*` would also block the profile *index's* pagination.
 - **`?tab=badges` is still unpaginated.** `_build_badges_tab_context` takes no page argument: it builds an OR-chain `Q()` over every earned series plus a full `UserBadgeProgress` scan for the profile, then groups in Python. It is bounded by the *badge catalogue* (hundreds of series), not by the profile's trophy count, so it is nowhere near the 250K-row class this gate was built for — but it is the largest remaining anonymous cost on this page and the obvious next thing to paginate.
