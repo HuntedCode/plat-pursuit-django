@@ -771,13 +771,12 @@ class GameCardWorkshopView(TemplateView):
 
     def get_context_data(self, **kwargs):
         from django.db.models import Count
-        from trophies.constants import BADGE_TYPE_DISPLAY_PRIORITY
+        from trophies.constants import badge_attribution_rank
         from trophies.models import Game, Badge, Contract, Stage
         from trophies.services.contract_service import contract_by_concept_map
         from trophies.services.frame_service import build_badge_frame
         from trophies.util_modules.constants import CONTRACT_XP_TOTAL
         ctx = super().get_context_data(**kwargs)
-        badge_prio = {t: i for i, t in enumerate(BADGE_TYPE_DISPLAY_PRIORITY)}
 
         # Fabricated per-game states + community ratings (no user here) so every card look renders.
         _states = [
@@ -834,7 +833,10 @@ class GameCardWorkshopView(TemplateView):
                     'franchise', 'developer', 'funded_by',
                     'base_badge', 'base_badge__franchise', 'base_badge__developer', 'base_badge__funded_by',
                 ),
-                key=lambda b: (badge_prio.get(b.badge_type, 99), (b.name or '').lower()),
+                key=lambda b: (
+                    badge_attribution_rank(b.collection_id, b.franchise_id, b.developer_id),
+                    (b.name or '').lower(),
+                ),
             )
             frames = []
             for b in badges[:self.BADGE_CAP]:

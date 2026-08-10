@@ -107,23 +107,34 @@ BADGE_TYPES = [
     BADGE_TYPE_EVENT,
 ]
 
-# Display/sort priority for badge types wherever badges a game belongs to are listed or a single one has
-# to be chosen (browse cards, game detail, the plat card's spine): broadest attribution first --
-# Collection > Franchise > Developer > Series -- with the special types (Megamix / Event / User)
-# trailing. Count DISTINCT series (one per series_slug), never tiers. Consumers sort by this then by
-# name; unknown/new types sort last.
+# Which badge a game leads with when it belongs to several (browse cards, game detail, the plat card's
+# spine). The rule is about the ATTRIBUTION A SERIES CARRIES, not its `badge_type` label:
+#
+#     has a collection  ->  else has a franchise  ->  else has a developer  ->  else fallback
+#
+# These are independent nullable FKs on BadgeSeries and are NOT implied by badge_type -- a
+# `series`-type badge can carry a franchise, and ranking by the type label puts it below a badge with
+# no attribution at all. Ordering by type was the wrong axis and shipped once; this is the fix.
 #
 # One order site-wide on purpose: a game that leads with its Collection badge on a browse card should
 # lead with the same badge on its share card, or the two surfaces disagree about what the game "is".
-BADGE_TYPE_DISPLAY_PRIORITY = [
-    BADGE_TYPE_COLLECTION,
-    BADGE_TYPE_FRANCHISE,
-    BADGE_TYPE_DEVELOPER,
-    BADGE_TYPE_SERIES,
-    BADGE_TYPE_MEGAMIX,
-    BADGE_TYPE_EVENT,
-    BADGE_TYPE_USER,
-]
+BADGE_ATTRIBUTION_FALLBACK_RANK = 3
+
+
+def badge_attribution_rank(collection_id=None, franchise_id=None, developer_id=None):
+    """Sort key for choosing among the badge series a game belongs to; lower wins.
+
+    Takes ids rather than a model so it serves both `BadgeSeries` instances and the `.values()` dicts
+    the batched browse-card query builds, without either having to materialise the related objects.
+    """
+    if collection_id:
+        return 0
+    if franchise_id:
+        return 1
+    if developer_id:
+        return 2
+    return BADGE_ATTRIBUTION_FALLBACK_RANK
+
 
 # Badge types that use concept-based stage completion (all stages must be complete).
 # Franchise + Event behave like Series (series_slug-grouped, concept/stage-based).

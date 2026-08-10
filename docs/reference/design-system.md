@@ -670,14 +670,18 @@ lets `currentColor`/token colours flow). The Lucide signature to match:
 
 ## Badge type display priority
 
-Wherever the **badges a game belongs to** are listed (browse cards, game detail, etc.), order them by the
-site-wide badge-type priority and **count distinct series** (one per `series_slug`), never tiers (a
-four-tier series is **one** badge, not four):
+Wherever the **badges a game belongs to** are listed (browse cards, game detail, the plat card's spine),
+order them by the **attribution the series carries** and **count distinct series** (one per
+`series_slug`), never tiers (a four-tier series is **one** badge, not four):
 
-> **Franchise › Collection › Developer › Series** (then the special types Megamix › Event › User)
+> has a **collection** › else has a **franchise** › else has a **developer** › else fallback
 
-Codified as `BADGE_TYPE_DISPLAY_PRIORITY` in `trophies/constants.py` — sort by it, then by name; unknown/new
-types sort last. Don't re-hardcode the order per surface.
+Codified as `badge_attribution_rank()` in `trophies/constants.py` — sort by it, then by name. Don't
+re-hardcode the order per surface.
+
+**This is not `badge_type`.** `collection`, `franchise` and `developer` are independent nullable FKs, and
+a `series`-type badge can carry a franchise. Ranking by the type label sorts that badge *below* one with
+no attribution at all — which is what shipped first and had to be corrected.
 
 ---
 

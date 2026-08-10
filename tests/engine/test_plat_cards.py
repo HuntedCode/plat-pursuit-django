@@ -499,37 +499,73 @@ def test_every_contract_job_is_named_on_the_card():
 
 # ── Which badge leads when a game is in several ───────────────────────────────────────────────────
 
-def _series_of_type(concept, name, badge_type):
-    series = BadgeSeriesFactory(name=name, badge_type=badge_type)
+def _attributed_series(concept, name, *, attribution=None, badge_type='series'):
+    """A live badge series this concept belongs to, carrying at most one attribution FK.
+
+    `badge_type` defaults to 'series' throughout these tests ON PURPOSE: the lead-badge rule reads the
+    attribution FKs, not the type label, and defaulting the label the "wrong" way is what proves it.
+    """
+    from trophies.models import Company, Franchise
+
+    kwargs = {}
+    if attribution == 'collection':
+        kwargs['collection'] = Franchise.objects.create(
+            igdb_id=9001, name=f'{name} Collection', slug=f'{name.lower().replace(" ", "-")}-c',
+            source_type='collection')
+    elif attribution == 'franchise':
+        kwargs['franchise'] = Franchise.objects.create(
+            igdb_id=9002, name=f'{name} Franchise', slug=f'{name.lower().replace(" ", "-")}-f',
+            source_type='franchise')
+    elif attribution == 'developer':
+        kwargs['developer'] = Company.objects.create(
+            igdb_id=9003, name=f'{name} Studio', slug=f'{name.lower().replace(" ", "-")}-d')
+
+    series = BadgeSeriesFactory(name=name, badge_type=badge_type, **kwargs)
     GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
     StageFactory(series_slug=series.series_slug).concepts.add(concept)
     return series
 
 
-def test_the_lead_badge_follows_the_site_wide_type_order():
-    """A game sits in its Collection, its Franchise, its studio's badge and its own series at once. The
-    card shows ONE, and it must be the same one a browse card leads with -- otherwise the two surfaces
-    disagree about what the game is."""
+def test_the_lead_badge_follows_the_attribution_the_series_carries():
+    """A game sits in a collection badge, a franchise badge, its studio's badge and a bare series at
+    once. The card shows ONE, and it must be the same one a browse card leads with -- otherwise the
+    two surfaces disagree about what the game is.
+
+    Every series here is badge_type='series'. That is the point: the rule reads the attribution FKs, so
+    ordering must hold even when the type label says otherwise."""
     profile = ProfileFactory()
     game, _, standing = _completed_game(profile, with_platinum=True)
-    for name, btype in [('Studio Badge', 'developer'), ('Own Series', 'series'),
-                        ('The Franchise', 'franchise'), ('The Collection', 'collection')]:
-        _series_of_type(game.concept, name, btype)
+    for name, attribution in [('Studio Badge', 'developer'), ('Own Series', None),
+                              ('The Franchise', 'franchise'), ('The Collection', 'collection')]:
+        _attributed_series(game.concept, name, attribution=attribution)
 
     lines = cards.get_card_data(profile, standing)['badge_lines']
 
-    # Collection outranks Franchise outranks Developer outranks the game's own Series.
+    # collection > franchise > developer > no attribution at all.
     assert lines[0]['series_name'] == 'The Collection'
 
 
-def test_type_order_outranks_a_held_title():
-    """Consequence of ordering by type first, stated so it can't surprise anyone later: holding the
-    Series title does not promote it over an unheld Collection badge. Type is the stronger signal of
-    what a game IS, and the card is showing the game."""
+def test_a_type_label_does_not_override_the_attribution():
+    """The regression this rule was corrected for.
+
+    A 'collection'-TYPE badge carrying no collection FK must not outrank a plain series that actually
+    has one. Type is a flavour label; the attribution is the fact."""
     profile = ProfileFactory()
     game, _, standing = _completed_game(profile, with_platinum=True)
-    _series_of_type(game.concept, 'The Collection', 'collection')
-    owned = _series_of_type(game.concept, 'Own Series', 'series')
+    _attributed_series(game.concept, 'Labelled Only', attribution=None, badge_type='collection')
+    _attributed_series(game.concept, 'Really Attributed', attribution='collection')
+
+    assert cards.get_card_data(profile, standing)['badge_lines'][0]['series_name'] == 'Really Attributed'
+
+
+def test_attribution_outranks_a_held_title():
+    """Consequence of ordering by attribution first, stated so it can't surprise anyone later: holding
+    an unattributed series' title does not promote it over an unheld collection badge. The attribution
+    is the stronger signal of what a game IS, and the card is showing the game."""
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    _attributed_series(game.concept, 'The Collection', attribution='collection')
+    owned = _attributed_series(game.concept, 'Own Series', attribution=None)
     owned.title = Title.objects.create(name='Held Title')
     owned.save(update_fields=['title'])
     UserTitle.objects.create(profile=profile, title=owned.title, source_type='badge_series',
@@ -538,11 +574,11 @@ def test_type_order_outranks_a_held_title():
     assert cards.get_card_data(profile, standing)['badge_lines'][0]['series_name'] == 'The Collection'
 
 
-def test_a_held_title_still_wins_within_one_type():
+def test_a_held_title_still_wins_within_one_attribution_rank():
     profile = ProfileFactory()
     game, _, standing = _completed_game(profile, with_platinum=True)
-    _series_of_type(game.concept, 'Alpha Series', 'series')
-    owned = _series_of_type(game.concept, 'Zeta Series', 'series')
+    _attributed_series(game.concept, 'Alpha Series', attribution=None)
+    owned = _attributed_series(game.concept, 'Zeta Series', attribution=None)
     owned.title = Title.objects.create(name='Held Title')
     owned.save(update_fields=['title'])
     UserTitle.objects.create(profile=profile, title=owned.title, source_type='badge_series',

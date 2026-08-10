@@ -32,7 +32,7 @@ from trophies.models import (
     BadgeSeries, EarnedTrophy, ProfileGame, ProfileTrophyGroup, SeriesBadgeStanding, Stage,
     TrophyGroup, UserConceptRating, UserTitle,
 )
-from trophies.constants import BADGE_TYPE_DISPLAY_PRIORITY
+from trophies.constants import badge_attribution_rank
 from trophies.templatetags.job_icons import _ICONS as _JOB_ICONS
 
 logger = logging.getLogger(__name__)
@@ -61,10 +61,6 @@ ART_OPTION_CAP = 4
 #: the site draw the same glyphs from one source. (The tag itself is unusable here -- see the note in
 #: _contract_line.)
 JOB_ICON_PATHS = _JOB_ICONS
-
-#: Which badge the card leads with when a game belongs to several -- the SAME order the browse
-#: cards and game detail use, so the surfaces can't disagree about what a game primarily is.
-_BADGE_RANK = {t: i for i, t in enumerate(BADGE_TYPE_DISPLAY_PRIORITY)}
 
 #: Medallion backing metals, per `.pp-med[data-tier]` in components/badge-medallion.css -- the
 #: source-of-truth hexes the whole badge system tints from (badge-detail.css says as much). Ported here
@@ -253,13 +249,14 @@ def _badge_lines(profile, concept, game):
     used to read the legacy Badge/UserBadgeProgress tier-1 rows, which retire at the badge cutover.
 
     A game can sit in several badges at once (its Collection, its Franchise, its studio, its own
-    series). The card shows ONE, so ordering matters: badge TYPE decides first, using the site-wide
-    BADGE_TYPE_DISPLAY_PRIORITY, so the badge a game leads with here is the badge it leads with on a
-    browse card. Within one type, a title the hunter actually HOLDS wins, then whichever series they
-    are furthest along in.
+    series). The card shows ONE, so ordering matters: the series' ATTRIBUTION decides first, via the
+    site-wide `badge_attribution_rank` (collection -> franchise -> developer -> fallback), so the badge
+    a game leads with here is the badge it leads with on a browse card. Within one rank, a title the
+    hunter actually HOLDS wins, then whichever series they are furthest along in.
 
-    (Consequence worth knowing: holding a Series title does NOT promote it over an unheld Collection
-    badge. Type is the stronger signal of what a game IS, and the card is showing the game.)
+    (Consequence worth knowing: holding a title on an unattributed series does NOT promote it over an
+    unheld collection badge. The attribution is the stronger signal of what a game IS, and the card is
+    showing the game.)
     """
     if not concept:
         return []
@@ -294,6 +291,9 @@ def _badge_lines(profile, concept, game):
         progress_bp = standing.progress_bp if standing else 0
         lines.append({
             'badge_type': series.badge_type,
+            'attribution_rank': badge_attribution_rank(
+                series.collection_id, series.franchise_id, series.developer_id,
+            ),
             'series_name': series.display_series or series.name,
             'series_slug': series.series_slug,
             'title': series.title.name if series.title_id else '',
@@ -304,7 +304,7 @@ def _badge_lines(profile, concept, game):
         })
 
     lines.sort(key=lambda l: (
-        _BADGE_RANK.get(l['badge_type'], 99),
+        l['attribution_rank'],
         not l['title_held'],
         -l['progress_pct'],
         l['series_name'].lower(),

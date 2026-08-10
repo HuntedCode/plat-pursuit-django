@@ -46,7 +46,7 @@ def build_game_card_context(page_games, request):
     that don't call it leave the band off (the card gates on the flag).
     """
     from collections import defaultdict
-    from trophies.constants import BADGE_TYPE_DISPLAY_PRIORITY
+    from trophies.constants import badge_attribution_rank
     from trophies.models import BadgeSeries
     from trophies.services.contract_service import contract_by_concept_map
     from trophies.util_modules.constants import CONTRACT_XP_TOTAL
@@ -89,7 +89,6 @@ def build_game_card_context(page_games, request):
     # ── Pursuer hooks: the badge SERIES a game belongs to + its home CONTRACT. Both concept-keyed and
     #    batched over the page's <=30 concepts (whale-safe -- 3 bounded queries, never per-card). ──
     badge_cap = 3
-    prio = {t: i for i, t in enumerate(BADGE_TYPE_DISPLAY_PRIORITY)}
     concept_id_set = set(concept_ids)
 
     # concept -> distinct badge series_slugs it appears in (1 query over the M2M).
@@ -104,14 +103,17 @@ def build_game_card_context(page_games, request):
         if cid in concept_id_set:
             concept_series[cid].add(slug)
 
-    # series_slug -> {label, badge_type} for each SERIES that ships a live group badge (1 query).
+    # series_slug -> {label, attribution ids} for each SERIES that ships a live group badge (1 query).
+    # The three FK ids ride along so the sort below can rank by attribution without materialising the
+    # related Franchise/Company rows -- they are already columns on the row being read.
     all_slugs = {s for slugs in concept_series.values() for s in slugs}
     series_badge = {}
     if all_slugs:
         series_badge = {
             b['series_slug']: {**b, 'label': b['display_series'] or b['name']}
             for b in BadgeSeries.objects.filter(series_slug__in=all_slugs, group_badges__is_live=True)
-            .values('series_slug', 'name', 'display_series', 'badge_type').distinct()
+            .values('series_slug', 'name', 'display_series', 'badge_type',
+                    'collection_id', 'franchise_id', 'developer_id').distinct()
         }
 
     badge_map = {}
@@ -119,7 +121,10 @@ def build_game_card_context(page_games, request):
         items = [series_badge[s] for s in slugs if s in series_badge]
         if not items:
             continue
-        items.sort(key=lambda b: (prio.get(b['badge_type'], 99), b['label'].lower()))
+        items.sort(key=lambda b: (
+            badge_attribution_rank(b['collection_id'], b['franchise_id'], b['developer_id']),
+            b['label'].lower(),
+        ))
         badge_map[cid] = {
             'total': len(items),
             'names': [b['label'] for b in items[:badge_cap]],
