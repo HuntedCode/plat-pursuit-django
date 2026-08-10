@@ -206,45 +206,6 @@
 .gd-prog__pctsign { font-family: var(--pp-font-display); font-weight: 800; font-size: 1rem; color: var(--pp-text-mute); flex: none; margin: 0 12px 0 1px; }
 .gd-prog__bar { flex: 1; }
 
-/* Plat card CTA: the reward for finishing, under the trophy haul. Shown ONLY when the viewer has earned
-   a card here, so it can afford the accent -- it appears at most once on the page and never on a game
-   still in progress. Accent follows the variant, matching the artifact it leads to (--pp-primary for a
-   platinum card, --pp-accent for 100%), the same rule .pcard uses on the browse grid. */
-.gd-platcard {
-    --gdpc: var(--pp-primary);
-    display: flex; align-items: center; gap: 11px;
-    padding: 10px 13px; border-radius: var(--pp-radius-lg);
-    text-decoration: none; color: inherit;
-    background: linear-gradient(100deg, color-mix(in oklab, var(--gdpc) 13%, var(--pp-bg-2)), var(--pp-bg-2));
-    border: 1px solid color-mix(in oklab, var(--gdpc) 34%, var(--pp-border));
-    transition: border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease),
-                transform var(--pp-dur-fast) var(--pp-ease);
-}
-.gd-platcard--full { --gdpc: var(--pp-accent); }
-.gd-platcard__icon {
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    width: 32px; height: 32px; border-radius: 9px;
-    color: var(--gdpc);
-    background: color-mix(in oklab, var(--gdpc) 15%, transparent);
-    border: 1px solid color-mix(in oklab, var(--gdpc) 32%, transparent);
-}
-.gd-platcard__icon svg { width: 17px; height: 17px; }
-.gd-platcard__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.gd-platcard__lbl { font-size: 0.82rem; font-weight: 700; color: var(--pp-text); }
-.gd-platcard__sub { font-size: 0.74rem; font-weight: 600; color: var(--gdpc); }
-@media (hover: hover) {
-    .gd-platcard:hover {
-        border-color: color-mix(in oklab, var(--gdpc) 58%, var(--pp-border));
-        box-shadow: 0 10px 26px -14px color-mix(in oklab, var(--gdpc) 70%, #000);
-    }
-}
-.gd-platcard:active { transform: scale(0.99); }
-.gd-platcard:focus-visible { outline: 2px solid var(--gdpc); outline-offset: 3px; }
-@media (prefers-reduced-motion: reduce) {
-    .gd-platcard { transition: border-color var(--pp-dur-fast) var(--pp-ease); }
-    .gd-platcard:active { transform: none; }
-}
-
 /* Composite per-trophy-group progress bar: one segment per group. Base = cyan (wide), DLC = violet. */
 .gd-groupbar { display: flex; align-items: stretch; gap: 3px; height: 11px; }
 .gd-groupbar__seg { position: relative; min-width: 12px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border); }
@@ -273,6 +234,24 @@
 }
 .gd-btn svg { width: 15px; height: 15px; }
 .gd-btn:hover { background: color-mix(in oklab, var(--pp-primary) 22%, transparent); box-shadow: 0 0 14px -3px color-mix(in oklab, var(--pp-primary) 60%, transparent); }
+/* Plat card: the reward for finishing, and the only action in this row that is EARNED -- so it carries
+   the variant accent of the artifact it leads to (primary for a platinum card, accent for 100%, the same
+   rule .pcard uses on the browse grid) rather than the row's default cyan. It shows at most once, and
+   never on a game still in progress, so it can afford to be the loudest thing here. */
+.gd-btn--card {
+    --gdpc: var(--pp-primary);
+    text-decoration: none;
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--gdpc) 18%, transparent);
+    border-color: color-mix(in oklab, var(--gdpc) 52%, var(--pp-border));
+}
+.gd-btn--card svg { color: var(--gdpc); }
+.gd-btn--card:hover {
+    background: color-mix(in oklab, var(--gdpc) 28%, transparent);
+    box-shadow: 0 0 16px -3px color-mix(in oklab, var(--gdpc) 65%, transparent);
+}
+.gd-btn--card:focus-visible { outline: 2px solid var(--gdpc); outline-offset: 2px; }
+.gd-btn--card-full { --gdpc: var(--pp-accent); }
 .gd-btn--ghost { background: transparent; border-color: var(--pp-border); color: var(--pp-text-dim); }
 .gd-btn--ghost:hover { background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); box-shadow: none; color: var(--pp-text); }
 #quick-add-container { position: relative; display: inline-flex; }

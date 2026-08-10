@@ -126,23 +126,6 @@
                             {# Trophy haul, promoted to 4-across cards. Deeper personal stats live in the My Stats modal below. #}
                             {% include 'trophies/partials/game_detail/_trophy_cards.html' with earned=profile_trophy_totals %}
 
-                            {% comment %}The reward for finishing, and only then: `plat_card` is set only
-                            when the VIEWER has earned a card for this game (the view asks the card
-                            service's own eligibility predicate). A LINK, not a modal -- it deep-links to
-                            /shareables/?c=<group>, which opens the card on the surface built for it,
-                            with its preview, theme picker and rating controls. A second copy of that
-                            here is exactly the drift the rebuild removed.{% endcomment %}
-                            {% if plat_card %}
-                            <a href="{{ plat_card.url }}" class="gd-platcard{% if plat_card.variant == 'full' %} gd-platcard--full{% endif %}">
-                                <span class="gd-platcard__icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><path d="M7 15h4"/></svg>
-                                </span>
-                                <span class="gd-platcard__text">
-                                    <span class="gd-platcard__lbl">{% if plat_card.variant == 'full' %}You finished this 100%{% else %}You platinumed this{% endif %}</span>
-                                    <span class="gd-platcard__sub">Make a share card &rsaquo;</span>
-                                </span>
-                            </a>
-                            {% endif %}
                         </div>
                         {% endwith %}
                     {% else %}
@@ -175,6 +158,21 @@
                             <button type="button" class="gd-btn gd-btn--primary" data-stats-open aria-haspopup="dialog" aria-controls="gd-stats-modal">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s Stats{% else %}My Stats{% endif %}
                             </button>
+                        {% endif %}
+                        {% comment %}The reward for finishing, and only then: `plat_card` is set only when
+                        the VIEWER has earned a card here (the view asks the card service's own eligibility
+                        predicate). It rides the EXISTING action row rather than a block of its own, so a
+                        finished game costs the hero no extra height -- and it reads as a peer of the other
+                        things you can do with this game, which is what it is.
+
+                        A LINK, not a modal: it deep-links to /shareables/?c=<group>, which opens the card on
+                        the surface built for it, with its preview, theme picker and rating controls. A second
+                        copy of that here is exactly the drift the rebuild removed.{% endcomment %}
+                        {% if plat_card %}
+                            <a href="{{ plat_card.url }}" class="gd-btn gd-btn--card{% if plat_card.variant == 'full' %} gd-btn--card-full{% endif %}"
+                               title="{% if plat_card.variant == 'full' %}You finished this 100%{% else %}You platinumed this{% endif %} -- make a share card">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><path d="M7 15h4"/></svg>{% if plat_card.variant == 'full' %}100% Card{% else %}Plat Card{% endif %}
+                            </a>
                         {% endif %}
                         {% if user.is_authenticated and user.profile %}
                         <div id="quick-add-container" data-game-id="{{ game.id }}">

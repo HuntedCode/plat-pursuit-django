@@ -623,10 +623,14 @@ def test_a_finished_game_offers_its_plat_card(client):
 
     content = _detail(client, game)
 
-    assert 'gd-platcard' in content
+    assert 'gd-btn--card' in content
     assert f'?c={group.id}' in content, 'must deep-link this completion, not the bare page'
-    assert 'You platinumed this' in content
-    assert 'gd-platcard--full' not in content
+    assert 'Plat Card' in content
+    assert 'gd-btn--card-full' not in content
+    # It rides the EXISTING action row, so a finished game costs the hero no extra height -- and it
+    # must NOT come back as a block of its own under the trophy haul, where it first shipped.
+    assert 'gd-btn--card' in content.split('gd-hero__actions')[1][:1200], 'must sit in the action row'
+    assert 'gd-platcard' not in content, 'the standalone block is gone'
 
 
 def test_a_100_percent_clear_offers_the_full_variant(client):
@@ -636,7 +640,7 @@ def test_a_100_percent_clear_offers_the_full_variant(client):
 
     content = _detail(client, game)
 
-    assert 'gd-platcard--full' in content and 'You finished this 100%' in content
+    assert 'gd-btn--card-full' in content and '100% Card' in content
 
 
 def test_an_unfinished_game_offers_no_card(client):
@@ -650,7 +654,7 @@ def test_an_unfinished_game_offers_no_card(client):
     ProfileTrophyGroupFactory(profile=profile, trophy_group=group, progress=61)
     client.force_login(profile.user)
 
-    assert 'gd-platcard' not in _detail(client, game)
+    assert 'gd-btn--card' not in _detail(client, game)
 
 
 def test_another_hunters_completion_is_never_offered_as_your_card(client):
@@ -666,11 +670,11 @@ def test_another_hunters_completion_is_never_offered_as_your_card(client):
                           'psn_username': them.psn_username})
     content = client.get(url).content.decode()
 
-    assert 'gd-platcard' not in content
+    assert 'gd-btn--card' not in content
 
 
 def test_an_anonymous_visitor_sees_no_card_cta(client):
     profile = ProfileFactory(is_linked=True)
     game, _ = _finished(profile, with_platinum=True)
 
-    assert 'gd-platcard' not in _detail(client, game)
+    assert 'gd-btn--card' not in _detail(client, game)
