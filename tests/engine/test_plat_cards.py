@@ -758,6 +758,25 @@ def test_every_curated_key_resolves_to_a_real_theme():
         assert entry['name'] and entry['background_css'], f'{key} resolved without a ground'
 
 
+def test_the_picker_still_fits_on_one_row():
+    """The swatch grid is `repeat(auto-fit, minmax(70px, 1fr))` in a 1000px box (plat-cards.css), which
+    yields 12 columns: floor((1000 - 36 padding + 7 gap) / (70 + 7)) == 12.
+
+    Every ground has to stay on screen -- no "more" control, no scrolling to reach one -- and the modal
+    must not scroll, so a second row costs the preview ~120px of height. 8 grounds + ART_OPTION_CAP is
+    exactly 12 today; a ninth ground wraps it. Adding one is fine, but the CSS min-width has to come
+    down in the same change, which is what this test is here to say."""
+    from core.services.completion_card_service import ART_OPTION_CAP
+    from trophies.themes import PLAT_CARD_THEME_KEYS
+
+    fixed = [k for k in PLAT_CARD_THEME_KEYS if k != 'ppArt']
+
+    assert len(fixed) + ART_OPTION_CAP <= 12, (
+        f'{len(fixed)} grounds + {ART_OPTION_CAP} art swatches needs a second row; '
+        'lower the minmax() floor in .pc-modal__themes to match'
+    )
+
+
 def test_the_curated_set_reuses_the_existing_retro_wave_theme():
     """Retro Wave is a SITE theme (category 'retro'), pulled into the card's curation unchanged rather
     than redrawn for it -- a card-local copy would drift from the one the site pickers show. It is also

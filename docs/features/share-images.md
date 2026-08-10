@@ -162,6 +162,13 @@ art the card already offers.
 - **The preview is injected into the live site; the download is not.** Anything relying on inherited
   CSS lays out differently in the two — unset `line-height` caused exactly this, and the card now pins
   it on every text node. If you add markup, pin its layout.
+- **The modal must never scroll, and no ground may hide behind chrome.** `fit()` bounds the preview by
+  the room the chrome leaves (viewport 92vh minus header + controls), so extra swatches shrink the CARD
+  rather than growing the box. Scaling on width alone was what let each new row push it past 92vh. The
+  swatch grid is `auto-fit, minmax(70px, 1fr)` for the same reason: 12 columns at the 1000px box, so
+  8 grounds + `ART_OPTION_CAP` still land on one row, and auto-fit collapses the empty tracks so a card
+  with no art stretches its 8 instead of leaving a gap. A ninth ground needs the floor lowered in the
+  same change -- `test_the_picker_still_fits_on_one_row` says so out loud.
 - **A card ground can be lighter, never light.** Every text colour in `plat_card.html` is a hardcoded
   light hex (`#f0f6fd` headings, `#9da5b1` / `#8a939f` sub-text) because the card is inline-styled for
   Playwright and has no tokens. A pale ground puts near-white text on near-white. "Lighter" means

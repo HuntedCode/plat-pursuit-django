@@ -165,13 +165,36 @@
         }
     }
 
-    // The card renders at a fixed 1200x630; scale it to whatever the frame is, so the preview keeps
-    // the artifact's real proportions instead of reflowing into a different layout.
+    // The card renders at a fixed 1200x630; scale it to whatever room the modal has, so the preview
+    // keeps the artifact's real proportions instead of reflowing into a different layout.
+    //
+    // Bounded by HEIGHT as well as width, and that is the whole point: scaling on width alone let the
+    // preview claim its full height no matter how little was left, so every extra row of grounds made
+    // the box taller until it scrolled. The picker must never be scrolled to or collapsed behind a
+    // "more" control -- every ground stays on screen -- so the preview is what gives way.
+    //
+    // The budget is computed from the VIEWPORT and the chrome, never from the box's current height:
+    // the box is sized by its content, so measuring it here would feed this function its own last
+    // answer. Header and controls are independent of the frame, so they can be measured directly.
+    var MIN_SCALE = 0.2;   // absurdly short viewports get a small preview, still never a scrollbar
     function fit() {
         var frame = dlg && dlg.querySelector('[data-share-frame]');
         var scaler = dlg && dlg.querySelector('[data-share-preview]');
         if (!frame || !scaler) { return; }
+
         var scale = Math.min(1, frame.clientWidth / 1200);
+        var stage = frame.parentElement;
+        var head = dlg.querySelector('.pc-modal__head');
+        var controls = dlg.querySelector('.pc-modal__controls');
+        if (stage && head && controls) {
+            var pad = window.getComputedStyle(stage);
+            var chrome = head.offsetHeight + controls.offsetHeight
+                + parseFloat(pad.paddingTop) + parseFloat(pad.paddingBottom)
+                + 2;                                        // the box's 1px borders
+            var room = (window.innerHeight * 0.92) - chrome;   // 92vh matches .pc-modal__box's cap
+            scale = Math.max(MIN_SCALE, Math.min(scale, room / 630));
+        }
+
         scaler.style.transform = 'scale(' + scale + ')';
         frame.style.height = Math.round(630 * scale) + 'px';
     }

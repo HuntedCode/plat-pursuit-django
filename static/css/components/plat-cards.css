@@ -134,15 +134,19 @@
 }
 .pc-modal::backdrop { background: rgba(5, 8, 12, 0.72); backdrop-filter: blur(3px); }
 
+/* NEVER scrolls. `fit()` sizes the preview from the room the chrome leaves, so the box shrinks the
+   card rather than growing past 92vh -- every ground stays on screen without a scrollbar and without
+   being collapsed behind a "more" control. overflow-y:auto here was what let it grow instead. */
 .pc-modal__box {
-    width: 100%; max-height: 92vh; overflow-y: auto;
+    width: 100%; max-height: 92vh; overflow: hidden;
     display: flex; flex-direction: column;
     border: 1px solid var(--pp-border); border-radius: 16px;
     background: var(--pp-bg-1);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 28px 70px -20px rgba(0, 0, 0, 0.8);
 }
 
-.pc-modal__head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 12px; border-bottom: 1px solid var(--pp-divider); }
+/* Head and controls hold their natural height; the stage is the only part that gives. */
+.pc-modal__head { flex: 0 0 auto; display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 12px; border-bottom: 1px solid var(--pp-divider); }
 .pc-modal__title { font-size: 17px; font-weight: 700; color: var(--pp-text); line-height: 1.2; }
 .pc-modal__sub {
     font-size: 13px; color: var(--pp-text-dim); margin-top: 3px;
@@ -160,7 +164,7 @@
 
 /* Stage: the card renders at its real 1200x630 and is scaled down by JS, so the preview is the
    artifact rather than a reimplementation of it that can drift. */
-.pc-modal__stage { position: relative; padding: 16px 18px; }
+.pc-modal__stage { flex: 1 1 auto; min-height: 0; position: relative; padding: 16px 18px; }
 .pc-modal__frame { position: relative; width: 100%; overflow: hidden; border-radius: 10px; background: var(--pp-bg-0); }
 .pc-modal__scaler { width: 1200px; height: 630px; transform-origin: top left; }
 .pc-modal__loading {
@@ -170,13 +174,19 @@
 }
 .pc-modal__error { margin: 0 18px 4px; font-size: 13px; color: var(--pp-error); }
 
-.pc-modal__controls { padding: 4px 18px 18px; display: flex; flex-direction: column; gap: 14px; }
+.pc-modal__controls { flex: 0 0 auto; padding: 4px 18px 18px; display: flex; flex-direction: column; gap: 12px; }
 
-.pc-modal__themes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+/* auto-fit, NOT a fixed column count. The item count is 8 grounds + however many art options the game
+   has (0..ART_OPTION_CAP), so any fixed count is wrong for most cards: `repeat(8)` fit exactly when
+   there were four grounds and four art slots, and put every art swatch on a second row once the
+   lighter grounds landed -- which is what pushed the modal past 92vh.
+   70px min gives 12 columns at the 1000px box, so the maximum 12 items still land on ONE row; auto-fit
+   then collapses the empty tracks, so a card with no art stretches its 8 across the full width instead
+   of leaving a gap. One row keeps ~120px of height in the preview rather than in chrome. */
+.pc-modal__themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 7px; }
 /* The JS appends art swatches into this slot; `display: contents` lets them sit in the same
    grid as the fixed grounds instead of being boxed into one cell. */
 [data-share-art-slot] { display: contents; }
-@media (min-width: 640px) { .pc-modal__themes { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
 
 .pc-theme { display: flex; flex-direction: column; gap: 6px; cursor: pointer; }
 .pc-theme__swatch {
