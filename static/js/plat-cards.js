@@ -462,17 +462,30 @@
 
             // Warm the card on hover INTENT. Generating a preview is the slowest step in this flow, so
             // starting it while the pointer settles usually means the modal opens with the card already
-            // there. Dwell-gated and cached, so sweeping across the grid doesn't fire a request per tile,
-            // and skipped entirely on touch (no hover, and it would waste a request on every scroll).
+            // there.
+            //
+            // A prefetch is NOT free: on a cold cache the preview endpoint fetches the avatar, cover and
+            // trophy icon, each a `requests.get(timeout=10)` server-side. So there are three separate
+            // guards, and only the last one is a real ceiling:
+            //   - dwell   -- the pointer has to settle; sweeping past a tile never fires
+            //   - cache   -- a preview is immutable per completion, so a card is fetched at most once
+            //   - BUDGET  -- a hard per-page cap, because the first two bound requests per CARD while a
+            //                determined mouse can still visit a lot of cards. Past the cap, opening a
+            //                card just fetches on click like it always did.
             if (window.matchMedia && window.matchMedia('(hover: hover)').matches) {
                 var warmTimer = null;
+                var warmBudget = 8;
                 document.body.addEventListener('mouseover', function (e) {
                     var trigger = e.target.closest('[data-card-open]');
-                    if (!trigger) { return; }
+                    if (!trigger || warmBudget <= 0) { return; }
+                    var id = trigger.dataset.trophyGroupId;
+                    if (previewCache[id] || inflight[id]) { return; }   // don't spend dwell on a warm card
                     clearTimeout(warmTimer);
                     warmTimer = setTimeout(function () {
-                        fetchPreview(trigger.dataset.trophyGroupId).catch(function () { /* opening will surface it */ });
-                    }, 180);
+                        if (warmBudget <= 0 || previewCache[id] || inflight[id]) { return; }
+                        warmBudget -= 1;
+                        fetchPreview(id).catch(function () { /* opening the card will surface it */ });
+                    }, 280);
                 });
                 document.body.addEventListener('mouseout', function (e) {
                     if (e.target.closest('[data-card-open]')) { clearTimeout(warmTimer); }
