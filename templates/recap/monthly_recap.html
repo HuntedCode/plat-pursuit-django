@@ -99,6 +99,7 @@ PlatPursuit.takeover. {% endcomment %}
     <div class="rcx__stage" id="recap-slides">
         {# Tap zones sit UNDER the slides (z-index), so a quiz option always wins the click. #}
         <button type="button" class="rcx__zone rcx__zone--prev" id="prev-slide" aria-label="Previous"></button>
+        <button type="button" class="rcx__zone rcx__zone--hold" id="hold-slide" aria-label="Pause"></button>
         <button type="button" class="rcx__zone rcx__zone--next" id="next-slide" aria-label="Next"></button>
         {% comment %} Washes show how far each click region actually extends; the arrows only ever showed
         which direction. They sit above the slide but take no pointer events. {% endcomment %}
@@ -112,7 +113,16 @@ PlatPursuit.takeover. {% endcomment %}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                  stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6" /></svg>
         </span>
-        <p class="rcx__hint">Tap the right to move on &middot; the left edge goes back &middot; hold to pause</p>
+        {% comment %} The middle's affordance carries BOTH states: the pause it offers, and the play it
+        offers back once latched. Swapped by class so the glyph never lies about what a press will do.
+        {% endcomment %}
+        <span class="rcx__aim rcx__aim--hold" aria-hidden="true">
+            <svg class="rcx__glyph rcx__glyph--pause" viewBox="0 0 24 24" fill="currentColor"
+                 aria-hidden="true"><rect x="7" y="5" width="3.5" height="14" rx="1" /><rect x="13.5" y="5" width="3.5" height="14" rx="1" /></svg>
+            <svg class="rcx__glyph rcx__glyph--play" viewBox="0 0 24 24" fill="currentColor"
+                 aria-hidden="true"><path d="M8 5l11 7-11 7z" /></svg>
+        </span>
+        <p class="rcx__hint">Tap the edges to move &middot; tap the middle to pause</p>
     </div>
 
     {% comment %} Beats you interact with advance on THIS, not on a timer -- see MANUAL_BEATS. {% endcomment %}

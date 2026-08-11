@@ -290,14 +290,76 @@ def test_completed_bars_are_committed_inline_not_left_to_the_cascade(js):
     assert "fill.style.width = '0'" in body, 'bars ahead of the playhead are not explicitly emptied'
 
 
-def test_the_backward_edge_has_one_definition(js):
-    """The click handler and the hover affordance must not disagree about where "back" is, or the deck
-    shows one thing and does another."""
-    assert 'isBackwardEdge' in _method(js, 'isBackwardEdge')
+def test_the_regions_have_one_definition(js):
+    """The click handler and the hover affordance must not disagree about where the regions are, or the
+    deck shows one thing and does another."""
+    assert 'zoneAt' in _method(js, 'zoneAt')
     handler = re.search(r"this\.container\.addEventListener\('click'.*?\n        \}\);", js, re.S)
-    assert 'isBackwardEdge' in handler.group(0), 'the click handler measures the edge itself'
+    assert 'zoneAt' in handler.group(0), 'the click handler measures the region itself'
     move = re.search(r"this\.container\.addEventListener\('pointermove'.*?\n        \}\);", js, re.S)
-    assert move and 'isBackwardEdge' in move.group(0), 'the affordance measures the edge itself'
+    assert move and 'zoneAt' in move.group(0), 'the affordance measures the region itself'
+
+
+def test_the_split_in_the_controller_matches_the_stylesheet():
+    """Two separate statements of the same 30/40/30 boundary: the regions you can hit (JS) and the regions
+    you are shown (CSS). Drift is invisible in both files and surfaces only as clicks landing somewhere
+    other than where the wash said they would."""
+    code = _code(CONTROLLER.read_text(encoding='utf-8'))
+    edge = re.search(r'this\.ZONE_EDGE\s*=\s*([\d.]+)', code)
+    assert edge, 'the edge width is not stated once'
+    pct = round(float(edge.group(1)) * 100)
+
+    css = _css()
+    for part in ('prev', 'next'):
+        rule = re.search(r'\.rcx__zone--' + part + r'\s*\{([^}]*)\}', css)
+        assert rule and f'width: {pct}%' in rule.group(1), f'the {part} zone is not {pct}% wide'
+        wash = re.search(r'\.rcx__wash--' + part + r'\s*\{([^}]*)\}', css)
+        assert wash and f'width: {pct}%' in wash.group(1), f'the {part} wash does not cover its zone'
+    hold = re.search(r'\.rcx__zone--hold\s*\{([^}]*)\}', css)
+    assert hold and f'width: {100 - 2 * pct}%' in hold.group(1), 'the middle does not fill what is left'
+
+
+def test_the_pause_latches_rather_than_following_the_finger(js):
+    """Holding pauses only while a finger is down, which is the wrong gesture for the slides that most
+    need it -- the dense ones you are trying to read. A tap in the middle latches instead, and a latch
+    that any of the resume paths can quietly undo is not a latch."""
+    code = _code(js)
+    assert 'if (this.pinned) return;' in _method(code, 'releaseBeat'), (
+        'lifting the finger cancels a latched pause'
+    )
+    assert 'if (this.pinned) return;' in _method(code, 'startBeatTimer'), (
+        'a dialog closing or a quiz being answered restarts a deck the hunter paused'
+    )
+
+
+def test_moving_on_clears_the_pause(js):
+    """Every beat is armed through one function, so the pause has exactly one place to be forgotten. Left
+    set, navigating away from a paused slide would land on a slide whose clock never starts -- a deck that
+    looks broken rather than paused."""
+    arm = _method(_code(js), 'armBeat')
+    assert 'this.pinned = false' in arm
+    assert "classList.remove('is-pinned'" in arm, 'the paused styling outlives the paused state'
+
+
+def test_a_beat_with_no_clock_cannot_be_paused(js):
+    """Quizzes and the calendar already wait on the hunter. "Paused" there is a state the deck would be in
+    without anything actually being suspended, with the glyph claiming to hold a beat nothing was moving."""
+    toggle = _method(_code(js), 'togglePause')
+    assert 'is-waiting' in toggle, 'a waiting beat can be put into a second, fictional pause'
+    assert '!this.pinned' in toggle, 'a paused deck cannot be un-paused once a dialog opens over it'
+
+
+def test_the_pause_is_reachable_without_a_pointer(js):
+    """The other two regions have had real buttons behind them all along, for keyboard and assistive tech.
+    A third region existing only as a hit-test would be a control those hunters simply do not have."""
+    code = _code(js)
+    assert "getElementById('hold-slide')" in code
+    assert 'this.holdBtn.addEventListener' in code
+    assert "setAttribute('aria-label'" in _method(code, 'togglePause'), (
+        'the label describes the state instead of what the next press does'
+    )
+    tpl = (ROOT / 'templates' / 'recap' / 'monthly_recap.html').read_text(encoding='utf-8')
+    assert 'id="hold-slide"' in tpl and 'rcx__zone--hold' in tpl
 
 
 def test_going_back_is_signposted_before_the_click(js):
@@ -409,7 +471,13 @@ def test_a_blocked_beat_leaves_no_stale_end_time(js):
     would read it as a remainder and hand the next slide a fraction of a beat."""
     body = _method(js, 'startBeatTimer')
     assert '_beatEndsAt = null' in body, 'a blocked beat keeps the previous beat`s end time'
-    assert 'if (!this.beatTimer)' in _method(js, 'holdBeat'), (
+    # The capture is INSIDE the `beatTimer` branch. It used to be an early return, but pinning the bar's
+    # visual now has to happen whether or not a clock is running (a latched pause arrives after the hold
+    # has already been released), so the guard narrowed from the whole method to the remainder alone.
+    hold = _method(js, 'holdBeat')
+    capture = re.search(r'if \(this\.beatTimer\) \{(.*?)\n        \}', hold, re.S)
+    assert capture, 'holdBeat no longer guards the remainder on a running clock'
+    assert '_beatLeft' in capture.group(1), (
         'holdBeat captures a remainder even when no beat is running'
     )
 

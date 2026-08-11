@@ -120,6 +120,40 @@ its purest form. It is now:
 - **The Stage** (`.rcx`): a full-screen takeover, rendered hidden on page load so the deck prefetch
   finishes while the cover is being read and entering is instant.
 
+**The three regions (30 / 40 / 30).** The stage is split left-to-right into *back*, *pause*, *forward*.
+One number states it (`ZONE_EDGE` in the controller, pinned to the stylesheet's zone and wash widths by a
+test), because the regions you can hit and the regions you are shown drifting apart is invisible in both
+files and shows up only as clicks landing somewhere the wash did not promise.
+
+| Region | Width | Tap | Shown by |
+|---|---|---|---|
+| Back | 0-30% | Previous beat | Left arrow + an accent wash across the region |
+| Pause | 30-70% | Latches / unlatches the pause | A pause glyph on aim; a play glyph while latched |
+| Forward | 70-100% | Next beat | Right arrow + an accent wash across the region |
+
+Why it is not a two-way split: everything that was not the backward edge used to advance, which made the
+middle -- the part you are reading -- a forward button, and left holding a finger down as the only way to
+pause. That is the wrong gesture for exactly the beats that need it, the dense ones. The middle now
+latches, so a tap that lands there because you misjudged the edge pauses rather than skipping something.
+
+The washes exist because the arrows are pinned at the extreme edges while the regions run 30% inward:
+they said which direction a click would go and nothing about how far that side extended.
+
+The latch has four rules, and each of them was a way for a "paused" deck to start moving again:
+
+- `releaseBeat` returns early while pinned, so lifting the finger does not end it.
+- `startBeatTimer` returns early while pinned. Every resume path funnels through it (a deferred release,
+  a dialog closing, a quiz being answered), so this is the only place that has to know.
+- `armBeat` clears it, because moving on is what un-pauses the deck -- and a beat that arrived already
+  pinned would look broken rather than paused.
+- `visibilitychange` respects it: returning to the tab restarts a *running* beat, never a paused one.
+
+A beat with no clock (a quiz, the calendar) cannot be paused; it is already waiting on you, and "paused"
+there would be a state with nothing suspended. Note also that `holdBeat` freezes the bar's *visual*
+unconditionally but only recomputes the remainder when a timer is running: the latch arrives on `click`,
+by which point `pointerup` has already released the hold, so there may be no clock left to stop but there
+is always a bar mid-flight to catch.
+
 Load-bearing details, each of which was a bug first:
 
 - **`.rcp` DISSOLVES on the stage.** In a takeover the stage IS the frame, so a bordered card inside one

@@ -49,9 +49,15 @@ class MonthlyRecapManager {
         this.BEAT_MAX_MS = 9500;
         this.READ_MS_PER_WORD = 260;      // ~230 wpm, plus room to look at the art rather than read it
         this.beatTimer = null;
+        // Width of each NAVIGATION edge, as a fraction of the stage. What is left between them is the
+        // pause zone -- so this single number is the whole 30/40/30 split, and the JS and the stylesheet
+        // are not free to drift apart about where the boundaries are.
+        this.ZONE_EDGE = 0.30;
+        this.pinned = false;          // a latched pause, as opposed to the transient hold under a finger
         this.stageOpen = false;       // the deck does not run until the hunter enters
         this.prevBtn = document.getElementById('prev-slide');
         this.nextBtn = document.getElementById('next-slide');
+        this.holdBtn = document.getElementById('hold-slide');
         this.shareSection = document.getElementById('share-section');
 
         this.init();
@@ -461,6 +467,9 @@ class MonthlyRecapManager {
         // handled below, where it can see what was actually clicked.
         this.prevBtn.addEventListener('click', () => this.prevSlide());
         this.nextBtn.addEventListener('click', () => this.nextSlide());
+        // The pause zone is a real control, not just a region: without one, the only way to stop the deck
+        // would be a pointer gesture, which is no way at all for a keyboard or a screen reader.
+        if (this.holdBtn) this.holdBtn.addEventListener('click', () => this.togglePause());
 
         this.container.addEventListener('click', (e) => {
             if (!this.stageOpen || this.container.classList.contains('is-ending')) return;
@@ -468,7 +477,10 @@ class MonthlyRecapManager {
             // Continue control, links inside a beat.
             if (e.target.closest('button, a, [data-quiz-option], input, select, dialog')) return;
 
-            if (this.isBackwardEdge(e.clientX)) this.prevSlide(); else this.nextSlide();
+            const zone = this.zoneAt(e.clientX);
+            if (zone === 'back') this.prevSlide();
+            else if (zone === 'fwd') this.nextSlide();
+            else this.togglePause();
         });
 
         const begin = document.getElementById('recap-begin');
@@ -510,6 +522,7 @@ class MonthlyRecapManager {
             if (document.hidden) {
                 this.holdBeat();
             } else {
+                if (this.pinned) return;    // paused on purpose before leaving; it stays paused
                 // Restart the beat outright rather than resuming: the two clocks drifted apart while the
                 // tab was backgrounded, and a clean restart is the only state they can agree on.
                 this.container.classList.remove('is-held');
@@ -525,9 +538,10 @@ class MonthlyRecapManager {
         // do, because nothing on screen suggested backward was even possible.
         this.container.addEventListener('pointermove', (e) => {
             if (!this.stageOpen || this.container.classList.contains('is-ending')) return;
-            const back = this.isBackwardEdge(e.clientX);
-            this.container.classList.toggle('is-aim-back', back);
-            this.container.classList.toggle('is-aim-fwd', !back);
+            const zone = this.zoneAt(e.clientX);
+            this.container.classList.toggle('is-aim-back', zone === 'back');
+            this.container.classList.toggle('is-aim-fwd', zone === 'fwd');
+            this.container.classList.toggle('is-aim-hold', zone === 'hold');
         });
 
         this.container.addEventListener('pointerdown', () => this.holdBeat());
@@ -535,7 +549,7 @@ class MonthlyRecapManager {
             this.container.addEventListener(evt, () => this.releaseBeat());
         });
         this.container.addEventListener('pointerleave', () => {
-            this.container.classList.remove('is-aim-back', 'is-aim-fwd');
+            this.container.classList.remove('is-aim-back', 'is-aim-fwd', 'is-aim-hold');
         });
 
         // Keyboard navigation. Bound at the DOCUMENT, so it has to yield: to anyone typing (the share
@@ -708,6 +722,8 @@ class MonthlyRecapManager {
      */
     armBeat(index, slideEl, ms) {
         this.cancelResume();          // a queued resume belongs to the beat we are leaving
+        this.pinned = false;          // ...and so does a pause: moving on is what un-pauses the deck
+        this.container.classList.remove('is-pinned', 'is-held');
         this._beatLeft = null;
         this._beatMs = ms != null ? ms : this.beatDuration(slideEl);
         this.container.style.setProperty('--rcx-beat', this._beatMs + 'ms');
@@ -737,6 +753,10 @@ class MonthlyRecapManager {
     startBeatTimer() {
         this.stopBeatTimer();
         if (this.prefersReducedMotion || !this.stageOpen) return;
+        // A pinned beat stays pinned. Guarding here rather than at each call site means a dialog closing,
+        // a quiz being answered or a deferred release cannot quietly restart a deck you paused. The
+        // remainder in `_beatLeft` survives untouched, because only a real start consumes it.
+        if (this.pinned) return;
         // Re-sync in case something changed since the beat was armed -- a quiz being answered, a dialog
         // opening or closing. armBeat has already done it for a fresh beat.
         const blocked = this.syncBeatState(this.slides[this.currentSlide]?.type);
@@ -759,15 +779,43 @@ class MonthlyRecapManager {
     }
 
     /**
-     * Is this x-coordinate in the "go back" edge?
+     * Which of the three regions is this x-coordinate in?
      *
-     * A QUARTER, not a third: forward is what almost every click means, so the backward target is kept
-     * deliberately small and hugging the edge. One definition, shared by the click handler and the hover
-     * affordance, so what you are shown and what you get cannot disagree.
+     * Thirty / forty / thirty. The deck used to be a two-way split where everything that was not the
+     * backward edge advanced, which made the middle -- the part you are actually reading -- a forward
+     * button. Pausing meant holding a finger down for as long as you wanted to look, which is the wrong
+     * gesture for the slides that need it most: the ones with the most to read.
+     *
+     * So the middle is now its own control and it LATCHES. The edges keep navigation and are wide enough
+     * to hit without aiming, and a tap that lands in the middle because you misjudged the edge pauses
+     * rather than skipping something -- a recoverable, visible outcome instead of a lost beat.
+     *
+     * One definition, shared by the click handler and the hover affordance, so what you are shown and
+     * what you get cannot disagree.
      */
-    isBackwardEdge(clientX) {
+    zoneAt(clientX) {
         const box = this.container.getBoundingClientRect();
-        return (clientX - box.left) < box.width * 0.25;
+        const at = (clientX - box.left) / (box.width || 1);
+        if (at < this.ZONE_EDGE) return 'back';
+        if (at > 1 - this.ZONE_EDGE) return 'fwd';
+        return 'hold';
+    }
+
+    /**
+     * Latch or unlatch the pause.
+     *
+     * A no-op on a beat that has no clock: quizzes and the calendar already wait on you, so "paused"
+     * there would be a state the deck was in without anything being suspended.
+     */
+    togglePause() {
+        if (!this.pinned && this.container.classList.contains('is-waiting')) return;
+        this.pinned = !this.pinned;
+        this.container.classList.toggle('is-pinned', this.pinned);
+        if (this.holdBtn) this.holdBtn.setAttribute('aria-label', this.pinned ? 'Resume' : 'Pause');
+        // `click` lands AFTER `pointerup`, so the hold this tap began has already been released and the
+        // bar handed back to the stylesheet. Re-take it rather than assuming it is still held.
+        this.cancelResume();
+        if (this.pinned) this.holdBeat(); else this.releaseBeat();
     }
 
     /** A quiz has been answered: hold on the verdict for a moment, then move on -- re-armed through the
@@ -786,13 +834,19 @@ class MonthlyRecapManager {
      */
     holdBeat() {
         if (!this.stageOpen || this.container.classList.contains('is-held')) return;
-        if (!this.beatTimer) { this.container.classList.add('is-held'); return; }   // nothing to freeze
+        // Freeze the bar FIRST and unconditionally. A latched pause arrives on `click`, by which point
+        // `pointerup` has already released the hold and handed the bar back to the stylesheet -- so there
+        // may be no timer left to stop, but there is always a bar mid-flight to catch.
         const fill = this.container.querySelector('.rcx__bar.is-live i');
         if (fill) fill.style.width = getComputedStyle(fill).width;
-        this._beatLeft = this._beatEndsAt
-            ? { index: this.currentSlide, ms: Math.max(0, this._beatEndsAt - performance.now()) }
-            : null;
-        this.stopBeatTimer();
+        // Only recompute the remainder when a clock is actually running. Overwriting it from a stale
+        // `_beatEndsAt` would throw away the remainder the pointerdown half of this same tap captured.
+        if (this.beatTimer) {
+            this._beatLeft = this._beatEndsAt
+                ? { index: this.currentSlide, ms: Math.max(0, this._beatEndsAt - performance.now()) }
+                : null;
+            this.stopBeatTimer();
+        }
         this.container.classList.add('is-held');
     }
 
@@ -808,6 +862,7 @@ class MonthlyRecapManager {
      * rather than by the timings happening to work out.
      */
     releaseBeat() {
+        if (this.pinned) return;        // latched: lifting the finger is not what ends this pause
         if (!this.container.classList.contains('is-held')) return;
         this.container.classList.remove('is-held');
         const fill = this.container.querySelector('.rcx__bar.is-live i');

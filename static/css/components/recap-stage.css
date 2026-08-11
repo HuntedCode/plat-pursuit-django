@@ -184,6 +184,9 @@
    current width inline before this lands (and an inline width outranks the class rules below); this only
    stops it easing on from there. */
 .rcx.is-held .rcx__bar.is-live i { transition: none; }
+/* A held bar and a LATCHED one look identical otherwise, and the difference matters: one ends when you
+   lift your finger, the other does not. Dimming the playhead says "this is not coming back on its own". */
+.rcx.is-pinned .rcx__bar.is-live i { opacity: 0.45; }
 
 /* WAITING (an unanswered quiz) and MANUAL (a beat with its own Continue): the deck is not counting, it is
    waiting on the hunter. The segment stays EMPTY and the track pulses.
@@ -247,9 +250,10 @@
 /* The zones are keyboard/AT controls only -- pointer advancement is handled at the stage, because these
    sit UNDER the slide and a real click never reaches them. Kept narrow and edge-hugging to match
    `isBackwardEdge`. */
-.rcx__zone { position: absolute; top: 0; bottom: 0; width: 25%; z-index: 0; border: 0; background: none; cursor: pointer; }
-.rcx__zone--prev { left: 0; }
-.rcx__zone--next { right: 0; width: 75%; }
+.rcx__zone { position: absolute; top: 0; bottom: 0; z-index: 0; border: 0; background: none; cursor: pointer; }
+.rcx__zone--prev { left: 0;  width: 30%; }
+.rcx__zone--hold { left: 30%; width: 40%; }
+.rcx__zone--next { right: 0; width: 30%; }
 .rcx__zone:focus-visible { outline: 2px solid var(--rcx-accent); outline-offset: -4px; }
 
 /* WHICH WAY AM I ABOUT TO GO. Backward was an invisible quarter of the screen, so aiming to skip forward
@@ -271,6 +275,15 @@
 .rcx__aim svg { width: 1.35rem; height: 1.35rem; }
 .rcx__aim--prev { left: 1rem;  transform: translateX(8px); }
 .rcx__aim--next { right: 1rem; transform: translateX(-8px); }
+/* Centred on the zone it belongs to, and BELOW the beat's own content rather than over its middle. */
+/* Centred with `left`, NOT a translate. The resting rule below sets `transform: none` on every aim, so a
+   glyph that leaned on a transform to centre itself sat half its own width off-axis the moment it lit --
+   measured 24px right of centre on a 1280 stage, which is exactly half of its 3rem box. The transform is
+   left free to carry the entrance offset alone. */
+.rcx__aim--hold { left: calc(50% - 1.5rem); top: auto; bottom: 3.25rem; margin-top: 0; transform: translateY(6px); }
+.rcx__glyph { width: 1.15rem; height: 1.15rem; grid-area: 1 / 1; }
+.rcx__glyph--play, .rcx.is-pinned .rcx__glyph--pause { display: none; }
+.rcx.is-pinned .rcx__glyph--play { display: block; }
 /* The REGION, not just the direction. The arrows are pinned at the edges while the backward hit area
    runs 25% inward, so they said which way a click would go and nothing about how far that side extends --
    a click at 20% of the width is nowhere near the left arrow and still goes back. This washes the side
@@ -282,13 +295,15 @@
     transition: opacity 0.25s ease;
 }
 .rcx__wash--prev {
-    left: 0; width: 25%;
+    left: 0; width: 30%;
     background: linear-gradient(90deg, color-mix(in oklab, var(--rcx-accent) 20%, transparent), transparent);
 }
 .rcx__wash--next {
-    right: 0; width: 75%;
-    background: linear-gradient(270deg, color-mix(in oklab, var(--rcx-accent) 14%, transparent), transparent);
+    right: 0; width: 30%;
+    background: linear-gradient(270deg, color-mix(in oklab, var(--rcx-accent) 20%, transparent), transparent);
 }
+/* The middle gets NO wash. It is the part you are reading, and a tint laid over the beat itself would be
+   the one place the affordance costs more than it explains. Its glyph is the whole signal. */
 .rcx.is-aim-back .rcx__wash--prev { opacity: 1; }
 .rcx.is-aim-fwd  .rcx__wash--next { opacity: 1; }
 .rcx.is-ending .rcx__wash, .rcx.is-card-only .rcx__wash { opacity: 0; }
@@ -302,7 +317,14 @@
    still lifts to full and takes the accent, so the answer to "which way will this click go" is on screen
    before you commit -- but the pair itself is simply there. */
 .rcx .rcx__aim { opacity: 0.55; transform: none; }
+/* The two navigation arrows are permanent furniture. The pause glyph is not: it would sit under the
+   middle of every beat saying nothing, so it earns its place only when you aim at it or it is holding
+   the deck. Once latched it goes to full and STAYS -- it is the only thing on screen reporting that the
+   deck is stopped rather than merely slow. */
+.rcx .rcx__aim--hold { opacity: 0; }
+.rcx.is-pinned .rcx__aim--hold { opacity: 1; }
 .rcx.is-aim-back .rcx__aim--prev,
+.rcx.is-aim-hold .rcx__aim--hold,
 .rcx.is-aim-fwd  .rcx__aim--next {
     opacity: 1;
     background: color-mix(in oklab, var(--rcx-accent) 26%, transparent);
