@@ -179,20 +179,27 @@
 .rcx__bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: #fff; }
 .rcx__bar.is-done i { width: 100%; }
 .rcx__bar.is-live i { width: 100%; transition: width var(--rcx-beat, 5s) linear; }
-/* Held or waiting: the timer must visibly STOP, or "hold to pause" is a lie.
-   `transition: none` alone does NOT freeze an in-flight transition -- it drops the animation and applies
-   the target value, which snapped the bar to full. The controller pins the current width inline before
-   this lands; this only stops it easing on from there. */
-.rcx.is-held .rcx__bar.is-live i,
-.rcx.is-waiting .rcx__bar.is-live i { transition: none; }
+/* HELD: freeze where it stands. `transition: none` alone does NOT freeze an in-flight transition -- it
+   drops the animation and applies the target, which snapped the bar to full. The controller pins the
+   current width inline before this lands (and an inline width outranks the class rules below); this only
+   stops it easing on from there. */
+.rcx.is-held .rcx__bar.is-live i { transition: none; }
 
-/* On a MANUAL beat there is no clock to show, and a segment frozen at zero just reads as broken. It
-   fills and breathes instead: lit because you are here, moving because it is waiting on you. */
-.rcx.is-manual .rcx__bar.is-live i { width: 100%; transition: none; }
+/* WAITING (an unanswered quiz) and MANUAL (a beat with its own Continue): the deck is not counting, it is
+   waiting on the hunter. The segment stays EMPTY and the track pulses.
+ *
+ * This previously left `is-live`'s `width: 100%` in place with the transition removed, so the bar snapped
+ * to FULL the instant either state landed -- every quiz beat opened showing a completed timer, and the
+ * calendar showed one too. A full bar means "this beat elapsed". Nothing had elapsed; that is the whole
+ * point of these two states. Manual used to do it deliberately, which was the same lie told on purpose. */
+.rcx.is-waiting .rcx__bar.is-live i,
+.rcx.is-manual .rcx__bar.is-live i { width: 0; transition: none; }
 @media (prefers-reduced-motion: no-preference) {
-    .rcx.is-manual .rcx__bar.is-live i { animation: rcxWaiting 2s ease-in-out infinite; }
+    .rcx.is-waiting .rcx__bar.is-live,
+    .rcx.is-manual .rcx__bar.is-live { animation: rcxWaiting 2s ease-in-out infinite; }
 }
-@keyframes rcxWaiting { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+@keyframes rcxWaiting { 0%, 100% { background: rgba(255, 255, 255, 0.16); }
+                        50%      { background: rgba(255, 255, 255, 0.42); } }
 /* "Tap the sides" is the wrong instruction when the beat has its own Continue control. */
 .rcx.is-manual .rcx__hint { opacity: 0; }
 

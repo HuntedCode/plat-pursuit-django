@@ -258,3 +258,20 @@ def test_releasing_resumes_the_remainder_rather_than_restarting(js):
     """Holding to finish reading a beat should not hand you the whole beat again."""
     body = _method(js, 'startBeatTimer')
     assert 'this._beatLeft' in body, 'the remaining time is ignored on resume'
+
+
+def test_a_waiting_beat_does_not_show_a_completed_timer():
+    """`is-live` declares `width: 100%` and relies on a transition to get there. Removing the transition
+    for a waiting beat -- an unanswered quiz, or a manual beat with its own Continue -- therefore applied
+    the target INSTANTLY: every quiz opened showing a full timer bar, claiming a beat had elapsed when
+    nothing had. That is the same inline-vs-class precedence trap that once left the bar stuck at zero,
+    arriving from the other direction.
+
+    The segment must be emptied explicitly, not merely un-transitioned."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'recap-stage.css').read_text(encoding='utf-8')
+    rule = re.search(r'\.rcx\.is-waiting \.rcx__bar\.is-live i,\s*'
+                     r'\.rcx\.is-manual \.rcx__bar\.is-live i \{([^}]*)\}', css)
+    assert rule, 'waiting/manual bars have no rule of their own'
+    body = rule.group(1)
+    assert 'width: 0' in body, 'a waiting bar still inherits is-live width:100% and snaps to full'
+    assert 'transition: none' in body

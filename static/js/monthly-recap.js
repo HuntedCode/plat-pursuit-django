@@ -399,7 +399,6 @@ class MonthlyRecapManager {
         // Rewind, then run. The inline width MUST be cleared before `is-live` lands: an inline style
         // beats the `.is-live i { width: 100% }` class rule, so leaving `width: 0` on the element pinned
         // the bar at zero for the entire beat and the timer never appeared to move.
-        this._beatLeft = null;
         const fill = live.querySelector('i');
         fill.style.transition = 'none';
         fill.style.width = '0';
@@ -468,9 +467,8 @@ class MonthlyRecapManager {
                 // Restart the beat outright rather than resuming: the two clocks drifted apart while the
                 // tab was backgrounded, and a clean restart is the only state they can agree on.
                 this.container.classList.remove('is-held');
-                this._beatLeft = null;
-                this.paintBars(this.currentSlide);
-                this.startBeatTimer();
+                const el = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
+                this.armBeat(this.currentSlide, el);
             }
         });
 
@@ -658,6 +656,21 @@ class MonthlyRecapManager {
 
     /** Pacing. A quiz holds the deck until it is answered -- the gate already exists, this just stops
      *  the clock so the timer bar does not keep running against a beat that cannot advance. */
+    /**
+     * Set this beat's length, paint the bar with it, then arm the timeout -- one number, one place.
+     *
+     * NB the ordering is tidiness, not a fix: the bar's transition does not begin until the current task
+     * ends, so it picks up `--rcx-beat` whichever order these run in. A negative control confirmed that.
+     * The bug that actually made the bars wrong was in the CSS -- see `is-waiting` in recap-stage.css.
+     */
+    armBeat(index, slideEl) {
+        this._beatLeft = null;
+        this._beatMs = this.beatDuration(slideEl);
+        this.container.style.setProperty('--rcx-beat', this._beatMs + 'ms');
+        this.paintBars(index);
+        this.startBeatTimer();
+    }
+
     startBeatTimer() {
         this.stopBeatTimer();
         if (this.prefersReducedMotion || !this.stageOpen) return;
@@ -674,11 +687,13 @@ class MonthlyRecapManager {
 
         if (blocked || this.currentSlide >= this.slides.length - 1) return;
 
-        const slideEl = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
-        const ms = this._beatLeft != null ? this._beatLeft : this.beatDuration(slideEl);
-        this._beatLeft = null;
+        // A resume runs the REMAINDER; a fresh beat uses the length armBeat already wrote.
+        const ms = this._beatLeft != null ? this._beatLeft : (this._beatMs || this.BEAT_MIN_MS);
+        if (this._beatLeft != null) {
+            this.container.style.setProperty('--rcx-beat', ms + 'ms');
+            this._beatLeft = null;
+        }
         this._beatEndsAt = performance.now() + ms;
-        this.container.style.setProperty('--rcx-beat', ms + 'ms');   // the bar runs for exactly this long
         this.beatTimer = setTimeout(() => this.nextSlide(), ms);
     }
 
@@ -753,8 +768,7 @@ class MonthlyRecapManager {
             }
         });
 
-        this.paintBars(index);
-        this.startBeatTimer();
+        this.armBeat(index, slideEls[index]);
         this.applyBeatAccent(slideEls[index]);
 
 
