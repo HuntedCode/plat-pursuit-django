@@ -271,10 +271,14 @@
 .rcx__aim svg { width: 1.35rem; height: 1.35rem; }
 .rcx__aim--prev { left: 1rem;  transform: translateX(8px); }
 .rcx__aim--next { right: 1rem; transform: translateX(-8px); }
-/* Both are visible whenever the deck is playing -- the pair has to be DISCOVERABLE, not merely available
-   to someone who already suspects it exists. The one you are aiming at lifts to full and takes the
-   accent, so the answer to "which way will this click go" is on screen before you commit to it. */
-.rcx.is-aim-back .rcx__aim, .rcx.is-aim-fwd .rcx__aim { opacity: 0.55; transform: none; }
+/* ALWAYS visible while the deck plays -- not conditional on pointer state at all.
+   Tying their visibility to `is-aim-*` meant they were absent whenever the pointer was outside the
+   window, had not moved since the stage opened, or had triggered a `pointerleave`. An affordance that
+   is only present once you are already interacting is one nobody discovers. The one you are aiming at
+   still lifts to full and takes the accent, so the answer to "which way will this click go" is on screen
+   before you commit -- but the pair itself is simply there. */
+.rcx .rcx__aim { opacity: 0.55; transform: none; }
+.rcx.is-ending .rcx__aim, .rcx.is-card-only .rcx__aim { opacity: 0; }
 .rcx.is-aim-back .rcx__aim--prev,
 .rcx.is-aim-fwd  .rcx__aim--next {
     opacity: 1;

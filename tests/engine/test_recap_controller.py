@@ -110,9 +110,12 @@ def test_interactive_beats_advance_on_a_control_not_a_clock(js):
     yanks the slide out from under the hunter or needs pause/resume nobody can predict."""
     code = _code(js)
     assert 'MANUAL_BEATS' in code and "'activity_calendar'" in code
-    body = _method(js, 'startBeatTimer')
+    # The decision moved into syncBeatState, which runs before the bar is painted -- see
+    # test_a_beats_pause_state_is_decided_before_its_bar_is_painted.
+    body = _method(js, 'syncBeatState')
     assert 'MANUAL_BEATS.has' in body, 'manual beats are not exempted from the auto-advance'
     assert "dialog[open]" in body, 'an open dialog does not stop the clock'
+    assert 'syncBeatState' in _method(js, 'startBeatTimer'), 'the timer never consults the state'
 
 
 def test_the_platinum_dialog_lives_inside_the_stage(js):
@@ -339,3 +342,27 @@ def test_the_arrows_are_visible_before_the_pointer_moves(js):
     """Entering the stage is a click on Begin; the mouse then sits still. Waiting for a pointermove that
     may never come means the affordance is never discovered."""
     assert "classList.add('is-aim-fwd')" in _method(js, 'openStage')
+
+
+def test_a_beats_pause_state_is_decided_before_its_bar_is_painted(js):
+    """paintBars asks whether the beat is paused so it knows whether to let the bar run. That state used
+    to be updated AFTERWARDS by startBeatTimer, so the slide following a quiz was painted while the stage
+    still said "waiting": its bar kept an inline width of 0 and never moved, while the timeout ran
+    underneath. A dead bar with the deck advancing anyway reads as a broken timer -- and with nothing on
+    the bar to watch, one advance is indistinguishable from two."""
+    body = _method(js, 'armBeat')
+    assert 'syncBeatState' in body, 'the pause state is not established for the beat being armed'
+    assert body.index('syncBeatState') < body.index('this.paintBars('), (
+        'the state is synced after painting, so paintBars reads the PREVIOUS beat'
+    )
+
+
+def test_the_direction_arrows_do_not_depend_on_pointer_state():
+    """Tied to `is-aim-*`, they were absent whenever the pointer was outside the window, had not moved
+    since the stage opened, or had fired a pointerleave -- an affordance you only get once you are
+    already interacting is one nobody finds."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'recap-stage.css').read_text(encoding='utf-8')
+    css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+    assert re.search(r'\.rcx \.rcx__aim \{[^}]*opacity: 0\.\d', css), (
+        'the arrows are only visible while an is-aim-* class is present'
+    )

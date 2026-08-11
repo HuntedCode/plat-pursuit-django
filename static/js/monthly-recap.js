@@ -706,24 +706,35 @@ class MonthlyRecapManager {
         this._beatLeft = null;
         this._beatMs = this.beatDuration(slideEl);
         this.container.style.setProperty('--rcx-beat', this._beatMs + 'ms');
+        this.syncBeatState(this.slides[index]?.type);   // BEFORE painting -- paintBars reads it
         this.paintBars(index);
         this.startBeatTimer();
+    }
+
+    /**
+     * Whether THIS beat is waiting on the hunter, expressed as classes on the stage.
+     *
+     * Split out of startBeatTimer because paintBars needs the answer for the beat it is about to paint,
+     * and startBeatTimer runs after it. Left there, the slide following a quiz was painted while the
+     * stage still said "waiting", so its bar kept an inline `width: 0` and never ran.
+     */
+    syncBeatState(type) {
+        const gated = this.quizManager.isQuizSlide(type) && !this.quizManager.canNavigate(type);
+        const manual = this.MANUAL_BEATS.has(type);
+        const blocked = gated || manual || Boolean(document.querySelector('dialog[open]'));
+        this.container.classList.toggle('is-waiting', blocked);
+        this.container.classList.toggle('is-manual', manual);
+        const advance = document.getElementById('recap-advance');
+        if (advance) advance.hidden = !manual || this.currentSlide >= this.slides.length - 1;
+        return blocked;
     }
 
     startBeatTimer() {
         this.stopBeatTimer();
         if (this.prefersReducedMotion || !this.stageOpen) return;
-        const type = this.slides[this.currentSlide]?.type;
-        const gated = this.quizManager.isQuizSlide(type) && !this.quizManager.canNavigate(type);
-        const manual = this.MANUAL_BEATS.has(type);
-        // A dialog open over the stage stops the clock too -- whatever opened it owns the moment.
-        const blocked = gated || manual || Boolean(document.querySelector('dialog[open]'));
-
-        this.container.classList.toggle('is-waiting', blocked);
-        this.container.classList.toggle('is-manual', manual);
-        const advance = document.getElementById('recap-advance');
-        if (advance) advance.hidden = !manual || this.currentSlide >= this.slides.length - 1;
-
+        // Re-sync in case something changed since the beat was armed -- a quiz being answered, a dialog
+        // opening or closing. armBeat has already done it for a fresh beat.
+        const blocked = this.syncBeatState(this.slides[this.currentSlide]?.type);
         if (blocked || this.currentSlide >= this.slides.length - 1) return;
 
         // A resume runs the REMAINDER; a fresh beat uses the length armBeat already wrote.
