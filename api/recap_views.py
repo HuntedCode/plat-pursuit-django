@@ -586,6 +586,9 @@ class RecapSlidePartialView(APIView):
                 'earn_rate': data.get('earn_rate', 0),
                 'icon_url': data.get('icon_url', ''),
                 'trophy_type': data.get('trophy_type', ''),
+                # PSN's own band ("Ultra Rare"), not the site's community rarity scale -- see
+                # get_rarest_trophy_in_month. Empty for recaps generated before this was stored.
+                'rarity_label': data.get('rarity_label', ''),
                 'flavor_text': get_flavor_text('rarest_trophy'),
             }
 

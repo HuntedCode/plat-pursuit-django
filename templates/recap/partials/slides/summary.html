@@ -1,31 +1,33 @@
 {% comment %}
-Recap Slide: Summary (Final slide with share buttons)
+Recap Slide: Summary -- the close
 Variables: highlights (list of strings), year, month
+
+Bookends the intro: same hero shell, same trophy mark, so the deck opens and closes on the same note.
+The old version cycled three accent colours through the highlight chips for no reason other than variety;
+they now share one treatment, because they are one list.
 {% endcomment %}
-<div class="flex items-center justify-center w-full h-full">
-    <!-- Display Box -->
-    <div class="card bg-white/[0.03] border border-base-content/5 shadow-md px-8 py-10 md:px-12 md:py-12 text-center max-w-lg">
-        <!-- Trophy Icon -->
-        <div class="mb-4">
-            {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='h-16 w-16' extra_class='mx-auto text-primary' %}
-        </div>
+<div class="rcp rcp--hero">
+    <span class="rcp__mark" aria-hidden="true">
+        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='h-16 w-16' extra_class='mx-auto' %}
+    </span>
 
-        <h2 class="text-3xl md:text-4xl font-bold text-primary mb-6 italic">That's a Wrap!</h2>
+    <h2 class="rcp__title pp-tally pp-tally--hero">That's a wrap</h2>
 
-        <!-- Highlight Badges -->
-        <div class="flex flex-wrap justify-center gap-3 mb-8">
+    {% if highlights %}
+    <div class="rcp__body">
+        <div class="rcp__chips">
             {% for highlight in highlights %}
-            <div class="badge badge-lg py-4 px-4 stagger-item {% cycle 'badge-accent' 'badge-secondary' 'badge-primary' %}" style="animation-delay: {{ forloop.counter0|add:1 }}00ms;">
-                {{ highlight }}
-            </div>
+            <span class="rcp__chip stagger-item" style="animation-delay: {{ forloop.counter0|add:1 }}00ms;">{{ highlight }}</span>
             {% endfor %}
         </div>
-
-        <p class="text-base-content/70">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-            </svg>
-            Scroll down to share your recap!
-        </p>
     </div>
+    {% endif %}
+
+    <p class="rcp__cue">
+        <svg class="rcp__cue-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 5v14M19 12l-7 7-7-7" />
+        </svg>
+        Scroll down to share your recap
+    </p>
 </div>

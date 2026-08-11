@@ -6,9 +6,17 @@
  * injected with innerHTML, so its rules were re-parsed on every slide fetch and duplicated into the
  * document each time the calendar was re-rendered.
  *
- * Still the pre-rebuild vocabulary in places (hardcoded hex, DaisyUI-era greys). The slides themselves
- * are rebuilt onto `--pp-*` and the shared primitives in the next pass; this file is the move, so that
- * pass has one place to work in.
+ * Sections, in order:
+ *   1. Deck chrome   -- slide transitions, progress dots, the share section reveal
+ *   2. Motion        -- the named animations the controller adds, and the reduced-motion contract
+ *   3. Activity ramp -- the calendar's dot scale
+ *   4. `.rcp`        -- the shared slide shell every one of the 16 slides is built on
+ *   5. Slide parts   -- the content pieces, all inheriting `--rcp-accent` from the shell
+ *
+ * TWO ordering traps live in here, both of which produced dead CSS that read as a fix. Source order
+ * decides at equal specificity, so a reduced-motion restore or a mobile clamp count declared BEFORE the
+ * rule it means to beat simply loses. Both are called out at their sites. Verify changes by RENDERING,
+ * not by reading the diff -- neither failure is visible in source.
  * ============================================================ */
 
     /* Recap deck height: viewport-aware so the deck fits the screen on
@@ -73,11 +81,6 @@
         background: rgba(255, 255, 255, 0.4);
     }
 
-    /* Count-up elements - initial state (JS handles actual counting) */
-    .count-up {
-        display: inline-block;
-    }
-
     /* Trophy bounce animation for intro */
     .animate-trophy-bounce {
         animation: trophyBounce 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
@@ -130,38 +133,6 @@
         }
     }
 
-    /* Platinum trophy glow effect */
-    .trophy-platinum-glow {
-        filter: drop-shadow(0 0 10px rgba(103, 209, 248, 0.5))
-                drop-shadow(0 0 20px rgba(103, 209, 248, 0.3));
-        animation: platinumPulse 2s ease-in-out infinite;
-    }
-
-    @keyframes platinumPulse {
-        0%, 100% {
-            filter: drop-shadow(0 0 10px rgba(103, 209, 248, 0.5))
-                    drop-shadow(0 0 20px rgba(103, 209, 248, 0.3));
-        }
-        50% {
-            filter: drop-shadow(0 0 20px rgba(103, 209, 248, 0.8))
-                    drop-shadow(0 0 35px rgba(103, 209, 248, 0.5));
-        }
-    }
-
-    /* Quiz option styling */
-    [data-quiz-option] {
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-
-    [data-quiz-option]:hover:not(.pointer-events-none) {
-        transform: scale(1.02);
-    }
-
-    [data-quiz-option].selected {
-        transform: scale(1.02);
-    }
-
     /* Bounce in animation for feedback */
     .animate-bounce-in {
         animation: bounceIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
@@ -196,14 +167,12 @@
 
     /* Reduced motion support */
     @media (prefers-reduced-motion: reduce) {
-        .count-up,
         .stagger-item,
         .animate-trophy-bounce,
         .animate-spotlight-reveal,
         .animate-pulse-once,
         .animate-bounce-in,
         .animate-shake,
-        .trophy-platinum-glow,
         .recap-slide {
             animation: none !important;
             transition: opacity 0.3s ease !important;
@@ -245,115 +214,389 @@
         }
     }
 
-    /* Trophy type colors */
-    .trophy-bronze { color: #cd7f32; }
-    .trophy-silver { color: #c0c0c0; }
-    .trophy-gold { color: #ffd700; }
-    .trophy-platinum { color: #67d1f8; }
+    .activity-dot { border-radius: 50%; transition: all 0.3s ease; }
 
-    /* Progress dots */
-    .progress-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.3);
-        transition: all 0.3s ease;
-        cursor: pointer;
-    }
-
-    .progress-dot.active {
-        background: #67d1f8;
-        transform: scale(1.3);
-    }
-
-    .progress-dot:hover {
-        background: rgba(255, 255, 255, 0.6);
-    }
-
-    /* Slide container */
-    .recap-container {
-        min-height: fit-content;
-        position: relative;
-        overflow: visible;
-    }
-
-    /* Slides wrapper - viewport-aware height for consistent UX. */
-    #recap-slides {
-        height: var(--recap-deck-height);
-        overflow: visible;
-    }
-
-    /* Share section: hidden until the summary slide loads. Using display
-       collapses the slot entirely so it doesn't reserve empty vertical
-       space between the recap deck and the More Months & Settings card. */
-    .share-section {
-        display: none;
-        opacity: 0;
-        transform: translateY(20px);
-        transition: all 0.5s ease 0.3s;
-    }
-
-    .share-section.visible {
-        display: block;
-        opacity: 1;
-        transform: translateY(0);
-    }
-
-/* ---- Activity calendar -------------------------------------------------------------------------
- * Was inline in the slide partial. The dot scale is deliberate: size AND colour both climb with
- * activity, so the month reads at a glance and does not depend on colour alone.
- */
-    .activity-dot {
-        transition: all 0.3s ease;
-    }
-
-    /* Level 0: No activity - faint circle */
-    .activity-level-0 {
-        width: 8px;
-        height: 8px;
-        background: rgba(255, 255, 255, 0.15);
-    }
-
-    /* Level 1: Low activity (1-25%) - accent color (orange) */
-    .activity-level-1 {
-        width: 12px;
-        height: 12px;
-        background: rgba(255, 170, 92, 0.8);
-    }
-
-    /* Level 2: Medium-low activity (26-50%) - blend accent toward secondary */
-    .activity-level-2 {
-        width: 16px;
-        height: 16px;
-        background: rgba(186, 128, 178, 0.85);
-    }
-
-    /* Level 3: Medium-high activity (51-75%) - secondary color (purple) */
-    .activity-level-3 {
-        width: 20px;
-        height: 20px;
-        background: rgba(149, 128, 255, 0.9);
-    }
-
-    /* Level 4: Max activity (76-100%) - primary color (blue) */
+    /* The ramp climbs in BOTH size and colour, so a month reads at a glance and never depends on hue
+       alone. It rides --rcp-accent rather than the four unrelated hardcoded hues it replaced (orange ->
+       mauve -> purple -> blue), which made the grid look like four different metrics stacked together. */
+    .activity-level-0 { width: 8px;  height: 8px;  background: color-mix(in oklab, var(--pp-text-mute) 30%, transparent); }
+    .activity-level-1 { width: 12px; height: 12px; background: color-mix(in oklab, var(--rcp-accent) 30%, transparent); }
+    .activity-level-2 { width: 16px; height: 16px; background: color-mix(in oklab, var(--rcp-accent) 52%, transparent); }
+    .activity-level-3 { width: 20px; height: 20px; background: color-mix(in oklab, var(--rcp-accent) 76%, transparent); }
     .activity-level-4 {
-        width: 24px;
-        height: 24px;
-        background: rgba(103, 209, 248, 1.0);
-        box-shadow: 0 0 8px rgba(103, 209, 248, 0.5);
+        width: 24px; height: 24px; background: var(--rcp-accent);
+        box-shadow: 0 0 8px color-mix(in oklab, var(--rcp-accent) 50%, transparent);
     }
 
-    .calendar-day:hover .activity-dot {
-        transform: scale(1.2);
+    /* A day with a platinum gets a ring, not just more colour -- level 4 is "busy", this is "you closed
+       something out", and they are different facts that must not collapse into one another. The ring is
+       the WARM accent, off the ramp's hue entirely: ringing it in the ramp colour made the marker
+       invisible on exactly the days most likely to be level 4. */
+    .rcp-cal__cell--plat .activity-dot {
+        border: 2px solid var(--pp-accent);
+        box-shadow: 0 0 10px color-mix(in oklab, var(--pp-accent) 65%, transparent);
     }
+    .rcp-cal__cell:hover .activity-dot { transform: scale(1.2); }
+    .rcp-cal__cell--plat:hover .activity-dot { transform: scale(1.3); }
 
-    /* Platinum days - extra emphasis */
-    .platinum-day .activity-dot {
-        box-shadow: 0 0 12px rgba(103, 209, 248, 0.7);
-        border: 2px solid rgba(103, 209, 248, 0.5);
-    }
+/* ---- The slide: one shell, three modifiers ------------------------------------------------------
+ * Every one of the 16 slides hand-rolled the same thing -- an outer centring flex plus
+ * `card bg-white/[0.03] border border-base-content/5 shadow-md px-8 py-10 ... text-center` -- copied
+ * with slightly different padding each time. This is that shell, once, on the house tokens.
+ *
+ * A Wrapped reads as authored because every beat shares a frame and only the CONTENT changes. So the
+ * slides own their content and nothing else; the shell owns the frame, the rhythm and the type scale.
+ *
+ * Anatomy, top to bottom -- not every slide uses every part:
+ *   __kicker   the lead-in ("You earned", "Your rarest trophy"). Quiet, sets up the reveal.
+ *   __figure   the one thing the slide is ABOUT. Usually a .pp-tally number.
+ *   __caption  what the figure means ("trophies this month").
+ *   __body     supporting detail: a breakdown, a list, a grid.
+ *   __flavor   the closing line. Last, quiet, optional.
+ */
+.rcp {
+    --rcp-accent: var(--pp-primary);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0; width: 100%; max-width: 34rem; margin-inline: auto;
+    padding: 2rem 1.5rem; border-radius: var(--pp-radius-lg);
+    text-align: center;
+    background: linear-gradient(180deg,
+        color-mix(in oklab, var(--rcp-accent) 7%, var(--pp-bg-1)) 0%, var(--pp-bg-1) 70%);
+    border: 1px solid color-mix(in oklab, var(--rcp-accent) 20%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 30px -18px rgba(0, 0, 0, 0.8);
+}
+@media (min-width: 768px) { .rcp { padding: 2.75rem 2.5rem; } }
 
-    .platinum-day:hover .activity-dot {
-        transform: scale(1.3);
-        cursor: pointer;
-    }
+.rcp__kicker {
+    font-size: 0.9rem; font-weight: 600; letter-spacing: 0.04em;
+    color: var(--pp-text-dim); margin-bottom: 0.75rem;
+}
+.rcp__figure { color: var(--rcp-accent); line-height: 0.9; }
+.rcp__caption { font-size: 1.05rem; color: var(--pp-text-dim); margin-top: 0.6rem; }
+.rcp__body { width: 100%; margin-top: 1.75rem; }
+.rcp__flavor {
+    font-size: 0.85rem; font-style: italic; color: var(--pp-text-mute);
+    margin-top: 1.5rem; padding-right: 1px;   /* italic glyphs slant past their box */
+}
+
+/* HERO -- the peak beats (the platinum, the rarest trophy). Bigger frame, and the accent actually
+   present rather than implied, because these are the moments the whole month builds toward. */
+.rcp--hero {
+    max-width: 38rem;
+    background: linear-gradient(180deg,
+        color-mix(in oklab, var(--rcp-accent) 14%, var(--pp-bg-1)) 0%, var(--pp-bg-1) 72%);
+    border-color: color-mix(in oklab, var(--rcp-accent) 38%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                0 16px 44px -20px color-mix(in oklab, var(--rcp-accent) 55%, #000);
+}
+
+/* BLEED -- content that IS the slide and needs the width: the activity calendar. No card; the grid
+   carries itself, and framing it twice just makes it smaller. */
+.rcp--bleed {
+    max-width: 46rem;
+    background: none; border: none; box-shadow: none;
+    padding-inline: 0.5rem;
+}
+
+/* WIDE -- for content that needs room but still wants the frame (game lists, badge rows). */
+.rcp--wide { max-width: 42rem; }
+
+/* Accent-per-slide: set once on the shell and both the frame and the figure follow, so a slide cannot
+   have a violet number in a cyan frame. */
+.rcp--accent-secondary { --rcp-accent: var(--pp-secondary); }
+.rcp--accent-warm      { --rcp-accent: var(--pp-accent); }
+.rcp--accent-success   { --rcp-accent: var(--pp-success); }
+
+
+/* ---- Shared slide parts ------------------------------------------------------------------------
+ * Everything below composes onto .rcp and inherits --rcp-accent from it, so a slide changes its whole
+ * colour story with one modifier and no part needs its own accent. Anything a house primitive already
+ * does (.scard, .pp-tally, .pp-horizon) is composed, not restated here.
+ */
+
+/* Marks, titles and secondary lines */
+.rcp__mark { color: var(--rcp-accent); display: block; margin-bottom: 1.25rem; line-height: 0; }
+.rcp__mark-icon { width: 3.5rem; height: 3.5rem; margin-inline: auto; }
+.rcp__title { font-family: var(--pp-font-display); color: var(--rcp-accent); line-height: 1.05; }
+.rcp__sub { font-size: 0.9rem; color: var(--pp-text-dim); margin-top: 0.5rem; }
+.rcp__hint { font-size: 0.8rem; color: var(--pp-text-mute); margin-top: 0.75rem; }
+.rcp__label {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--pp-text-mute); margin-bottom: 0.75rem;
+}
+/* Sign and unit ride BESIDE an animated figure, never inside it: countUp replaces textContent wholesale
+   and would eat anything sharing the node. */
+.rcp__sign, .rcp__unit { color: var(--rcp-accent); font-size: 0.55em; font-weight: 800; }
+.rcp__unit { margin-left: 0.08em; }
+.rcp__body--tight { margin-top: 1.25rem; }
+
+/* Stamp: the deck's one small "fact pill" -- rarity band, peak hour, active days. */
+.rcp__stamp {
+    align-self: center; margin-top: 0.9rem;
+    padding: 0.3rem 0.8rem; border-radius: 999px;
+    font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--rcp-accent);
+    background: color-mix(in oklab, var(--rcp-accent) 12%, transparent);
+    border: 1px solid color-mix(in oklab, var(--rcp-accent) 32%, transparent);
+}
+
+/* Chips: personal bests, closing highlights. One treatment, not a colour cycle. */
+.rcp__chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; }
+.rcp__chip {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.45rem 0.85rem; border-radius: 999px;
+    font-size: 0.82rem; font-weight: 600; color: var(--pp-text);
+    background: color-mix(in oklab, var(--rcp-accent) 10%, var(--pp-bg-2));
+    border: 1px solid color-mix(in oklab, var(--rcp-accent) 28%, var(--pp-border));
+}
+.rcp__chip-icon { width: 0.85rem; height: 0.85rem; color: var(--rcp-accent); flex: none; }
+
+/* Closing cue */
+.rcp__cue {
+    display: inline-flex; align-items: center; gap: 0.45rem; align-self: center;
+    margin-top: 2rem; font-size: 0.9rem; color: var(--pp-text-dim);
+}
+.rcp__cue-icon { width: 1rem; height: 1rem; }
+@media (prefers-reduced-motion: no-preference) {
+    .rcp__cue-icon { animation: rcpCue 2.2s ease-in-out infinite; }
+}
+@keyframes rcpCue { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+
+/* Intro / close identity */
+.rcp__year {
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 1.75rem;
+    color: var(--pp-text-dim); line-height: 1; margin-top: 0.35rem;
+}
+.rcp__who { display: flex; align-items: center; justify-content: center; gap: 0.6rem; margin-top: 1.75rem; }
+.rcp__avatar {
+    width: 2.5rem; height: 2.5rem; border-radius: 50%; object-fit: cover;
+    border: 2px solid color-mix(in oklab, var(--rcp-accent) 60%, transparent);
+}
+.rcp__name { font-weight: 700; color: var(--pp-text); }
+
+/* Stat cells: four trophy tiers, or the two-up games pair. Four across at every size -- these are short
+   numbers meant to be read in one glance, and a 2x2 collapse breaks that read for no gain. */
+.rcp-tiers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; }
+.rcp__pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+.scard--tier { padding: 0.6rem 0.25rem; text-align: center; }
+/* "PLATINUM" is the widest of the four and overflows its cell at 375px with the tracking the other
+   labels want. Tighten at base, restore the tracking once there is room. */
+.scard--tier .scard__label { margin-top: 0.4rem; margin-bottom: 0; font-size: 8.5px; letter-spacing: 0.01em; }
+@media (min-width: 768px) { .scard--tier .scard__label { font-size: 9.5px; letter-spacing: 0.06em; } }
+.scard--stat { padding: 1.1rem 0.5rem; text-align: center; }
+.scard--stat .scard__label { margin-top: 0.35rem; margin-bottom: 0; font-size: 0.72rem; }
+.rcp__stat-icon {
+    width: 1.6rem; height: 1.6rem; margin: 0 auto 0.5rem;
+    color: var(--scard-accent, var(--rcp-accent));
+}
+
+/* Date plate (most active day) */
+.rcp-date {
+    display: inline-flex; align-items: center; gap: 0.9rem; align-self: center;
+    padding: 0.9rem 1.4rem; border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-2);
+    border: 1px solid color-mix(in oklab, var(--rcp-accent) 35%, var(--pp-border));
+}
+.rcp-date__icon { width: 2.25rem; height: 2.25rem; color: var(--rcp-accent); flex: none; }
+.rcp-date__text { text-align: left; }
+.rcp-date__day { font-family: var(--pp-font-display); font-weight: 700; font-size: 1.35rem; color: var(--pp-text); }
+.rcp-date__full { font-size: 0.85rem; color: var(--pp-text-dim); }
+
+/* Streak flame */
+.rcp__flame { display: flex; align-items: center; justify-content: center; gap: 0.85rem; }
+.rcp__flame-icon { width: 3rem; height: 3rem; color: var(--rcp-accent); flex: none; }
+
+/* Rarest trophy */
+.rcp-trophy__icon {
+    width: 5.5rem; height: 5.5rem; border-radius: var(--pp-radius-md); object-fit: cover;
+    margin: 0 auto 1.25rem;
+    border: 2px solid color-mix(in oklab, var(--rcp-accent) 45%, transparent);
+    box-shadow: 0 10px 26px -12px color-mix(in oklab, var(--rcp-accent) 70%, #000);
+}
+.rcp-trophy__name {
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 1.5rem;
+    color: var(--pp-text); line-height: 1.2;
+}
+.rcp-trophy__game { font-size: 0.95rem; color: var(--pp-text-dim); margin-top: 0.25rem; }
+.rcp-trophy__rate { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; margin-top: 1.5rem; }
+.rcp-trophy__of { margin-left: 0.45rem; margin-top: 0; }
+
+/* Platinum covers. 3/4 portrait + object-position:top per the house image rules: PSN fallback art is
+   wider than IGDB's cover and loses its logo without the top anchor. */
+/* Four across at EVERY size. Two across on mobile is the obvious call and is wrong here: a 3/4 portrait
+   at half the shell width is ~180px tall, so two rows of them pushed this slide 232px past the deck and
+   it scrolled inside itself -- the one thing the deck must not do. Four thumbnails read fine; the earned
+   date is the expendable part and it goes instead (see below). */
+.rcp-covers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.4rem; }
+@media (min-width: 768px) { .rcp-covers { gap: 0.65rem; } }
+.rcp-cover__art {
+    position: relative; aspect-ratio: 3 / 4; border-radius: var(--pp-radius-sm); overflow: hidden;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+}
+.rcp-cover__art img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.rcp-cover__blank {
+    display: grid; place-items: center; width: 100%; height: 100%;
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 1.75rem; color: var(--pp-text-mute);
+}
+.rcp-cover__seal {
+    position: absolute; right: 0.3rem; bottom: 0.3rem;
+    display: grid; place-items: center; width: 1.35rem; height: 1.35rem; border-radius: 50%;
+    color: var(--rcp-accent); background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
+    border: 1px solid color-mix(in oklab, var(--rcp-accent) 40%, transparent);
+}
+/* One line in the four narrow mobile columns; two from md, where the reserved second line also keeps the
+   dates aligned across the row (one game wrapping would otherwise drag its date out of line). The clamp
+   count lives IN this rule rather than in a later override: at equal specificity the base value simply
+   won and the override was dead CSS -- names wrapped to two lines and spilled their column. */
+.rcp-cover__name {
+    margin-top: 0.4rem; font-size: 0.65rem; font-weight: 600; color: var(--pp-text); line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+    padding-right: 0.25rem;
+}
+.rcp-cover__date { display: none; font-size: 0.66rem; color: var(--rcp-accent); margin-top: 0.1rem; }
+@media (min-width: 768px) {
+    .rcp-cover__name { font-size: 0.72rem; -webkit-line-clamp: 2; line-clamp: 2; min-height: 2.5em; }
+    .rcp-cover__date { display: block; }
+}
+
+/* Badges as objects: subject composited on its tier plate, the way the Medallion reads elsewhere. */
+.rcp-badges { display: flex; flex-direction: column; gap: 0.4rem; }
+@media (min-width: 768px) { .rcp-badges { gap: 0.5rem; } }
+.rcp-badge {
+    display: flex; align-items: center; gap: 0.65rem; text-align: left;
+    padding: 0.4rem 0.7rem; border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+}
+@media (min-width: 768px) { .rcp-badge { gap: 0.75rem; padding: 0.55rem 0.8rem; } }
+.rcp-badge__art { position: relative; display: grid; place-items: center; width: 2.5rem; height: 2.5rem; flex: none; }
+@media (min-width: 768px) { .rcp-badge__art { width: 3rem; height: 3rem; } }
+.rcp-badge__plate { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.rcp-badge__subject { position: relative; width: 72%; height: 72%; object-fit: contain; }
+.rcp-badge__body { display: flex; flex-direction: column; min-width: 0; }
+.rcp-badge__name {
+    font-size: 0.85rem; font-weight: 700; color: var(--pp-text); line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rcp-badge__tier { font-size: 0.7rem; color: var(--pp-text-dim); }
+
+/* Time-of-day bars. Evidence for the persona headline, so deliberately quiet. */
+.rcp-clock { display: flex; justify-content: center; align-items: flex-end; gap: 0.4rem; }
+.rcp-clock__col { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+.rcp-clock__track {
+    display: flex; flex-direction: column-reverse;
+    width: 2.5rem; height: 4.5rem; border-radius: var(--pp-radius-sm) var(--pp-radius-sm) 0 0;
+    overflow: hidden; background: var(--pp-bg-2);
+}
+.rcp-clock__fill {
+    width: 100%; border-radius: var(--pp-radius-sm) var(--pp-radius-sm) 0 0;
+    background: linear-gradient(180deg,
+        var(--rcp-accent) 0%, color-mix(in oklab, var(--rcp-accent) 55%, transparent) 100%);
+}
+.rcp-clock__label { font-size: 0.66rem; color: var(--pp-text-mute); }
+
+/* Activity calendar */
+.rcp-cal { display: inline-flex; flex-direction: column; gap: 0.5rem; align-self: center; }
+.rcp-cal__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.25rem; }
+.rcp-cal__grid--head { font-size: 0.66rem; color: var(--pp-text-mute); }
+.rcp-cal__cell {
+    display: grid; place-items: center; width: 2rem; height: 2rem;
+    background: none; border: 0; padding: 0;
+}
+@media (min-width: 768px) { .rcp-cal__cell { width: 2.25rem; height: 2.25rem; } }
+.rcp-cal__cell--empty { visibility: hidden; }
+.rcp-cal__cell--plat { cursor: pointer; border-radius: var(--pp-radius-sm); }
+.rcp-cal__cell--plat:hover .activity-dot,
+.rcp-cal__cell--plat:focus-visible .activity-dot {
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--rcp-accent) 70%, transparent);
+}
+.rcp-cal__cell--plat:focus-visible { outline: 2px solid var(--rcp-accent); outline-offset: 1px; }
+.rcp-cal__legend {
+    display: flex; align-items: center; justify-content: center; gap: 0.3rem;
+    font-size: 0.66rem; color: var(--pp-text-mute);
+}
+.rcp-cal__legend .activity-dot { width: 0.6rem; height: 0.6rem; }
+.rcp-cal__totals {
+    display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+    margin-top: 0.9rem; font-size: 0.85rem; color: var(--pp-text-dim);
+}
+.rcp-cal__totals strong { color: var(--rcp-accent); font-weight: 800; }
+.rcp-cal__sep { width: 1px; height: 0.85rem; background: var(--pp-border); }
+
+/* ---- Quiz ---------------------------------------------------------------------------------------
+ * One interaction treatment across all four quiz slides. State classes (is-correct, is-wrong,
+ * is-missed, is-dimmed, is-locked) are applied by monthly-recap.js after an answer; they replaced the
+ * DaisyUI ring and bg utilities the controller used to write, which have no counterpart in the
+ * rebuilt deck.
+ */
+.rcp-quiz__ask {
+    font-family: var(--pp-font-display); font-weight: 700; font-size: 1.2rem;
+    color: var(--pp-text); line-height: 1.3; margin-top: 0.35rem;
+}
+@media (min-width: 768px) { .rcp-quiz__ask { font-size: 1.4rem; } }
+.rcp-quiz__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+.rcp-quiz__row { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; }
+
+.rcp-quiz__opt {
+    --opt-accent: var(--rcp-accent);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.15rem;
+    padding: 0.75rem 0.6rem; border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text);
+    cursor: pointer; text-align: center;
+    transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, opacity 0.25s ease;
+}
+.rcp-quiz__opt:hover {
+    border-color: color-mix(in oklab, var(--opt-accent) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--opt-accent) 8%, var(--pp-bg-2));
+}
+.rcp-quiz__opt:focus-visible { outline: 2px solid var(--opt-accent); outline-offset: 2px; }
+.rcp-quiz__opt--num { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.35rem; padding: 1rem 0.6rem; }
+.rcp-quiz__opt--day { min-width: 3.4rem; font-weight: 700; font-size: 0.85rem; padding: 0.6rem 0.5rem; }
+.rcp-quiz__opt--tile { gap: 0.3rem; padding: 0.7rem 0.55rem; }
+/* The trophy tier reads as a rail on the tile edge rather than a pill: four pills in a 2x2 grid compete
+   with the art the hunter is being asked to compare. Its own modifier, NOT part of --tile: the badge quiz
+   has no per-option colour, so inheriting the rail painted all four tiles in the deck accent and every
+   one of them read as already selected. */
+.rcp-quiz__opt--rail { border-left: 3px solid color-mix(in oklab, var(--opt-accent) 65%, transparent); }
+.rcp-quiz__opt-art { width: 2.5rem; height: 2.5rem; border-radius: var(--pp-radius-sm); object-fit: cover; }
+.rcp-quiz__opt-art--blank {
+    display: grid; place-items: center; color: var(--pp-text-mute); background: var(--pp-bg-1);
+}
+.rcp-quiz__opt-art--badge { position: relative; display: grid; place-items: center; border-radius: 0; }
+.rcp-quiz__opt-name {
+    font-size: 0.78rem; font-weight: 700; line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rcp-quiz__opt-sub {
+    font-size: 0.66rem; color: var(--pp-text-dim); line-height: 1.2;
+    display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* Pre-submit selection (multi-select quizzes only) */
+.rcp-quiz__opt.is-selected {
+    border-color: var(--opt-accent);
+    background: color-mix(in oklab, var(--opt-accent) 14%, var(--pp-bg-2));
+}
+
+/* Answered states */
+.rcp-quiz__opt.is-correct {
+    border-color: var(--pp-success);
+    background: color-mix(in oklab, var(--pp-success) 16%, var(--pp-bg-2));
+    box-shadow: 0 0 0 1px var(--pp-success) inset;
+}
+.rcp-quiz__opt.is-wrong {
+    border-color: var(--pp-error);
+    background: color-mix(in oklab, var(--pp-error) 14%, var(--pp-bg-2));
+}
+.rcp-quiz__opt.is-missed { border-color: var(--pp-accent); background: color-mix(in oklab, var(--pp-accent) 12%, var(--pp-bg-2)); }
+.rcp-quiz__opt.is-dimmed { opacity: 0.45; }
+.rcp-quiz__opt.is-locked { pointer-events: none; }
+
+.rcp-quiz__verdict { margin-top: 1.1rem; font-family: var(--pp-font-display); font-weight: 800; font-size: 1.1rem; }
+.rcp-quiz__verdict.is-correct { color: var(--pp-success); }
+.rcp-quiz__verdict.is-wrong { color: var(--pp-accent); }
+.rcp-quiz__reveal {
+    margin-top: 0.9rem; padding: 0.75rem 1rem; border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); font-size: 0.9rem; color: var(--pp-text-dim);
+}
+.rcp-quiz__reveal strong { color: var(--rcp-accent); font-weight: 800; }
+.rcp-quiz__reveal-sub { font-size: 0.75rem; color: var(--pp-text-mute); margin-top: 0.2rem; }

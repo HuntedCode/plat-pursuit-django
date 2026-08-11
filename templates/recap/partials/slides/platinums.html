@@ -1,41 +1,45 @@
 {% comment %}
 Recap Slide: Platinums Earned
-Variables: count, games (list of dicts with game_name, game_image, earned_date, earn_rate)
+Variables: count, games (list of {game_name, game_image, earned_date, earn_rate}), flavor_text
+
+The peak of the deck, so it takes the wide shell and the covers get real size. Covers are aspect-[3/4]
+with object-top per the house image rules -- PSN fallback art is wider than IGDB's portrait cover and
+crops its logo off without the top anchor.
+
+The grid still shows at most four; the service caps `games` upstream. If that cap is lifted, the "+N
+more" affordance is the thing to add, not more cells -- five covers in a four-up grid orphans one.
 {% endcomment %}
-<div class="flex items-center justify-center w-full h-full">
-    <!-- Display Box -->
-    <div class="card bg-white/[0.03] border border-base-content/5 shadow-md px-4 py-6 md:px-8 md:py-8 text-center w-full max-w-2xl">
-        <p class="text-base text-base-content/70 mb-1">You earned</p>
+<div class="rcp rcp--wide">
+    <p class="rcp__kicker">You earned</p>
 
-        <!-- Big Platinum Count -->
-        <div class="text-5xl md:text-6xl font-bold text-primary mb-1 count-up">{{ count }}</div>
-        <p class="text-xl text-base-content/70 mb-4">platinum{{ count|pluralize }} this month!</p>
+    <div class="rcp__figure pp-tally pp-tally--hero" data-countup="{{ count }}">{{ count }}</div>
+    <p class="rcp__caption">platinum{{ count|pluralize }} this month</p>
 
-        <!-- Game Cards -->
-        {% if games %}
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+    {% if games %}
+    <div class="rcp__body">
+        <div class="rcp-covers">
             {% for game in games|slice:":4" %}
-            <div class="card bg-base-300 rounded-box shadow-md shadow-neutral hover:shadow-lg hover:shadow-primary/20 transition-all duration-300 stagger-item" style="animation-delay: {{ forloop.counter0|add:1 }}00ms;">
-                {% if game.game_image %}
-                <figure class="relative h-20 md:h-24 overflow-hidden">
-                    <img src="{{ game.game_image }}" alt="{{ game.game_name }}" class="w-full h-full object-cover" loading="lazy" />
-                    <!-- Platinum Trophy Overlay -->
-                    <div class="absolute bottom-1 right-1 bg-base-300/90 rounded-full p-1">
-                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-4 h-4' extra_class='text-primary' %}
-                    </div>
-                </figure>
-                {% endif %}
-                <div class="card-body p-2">
-                    <h3 class="card-title text-xs line-clamp-2 justify-center text-base-content pr-1">{{ game.game_name }}</h3>
-                    <p class="text-[0.65rem] text-primary font-medium">{{ game.earned_date }}</p>
+            <div class="rcp-cover stagger-item" style="animation-delay: {{ forloop.counter0|add:1 }}00ms;">
+                <div class="rcp-cover__art">
+                    {% if game.game_image %}
+                    <img src="{{ game.game_image }}" alt="{{ game.game_name }}" loading="lazy" draggable="false" />
+                    {% else %}
+                    {% comment %} A cover-less game is common enough (PSN art missing, stub concept) that an
+                    empty bordered rectangle beside real art reads as a broken image. Fall back to the
+                    initial on the shell ground. {% endcomment %}
+                    <span class="rcp-cover__blank" aria-hidden="true">{{ game.game_name|first }}</span>
+                    {% endif %}
+                    <span class="rcp-cover__seal" aria-hidden="true">
+                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-3.5 h-3.5' %}
+                    </span>
                 </div>
+                <p class="rcp-cover__name">{{ game.game_name }}</p>
+                <p class="rcp-cover__date">{{ game.earned_date }}</p>
             </div>
             {% endfor %}
         </div>
-        {% endif %}
-
-        {% if flavor_text %}
-        <p class="text-xs text-base-content/50 italic mt-3 pr-1">{{ flavor_text }}</p>
-        {% endif %}
     </div>
+    {% endif %}
+
+    {% if flavor_text %}<p class="rcp__flavor">{{ flavor_text }}</p>{% endif %}
 </div>

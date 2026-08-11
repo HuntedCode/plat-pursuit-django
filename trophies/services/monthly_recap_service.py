@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from django.db import transaction
 from django.db.models import Count, Min, Q, F
 from django.db.models.functions import TruncDate, TruncMonth
+from django.templatetags.static import static
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -347,7 +348,7 @@ class MonthlyRecapService:
         Find the rarest trophy (lowest earn_rate) earned in the month.
 
         Returns:
-            dict or None: {name, game, earn_rate, icon_url, trophy_type}
+            dict or None: {name, game, earn_rate, icon_url, trophy_type, rarity_label}
         """
         from trophies.models import EarnedTrophy
 
@@ -369,12 +370,19 @@ class MonthlyRecapService:
             return None
 
         trophy = rarest.trophy
+        # PSN's OWN rarity band, not the site's rarity scale. `earn_rate` here is
+        # Trophy.trophy_earn_rate -- the share of players who own the game and earned this -- whereas
+        # `--pp-rarity-*` / data-rarity grades against the whole PlatPursuit community. Different
+        # populations, so grading a PSN earn rate on the site's thresholds would be a category error.
+        # The plat card labels its platinum from this same map; reused so the two agree.
+        from core.services.completion_card_service import RARITY_LABELS
         return {
             'name': trophy.trophy_name,
             'game': trophy.game.title_name,
             'earn_rate': trophy.trophy_earn_rate,
             'icon_url': trophy.trophy_icon_url or '',
             'trophy_type': trophy.trophy_type,
+            'rarity_label': RARITY_LABELS.get(trophy.trophy_rarity, ''),
         }
 
     @classmethod
@@ -573,12 +581,18 @@ class MonthlyRecapService:
 
             total_xp += completion_xp + progress_xp
 
-            # Build badge display data
+            # Build badge display data. `backdrop` is the tier plate the badge sits ON everywhere else on
+            # the site (the Medallion treatment) -- without it the subject's white rim-light traces the bare
+            # art. It is always a static path, so it is resolved here rather than reassembled in the
+            # template from `tier`. `main` may be either static or media, which is what `has_image` tells
+            # the template; that split is legacy and goes away when the recap moves to GroupBadge.
             try:
                 layers = badge.get_badge_layers()
                 image_url = layers.get('main', '')
+                backdrop_url = static(layers.get('backdrop', ''))
             except Exception:
                 image_url = ''
+                backdrop_url = ''
 
             badges_data.append({
                 'name': badge.effective_display_series or badge.name,
@@ -587,6 +601,7 @@ class MonthlyRecapService:
                 'series_slug': badge.series_slug,
                 'has_image': bool(badge.badge_image or (badge.base_badge and badge.base_badge.badge_image)),
                 'image_url': image_url,
+                'backdrop_url': backdrop_url,
             })
 
         return {
@@ -643,12 +658,14 @@ class MonthlyRecapService:
 
             # Only include if they have any meaningful progress (at least 1%)
             if progress_pct >= 1:
+                layers = badge.get_badge_layers()
                 badges_with_progress.append({
                     'id': str(badge.id),
                     'name': badge.effective_display_title or badge.name,
                     'series': badge.effective_display_series or '',
                     'has_image': bool(badge.badge_image or (badge.base_badge and badge.base_badge.badge_image)),
-                    'icon_url': badge.get_badge_layers().get('main', ''),
+                    'icon_url': layers.get('main', ''),
+                    'backdrop_url': static(layers.get('backdrop', '')) if layers.get('backdrop') else '',
                     'progress_pct': progress_pct,
                     'completed': prog.completed_concepts,
                     'required': required,
@@ -687,6 +704,7 @@ class MonthlyRecapService:
                 'name': opt['name'],
                 'series': opt['series'],
                 'icon_url': opt['icon_url'],
+                'backdrop_url': opt['backdrop_url'],
                 'has_image': opt['has_image'],
             })
 

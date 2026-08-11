@@ -447,7 +447,7 @@ class MonthlyRecapManager {
     wireSlideInteractions(slideEl, slideType) {
         if (!slideEl) return;
         if (slideType === 'activity_calendar') {
-            slideEl.querySelectorAll('.calendar-day.platinum-day').forEach((day) => {
+            slideEl.querySelectorAll('.rcp-cal__cell--plat').forEach((day) => {
                 day.addEventListener('click', () => this.showPlatinumDetails(day));
             });
         }
@@ -464,9 +464,6 @@ class MonthlyRecapManager {
 
         // Per-slide specific animations
         switch (slideType) {
-            case 'intro':
-                this.animateIntroSlide(slideEl);
-                break;
             case 'total_trophies':
                 this.animateTotalTrophiesSlide(slideEl);
                 break;
@@ -486,71 +483,22 @@ class MonthlyRecapManager {
     }
 
     /**
-     * Animate all elements with count-up class (actual number counting 0 to N)
+     * Count-ups. The deck marks its animated figures with `data-countup` and delegates to the shared
+     * PlatPursuit.countUp, which already owns the easing, locale formatting, decimal support and the
+     * reduced-motion short-circuit. The private copy this replaced re-derived the target by stripping
+     * non-digits out of textContent, so it could not represent a decimal earn rate or a negative change.
+     *
+     * Sign and unit live in SIBLING elements in the templates, because countUp overwrites textContent.
      */
     animateCountUpElements(slideEl) {
-        const countElements = slideEl.querySelectorAll('.count-up');
-        countElements.forEach(el => {
-            // Get the target value from text content
-            const text = el.textContent.trim();
-            const targetValue = parseInt(text.replace(/[^0-9]/g, ''), 10);
-
-            if (isNaN(targetValue) || targetValue === 0) return;
-
-            // Preserve any prefix/suffix (like % or +)
-            const prefix = text.match(/^[^0-9]*/)?.[0] || '';
-            const suffix = text.match(/[^0-9]*$/)?.[0] || '';
-
-            // Animate from 0 to target
-            this.animateCountUp(el, targetValue, 1500, prefix, suffix);
-        });
-    }
-
-    /**
-     * Animate a single number from 0 to endValue
-     */
-    animateCountUp(element, endValue, duration = 1500, prefix = '', suffix = '') {
-        const startValue = 0;
-        const startTime = performance.now();
-
-        const animate = (currentTime) => {
-            const elapsed = currentTime - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-
-            // Ease-out-expo for satisfying deceleration
-            const easeOutExpo = 1 - Math.pow(2, -10 * progress);
-            const currentValue = Math.floor(startValue + (endValue - startValue) * easeOutExpo);
-
-            element.textContent = `${prefix}${currentValue.toLocaleString()}${suffix}`;
-
-            if (progress < 1) {
-                requestAnimationFrame(animate);
-            } else {
-                // Ensure final value is exact
-                element.textContent = `${prefix}${endValue.toLocaleString()}${suffix}`;
-            }
-        };
-
-        // Start from 0
-        element.textContent = `${prefix}0${suffix}`;
-        requestAnimationFrame(animate);
-    }
-
-    /**
-     * Intro slide animation - trophy bounce with glow
-     */
-    animateIntroSlide(slideEl) {
-        const trophyIcon = slideEl.querySelector('.trophy-icon, svg, .text-6xl');
-        if (trophyIcon) {
-            trophyIcon.classList.add('animate-trophy-bounce');
-        }
+        slideEl.querySelectorAll('[data-countup]').forEach((el) => PlatPursuit.countUp(el, 1200));
     }
 
     /**
      * Total trophies slide - number scales in, then stats fan in
      */
     animateTotalTrophiesSlide(slideEl) {
-        const statsSection = slideEl.querySelector('.stats');
+        const statsSection = slideEl.querySelector('.rcp-tiers');
         if (statsSection) {
             // Initially hide stats
             statsSection.style.opacity = '0';
@@ -586,13 +534,9 @@ class MonthlyRecapManager {
      * Rarest trophy slide - spotlight reveal effect
      */
     animateRarestTrophySlide(slideEl) {
-        const card = slideEl.querySelector('.card');
-        if (card) {
-            card.classList.add('animate-spotlight-reveal');
-        }
-
-        // Reveal earn rate badge with delay
-        const badge = slideEl.querySelector('.badge');
+        // The trophy icon carries `animate-spotlight-reveal` from the template; only the rarity stamp
+        // needs holding back, so it lands after the earn rate has finished counting.
+        const badge = slideEl.querySelector('.rcp__stamp');
         if (badge) {
             badge.style.opacity = '0';
             badge.style.transform = 'scale(0.8)';
@@ -610,7 +554,7 @@ class MonthlyRecapManager {
      * Activity calendar slide - dots fill in sequentially
      */
     animateCalendarSlide(slideEl) {
-        const days = slideEl.querySelectorAll('.calendar-day');
+        const days = slideEl.querySelectorAll('.rcp-cal__cell');
         const delay = 30; // ms between each day
 
         days.forEach((day, index) => {
@@ -1113,9 +1057,7 @@ class RecapQuizManager {
 
         if (isMultiSelect) {
             // Toggle selection for multi-select
-            option.classList.toggle('selected');
-            option.classList.toggle('ring-2');
-            option.classList.toggle('ring-primary');
+            option.classList.toggle('is-selected');
         } else {
             // Single select - immediate answer
             this.hasAnswered = true;
@@ -1135,7 +1077,7 @@ class RecapQuizManager {
             if (slideType === 'quiz_closest_badge') {
                 const answerDetail = slideEl.querySelector('[data-quiz-answer-detail]');
                 if (answerDetail) {
-                    answerDetail.classList.remove('hidden');
+                    answerDetail.hidden = false;
                     answerDetail.classList.add('animate-bounce-in');
                 }
             }
@@ -1155,7 +1097,7 @@ class RecapQuizManager {
         if (this.hasAnswered) return;
         this.hasAnswered = true;
 
-        const selectedOptions = slideEl.querySelectorAll('[data-quiz-option].selected');
+        const selectedOptions = slideEl.querySelectorAll('[data-quiz-option].is-selected');
         // Find the element with data-quiz-correct (it's on the inner card, not slideEl)
         const quizContainer = slideEl.querySelector('[data-quiz-correct]');
         const correctValues = JSON.parse(quizContainer ? quizContainer.dataset.quizCorrect : '[]');
@@ -1189,15 +1131,15 @@ class RecapQuizManager {
         const allOptions = slideEl.querySelectorAll('[data-quiz-option]');
 
         allOptions.forEach(option => {
-            option.classList.add('pointer-events-none');
+            option.classList.add('is-locked');
 
             // Compare as strings for consistency
             if (String(option.dataset.quizOption) === String(correctValue)) {
-                option.classList.add('ring-2', 'ring-success', 'bg-success/20');
+                option.classList.add('is-correct');
             } else if (option === selectedOption && !isCorrect) {
-                option.classList.add('ring-2', 'ring-error', 'bg-error/20');
+                option.classList.add('is-wrong');
             } else {
-                option.classList.add('opacity-50');
+                option.classList.add('is-dimmed');
             }
         });
 
@@ -1216,29 +1158,24 @@ class RecapQuizManager {
             const wasSelected = selectedValues.includes(value);
             const isCorrect = correctValues.includes(value);
 
-            option.classList.add('pointer-events-none');
+            option.classList.add('is-locked', 'is-selected');
+            option.classList.remove('is-selected');
 
             if (isCorrect && wasSelected) {
-                // Correct selection
-                option.classList.remove('ring-primary');
-                option.classList.add('ring-2', 'ring-success', 'bg-success/20');
+                option.classList.add('is-correct');
             } else if (isCorrect && !wasSelected) {
-                // Missed correct answer
-                option.classList.add('ring-2', 'ring-warning', 'bg-warning/20', 'opacity-75');
+                option.classList.add('is-missed');
             } else if (!isCorrect && wasSelected) {
-                // Incorrect selection
-                option.classList.remove('ring-primary');
-                option.classList.add('ring-2', 'ring-error', 'bg-error/20');
+                option.classList.add('is-wrong');
             } else {
-                // Correctly not selected
-                option.classList.add('opacity-50');
+                option.classList.add('is-dimmed');
             }
         });
 
         // Hide submit button
         const submitBtn = slideEl.querySelector('[data-quiz-submit]');
         if (submitBtn) {
-            submitBtn.classList.add('hidden');
+            submitBtn.hidden = true;
         }
 
         // Show feedback
@@ -1256,25 +1193,11 @@ class RecapQuizManager {
         const feedbackContainer = slideEl.querySelector('[data-quiz-feedback]') ||
             this.createFeedbackContainer(slideEl);
 
-        let message, className;
-        if (isCorrect) {
-            message = this.getCorrectMessage();
-            className = 'text-success';
-        } else {
-            message = this.getIncorrectMessage();
-            className = 'text-warning';
-        }
-
-        if (extraText) {
-            message += ` (${extraText})`;
-        }
-
-        feedbackContainer.innerHTML = `
-            <div class="animate-bounce-in ${className} text-xl font-bold mt-4">
-                ${message}
-            </div>
-        `;
-        feedbackContainer.classList.remove('hidden');
+        const message = isCorrect ? this.getCorrectMessage() : this.getIncorrectMessage();
+        feedbackContainer.classList.remove('is-correct', 'is-wrong');
+        feedbackContainer.classList.add(isCorrect ? 'is-correct' : 'is-wrong', 'animate-bounce-in');
+        feedbackContainer.textContent = extraText ? `${message} (${extraText})` : message;
+        feedbackContainer.hidden = false;
     }
 
     /**
@@ -1283,10 +1206,10 @@ class RecapQuizManager {
     createFeedbackContainer(slideEl) {
         const container = document.createElement('div');
         container.dataset.quizFeedback = '';
-        container.className = 'text-center';
-        const card = slideEl.querySelector('.card');
-        if (card) {
-            card.appendChild(container);
+        container.className = 'rcp-quiz__verdict';
+        const shell = slideEl.querySelector('.rcp');
+        if (shell) {
+            shell.appendChild(container);
         }
         return container;
     }
@@ -1296,11 +1219,11 @@ class RecapQuizManager {
      */
     getCorrectMessage() {
         const messages = [
-            'Nailed it! 🎯',
-            'You got it! ✨',
-            'Perfect! 🌟',
-            'Exactly right! 💫',
-            'Nice one! 🏆'
+            'Nailed it.',
+            'You got it.',
+            'Exactly right.',
+            'Nice one.',
+            'You know yourself well.'
         ];
         return messages[Math.floor(Math.random() * messages.length)];
     }

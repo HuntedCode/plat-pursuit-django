@@ -24,10 +24,11 @@ The frontend renders slides via Django template partials fetched one-at-a-time f
 | `core/management/commands/send_monthly_recap_emails.py` | Email + notification sending (360 lines) |
 | `core/services/email_service.py` | Reusable HTML email sender via SendGrid |
 | `static/js/monthly-recap.js` | MonthlyRecapManager: slides, animations, quizzes, themes (~1,100 lines) |
-| `templates/trophies/monthly_recap.html` | Main slide presentation page |
-| `templates/trophies/recap_index.html` | Month picker + sync gate |
-| `templates/trophies/recap/partials/slides/` | 18 slide templates (intro, stats, quizzes, etc.) |
-| `templates/trophies/recap_share_card.html` | Share card HTML (landscape/portrait) |
+| `templates/recap/monthly_recap.html` | Main slide presentation page |
+| `templates/recap/recap_index.html` | Month picker + sync gate |
+| `templates/recap/partials/slides/` | 16 slide templates, all built on the `.rcp` shell |
+| `static/css/components/recap-deck.css` | Deck chrome, motion, activity ramp, `.rcp` shell + slide parts |
+| `templates/recap/partials/recap_share_card.html` | Share card HTML (landscape/portrait) |
 | `templates/emails/monthly_recap.html` | Non-spoiler teaser email with CTA |
 
 ## Data Model
@@ -101,6 +102,29 @@ Immutable pattern: once `is_finalized=True`, regeneration is skipped even with `
 3. Flavor text system: `SLIDE_FLAVOR_TEXT` dict with random selection per slide type
 4. Slides: intro, total_trophies, platinums, rarest_trophy, most_active_day, activity_calendar, games, badges, comparison, summary, 4 quiz types, streak, time_analysis
 
+### The slide shell (`.rcp`)
+
+Every slide is one `.rcp` element. Before the rebuild each of the 16 hand-rolled the same outer centring
+flex plus a `card bg-white/[0.03] border border-base-content/5 ...` with slightly different padding, so no
+two slides shared a frame. A Wrapped reads as *authored* because every beat shares a frame and only the
+CONTENT changes, so the shell owns the frame, rhythm and type scale, and the slides own nothing else.
+
+| Part | Role |
+|------|------|
+| `.rcp__kicker` | The lead-in ("You earned"). Quiet, sets up the reveal. |
+| `.rcp__figure` | The one thing the slide is about. Usually a `.pp-tally` number. |
+| `.rcp__caption` | What the figure means ("trophies this month"). |
+| `.rcp__body` | Supporting detail: a breakdown, a list, a grid. |
+| `.rcp__flavor` | The closing line. Last, quiet, optional. |
+
+Modifiers: `--hero` (intro/close/peak), `--wide` (grids), `--bleed`, and the accent swaps
+`--accent-secondary` / `--accent-warm` / `--accent-success`. **A slide changes its whole colour story with
+one modifier**: every part inherits `--rcp-accent` from the shell, so no part carries its own colour.
+
+Shared parts (`.rcp__stamp`, `.rcp__chips`, `.rcp__pair`, `.rcp-quiz__*`, ...) all sit in
+`recap-deck.css` below the shell. Composition over restatement: tier cells are `.scard` with
+`--scard-accent`, figures are `.pp-tally` + `data-countup` -> `PlatPursuit.countUp`.
+
 ## API Endpoints
 
 | Method | Path | Auth | Rate Limit | Purpose |
@@ -122,6 +146,33 @@ Immutable pattern: once `is_finalized=True`, regeneration is skipped even with `
 - `MonthlyRecapMessageService`: Shared context builder ensures email and notification content consistency
 
 ## Gotchas and Pitfalls
+
+- **Source order decides in `recap-deck.css`, and losing is silent.** Two separate fixes in this file were
+  dead CSS that read as working, both caught only by rendering: the reduced-motion `.stagger-item` restore
+  (see below) and the platinum grid's mobile `-webkit-line-clamp: 1`, which was declared in a later
+  override that lost to the base rule at equal specificity, so cover names wrapped and spilled their
+  column. Put the value in the rule it belongs to, or put the override immediately after its base.
+
+- **`countUp` overwrites `textContent` wholesale.** A sign or unit inside a `data-countup` node is eaten
+  mid-animation. Templates put them in sibling `.rcp__sign` / `.rcp__unit` elements; pinned by
+  `test_recap_deck_contract.py`.
+
+- **The rarest-trophy slide speaks PSN's rarity vocabulary, not the site's.** `earn_rate` is
+  `Trophy.trophy_earn_rate` (share of players who own the game), while `data-rarity` / `.pp-rarity` grades
+  against the whole PlatPursuit community. Different populations. The slide reuses `RARITY_LABELS` from
+  `completion_card_service` and styles the band as a quiet `.rcp__stamp` so it cannot be mistaken for the
+  site's scale.
+
+- **Badges in the recap are still the LEGACY `Badge` model.** `badges.html` and `quiz_closest_badge.html`
+  hand-roll the backdrop-plate-plus-subject stack rather than using `components/badge_medallion.html`,
+  because that partial reads a `GroupBadge` frame dict. Swap it in with the badge cutover, not before --
+  an adapter would be built on code the cutover deletes. `backdrop_url` is absent on recaps stored before
+  it was added, so the plate is gated in both templates.
+
+- **Three DOM contracts couple templates, controller and stylesheet**, and none of them raise when broken:
+  `data-countup`, `.rcp-cal__cell` / `--plat`, and the quiz's `data-quiz-*` plus the `is-correct` /
+  `is-wrong` / `is-dimmed` / `is-locked` / `is-selected` state classes. All pinned by
+  `tests/engine/test_recap_deck_contract.py`.
 
 - **Reduced motion must remove MOVEMENT, never content or behaviour.** Two bugs lived here: `.stagger-item` rests at `opacity: 0` and is revealed BY its animation, so `animation: none` left every platinum card, badge row and calendar day permanently invisible; and the calendar's platinum-day click handlers were registered inside `animateCalendarSlide`, which the preference skips -- so it removed a feature, not just its motion. **The restore must be declared AFTER the `opacity: 0` rule**: the first fix put it in the main reduced-motion block higher up the file, where equal specificity meant the base rule won and the fix silently did nothing. Caught by rendering with the preference on, not by reading. Pinned by `test_recap_reduced_motion.py`.
 - **Timezone conversion edge case**: Month boundaries in UTC may not align with user's local calendar month. Solution: convert boundaries from user's local midnight to UTC using `pytz`, with ±14 hour buffer for batch queries.

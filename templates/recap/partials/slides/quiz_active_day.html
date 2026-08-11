@@ -1,31 +1,24 @@
 {% comment %}
-Recap Slide: Quiz - Guess Most Active Day of Week
+Recap Slide: Quiz -- guess most active day of week
 Variables: correct_day (0-6), correct_day_name, correct_count, day_counts, day_names
+
+Seven options, so they wrap as a chip row rather than sitting in the 2x2 grid the other quizzes use --
+seven cells in a two-column grid orphans the last one.
 {% endcomment %}
-<div class="flex items-center justify-center w-full h-full">
-    <div class="card bg-white/[0.03] border border-base-content/5 shadow-md px-8 py-10 md:px-12 md:py-12 text-center max-w-md"
-         data-quiz-correct="{{ correct_day }}">
-        <!-- Question Icon -->
-        <div class="text-5xl mb-4">📅</div>
+<div class="rcp rcp-quiz" data-quiz-correct="{{ correct_day }}">
+    <p class="rcp__kicker">Quick quiz</p>
+    <h3 class="rcp-quiz__ask">Which day of the week were you most active?</h3>
 
-        <!-- Question -->
-        <h3 class="text-2xl md:text-3xl font-bold text-primary mb-2">Quick Quiz!</h3>
-        <p class="text-lg text-base-content/70 mb-8">Which day of the week were you most active?</p>
-
-        <!-- Day Options -->
-        <div class="flex flex-wrap justify-center gap-2 mb-4">
+    <div class="rcp__body">
+        <div class="rcp-quiz__row">
             {% for day_name in day_names %}
-            <button data-quiz-option="{{ forloop.counter0 }}"
-                    class="btn btn-outline border-2 hover:btn-primary min-w-16 transition-all">
-                {{ day_name|slice:":3" }}
-            </button>
+            <button type="button" class="rcp-quiz__opt rcp-quiz__opt--day"
+                    data-quiz-option="{{ forloop.counter0 }}"
+                    aria-label="{{ day_name }}">{{ day_name|slice:":3" }}</button>
             {% endfor %}
         </div>
-
-        <!-- Hint -->
-        <p class="text-sm text-base-content/50 mt-4">Trust your gut!</p>
-
-        <!-- Feedback container (populated by JS) -->
-        <div data-quiz-feedback class="hidden"></div>
+        <p class="rcp__hint">Trust your gut.</p>
     </div>
+
+    <div class="rcp-quiz__verdict" data-quiz-feedback hidden></div>
 </div>

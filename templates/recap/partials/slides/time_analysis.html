@@ -1,45 +1,62 @@
 {% comment %}
 Recap Slide: Time-of-Day Analysis
-Variables: peak_hour, peak_hour_12, peak_period, persona, periods (dict)
+Variables: peak_hour, peak_hour_12, peak_period, persona, periods (dict), max_period_count
+
+The persona is the headline and the bars are the evidence, so the bars stay quiet -- they are a shape to
+glance at, not a chart to read. The three raw emoji this slide used to lead with are gone; iconography in
+the deck is drawn, per the visual identity.
+
+Only the night owl swaps accent (to secondary). Early bird and day hunter are both daylight, so they share
+the warm accent rather than inventing a third hue for a distinction nobody would read.
 {% endcomment %}
-<div class="flex items-center justify-center w-full h-full">
-    <div class="card bg-white/[0.03] border border-base-content/5 shadow-md px-8 py-10 md:px-12 md:py-12 text-center max-w-md">
-        <p class="text-lg text-base-content/70 mb-4">You're a</p>
+{% if persona == 'night_owl' %}
+<div class="rcp rcp--accent-secondary">
+{% else %}
+<div class="rcp rcp--accent-warm">
+{% endif %}
+    <p class="rcp__kicker">You're a</p>
 
-        <!-- Persona Display -->
+    <span class="rcp__mark" aria-hidden="true">
         {% if persona == 'early_bird' %}
-        <div class="text-6xl mb-4">🌅</div>
-        <h2 class="text-3xl md:text-4xl font-bold text-warning mb-2">Early Bird</h2>
-        <p class="text-base-content/70 mb-6">Most trophies earned in the <strong class="text-warning">{{ peak_period }}</strong></p>
+        <svg class="rcp__mark-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 18a5 5 0 0 0-10 0M12 2v4M4.9 10.9l2.1 2.1M2 18h2M20 18h2M17 13l2.1-2.1M3 22h18" />
+        </svg>
         {% elif persona == 'day_hunter' %}
-        <div class="text-6xl mb-4">☀️</div>
-        <h2 class="text-3xl md:text-4xl font-bold text-warning mb-2">Day Hunter</h2>
-        <p class="text-base-content/70 mb-6">Most trophies earned in the <strong class="text-warning">{{ peak_period }}</strong></p>
+        <svg class="rcp__mark-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.1M7 16.9l-2.1 2.2" />
+        </svg>
         {% else %}
-        <div class="text-6xl mb-4">🌙</div>
-        <h2 class="text-3xl md:text-4xl font-bold text-secondary mb-2">Night Owl</h2>
-        <p class="text-base-content/70 mb-6">Most trophies earned in the <strong class="text-secondary">{{ peak_period }}</strong></p>
+        <svg class="rcp__mark-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z" />
+        </svg>
         {% endif %}
+    </span>
 
-        <!-- Period Breakdown -->
-        <div class="flex justify-center gap-1 mb-6">
+    <h2 class="rcp__title pp-tally pp-tally--xl">
+        {% if persona == 'early_bird' %}Early Bird{% elif persona == 'day_hunter' %}Day Hunter{% else %}Night Owl{% endif %}
+    </h2>
+    <p class="rcp__caption">Most trophies earned in the {{ peak_period|lower }}</p>
+
+    <div class="rcp__body">
+        <div class="rcp-clock">
             {% for period, count in periods.items %}
-            <div class="flex flex-col items-center">
-                <div class="w-12 bg-base-200 rounded-t overflow-hidden flex flex-col-reverse" style="height: 80px;">
+            <div class="rcp-clock__col">
+                <div class="rcp-clock__track">
                     {% if count > 0 %}
-                    <div class="bg-primary w-full transition-all" style="height: {% widthratio count max_period_count 100 %}%;"></div>
+                    <div class="rcp-clock__fill" style="height: {% widthratio count max_period_count 100 %}%;"></div>
                     {% endif %}
                 </div>
-                <span class="text-xs text-base-content/50 mt-2">
+                <span class="rcp-clock__label">
                     {% if period == 'Morning' %}Morn{% elif period == 'Afternoon' %}Aftn{% elif period == 'Evening' %}Eve{% else %}Late{% endif %}
                 </span>
             </div>
             {% endfor %}
         </div>
 
-        <!-- Peak Hour -->
-        <div class="badge badge-lg badge-outline gap-2 py-4">
-            Peak hour: <span class="font-bold text-primary">{{ peak_hour_12 }}</span>
-        </div>
+        <span class="rcp__stamp">Peak hour {{ peak_hour_12 }}</span>
     </div>
 </div>
