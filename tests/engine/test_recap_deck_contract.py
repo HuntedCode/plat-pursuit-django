@@ -65,7 +65,7 @@ def deck_css():
 
 def test_every_slide_exists():
     """A guard on the parametrised tests below: an empty glob would make them all vacuously pass."""
-    assert len(SLIDES) == 17, f'expected 17 slides, found {[p.name for p in SLIDES]}'
+    assert len(SLIDES) == 20, f'expected 20 slides, found {[p.name for p in SLIDES]}'
     assert len(QUIZ_SLIDES) == 4, f'expected 4 interactive quizzes, found {[p.name for p in QUIZ_SLIDES]}'
 
 

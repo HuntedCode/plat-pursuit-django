@@ -24,6 +24,12 @@ the old slide used. Nobody's Wrapped should scold them.
     {% endwith %}
     <p class="rcp__caption">change in trophies earned</p>
 
+    {% if vs_last_year %}
+    {% comment %} Same month, last year. Sits under the headline rather than beside it: vs-last-month is
+    the question the slide asks, and this is the sharper follow-up, not a rival figure. {% endcomment %}
+    <p class="rcp__sub">{{ vs_last_year }} against the same month last year</p>
+    {% endif %}
+
     {% if personal_bests %}
     <div class="rcp__body">
         <p class="rcp__label">Personal bests</p>

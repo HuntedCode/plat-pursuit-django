@@ -199,6 +199,11 @@ class MonthlyRecapService:
         # Get comparison data
         comparison = cls.get_comparison_data(profile, year, month, user_tz=user_tz)
 
+        # Context beats: what they played, how they stack up, and this month across their other years.
+        taste = cls.get_taste_for_month(profile, year, month, user_tz=user_tz)
+        community = cls.get_community_comparison_for_month(profile, year, month, user_tz=user_tz)
+        history = cls.get_month_in_history(profile, year, month, user_tz=user_tz)
+
         return {
             'total_trophies_earned': trophy_counts['total'],
             'bronzes_earned': trophy_counts['bronze'],
@@ -218,6 +223,9 @@ class MonthlyRecapService:
             'quiz_active_day_data': quiz_active_day or {},
             'badge_xp_earned': badge_stats['xp_earned'],
             'badges_earned_count': badge_stats['badges_count'],
+            'taste_data': taste or {},
+            'community_comparison_data': community or {},
+            'month_in_history_data': history or {},
             'badges_data': badge_stats['badges_data'],
             'badge_progress_quiz_data': badge_progress_quiz or {},
             'comparison_data': comparison,
@@ -720,6 +728,168 @@ class MonthlyRecapService:
         }
 
     @classmethod
+    def get_taste_for_month(cls, profile, year, month, user_tz=None):
+        """What the hunter actually played this month: top genre, and top franchise if there is one.
+
+        Both are DB-aggregated group-bys over the month's earned trophies -- a whale can earn thousands in
+        a month and iterating them in Python to build a Counter is the exact pattern that OOMs the worker.
+
+        Genres come from the IGDB enrichment (ConceptGenre), so an unmatched or PSN-only concept simply
+        contributes nothing rather than skewing toward a placeholder. Excluded franchise links are
+        filtered: `is_excluded` is the admin override that hides a bad IGDB link everywhere else, and this
+        slide must not be the one place it leaks back in.
+
+        Returns:
+            dict or None: {genre, genre_count, runners_up: [(name, count)], franchise, franchise_count}
+        """
+        from trophies.models import EarnedTrophy
+
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
+        earned = EarnedTrophy.objects.filter(
+            profile=profile, earned=True,
+            earned_date_time__gte=start_date, earned_date_time__lt=end_date,
+        )
+
+        genre_field = 'trophy__game__concept__concept_genres__genre__name'
+        genres = list(
+            earned.filter(**{f'{genre_field}__isnull': False})
+            .values(genre_field).annotate(n=Count('id')).order_by('-n', genre_field)[:3]
+        )
+        if not genres:
+            return None
+
+        fr_field = 'trophy__game__concept__concept_franchises__franchise__name'
+        franchise = (
+            earned.filter(**{f'{fr_field}__isnull': False,
+                             'trophy__game__concept__concept_franchises__is_excluded': False})
+            .values(fr_field).annotate(n=Count('id')).order_by('-n', fr_field).first()
+        )
+
+        return {
+            'genre': genres[0][genre_field],
+            'genre_count': genres[0]['n'],
+            'runners_up': [(row[genre_field], row['n']) for row in genres[1:]],
+            'franchise': franchise[fr_field] if franchise else '',
+            'franchise_count': franchise['n'] if franchise else 0,
+        }
+
+    @classmethod
+    def get_community_comparison_for_month(cls, profile, year, month, user_tz=None):
+        """The hunter's completion on this month's headline game, against everyone else's.
+
+        The deck's only outward-looking beat: every other slide is the hunter alone. Uses the community
+        stats already denormalized onto Game (avg_completion, played_count, plats_earned_count) by the
+        nightly recalc, so this costs one indexed read rather than an aggregate over every owner.
+
+        The "headline game" is the one they earned the most trophies in this month -- the game the month
+        was actually about, not their highest completion.
+
+        Returns:
+            dict or None: {game_name, game_image, your_completion, avg_completion, played_count,
+                           plats_earned_count, beats_average}
+        """
+        from trophies.models import EarnedTrophy, ProfileGame
+
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
+        top = (
+            EarnedTrophy.objects
+            .filter(profile=profile, earned=True,
+                    earned_date_time__gte=start_date, earned_date_time__lt=end_date)
+            .values('trophy__game_id').annotate(n=Count('id')).order_by('-n', 'trophy__game_id').first()
+        )
+        if not top:
+            return None
+
+        pg = (
+            ProfileGame.objects
+            .filter(profile=profile, game_id=top['trophy__game_id'])
+            .select_related('game', 'game__concept', 'game__concept__igdb_match')
+            .defer('game__concept__igdb_match__raw_response')
+            .first()
+        )
+        # A game with no community sample says nothing worth a slide.
+        if pg is None or not pg.game.played_count:
+            return None
+
+        game = pg.game
+        return {
+            'game_name': game.title_name,
+            'game_image': game.display_image_url or '',
+            'your_completion': round(pg.progress or 0),
+            'avg_completion': round(game.avg_completion or 0),
+            'played_count': game.played_count,
+            'plats_earned_count': game.plats_earned_count,
+            'beats_average': (pg.progress or 0) > (game.avg_completion or 0),
+        }
+
+    @classmethod
+    def get_month_in_history(cls, profile, year, month, user_tz=None):
+        """Every OTHER year's version of this same month, plus the notable thing that happened in one.
+
+        Year-over-year on the same month is a fairer comparison than vs-last-month, which is really a
+        seasonality measurement -- December beats February for almost everyone. And it is the one beat
+        that gets better the longer someone uses the site: a fifth March means a fifth bar.
+
+        DB-aggregated into one row per active month (a couple of hundred rows for a decade-old account),
+        then filtered to this month number in Python. The filter cannot move into SQL without giving up
+        `TruncMonth`'s timezone handling, and the row count it runs over is summary-sized, not trophy-sized.
+
+        Returns:
+            dict or None: {years: [{year, trophies, platinums, is_current}], best_year,
+                           anniversary: {years_ago, game_name, trophy_name} | None}
+        """
+        from trophies.models import EarnedTrophy
+
+        user_tz = user_tz or cls._resolve_user_tz(profile)
+        rows = (
+            EarnedTrophy.objects
+            .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+            .annotate(bucket=TruncMonth('earned_date_time', tzinfo=user_tz))
+            .values('bucket')
+            .annotate(trophies=Count('id'),
+                      platinums=Count('id', filter=Q(trophy__trophy_type='platinum')))
+            .order_by('bucket')
+        )
+
+        years = [
+            {'year': r['bucket'].year, 'trophies': r['trophies'], 'platinums': r['platinums'],
+             'is_current': r['bucket'].year == year}
+            for r in rows if r['bucket'] and r['bucket'].month == month
+        ]
+        # One year is not a history.
+        if len(years) < 2:
+            return None
+
+        # The anniversary: their FIRST platinum ever, if it landed in this month of some earlier year.
+        anniversary = None
+        first_plat = (
+            EarnedTrophy.objects
+            .filter(profile=profile, earned=True, trophy__trophy_type='platinum',
+                    earned_date_time__isnull=False)
+            .select_related('trophy', 'trophy__game')
+            .order_by('earned_date_time')
+            .first()
+        )
+        if first_plat:
+            local = first_plat.earned_date_time.astimezone(user_tz)
+            if local.month == month and local.year < year:
+                anniversary = {
+                    'years_ago': year - local.year,
+                    'game_name': first_plat.trophy.game.title_name,
+                    'trophy_name': first_plat.trophy.trophy_name,
+                }
+
+        best = max(years, key=lambda y: y['trophies'])
+        return {
+            'years': years,
+            'best_year': best['year'],
+            # The bar scale. `years` is chronological, so the template cannot find the tallest itself and
+            # scaling against the first year would let later bars exceed 100%.
+            'best_trophies': best['trophies'] or 1,
+            'anniversary': anniversary,
+        }
+
+    @classmethod
     def get_comparison_data(cls, profile, year, month, user_tz=None):
         """
         Get comparison stats vs previous month and personal bests.
@@ -774,8 +944,20 @@ class MonthlyRecapService:
             if current_total > 0:
                 personal_bests.append("Your first monthly recap!")
 
+        # Same month, previous year. A fairer read than vs-last-month, which mostly measures seasonality:
+        # almost everyone's December beats their February. Empty when there is no such month to compare to,
+        # so a first-year hunter sees nothing rather than a meaningless "+100%".
+        last_year_total = cls.get_trophy_count_for_month(profile, year - 1, month, user_tz=user_tz)
+        if last_year_total > 0:
+            yoy_pct = round(((current_total - last_year_total) / last_year_total) * 100)
+            vs_last_year = f"+{yoy_pct}%" if yoy_pct >= 0 else f"{yoy_pct}%"
+        else:
+            vs_last_year = ''
+
         return {
             'vs_prev_month_pct': vs_prev,
+            'vs_last_year_pct': vs_last_year,
+            'last_year_total': last_year_total,
             'personal_bests': personal_bests,
         }
 
@@ -1444,6 +1626,8 @@ DECK = [
     RecapBeat('games', lambda r, c: {
         'started': r.games_started, 'completed': r.games_completed,
     }, when=lambda r: r.games_started > 0 or r.games_completed > 0),
+    RecapBeat('taste', lambda r, c: {**r.taste_data, 'month_name': c['month_name']},
+              when=lambda r: bool(r.taste_data)),
 
     # -- BUILD: when, and how consistently ------------------------------------------------------------
     RecapBeat('quiz_active_day', lambda r, c: dict(r.quiz_active_day_data),
@@ -1470,6 +1654,8 @@ DECK = [
     }, when=lambda r: r.platinums_earned > 0),
 
     # -- PEAK: and what it moved ----------------------------------------------------------------------
+    RecapBeat('community', lambda r, c: dict(r.community_comparison_data),
+              when=lambda r: bool(r.community_comparison_data)),
     RecapBeat('quiz_closest_badge', lambda r, c: dict(r.badge_progress_quiz_data),
               when=lambda r: bool(r.badge_progress_quiz_data), is_quiz=True),
     RecapBeat('badges', lambda r, c: {
@@ -1479,8 +1665,12 @@ DECK = [
     }, when=lambda r: r.badges_earned_count > 0),
     RecapBeat('comparison', lambda r, c: {
         'vs_prev_month': (r.comparison_data or {}).get('vs_prev_month_pct', '0%'),
+        'vs_last_year': (r.comparison_data or {}).get('vs_last_year_pct', ''),
         'personal_bests': (r.comparison_data or {}).get('personal_bests', []),
     }),
+    RecapBeat('month_in_history', lambda r, c: {
+        **r.month_in_history_data, 'month_name': c['month_name'], 'year': r.year,
+    }, when=lambda r: bool(r.month_in_history_data)),
 
     # -- PAYOFF + CLOSE -------------------------------------------------------------------------------
     # No payload: the score is whatever the hunter actually answered, so the controller fills it in.

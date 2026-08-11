@@ -4601,6 +4601,20 @@ class MonthlyRecap(models.Model):
                   "dates (badge_xp.monthly_xp). Snapshotted at generation; there is no XP ledger.",
     )
     badges_earned_count = models.PositiveIntegerField(default=0)
+    taste_data = models.JSONField(
+        default=dict, blank=True,
+        help_text="Top genre + franchise for the month (get_taste_for_month).",
+    )
+    community_comparison_data = models.JSONField(
+        default=dict, blank=True,
+        help_text="This month's headline game vs the community's denormed stats "
+                  "(get_community_comparison_for_month).",
+    )
+    month_in_history_data = models.JSONField(
+        default=dict, blank=True,
+        help_text="This same month across the hunter's other years, plus a first-platinum anniversary "
+                  "when one falls here (get_month_in_history).",
+    )
     badges_data = models.JSONField(
         default=list,
         blank=True,

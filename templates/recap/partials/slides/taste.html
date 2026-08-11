@@ -1,0 +1,37 @@
+{% comment %}
+Recap Slide: Taste -- what the month was actually made of.
+Variables: genre, genre_count, runners_up (list of (name, count)), franchise, franchise_count, flavor_text
+
+The genre is the headline; the runners-up are evidence, sized against it so the shape of the month reads
+without anyone doing arithmetic. The franchise is a stamp rather than a second headline: plenty of months
+have no franchise at all, and a slide with two competing hero lines has neither.
+{% endcomment %}
+<div class="rcp rcp--accent-secondary">
+    <p class="rcp__kicker">You spent {{ month_name|default:"the month" }} in</p>
+
+    <h2 class="rcp__title pp-tally pp-tally--hero">{{ genre }}</h2>
+    <p class="rcp__caption">{{ genre_count }} {{ genre_count|pluralize:"trophy,trophies" }} earned in the genre</p>
+
+    {% if runners_up %}
+    <div class="rcp__body">
+        <p class="rcp__label">Also in the mix</p>
+        <div class="rcp-taste">
+            {% for name, count in runners_up %}
+            <div class="rcp-taste__row stagger-item" style="animation-delay: {{ forloop.counter0|add:2 }}00ms;">
+                <span class="rcp-taste__name">{{ name }}</span>
+                <span class="rcp-taste__bar" aria-hidden="true">
+                    <span class="rcp-taste__fill" style="width: {% widthratio count genre_count 100 %}%;"></span>
+                </span>
+                <span class="rcp-taste__count">{{ count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if franchise %}
+    <span class="rcp__stamp">Most time in {{ franchise }}</span>
+    {% endif %}
+
+    {% if flavor_text %}<p class="rcp__flavor">{{ flavor_text }}</p>{% endif %}
+</div>

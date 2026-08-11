@@ -503,6 +503,10 @@ class RecapSlidePartialView(APIView):
         # New stat slides
         'streak': 'recap/partials/slides/streak.html',
         'time_analysis': 'recap/partials/slides/time_analysis.html',
+        # Context beats
+        'taste': 'recap/partials/slides/taste.html',
+        'community': 'recap/partials/slides/community.html',
+        'month_in_history': 'recap/partials/slides/month_in_history.html',
         # No server payload: the controller fills it from the answers actually given.
         'quiz_score': 'recap/partials/slides/quiz_score.html',
     }

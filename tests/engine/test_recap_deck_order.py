@@ -50,7 +50,13 @@ def _full_recap():
         quiz_rarest_trophy_data={'correct_trophy_id': 'a', 'options': []},
         quiz_active_day_data={'correct_day': 5, 'day_names': []},
         badge_progress_quiz_data={'correct_badge_id': 'b', 'options': []},
-        comparison_data={'vs_prev_month_pct': '+42%', 'personal_bests': []},
+        comparison_data={'vs_prev_month_pct': '+42%', 'vs_last_year_pct': '+12%', 'personal_bests': []},
+        taste_data={'genre': 'Role-playing (RPG)', 'genre_count': 62, 'runners_up': []},
+        community_comparison_data={'game_name': 'Bloodborne', 'your_completion': 87,
+                                   'avg_completion': 54, 'played_count': 12480},
+        month_in_history_data={'years': [{'year': 2025, 'trophies': 96, 'platinums': 1},
+                                         {'year': 2026, 'trophies': 147, 'platinums': 3}],
+                               'best_year': 2026, 'best_trophies': 147, 'anniversary': None},
     )
 
 
