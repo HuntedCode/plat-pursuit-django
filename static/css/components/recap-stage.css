@@ -83,8 +83,17 @@
 .rcx-enter__stat { display: flex; flex-direction: column; gap: 0.15rem; }
 .rcx-enter__stat b { font-family: var(--pp-font-display); font-size: 1.15rem; color: var(--pp-text); }
 .rcx-enter__stat span { font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
-.rcx-enter__aside { margin-top: 1.5rem; font-size: 0.8rem; color: var(--pp-text-mute); }
-.rcx-enter__aside a { color: var(--pp-primary); }
+.rcx-enter__aside {
+    display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+    margin-top: 1.5rem; font-size: 0.8rem; color: var(--pp-text-mute);
+}
+.rcx-enter__aside a,
+.rcx-enter__link {
+    color: var(--pp-primary); background: none; border: 0; padding: 0; cursor: pointer;
+    font-size: inherit; font-family: inherit;
+}
+.rcx-enter__aside a:hover, .rcx-enter__link:hover { text-decoration: underline; }
+.rcx-enter__link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
 
 /* ---- 2. The Stage --------------------------------------------------------------------------------- */
 .rcx {
@@ -268,6 +277,39 @@
     transition: opacity 0.4s ease;
 }
 .rcx.is-underway .rcx__hint { opacity: 0; }
+
+/* The card scene: the ceremony's ending. Sits over the stage rather than beside it, so arriving here is
+   a transition within the ceremony and not an exit from it. */
+.rcx__card {
+    position: absolute; inset: 0; z-index: 3;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1rem; padding: 1.5rem 1rem;
+    background: color-mix(in oklab, var(--pp-bg-0) 88%, transparent);
+}
+.rcx__card[hidden] { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+    .rcx__card { animation: rcxCardIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+}
+/* Arrives as a settle rather than a slide: the deck has stopped moving and this is what it leaves you. */
+@keyframes rcxCardIn { from { opacity: 0; transform: translateY(18px) scale(0.985); } to { opacity: 1; transform: none; } }
+
+.rcx__card-label {
+    font-size: 0.78rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+/* The card renders at its natural share size; the frame scales it to fit whatever room there is rather
+   than letting it overflow or forcing a re-layout of markup that must stay pixel-exact for the PNG. */
+.rcx__card-frame {
+    display: flex; align-items: center; justify-content: center;
+    max-width: 100%; min-height: 0; flex: 1;
+    overflow: hidden;
+}
+.rcx__card-frame > * {
+    transform: scale(var(--rcx-card-scale, 1));
+    transform-origin: center;
+    border-radius: var(--pp-radius-md);
+    box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.95);
+}
 
 /* The closing beat hands over to sharing without leaving the stage. */
 .rcx__out { position: relative; display: flex; justify-content: center; gap: 0.6rem; padding: 0 1rem 1.25rem; }

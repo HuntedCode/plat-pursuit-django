@@ -234,14 +234,87 @@ class MonthlyRecapManager {
             onClose: () => this.onStageClosed(),
         });
 
+        // Warm the card while the deck plays. It is a template render (/html/), not Playwright, so this
+        // is cheap -- and it means the ending transitions instantly instead of showing a spinner at the
+        // exact moment the ceremony is meant to pay off.
+        this.warmCard();
+
         // Start the deck at the top every time it is entered, so "watch it again" actually replays.
         this.goToSlide(0);
+    }
+
+    /** Fetch the share card's HTML once per stage session. Failure is silent: the deck still ends fine
+     *  on the summary, and the page below still offers the card. */
+    async warmCard() {
+        if (this.cardHtml) return;
+        try {
+            const data = await PlatPursuit.API.get(`/api/v1/recap/${this.year}/${this.month}/html/`);
+            this.cardHtml = (data && data.html) || '';
+        } catch (err) {
+            this.cardHtml = '';
+        }
+    }
+
+    /**
+     * The ending: the summary has had its beat, and now it becomes the thing you keep.
+     *
+     * The card renders at its natural share dimensions, because those are what the PNG is built from --
+     * re-laying it out for the screen would mean the thing you looked at and the thing you downloaded
+     * were different objects. So it is SCALED to fit instead.
+     */
+    showCardScene() {
+        const scene = document.getElementById('recap-card');
+        const frame = document.getElementById('recap-card-frame');
+        if (!scene || !frame || !this.cardHtml) return;
+
+        this.stopBeatTimer();
+        frame.innerHTML = this.cardHtml;
+        scene.hidden = false;
+
+        const card = frame.firstElementChild;
+        if (card) {
+            const fit = () => {
+                const bw = frame.clientWidth, bh = frame.clientHeight;
+                const cw = card.offsetWidth, ch = card.offsetHeight;
+                if (!cw || !ch) return;
+                // Never scale UP: past 1:1 it is a blurry enlargement of a fixed-size render.
+                frame.style.setProperty('--rcx-card-scale', String(Math.min(1, bw / cw, bh / ch)));
+            };
+            fit();
+            this._fitCard = PlatPursuit.debounce(fit, 120);
+            window.addEventListener('resize', this._fitCard);
+        }
+
+        const dl = document.getElementById('recap-download');
+        if (dl && !dl._wired) {
+            dl._wired = true;
+            dl.addEventListener('click', () => this.downloadCard());
+        }
+        const custom = document.getElementById('recap-customise');
+        if (custom && !custom._wired) {
+            custom._wired = true;
+            // Customising is a page job, not a ceremony job: leave, and land on the picker below.
+            custom.addEventListener('click', () => {
+                this.seenSummary = true;
+                if (this.handle) this.handle.close();
+            });
+        }
+    }
+
+    /** The one expensive call in the whole flow -- everything else is a template render. */
+    downloadCard() {
+        const theme = this.currentBackground && this.currentBackground !== 'default'
+            ? `&theme=${encodeURIComponent(this.currentBackground)}` : '';
+        window.location.href =
+            `/api/v1/recap/${this.year}/${this.month}/png/?image_format=landscape${theme}`;
     }
 
     /** takeover() has already removed the stage and restored focus; put the page back in order. */
     onStageClosed() {
         this.stageOpen = false;
         this.stopBeatTimer();
+        clearTimeout(this._cardTimer);
+        if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
         this.handle = null;
         const shareSection = document.getElementById('share-section');
         if (shareSection && this.seenSummary) {
@@ -320,6 +393,10 @@ class MonthlyRecapManager {
 
         const exit = document.getElementById('recap-exit');
         if (exit) exit.addEventListener('click', () => this.handle && this.handle.close());
+
+        // Coming back for the card should not mean sitting through the deck again.
+        const quick = document.getElementById('recap-quick-download');
+        if (quick) quick.addEventListener('click', () => this.downloadCard());
 
         const advance = document.getElementById('recap-advance');
         if (advance) advance.addEventListener('click', (e) => {
@@ -609,13 +686,20 @@ class MonthlyRecapManager {
 
         // The closing beat hands over: the stage offers Share / Done, and the panel below opens once
         // they leave. Revealing it mid-ceremony was pointless -- it sits behind a full-screen takeover.
-        const out = document.getElementById('recap-out');
+        const card = document.getElementById('recap-card');
         if (slideType === 'summary') {
             this.seenSummary = true;
-            if (out) out.hidden = false;
             this.loadSharePreview();
-        } else if (out) {
-            out.hidden = true;
+            // Hold on the summary for its own beat, then hand over. Cleared whenever the beat changes, so
+            // stepping back off the summary cannot strand a transition that then fires over another beat.
+            clearTimeout(this._cardTimer);
+            this._cardTimer = setTimeout(() => {
+                if (this.slides[this.currentSlide]?.type === 'summary') this.showCardScene();
+            }, this.beatDuration(slideEls[index]));
+        } else {
+            clearTimeout(this._cardTimer);
+            if (card) card.hidden = true;
+            if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
         }
 
         // Update navigation button states for non-quiz slides

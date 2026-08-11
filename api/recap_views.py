@@ -26,6 +26,12 @@ from core.services.share_image_cache import ShareImageCache
 
 logger = logging.getLogger(__name__)
 
+#: Platinum covers the share card's grid can hold. The builder must fill up to this, not fewer, or the
+#: template's "+N more" badge is unreachable.
+SHARE_CARD_PLATINUM_SLOTS = 8
+#: Longest edge for images embedded in the card, matching the plat card's budget.
+SHARE_CARD_IMAGE_MAX = 1000
+
 
 def _check_profile_synced(request):
     """Returns a 403 Response if the user has no linked profile or hasn't finished syncing."""
@@ -353,9 +359,12 @@ class RecapShareImageHTMLView(APIView):
         if avatar_url and not avatar_data:
             logger.warning(f"[RECAP-SHARE] Failed to cache avatar: {avatar_url}")
 
-        # Process platinum game images (first 3 for share card)
+        # The card's grid holds SHARE_CARD_PLATINUM_SLOTS. This capped at 3 regardless, so a six-platinum
+        # month rendered three of them and the template's "+N more" badge -- which compares the rendered
+        # count against the total -- could never fire, because the two were never allowed to differ.
+        all_plats = recap.platinums_data or []
         platinums_with_images = []
-        for plat in (recap.platinums_data or [])[:3]:
+        for plat in all_plats[:SHARE_CARD_PLATINUM_SLOTS]:
             plat_copy = dict(plat)
             if plat_copy.get('game_image'):
                 original_url = plat_copy['game_image']
@@ -382,6 +391,7 @@ class RecapShareImageHTMLView(APIView):
             'games_completed': recap.games_completed,
             # Highlights
             'platinums_data': platinums_with_images,
+            'platinums_overflow': max(0, len(all_plats) - SHARE_CARD_PLATINUM_SLOTS),
             'rarest_trophy': recap.rarest_trophy_data or {},
             'rarest_trophy_icon': rarest_icon,
             'most_active_day': recap.most_active_day or {},
@@ -435,7 +445,14 @@ class RecapShareImagePNGView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        theme_key = request.query_params.get('theme', 'default')
+        # The picker offers `include_game_art=False`; this accepted anything, so a hand-typed key could
+        # select a theme that expects a game image the recap card never supplies.
+        theme_key = (request.query_params.get('theme') or 'default').strip()
+        if theme_key != 'default':
+            from trophies.themes import GRADIENT_THEMES
+            if theme_key not in GRADIENT_THEMES or GRADIENT_THEMES[theme_key].get('requires_game_image'):
+                return Response({'error': 'Invalid theme.'},
+                                status=http_status.HTTP_400_BAD_REQUEST)
 
         recap = MonthlyRecapService.get_or_generate_recap(profile, year, month)
         if not recap:
@@ -457,6 +474,9 @@ class RecapShareImagePNGView(APIView):
                 html,
                 format_type=format_type,
                 theme_key=theme_key,
+                # Left at the 200px default, every cover and icon on the card was an upscaled thumbnail.
+                # Same budget the plat card uses (api/shareable_views.CARD_IMAGE_MAX).
+                image_max_size=SHARE_CARD_IMAGE_MAX,
             )
         except Exception as e:
             logger.exception(f"[RECAP-PNG] Playwright render failed for {year}/{month}: {e}")

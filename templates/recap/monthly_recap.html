@@ -64,6 +64,8 @@ unconditionally reached for attributes that were never provided. {% endcomment %
     </div>
 
     <p class="rcx-enter__aside">
+        <button type="button" class="rcx-enter__link" id="recap-quick-download">Just get the card</button>
+        <span aria-hidden="true">&middot;</span>
         <a href="#recap-options">Pick a different month</a>
     </p>
 </div>
@@ -112,9 +114,24 @@ PlatPursuit.takeover. {% endcomment %}
         </button>
     </div>
 
-    <div class="rcx__out" id="recap-out" hidden>
-        <button type="button" class="rcx__btn rcx__btn--primary" id="recap-share">Share this recap</button>
-        <button type="button" class="rcx__btn" id="recap-done">Done</button>
+    {% comment %} The ending. The summary lands, holds for its beat, and then becomes the thing you keep.
+    The card is live HTML from /html/ (a template render, not Playwright) so the transition is instant;
+    only Download runs the renderer. Theme picking deliberately stays on the page below -- a payoff should
+    not turn into a settings panel. {% endcomment %}
+    <div class="rcx__card" id="recap-card" hidden>
+        <p class="rcx__card-label">Your {{ month_name }} card</p>
+        <div class="rcx__card-frame" id="recap-card-frame"></div>
+        <div class="rcx__out">
+            <button type="button" class="rcx__btn rcx__btn--primary" id="recap-download">
+                Download
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 4v12M6 12l6 6 6-6M4 21h16" />
+                </svg>
+            </button>
+            <button type="button" class="rcx__btn" id="recap-customise">Change the look</button>
+            <button type="button" class="rcx__btn" id="recap-done">Done</button>
+        </div>
     </div>
 </div>
 
