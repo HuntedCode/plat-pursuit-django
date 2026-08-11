@@ -1703,6 +1703,10 @@ function takeover(root, opts) {
 
     function onKey(e) {
         if (opts.onKey && opts.onKey(e) === true) { return; }
+        // A dialog opened INSIDE the takeover owns Escape and the Tab order while it is up. Without this
+        // the capture-phase listener fires first and tears down the whole surface on the keypress that
+        // was meant to dismiss the dialog -- the takeover would vanish out from under an open modal.
+        if (root.querySelector('dialog[open]')) { return; }
         if (e.key === 'Escape') { e.preventDefault(); close(); return; }
         if (e.key !== 'Tab') { return; }
         var items = focusable();

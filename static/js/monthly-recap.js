@@ -41,6 +41,10 @@ class MonthlyRecapManager {
         this.progressDots = document.getElementById('progress-dots');
         // Pacing is DERIVED, not fixed. One beat is a single number and the next is a month of calendar
         // days; a single duration makes the short ones drag and cuts the dense ones off mid-read.
+        // Beats you are meant to POKE AT are not on a clock. The calendar's platinum days open a detail
+        // dialog, and a timer running behind an open modal either yanks the slide out from under you or
+        // has to be paused-and-resumed in a way nobody can predict. They advance on an explicit control.
+        this.MANUAL_BEATS = new Set(['activity_calendar']);
         this.BEAT_MIN_MS = 4000;
         this.BEAT_MAX_MS = 9500;
         this.READ_MS_PER_WORD = 260;      // ~230 wpm, plus room to look at the art rather than read it
@@ -317,6 +321,11 @@ class MonthlyRecapManager {
         const exit = document.getElementById('recap-exit');
         if (exit) exit.addEventListener('click', () => this.handle && this.handle.close());
 
+        const advance = document.getElementById('recap-advance');
+        if (advance) advance.addEventListener('click', (e) => {
+            if (e.target.closest('[data-advance]')) this.nextSlide();
+        });
+
         const done = document.getElementById('recap-done');
         if (done) done.addEventListener('click', () => this.handle && this.handle.close());
 
@@ -503,9 +512,17 @@ class MonthlyRecapManager {
         this.stopBeatTimer();
         if (this.prefersReducedMotion || !this.stageOpen) return;
         const type = this.slides[this.currentSlide]?.type;
-        const waiting = this.quizManager.isQuizSlide(type) && !this.quizManager.canNavigate(type);
-        this.container.classList.toggle('is-waiting', waiting);
-        if (waiting || this.currentSlide >= this.slides.length - 1) return;
+        const gated = this.quizManager.isQuizSlide(type) && !this.quizManager.canNavigate(type);
+        const manual = this.MANUAL_BEATS.has(type);
+        // A dialog open over the stage stops the clock too -- whatever opened it owns the moment.
+        const blocked = gated || manual || Boolean(document.querySelector('dialog[open]'));
+
+        this.container.classList.toggle('is-waiting', blocked);
+        this.container.classList.toggle('is-manual', manual);
+        const advance = document.getElementById('recap-advance');
+        if (advance) advance.hidden = !manual || this.currentSlide >= this.slides.length - 1;
+
+        if (blocked || this.currentSlide >= this.slides.length - 1) return;
 
         const slideEl = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
         const ms = this.beatDuration(slideEl);
@@ -858,12 +875,20 @@ class MonthlyRecapManager {
             </ul>
         `;
 
-        dialog.addEventListener('close', () => dialog.remove());
+        dialog.addEventListener('close', () => {
+            dialog.remove();
+            this.startBeatTimer();      // the stage stopped its clock while this was up
+        });
         dialog.querySelector('.rcp-plats__close').addEventListener('click', () => dialog.close());
         // Backdrop click: the ::backdrop pseudo-element reports the dialog itself as the target.
         dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });
 
-        document.body.appendChild(dialog);
+        this.stopBeatTimer();
+        // Into the STAGE, not the body: it belongs to the ceremony, so the takeover can tell it is open
+        // (and hand it Escape) and it is torn down with the stage if the hunter leaves while it is up.
+        // showModal() promotes it to the top layer regardless of where it sits in the DOM, so being
+        // inside a position:fixed ancestor does not affect how it is centred.
+        (this.container || document.body).appendChild(dialog);
         dialog.showModal();
     }
 
@@ -1236,7 +1261,8 @@ class RecapQuizManager {
      * Check if a slide type is a quiz slide
      */
     isQuizSlide(slideType) {
-        return slideType && slideType.startsWith('quiz_');
+        // `quiz_score` REPORTS on the quizzes; it does not ask anything, so it must not be gated like one.
+        return Boolean(slideType) && slideType.startsWith('quiz_') && slideType !== 'quiz_score';
     }
 
     /**

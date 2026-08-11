@@ -91,6 +91,48 @@ def test_the_unreachable_multiselect_branch_is_gone(js):
     assert 'data-quiz-submit' not in code
 
 
+def test_the_score_beat_is_not_gated_like_a_quiz(js):
+    """`quiz_score` REPORTS on the quizzes; it asks nothing. Treating it as one made canNavigate()
+    permanently false there -- the auto-advance refused to start AND both nav paths refused to move, so
+    the deck dead-ended one slide short of the summary every single time.
+
+    Same prefix trap as the deck builder, where `quiz_score` counted itself when deciding whether there
+    were any quizzes worth scoring. Two bugs, one cause, which is why it is pinned on both sides."""
+    body = _method(js, 'isQuizSlide')
+    assert "'quiz_score'" in body, (
+        'isQuizSlide no longer excludes the score beat; it will gate a slide that can never be answered'
+    )
+
+
+def test_interactive_beats_advance_on_a_control_not_a_clock(js):
+    """The calendar's platinum days open a detail dialog. A timer running behind an open modal either
+    yanks the slide out from under the hunter or needs pause/resume nobody can predict."""
+    code = _code(js)
+    assert 'MANUAL_BEATS' in code and "'activity_calendar'" in code
+    body = _method(js, 'startBeatTimer')
+    assert 'MANUAL_BEATS.has' in body, 'manual beats are not exempted from the auto-advance'
+    assert "dialog[open]" in body, 'an open dialog does not stop the clock'
+
+
+def test_the_platinum_dialog_lives_inside_the_stage(js):
+    """Appended to <body> it is invisible to the takeover, which then answers Escape itself and tears the
+    whole ceremony down on the keypress meant to dismiss the dialog."""
+    body = _method(js, 'showPlatinumDetails')
+    assert 'this.container' in body and 'appendChild(dialog)' in body
+    assert 'document.body.appendChild(dialog)' not in body
+
+
+def test_a_takeover_yields_escape_to_a_dialog_inside_it():
+    """The takeover binds keydown in the CAPTURE phase, so without this it wins Escape before the dialog
+    ever sees it."""
+    utils = (ROOT / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+    fn = re.search(r'function takeover\(root, opts\) \{.*?\n\}', utils, re.S)
+    assert fn, 'takeover() not found'
+    assert "root.querySelector('dialog[open]')" in fn.group(0), (
+        'takeover does not defer to a dialog opened inside it'
+    )
+
+
 # --- Document-level keyboard handler ---------------------------------------------------------------
 
 def test_arrow_keys_yield_to_typing_dialogs_and_modifiers(js):

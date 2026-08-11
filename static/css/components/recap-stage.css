@@ -136,6 +136,16 @@
 .rcx.is-held .rcx__bar.is-live i,
 .rcx.is-waiting .rcx__bar.is-live i { transition: none; }
 
+/* On a MANUAL beat there is no clock to show, and a segment frozen at zero just reads as broken. It
+   fills and breathes instead: lit because you are here, moving because it is waiting on you. */
+.rcx.is-manual .rcx__bar.is-live i { width: 100%; transition: none; }
+@media (prefers-reduced-motion: no-preference) {
+    .rcx.is-manual .rcx__bar.is-live i { animation: rcxWaiting 2s ease-in-out infinite; }
+}
+@keyframes rcxWaiting { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+/* "Tap the sides" is the wrong instruction when the beat has its own Continue control. */
+.rcx.is-manual .rcx__hint { opacity: 0; }
+
 .rcx__top {
     position: relative; display: flex; align-items: center; justify-content: space-between;
     gap: 0.75rem; padding: 0.75rem 1rem;
