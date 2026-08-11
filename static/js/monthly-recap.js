@@ -290,12 +290,33 @@ class MonthlyRecapManager {
         const card = frame.firstElementChild;
         if (!card) return;
 
+        // Height available to the card, derived from the COLUMN rather than the frame's own box. Reading
+        // the frame's height would be circular once the frame hugs its scaled content, and clearing the
+        // height to re-measure would force a synchronous layout every time.
+        const availableHeight = () => {
+            const wrap = frame.parentElement;
+            const cs = getComputedStyle(wrap);
+            const gap = parseFloat(cs.rowGap) || 0;
+            let used = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)
+                     + gap * Math.max(0, wrap.children.length - 1);
+            for (const el of wrap.children) {
+                if (el !== frame) used += el.getBoundingClientRect().height;
+            }
+            return Math.max(0, wrap.clientHeight - used);
+        };
+
         const fit = () => {
-            const bw = frame.clientWidth, bh = frame.clientHeight;
+            const bw = frame.clientWidth, bh = availableHeight();
             const cw = card.offsetWidth, ch = card.offsetHeight;
             if (!cw || !ch) return;
             // Never scale UP: past 1:1 it is a blurry enlargement of a fixed-size render.
-            frame.style.setProperty('--rcx-card-scale', String(Math.min(1, bw / cw, bh / ch)));
+            const scale = Math.min(1, bw / cw, bh / ch);
+            frame.style.setProperty('--rcx-card-scale', String(scale));
+            // Hug the SCALED card. `transform` does not affect layout, so a frame left to size itself
+            // stays full card-height however far down the card was scaled -- on a phone that is a 630px
+            // box around a 180px card, which pushed the label to the top of the stage and left the
+            // buttons stranded at the bottom. With the frame hugging, the column centres as one stack.
+            frame.style.height = `${Math.round(ch * scale)}px`;
         };
         fit();
         this._fitCard = PlatPursuit.debounce(fit, 120);

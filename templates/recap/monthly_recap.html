@@ -100,6 +100,10 @@ PlatPursuit.takeover. {% endcomment %}
         {# Tap zones sit UNDER the slides (z-index), so a quiz option always wins the click. #}
         <button type="button" class="rcx__zone rcx__zone--prev" id="prev-slide" aria-label="Previous"></button>
         <button type="button" class="rcx__zone rcx__zone--next" id="next-slide" aria-label="Next"></button>
+        {% comment %} Washes show how far each click region actually extends; the arrows only ever showed
+        which direction. They sit above the slide but take no pointer events. {% endcomment %}
+        <span class="rcx__wash rcx__wash--prev" aria-hidden="true"></span>
+        <span class="rcx__wash rcx__wash--next" aria-hidden="true"></span>
         <span class="rcx__aim rcx__aim--prev" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                  stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>

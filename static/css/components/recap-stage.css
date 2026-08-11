@@ -271,6 +271,30 @@
 .rcx__aim svg { width: 1.35rem; height: 1.35rem; }
 .rcx__aim--prev { left: 1rem;  transform: translateX(8px); }
 .rcx__aim--next { right: 1rem; transform: translateX(-8px); }
+/* The REGION, not just the direction. The arrows are pinned at the edges while the backward hit area
+   runs 25% inward, so they said which way a click would go and nothing about how far that side extends --
+   a click at 20% of the width is nowhere near the left arrow and still goes back. This washes the side
+   you are aiming at across its ACTUAL extent, so the boundary is visible before you commit rather than
+   inferred after being surprised by it. Sized off the same 25/75 split `isBackwardEdge` uses. */
+.rcx__wash {
+    position: absolute; top: 0; bottom: 0; z-index: 1; pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+.rcx__wash--prev {
+    left: 0; width: 25%;
+    background: linear-gradient(90deg, color-mix(in oklab, var(--rcx-accent) 20%, transparent), transparent);
+}
+.rcx__wash--next {
+    right: 0; width: 75%;
+    background: linear-gradient(270deg, color-mix(in oklab, var(--rcx-accent) 14%, transparent), transparent);
+}
+.rcx.is-aim-back .rcx__wash--prev { opacity: 1; }
+.rcx.is-aim-fwd  .rcx__wash--next { opacity: 1; }
+.rcx.is-ending .rcx__wash, .rcx.is-card-only .rcx__wash { opacity: 0; }
+/* Touch has no hover to preview with, so the wash would only ever flash under a finger mid-tap. */
+@media (hover: none) { .rcx__wash { display: none; } }
+
 /* ALWAYS visible while the deck plays -- not conditional on pointer state at all.
    Tying their visibility to `is-aim-*` meant they were absent whenever the pointer was outside the
    window, had not moved since the stage opened, or had triggered a `pointerleave`. An affordance that
@@ -278,13 +302,18 @@
    still lifts to full and takes the accent, so the answer to "which way will this click go" is on screen
    before you commit -- but the pair itself is simply there. */
 .rcx .rcx__aim { opacity: 0.55; transform: none; }
-.rcx.is-ending .rcx__aim, .rcx.is-card-only .rcx__aim { opacity: 0; }
 .rcx.is-aim-back .rcx__aim--prev,
 .rcx.is-aim-fwd  .rcx__aim--next {
     opacity: 1;
     background: color-mix(in oklab, var(--rcx-accent) 26%, transparent);
     border-color: color-mix(in oklab, var(--rcx-accent) 55%, transparent);
 }
+/* Scene beats aim, and the scene rules must therefore OUTRANK the aim ones rather than merely precede
+   them. `is-aim-fwd` is set the moment the pointer moves and is not cleared by reaching the ending, so an
+   equal-specificity hide placed above simply lost the cascade and left a lit arrow floating beside the
+   card. Doubling the state class settles it by weight, not by line order. */
+.rcx.is-ending.is-ending .rcx__aim,
+.rcx.is-card-only.is-card-only .rcx__aim { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .rcx__aim { transition: opacity 0.22s ease; } }
 /* No `hover: none` guard. A desktop with a touchscreen reports `hover: none` and would have hidden these
    entirely -- which is very likely why they were reported missing. The arrows are driven by pointer
@@ -429,7 +458,7 @@
 
 .rcx__card {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
-    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 0.85rem; padding: 0 1rem 1.25rem;
     height: 62%;
 }
@@ -461,7 +490,10 @@
    than letting it overflow or forcing a re-layout of markup that must stay pixel-exact for the PNG. */
 .rcx__card-frame {
     display: flex; align-items: center; justify-content: center;
-    max-width: 100%; min-height: 0; flex: 1;
+    max-width: 100%; min-height: 0;
+    /* Sized by JS to the card's SCALED height, so the column hugs the card instead of stretching around
+       it -- a growing frame made `justify-content` a no-op and pinned the label to the stage's top edge. */
+    flex: 0 0 auto;
     overflow: hidden;
 }
 .rcx__card-frame > * {

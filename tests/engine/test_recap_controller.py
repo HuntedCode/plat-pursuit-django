@@ -412,3 +412,86 @@ def test_a_blocked_beat_leaves_no_stale_end_time(js):
     assert 'if (!this.beatTimer)' in _method(js, 'holdBeat'), (
         'holdBeat captures a remainder even when no beat is running'
     )
+
+
+# --- The card scene's composition -----------------------------------------------------------------
+
+def _css():
+    return (ROOT / 'static' / 'css' / 'components' / 'recap-stage.css').read_text(encoding='utf-8')
+
+
+def _rules(css):
+    """(selector, declarations, order) for every top-level rule, comments stripped. Good enough for this
+    one stylesheet: it has no nested at-rules around the selectors under test."""
+    css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+    css = re.sub(r'@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}', '', css, flags=re.S)
+    return [(m.group(1).strip(), m.group(2), i)
+            for i, m in enumerate(re.finditer(r'([^{}]+)\{([^{}]*)\}', css))]
+
+
+def _specificity(sel):
+    """(ids, classes, elements). Repeated classes count separately -- that repetition is the lever used
+    to settle this cascade, so a resolver that collapsed them would miss the whole point."""
+    return (sel.count('#'), len(re.findall(r'\.[\w-]+|\[|:(?!:)', sel)), len(re.findall(r'(?<![\w.#:-])[a-z]+', sel)))
+
+
+def _resolve(css, target_classes, element_classes, prop):
+    """The winning declaration of `prop` on an element carrying `element_classes`, inside a stage carrying
+    `target_classes`. Resolves by (specificity, source order), the way a browser does."""
+    have = set(target_classes) | set(element_classes)
+    winner = None
+    for sel, decls, order in _rules(css):
+        for one in sel.split(','):
+            one = one.strip()
+            if not one or not one.startswith('.rcx'):
+                continue
+            needed = set(re.findall(r'\.([\w-]+)', one))
+            if not needed <= have:
+                continue
+            m = re.search(rf'(?:^|;)\s*{prop}\s*:\s*([^;]+)', decls)
+            if not m:
+                continue
+            key = (_specificity(one), order)
+            if winner is None or key > winner[0]:
+                winner = (key, m.group(1).strip(), one)
+    return winner
+
+
+def test_the_ending_scene_outranks_the_pointer_aim_state():
+    """`is-aim-fwd` is set on the first pointer move and nothing clears it, so it is still on the stage
+    when the deck reaches its ending. The hide was written at equal specificity ABOVE the highlight, lost
+    the cascade, and left a lit arrow floating beside the share card -- a control pointing at a deck that
+    is no longer there. Resolved rather than pattern-matched, because the bug was the RESOLUTION."""
+    css = _css()
+    for scene in ('is-ending', 'is-card-only'):
+        won = _resolve(css, ['rcx', scene, 'is-aim-fwd'], ['rcx__aim', 'rcx__aim--next'], 'opacity')
+        assert won and won[1] == '0', (
+            f'with the pointer aimed forward, {scene} leaves the arrow at {won and won[1]} (from `{won and won[2]}`)'
+        )
+
+
+def test_the_card_frame_hugs_the_scaled_card():
+    """`transform: scale` does not change layout, so a frame left to size itself stayed full card-height
+    however far the card was scaled down -- on a phone, a 630px box around a 180px card. The column then
+    had nothing left to centre and pinned the label to the top edge of the stage."""
+    css, code = _css(), _code(CONTROLLER.read_text(encoding='utf-8'))
+    frame = css[css.index('.rcx__card-frame {'):]
+    frame = frame[:frame.index('}')]
+    assert 'flex: 0 0 auto' in frame, 'a growing frame makes justify-content a no-op'
+    assert 'justify-content: center' in css[css.index('.rcx__card {'):css.index('.rcx__card {') + 300]
+
+    fit = code[code.index('const fit = ()'):]
+    fit = fit[:fit.index('\n        };')]
+    assert 'frame.style.height' in fit, 'the frame never hugs, so the stack cannot centre'
+    assert 'ch * scale' in fit, 'hugging the UNSCALED height reintroduces the empty box'
+
+
+def test_the_available_height_is_not_read_from_the_frame_itself():
+    """Once the frame is sized from the scale, reading its own height to compute that scale is circular:
+    the second fit (a resize) would measure the hugged box and lock the card at whatever size it already
+    had. The measurement has to come from the column."""
+    code = _code(CONTROLLER.read_text(encoding='utf-8'))
+    fit = code[code.index('const fit = ()'):]
+    fit = fit[:fit.index('\n        };')]
+    assert 'frame.clientHeight' not in fit, 'the fit measures the box it is about to set'
+    assert 'availableHeight()' in fit
