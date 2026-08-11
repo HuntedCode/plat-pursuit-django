@@ -39,7 +39,11 @@ class MonthlyRecapManager {
         // DOM elements
         this.slidesContainer = document.getElementById('recap-slides');
         this.progressDots = document.getElementById('progress-dots');
-        this.BEAT_MS = 5200;          // long enough to read a beat, short enough to keep moving
+        // Pacing is DERIVED, not fixed. One beat is a single number and the next is a month of calendar
+        // days; a single duration makes the short ones drag and cuts the dense ones off mid-read.
+        this.BEAT_MIN_MS = 4000;
+        this.BEAT_MAX_MS = 9500;
+        this.READ_MS_PER_WORD = 260;      // ~230 wpm, plus room to look at the art rather than read it
         this.beatTimer = null;
         this.stageOpen = false;       // the deck does not run until the hunter enters
         this.prevBtn = document.getElementById('prev-slide');
@@ -285,13 +289,16 @@ class MonthlyRecapManager {
         const live = this.bars[index];
         if (!live) return;
         if (this.prefersReducedMotion) { live.classList.add('is-done'); return; }
-        // Reset without a transition, force layout, then let it run -- otherwise the fill animates
-        // BACKWARDS from wherever the previous beat left it.
+
+        // Rewind, then run. The inline width MUST be cleared before `is-live` lands: an inline style
+        // beats the `.is-live i { width: 100% }` class rule, so leaving `width: 0` on the element pinned
+        // the bar at zero for the entire beat and the timer never appeared to move.
         const fill = live.querySelector('i');
         fill.style.transition = 'none';
         fill.style.width = '0';
-        void fill.offsetWidth;
+        void fill.offsetWidth;            // commit the rewind before re-enabling the transition
         fill.style.transition = '';
+        fill.style.width = '';            // hand the width back to the stylesheet
         live.classList.add('is-live');
     }
 
@@ -499,7 +506,24 @@ class MonthlyRecapManager {
         const waiting = this.quizManager.isQuizSlide(type) && !this.quizManager.canNavigate(type);
         this.container.classList.toggle('is-waiting', waiting);
         if (waiting || this.currentSlide >= this.slides.length - 1) return;
-        this.beatTimer = setTimeout(() => this.nextSlide(), this.BEAT_MS);
+
+        const slideEl = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
+        const ms = this.beatDuration(slideEl);
+        this.container.style.setProperty('--rcx-beat', ms + 'ms');   // the timer bar runs for exactly this long
+        this.beatTimer = setTimeout(() => this.nextSlide(), ms);
+    }
+
+    /**
+     * How long this beat gets: reading time for its words, plus a beat per thing to look at (a cover, a
+     * medallion, a calendar cell), clamped so nothing races or stalls. Measured off the rendered slide,
+     * so a beat that grows new content is paced correctly without anyone updating a table.
+     */
+    beatDuration(slideEl) {
+        if (!slideEl) return this.BEAT_MIN_MS;
+        const words = (slideEl.textContent || '').trim().split(/\s+/).filter(Boolean).length;
+        const things = slideEl.querySelectorAll('img, .scard, .pp-med, .activity-dot, .rcp__chip').length;
+        const ms = 1400 + words * this.READ_MS_PER_WORD + Math.min(things, 24) * 90;
+        return Math.round(Math.min(this.BEAT_MAX_MS, Math.max(this.BEAT_MIN_MS, ms)));
     }
 
     stopBeatTimer() {
@@ -951,16 +975,16 @@ class MonthlyRecapManager {
         previewInner.style.transform = `scale(${scale})`;
     }
 
-    triggerSlideEffects(slide) {
-        if (slide.type === 'platinums' || slide.type === 'summary') {
-            // Fire confetti
-            if (window.PlatPursuit && window.PlatPursuit.CelebrationManager) {
-                window.PlatPursuit.CelebrationManager.loadConfetti().then(() => {
-                    window.PlatPursuit.CelebrationManager.fireSideConfetti(2000);
-                }).catch(() => {});
-            }
-        }
-    }
+    /**
+     * Deliberately empty, and kept as a seam rather than deleted so the call site stays honest about
+     * where a per-beat effect WOULD go.
+     *
+     * This used to fire side-confetti on both the platinums and the summary beats. Anti-reference #4:
+     * casual mobile games over-celebrate everything, and we celebrate the meaningful moments and let the
+     * rest breathe. Two confetti bursts in one deck is not a celebration, it is a texture -- and on a
+     * paced ceremony the beats now carry their own weight through choreography instead.
+     */
+    triggerSlideEffects() {}
 
     setupShareButtons() {
         // Download button

@@ -193,6 +193,58 @@
     font-size: 0.95rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-dim);
 }
 .rcx .rcp__caption { font-size: 1.1rem; }
+
+/* A full screen is a lot of room, and a 34rem column centred in it reads as a small card floating in the
+   dark -- the very thing the dissolve was meant to stop. Beats grow into the space they are given: the
+   type scales up, and beats that carry a GRID (covers, medallions, the calendar, the year bars) get real
+   width instead of wrapping inside a column sized for prose. */
+@media (min-width: 1024px) {
+    .rcx .rcp { max-width: 42rem; }
+    .rcx .rcp--wide { max-width: 58rem; }
+    .rcx .rcp .pp-tally--hero { font-size: clamp(4.5rem, 7.5vw, 7.5rem); }
+    .rcx .rcp .pp-tally--xl { font-size: clamp(2.5rem, 4vw, 3.75rem); }
+    .rcx .rcp__kicker { font-size: 1.05rem; }
+    .rcx .rcp__caption { font-size: 1.3rem; }
+    .rcx .rcp__flavor { font-size: 1rem; }
+    /* The SUBJECT of a hero beat scales too. Scaling only the type left the thing the beat is actually
+       about -- a trophy, a date, a streak -- at its in-a-card size, floating in a screen of space. */
+    .rcx .rcp-trophy__icon { width: 9rem; height: 9rem; margin-bottom: 1.75rem; }
+    .rcx .rcp-trophy__name { font-size: 2.4rem; }
+    .rcx .rcp-trophy__game { font-size: 1.15rem; }
+    .rcx .rcp__mark-icon { width: 5rem; height: 5rem; }
+    .rcx .rcp__flame-icon { width: 4.5rem; height: 4.5rem; }
+    .rcx .rcp-date { padding: 1.25rem 2rem; gap: 1.25rem; }
+    .rcx .rcp-date__icon { width: 3rem; height: 3rem; }
+    .rcx .rcp-date__day { font-size: 1.9rem; }
+    .rcx .rcp-date__full { font-size: 1rem; }
+    .rcx .rcp__stamp { font-size: 0.85rem; padding: 0.4rem 1.1rem; }
+    .rcx .rcp__chip { font-size: 0.95rem; padding: 0.55rem 1.1rem; }
+
+    /* The grids themselves get bigger cells, or wider just means more gutter. */
+    .rcx .rcp-covers { gap: 1rem; }
+    .rcx .rcp-med .pp-med { --sz: 132px; }
+    .rcx .rcp-cal__cell { width: 2.75rem; height: 2.75rem; }
+    .rcx .rcp-years__track { width: 3rem; height: 7rem; }
+    .rcx .rcp-clock__track { width: 3.25rem; height: 6rem; }
+    .rcx .rcp__mark svg { width: 6rem; height: 6rem; }
+}
+
+/* Per-beat choreography, on the SHARED primitive rather than a per-slide animation: the parts of a beat
+   arrive in sequence after the beat itself lands (anticipation, then follow-through), which is the whole
+   difference between content appearing and content being presented. `.rcp`'s direct children are exactly
+   the right units -- kicker, figure, caption, body, flavor. `.stagger-item`s inside the body are
+   grandchildren, so their own cascade still runs underneath this one.
+   `backwards` holds the hidden start state through the delay so nothing flashes before its turn. */
+@media (prefers-reduced-motion: no-preference) {
+    .rcx .recap-slide.active .rcp > * {
+        animation: rcxPartIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+    }
+    .rcx .recap-slide.active .rcp > *:nth-child(2) { animation-delay: 0.09s; }
+    .rcx .recap-slide.active .rcp > *:nth-child(3) { animation-delay: 0.18s; }
+    .rcx .recap-slide.active .rcp > *:nth-child(4) { animation-delay: 0.27s; }
+    .rcx .recap-slide.active .rcp > *:nth-child(n+5) { animation-delay: 0.34s; }
+}
+@keyframes rcxPartIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 /* The parts that ARE objects keep their surfaces -- dissolving the shell must not dissolve the content. */
 .rcx .rcp .scard,
 .rcx .rcp .rcp-date,
