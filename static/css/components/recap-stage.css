@@ -106,17 +106,42 @@
 .rcx.is-in { opacity: 1; }
 
 /* Every beat sets its own accent; the WHOLE stage takes it, not just the card. This is what makes the
-   surface change character between beats instead of being one box with swapped contents. */
-.rcx { --rcx-accent: var(--pp-primary); }
+   surface change character between beats instead of being one box with swapped contents.
+ *
+ * REGISTERED as a colour so it can actually TWEEN. `transition: background` on a gradient does nothing
+ * useful -- browsers cannot interpolate two gradient images, so they swap discretely at the halfway
+ * point. The old rule read like a fade and behaved like a snap with a delay in front of it. Registering
+ * the custom property means the ACCENT interpolates, and every surface derived from it -- the ground, the
+ * aura, the type, the stamps -- crossfades together for free. Same trick frame.css and
+ * badge-medallion.css already use for their own animated properties. */
+@property --rcx-accent {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: oklch(86% 0.142 206);   /* --pp-primary; @property cannot reference a var() here */
+}
+.rcx {
+    --rcx-accent: var(--pp-primary);
+    transition: --rcx-accent 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+}
 .rcx[data-accent="secondary"] { --rcx-accent: var(--pp-secondary); }
 .rcx[data-accent="accent"]    { --rcx-accent: var(--pp-accent); }
 .rcx[data-accent="success"]   { --rcx-accent: var(--pp-success); }
 
 .rcx__ground {
-    position: absolute; inset: 0; pointer-events: none;
+    position: absolute; inset: -18%; pointer-events: none;
     background: radial-gradient(130% 85% at 50% 0%,
         color-mix(in oklab, var(--rcx-accent) 24%, var(--pp-bg-0)) 0%, var(--pp-bg-0) 62%);
-    transition: background 0.7s ease;
+}
+/* The bloom BREATHES rather than sitting still: a very slow transform on an over-inset layer, so the
+   gradient's centre wanders and its falloff opens and closes without any edge ever coming into view.
+   Transform only -- it stays on the compositor, and this is a viewport-sized element where animating
+   anything that triggers paint would cost real frames on a phone. */
+@media (prefers-reduced-motion: no-preference) {
+    .rcx__ground { animation: rcxBreathe 26s ease-in-out infinite alternate; }
+}
+@keyframes rcxBreathe {
+    from { transform: translate3d(-3%, -2%, 0) scale(1.04); }
+    to   { transform: translate3d(3%, 2%, 0) scale(1.14); }
 }
 /* Two slow blooms. Behind everything, never animated per-frame over a backdrop-filter, and the only
    ambient motion on the surface -- restraint is the difference between atmosphere and a screensaver. */
@@ -130,9 +155,10 @@
 .rcx__aura span:nth-child(2) { right: 2%; bottom: 2%; width: 38%; }
 @media (prefers-reduced-motion: no-preference) {
     .rcx__aura span:nth-child(1) { animation: rcxDrift 17s ease-in-out infinite alternate; }
-    .rcx__aura span:nth-child(2) { animation: rcxDrift 21s ease-in-out infinite alternate-reverse; }
+    .rcx__aura span:nth-child(2) { animation: rcxDriftB 23s ease-in-out infinite alternate; }
 }
 @keyframes rcxDrift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(6%, 5%, 0) scale(1.15); } }
+@keyframes rcxDriftB { from { transform: translate3d(2%, -4%, 0) scale(1.1); } to { transform: translate3d(-5%, 3%, 0) scale(0.94); } }
 
 /* Segmented timer. The clearest possible "this is a story, it has a length and a pace" signal, and the
    thing a row of dots can never say. */
@@ -278,20 +304,58 @@
 }
 .rcx.is-underway .rcx__hint { opacity: 0; }
 
-/* The card scene: the ceremony's ending. Sits over the stage rather than beside it, so arriving here is
-   a transition within the ceremony and not an exit from it. */
+/* The ending is ONE composition, not a cut. The summary lands, holds for its beat, and then RISES to
+   become the title of the screen while the card arrives underneath it -- so the last thing the ceremony
+   does is recompose itself, rather than covering itself with a different panel.
+ *
+ * That is why the card is NOT an inset overlay: it occupies the lower half of the same stage, and the
+ * summary is moved up out of its way. Both are visible together, which is the whole point. */
+/* The summary REDUCES to a header rather than just moving: its supporting parts fold away so what
+   remains -- the mark and the headline -- can sit in the band above the card. Lifting the whole slide
+   without shedding anything pushed the headline off the top of the screen and left only the icon, which
+   is the opposite of "one cohesive end screen". */
+.rcx.is-ending .recap-slide.active {
+    justify-content: flex-start;
+    transform: scale(0.82);
+    transform-origin: top center;
+    transition: transform 0.75s cubic-bezier(0.22, 1, 0.3, 1);
+}
+.rcx.is-ending .recap-slide.active .rcp__body,
+.rcx.is-ending .recap-slide.active .rcp__cue {
+    opacity: 0;
+    max-height: 0;
+    margin: 0;
+    overflow: hidden;
+    transition: opacity 0.35s ease, max-height 0.6s cubic-bezier(0.22, 1, 0.3, 1), margin 0.6s ease;
+}
+.rcx.is-ending .recap-slide.active .rcp__mark { margin-bottom: 0.4rem; }
+/* It is a HEADER now, so it takes header sizing. Left at hero scale the headline wrapped to two lines
+   and the second one went behind the card. */
+.rcx.is-ending .recap-slide.active .pp-tally--hero {
+    font-size: clamp(1.9rem, 4.5vw, 2.9rem);
+    transition: font-size 0.6s cubic-bezier(0.22, 1, 0.3, 1);
+}
+.rcx.is-ending .recap-slide.active .rcp__mark svg,
+.rcx.is-ending .recap-slide.active .rcp__mark-icon { width: 3rem; height: 3rem; }
+@media (prefers-reduced-motion: reduce) {
+    .rcx.is-ending .recap-slide.active { transition: none; }
+    .rcx.is-ending .recap-slide.active .rcp__body,
+    .rcx.is-ending .recap-slide.active .rcp__cue { transition: none; }
+}
+
 .rcx__card {
-    position: absolute; inset: 0; z-index: 3;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 1rem; padding: 1.5rem 1rem;
-    background: color-mix(in oklab, var(--pp-bg-0) 88%, transparent);
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    gap: 0.85rem; padding: 0 1rem 1.25rem;
+    height: 62%;
 }
 .rcx__card[hidden] { display: none; }
 @media (prefers-reduced-motion: no-preference) {
-    .rcx__card { animation: rcxCardIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    /* Rises INTO the space the summary just vacated, a beat behind it, so the two moves read as one
+       gesture handing off rather than two things happening at once. */
+    .rcx__card { animation: rcxCardIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both; }
 }
-/* Arrives as a settle rather than a slide: the deck has stopped moving and this is what it leaves you. */
-@keyframes rcxCardIn { from { opacity: 0; transform: translateY(18px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes rcxCardIn { from { opacity: 0; transform: translateY(42px); } to { opacity: 1; transform: none; } }
 
 .rcx__card-label {
     font-size: 0.78rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;

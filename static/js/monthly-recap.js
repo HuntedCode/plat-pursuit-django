@@ -269,6 +269,9 @@ class MonthlyRecapManager {
 
         this.stopBeatTimer();
         frame.innerHTML = this.cardHtml;
+        // `is-ending` lifts the summary out of the way; the card rises into the space it leaves. One
+        // composition recomposing itself, rather than a panel covering a slide.
+        this.container.classList.add('is-ending');
         scene.hidden = false;
 
         const card = frame.firstElementChild;
@@ -314,6 +317,7 @@ class MonthlyRecapManager {
         this.stageOpen = false;
         this.stopBeatTimer();
         clearTimeout(this._cardTimer);
+        this.container.classList.remove('is-ending');
         if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
         this.handle = null;
         const shareSection = document.getElementById('share-section');
@@ -698,6 +702,7 @@ class MonthlyRecapManager {
             }, this.beatDuration(slideEls[index]));
         } else {
             clearTimeout(this._cardTimer);
+            this.container.classList.remove('is-ending');
             if (card) card.hidden = true;
             if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
         }
