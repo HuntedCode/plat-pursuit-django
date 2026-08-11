@@ -340,6 +340,7 @@ class MonthlyRecapManager {
     onStageClosed() {
         this.stageOpen = false;
         this.container.classList.remove('is-card-only');
+        this.cancelResume();
         this.stopBeatTimer();
         clearTimeout(this._cardTimer);
         this.container.classList.remove('is-ending');
@@ -700,6 +701,7 @@ class MonthlyRecapManager {
      * The bug that actually made the bars wrong was in the CSS -- see `is-waiting` in recap-stage.css.
      */
     armBeat(index, slideEl) {
+        this.cancelResume();          // a queued resume belongs to the beat we are leaving
         this._beatLeft = null;
         this._beatMs = this.beatDuration(slideEl);
         this.container.style.setProperty('--rcx-beat', this._beatMs + 'ms');
@@ -724,7 +726,9 @@ class MonthlyRecapManager {
         if (blocked || this.currentSlide >= this.slides.length - 1) return;
 
         // A resume runs the REMAINDER; a fresh beat uses the length armBeat already wrote.
-        const ms = this._beatLeft != null ? this._beatLeft : (this._beatMs || this.BEAT_MIN_MS);
+        const ms = this._beatLeft != null
+            ? this._floor(this._beatLeft)
+            : (this._beatMs || this.BEAT_MIN_MS);
         if (this._beatLeft != null) {
             this.container.style.setProperty('--rcx-beat', ms + 'ms');
             this._beatLeft = null;
@@ -763,14 +767,31 @@ class MonthlyRecapManager {
         this.container.classList.add('is-held');
     }
 
-    /** Resume with what is LEFT of the beat, not a fresh one -- holding to finish reading a slide should
-     *  not hand you the whole slide again. */
+    /**
+     * Resume with what is LEFT of the beat, not a fresh one -- holding to finish reading a slide should
+     * not hand you the whole slide again.
+     *
+     * Resuming on the NEXT FRAME, not immediately, and that is the important part. Every click is also a
+     * pointerdown/pointerup pair, so a click late in a beat leaves a near-zero remainder here; scheduling
+     * that straight away can fire it in the gap between `pointerup` and `click` and advance the deck
+     * BEFORE the click does -- two slides for one click. Deferring a frame means a pending click always
+     * navigates first, and `armBeat` cancels this resume when it does. The race is gone by construction
+     * rather than by the timings happening to work out.
+     */
     releaseBeat() {
         if (!this.container.classList.contains('is-held')) return;
         this.container.classList.remove('is-held');
         const fill = this.container.querySelector('.rcx__bar.is-live i');
         if (fill) fill.style.width = '';        // back to the stylesheet, which runs it to 100%
-        this.startBeatTimer();
+        this.cancelResume();
+        this._resumeFrame = requestAnimationFrame(() => {
+            this._resumeFrame = null;
+            this.startBeatTimer();
+        });
+    }
+
+    cancelResume() {
+        if (this._resumeFrame) { cancelAnimationFrame(this._resumeFrame); this._resumeFrame = null; }
     }
 
     /**
@@ -788,6 +809,12 @@ class MonthlyRecapManager {
 
     stopBeatTimer() {
         if (this.beatTimer) { clearTimeout(this.beatTimer); this.beatTimer = null; }
+    }
+
+    /** Floor on any scheduled advance. A remainder of a millisecond is not a beat -- it is a slide
+     *  flashing past -- and it is exactly the value a click late in a beat leaves behind. */
+    _floor(ms) {
+        return Math.max(250, ms);
     }
 
     goToSlide(index) {
