@@ -337,18 +337,22 @@
  *
  * Slower, too -- 1.15s. This is the deck's closing gesture and the only one nobody is waiting to skip. */
 .rcx.is-ending .recap-slide.active {
-    /* The entrance animation MUST be cleared here. `rcxInFwd` runs with `both`, so its final keyframe
-       (`transform: none`) keeps applying after it finishes -- and a running animation outranks both a
-       transition and a plain declaration in the cascade. So this transform was being overridden and the
-       summary never moved.
-       It worked in an earlier pass only by accident: that version also flipped `justify-content`, which
-       an animation cannot override, so the LAYOUT change was doing the moving and the transform was
-       already dead. Removing the layout flip (to stop the jump) removed the only thing that was working.
-       The entrance has long finished by the time this class lands, so clearing it costs nothing. */
-    animation: none;
-    transform: translate3d(0, -30%, 0) scale(0.58);
-    transition: transform 1.15s cubic-bezier(0.32, 0.72, 0.24, 1);
+    /* An ANIMATION, not a transition, and this is the whole reason the lift kept snapping.
+     *
+     * The entrance (`rcxInFwd`) runs with fill `both`, so `transform` is animation-controlled even after
+     * it finishes. Per spec a transition does not start on a property the previous style was animating --
+     * so setting `animation: none` and a new transform in the same recalculation gives no interpolation
+     * at all: the browser jumps straight to the end value. Profiling caught it, one moving frame out of
+     * a 1.15s window.
+     *
+     * A second animation has no such conflict: animations always play, and this one simply replaces the
+     * entrance. `forwards` holds the end state so it does not snap back. */
+    animation: rcxLift 1.15s cubic-bezier(0.32, 0.72, 0.24, 1) forwards;
     will-change: transform;
+}
+@keyframes rcxLift {
+    from { transform: none; }
+    to   { transform: translate3d(0, -30%, 0) scale(0.58); }
 }
 .rcx.is-ending .recap-slide.active .rcp__body,
 .rcx.is-ending .recap-slide.active .rcp__cue {
@@ -356,7 +360,11 @@
     transition: opacity 0.55s ease;
 }
 @media (prefers-reduced-motion: reduce) {
-    .rcx.is-ending .recap-slide.active { transition: none; }
+    /* Still recomposes -- it is the layout of the end screen, not decoration -- just without the travel. */
+    .rcx.is-ending .recap-slide.active {
+        animation: none;
+        transform: translate3d(0, -30%, 0) scale(0.58);
+    }
     .rcx.is-ending .recap-slide.active .rcp__body,
     .rcx.is-ending .recap-slide.active .rcp__cue { transition: none; }
 }
@@ -367,11 +375,23 @@
     gap: 0.85rem; padding: 0 1rem 1.25rem;
     height: 62%;
 }
-.rcx__card[hidden] { display: none; }
+/* Mounted and LAID OUT for the whole deck, just not visible. `display: none` would skip layout, which
+   only defers the cost to the frame the ending transition starts in -- which is what made it jump.
+   visibility also keeps its controls out of the tab order while it is not the active scene. */
+.rcx__card {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+.rcx.is-ending .rcx__card {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
 @media (prefers-reduced-motion: no-preference) {
     /* Rises INTO the space the summary just vacated, a beat behind it, so the two moves read as one
        gesture handing off rather than two things happening at once. */
-    .rcx__card { animation: rcxCardIn 1.05s cubic-bezier(0.32, 0.72, 0.24, 1) 0.32s both; }
+    .rcx.is-ending .rcx__card { animation: rcxCardIn 1.05s cubic-bezier(0.32, 0.72, 0.24, 1) 0.32s both; }
 }
 @keyframes rcxCardIn { from { opacity: 0; transform: translate3d(0, 56px, 0); } to { opacity: 1; transform: none; } }
 

@@ -250,6 +250,8 @@ class MonthlyRecapManager {
         try {
             const data = await PlatPursuit.API.get(`/api/v1/recap/${this.year}/${this.month}/html/`);
             this.cardHtml = (data && data.html) || '';
+            // Mount immediately: the layout cost is paid here, mid-deck, where nothing is animating.
+            this.mountCard();
         } catch (err) {
             this.cardHtml = '';
         }
@@ -262,31 +264,41 @@ class MonthlyRecapManager {
      * re-laying it out for the screen would mean the thing you looked at and the thing you downloaded
      * were different objects. So it is SCALED to fit instead.
      */
+    /**
+     * Put the card in the DOM and measure it NOW, long before the ending needs it. It is laid out but
+     * invisible (visibility, not display -- `display: none` skips layout entirely, which would just
+     * defer the same cost to the worst possible moment).
+     */
+    mountCard() {
+        const frame = document.getElementById('recap-card-frame');
+        if (!frame || !this.cardHtml || frame.firstElementChild) return;
+
+        frame.innerHTML = this.cardHtml;
+        const card = frame.firstElementChild;
+        if (!card) return;
+
+        const fit = () => {
+            const bw = frame.clientWidth, bh = frame.clientHeight;
+            const cw = card.offsetWidth, ch = card.offsetHeight;
+            if (!cw || !ch) return;
+            // Never scale UP: past 1:1 it is a blurry enlargement of a fixed-size render.
+            frame.style.setProperty('--rcx-card-scale', String(Math.min(1, bw / cw, bh / ch)));
+        };
+        fit();
+        this._fitCard = PlatPursuit.debounce(fit, 120);
+        window.addEventListener('resize', this._fitCard);
+    }
+
     showCardScene() {
         const scene = document.getElementById('recap-card');
-        const frame = document.getElementById('recap-card-frame');
-        if (!scene || !frame || !this.cardHtml) return;
+        if (!scene || !this.cardHtml) return;
 
         this.stopBeatTimer();
-        frame.innerHTML = this.cardHtml;
-        // `is-ending` lifts the summary out of the way; the card rises into the space it leaves. One
-        // composition recomposing itself, rather than a panel covering a slide.
+        this.mountCard();                       // no-op if it is already mounted, which it should be
+        scene.setAttribute('aria-hidden', 'false');
+        // The only work in this frame: one class. `is-ending` lifts the summary out of the way and the
+        // card rises into the space it leaves -- one composition recomposing itself.
         this.container.classList.add('is-ending');
-        scene.hidden = false;
-
-        const card = frame.firstElementChild;
-        if (card) {
-            const fit = () => {
-                const bw = frame.clientWidth, bh = frame.clientHeight;
-                const cw = card.offsetWidth, ch = card.offsetHeight;
-                if (!cw || !ch) return;
-                // Never scale UP: past 1:1 it is a blurry enlargement of a fixed-size render.
-                frame.style.setProperty('--rcx-card-scale', String(Math.min(1, bw / cw, bh / ch)));
-            };
-            fit();
-            this._fitCard = PlatPursuit.debounce(fit, 120);
-            window.addEventListener('resize', this._fitCard);
-        }
 
         const dl = document.getElementById('recap-download');
         if (dl && !dl._wired) {
@@ -723,7 +735,7 @@ class MonthlyRecapManager {
         } else {
             clearTimeout(this._cardTimer);
             this.container.classList.remove('is-ending');
-            if (card) card.hidden = true;
+            if (card) card.setAttribute('aria-hidden', 'true');
             if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
         }
 
@@ -872,21 +884,14 @@ class MonthlyRecapManager {
     /**
      * Rarest trophy slide - spotlight reveal effect
      */
-    animateRarestTrophySlide(slideEl) {
-        // The trophy icon carries `animate-spotlight-reveal` from the template; only the rarity stamp
-        // needs holding back, so it lands after the earn rate has finished counting.
-        const badge = slideEl.querySelector('.rcp__stamp');
-        if (badge) {
-            badge.style.opacity = '0';
-            badge.style.transform = 'scale(0.8)';
-
-            setTimeout(() => {
-                badge.style.transition = 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
-                badge.style.opacity = '1';
-                badge.style.transform = 'scale(1)';
-                badge.classList.add('animate-pulse-once');
-            }, 1200);
-        }
+    animateRarestTrophySlide() {
+        // Nothing. The trophy icon carries `animate-spotlight-reveal` from the template and the rarity
+        // stamp arrives on the shared `.rcp > *` cascade as the last child.
+        //
+        // This used to hold the stamp back with inline styles, which ran a frame AFTER the browser had
+        // already painted it -- so it appeared, vanished, and then animated in. A JS entrance can never
+        // beat the paint of the markup it is trying to hide; that has to come from CSS, and the cascade
+        // already does it.
     }
 
     /**

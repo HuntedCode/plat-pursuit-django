@@ -118,7 +118,7 @@ PlatPursuit.takeover. {% endcomment %}
     The card is live HTML from /html/ (a template render, not Playwright) so the transition is instant;
     only Download runs the renderer. Theme picking deliberately stays on the page below -- a payoff should
     not turn into a settings panel. {% endcomment %}
-    <div class="rcx__card" id="recap-card" hidden>
+    <div class="rcx__card" id="recap-card" aria-hidden="true">
         <p class="rcx__card-label">Your {{ month_name }} card</p>
         <div class="rcx__card-frame" id="recap-card-frame"></div>
         <div class="rcx__out">
