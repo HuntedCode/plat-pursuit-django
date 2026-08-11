@@ -319,6 +319,23 @@ def test_the_split_in_the_controller_matches_the_stylesheet():
     assert hold and f'width: {100 - 2 * pct}%' in hold.group(1), 'the middle does not fill what is left'
 
 
+def test_the_wash_has_no_horizontal_edge_of_its_own():
+    """The wash's box is `.rcx__stage`, which starts directly under the top bar and, on a manual beat,
+    ends directly above the row the Continue control sits in. Flat `top: 0` / `bottom: 0` therefore drew a
+    hard line along both seams: the tint appeared out of nothing mid-screen and read as the background
+    being clipped rather than as a region lighting up. The horizontal gradient carries the boundary that
+    matters; the vertical mask only has to keep the shape from having an edge nobody asked for."""
+    css = _css()
+    rule = re.search(r'\.rcx__wash\s*\{([^}]*)\}', css)
+    assert rule, 'no base wash rule'
+    body = rule.group(1)
+    assert 'mask-image' in body, 'the wash is cut flat at the stage boundary'
+    mask = re.search(r'[^-]mask-image:\s*linear-gradient\(([^)]*)\)', body)
+    assert mask and 'transparent 0' in mask.group(1) and mask.group(1).rstrip().endswith('transparent 100%'), (
+        'the mask does not reach transparent at BOTH ends, so one seam is still hard'
+    )
+
+
 def test_the_pause_latches_rather_than_following_the_finger(js):
     """Holding pauses only while a finger is down, which is the wrong gesture for the slides that most
     need it -- the dense ones you are trying to read. A tap in the middle latches instead, and a latch

@@ -139,6 +139,12 @@ latches, so a tap that lands there because you misjudged the edge pauses rather 
 The washes exist because the arrows are pinned at the extreme edges while the regions run 30% inward:
 they said which direction a click would go and nothing about how far that side extended.
 
+A wash is masked to transparent at its top and bottom. Its box is `.rcx__stage`, which begins directly
+under the top bar and (on a manual beat) ends directly above the Continue row, so a flat `top: 0` /
+`bottom: 0` drew a hard line along both seams -- the tint appeared out of nothing mid-screen and read as
+the background being clipped rather than as a region lighting up. The horizontal gradient is what carries
+the boundary; the vertical mask only stops the shape having an edge nobody asked for.
+
 The latch has four rules, and each of them was a way for a "paused" deck to start moving again:
 
 - `releaseBeat` returns early while pinned, so lifting the finger does not end it.
