@@ -387,7 +387,6 @@ class RecapShareImageHTMLView(APIView):
             'most_active_day': recap.most_active_day or {},
             'activity_calendar': recap.activity_calendar or {},
             # Badge stats
-            'badge_xp': recap.badge_xp_earned,
             'badges_count': recap.badges_earned_count,
             # Identity
             'is_plus': getattr(profile, 'is_plus', False),
@@ -625,7 +624,6 @@ class RecapSlidePartialView(APIView):
 
         elif slide_type == 'badges':
             return {
-                'xp_earned': recap.badge_xp_earned,
                 'badges_count': recap.badges_earned_count,
                 'badges': recap.badges_data or [],
                 'flavor_text': get_flavor_text('badges'),

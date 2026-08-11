@@ -27,6 +27,7 @@ The frontend renders slides via Django template partials fetched one-at-a-time f
 | `templates/recap/monthly_recap.html` | Main slide presentation page |
 | `templates/recap/recap_index.html` | Month picker + sync gate |
 | `templates/recap/partials/slides/` | 16 slide templates, all built on the `.rcp` shell |
+| `components/badge_medallion.html` | Composed by both badge slides (their payloads are frame dicts) |
 | `static/css/components/recap-deck.css` | Deck chrome, motion, activity ramp, `.rcp` shell + slide parts |
 | `templates/recap/partials/recap_share_card.html` | Share card HTML (landscape/portrait) |
 | `templates/emails/monthly_recap.html` | Non-spoiler teaser email with CTA |
@@ -163,11 +164,26 @@ Shared parts (`.rcp__stamp`, `.rcp__chips`, `.rcp__pair`, `.rcp-quiz__*`, ...) a
   `completion_card_service` and styles the band as a quiet `.rcp__stamp` so it cannot be mistaken for the
   site's scale.
 
-- **Badges in the recap are still the LEGACY `Badge` model.** `badges.html` and `quiz_closest_badge.html`
-  hand-roll the backdrop-plate-plus-subject stack rather than using `components/badge_medallion.html`,
-  because that partial reads a `GroupBadge` frame dict. Swap it in with the badge cutover, not before --
-  an adapter would be built on code the cutover deletes. `backdrop_url` is absent on recaps stored before
-  it was added, so the plate is gated in both templates.
+- **The recap reads the badge subsystem, never the legacy tables.** `UserBadge` / `UserBadgeProgress`
+  are written only by `badge_service`, which no live path calls (evaluation runs through `badge_apply`
+  from the `evaluate_badges` command), so the slides that read them were showing an empty or frozen set
+  for everybody. Both badge readers now use `UserGroupBadge` and `SeriesBadgeStanding`, and their
+  payloads ARE Medallion frame dicts, so both templates compose `components/badge_medallion.html`.
+  Pinned by `test_recap_deck_contract.py`.
+
+- **There is no badge-XP figure, deliberately.** The badge subsystem has no XP ledger --
+  `ProfileBadgeStanding.total_xp` is recomputed from scratch on every evaluation -- so "XP earned in
+  March" is not a question it can answer. It *is* derivable by re-running the engine and bucketing
+  `StageResult.base_date`, but that is the evaluator, and recap generation sits on the request path
+  behind a prefetch firing 8-16 concurrent slide requests. Approximating from completion bonuses alone
+  would undercount by roughly the whole stage drip. If monthly XP is wanted, the fix is an XP event
+  ledger (the shape `ContractXPGrant` already uses for jobs), not an engine run per page view.
+  `MonthlyRecap.badge_xp_earned` was dropped in `0287_drop_recap_badge_xp`.
+
+- **The closest-badge quiz only appears on the most recent completed month.** `SeriesBadgeStanding` is
+  live state with no history. Now that every month is openable, generating an old recap would freeze
+  TODAY'S progress into it and label it with that month, permanently, because the snapshot is persisted.
+  Older months return `None` and the frontend drops the slide.
 
 - **Three DOM contracts couple templates, controller and stylesheet**, and none of them raise when broken:
   `data-countup`, `.rcp-cal__cell` / `--plat`, and the quiz's `data-quiz-*` plus the `is-correct` /

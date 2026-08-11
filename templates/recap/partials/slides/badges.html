@@ -1,47 +1,36 @@
-{% load static %}
 {% comment %}
-Recap Slide: Badge Progress
-Variables: xp_earned, badges_count, badges (list of {name, tier, tier_name, has_image, image_url, backdrop_url}), flavor_text
+Recap Slide: Badges Earned
+Variables: badges_count, badges (list of Medallion frame dicts), flavor_text
 
-Badges read as OBJECTS here, not list rows: each sits on its tier backdrop plate the way the Medallion
-composes them everywhere else. This is a hand-rolled two-layer stack rather than components/badge_medallion.html
-because that partial reads a GroupBadge `frame` dict, and the recap still runs on the legacy Badge model --
-wiring an adapter would be building on code the badge cutover deletes. Swap it in with that cutover.
+Badges render as the Medallion, the same object treatment they get everywhere else on the site -- the
+payload from `get_badge_stats_for_month` IS a frame dict, so this composes the shared partial rather than
+restating it. An earlier pass hand-rolled a plate-plus-subject stack because the recap was still reading
+the legacy Badge model, which has no frame; it reads UserGroupBadge now, so the real component fits.
 
-`backdrop_url` is absent on recaps stored before it was added, so the plate is gated; those fall back to
-the bare subject, which is what they render today.
+There is no XP figure. The badge subsystem has no XP ledger (standings are recomputed from scratch), so
+"XP earned in March" is not a question it can answer -- see get_badge_stats_for_month.
 {% endcomment %}
-<div class="rcp rcp--accent-warm">
-    <p class="rcp__kicker">Badge progress</p>
+<div class="rcp rcp--wide rcp--accent-warm">
+    <p class="rcp__kicker">You earned</p>
 
-    {% if xp_earned > 0 %}
-    <div class="rcp__figure pp-tally pp-tally--hero"><span class="rcp__sign">+</span><span data-countup="{{ xp_earned }}">{{ xp_earned }}</span></div>
-    <p class="rcp__caption">badge XP earned</p>
-    {% endif %}
+    <div class="rcp__figure pp-tally pp-tally--hero" data-countup="{{ badges_count }}">{{ badges_count }}</div>
+    <p class="rcp__caption">badge{{ badges_count|pluralize }} this month</p>
 
     {% if badges %}
     <div class="rcp__body">
-        <p class="rcp__label">{{ badges_count }} badge{{ badges_count|pluralize }} earned</p>
-        <div class="rcp-badges">
-            {% for badge in badges|slice:":3" %}
-            <div class="rcp-badge stagger-item" style="animation-delay: {{ forloop.counter0|add:2 }}00ms;">
-                <span class="rcp-badge__art">
-                    {% if badge.backdrop_url %}
-                    <img class="rcp-badge__plate" src="{{ badge.backdrop_url }}" alt="" loading="lazy" draggable="false" />
-                    {% endif %}
-                    <img class="rcp-badge__subject" src="{% if badge.has_image %}{{ badge.image_url }}{% else %}{% static badge.image_url %}{% endif %}"
-                         alt="" loading="lazy" draggable="false" />
-                </span>
-                <span class="rcp-badge__body">
-                    <span class="rcp-badge__name">{{ badge.name }}</span>
-                    <span class="rcp-badge__tier">{{ badge.tier_name }}</span>
-                </span>
+        <div class="rcp-meds">
+            {% for badge in badges|slice:":4" %}
+            <div class="rcp-med stagger-item" style="animation-delay: {{ forloop.counter0|add:1 }}00ms;">
+                {% include 'components/badge_medallion.html' with frame=badge no_id=True %}
+                <p class="rcp-med__series">{{ badge.series_name }}</p>
+                <p class="rcp-med__edition">{{ badge.badge_name }}</p>
             </div>
             {% endfor %}
         </div>
+        {% if badges_count > 4 %}
+        <p class="rcp__hint">and {{ badges_count|add:"-4" }} more</p>
+        {% endif %}
     </div>
-    {% else %}
-    <p class="rcp__body rcp__flavor">No badges this month. The next one is always closer than it looks.</p>
     {% endif %}
 
     {% if flavor_text %}<p class="rcp__flavor">{{ flavor_text }}</p>{% endif %}

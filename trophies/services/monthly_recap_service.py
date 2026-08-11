@@ -214,7 +214,6 @@ class MonthlyRecapService:
             'quiz_total_trophies_data': quiz_total_trophies or {},
             'quiz_rarest_trophy_data': quiz_rarest_trophy or {},
             'quiz_active_day_data': quiz_active_day or {},
-            'badge_xp_earned': badge_stats['xp_earned'],
             'badges_earned_count': badge_stats['badges_count'],
             'badges_data': badge_stats['badges_data'],
             'badge_progress_quiz_data': badge_progress_quiz or {},
@@ -538,183 +537,172 @@ class MonthlyRecapService:
 
     @classmethod
     def get_badge_stats_for_month(cls, profile, year, month, user_tz=None):
-        """
-        Get badge XP and badges earned in the month.
+        """Badges earned in the month, as objects ready for the Medallion.
 
-        Includes both badge completion bonuses (3000 XP per badge) and
-        stage progress XP (tier-specific XP per concept completed).
+        Reads UserGroupBadge -- the badge system. The version this replaced read the legacy `UserBadge`
+        table, which nothing writes any more: the only writer is `badge_service`, which no live path
+        calls (evaluation runs through `badge_apply` from the `evaluate_badges` command). So the slide
+        was showing an empty or frozen set for everybody.
 
-        When a badge is earned, we attribute all its accumulated stage
-        progress XP to that month as a reasonable approximation.
+        NO XP figure. The badge subsystem deliberately has no XP ledger -- `ProfileBadgeStanding.total_xp`
+        is recomputed from scratch on every evaluation (badge_xp.recompute_standing), so "XP earned in
+        March" is not a question it can answer. It IS derivable by re-running the engine and bucketing
+        `StageResult.base_date`, but that is the evaluator, and recap generation sits on the request path
+        behind a prefetch that fires 8-16 concurrent slide requests. Inventing a number from the
+        completion bonuses alone would undercount by roughly the whole stage drip. If monthly XP is
+        wanted, the honest fix is an XP event ledger (the shape `ContractXPGrant` already uses for jobs),
+        not an engine run per page view.
+
+        `art_layers` are absolute static URLs and are SNAPSHOTTED onto the recap. Safe because the project
+        serves static through whitenoise's CompressedStaticFilesStorage, which does not hash filenames.
 
         Returns:
-            dict: {xp_earned, badges_count, badges_data}
+            dict: {badges_count, badges_data}
         """
-        from trophies.models import UserBadge
-        from trophies.services.xp_service import calculate_progress_xp_for_badge
-        from trophies.util_modules.constants import BADGE_TIER_XP
+        from trophies.models import UserGroupBadge
+        from trophies.services.badge_detail_service import group_medallion_layers
 
         start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
-        # Get badges earned this month
-        badges_earned = UserBadge.objects.filter(
-            profile=profile,
-            earned_at__gte=start_date,
-            earned_at__lt=end_date
-        ).select_related('badge')
+        earned = (
+            UserGroupBadge.objects
+            .filter(profile=profile, earned_at__gte=start_date, earned_at__lt=end_date)
+            .select_related('group_badge__series', 'group_badge__platform_group')
+            .order_by('earned_at')
+        )
 
-        total_xp = 0
         badges_data = []
-
-        for user_badge in badges_earned:
-            badge = user_badge.badge
-
-            # Badge completion bonus (3000 XP)
-            completion_xp = BADGE_TIER_XP
-
-            # Stage progress XP (tier-specific: Bronze/Gold=250, Silver/Plat=75)
-            # Uses badge.required_stages as completed concepts count
-            progress_xp = calculate_progress_xp_for_badge(
-                badge,
-                badge.required_stages if badge.required_stages > 0 else 0
-            )
-
-            total_xp += completion_xp + progress_xp
-
-            # Build badge display data. `backdrop` is the tier plate the badge sits ON everywhere else on
-            # the site (the Medallion treatment) -- without it the subject's white rim-light traces the bare
-            # art. It is always a static path, so it is resolved here rather than reassembled in the
-            # template from `tier`. `main` may be either static or media, which is what `has_image` tells
-            # the template; that split is legacy and goes away when the recap moves to GroupBadge.
+        for ugb in earned:
+            gb = ugb.group_badge
             try:
-                layers = badge.get_badge_layers()
-                image_url = layers.get('main', '')
-                backdrop_url = static(layers.get('backdrop', ''))
+                tier, layers, is_avatar = group_medallion_layers(gb)
             except Exception:
-                image_url = ''
-                backdrop_url = ''
+                logger.exception("Could not resolve medallion art for group badge %s", gb.id)
+                continue
 
+            # The frame dict components/badge_medallion.html reads. An earned badge needs no progress
+            # meter, so the stage counts are deliberately absent rather than zeroed.
             badges_data.append({
-                'name': badge.effective_display_series or badge.name,
-                'tier': badge.tier,
-                'tier_name': cls._get_tier_name(badge.tier),
-                'series_slug': badge.series_slug,
-                'has_image': bool(badge.badge_image or (badge.base_badge and badge.base_badge.badge_image)),
-                'image_url': image_url,
-                'backdrop_url': backdrop_url,
+                'tier': tier,
+                'state': 'earned',
+                'art_layers': layers,
+                'is_avatar': is_avatar,
+                'is_holographic': ugb.is_holo,
+                'series_name': gb.series.name,
+                'badge_name': gb.platform_group.name,      # the edition: "Legacy HD" / "Ultra HD"
+                'series_slug': gb.series.series_slug,
+                'set_number': gb.set_number,
             })
 
         return {
-            'xp_earned': total_xp,
-            'badges_count': len(badges_earned),
+            'badges_count': len(badges_data),
             'badges_data': badges_data,
         }
 
     @classmethod
     def get_badge_progress_quiz_snapshot(cls, profile, year, month, user_tz=None):
-        """
-        Capture a snapshot of badge progress state at the end of a month for quiz.
+        """"Which badge are you closest to earning?" -- read from SeriesBadgeStanding.
 
-        Finds Tier 1 badges the user had progress on but hadn't earned by month-end,
-        and creates quiz options. Data is denormalized so it doesn't change over time.
+        Reads the badge subsystem's materialized per-series standing. The version this replaced read
+        `UserBadgeProgress` filtered to `badge__tier=1`, both of which belong to the legacy tier-based
+        system that nothing writes any more.
+
+        MOST RECENT COMPLETED MONTH ONLY. Returns None for anything older, which drops the slide (the
+        frontend already skips quiz slides with no data). SeriesBadgeStanding is LIVE state, recomputed
+        from scratch on every evaluation -- there is no history in it and no way to reconstruct "where you
+        stood in March 2019". Now that every month is openable, generating an old recap would freeze
+        TODAY'S progress into it and label it with that month, permanently, because the snapshot is
+        persisted. A quiz that lies about the past is worse than one slide fewer.
+
+        Progress is in basis points (0-10000): 10000 means the best edition is fully cleared, i.e. earned,
+        so those are excluded rather than filtered against a separate earned-badge list.
 
         Returns:
             dict or None: {correct_badge_id, correct_badge_name, correct_progress_pct,
-                          correct_completed, correct_required, options: [...]}
+                           correct_completed, correct_required, options: [...]}
         """
         import random
-        from trophies.models import Badge, UserBadge, UserBadgeProgress
+        from trophies.models import GroupBadge, SeriesBadgeStanding
+        from trophies.services.badge_detail_service import group_medallion_layers
 
-        # Get date at end of month to capture state at that time
-        _, end_date = cls.get_month_date_range(year, month, user_tz)
-
-        # Get badges earned by end of month
-        earned_badge_ids = UserBadge.objects.filter(
-            profile=profile,
-            earned_at__lt=end_date
-        ).values_list('badge_id', flat=True)
-
-        # Get progress records for tier 1 badges not yet earned by month end
-        # Note: UserBadgeProgress tracks current state, but we filter by earned_at
-        # to determine "earned by month end" status
-        progress_records = UserBadgeProgress.objects.filter(
-            profile=profile,
-            badge__tier=1,
-            completed_concepts__gt=0,
-            last_checked__lte=end_date  # Progress as of month end
-        ).exclude(
-            badge_id__in=earned_badge_ids
-        ).select_related('badge').order_by('-completed_concepts')
-
-        if not progress_records.exists():
+        user_tz = user_tz or cls._resolve_user_tz(profile)
+        now_local = timezone.now().astimezone(user_tz)
+        prev_year, prev_month = (now_local.year, now_local.month - 1) if now_local.month > 1             else (now_local.year - 1, 12)
+        if (year, month) != (prev_year, prev_month):
             return None
 
-        # Calculate progress percentage for each
-        badges_with_progress = []
-        for prog in progress_records:
-            badge = prog.badge
-            required = badge.required_stages if badge.required_stages > 0 else 1
-            progress_pct = min(100, int((prog.completed_concepts / required) * 100))
-
-            # Only include if they have any meaningful progress (at least 1%)
-            if progress_pct >= 1:
-                layers = badge.get_badge_layers()
-                badges_with_progress.append({
-                    'id': str(badge.id),
-                    'name': badge.effective_display_title or badge.name,
-                    'series': badge.effective_display_series or '',
-                    'has_image': bool(badge.badge_image or (badge.base_badge and badge.base_badge.badge_image)),
-                    'icon_url': layers.get('main', ''),
-                    'backdrop_url': static(layers.get('backdrop', '')) if layers.get('backdrop') else '',
-                    'progress_pct': progress_pct,
-                    'completed': prog.completed_concepts,
-                    'required': required,
-                })
-
-        if len(badges_with_progress) < 2:
-            # Need at least 2 badges with progress for a quiz
+        standings = list(
+            SeriesBadgeStanding.objects
+            .filter(profile=profile, progress_bp__gt=0, progress_bp__lt=10000)
+            .order_by('-progress_bp')[:8]
+        )
+        if len(standings) < 2:
             return None
 
-        # Sort by progress percentage descending
-        badges_with_progress.sort(key=lambda x: x['progress_pct'], reverse=True)
+        # One representative edition per series: the one the standing's progress describes, which is the
+        # furthest-along entry in the per-edition read-model. Its art is what the option shows.
+        best_group_key = {}
+        for st in standings:
+            groups = st.group_progress or {}
+            ranked = [
+                (cleared / gating, key)
+                for key, (cleared, gating) in (
+                    (k, v) for k, v in groups.items()
+                    if isinstance(v, (list, tuple)) and len(v) == 2 and v[1]
+                )
+            ]
+            if ranked:
+                best_group_key[st.series_slug] = max(ranked)[1]
 
-        # The closest badge is the one with highest progress
-        closest = badges_with_progress[0]
-        correct_id = closest['id']
+        group_badges = {
+            (gb.series.series_slug, gb.platform_group.key): gb
+            for gb in GroupBadge.objects
+            .filter(series__series_slug__in=[st.series_slug for st in standings])
+            .select_related('series', 'platform_group')
+        }
 
-        # Select up to 3 decoys from the rest
-        others = badges_with_progress[1:]
-        if len(others) >= 3:
-            decoys = random.sample(others, 3)
-        elif len(others) > 0:
-            decoys = others
-        else:
-            # Only 1 badge with progress - can't make a quiz
-            return None
-
-        # Build options and shuffle (will have 2-4 options)
-        options = [closest] + decoys
-        random.shuffle(options)
-
-        # Remove progress info from options (don't give away the answer)
-        clean_options = []
-        for opt in options:
-            clean_options.append({
-                'id': opt['id'],
-                'name': opt['name'],
-                'series': opt['series'],
-                'icon_url': opt['icon_url'],
-                'backdrop_url': opt['backdrop_url'],
-                'has_image': opt['has_image'],
+        candidates = []
+        for st in standings:
+            gb = group_badges.get((st.series_slug, best_group_key.get(st.series_slug)))
+            if gb is None:
+                continue
+            try:
+                tier, layers, is_avatar = group_medallion_layers(gb)
+            except Exception:
+                logger.exception("Could not resolve medallion art for group badge %s", gb.id)
+                continue
+            candidates.append({
+                'id': str(gb.id),
+                'name': gb.series.name,
+                'series': gb.platform_group.name,       # the edition, as the option's subtitle
+                'tier': tier,
+                'state': 'unearned',
+                'art_layers': layers,
+                'is_avatar': is_avatar,
+                'progress_pct': round(st.progress_bp / 100),
+                'completed': st.stages_cleared,
+                'required': st.stages_total,
             })
 
+        if len(candidates) < 2:
+            return None
+
+        # Already ordered by progress_bp desc, so the first is the answer.
+        closest, others = candidates[0], candidates[1:]
+        options = [closest] + (random.sample(others, 3) if len(others) >= 3 else others)
+        random.shuffle(options)
+
         return {
-            'correct_badge_id': correct_id,
+            'correct_badge_id': closest['id'],
             'correct_badge_name': closest['name'],
             'correct_progress_pct': closest['progress_pct'],
             'correct_completed': closest['completed'],
             'correct_required': closest['required'],
-            'options': clean_options,
+            # Progress is stripped from the options: it IS the answer.
+            'options': [
+                {k: opt[k] for k in ('id', 'name', 'series', 'tier', 'state', 'art_layers', 'is_avatar')}
+                for opt in options
+            ],
         }
 
     @classmethod
@@ -1035,12 +1023,6 @@ class MonthlyRecapService:
 
         logger.info(f"Generated {count} monthly recaps for {year}/{month:02d}")
         return count
-
-    @staticmethod
-    def _get_tier_name(tier):
-        """Convert tier number to display name."""
-        tier_map = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
-        return tier_map.get(tier, 'Bronze')
 
     # =========================================================================
     # QUIZ DATA METHODS
@@ -1545,11 +1527,10 @@ class MonthlyRecapService:
                 **recap.badge_progress_quiz_data,
             })
 
-        # Badge XP
-        if recap.badge_xp_earned > 0 or recap.badges_earned_count > 0:
+        # Badges earned
+        if recap.badges_earned_count > 0:
             slides.append({
                 'type': 'badges',
-                'xp_earned': recap.badge_xp_earned,
                 'badges_count': recap.badges_earned_count,
                 'badges': recap.badges_data or [],
             })

@@ -4595,7 +4595,6 @@ class MonthlyRecap(models.Model):
     )
 
     # Badge/XP stats
-    badge_xp_earned = models.PositiveIntegerField(default=0)
     badges_earned_count = models.PositiveIntegerField(default=0)
     badges_data = models.JSONField(
         default=list,

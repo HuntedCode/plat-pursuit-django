@@ -1956,7 +1956,6 @@ def _compute_recap_stats(profile):
 
     agg = recaps.aggregate(
         total_badges=Coalesce(Sum('badges_earned_count'), 0),
-        total_xp=Coalesce(Sum('badge_xp_earned'), 0),
         avg_trophies=Avg('total_trophies_earned'),
         avg_plats=Avg('platinums_earned'),
     )
@@ -1985,7 +1984,6 @@ def _compute_recap_stats(profile):
         'avg_trophies_per_month': round(agg['avg_trophies'] or 0, 1),
         'avg_plats_per_month': round(agg['avg_plats'] or 0, 1),
         'total_recap_badges': agg['total_badges'],
-        'total_recap_xp': agg['total_xp'],
         'best_month': _fmt_recap(best_month, 'total_trophies_earned'),
         'worst_active_month': _fmt_recap(worst_active, 'total_trophies_earned'),
         'best_plat_month': _fmt_recap(best_plat_month, 'platinums_earned'),

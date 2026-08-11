@@ -41,6 +41,16 @@ LEGACY_MARKERS = [
 ]
 
 
+def _code_only(path):
+    """Source with comments, docstrings and `{% comment %}` blocks stripped. All three legitimately name
+    the legacy tables and fields these tests forbid, in order to explain what replaced them -- without
+    stripping them the tests fail on their own documentation."""
+    src = path.read_text(encoding='utf-8')
+    src = re.sub(r'{% comment %}.*?{% endcomment %}', '', src, flags=re.S)
+    src = re.sub(r'"""(?:[^"\\]|\\.|"(?!""))*"""', '', src, flags=re.S)
+    return '\n'.join(ln for ln in src.splitlines() if not ln.lstrip().startswith('#'))
+
+
 @pytest.fixture(scope='module')
 def controller():
     return CONTROLLER.read_text(encoding='utf-8')
@@ -154,6 +164,39 @@ def test_no_daisyui_state_classes_remain(controller):
         assert legacy not in controller, (
             f'controller still writes {legacy}, which the rebuilt deck has no rule for'
         )
+
+
+def test_badge_slides_compose_the_shared_medallion():
+    """Badges are objects, and the Medallion is how the site renders them. The recap hand-rolled a
+    plate-plus-subject stack only while it was stuck on the legacy Badge model, which has no frame; it
+    reads UserGroupBadge now, so the component fits and the one-off must not come back."""
+    for name in ('badges.html', 'quiz_closest_badge.html'):
+        html = (SLIDE_DIR / name).read_text(encoding='utf-8')
+        assert "components/badge_medallion.html" in html, f'{name} does not use the Medallion'
+        assert 'rcp-badge__plate' not in html, f'{name} still hand-rolls the badge art stack'
+
+
+def test_recap_reads_no_legacy_badge_tables():
+    """UserBadge / UserBadgeProgress are written by badge_service, which no live path calls -- evaluation
+    runs through badge_apply. A recap reading them shows a frozen or empty set for everybody."""
+    for path in ('trophies/services/monthly_recap_service.py', 'api/recap_views.py',
+                 'core/services/monthly_recap_message_service.py'):
+        # Comment lines are dropped: they legitimately name the tables to explain what was replaced.
+        code = _code_only(ROOT / path)
+        for legacy in ('UserBadgeProgress', 'badge__tier'):
+            assert legacy not in code, f'{path} still reads the legacy badge table {legacy}'
+        assert 'UserBadge.objects' not in code, f'{path} still reads legacy UserBadge'
+
+
+def test_no_badge_xp_figure_anywhere_in_the_recap():
+    """The badge subsystem has no XP ledger -- standings are recomputed from scratch -- so a per-month XP
+    number cannot be derived without running the evaluator on the request path. It was removed rather
+    than approximated."""
+    for path in ('trophies/services/monthly_recap_service.py', 'api/recap_views.py',
+                 'core/services/monthly_recap_message_service.py',
+                 'templates/recap/partials/slides/badges.html'):
+        code = _code_only(ROOT / path)
+        assert 'badge_xp_earned' not in code, f'{path} still reads the removed badge_xp_earned field'
 
 
 def test_verdict_is_hidden_by_attribute_not_a_utility_class(controller):

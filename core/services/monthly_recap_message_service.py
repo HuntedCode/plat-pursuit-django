@@ -168,7 +168,6 @@ class MonthlyRecapMessageService:
         context['time_analysis'] = recap.time_analysis_data or {}
 
         # Badge summary (capped at 5)
-        context['badge_xp_earned'] = recap.badge_xp_earned
         context['badges_data'] = (recap.badges_data or [])[:5]
 
         # Month-over-month comparison

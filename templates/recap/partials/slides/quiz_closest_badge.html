@@ -1,12 +1,15 @@
-{% load static %}
 {% comment %}
 Recap Slide: Quiz -- which badge are you closest to
 Variables: correct_badge_id, correct_badge_name, correct_progress_pct, correct_completed,
-           correct_required, options (list of {id, name, series, icon_url, backdrop_url, has_image})
+           correct_required, options (list of Medallion frame dicts + id/name/series)
 
-Same tile treatment as the rarest-trophy quiz, with the badge composed on its tier plate (see badges.html
-for why this is hand-rolled rather than the Medallion partial). The reveal panel below is unhidden by the
-controller once an answer lands, so the progress number stays out of sight while it would be the answer.
+Options are Medallions in their unearned state, so the choice reads as "which of these objects" rather
+than four thumbnails. The reveal panel below is unhidden by the controller once an answer lands, so the
+progress number stays out of sight while it would be the answer.
+
+This slide only ever appears on the most recent completed month -- SeriesBadgeStanding is live state with
+no history, so an older recap would freeze today's progress and label it with that month. See
+get_badge_progress_quiz_snapshot.
 {% endcomment %}
 <div class="rcp rcp--wide rcp-quiz" data-quiz-correct="{{ correct_badge_id }}">
     <p class="rcp__kicker">Quick quiz</p>
@@ -16,12 +19,8 @@ controller once an answer lands, so the progress number stays out of sight while
         <div class="rcp-quiz__grid">
             {% for badge in options %}
             <button type="button" class="rcp-quiz__opt rcp-quiz__opt--tile" data-quiz-option="{{ badge.id }}">
-                <span class="rcp-quiz__opt-art rcp-quiz__opt-art--badge">
-                    {% if badge.backdrop_url %}
-                    <img class="rcp-badge__plate" src="{{ badge.backdrop_url }}" alt="" loading="lazy" draggable="false" />
-                    {% endif %}
-                    <img class="rcp-badge__subject" src="{% if badge.has_image %}{{ badge.icon_url }}{% else %}{% static badge.icon_url %}{% endif %}"
-                         alt="" loading="lazy" draggable="false" />
+                <span class="rcp-quiz__opt-med">
+                    {% include 'components/badge_medallion.html' with frame=badge no_id=True %}
                 </span>
                 <span class="rcp-quiz__opt-name">{{ badge.name }}</span>
                 {% if badge.series %}<span class="rcp-quiz__opt-sub">{{ badge.series }}</span>{% endif %}
@@ -34,6 +33,6 @@ controller once an answer lands, so the progress number stays out of sight while
 
     <div class="rcp-quiz__reveal" data-quiz-answer-detail hidden>
         <p><strong>{{ correct_progress_pct }}%</strong> of the way there</p>
-        <p class="rcp-quiz__reveal-sub">{{ correct_completed }} of {{ correct_required }} concepts completed</p>
+        <p class="rcp-quiz__reveal-sub">{{ correct_completed }} of {{ correct_required }} stages cleared</p>
     </div>
 </div>

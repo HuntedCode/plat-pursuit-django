@@ -459,25 +459,26 @@
     .rcp-cover__date { display: block; }
 }
 
-/* Badges as objects: subject composited on its tier plate, the way the Medallion reads elsewhere. */
-.rcp-badges { display: flex; flex-direction: column; gap: 0.4rem; }
-@media (min-width: 768px) { .rcp-badges { gap: 0.5rem; } }
-.rcp-badge {
-    display: flex; align-items: center; gap: 0.65rem; text-align: left;
-    padding: 0.4rem 0.7rem; border-radius: var(--pp-radius-md);
-    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+/* Badges as Medallions. The component owns its own rendering; these rules only place and caption it.
+   `--sz` on the nested .pp-med is the Medallion's width knob (default 160px), set the same way the
+   badge-detail and collection surfaces do it. */
+.rcp-meds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+@media (min-width: 768px) { .rcp-meds { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; } }
+.rcp-med { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+.rcp-med .pp-med { --sz: 56px; }
+@media (min-width: 768px) { .rcp-med .pp-med { --sz: 104px; } .rcp-med { gap: 0.4rem; } }
+/* Clamp count lives IN the base rule, not a later override -- source order decides at equal specificity
+   and a 2x2 of two-line captions puts this slide past the mobile deck. */
+.rcp-med__series {
+    font-size: 0.72rem; font-weight: 700; color: var(--pp-text); line-height: 1.2;
+    display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
 }
-@media (min-width: 768px) { .rcp-badge { gap: 0.75rem; padding: 0.55rem 0.8rem; } }
-.rcp-badge__art { position: relative; display: grid; place-items: center; width: 2.5rem; height: 2.5rem; flex: none; }
-@media (min-width: 768px) { .rcp-badge__art { width: 3rem; height: 3rem; } }
-.rcp-badge__plate { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-.rcp-badge__subject { position: relative; width: 72%; height: 72%; object-fit: contain; }
-.rcp-badge__body { display: flex; flex-direction: column; min-width: 0; }
-.rcp-badge__name {
-    font-size: 0.85rem; font-weight: 700; color: var(--pp-text); line-height: 1.25;
-    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+@media (min-width: 768px) {
+    .rcp-med__series { font-size: 0.75rem; -webkit-line-clamp: 2; line-clamp: 2; }
 }
-.rcp-badge__tier { font-size: 0.7rem; color: var(--pp-text-dim); }
+.rcp-med__edition { font-size: 0.66rem; color: var(--pp-text-dim); }
+.rcp-quiz__opt-med { display: block; }
+.rcp-quiz__opt-med .pp-med { --sz: 56px; }
 
 /* Time-of-day bars. Evidence for the persona headline, so deliberately quiet. */
 .rcp-clock { display: flex; justify-content: center; align-items: flex-end; gap: 0.4rem; }
