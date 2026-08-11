@@ -31,6 +31,7 @@
 @import "./components/claim-ceremony.css";
 @import "./components/game-detail.css";
 @import "./components/plat-cards.css";
+@import "./components/recap-deck.css";
 @plugin "daisyui";
 
 @theme {

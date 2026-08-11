@@ -20,14 +20,15 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-DECK = ROOT / 'templates' / 'recap' / 'monthly_recap.html'
+DECK_CSS = ROOT / 'static' / 'css' / 'components' / 'recap-deck.css'
 CONTROLLER = ROOT / 'static' / 'js' / 'monthly-recap.js'
 
 
 @pytest.fixture(scope='module')
 def deck_css():
-    html = DECK.read_text(encoding='utf-8')
-    return re.search(r'<style>(.*?)</style>', html, re.S).group(1)
+    # The deck's CSS lives in its own component file now; it used to be a <style> block inside
+    # monthly_recap.html (and a second one inside the calendar slide partial).
+    return DECK_CSS.read_text(encoding='utf-8')
 
 
 def test_stagger_items_are_restored_under_reduced_motion(deck_css):
