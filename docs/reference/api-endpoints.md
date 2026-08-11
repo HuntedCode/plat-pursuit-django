@@ -95,7 +95,8 @@ Staff-authored platinum guides on game detail pages. Replaces the old Checklists
 | POST | `/api/v1/recap/<year>/<month>/regenerate/` | Login | Force regenerate (10/min) |
 | GET | `/api/v1/recap/<year>/<month>/html/` | Login | Recap share card HTML (60/min) |
 | GET | `/api/v1/recap/<year>/<month>/png/` | Login | Recap share card PNG (20/min) |
-| GET | `/api/v1/recap/<year>/<month>/slide/<type>/` | Login | Individual slide partial |
+| GET | `/api/v1/recap/<year>/<month>/deck/` | Login | Every slide's HTML in one response (what the deck uses) |
+| GET | `/api/v1/recap/<year>/<month>/slide/<type>/` | Login | One slide partial. No in-repo caller |
 
 ### Game Lists
 

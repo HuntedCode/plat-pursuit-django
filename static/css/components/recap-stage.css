@@ -357,7 +357,6 @@
 .rcx .rcp .scard,
 .rcx .rcp .rcp-date,
 .rcx .rcp .rcp-quiz__opt,
-.rcx .rcp .rcp-badge,
 .rcx .rcp .rcp-quiz__reveal { background: color-mix(in oklab, var(--pp-bg-1) 82%, transparent); }
 
 .rcx__hint {

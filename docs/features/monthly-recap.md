@@ -28,7 +28,9 @@ The frontend renders slides via Django template partials fetched one-at-a-time f
 | `templates/recap/recap_index.html` | Month picker + sync gate |
 | `templates/recap/partials/slides/` | 16 slide templates, all built on the `.rcp` shell |
 | `components/badge_medallion.html` | Composed by both badge slides (their payloads are frame dicts) |
-| `static/css/components/recap-deck.css` | Deck chrome, motion, activity ramp, `.rcp` shell + slide parts |
+| `static/css/components/recap-deck.css` | Motion, activity ramp, the `.rcp` slide shell + its parts |
+| `static/css/components/recap-stage.css` | The entrance cover and the full-screen stage (`.rcx`) |
+| `static/js/utils.js` | `PlatPursuit.takeover()` -- scroll lock, page-recede, focus trap, Escape |
 | `templates/recap/partials/recap_share_card.html` | Share card HTML (landscape/portrait) |
 | `templates/emails/monthly_recap.html` | Non-spoiler teaser email with CTA |
 
@@ -103,6 +105,41 @@ Immutable pattern: once `is_finalized=True`, regeneration is skipped even with `
 3. Flavor text system: `SLIDE_FLAVOR_TEXT` dict with random selection per slide type
 4. Slides: intro, total_trophies, platinums, rarest_trophy, most_active_day, activity_calendar, games, badges, comparison, summary, 4 quiz types, streak, time_analysis
 
+### Presentation: the Entrance and the Stage
+
+The recap is a **ceremony**, not a dashboard panel. Direction chosen from three built at
+[`/design/recap-stage/`](../../templates/design/recap_stage_workshop.html); the other two (a PS-era
+"broadcast" readout, and a scroll-driven editorial "spread") remain on that page.
+
+The page used to be a breadcrumb plus three nested `card bg-base-200/90 border-2 border-base-300`
+wrappers around a fixed-height box with a row of dots and two ghost circle buttons -- anti-reference #1 in
+its purest form. It is now:
+
+- **The Entrance** (`.rcx-enter`): a cover, not a header. The month, its headline numbers, one action, and
+  a "Just get the card" shortcut for people who came back for the artifact rather than the story.
+- **The Stage** (`.rcx`): a full-screen takeover, rendered hidden on page load so the deck prefetch
+  finishes while the cover is being read and entering is instant.
+
+Load-bearing details, each of which was a bug first:
+
+- **`.rcp` DISSOLVES on the stage.** In a takeover the stage IS the frame, so a bordered card inside one
+  is a frame within a frame. The shell keeps its real job (type scale, rhythm, anatomy) and stops drawing
+  a box; the type grows to carry the beat instead.
+- **The stage moves to `<body>` on open.** A `position: fixed` element inside the transformed page-recede
+  wrapper is positioned against that wrapper, not the viewport.
+- **`renderAllSlides` may remove only `.recap-slide` elements.** The stage also holds the tap zones, the
+  direction arrows and the hint line; `innerHTML = ''` destroyed all of it on first render, which is why
+  the arrows were never in the DOM and the zone buttons the controller had captured were detached nodes.
+- **Only ONE clock may run.** Pacing is derived per beat (reading time + a beat per thing to look at,
+  clamped 4-9.5s) and armed through `armBeat`. The quiz's post-answer dwell goes through the same path:
+  when it had its own `setTimeout`, two timers raced and how early the deck jumped depended on how fast
+  the question was answered.
+- **Beats that wait on the hunter show an EMPTY pulsing segment.** `.is-live` declares `width: 100%` and
+  relies on a transition to get there, so removing the transition *commits* to full rather than freezing.
+  A quiz showing a completed timer is a lie about a beat that has not run.
+- **`syncBeatState` runs before `paintBars`.** The bar needs to know whether THIS beat is paused; when the
+  state was updated afterwards, the slide following a quiz was painted as "waiting" and its bar never ran.
+
 ### The deck arc (`DECK`)
 
 Slide order is **data**, not control flow. `MonthlyRecapService.DECK` is an ordered list of `RecapBeat`
@@ -169,7 +206,8 @@ Shared parts (`.rcp__stamp`, `.rcp__chips`, `.rcp__pair`, `.rcp-quiz__*`, ...) a
 | POST | `/api/v1/recap/<year>/<month>/regenerate/` | Yes | 10/min | Force regenerate (current month only) |
 | GET | `/api/v1/recap/<year>/<month>/html/` | Yes | 60/min | Share card HTML |
 | GET | `/api/v1/recap/<year>/<month>/png/` | Yes | 20/min | Share card PNG (Playwright) |
-| GET | `/api/v1/recap/<year>/<month>/slide/<type>/` | Yes | - | Individual slide partial |
+| GET | `/api/v1/recap/<year>/<month>/deck/` | Yes | 30/min | **Every slide's HTML in one response** (what the deck uses) |
+| GET | `/api/v1/recap/<year>/<month>/slide/<type>/` | Yes | 60/min | One slide partial. No in-repo caller; kept as a public surface |
 
 ## Integration Points
 

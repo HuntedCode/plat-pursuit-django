@@ -554,7 +554,13 @@ class RecapSlidePartialView(APIView):
     GET /api/v1/recap/<year>/<month>/slide/<slide_type>/
 
     Returns rendered HTML for a specific slide partial.
-    Used by frontend to render slides from Django templates.
+
+    NOTE: the deck no longer uses this -- it fetches every slide in one request from RecapDeckView, which
+    reuses this class's SLIDE_TEMPLATES and _build_slide_context. The route is kept because it is a
+    documented public endpoint (docs/reference/api-endpoints.md) and may have consumers outside this repo,
+    but nothing in the repo calls it any more. It was also the one recap view with no rate limit; it has
+    one now, since an unthrottled endpoint that renders templates is worth closing whether or not the
+    frontend uses it.
     """
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication, TokenAuthentication]
@@ -587,6 +593,7 @@ class RecapSlidePartialView(APIView):
         'quiz_score': 'recap/partials/slides/quiz_score.html',
     }
 
+    @method_decorator(ratelimit(key='user', rate='60/m', method='GET', block=True))
     def get(self, request, year, month, slide_type):
         gate = _check_profile_synced(request)
         if gate:

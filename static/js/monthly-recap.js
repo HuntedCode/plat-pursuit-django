@@ -615,25 +615,6 @@ class MonthlyRecapManager {
         if (this._abort) { this._abort.abort(); this._abort = null; }
     }
 
-    async fetchSlideHTML(slideType, index) {
-        const cacheKey = `${slideType}_${index}`;
-
-        // Check cache
-        if (this.slideCache[cacheKey]) {
-            return this.slideCache[cacheKey];
-        }
-
-        try {
-            const data = await PlatPursuit.API.get(`/api/v1/recap/${this.year}/${this.month}/slide/${slideType}/`);
-            this.slideCache[cacheKey] = data.html;
-            return data.html;
-        } catch (error) {
-            console.error(`Error fetching slide ${slideType}:`, error);
-            // Return fallback HTML
-            return this.getFallbackSlideHTML(slideType);
-        }
-    }
-
     getFallbackSlideHTML(slideType) {
         return `
             <div class="text-center py-8">

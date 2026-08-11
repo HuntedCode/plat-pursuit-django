@@ -40,6 +40,8 @@
 | # | Task | When | Done |
 |---|------|------|------|
 | M1 | **Pause the `send_monthly_recap_emails` Render cron** (3rd of month, 06:00 UTC). The monthly recap is being rebuilt and nothing should go out carrying the old design. `settings.MONTHLY_RECAP_SEND_ENABLED` now defaults to **False**, so the command fails safe even if the cron fires — pausing it is belt-and-braces, and stops a pointless monthly run. **Note this stops the in-app notification too**: it is dispatched from inside the email loop, so the two cannot be separated without lifting it out. Re-enable by setting `MONTHLY_RECAP_SEND_ENABLED=True` in the environment when the rebuilt email ships. | With the recap rebuild | ☐ |
+| M2 | **Run `collectstatic`.** `staticfiles/` is badly stale in this working copy (`monthly-recap.js` dated April, `output.css` two days behind), which is invisible in dev — runserver serves from `static/` — and fatal in prod, where WhiteNoise serves `STATIC_ROOT`. Shipping without it serves an April recap controller against the rebuilt templates. | Every deploy, but verify this one | ☐ |
+| M3 | **Apply migrations `0287` and `0288`.** 0287 is a `help_text` change on `MonthlyRecap.badge_xp_earned`; 0288 adds the three JSON fields the new context beats persist (`taste_data`, `community_comparison_data`, `month_in_history_data`). Both are additive — no backfill, and recaps generated before them simply omit the new beats. | With the recap rebuild | ☐ |
 
 
 ---
