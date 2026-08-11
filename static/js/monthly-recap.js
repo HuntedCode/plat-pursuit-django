@@ -219,9 +219,14 @@ class MonthlyRecapManager {
      * (the page-recede wrapper) is positioned against THAT ancestor, not the viewport, and would sit
      * scaled down in the corner.
      */
-    openStage() {
+    openStage(opts = {}) {
         if (this.stageOpen) return;
         this.stageOpen = true;
+        // Card-only: the same stage, opened straight at its ending. Someone who came back for the card
+        // gets the card -- with the look picker and a preview -- rather than a blind download, and
+        // without a deck they did not ask for. `is-card-only` drops the deck's chrome.
+        const cardOnly = Boolean(opts.cardOnly);
+        this.container.classList.toggle('is-card-only', cardOnly);
 
         document.body.appendChild(this.container);
         this.container.hidden = false;
@@ -238,6 +243,13 @@ class MonthlyRecapManager {
         // is cheap -- and it means the ending transitions instantly instead of showing a spinner at the
         // exact moment the ceremony is meant to pay off.
         this.warmCard();
+
+        if (cardOnly) {
+            // The card may still be in flight; warmCard resolves before this runs on a warm cache, and
+            // showCardScene is a no-op until the HTML exists, so ask again once it lands.
+            Promise.resolve(this.warmCard()).then(() => this.showCardScene());
+            return;
+        }
 
         // Start the deck at the top every time it is entered, so "watch it again" actually replays.
         this.goToSlide(0);
@@ -327,6 +339,7 @@ class MonthlyRecapManager {
     /** takeover() has already removed the stage and restored focus; put the page back in order. */
     onStageClosed() {
         this.stageOpen = false;
+        this.container.classList.remove('is-card-only');
         this.stopBeatTimer();
         clearTimeout(this._cardTimer);
         this.container.classList.remove('is-ending');
@@ -412,7 +425,7 @@ class MonthlyRecapManager {
 
         // Coming back for the card should not mean sitting through the deck again.
         const quick = document.getElementById('recap-quick-download');
-        if (quick) quick.addEventListener('click', () => this.downloadCard());
+        if (quick) quick.addEventListener('click', () => this.openStage({ cardOnly: true }));
 
         const advance = document.getElementById('recap-advance');
         if (advance) advance.addEventListener('click', (e) => {
@@ -427,6 +440,8 @@ class MonthlyRecapManager {
             this.seenSummary = true;
             if (this.handle) this.handle.close();     // onStageClosed opens and scrolls to the panel
         });
+
+        window.addEventListener('pagehide', () => this.abortLoad());
 
         // Leaving the tab desynced the deck: background tabs throttle setTimeout (clamped to a second or
         // more) while the CSS transition driving the timer bar is throttled on a different schedule, so
@@ -517,29 +532,43 @@ class MonthlyRecapManager {
         }, { passive: true });
     }
 
+    /**
+     * One request for the whole deck.
+     *
+     * This used to fan out one request PER BEAT in parallel. At 20 beats that is 20 requests for a single
+     * month, and DRF throttles at 60/min per user across the entire API -- so flicking between a few
+     * months exhausted the bucket and started 429ing everything the page did, including the notification
+     * poll. The deck was starving the rest of the site of its own request budget.
+     *
+     * Aborting on navigation (below) is necessary but was never sufficient: a month view that COMPLETED
+     * still cost 20. The volume itself was the bug.
+     */
     async prefetchAllSlides() {
-        // Remove loading slide
         const loadingSlide = document.getElementById('loading-slide');
-
-        // Fetch all slides in parallel
-        const fetchPromises = this.slides.map((slide, index) =>
-            this.fetchSlideHTML(slide.type, index)
-        );
+        this._abort = new AbortController();
 
         try {
-            await Promise.all(fetchPromises);
-
-            // Remove loading slide after all fetches complete
-            if (loadingSlide) loadingSlide.remove();
-
-            // Render slides from cache
-            this.renderAllSlides();
+            const data = await PlatPursuit.API.get(
+                `/api/v1/recap/${this.year}/${this.month}/deck/`,
+                { signal: this._abort.signal },
+            );
+            (data.slides || []).forEach((slide, index) => {
+                this.slideCache[`${slide.type}_${index}`] = slide.html;
+            });
         } catch (error) {
-            console.error('Error prefetching slides:', error);
-            // Still remove loading and show what we have
-            if (loadingSlide) loadingSlide.remove();
-            this.renderAllSlides();
+            if (error.name === 'AbortError') return;      // month switched; the new load owns the page
+            console.error('Error loading recap deck:', error);
         }
+
+        if (loadingSlide) loadingSlide.remove();
+        this.renderAllSlides();
+    }
+
+    /** Drop an in-flight deck load when the page goes away. Secondary to the batching above -- a browser
+     *  cancels pending requests on navigation anyway, and anything the server already received has
+     *  already cost its throttle slot -- but it stops a half-applied response from racing teardown. */
+    abortLoad() {
+        if (this._abort) { this._abort.abort(); this._abort = null; }
     }
 
     async fetchSlideHTML(slideType, index) {

@@ -493,6 +493,62 @@ class RecapShareImagePNGView(APIView):
         return response
 
 
+class RecapDeckView(APIView):
+    """
+    GET /api/v1/recap/<year>/<month>/deck/
+
+    Every slide's rendered HTML in ONE response.
+
+    The deck used to be fetched a slide at a time, in parallel -- which meant a single month view cost
+    one request per beat. At 20 beats that is 20 requests, and DRF throttles at 60/min per user across
+    the WHOLE API, so switching months a few times in quick succession exhausted the bucket and started
+    429ing everything the page did: the remaining slides, the notification poll, the unread count. The
+    deck was starving the rest of the site of its own request budget.
+
+    Batching is the fix rather than retrying or backing off, because the requests were never independent:
+    they all resolve the same recap, and `get_or_generate_recap` was being called once per slide for a
+    month the first request had already generated.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    @method_decorator(ratelimit(key='user', rate='30/m', method='GET', block=True))
+    def get(self, request, year, month):
+        gate = _check_profile_synced(request)
+        if gate:
+            return gate
+        profile = request.user.profile
+        now_local = get_user_local_now(request)
+
+        bounds = _check_month_bounds(year, month, now_local)
+        if bounds:
+            return bounds
+
+        stale_gate = _check_sync_freshness_api(profile, year, month, now_local)
+        if stale_gate:
+            return stale_gate
+
+        recap = MonthlyRecapService.get_or_generate_recap(profile, year, month)
+        if not recap:
+            return Response({'error': 'No activity found for this month.'},
+                            status=http_status.HTTP_404_NOT_FOUND)
+
+        partial = RecapSlidePartialView()
+        slides = []
+        for beat in MonthlyRecapService.build_slides_response(recap):
+            slide_type = beat['type']
+            template = partial.SLIDE_TEMPLATES.get(slide_type)
+            if not template:
+                continue
+            context = partial._build_slide_context(slide_type, recap, profile, year, month)
+            slides.append({
+                'type': slide_type,
+                'html': render_to_string(template, context, request=request),
+            })
+
+        return Response({'slides': slides})
+
+
 class RecapSlidePartialView(APIView):
     """
     GET /api/v1/recap/<year>/<month>/slide/<slide_type>/

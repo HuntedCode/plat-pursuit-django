@@ -369,6 +369,14 @@
     .rcx.is-ending .recap-slide.active .rcp__cue { transition: none; }
 }
 
+/* Card-only: the stage opened straight at its ending, with the deck's chrome dropped. There is no deck
+   to pace, navigate or scrub, so a timer bar and tap zones would be lying about what this is. */
+.rcx.is-card-only .rcx__bars,
+.rcx.is-card-only .rcx__zone,
+.rcx.is-card-only .rcx__hint,
+.rcx.is-card-only .recap-slide { display: none; }
+.rcx.is-card-only .rcx__card { inset: 0; height: auto; justify-content: center; }
+
 .rcx__card {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
     display: flex; flex-direction: column; align-items: center; justify-content: flex-end;

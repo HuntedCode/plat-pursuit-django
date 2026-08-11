@@ -39,7 +39,8 @@ def _code(js):
 def _method(js, name):
     """Body of a class method, anchored to its DEFINITION -- an unanchored search finds the call site
     first and captures the wrong function."""
-    m = re.search(r'\n    ' + re.escape(name) + r'\(.*?\n    \}\n', js, re.S)
+    # `async ` is optional: the deck loader is async, and without this the anchor silently misses it.
+    m = re.search(r'\n    (?:async )?' + re.escape(name) + r'\(.*?\n    \}\n', js, re.S)
     assert m, f'{name} not found'
     return m.group(0)
 
@@ -197,3 +198,30 @@ def test_malformed_platinum_payload_cannot_break_the_slide(js):
     body = _method(js, 'showPlatinumDetails')
     assert 'JSON.parse' in body and 'catch' in body
     assert 'Array.isArray' in body, 'a non-array payload would throw on .map'
+
+
+# --- Request budget ---------------------------------------------------------------------------------
+
+def test_the_deck_is_fetched_in_one_request(js):
+    """It used to fan out one request PER BEAT in parallel. At 20 beats that is 20 requests for a single
+    month, against a 60/min per-user throttle that covers the WHOLE API -- so flicking between months
+    exhausted the bucket and 429'd everything else the page did, including the notification poll.
+
+    Aborting on navigation is not a substitute: a month view that COMPLETED still cost 20."""
+    body = _method(js, 'prefetchAllSlides')
+    assert '/deck/' in body, 'the deck is not fetched from the batched endpoint'
+    assert 'Promise.all' not in body, 'the per-slide fan-out is back'
+    assert 'this.slides.map' not in body, 'still issuing one request per beat'
+
+
+def test_the_batched_endpoint_exists_and_is_routed():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    assert 'class RecapDeckView' in (root / 'api' / 'recap_views.py').read_text(encoding='utf-8')
+    urls = (root / 'api' / 'urls.py').read_text(encoding='utf-8')
+    assert "recap/<int:year>/<int:month>/deck/" in urls, 'the deck endpoint is not routed'
+
+
+def test_an_in_flight_load_can_be_dropped(js):
+    assert 'AbortController' in _code(js)
+    assert 'abortLoad' in _method(js, 'abortLoad')

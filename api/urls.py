@@ -18,7 +18,7 @@ from .shareable_views import (
 # Platinum Grid is RETIRED (2026-08); api/platinum_grid_views.py is parked unrouted.
 from .recap_views import (
     RecapAvailableView, RecapDetailView, RecapRegenerateView, RecapShareImageHTMLView,
-    RecapShareImagePNGView, RecapSlidePartialView
+    RecapShareImagePNGView, RecapSlidePartialView, RecapDeckView
 )
 from .tracking_views import TrackSiteEventView
 from .easter_egg_views import RollEasterEggView
@@ -162,6 +162,7 @@ urlpatterns = [
     path('recap/<int:year>/<int:month>/regenerate/', RecapRegenerateView.as_view(), name='recap-regenerate'),
     path('recap/<int:year>/<int:month>/html/', RecapShareImageHTMLView.as_view(), name='recap-share-html'),
     path('recap/<int:year>/<int:month>/png/', RecapShareImagePNGView.as_view(), name='recap-share-png'),
+    path('recap/<int:year>/<int:month>/deck/', RecapDeckView.as_view(), name='recap-deck'),
     path('recap/<int:year>/<int:month>/slide/<str:slide_type>/', RecapSlidePartialView.as_view(), name='recap-slide-partial'),
 
     # Tracking endpoints

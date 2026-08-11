@@ -445,6 +445,9 @@
         var(--rcp-accent) 0%, color-mix(in oklab, var(--rcp-accent) 55%, transparent) 100%);
 }
 .rcp-clock__label { font-size: 0.66rem; color: var(--pp-text-mute); }
+/* The peak-hour stamp sits directly under the bars; the stamp's own top margin is sized for text
+   above it, not for a chart, so the two were crowding. */
+.rcp-clock + .rcp__stamp { margin-top: 1.25rem; }
 
 /* Activity calendar */
 .rcp-cal { display: inline-flex; flex-direction: column; gap: 0.5rem; align-self: center; }
