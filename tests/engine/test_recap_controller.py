@@ -389,3 +389,26 @@ def test_the_stage_furniture_is_present_in_the_template():
     tpl = (ROOT / 'templates' / 'recap' / 'monthly_recap.html').read_text(encoding='utf-8')
     for needed in ('rcx__aim--prev', 'rcx__aim--next', 'id="prev-slide"', 'id="next-slide"', 'rcx__hint'):
         assert needed in tpl, f'{needed} missing from the stage markup'
+
+
+def test_the_quiz_dwell_runs_on_the_beat_clock_not_its_own(js):
+    """Answering used to start a private `setTimeout(nextSlide, 2000)` while the beat system had a timer
+    of its own. Both call nextSlide, so the deck could advance twice -- and because the private dwell runs
+    from the ANSWER while the beat runs from the slide opening, how early the second landed depended on
+    how fast the question was answered. That is the reported "next slide finishes early".
+
+    One clock: the dwell is armed through armBeat, so the bar shows the advance you actually get."""
+    body = _method(js, 'handleOptionClick')
+    assert 'dwellOnAnswer' in body, 'the quiz still schedules its own advance'
+    assert 'setTimeout' not in _code(body), 'a private timer is racing the beat clock again'
+    assert 'armBeat' in _method(js, 'dwellOnAnswer'), 'the dwell does not go through the beat path'
+
+
+def test_a_blocked_beat_leaves_no_stale_end_time(js):
+    """A quiz arms no clock, so `_beatEndsAt` must not keep pointing at the PREVIOUS beat's end -- holdBeat
+    would read it as a remainder and hand the next slide a fraction of a beat."""
+    body = _method(js, 'startBeatTimer')
+    assert '_beatEndsAt = null' in body, 'a blocked beat keeps the previous beat`s end time'
+    assert 'if (!this.beatTimer)' in _method(js, 'holdBeat'), (
+        'holdBeat captures a remainder even when no beat is running'
+    )

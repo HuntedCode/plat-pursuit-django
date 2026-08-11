@@ -704,10 +704,10 @@ class MonthlyRecapManager {
      * ends, so it picks up `--rcx-beat` whichever order these run in. A negative control confirmed that.
      * The bug that actually made the bars wrong was in the CSS -- see `is-waiting` in recap-stage.css.
      */
-    armBeat(index, slideEl) {
+    armBeat(index, slideEl, ms) {
         this.cancelResume();          // a queued resume belongs to the beat we are leaving
         this._beatLeft = null;
-        this._beatMs = this.beatDuration(slideEl);
+        this._beatMs = ms != null ? ms : this.beatDuration(slideEl);
         this.container.style.setProperty('--rcx-beat', this._beatMs + 'ms');
         this.syncBeatState(this.slides[index]?.type);   // BEFORE painting -- paintBars reads it
         this.paintBars(index);
@@ -738,7 +738,10 @@ class MonthlyRecapManager {
         // Re-sync in case something changed since the beat was armed -- a quiz being answered, a dialog
         // opening or closing. armBeat has already done it for a fresh beat.
         const blocked = this.syncBeatState(this.slides[this.currentSlide]?.type);
-        if (blocked || this.currentSlide >= this.slides.length - 1) return;
+        if (blocked || this.currentSlide >= this.slides.length - 1) {
+            this._beatEndsAt = null;      // no clock running: there is no remainder to carry
+            return;
+        }
 
         // A resume runs the REMAINDER; a fresh beat uses the length armBeat already wrote.
         // A remainder is only honoured for the slide it was taken from. Anything else is stale by
@@ -765,6 +768,13 @@ class MonthlyRecapManager {
         return (clientX - box.left) < box.width * 0.25;
     }
 
+    /** A quiz has been answered: hold on the verdict for a moment, then move on -- re-armed through the
+     *  normal beat path so the deck never has two clocks running at it. */
+    dwellOnAnswer(ms) {
+        const el = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
+        this.armBeat(this.currentSlide, el, ms);
+    }
+
     /**
      * Freeze the beat under a finger.
      *
@@ -774,6 +784,7 @@ class MonthlyRecapManager {
      */
     holdBeat() {
         if (!this.stageOpen || this.container.classList.contains('is-held')) return;
+        if (!this.beatTimer) { this.container.classList.add('is-held'); return; }   // nothing to freeze
         const fill = this.container.querySelector('.rcx__bar.is-live i');
         if (fill) fill.style.width = getComputedStyle(fill).width;
         this._beatLeft = this._beatEndsAt
@@ -1536,6 +1547,7 @@ class RecapQuizManager {
         // slide they had already answered, with the shake firing on every attempt to leave.
         this.quizResults = {};
         this.currentQuizSlide = null;
+        this.QUIZ_FEEDBACK_MS = 2200;      // long enough to read the verdict before the deck moves on
     }
 
     /** Has this specific quiz been answered? */
@@ -1596,8 +1608,9 @@ class RecapQuizManager {
             }
         }
 
-        // Navigation buttons stay disabled; they re-enable when the next slide loads.
-        setTimeout(() => this.recapManager.nextSlide(), 2000);
+        // The feedback dwell IS this beat's remaining time, not a second timer racing the first. The bar
+        // restarts and runs for it, so what you watch counts down to the advance you actually get.
+        this.recapManager.dwellOnAnswer(this.QUIZ_FEEDBACK_MS);
     }
 
     /**
