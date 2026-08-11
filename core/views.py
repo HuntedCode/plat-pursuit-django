@@ -701,6 +701,71 @@ class ChromeWorkshopView(TemplateView):
         return ctx
 
 
+class RecapStageWorkshopView(TemplateView):
+    """Design workshop (/design/recap-stage/): three answers to "what IS the monthly recap".
+
+    The recap's SLIDES were rebuilt onto `--pp-*` and the shared `.rcp` shell, but its presentation is
+    still the pre-rebuild dashboard module -- a breadcrumb, then three nested
+    `card bg-base-200/90 border-2 border-base-300` wrappers, then a fixed-height slide box with a row of
+    dots and two ghost circle buttons. Anti-reference #1 (the generic Tailwind dashboard) in its purest
+    form, and no amount of slide polish escapes it, because the frame announces "dashboard panel" before
+    anyone reads a word.
+
+    Same real slides in all three stages, so the comparison is purely presentational:
+
+      A. Ceremony  -- immersive takeover on the claim-ceremony grammar. Story controls, per-beat colour
+                      world, an entrance you choose. The recap as an EVENT.
+      B. Broadcast -- the PSN-era love letter (visual-identity 5, "PSN-era informed"): a console system
+                      readout that assembles itself. Paced, typographic, prestigious. The recap as an
+                      ARTIFACT your console produced.
+      C. Spread    -- no deck at all. Scroll-driven editorial long-form; linkable, browsable, no mode to
+                      enter. The recap as a FEATURE about your month.
+
+    Not a product surface -- a decision aid.
+    """
+    template_name = 'design/recap_stage_workshop.html'
+
+    # Fabricated but shaped exactly like the real payloads, so the real partials render unmodified.
+    ICON = '/static/images/badges/default.png'
+
+    def _slides(self):
+        from django.template.loader import render_to_string
+        specs = [
+            ('intro', {'month_name': 'March', 'year': 2026, 'username': 'HuntedCode',
+                       'avatar_url': self.ICON}),
+            ('total_trophies', {'value': 147, 'flavor_text': 'The grind never stops.',
+                                'breakdown': {'bronze': 96, 'silver': 34, 'gold': 14, 'platinum': 3}}),
+            ('rarest_trophy', {'name': 'Chalice of the Deep', 'game': 'Bloodborne', 'earn_rate': 1.4,
+                               'icon_url': self.ICON, 'trophy_type': 'gold', 'rarity_label': 'Ultra Rare',
+                               'flavor_text': 'Not many can say they have this one.'}),
+            ('platinums', {'count': 3, 'flavor_text': 'Three in a month is a real haul.', 'games': [
+                {'game_name': 'Bloodborne', 'game_image': self.ICON, 'earned_date': 'Mar 4'},
+                {'game_name': 'Returnal', 'game_image': self.ICON, 'earned_date': 'Mar 12'},
+                {'game_name': 'Sekiro', 'game_image': self.ICON, 'earned_date': 'Mar 27'}]}),
+            ('month_in_history', {'month_name': 'March', 'year': 2026, 'best_trophies': 210,
+                                  'best_year': 2024, 'anniversary': None, 'years': [
+                {'year': 2023, 'trophies': 118, 'platinums': 2, 'is_current': False},
+                {'year': 2024, 'trophies': 210, 'platinums': 5, 'is_current': False},
+                {'year': 2025, 'trophies': 96, 'platinums': 1, 'is_current': False},
+                {'year': 2026, 'trophies': 147, 'platinums': 3, 'is_current': True}]}),
+            ('summary', {'year': 2026, 'month': 3,
+                         'highlights': ['147 trophies', '3 platinums', '9-day streak', 'Night Owl']}),
+        ]
+        # `accent` drives each stage's per-beat colour world; it mirrors the modifier the slide itself uses.
+        accents = {'intro': 'primary', 'total_trophies': 'primary', 'rarest_trophy': 'accent',
+                   'platinums': 'primary', 'month_in_history': 'primary', 'summary': 'primary'}
+        return [
+            {'type': name, 'accent': accents[name],
+             'html': render_to_string(f'recap/partials/slides/{name}.html', ctx)}
+            for name, ctx in specs
+        ]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['slides'] = self._slides()
+        return ctx
+
+
 class StageCardsWorkshopView(TemplateView):
     """Design workshop (/design/stage-cards/): the badge-detail stage journey rebuilt from scratch --
     the stage card + the game card, now with CONTRACT awareness (each game's home Contract + its jobs/XP,

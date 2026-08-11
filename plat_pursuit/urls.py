@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, SupportHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, BadgePresentationView, RequirementsChecklistWorkshopView, StageCardsWorkshopView, GameCardWorkshopView, BadgeJourneyWorkshopView, ChromeWorkshopView, PursuerCardPreviewView, PursuerCardRanksPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView as DesignResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, SupportHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, BadgePresentationView, RequirementsChecklistWorkshopView, StageCardsWorkshopView, GameCardWorkshopView, BadgeJourneyWorkshopView, ChromeWorkshopView, RecapStageWorkshopView, PursuerCardPreviewView, PursuerCardRanksPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView as DesignResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, GameListSitemap, RoadmapSitemap,
@@ -404,6 +404,7 @@ urlpatterns = [
     path('design/game-card/', GameCardWorkshopView.as_view(), name='design_game_card'),
     path('design/badge-journey/', BadgeJourneyWorkshopView.as_view(), name='design_badge_journey'),
     path('design/chrome/', ChromeWorkshopView.as_view(), name='design_chrome'),
+    path('design/recap-stage/', RecapStageWorkshopView.as_view(), name='design_recap_stage'),
     path('design/tally/', TemplateView.as_view(template_name='design/tally_preview.html'), name='design_tally_preview'),
     path('design/horizon/', TemplateView.as_view(template_name='design/horizon_preview.html'), name='design_horizon_preview'),
     path('design/pursuer-card/', PursuerCardPreviewView.as_view(), name='design_pursuer_card_preview'),

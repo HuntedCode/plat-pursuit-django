@@ -1,0 +1,422 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Recap stage workshop{% endblock %}
+
+{% block content %}
+{% comment %}
+Design decision aid (NOT a product surface). Three answers to "what IS the monthly recap", with the SAME
+real slide partials inside each, so the only variable is presentation.
+
+Why this exists: the slides were rebuilt onto --pp-* and the shared .rcp shell, but the presentation
+around them is still the pre-rebuild dashboard module -- breadcrumb, then three nested
+`card bg-base-200/90 border-2 border-base-300` wrappers, then a fixed-height box with dots and two ghost
+circle buttons. That is anti-reference #1 (the generic Tailwind dashboard) in its purest form, and the
+frame says "dashboard panel" before anyone reads a word.
+
+Styles are inline and `rsw-` prefixed on purpose: a workshop is throwaway, and keeping it out of
+recap-deck.css means nothing here can leak into the product before we have chosen.
+{% endcomment %}
+<style>
+    .rsw { max-width: 1180px; margin: 0 auto; padding: 24px 16px 120px; }
+    .rsw h1 { font-family: var(--pp-font-display); font-size: 1.7rem; font-weight: 800; color: var(--pp-text); }
+    .rsw__sub { color: var(--pp-text-dim); font-size: 0.9rem; margin-top: 8px; max-width: 62ch; line-height: 1.5; }
+    .rsw__block { margin-top: 56px; }
+    .rsw__tag { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+    .rsw__letter { font-family: var(--pp-font-display); font-size: 1.15rem; font-weight: 800; color: var(--pp-primary); }
+    .rsw__name { font-family: var(--pp-font-display); font-size: 1.15rem; font-weight: 800; color: var(--pp-text); }
+    .rsw__thesis { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+    .rsw__note { font-size: 0.82rem; color: var(--pp-text-dim); margin: 0 0 16px; max-width: 74ch; line-height: 1.55; }
+    .rsw__note b { color: var(--pp-text); font-weight: 700; }
+    .rsw__frame { border: 1px dashed color-mix(in oklab, var(--pp-border) 80%, transparent); border-radius: var(--pp-radius-lg); overflow: hidden; }
+    .rsw__caption { font-size: 0.72rem; color: var(--pp-text-mute); font-style: italic; margin-top: 10px; }
+
+    /* Every stage drives its own accent from the active beat, so the whole surface changes character
+       between slides instead of only the card inside it. */
+    .rsw-stage { --rsw-accent: var(--pp-primary); }
+    .rsw-stage[data-accent="accent"] { --rsw-accent: var(--pp-accent); }
+    .rsw-stage[data-accent="secondary"] { --rsw-accent: var(--pp-secondary); }
+
+    /* ============================================================================================
+     * A. CEREMONY -- the recap as an EVENT.
+     * Full-bleed takeover, story grammar (segmented bar, tap zones, hold-to-pause), and a colour
+     * world per beat. The grammar people already know from Stories, in our voice.
+     * ========================================================================================== */
+    .rsw-cer {
+        position: relative; height: 640px; display: flex; flex-direction: column;
+        background: radial-gradient(120% 90% at 50% 0%,
+            color-mix(in oklab, var(--rsw-accent) 26%, var(--pp-bg-0)) 0%, var(--pp-bg-0) 62%);
+        transition: background 0.7s ease;
+    }
+    /* The aurora is what makes it feel like a place rather than a panel. Two slow drifting blooms,
+       tinted by the beat. Deliberately behind everything and never animated per-frame over a blur. */
+    .rsw-cer__aura { position: absolute; inset: -20%; pointer-events: none; opacity: 0.5; }
+    .rsw-cer__aura span {
+        position: absolute; width: 46%; aspect-ratio: 1; border-radius: 50%;
+        background: radial-gradient(circle, color-mix(in oklab, var(--rsw-accent) 55%, transparent) 0%, transparent 70%);
+        filter: blur(30px);
+    }
+    .rsw-cer__aura span:nth-child(1) { left: 6%; top: 8%; }
+    .rsw-cer__aura span:nth-child(2) { right: 4%; bottom: 4%; width: 38%; }
+    @media (prefers-reduced-motion: no-preference) {
+        .rsw-cer__aura span:nth-child(1) { animation: rswDrift 15s ease-in-out infinite alternate; }
+        .rsw-cer__aura span:nth-child(2) { animation: rswDrift 19s ease-in-out infinite alternate-reverse; }
+    }
+    @keyframes rswDrift { from { transform: translate3d(0,0,0) scale(1); } to { transform: translate3d(6%, 5%, 0) scale(1.16); } }
+
+    /* A DISSOLVES THE CARD. This is the single biggest move in the whole comparison: in a takeover the
+       STAGE is the frame, so keeping a bordered card inside it is a frame within a frame -- exactly the
+       nesting that makes the current recap read as a widget. The .rcp shell keeps doing its real job
+       (type scale, rhythm, anatomy) and stops drawing a box. */
+    .rsw-cer .rcp {
+        background: none; border: 0; box-shadow: none; padding: 0; max-width: 32rem;
+    }
+    .rsw-cer .rcp--hero::after, .rsw-cer .rcp--hero::before { display: none; }
+    /* With no card to sit on, the type carries the beat -- so it grows. */
+    .rsw-cer .rcp .pp-tally--hero { font-size: clamp(3.5rem, 11vw, 5.5rem); }
+    .rsw-cer .rcp__kicker { font-size: 1rem; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.75; }
+    .rsw-cer .rcp__caption { font-size: 1.2rem; }
+
+    /* Segmented progress. The single clearest "this is a story, it has a length and a pace" signal. */
+    .rsw-cer__bars { position: relative; display: flex; gap: 4px; padding: 14px 16px 0; }
+    .rsw-cer__bar { flex: 1; height: 3px; border-radius: 999px; background: rgba(255,255,255,0.18); overflow: hidden; }
+    .rsw-cer__bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: #fff; }
+    .rsw-cer__bar.is-done i { width: 100%; }
+    .rsw-cer__bar.is-live i { width: 100%; transition: width 5s linear; }
+
+    .rsw-cer__top { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; }
+    .rsw-cer__who { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: rgba(255,255,255,0.8); }
+    .rsw-cer__who img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+    .rsw-cer__exit { background: none; border: 0; color: rgba(255,255,255,0.6); cursor: pointer; padding: 4px; }
+    .rsw-cer__exit svg { width: 18px; height: 18px; }
+
+    .rsw-cer__stage { position: relative; flex: 1; display: grid; place-items: center; padding: 8px 16px 20px; min-height: 0; }
+    .rsw-cer__slide { position: absolute; inset: 8px 16px 20px; display: grid; place-items: center; opacity: 0; pointer-events: none; }
+    .rsw-cer__slide.is-active { opacity: 1; pointer-events: auto; }
+    /* Directional, not a fade: the outgoing beat leaves the way you sent it and the incoming one settles
+       with a spring. One gesture, two halves -- the exit choreographed as carefully as the entrance. */
+    @media (prefers-reduced-motion: no-preference) {
+        .rsw-cer__slide.is-active { animation: rswInFwd 0.52s cubic-bezier(0.22, 1.1, 0.36, 1) both; }
+        .rsw-cer.is-back .rsw-cer__slide.is-active { animation-name: rswInBack; }
+    }
+    @keyframes rswInFwd  { from { opacity: 0; transform: translateX(34px) scale(0.965); } to { opacity: 1; transform: none; } }
+    @keyframes rswInBack { from { opacity: 0; transform: translateX(-34px) scale(0.965); } to { opacity: 1; transform: none; } }
+
+    /* Tap zones, the way every story UI works. Invisible, and they sit UNDER the slide so the slide's own
+       controls (quiz options) still win. */
+    .rsw-cer__zone { position: absolute; top: 0; bottom: 0; width: 32%; border: 0; background: none; cursor: pointer; z-index: 0; }
+    .rsw-cer__zone--prev { left: 0; } .rsw-cer__zone--next { right: 0; }
+    .rsw-cer__slide { z-index: 1; }
+    .rsw-cer__hint { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); font-size: 0.68rem; color: rgba(255,255,255,0.35); }
+
+    /* ============================================================================================
+     * B. BROADCAST -- the recap as an ARTIFACT.
+     * The love-letter rule (visual-identity 5): PS-era system readout. Assembles itself rather than
+     * sliding; the Horizon is the ground; type does the work. Prestigious and unhurried.
+     * ========================================================================================== */
+    .rsw-bro {
+        position: relative; height: 640px; display: flex; flex-direction: column;
+        background:
+            linear-gradient(180deg, color-mix(in oklab, var(--rsw-accent) 10%, var(--pp-bg-0)) 0%, var(--pp-bg-0) 40%),
+            var(--pp-bg-0);
+        transition: background 0.7s ease;
+    }
+    /* Horizon: the identity's own ground primitive, borrowed as the stage floor. */
+    .rsw-bro__horizon {
+        position: absolute; left: 0; right: 0; bottom: 0; height: 42%; pointer-events: none;
+        background: linear-gradient(180deg, transparent 0%, color-mix(in oklab, var(--rsw-accent) 12%, transparent) 100%);
+        border-top: 1px solid color-mix(in oklab, var(--rsw-accent) 26%, transparent);
+        mask-image: linear-gradient(180deg, transparent, #000 40%);
+    }
+    /* A faint grid, PS-era geometric abstraction. Conceptual, not skeumorphic: no scanline texture. */
+    .rsw-bro__grid {
+        position: absolute; inset: 0; pointer-events: none; opacity: 0.3;
+        background-image:
+            linear-gradient(to right, color-mix(in oklab, var(--rsw-accent) 40%, transparent) 1px, transparent 1px),
+            linear-gradient(to bottom, color-mix(in oklab, var(--rsw-accent) 40%, transparent) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: radial-gradient(80% 60% at 50% 45%, #000 0%, transparent 75%);
+    }
+    /* B KEEPS the panel but makes it TECHNICAL rather than soft: squared corners, a hairline rule, corner
+       marks. The card stops being a content card and becomes a readout panel. */
+    .rsw-bro .rcp {
+        border-radius: 2px;
+        background: linear-gradient(180deg, color-mix(in oklab, var(--rsw-accent) 5%, var(--pp-bg-1)), var(--pp-bg-1));
+        border: 1px solid color-mix(in oklab, var(--rsw-accent) 32%, var(--pp-border));
+        box-shadow: none;
+    }
+    /* Corner marks hug the PANEL, not the stage. `.rcp` uses no pseudo-elements of its own, so these are
+       free -- and on the slide wrapper (which is inset to the full stage) they floated off in the corners
+       of the frame instead of registering the panel. */
+    .rsw-bro .rcp { position: relative; }
+    .rsw-bro .rcp::before, .rsw-bro .rcp::after {
+        content: ''; position: absolute; width: 12px; height: 12px; pointer-events: none;
+        border-color: var(--rsw-accent); opacity: 0.9;
+    }
+    .rsw-bro .rcp::before { left: -1px; top: -1px; border-left: 2px solid; border-top: 2px solid; }
+    .rsw-bro .rcp::after { right: -1px; bottom: -1px; border-right: 2px solid; border-bottom: 2px solid; }
+
+    .rsw-bro__head { position: relative; display: flex; align-items: baseline; gap: 12px; padding: 16px 20px 0; }
+    .rsw-bro__sys { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase; color: var(--rsw-accent); }
+    .rsw-bro__idx { margin-left: auto; font-size: 0.66rem; letter-spacing: 0.14em; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+    .rsw-bro__rule { position: relative; height: 1px; margin: 10px 20px 0; background: linear-gradient(90deg, color-mix(in oklab, var(--rsw-accent) 55%, transparent), transparent); }
+    .rsw-bro__stage { position: relative; flex: 1; display: grid; place-items: center; padding: 16px 20px 24px; min-height: 0; }
+    .rsw-bro__slide { position: absolute; inset: 16px 20px 24px; display: grid; place-items: center; opacity: 0; pointer-events: none; }
+    .rsw-bro__slide.is-active { opacity: 1; pointer-events: auto; }
+    /* Assembly, not motion across the screen: it resolves into place, like a panel drawing itself. */
+    @media (prefers-reduced-motion: no-preference) {
+        .rsw-bro__slide.is-active { animation: rswAssemble 0.66s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    }
+    @keyframes rswAssemble {
+        from { opacity: 0; transform: translateY(10px); clip-path: inset(0 0 100% 0); }
+        to   { opacity: 1; transform: none; clip-path: inset(0 0 0 0); }
+    }
+    .rsw-bro__foot { position: relative; display: flex; align-items: center; gap: 10px; padding: 0 20px 16px; }
+    .rsw-bro__step { flex: 1; height: 2px; background: rgba(255,255,255,0.1); position: relative; }
+    .rsw-bro__step i { position: absolute; inset: 0 auto 0 0; background: var(--rsw-accent); transition: width 0.45s ease; }
+    .rsw-bro__btn {
+        border: 1px solid color-mix(in oklab, var(--rsw-accent) 40%, var(--pp-border)); background: transparent;
+        color: var(--pp-text); border-radius: var(--pp-radius-sm); padding: 5px 12px; cursor: pointer;
+        font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .rsw-bro__btn:hover { border-color: var(--rsw-accent); color: var(--rsw-accent); }
+
+    /* ============================================================================================
+     * C. SPREAD -- the recap as a FEATURE.
+     * No deck, no mode. Beats reveal on scroll in a long-form editorial column. Linkable, browsable,
+     * and the only direction that suits going back through old months casually.
+     * ========================================================================================== */
+    .rsw-spr { position: relative; height: 640px; overflow-y: auto; scroll-behavior: smooth; background: var(--pp-bg-0); }
+    .rsw-spr__inner { max-width: 640px; margin: 0 auto; padding: 32px 20px 80px; display: flex; flex-direction: column; gap: 56px; }
+    .rsw-spr__beat { position: relative; opacity: 0; transform: translateY(18px); transition: opacity 0.55s ease, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1); }
+    .rsw-spr__beat.is-in { opacity: 1; transform: none; }
+    @media (prefers-reduced-motion: reduce) { .rsw-spr__beat { opacity: 1; transform: none; } }
+    /* A rail with a node per beat: the spine that makes a long scroll read as a sequence. */
+    .rsw-spr__beat::before {
+        content: ''; position: absolute; left: -22px; top: 8px; width: 9px; height: 9px; border-radius: 50%;
+        background: var(--pp-bg-0); border: 2px solid color-mix(in oklab, var(--pp-primary) 60%, transparent);
+    }
+    .rsw-spr__beat::after {
+        content: ''; position: absolute; left: -18px; top: 22px; bottom: -56px; width: 1px;
+        background: linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 30%, transparent), transparent);
+    }
+    .rsw-spr__beat:last-child::after { display: none; }
+    .rsw-spr__eyebrow { font-size: 0.64rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 10px; }
+
+    @media (max-width: 640px) {
+        .rsw-cer, .rsw-bro, .rsw-spr { height: 560px; }
+        .rsw-spr__inner { padding-left: 34px; }
+    }
+</style>
+
+<div class="rsw">
+    <h1>Recap stage</h1>
+    <p class="rsw__sub">
+        Three answers to <b>what the monthly recap actually is</b>. The slides inside are the real
+        partials, identical in all three, so the only thing being compared is the presentation around
+        them. Click through each one: the motion is most of the argument.
+    </p>
+
+    {# ---------- A ---------- #}
+    <div class="rsw__block">
+        <div class="rsw__tag">
+            <span class="rsw__letter">A</span>
+            <span class="rsw__name">Ceremony</span>
+            <span class="rsw__thesis">The recap as an event</span>
+        </div>
+        <p class="rsw__note">
+            Full-bleed takeover on the same grammar as the claim ceremony: the page recedes, chrome goes,
+            and you are somewhere else. Story controls people already know (segmented bar, tap left/right,
+            auto-advance), and <b>a colour world per beat</b> so the whole surface changes character, not
+            just the card. Transitions are directional with a spring settle, so the exit is choreographed
+            as carefully as the entrance.
+        </p>
+        <div class="rsw__frame">
+            <div class="rsw-stage rsw-cer" data-stage="cer" data-accent="primary">
+                <div class="rsw-cer__aura" aria-hidden="true"><span></span><span></span></div>
+                <div class="rsw-cer__bars" data-bars>
+                    {% for s in slides %}<span class="rsw-cer__bar"><i></i></span>{% endfor %}
+                </div>
+                <div class="rsw-cer__top">
+                    <span class="rsw-cer__who">
+                        <img src="{% static 'images/badges/default.png' %}" alt="" />HuntedCode &middot; March 2026
+                    </span>
+                    <button type="button" class="rsw-cer__exit" aria-label="Exit">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div class="rsw-cer__stage">
+                    <button type="button" class="rsw-cer__zone rsw-cer__zone--prev" data-nav="-1" aria-label="Previous"></button>
+                    <button type="button" class="rsw-cer__zone rsw-cer__zone--next" data-nav="1" aria-label="Next"></button>
+                    {% for s in slides %}
+                    <div class="rsw-cer__slide{% if forloop.first %} is-active{% endif %}" data-accent="{{ s.accent }}">{{ s.html|safe }}</div>
+                    {% endfor %}
+                    <span class="rsw-cer__hint">tap the sides &middot; hold to pause</span>
+                </div>
+            </div>
+        </div>
+        <p class="rsw__caption">Auto-advances. Hold anywhere to pause.</p>
+    </div>
+
+    {# ---------- B ---------- #}
+    <div class="rsw__block">
+        <div class="rsw__tag">
+            <span class="rsw__letter">B</span>
+            <span class="rsw__name">Broadcast</span>
+            <span class="rsw__thesis">The recap as an artifact</span>
+        </div>
+        <p class="rsw__note">
+            The love-letter rule, cashed in: a console system readout your machine produced for you.
+            Geometric ground, the <b>Horizon</b> as the floor, type doing the work, and beats that
+            <b>assemble</b> into place rather than slide past. Slower and more prestigious than A; it
+            feels like a document you were issued rather than a story you are being shown. Least
+            familiar of the three, and the most ours.
+        </p>
+        <div class="rsw__frame">
+            <div class="rsw-stage rsw-bro" data-stage="bro" data-accent="primary">
+                <div class="rsw-bro__grid" aria-hidden="true"></div>
+                <div class="rsw-bro__horizon" aria-hidden="true"></div>
+                <div class="rsw-bro__head">
+                    <span class="rsw-bro__sys">Monthly report</span>
+                    <span class="rsw-bro__idx" data-idx>01 / {{ slides|length }}</span>
+                </div>
+                <div class="rsw-bro__rule"></div>
+                <div class="rsw-bro__stage">
+                    {% for s in slides %}
+                    <div class="rsw-bro__slide{% if forloop.first %} is-active{% endif %}" data-accent="{{ s.accent }}">{{ s.html|safe }}</div>
+                    {% endfor %}
+                </div>
+                <div class="rsw-bro__foot">
+                    <button type="button" class="rsw-bro__btn" data-nav="-1">Back</button>
+                    <span class="rsw-bro__step"><i data-step style="width: 16%;"></i></span>
+                    <button type="button" class="rsw-bro__btn" data-nav="1">Next</button>
+                </div>
+            </div>
+        </div>
+        <p class="rsw__caption">Manual pacing. No auto-advance: an artifact does not rush you.</p>
+    </div>
+
+    {# ---------- C ---------- #}
+    <div class="rsw__block">
+        <div class="rsw__tag">
+            <span class="rsw__letter">C</span>
+            <span class="rsw__name">Spread</span>
+            <span class="rsw__thesis">The recap as a feature</span>
+        </div>
+        <p class="rsw__note">
+            Not a deck at all. One editorial column, beats revealing on scroll along a spine.
+            Nothing to enter or exit, every beat is linkable, and it is the only direction that suits
+            <b>browsing back through old months</b> casually rather than sitting through them. The
+            trade: no pacing, no anticipation, and the quizzes lose their reason to exist.
+        </p>
+        <div class="rsw__frame">
+            <div class="rsw-spr" data-stage="spr">
+                <div class="rsw-spr__inner">
+                    {% for s in slides %}
+                    <div class="rsw-spr__beat"><p class="rsw-spr__eyebrow">{{ forloop.counter|stringformat:"02d" }}</p>{{ s.html|safe }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <p class="rsw__caption">Scroll inside the frame.</p>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    /* Shared deck behaviour for A and B: both are indexed stages, they just dress and pace differently. */
+    function deck(root, opts) {
+        var slides = Array.prototype.slice.call(root.querySelectorAll(opts.slideSel));
+        if (!slides.length) { return; }
+        var i = 0, timer = null, held = false;
+
+        function paint(next, back) {
+            root.classList.toggle('is-back', !!back);
+            slides[i].classList.remove('is-active');
+            i = next;
+            var el = slides[i];
+            el.classList.add('is-active');
+            // The whole stage takes the beat's accent -- this is the "colour world per beat".
+            root.dataset.accent = el.dataset.accent || 'primary';
+            if (opts.onPaint) { opts.onPaint(i, slides.length); }
+            schedule();
+        }
+        function go(step) {
+            var next = i + step;
+            if (next < 0 || next >= slides.length) { return; }
+            paint(next, step < 0);
+        }
+        function schedule() {
+            if (timer) { clearTimeout(timer); timer = null; }
+            if (!opts.auto || reduce || held) { return; }
+            timer = setTimeout(function () { go(i + 1 < slides.length ? 1 : -i); }, opts.auto);
+        }
+
+        root.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-nav]');
+            if (btn && root.contains(btn)) { go(parseInt(btn.dataset.nav, 10)); }
+        });
+        // Hold to pause -- the affordance every story UI has and ours never did.
+        ['pointerdown', 'pointerup', 'pointerleave'].forEach(function (evt) {
+            root.addEventListener(evt, function (e) {
+                held = (evt === 'pointerdown');
+                if (held && timer) { clearTimeout(timer); timer = null; } else { schedule(); }
+            });
+        });
+
+        if (opts.onPaint) { opts.onPaint(0, slides.length); }
+        schedule();
+    }
+
+    var cer = document.querySelector('[data-stage="cer"]');
+    if (cer) {
+        var bars = Array.prototype.slice.call(cer.querySelectorAll('.rsw-cer__bar'));
+        deck(cer, {
+            slideSel: '.rsw-cer__slide',
+            auto: 5000,
+            onPaint: function (idx) {
+                bars.forEach(function (b, n) {
+                    b.classList.remove('is-live', 'is-done');
+                    if (n < idx) { b.classList.add('is-done'); }
+                });
+                // Restart the fill from zero so the bar reads as a timer, not a progress bar.
+                var live = bars[idx];
+                live.querySelector('i').style.transition = 'none';
+                live.querySelector('i').style.width = '0';
+                void live.offsetWidth;
+                live.querySelector('i').style.transition = '';
+                live.classList.add(reduce ? 'is-done' : 'is-live');
+            },
+        });
+    }
+
+    var bro = document.querySelector('[data-stage="bro"]');
+    if (bro) {
+        var idxEl = bro.querySelector('[data-idx]'), stepEl = bro.querySelector('[data-step]');
+        deck(bro, {
+            slideSel: '.rsw-bro__slide',
+            auto: 0,
+            onPaint: function (idx, total) {
+                idxEl.textContent = String(idx + 1).padStart(2, '0') + ' / ' + total;
+                stepEl.style.width = ((idx + 1) / total * 100) + '%';
+            },
+        });
+    }
+
+    var spr = document.querySelector('[data-stage="spr"]');
+    if (spr) {
+        var beats = spr.querySelectorAll('.rsw-spr__beat');
+        if (reduce) {
+            beats.forEach(function (b) { b.classList.add('is-in'); });
+        } else {
+            var io = new IntersectionObserver(function (entries) {
+                entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('is-in'); } });
+            }, { root: spr, threshold: 0.25 });
+            beats.forEach(function (b) { io.observe(b); });
+        }
+    }
+})();
+</script>
+{% endblock %}
