@@ -233,6 +233,7 @@ class MonthlyRecapManager {
         void this.container.offsetWidth;              // let the un-hide land before the fade starts
         this.container.classList.add('is-in');
 
+        this.container.classList.add('is-aim-fwd');   // discoverable before the pointer moves at all
         this.handle = PlatPursuit.takeover(this.container, {
             focusSel: '#recap-exit',
             exitMs: 280,
@@ -726,13 +727,14 @@ class MonthlyRecapManager {
         if (blocked || this.currentSlide >= this.slides.length - 1) return;
 
         // A resume runs the REMAINDER; a fresh beat uses the length armBeat already wrote.
-        const ms = this._beatLeft != null
-            ? this._floor(this._beatLeft)
-            : (this._beatMs || this.BEAT_MIN_MS);
-        if (this._beatLeft != null) {
-            this.container.style.setProperty('--rcx-beat', ms + 'ms');
-            this._beatLeft = null;
-        }
+        // A remainder is only honoured for the slide it was taken from. Anything else is stale by
+        // definition, and using it would run this beat on the previous beat's leftovers.
+        const carry = (this._beatLeft && this._beatLeft.index === this.currentSlide)
+            ? this._floor(this._beatLeft.ms) : null;
+        this._beatLeft = null;
+
+        const ms = carry != null ? carry : (this._beatMs || this.BEAT_MIN_MS);
+        if (carry != null) this.container.style.setProperty('--rcx-beat', ms + 'ms');
         this._beatEndsAt = performance.now() + ms;
         this.beatTimer = setTimeout(() => this.nextSlide(), ms);
     }
@@ -760,9 +762,9 @@ class MonthlyRecapManager {
         if (!this.stageOpen || this.container.classList.contains('is-held')) return;
         const fill = this.container.querySelector('.rcx__bar.is-live i');
         if (fill) fill.style.width = getComputedStyle(fill).width;
-        if (this._beatEndsAt) {
-            this._beatLeft = Math.max(0, this._beatEndsAt - performance.now());
-        }
+        this._beatLeft = this._beatEndsAt
+            ? { index: this.currentSlide, ms: Math.max(0, this._beatEndsAt - performance.now()) }
+            : null;
         this.stopBeatTimer();
         this.container.classList.add('is-held');
     }

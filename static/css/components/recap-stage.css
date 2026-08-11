@@ -259,25 +259,32 @@
 .rcx__aim {
     position: absolute; top: 50%; z-index: 2; pointer-events: none;
     display: grid; place-items: center;
-    width: 2.5rem; height: 2.5rem; margin-top: -1.25rem;
+    width: 3rem; height: 3rem; margin-top: -1.5rem;
     border-radius: 50%;
     color: var(--pp-text);
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.22);
     opacity: 0;
-    transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+    transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1),
+                background-color 0.22s ease, border-color 0.22s ease;
 }
-.rcx__aim svg { width: 1.1rem; height: 1.1rem; }
-.rcx__aim--prev { left: 1rem;  transform: translateX(6px); }
-.rcx__aim--next { right: 1rem; transform: translateX(-6px); }
-/* Both hint faintly whenever the pointer is over the stage, so the pair is discoverable at all; the one
-   you are aiming at lifts. */
-.rcx.is-aim-back .rcx__aim, .rcx.is-aim-fwd .rcx__aim { opacity: 0.28; transform: none; }
+.rcx__aim svg { width: 1.35rem; height: 1.35rem; }
+.rcx__aim--prev { left: 1rem;  transform: translateX(8px); }
+.rcx__aim--next { right: 1rem; transform: translateX(-8px); }
+/* Both are visible whenever the deck is playing -- the pair has to be DISCOVERABLE, not merely available
+   to someone who already suspects it exists. The one you are aiming at lifts to full and takes the
+   accent, so the answer to "which way will this click go" is on screen before you commit to it. */
+.rcx.is-aim-back .rcx__aim, .rcx.is-aim-fwd .rcx__aim { opacity: 0.55; transform: none; }
 .rcx.is-aim-back .rcx__aim--prev,
-.rcx.is-aim-fwd  .rcx__aim--next { opacity: 1; background: rgba(255, 255, 255, 0.12); }
+.rcx.is-aim-fwd  .rcx__aim--next {
+    opacity: 1;
+    background: color-mix(in oklab, var(--rcx-accent) 26%, transparent);
+    border-color: color-mix(in oklab, var(--rcx-accent) 55%, transparent);
+}
 @media (prefers-reduced-motion: reduce) { .rcx__aim { transition: opacity 0.22s ease; } }
-/* Touch has no hover, so the arrows would only ever appear mid-tap. The hint line carries it there. */
-@media (hover: none) { .rcx__aim { display: none; } }
+/* No `hover: none` guard. A desktop with a touchscreen reports `hover: none` and would have hidden these
+   entirely -- which is very likely why they were reported missing. The arrows are driven by pointer
+   state, so on a genuine touch device they simply never light up; nothing needs to hide them. */
 
 /* THE DISSOLVE. See the file header: on the stage the shell stops drawing a box, and the type grows to
    carry the beat in its place. */

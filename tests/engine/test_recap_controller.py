@@ -307,3 +307,35 @@ def test_going_back_is_signposted_before_the_click(js):
     assert 'pointer-events: none' in css[css.index('.rcx__aim'):css.index('.rcx__aim') + 600], (
         'the arrows can steal a click from a quiz option'
     )
+
+
+def test_a_held_remainder_cannot_leak_into_another_slide(js):
+    """`_beatLeft` is the time left on the beat you were HOLDING. If it survives into the next slide,
+    that slide runs on the previous one's leftovers and advances early -- which reads as a double skip.
+    Keying it to its slide makes a stale remainder unusable rather than merely unlikely."""
+    hold = _method(js, 'holdBeat')
+    assert 'index: this.currentSlide' in hold, 'the remainder is not keyed to the slide it came from'
+    start = _method(js, 'startBeatTimer')
+    assert '_beatLeft.index === this.currentSlide' in start, (
+        'a remainder from another slide would still be honoured'
+    )
+
+
+def test_the_direction_arrows_are_not_hidden_on_touch_capable_desktops():
+    """A `hover: none` guard hides them on any desktop with a touchscreen, which is very likely why they
+    were reported missing. They are driven by pointer state, so a genuine touch device simply never
+    lights them; nothing needs to hide them."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'recap-stage.css').read_text(encoding='utf-8')
+    # Comments are stripped first: the note explaining WHY the guard is gone contains the phrase, and a
+    # substring search on raw CSS flags the explanation as the offence.
+    css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+    rules = re.findall(r'@media\s*\([^)]*hover:\s*none[^)]*\)\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}', css)
+    assert not any('.rcx__aim' in r for r in rules), (
+        'the arrows are hidden behind a `hover: none` media query, which matches touch-capable desktops'
+    )
+
+
+def test_the_arrows_are_visible_before_the_pointer_moves(js):
+    """Entering the stage is a click on Begin; the mouse then sits still. Waiting for a pointermove that
+    may never come means the affordance is never discovered."""
+    assert "classList.add('is-aim-fwd')" in _method(js, 'openStage')
