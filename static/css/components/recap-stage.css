@@ -244,10 +244,40 @@
 @keyframes rcxInBack { from { opacity: 0; transform: translateX(-36px) scale(0.965); } to { opacity: 1; transform: none; } }
 
 /* Tap zones, the way every story UI works. UNDER the slide, so a quiz option always wins the click. */
-.rcx__zone { position: absolute; top: 0; bottom: 0; width: 30%; z-index: 0; border: 0; background: none; cursor: pointer; }
+/* The zones are keyboard/AT controls only -- pointer advancement is handled at the stage, because these
+   sit UNDER the slide and a real click never reaches them. Kept narrow and edge-hugging to match
+   `isBackwardEdge`. */
+.rcx__zone { position: absolute; top: 0; bottom: 0; width: 25%; z-index: 0; border: 0; background: none; cursor: pointer; }
 .rcx__zone--prev { left: 0; }
-.rcx__zone--next { right: 0; }
+.rcx__zone--next { right: 0; width: 75%; }
 .rcx__zone:focus-visible { outline: 2px solid var(--rcx-accent); outline-offset: -4px; }
+
+/* WHICH WAY AM I ABOUT TO GO. Backward was an invisible quarter of the screen, so aiming to skip forward
+   and going back instead felt like a fault rather than a mistake -- nothing had ever suggested backward
+   was possible. These arrows answer that before the click, not after.
+   They sit above the slide but take no pointer events, so they cannot steal a click from a quiz option. */
+.rcx__aim {
+    position: absolute; top: 50%; z-index: 2; pointer-events: none;
+    display: grid; place-items: center;
+    width: 2.5rem; height: 2.5rem; margin-top: -1.25rem;
+    border-radius: 50%;
+    color: var(--pp-text);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    opacity: 0;
+    transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.rcx__aim svg { width: 1.1rem; height: 1.1rem; }
+.rcx__aim--prev { left: 1rem;  transform: translateX(6px); }
+.rcx__aim--next { right: 1rem; transform: translateX(-6px); }
+/* Both hint faintly whenever the pointer is over the stage, so the pair is discoverable at all; the one
+   you are aiming at lifts. */
+.rcx.is-aim-back .rcx__aim, .rcx.is-aim-fwd .rcx__aim { opacity: 0.28; transform: none; }
+.rcx.is-aim-back .rcx__aim--prev,
+.rcx.is-aim-fwd  .rcx__aim--next { opacity: 1; background: rgba(255, 255, 255, 0.12); }
+@media (prefers-reduced-motion: reduce) { .rcx__aim { transition: opacity 0.22s ease; } }
+/* Touch has no hover, so the arrows would only ever appear mid-tap. The hint line carries it there. */
+@media (hover: none) { .rcx__aim { display: none; } }
 
 /* THE DISSOLVE. See the file header: on the stage the shell stops drawing a box, and the type grows to
    carry the beat in its place. */

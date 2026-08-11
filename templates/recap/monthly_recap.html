@@ -100,7 +100,15 @@ PlatPursuit.takeover. {% endcomment %}
         {# Tap zones sit UNDER the slides (z-index), so a quiz option always wins the click. #}
         <button type="button" class="rcx__zone rcx__zone--prev" id="prev-slide" aria-label="Previous"></button>
         <button type="button" class="rcx__zone rcx__zone--next" id="next-slide" aria-label="Next"></button>
-        <p class="rcx__hint">Tap the sides to move &middot; hold to pause</p>
+        <span class="rcx__aim rcx__aim--prev" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                 stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        </span>
+        <span class="rcx__aim rcx__aim--next" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                 stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+        </span>
+        <p class="rcx__hint">Tap the right to move on &middot; the left edge goes back &middot; hold to pause</p>
     </div>
 
     {% comment %} Beats you interact with advance on THIS, not on a timer -- see MANUAL_BEATS. {% endcomment %}

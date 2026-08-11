@@ -275,3 +275,35 @@ def test_a_waiting_beat_does_not_show_a_completed_timer():
     body = rule.group(1)
     assert 'width: 0' in body, 'a waiting bar still inherits is-live width:100% and snaps to full'
     assert 'transition: none' in body
+
+
+def test_completed_bars_are_committed_inline_not_left_to_the_cascade(js):
+    """A skipped bar was reported as still animating rather than snapping full. Class-swapping relies on
+    how a browser cancels an in-flight transition when the rule carrying it stops matching, which varies
+    and which I could not reproduce from a harness. An inline width outranks every rule and cannot be
+    interpolated toward, so the behaviour stops depending on that."""
+    body = _method(js, 'paintBars')
+    assert "fill.style.width = '100%'" in body, 'completed bars are not committed to full explicitly'
+    assert "fill.style.width = '0'" in body, 'bars ahead of the playhead are not explicitly emptied'
+
+
+def test_the_backward_edge_has_one_definition(js):
+    """The click handler and the hover affordance must not disagree about where "back" is, or the deck
+    shows one thing and does another."""
+    assert 'isBackwardEdge' in _method(js, 'isBackwardEdge')
+    handler = re.search(r"this\.container\.addEventListener\('click'.*?\n        \}\);", js, re.S)
+    assert 'isBackwardEdge' in handler.group(0), 'the click handler measures the edge itself'
+    move = re.search(r"this\.container\.addEventListener\('pointermove'.*?\n        \}\);", js, re.S)
+    assert move and 'isBackwardEdge' in move.group(0), 'the affordance measures the edge itself'
+
+
+def test_going_back_is_signposted_before_the_click(js):
+    """Backward was an invisible quarter of the screen: aiming to skip forward and landing on it instead
+    reads as a fault, because nothing suggested backward was possible."""
+    code = _code(js)
+    assert 'is-aim-back' in code and 'is-aim-fwd' in code
+    css = (ROOT / 'static' / 'css' / 'components' / 'recap-stage.css').read_text(encoding='utf-8')
+    assert '.rcx__aim' in css
+    assert 'pointer-events: none' in css[css.index('.rcx__aim'):css.index('.rcx__aim') + 600], (
+        'the arrows can steal a click from a quiz option'
+    )

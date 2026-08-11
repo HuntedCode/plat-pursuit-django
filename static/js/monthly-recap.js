@@ -385,27 +385,52 @@ class MonthlyRecapManager {
         this.container.dataset.accent = accent;
     }
 
-    /** Paint the bars for the active beat and restart its fill from zero. */
+    /**
+     * Paint every bar for the active beat.
+     *
+     * Each fill's width is COMMITTED INLINE rather than left to the class rules. Relying on classes meant
+     * relying on how a browser cancels an in-flight transition when the rule carrying it stops matching --
+     * behaviour that varies, and that I could not pin down from a harness while a skipped bar was being
+     * reported as still animating. An inline value outranks every rule here and cannot be interpolated
+     * toward, so a bar behind the playhead is full the instant it is painted. No semantics to trust.
+     */
     paintBars(index) {
         if (!this.bars) return;
+        const paused = this.container.classList.contains('is-waiting')
+            || this.container.classList.contains('is-manual');
+
         this.bars.forEach((bar, n) => {
+            const fill = bar.querySelector('i');
             bar.classList.remove('is-live', 'is-done');
-            if (n < index) bar.classList.add('is-done');
+            fill.style.transition = 'none';
+            if (n < index) {
+                bar.classList.add('is-done');
+                fill.style.width = '100%';        // behind the playhead: done, immediately
+            } else if (n > index) {
+                fill.style.width = '0';           // ahead of it: untouched
+            }
         });
+
         const live = this.bars[index];
         if (!live) return;
-        if (this.prefersReducedMotion) { live.classList.add('is-done'); return; }
-
-        // Rewind, then run. The inline width MUST be cleared before `is-live` lands: an inline style
-        // beats the `.is-live i { width: 100% }` class rule, so leaving `width: 0` on the element pinned
-        // the bar at zero for the entire beat and the timer never appeared to move.
         const fill = live.querySelector('i');
-        fill.style.transition = 'none';
+
+        if (this.prefersReducedMotion) {
+            live.classList.add('is-done');
+            fill.style.width = '100%';
+            return;
+        }
+
+        // Rewind to zero and COMMIT it, then hand the width back to the stylesheet so `.is-live` can run
+        // it to 100% over the beat. Without the commit the fill eases BACKWARDS from wherever the last
+        // beat left it; without handing it back, the inline zero pins the bar and it never moves at all.
         fill.style.width = '0';
-        void fill.offsetWidth;            // commit the rewind before re-enabling the transition
-        fill.style.transition = '';
-        fill.style.width = '';            // hand the width back to the stylesheet
+        void fill.offsetWidth;
         live.classList.add('is-live');
+        if (!paused) {
+            fill.style.transition = '';
+            fill.style.width = '';
+        }
     }
 
     setupEventListeners() {
@@ -420,9 +445,7 @@ class MonthlyRecapManager {
             // Continue control, links inside a beat.
             if (e.target.closest('button, a, [data-quiz-option], input, select, dialog')) return;
 
-            const box = this.container.getBoundingClientRect();
-            const backward = (e.clientX - box.left) < box.width * 0.3;
-            if (backward) this.prevSlide(); else this.nextSlide();
+            if (this.isBackwardEdge(e.clientX)) this.prevSlide(); else this.nextSlide();
         });
 
         const begin = document.getElementById('recap-begin');
@@ -474,9 +497,22 @@ class MonthlyRecapManager {
 
         // Hold to pause -- the affordance every story UI has. Pointer events rather than touch, so a
         // mouse press pauses too.
+        // Show WHICH way a click will go, as the pointer moves. Going back was an invisible third of the
+        // screen: aiming to skip forward and landing on it instead is the most jarring thing the deck can
+        // do, because nothing on screen suggested backward was even possible.
+        this.container.addEventListener('pointermove', (e) => {
+            if (!this.stageOpen || this.container.classList.contains('is-ending')) return;
+            const back = this.isBackwardEdge(e.clientX);
+            this.container.classList.toggle('is-aim-back', back);
+            this.container.classList.toggle('is-aim-fwd', !back);
+        });
+
         this.container.addEventListener('pointerdown', () => this.holdBeat());
         ['pointerup', 'pointercancel', 'pointerleave'].forEach((evt) => {
             this.container.addEventListener(evt, () => this.releaseBeat());
+        });
+        this.container.addEventListener('pointerleave', () => {
+            this.container.classList.remove('is-aim-back', 'is-aim-fwd');
         });
 
         // Keyboard navigation. Bound at the DOCUMENT, so it has to yield: to anyone typing (the share
@@ -695,6 +731,18 @@ class MonthlyRecapManager {
         }
         this._beatEndsAt = performance.now() + ms;
         this.beatTimer = setTimeout(() => this.nextSlide(), ms);
+    }
+
+    /**
+     * Is this x-coordinate in the "go back" edge?
+     *
+     * A QUARTER, not a third: forward is what almost every click means, so the backward target is kept
+     * deliberately small and hugging the edge. One definition, shared by the click handler and the hover
+     * affordance, so what you are shown and what you get cannot disagree.
+     */
+    isBackwardEdge(clientX) {
+        const box = this.container.getBoundingClientRect();
+        return (clientX - box.left) < box.width * 0.25;
     }
 
     /**
