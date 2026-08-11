@@ -643,8 +643,11 @@ class MonthlyRecapManager {
     }
 
     renderAllSlides() {
-        // Clear container
-        this.slidesContainer.innerHTML = '';
+        // Remove only the SLIDES. `innerHTML = ''` was wiping the whole stage, and the stage is not just
+        // slides -- the tap zones, the direction arrows and the hint line are markup that lives here too.
+        // They were destroyed on first render and never came back, so the arrows were never in the DOM to
+        // be seen and the zone buttons the controller had already captured were detached nodes.
+        this.slidesContainer.querySelectorAll('.recap-slide').forEach((el) => el.remove());
 
         // Render each slide
         this.slides.forEach((slide, index) => {

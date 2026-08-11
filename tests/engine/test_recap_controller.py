@@ -366,3 +366,26 @@ def test_the_direction_arrows_do_not_depend_on_pointer_state():
     assert re.search(r'\.rcx \.rcx__aim \{[^}]*opacity: 0\.\d', css), (
         'the arrows are only visible while an is-aim-* class is present'
     )
+
+
+def test_rendering_slides_does_not_destroy_the_stage_furniture(js):
+    """`this.slidesContainer.innerHTML = ''` wiped the WHOLE stage on first render, and the stage is not
+    just slides -- the tap zones, the direction arrows and the hint line are markup that lives there too.
+
+    Consequences, all of which were reported as separate bugs: the arrows were never in the DOM to be
+    seen; the hint line vanished; and `this.prevBtn` / `this.nextBtn`, captured at construction, became
+    detached nodes, so clicking a zone could never do anything. Only slides may be removed."""
+    # Comments stripped: the note explaining WHY the wipe is gone quotes the wipe verbatim, and a raw
+    # substring search reports the explanation as the offence. (Third time this session.)
+    body = _code(_method(js, 'renderAllSlides'))
+    assert "innerHTML = ''" not in body, (
+        'renderAllSlides clears the whole stage again, taking the zones, arrows and hint with it'
+    )
+    assert "querySelectorAll('.recap-slide')" in body, 'slides are not removed selectively'
+
+
+def test_the_stage_furniture_is_present_in_the_template():
+    """If it is not in the markup, no amount of CSS can show it."""
+    tpl = (ROOT / 'templates' / 'recap' / 'monthly_recap.html').read_text(encoding='utf-8')
+    for needed in ('rcx__aim--prev', 'rcx__aim--next', 'id="prev-slide"', 'id="next-slide"', 'rcx__hint'):
+        assert needed in tpl, f'{needed} missing from the stage markup'
