@@ -370,7 +370,6 @@ class MonthlyRecapManager {
         this.container.classList.remove('is-card-only');
         this.cancelResume();
         this.stopBeatTimer();
-        clearTimeout(this._cardTimer);
         this.container.classList.remove('is-ending');
         if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
         this.handle = null;
@@ -470,6 +469,12 @@ class MonthlyRecapManager {
         // The pause zone is a real control, not just a region: without one, the only way to stop the deck
         // would be a pointer gesture, which is no way at all for a keyboard or a screen reader.
         if (this.holdBtn) this.holdBtn.addEventListener('click', () => this.togglePause());
+        if (this.prefersReducedMotion) {
+            // ...and a control that does nothing does not belong in the tab order, nor does the hint get
+            // to advertise it. The middle simply becomes inert; the edges still navigate.
+            this.container.classList.add('is-static');
+            if (this.holdBtn) this.holdBtn.hidden = true;
+        }
 
         this.container.addEventListener('click', (e) => {
             if (!this.stageOpen || this.container.classList.contains('is-ending')) return;
@@ -760,7 +765,7 @@ class MonthlyRecapManager {
         // Re-sync in case something changed since the beat was armed -- a quiz being answered, a dialog
         // opening or closing. armBeat has already done it for a fresh beat.
         const blocked = this.syncBeatState(this.slides[this.currentSlide]?.type);
-        if (blocked || this.currentSlide >= this.slides.length - 1) {
+        if (blocked) {
             this._beatEndsAt = null;      // no clock running: there is no remainder to carry
             return;
         }
@@ -775,7 +780,21 @@ class MonthlyRecapManager {
         const ms = carry != null ? carry : (this._beatMs || this.BEAT_MIN_MS);
         if (carry != null) this.container.style.setProperty('--rcx-beat', ms + 'ms');
         this._beatEndsAt = performance.now() + ms;
-        this.beatTimer = setTimeout(() => this.nextSlide(), ms);
+        this.beatTimer = setTimeout(() => this.endOfBeat(), ms);
+    }
+
+    /**
+     * What this beat does when its time runs out: advance, or -- on the last one -- hand over to the card.
+     *
+     * The summary used to bail out of `startBeatTimer` and schedule its own `setTimeout` instead, which
+     * made it the ONE beat paced by a second clock. Nothing that governs the first clock reached it: a
+     * held finger did not stop it, the tab-visibility restart did not re-align it, and a latched pause
+     * left the deck reporting "paused" while the card arrived on schedule underneath. Same shape as the
+     * quiz dwell that raced the beat timer -- see the file header. One clock; the ending is a branch.
+     */
+    endOfBeat() {
+        if (this.currentSlide >= this.slides.length - 1) this.showCardScene();
+        else this.nextSlide();
     }
 
     /**
@@ -808,6 +827,10 @@ class MonthlyRecapManager {
      * there would be a state the deck was in without anything being suspended.
      */
     togglePause() {
+        // Nothing to pause under reduced motion: no beat is ever armed there, so the deck only moves when
+        // the hunter moves it. Latching anyway would put a "Resume" control on screen offering to restart
+        // something that was never running -- the same lie the `is-waiting` guard below exists to prevent.
+        if (this.prefersReducedMotion) return;
         if (!this.pinned && this.container.classList.contains('is-waiting')) return;
         this.pinned = !this.pinned;
         this.container.classList.toggle('is-pinned', this.pinned);
@@ -966,14 +989,9 @@ class MonthlyRecapManager {
         if (slideType === 'summary') {
             this.seenSummary = true;
             this.loadSharePreview();
-            // Hold on the summary for its own beat, then hand over. Cleared whenever the beat changes, so
-            // stepping back off the summary cannot strand a transition that then fires over another beat.
-            clearTimeout(this._cardTimer);
-            this._cardTimer = setTimeout(() => {
-                if (this.slides[this.currentSlide]?.type === 'summary') this.showCardScene();
-            }, this.beatDuration(slideEls[index]));
+            // The hold before the hand-over is this beat's OWN beat, armed by the normal path like every
+            // other -- so pausing it actually pauses it. `endOfBeat` decides what happens when it expires.
         } else {
-            clearTimeout(this._cardTimer);
             this.container.classList.remove('is-ending');
             if (card) card.setAttribute('aria-hidden', 'true');
             if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
@@ -1540,6 +1558,11 @@ class MonthlyRecapManager {
 
         if (this.currentSlide < this.slides.length - 1) {
             this.goToSlide(this.currentSlide + 1);
+        } else {
+            // On the last beat "move on" means the card, not nothing. This used to be a dead tap: the
+            // summary's hand-over was on its own timer, so the forward zone had nothing to hand to and
+            // the only way past the summary was to wait it out.
+            this.showCardScene();
         }
     }
 

@@ -349,6 +349,31 @@ def test_the_pause_latches_rather_than_following_the_finger(js):
     )
 
 
+def test_the_summary_is_paced_by_the_beat_clock_like_every_other_slide(js):
+    """The summary used to bail out of `startBeatTimer` and schedule its own `setTimeout` to hand over to
+    the card. That made it the one beat governed by a second clock, and nothing that governs the first
+    reached it: a held finger did not stop it, the tab-visibility restart did not re-align it, and a
+    latched pause left the deck reporting "paused" while the card arrived underneath on schedule.
+    Measured before the fix -- `pinned: True` and, six seconds later, `ending: True` with the card
+    visible. Same shape as the quiz dwell that raced the beat timer."""
+    code = _code(js)
+    assert '_cardTimer' not in code, 'the summary is back on a second clock'
+    start = _method(code, 'startBeatTimer')
+    assert 'this.slides.length - 1' not in start, (
+        'the last beat opts out of the clock again, which is what forced a private timer'
+    )
+    end = _method(code, 'endOfBeat')
+    assert 'showCardScene' in end and 'nextSlide' in end, 'the ending is not a branch of the one clock'
+    assert 'this.endOfBeat()' in start, 'the beat still expires straight into nextSlide'
+
+
+def test_moving_on_from_the_summary_hands_over_rather_than_doing_nothing(js):
+    """`nextSlide` had nothing to advance to on the last beat, so the forward zone, the arrow key and the
+    swipe were all dead there and waiting out the hold was the only way past the summary."""
+    nxt = _method(_code(js), 'nextSlide')
+    assert 'showCardScene' in nxt, 'forward on the last beat is still a dead tap'
+
+
 def test_moving_on_clears_the_pause(js):
     """Every beat is armed through one function, so the pause has exactly one place to be forgotten. Left
     set, navigating away from a paused slide would land on a slide whose clock never starts -- a deck that

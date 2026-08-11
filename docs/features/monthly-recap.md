@@ -1,6 +1,6 @@
 # Monthly Recap System
 
-A "Spotify Wrapped" style feature for trophy hunting activity. Each month, the system generates personalized recaps with trophy stats, activity analysis, badge progress, interactive quizzes, and shareable cards. Recaps are presented as animated slide decks with theme selection and confetti celebrations. Free users get the current + most recent completed month; premium users get full history.
+A "Spotify Wrapped" style feature for trophy hunting activity. Each month, the system generates personalized recaps with trophy stats, activity analysis, badge progress, interactive quizzes, and a shareable card. The recap is presented as a full-screen **ceremony** -- an entrance cover, then a paced 20-beat deck that closes on the card. **Every logged-in hunter can open any month they earned a trophy in**; the premium ladder was deleted and no month is gated. The in-progress month stays closed, because a Wrapped is a retrospective.
 
 ## Architecture Overview
 
@@ -10,7 +10,7 @@ Generation happens **on-demand** (when a user views their recap) or via **cron**
 
 **Timezone handling is critical**: all month boundaries are computed in the user's local timezone, then converted to UTC for database queries. A user in Tokyo and a user in New York have different "January" boundaries. The system resolves timezone from `profile.user.user_timezone` (falls back to UTC).
 
-The frontend renders slides via Django template partials fetched one-at-a-time from the API, with per-slide animations, quiz interactivity, and a flavor text system that randomizes descriptive text on each viewing.
+The frontend renders slides from Django template partials fetched in ONE request (`/deck/`), with per-beat motion, quiz interactivity, and a flavor text system that varies descriptive text per viewing. One request per beat meant ~20 calls against a 60/min all-API throttle, which 429d the rest of the site when a hunter flicked between months.
 
 ## File Map
 
@@ -26,7 +26,7 @@ The frontend renders slides via Django template partials fetched one-at-a-time f
 | `static/js/monthly-recap.js` | MonthlyRecapManager: slides, animations, quizzes, themes (~1,100 lines) |
 | `templates/recap/monthly_recap.html` | Main slide presentation page |
 | `templates/recap/recap_index.html` | Month picker + sync gate |
-| `templates/recap/partials/slides/` | 16 slide templates, all built on the `.rcp` shell |
+| `templates/recap/partials/slides/` | 20 slide templates, all built on the `.rcp` shell |
 | `components/badge_medallion.html` | Composed by both badge slides (their payloads are frame dicts) |
 | `static/css/components/recap-deck.css` | Motion, activity ramp, the `.rcp` slide shell + its parts |
 | `static/css/components/recap-stage.css` | The entrance cover and the full-screen stage (`.rcx`) |
@@ -55,7 +55,7 @@ Immutable pattern: once `is_finalized=True`, regeneration is skipped even with `
 ### On-Demand Generation
 
 1. User navigates to `/recap/<year>/<month>/`
-2. `RecapSlideView` validates: month is completed (not current), premium gating for past months
+2. `RecapSlideView` validates: the month is completed (not current, not future) and has trophy activity. No premium gating -- see the intro.
 3. API call to `RecapDetailView` fetches recap data
 4. `MonthlyRecapService.get_or_generate_recap()` checks for existing recap
 5. If none or stale (current month + >1 hour old): calls `generate_recap_data()`
@@ -103,7 +103,7 @@ Immutable pattern: once `is_finalized=True`, regeneration is skipped even with `
 1. Frontend requests individual slides via `RecapSlidePartialView`
 2. API maps each `DECK` beat to a Django template partial in `recap/partials/slides/` (`SLIDE_TEMPLATES`; `test_recap_deck_order` pins that the two sets match exactly)
 3. Flavor text system: `SLIDE_FLAVOR_TEXT` dict with random selection per slide type
-4. Slides: intro, total_trophies, platinums, rarest_trophy, most_active_day, activity_calendar, games, badges, comparison, summary, 4 quiz types, streak, time_analysis
+4. The deck is a data-driven `DECK` of 20 `RecapBeat`s, each with a `when` condition, not an append sequence. Order and membership live in `monthly_recap_service.py`; `test_recap_deck_order` pins it.
 
 ### Presentation: the Entrance and the Stage
 
@@ -154,8 +154,11 @@ The latch has four rules, and each of them was a way for a "paused" deck to star
   pinned would look broken rather than paused.
 - `visibilitychange` respects it: returning to the tab restarts a *running* beat, never a paused one.
 
-A beat with no clock (a quiz, the calendar) cannot be paused; it is already waiting on you, and "paused"
-there would be a state with nothing suspended. Note also that `holdBeat` freezes the bar's *visual*
+A beat with no clock cannot be paused; it is already waiting on you, and "paused" there would be a state
+with nothing suspended. That covers quizzes and the calendar, and also **reduced motion**, where no beat
+is ever armed and the deck moves only when the hunter moves it -- there the middle zone goes inert, the
+hint drops its pause clause and the control leaves the tab order, because an affordance for a control that
+does nothing describes behaviour the hunter will then not get. Note also that `holdBeat` freezes the bar's *visual*
 unconditionally but only recomputes the remainder when a timer is running: the latch arrives on `click`,
 by which point `pointerup` has already released the hold, so there may be no clock left to stop but there
 is always a bar mid-flight to catch.
@@ -173,7 +176,11 @@ Load-bearing details, each of which was a bug first:
 - **Only ONE clock may run.** Pacing is derived per beat (reading time + a beat per thing to look at,
   clamped 4-9.5s) and armed through `armBeat`. The quiz's post-answer dwell goes through the same path:
   when it had its own `setTimeout`, two timers raced and how early the deck jumped depended on how fast
-  the question was answered.
+  the question was answered. The **summary** broke this rule a second time and in the same shape: it
+  opted out of `startBeatTimer` (being the last slide) and ran a private `_cardTimer` to hand over to the
+  card, so nothing governing the real clock reached it -- a held finger did not stop it and a latched
+  pause left the deck reporting "paused" while the card arrived underneath on schedule. The last beat now
+  runs the same clock as every other and `endOfBeat` decides what expiry means: advance, or hand over.
 - **Beats that wait on the hunter show an EMPTY pulsing segment.** `.is-live` declares `width: 100%` and
   relies on a transition to get there, so removing the transition *commits* to full rather than freezing.
   A quiz showing a completed timer is a lie about a beat that has not run.

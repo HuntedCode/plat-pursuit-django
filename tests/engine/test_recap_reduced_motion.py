@@ -83,3 +83,31 @@ def test_interactions_are_wired_outside_the_motion_path():
     assert 'prefersReducedMotion' not in wire.group(1), 'wiring must not depend on motion preference'
     # And it must be invoked before the animation call it replaced part of.
     assert js.index('this.wireSlideInteractions(') < js.index('this.triggerSlideAnimations(slideEl, slideType);')
+
+
+def test_the_pause_zone_is_inert_under_reduced_motion():
+    """Reduced motion arms no beats: `startBeatTimer` returns immediately, so the deck only ever moves
+    when the hunter moves it. The middle zone would nonetheless latch, put a play glyph on screen and flip
+    its label to "Resume" -- offering to restart something that was never running. Confirmed in a browser
+    with the preference on before this guard existed: `pinned: true`, play glyph shown, label "Resume".
+
+    The affordances have to go with the behaviour. A hint that still reads "tap the middle to pause" and a
+    focusable control that does nothing describe behaviour the hunter will then not get, which is worse
+    than saying nothing at all."""
+    js = CONTROLLER.read_text(encoding='utf-8')
+    toggle = re.search(r'\n    togglePause\(\).*?\n    \}\n', js, re.S)
+    assert toggle, 'togglePause not found'
+    assert 'if (this.prefersReducedMotion) return;' in toggle.group(0), (
+        'the middle latches a deck that has no clock to stop'
+    )
+    assert "classList.add('is-static')" in js and 'this.holdBtn.hidden = true' in js, (
+        'a control that does nothing is left in the tab order'
+    )
+
+    css = (ROOT / 'static' / 'css' / 'components' / 'recap-stage.css').read_text(encoding='utf-8')
+    rule = re.search(r'\.rcx\.is-static[^{]*\{([^}]*)\}', css)
+    assert rule and 'display: none' in rule.group(1), 'the static state hides nothing'
+    assert 'rcx__hint-pause' in css, 'the hint still advertises a pause that cannot happen'
+
+    tpl = (ROOT / 'templates' / 'recap' / 'monthly_recap.html').read_text(encoding='utf-8')
+    assert 'rcx__hint-pause' in tpl, 'the hint has no separable pause clause to hide'

@@ -285,7 +285,7 @@
 .rcx__glyph--play, .rcx.is-pinned .rcx__glyph--pause { display: none; }
 .rcx.is-pinned .rcx__glyph--play { display: block; }
 /* The REGION, not just the direction. The arrows are pinned at the edges while the backward hit area
-   runs 25% inward, so they said which way a click would go and nothing about how far that side extends --
+   run 30% inward, so they said which way a click would go and nothing about how far that side extends --
    a click at 20% of the width is nowhere near the left arrow and still goes back. This washes the side
    you are aiming at across its ACTUAL extent, so the boundary is visible before you commit rather than
    inferred after being surprised by it. Sized off the same 25/75 split `isBackwardEdge` uses. */
@@ -316,6 +316,12 @@
 .rcx.is-ending .rcx__wash, .rcx.is-card-only .rcx__wash { opacity: 0; }
 /* Touch has no hover to preview with, so the wash would only ever flash under a finger mid-tap. */
 @media (hover: none) { .rcx__wash { display: none; } }
+
+/* Reduced motion arms no beats at all, so there is no clock for the middle to stop. The zone goes inert
+   and everything that advertised it goes with it -- an affordance for a control that does nothing is
+   worse than no affordance, because it describes behaviour the hunter will then not get. */
+.rcx.is-static .rcx__hint-pause,
+.rcx.is-static .rcx__aim--hold { display: none; }
 
 /* ALWAYS visible while the deck plays -- not conditional on pointer state at all.
    Tying their visibility to `is-aim-*` meant they were absent whenever the pointer was outside the
