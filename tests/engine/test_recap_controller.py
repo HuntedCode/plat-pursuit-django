@@ -225,3 +225,36 @@ def test_the_batched_endpoint_exists_and_is_routed():
 def test_an_in_flight_load_can_be_dropped(js):
     assert 'AbortController' in _code(js)
     assert 'abortLoad' in _method(js, 'abortLoad')
+
+
+def test_advancing_is_handled_at_the_stage_not_by_the_tap_zones(js):
+    """`.recap-slide` is absolutely positioned across the whole stage at z-index 1 and the zones sit
+    beneath it at z-index 0, so a REAL click never reached a zone -- the slide always caught it. Raising
+    the zones instead would break the opposite case (quiz options, calendar days), so advancement is
+    handled at the stage with a guard: anything interactive owns its own click.
+
+    This survived earlier testing because the harness dispatched `.click()` at the zone element directly,
+    routing around the exact bug it should have caught. It now clicks real coordinates."""
+    handler = re.search(r"this\.container\.addEventListener\('click'.*?\n        \}\);", js, re.S)
+    assert handler, 'no stage-level click handler'
+    body = handler.group(0)
+    assert 'closest(' in body, 'no guard -- clicking a quiz option would also advance the deck'
+    assert 'data-quiz-option' in body and 'button' in body
+    assert 'clientX' in body, 'advancement does not depend on WHERE the click landed'
+
+
+def test_holding_pins_the_bar_rather_than_ending_it(js):
+    """`transition: none` does not freeze an in-flight transition -- it drops the animation and applies
+    the target value, so the bar snapped to FULL on every pointerdown, which is every click."""
+    body = _method(js, 'holdBeat')
+    assert 'getComputedStyle' in body and 'style.width' in body, (
+        'the current width is not pinned before the transition is removed'
+    )
+    release = _method(js, 'releaseBeat')
+    assert '_beatLeft' in body and 'startBeatTimer' in release
+
+
+def test_releasing_resumes_the_remainder_rather_than_restarting(js):
+    """Holding to finish reading a beat should not hand you the whole beat again."""
+    body = _method(js, 'startBeatTimer')
+    assert 'this._beatLeft' in body, 'the remaining time is ignored on resume'

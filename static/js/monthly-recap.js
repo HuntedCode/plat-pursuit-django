@@ -399,6 +399,7 @@ class MonthlyRecapManager {
         // Rewind, then run. The inline width MUST be cleared before `is-live` lands: an inline style
         // beats the `.is-live i { width: 100% }` class rule, so leaving `width: 0` on the element pinned
         // the bar at zero for the entire beat and the timer never appeared to move.
+        this._beatLeft = null;
         const fill = live.querySelector('i');
         fill.style.transition = 'none';
         fill.style.width = '0';
@@ -409,12 +410,20 @@ class MonthlyRecapManager {
     }
 
     setupEventListeners() {
-        this.prevBtn.addEventListener('click', () => {
-            this.prevSlide();
-        });
+        // The zones stay as focusable controls for keyboard and assistive tech; pointer advancement is
+        // handled below, where it can see what was actually clicked.
+        this.prevBtn.addEventListener('click', () => this.prevSlide());
+        this.nextBtn.addEventListener('click', () => this.nextSlide());
 
-        this.nextBtn.addEventListener('click', () => {
-            this.nextSlide();
+        this.container.addEventListener('click', (e) => {
+            if (!this.stageOpen || this.container.classList.contains('is-ending')) return;
+            // Anything interactive owns its own click: quiz options, calendar days, the exit, the
+            // Continue control, links inside a beat.
+            if (e.target.closest('button, a, [data-quiz-option], input, select, dialog')) return;
+
+            const box = this.container.getBoundingClientRect();
+            const backward = (e.clientX - box.left) < box.width * 0.3;
+            if (backward) this.prevSlide(); else this.nextSlide();
         });
 
         const begin = document.getElementById('recap-begin');
@@ -454,10 +463,12 @@ class MonthlyRecapManager {
         document.addEventListener('visibilitychange', () => {
             if (!this.stageOpen) return;
             if (document.hidden) {
-                this.stopBeatTimer();
-                this.container.classList.add('is-held');    // freezes the bar where it stands
+                this.holdBeat();
             } else {
+                // Restart the beat outright rather than resuming: the two clocks drifted apart while the
+                // tab was backgrounded, and a clean restart is the only state they can agree on.
                 this.container.classList.remove('is-held');
+                this._beatLeft = null;
                 this.paintBars(this.currentSlide);
                 this.startBeatTimer();
             }
@@ -465,12 +476,9 @@ class MonthlyRecapManager {
 
         // Hold to pause -- the affordance every story UI has. Pointer events rather than touch, so a
         // mouse press pauses too.
-        ['pointerdown', 'pointerup', 'pointercancel', 'pointerleave'].forEach((evt) => {
-            this.container.addEventListener(evt, () => {
-                const held = evt === 'pointerdown';
-                this.container.classList.toggle('is-held', held);
-                if (held) this.stopBeatTimer(); else this.startBeatTimer();
-            });
+        this.container.addEventListener('pointerdown', () => this.holdBeat());
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach((evt) => {
+            this.container.addEventListener(evt, () => this.releaseBeat());
         });
 
         // Keyboard navigation. Bound at the DOCUMENT, so it has to yield: to anyone typing (the share
@@ -667,9 +675,39 @@ class MonthlyRecapManager {
         if (blocked || this.currentSlide >= this.slides.length - 1) return;
 
         const slideEl = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
-        const ms = this.beatDuration(slideEl);
-        this.container.style.setProperty('--rcx-beat', ms + 'ms');   // the timer bar runs for exactly this long
+        const ms = this._beatLeft != null ? this._beatLeft : this.beatDuration(slideEl);
+        this._beatLeft = null;
+        this._beatEndsAt = performance.now() + ms;
+        this.container.style.setProperty('--rcx-beat', ms + 'ms');   // the bar runs for exactly this long
         this.beatTimer = setTimeout(() => this.nextSlide(), ms);
+    }
+
+    /**
+     * Freeze the beat under a finger.
+     *
+     * The bar has to be PINNED at the width it is showing. `transition: none` does not freeze an
+     * in-flight transition -- it drops the animation and applies the target immediately, so the bar
+     * snapped to full on every pointerdown, which is every click.
+     */
+    holdBeat() {
+        if (!this.stageOpen || this.container.classList.contains('is-held')) return;
+        const fill = this.container.querySelector('.rcx__bar.is-live i');
+        if (fill) fill.style.width = getComputedStyle(fill).width;
+        if (this._beatEndsAt) {
+            this._beatLeft = Math.max(0, this._beatEndsAt - performance.now());
+        }
+        this.stopBeatTimer();
+        this.container.classList.add('is-held');
+    }
+
+    /** Resume with what is LEFT of the beat, not a fresh one -- holding to finish reading a slide should
+     *  not hand you the whole slide again. */
+    releaseBeat() {
+        if (!this.container.classList.contains('is-held')) return;
+        this.container.classList.remove('is-held');
+        const fill = this.container.querySelector('.rcx__bar.is-live i');
+        if (fill) fill.style.width = '';        // back to the stylesheet, which runs it to 100%
+        this.startBeatTimer();
     }
 
     /**

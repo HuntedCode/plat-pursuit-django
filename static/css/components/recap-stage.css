@@ -179,7 +179,10 @@
 .rcx__bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: #fff; }
 .rcx__bar.is-done i { width: 100%; }
 .rcx__bar.is-live i { width: 100%; transition: width var(--rcx-beat, 5s) linear; }
-/* Held (finger down) or on an unanswered quiz: the timer must visibly STOP, or "hold to pause" is a lie. */
+/* Held or waiting: the timer must visibly STOP, or "hold to pause" is a lie.
+   `transition: none` alone does NOT freeze an in-flight transition -- it drops the animation and applies
+   the target value, which snapped the bar to full. The controller pins the current width inline before
+   this lands; this only stops it easing on from there. */
 .rcx.is-held .rcx__bar.is-live i,
 .rcx.is-waiting .rcx__bar.is-live i { transition: none; }
 
