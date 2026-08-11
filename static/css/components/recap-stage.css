@@ -132,33 +132,45 @@
     background: radial-gradient(130% 85% at 50% 0%,
         color-mix(in oklab, var(--rcx-accent) 24%, var(--pp-bg-0)) 0%, var(--pp-bg-0) 62%);
 }
-/* The bloom BREATHES rather than sitting still: a very slow transform on an over-inset layer, so the
-   gradient's centre wanders and its falloff opens and closes without any edge ever coming into view.
-   Transform only -- it stays on the compositor, and this is a viewport-sized element where animating
-   anything that triggers paint would cost real frames on a phone. */
+/* The ground drifts with REAL travel. The first attempt moved it 3% over 26 seconds, which on a soft
+   radial gradient is indistinguishable from stationary -- the motion existed and simply could not be
+   seen. Transform only, so it stays on the compositor: this is a viewport-sized element and animating
+   anything that triggers paint here costs real frames on a phone. */
 @media (prefers-reduced-motion: no-preference) {
-    .rcx__ground { animation: rcxBreathe 26s ease-in-out infinite alternate; }
+    .rcx__ground { animation: rcxBreathe 19s ease-in-out infinite alternate; }
 }
 @keyframes rcxBreathe {
-    from { transform: translate3d(-3%, -2%, 0) scale(1.04); }
-    to   { transform: translate3d(3%, 2%, 0) scale(1.14); }
+    from { transform: translate3d(-9%, -6%, 0) scale(1.0); }
+    to   { transform: translate3d(9%, 7%, 0) scale(1.35); }
 }
 /* Two slow blooms. Behind everything, never animated per-frame over a backdrop-filter, and the only
    ambient motion on the surface -- restraint is the difference between atmosphere and a screensaver. */
-.rcx__aura { position: absolute; inset: -20%; pointer-events: none; opacity: 0.45; }
-.rcx__aura span {
-    position: absolute; width: 46%; aspect-ratio: 1; border-radius: 50%;
-    background: radial-gradient(circle, color-mix(in oklab, var(--rcx-accent) 55%, transparent) 0%, transparent 70%);
-    filter: blur(40px);
-}
-.rcx__aura span:nth-child(1) { left: 4%; top: 6%; }
-.rcx__aura span:nth-child(2) { right: 2%; bottom: 2%; width: 38%; }
+.rcx__aura { position: absolute; inset: -25%; pointer-events: none; opacity: 0.6; }
+/* The container turns slowly while the blooms drift inside it. Two motions on different axes at
+   incommensurate periods means the composition never visibly repeats -- which is what separates
+   "atmosphere" from "a looping background". Rotation is what gives it continuous life; the drifts alone
+   only ever swing back and forth. */
 @media (prefers-reduced-motion: no-preference) {
-    .rcx__aura span:nth-child(1) { animation: rcxDrift 17s ease-in-out infinite alternate; }
-    .rcx__aura span:nth-child(2) { animation: rcxDriftB 23s ease-in-out infinite alternate; }
+    .rcx__aura { animation: rcxTurn 75s linear infinite; }
 }
-@keyframes rcxDrift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(6%, 5%, 0) scale(1.15); } }
-@keyframes rcxDriftB { from { transform: translate3d(2%, -4%, 0) scale(1.1); } to { transform: translate3d(-5%, 3%, 0) scale(0.94); } }
+@keyframes rcxTurn { to { transform: rotate(360deg); } }
+.rcx__aura span {
+    position: absolute; width: 52%; aspect-ratio: 1; border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in oklab, var(--rcx-accent) 62%, transparent) 0%, transparent 70%);
+    filter: blur(45px);
+    will-change: transform;
+}
+.rcx__aura span:nth-child(1) { left: 2%; top: 4%; }
+.rcx__aura span:nth-child(2) { right: 0%; bottom: 0%; width: 44%; }
+.rcx__aura span:nth-child(3) { left: 34%; bottom: 12%; width: 34%; opacity: 0.75; }
+@media (prefers-reduced-motion: no-preference) {
+    .rcx__aura span:nth-child(1) { animation: rcxDrift 13s ease-in-out infinite alternate; }
+    .rcx__aura span:nth-child(2) { animation: rcxDriftB 17s ease-in-out infinite alternate; }
+    .rcx__aura span:nth-child(3) { animation: rcxDriftC 21s ease-in-out infinite alternate; }
+}
+@keyframes rcxDrift  { from { transform: translate3d(-14%, -8%, 0) scale(0.9); }  to { transform: translate3d(18%, 12%, 0) scale(1.3); } }
+@keyframes rcxDriftB { from { transform: translate3d(12%, -14%, 0) scale(1.25); } to { transform: translate3d(-16%, 10%, 0) scale(0.85); } }
+@keyframes rcxDriftC { from { transform: translate3d(-10%, 10%, 0) scale(1.15); } to { transform: translate3d(14%, -12%, 0) scale(0.95); } }
 
 /* Segmented timer. The clearest possible "this is a story, it has a length and a pace" signal, and the
    thing a row of dots can never say. */
@@ -310,33 +322,30 @@
  *
  * That is why the card is NOT an inset overlay: it occupies the lower half of the same stage, and the
  * summary is moved up out of its way. Both are visible together, which is the whole point. */
-/* The summary REDUCES to a header rather than just moving: its supporting parts fold away so what
-   remains -- the mark and the headline -- can sit in the band above the card. Lifting the whole slide
-   without shedding anything pushed the headline off the top of the screen and left only the icon, which
-   is the opposite of "one cohesive end screen". */
+/* The summary becomes the header of the end screen. TRANSFORM AND OPACITY ONLY, which is the whole
+   difference between this reading as smooth and reading as a jump:
+ *
+ *   - `font-size` was animated. That is a layout property -- every frame reflows the text, and the
+ *     glyphs snap between whole pixel sizes rather than gliding.
+ *   - `max-height` was animated to collapse the body. Also layout, and it eases against a value nothing
+ *     can interpolate cleanly, so it lurches.
+ *   - `justify-content` was flipped to flex-start at the START of the transition. That is not animatable
+ *     at all: the content teleported to the top and THEN began scaling. That was the jump.
+ *
+ * So: one composite transform on the slide, opacity on the parts that leave. The scale shrinks the
+ * headline in place, which is what the font-size transition was reaching for anyway.
+ *
+ * Slower, too -- 1.15s. This is the deck's closing gesture and the only one nobody is waiting to skip. */
 .rcx.is-ending .recap-slide.active {
-    justify-content: flex-start;
-    transform: scale(0.82);
-    transform-origin: top center;
-    transition: transform 0.75s cubic-bezier(0.22, 1, 0.3, 1);
+    transform: translate3d(0, -30%, 0) scale(0.58);
+    transition: transform 1.15s cubic-bezier(0.32, 0.72, 0.24, 1);
+    will-change: transform;
 }
 .rcx.is-ending .recap-slide.active .rcp__body,
 .rcx.is-ending .recap-slide.active .rcp__cue {
     opacity: 0;
-    max-height: 0;
-    margin: 0;
-    overflow: hidden;
-    transition: opacity 0.35s ease, max-height 0.6s cubic-bezier(0.22, 1, 0.3, 1), margin 0.6s ease;
+    transition: opacity 0.55s ease;
 }
-.rcx.is-ending .recap-slide.active .rcp__mark { margin-bottom: 0.4rem; }
-/* It is a HEADER now, so it takes header sizing. Left at hero scale the headline wrapped to two lines
-   and the second one went behind the card. */
-.rcx.is-ending .recap-slide.active .pp-tally--hero {
-    font-size: clamp(1.9rem, 4.5vw, 2.9rem);
-    transition: font-size 0.6s cubic-bezier(0.22, 1, 0.3, 1);
-}
-.rcx.is-ending .recap-slide.active .rcp__mark svg,
-.rcx.is-ending .recap-slide.active .rcp__mark-icon { width: 3rem; height: 3rem; }
 @media (prefers-reduced-motion: reduce) {
     .rcx.is-ending .recap-slide.active { transition: none; }
     .rcx.is-ending .recap-slide.active .rcp__body,
@@ -353,9 +362,9 @@
 @media (prefers-reduced-motion: no-preference) {
     /* Rises INTO the space the summary just vacated, a beat behind it, so the two moves read as one
        gesture handing off rather than two things happening at once. */
-    .rcx__card { animation: rcxCardIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both; }
+    .rcx__card { animation: rcxCardIn 1.05s cubic-bezier(0.32, 0.72, 0.24, 1) 0.32s both; }
 }
-@keyframes rcxCardIn { from { opacity: 0; transform: translateY(42px); } to { opacity: 1; transform: none; } }
+@keyframes rcxCardIn { from { opacity: 0; transform: translate3d(0, 56px, 0); } to { opacity: 1; transform: none; } }
 
 .rcx__card-label {
     font-size: 0.78rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;

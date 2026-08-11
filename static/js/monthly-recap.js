@@ -416,6 +416,26 @@ class MonthlyRecapManager {
             if (this.handle) this.handle.close();     // onStageClosed opens and scrolls to the panel
         });
 
+        // Leaving the tab desynced the deck: background tabs throttle setTimeout (clamped to a second or
+        // more) while the CSS transition driving the timer bar is throttled on a different schedule, so
+        // the two came back disagreeing -- a bar sitting full against a beat that had not advanced, or a
+        // beat advancing under a bar that had barely moved.
+        //
+        // Rather than trying to reconcile two clocks that drifted apart, the current beat simply RESTARTS
+        // on return: bar and timer begin from the same instant, so they cannot disagree. Restarting is
+        // also the honest behaviour -- you were not looking, so you get the beat back.
+        document.addEventListener('visibilitychange', () => {
+            if (!this.stageOpen) return;
+            if (document.hidden) {
+                this.stopBeatTimer();
+                this.container.classList.add('is-held');    // freezes the bar where it stands
+            } else {
+                this.container.classList.remove('is-held');
+                this.paintBars(this.currentSlide);
+                this.startBeatTimer();
+            }
+        });
+
         // Hold to pause -- the affordance every story UI has. Pointer events rather than touch, so a
         // mouse press pauses too.
         ['pointerdown', 'pointerup', 'pointercancel', 'pointerleave'].forEach((evt) => {
