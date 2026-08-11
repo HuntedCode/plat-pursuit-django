@@ -171,6 +171,18 @@ Shared parts (`.rcp__stamp`, `.rcp__chips`, `.rcp__pair`, `.rcp-quiz__*`, ...) a
   payloads ARE Medallion frame dicts, so both templates compose `components/badge_medallion.html`.
   Pinned by `test_recap_deck_contract.py`.
 
+- **The three badge fields are snapshots of a NON-STATIONARY derivation.** `badge_xp_earned`,
+  `badges_earned_count` and `badges_data` are sealed at generation (a finalized recap is never
+  recomputed -- `get_or_generate_recap` returns early on `is_finalized`, before it even consults
+  `force_regenerate`, and the admin regenerate action skips finalized rows). But unlike
+  `total_trophies_earned`, whose inputs are stable history, these depend on the badge CATALOG, which is
+  mutable: author a new series and a hunter's old plays retroactively clear stages that did not exist
+  then. Because generation is on-demand, **the value depends on when the hunter first opened that
+  month** -- two hunters with identical 2019 activity get different frozen numbers if a series shipped
+  between their visits. Accepted deliberately: the number is always true as of when they looked, and a
+  Wrapped is a keepsake, not an audit ledger. The alternatives are worse (recomputing rewrites people's
+  saved recaps; clamping to `badge.created_at` puts XP in months where the earned badges do not appear).
+
 - **Monthly badge XP comes from the engine's dates, not a ledger.** There is no badge-XP ledger and
   none is needed: every cleared gating stage carries `StageResult.base_date` and every earned badge
   carries `GroupBadgeResult.earned_date`, so `badge_xp.monthly_xp` buckets the same two components
@@ -192,6 +204,27 @@ Shared parts (`.rcp__stamp`, `.rcp__chips`, `.rcp__pair`, `.rcp-quiz__*`, ...) a
   live state with no history. Now that every month is openable, generating an old recap would freeze
   TODAY'S progress into it and label it with that month, permanently, because the snapshot is persisted.
   Older months return `None` and the frontend drops the slide.
+
+- **Quiz answered-state is PER SLIDE and derived from `quizResults`, not a flag.** One shared
+  `hasAnswered` boolean plus an `initQuizSlide` that only runs on a slide's first visit meant: answer
+  quiz A, advance to quiz B (which reset the flag), go back to A -- and A's own answer no longer counted,
+  so navigation locked on a slide the hunter had already answered. Both quiz paths record the result
+  BEFORE rendering feedback, because the recorded result *is* the flag.
+
+- **The document-level arrow-key handler must keep yielding.** To form fields and contenteditable (the
+  share section below the deck has a `<select>`), to `dialog[open]` (the platinum detail owns the
+  keyboard while up), and to modified presses.
+
+- **`.has-overflow` has to be re-checked on resize.** The deck is `clamp(520px, 100vh - 360px, 720px)`,
+  so which slides overflow moves with the viewport. `visualViewport` is watched too: mobile browser
+  chrome collapsing changes `100vh` without firing `resize`.
+
+- **The platinum-day detail is a native `<dialog>`, and its content is escaped.** The hand-rolled overlay
+  it replaced registered a document-level Escape handler and unbound it only on the Escape path, so
+  closing by backdrop or X leaked one dead handler per open; and it interpolated `game_name` /
+  `trophy_name` -- PSN-sourced text -- straight into `innerHTML`. `showModal()` brings the top layer,
+  backdrop, focus trapping and Escape with it. Note that overriding `display` on the dialog drops the
+  UA's `inset: 0; margin: auto` centring, which is why the rule restates it.
 
 - **Three DOM contracts couple templates, controller and stylesheet**, and none of them raise when broken:
   `data-countup`, `.rcp-cal__cell` / `--plat`, and the quiz's `data-quiz-*` plus the `is-correct` /

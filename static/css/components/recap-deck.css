@@ -606,3 +606,76 @@
 }
 .rcp-quiz__reveal strong { color: var(--rcp-accent); font-weight: 800; }
 .rcp-quiz__reveal-sub { font-size: 0.75rem; color: var(--pp-text-mute); margin-top: 0.2rem; }
+
+/* ---- Platinum detail dialog ---------------------------------------------------------------------
+ * Opened from a platinum day on the activity calendar. A native <dialog> in the top layer, so it needs
+ * no z-index and inherits focus trapping + Escape from the platform.
+ */
+.rcp-plats {
+    --rcp-accent: var(--pp-primary);
+    /* The UA centres a modal dialog with `inset: 0; margin: auto` on the default `display: block`.
+       Overriding display (to flex, for the sticky header + scrolling list) drops that, so it is restated
+       here -- without it the dialog pins to the top-left corner. */
+    inset: 0;
+    margin: auto;
+    width: min(28rem, calc(100vw - 2rem));
+    max-height: min(32rem, calc(100vh - 4rem));
+    padding: 1.25rem;
+    border-radius: var(--pp-radius-lg);
+    border: 1px solid color-mix(in oklab, var(--rcp-accent) 30%, var(--pp-border));
+    background: var(--pp-bg-1);
+    color: var(--pp-text);
+    box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.85);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.rcp-plats::backdrop { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(3px); }
+@media (prefers-reduced-motion: no-preference) {
+    .rcp-plats[open] { animation: rcpPlatsIn 0.22s cubic-bezier(0.34, 1.4, 0.64, 1); }
+}
+@keyframes rcpPlatsIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.97); }
+    to   { opacity: 1; transform: none; }
+}
+
+.rcp-plats__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.rcp-plats__day {
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 1.35rem; color: var(--rcp-accent);
+}
+.rcp-plats__count { font-size: 0.8rem; color: var(--pp-text-dim); margin-top: 0.1rem; }
+.rcp-plats__close {
+    display: grid; place-items: center; width: 2rem; height: 2rem; flex: none;
+    border-radius: 50%; border: 1px solid var(--pp-border); background: var(--pp-bg-2);
+    color: var(--pp-text-dim); cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease;
+}
+.rcp-plats__close:hover { color: var(--pp-text); border-color: var(--rcp-accent); }
+.rcp-plats__close:focus-visible { outline: 2px solid var(--rcp-accent); outline-offset: 2px; }
+.rcp-plats__close svg { width: 1rem; height: 1rem; }
+
+.rcp-plats__list {
+    display: flex; flex-direction: column; gap: 0.5rem;
+    margin-top: 1rem; padding: 0; list-style: none;
+    overflow-y: auto;   /* the list scrolls, not the dialog -- the header stays put */
+}
+.rcp-plats__item {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.6rem; border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+}
+.rcp-plats__icon {
+    width: 2.75rem; height: 2.75rem; flex: none;
+    border-radius: var(--pp-radius-sm); object-fit: cover;
+}
+.rcp-plats__text { min-width: 0; }
+.rcp-plats__game {
+    font-size: 0.85rem; font-weight: 700; line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rcp-plats__trophy {
+    font-size: 0.75rem; color: var(--pp-text-dim); line-height: 1.2;
+    display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rcp-plats__seal { margin-left: auto; flex: none; color: var(--rcp-accent); }
+.rcp-plats__seal svg { width: 1.15rem; height: 1.15rem; }

@@ -186,6 +186,9 @@ class MonthlyRecapManager {
         // Set up swipe support for mobile
         this.setupSwipeSupport();
 
+        // The deck height tracks the viewport, so which slides overflow changes with it
+        this.watchSlideOverflow();
+
         // Track page view
         PlatPursuit.API.post('/api/v1/tracking/site-event/', {
             event_type: 'recap_page_view',
@@ -207,7 +210,7 @@ class MonthlyRecapManager {
             dot.addEventListener('click', () => {
                 // Block navigation if on unanswered quiz
                 const currentSlideType = this.slides[this.currentSlide]?.type;
-                if (this.quizManager.isQuizSlide(currentSlideType) && !this.quizManager.canNavigate()) {
+                if (this.quizManager.isQuizSlide(currentSlideType) && !this.quizManager.canNavigate(currentSlideType)) {
                     // Shake the slide to indicate they need to answer
                     const slideEl = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
                     if (slideEl) {
@@ -231,11 +234,22 @@ class MonthlyRecapManager {
             this.nextSlide();
         });
 
-        // Keyboard navigation
+        // Keyboard navigation. Bound at the DOCUMENT, so it has to yield: to anyone typing (the share
+        // section below the deck has a background <select>, and caret movement inside a field must not
+        // also flip the slide), to an open dialog (the platinum detail owns Escape and arrow keys while
+        // it is up), and to modified presses, which belong to the browser.
         document.addEventListener('keydown', (e) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+            if (e.altKey || e.ctrlKey || e.metaKey) return;
+            if (document.querySelector('dialog[open]')) return;
+
+            const el = e.target;
+            if (el && (el.isContentEditable ||
+                       ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return;
+
             if (e.key === 'ArrowLeft') {
                 this.prevSlide();
-            } else if (e.key === 'ArrowRight') {
+            } else {
                 this.nextSlide();
             }
         });
@@ -354,6 +368,21 @@ class MonthlyRecapManager {
         setTimeout(() => this.checkSlideOverflow(), 100);
     }
 
+    /**
+     * `.has-overflow` top-aligns a slide that is taller than the deck so it can be scrolled to. The deck's
+     * height is `clamp(520px, 100vh - 360px, 720px)`, so it MOVES with the viewport -- rotating a phone or
+     * dragging a desktop window changes which slides overflow. Checking only once after render left slides
+     * centred and clipped at the new size, with the overflowing top unreachable.
+     */
+    watchSlideOverflow() {
+        const recheck = PlatPursuit.debounce(() => this.checkSlideOverflow(), 150);
+        window.addEventListener('resize', recheck);
+        if (window.visualViewport) {
+            // Mobile browser chrome collapsing on scroll changes 100vh without firing `resize`.
+            window.visualViewport.addEventListener('resize', recheck);
+        }
+    }
+
     checkSlideOverflow() {
         const slideEls = this.slidesContainer.querySelectorAll('.recap-slide');
         slideEls.forEach(el => {
@@ -412,7 +441,7 @@ class MonthlyRecapManager {
                 // Initialize quiz if this is a quiz slide
                 if (this.quizManager.isQuizSlide(slideType)) {
                     this.quizManager.initQuizSlide(slideEl, slideType);
-                    // Update buttons AFTER quiz is initialized (hasAnswered is now false)
+                    // Update buttons AFTER the quiz is wired up
                     this.updateNavigationButtons();
                 }
             }, 100);
@@ -597,70 +626,61 @@ class MonthlyRecapManager {
             return;
         }
 
+        let platinums;
         try {
-            const platinums = JSON.parse(platinumsData);
-            const dayNumber = dayElement.dataset.day;
-
-            // Create modal HTML
-            const modalHTML = `
-                <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" id="platinum-modal">
-                    <div class="card bg-base-300 shadow-2xl max-w-md w-full border border-primary/30">
-                        <div class="card-body">
-                            <div class="flex justify-between items-start mb-4">
-                                <div>
-                                    <h3 class="text-2xl font-bold text-primary">Day ${dayNumber}</h3>
-                                    <p class="text-sm text-base-content/60">${platinums.length} Platinum${platinums.length > 1 ? 's' : ''} Earned</p>
-                                </div>
-                                <button class="btn btn-sm btn-circle btn-ghost" onclick="document.getElementById('platinum-modal').remove()">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                            <div class="space-y-3 max-h-96 overflow-y-auto">
-                                ${platinums.map(plat => `
-                                    <div class="flex items-center gap-3 p-3 bg-base-200 rounded-lg border border-primary/10 hover:border-primary/30 transition-all">
-                                        ${plat.icon_url ? `
-                                            <img src="${plat.icon_url}" alt="${plat.trophy_name}" class="w-12 h-12 rounded-lg flex-shrink-0 object-cover" />
-                                        ` : ''}
-                                        <div class="flex-1 min-w-0">
-                                            <p class="font-semibold text-base-content line-clamp-2">${plat.game_name}</p>
-                                            <p class="text-sm text-base-content/70 line-clamp-1">${plat.trophy_name}</p>
-                                        </div>
-                                        <svg class="w-6 h-6 text-primary flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-                                        </svg>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            // Insert modal
-            document.body.insertAdjacentHTML('beforeend', modalHTML);
-
-            // Close on backdrop click
-            const modal = document.getElementById('platinum-modal');
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    modal.remove();
-                }
-            });
-
-            // Close on escape key
-            const escapeHandler = (e) => {
-                if (e.key === 'Escape') {
-                    modal.remove();
-                    document.removeEventListener('keydown', escapeHandler);
-                }
-            };
-            document.addEventListener('keydown', escapeHandler);
-
+            platinums = JSON.parse(platinumsData);
         } catch (error) {
-            console.error('Error parsing platinum data:', error);
+            console.error('Could not parse platinum data for the calendar day:', error);
+            return;
         }
+        if (!Array.isArray(platinums) || !platinums.length) return;
+
+        const esc = PlatPursuit.HTMLUtils.escape;
+        const day = dayElement.dataset.day;
+
+        // A native <dialog> rather than a hand-rolled overlay. showModal() brings the top layer, the
+        // backdrop, focus trapping and Escape-to-close with it -- the version this replaced registered its
+        // own document-level Escape handler and only removed it when Escape fired, so closing by backdrop
+        // or by the X button leaked a listener that kept firing on every later keypress.
+        //
+        // Game and trophy names are PSN-sourced text and are ESCAPED. They used to be interpolated raw
+        // into innerHTML.
+        const dialog = document.createElement('dialog');
+        dialog.className = 'rcp-plats';
+        dialog.innerHTML = `
+            <div class="rcp-plats__head">
+                <div>
+                    <h3 class="rcp-plats__day">Day ${esc(day)}</h3>
+                    <p class="rcp-plats__count">${platinums.length} platinum${platinums.length > 1 ? 's' : ''} earned</p>
+                </div>
+                <button type="button" class="rcp-plats__close" aria-label="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" aria-hidden="true"><path d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <ul class="rcp-plats__list">
+                ${platinums.map((plat) => `
+                    <li class="rcp-plats__item">
+                        ${plat.icon_url ? `<img class="rcp-plats__icon" src="${esc(plat.icon_url)}" alt="" loading="lazy" draggable="false" />` : ''}
+                        <div class="rcp-plats__text">
+                            <p class="rcp-plats__game">${esc(plat.game_name || '')}</p>
+                            <p class="rcp-plats__trophy">${esc(plat.trophy_name || '')}</p>
+                        </div>
+                        <span class="rcp-plats__seal" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+                        </span>
+                    </li>
+                `).join('')}
+            </ul>
+        `;
+
+        dialog.addEventListener('close', () => dialog.remove());
+        dialog.querySelector('.rcp-plats__close').addEventListener('click', () => dialog.close());
+        // Backdrop click: the ::backdrop pseudo-element reports the dialog itself as the target.
+        dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });
+
+        document.body.appendChild(dialog);
+        dialog.showModal();
     }
 
     /**
@@ -945,7 +965,7 @@ class MonthlyRecapManager {
     nextSlide() {
         // Check if we're on a quiz slide that hasn't been answered
         const currentSlideType = this.slides[this.currentSlide]?.type;
-        if (this.quizManager.isQuizSlide(currentSlideType) && !this.quizManager.canNavigate()) {
+        if (this.quizManager.isQuizSlide(currentSlideType) && !this.quizManager.canNavigate(currentSlideType)) {
             // Shake the slide to indicate they need to answer
             const slideEl = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
             if (slideEl) {
@@ -963,7 +983,7 @@ class MonthlyRecapManager {
     prevSlide() {
         // Check if we're on a quiz slide that hasn't been answered
         const currentSlideType = this.slides[this.currentSlide]?.type;
-        if (this.quizManager.isQuizSlide(currentSlideType) && !this.quizManager.canNavigate()) {
+        if (this.quizManager.isQuizSlide(currentSlideType) && !this.quizManager.canNavigate(currentSlideType)) {
             // Shake the slide to indicate they need to answer
             const slideEl = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
             if (slideEl) {
@@ -985,7 +1005,7 @@ class MonthlyRecapManager {
     updateNavigationButtons() {
         const currentSlideType = this.slides[this.currentSlide]?.type;
         const isQuizSlide = this.quizManager.isQuizSlide(currentSlideType);
-        const canNavigate = this.quizManager.canNavigate();
+        const canNavigate = this.quizManager.canNavigate(currentSlideType);
 
         // Disable/enable buttons based on quiz state
         if (isQuizSlide && !canNavigate) {
@@ -1014,9 +1034,18 @@ class MonthlyRecapManager {
 class RecapQuizManager {
     constructor(recapManager) {
         this.recapManager = recapManager;
+        // Answered state is PER SLIDE, derived from quizResults -- there is no separate flag. A single
+        // `hasAnswered` boolean was shared by every quiz in the deck, and initQuizSlide (which reset it)
+        // only runs on a slide's FIRST visit. So: answer quiz A, advance to quiz B, then go back to A --
+        // A's own answer no longer counted, canNavigate() returned false, and the hunter was stuck on a
+        // slide they had already answered, with the shake firing on every attempt to leave.
         this.quizResults = {};
         this.currentQuizSlide = null;
-        this.hasAnswered = false;
+    }
+
+    /** Has this specific quiz been answered? */
+    isAnswered(slideType) {
+        return Boolean(slideType) && Object.prototype.hasOwnProperty.call(this.quizResults, slideType);
     }
 
     /**
@@ -1031,7 +1060,6 @@ class RecapQuizManager {
      */
     initQuizSlide(slideEl, slideType) {
         this.currentQuizSlide = slideType;
-        this.hasAnswered = false;
 
         // Set up click handlers for quiz options
         const options = slideEl.querySelectorAll('[data-quiz-option]');
@@ -1050,7 +1078,7 @@ class RecapQuizManager {
      * Handle click on a single-select quiz option
      */
     handleOptionClick(e, slideEl, slideType) {
-        if (this.hasAnswered) return;
+        if (this.isAnswered(slideType)) return;
 
         const option = e.currentTarget;
         const isMultiSelect = slideEl.querySelector('[data-quiz-submit]') !== null;
@@ -1059,8 +1087,6 @@ class RecapQuizManager {
             // Toggle selection for multi-select
             option.classList.toggle('is-selected');
         } else {
-            // Single select - immediate answer
-            this.hasAnswered = true;
             const selectedValue = option.dataset.quizOption;
 
             // Find the element with data-quiz-correct (it's on the inner card, not slideEl)
@@ -1070,8 +1096,10 @@ class RecapQuizManager {
             // Compare as strings to handle both numeric and string values consistently
             const isCorrect = String(selectedValue) === String(correctValue);
 
-            this.showSingleSelectFeedback(slideEl, option, isCorrect, correctValue);
+            // Record BEFORE rendering feedback: the recorded result IS the answered flag, so it has to
+            // exist before anything can re-enter and re-answer.
             this.recordResult(slideType, isCorrect);
+            this.showSingleSelectFeedback(slideEl, option, isCorrect, correctValue);
 
             // Show answer detail for closest badge quiz
             if (slideType === 'quiz_closest_badge') {
@@ -1094,8 +1122,7 @@ class RecapQuizManager {
      * Handle submit for multi-select quizzes (like spot the platinums)
      */
     handleMultiSelectSubmit(slideEl, slideType) {
-        if (this.hasAnswered) return;
-        this.hasAnswered = true;
+        if (this.isAnswered(slideType)) return;
 
         const selectedOptions = slideEl.querySelectorAll('[data-quiz-option].is-selected');
         // Find the element with data-quiz-correct (it's on the inner card, not slideEl)
@@ -1111,12 +1138,12 @@ class RecapQuizManager {
 
         const isFullyCorrect = incorrectSelections === 0 && missedSelections === 0;
 
-        this.showMultiSelectFeedback(slideEl, selectedValues, correctValues);
         this.recordResult(slideType, isFullyCorrect, {
             correct: correctSelections,
             incorrect: incorrectSelections,
             missed: missedSelections
         });
+        this.showMultiSelectFeedback(slideEl, selectedValues, correctValues);
 
         // Auto-advance after feedback
         setTimeout(() => {
@@ -1270,9 +1297,9 @@ class RecapQuizManager {
     /**
      * Check if user can navigate away from current quiz slide
      */
-    canNavigate() {
-        if (!this.currentQuizSlide) return true;
-        return this.hasAnswered;
+    canNavigate(slideType) {
+        if (!this.isQuizSlide(slideType)) return true;
+        return this.isAnswered(slideType);
     }
 }
 
