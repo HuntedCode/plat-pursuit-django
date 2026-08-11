@@ -475,11 +475,56 @@ class MonthlyRecapManager {
      */
     wireSlideInteractions(slideEl, slideType) {
         if (!slideEl) return;
+        if (slideType === 'quiz_score') {
+            this.fillQuizScore(slideEl);
+        }
         if (slideType === 'activity_calendar') {
             slideEl.querySelectorAll('.rcp-cal__cell--plat').forEach((day) => {
                 day.addEventListener('click', () => this.showPlatinumDetails(day));
             });
         }
+    }
+
+    /**
+     * The payoff slide. The deck has always computed this score and never shown it. It has no server
+     * payload -- it is whatever the hunter answered THIS sitting -- so it is filled in here, and it is
+     * filled in `wireSlideInteractions` rather than an animator so that a reduced-motion viewer still
+     * gets the numbers.
+     */
+    fillQuizScore(slideEl) {
+        const score = this.quizManager.getScore();
+        // Quizzes gate navigation until answered, so reaching this slide means every quiz before it has
+        // a result. Guard anyway: a deck with no quizzes drops this slide server-side, and a future
+        // change to the gate should degrade to a blank slide, not a broken one.
+        if (!score) return;
+
+        const set = (sel, text) => {
+            const el = slideEl.querySelector(sel);
+            if (el) el.textContent = text;
+        };
+        set('[data-score-correct]', String(score.correct));
+        set('[data-score-total]', `/ ${score.total}`);
+
+        const pips = slideEl.querySelector('[data-score-pips]');
+        if (pips) {
+            pips.replaceChildren(...this.quizManager.orderedResults().map((hit, i) => {
+                const pip = document.createElement('span');
+                pip.className = `rcp-score__pip ${hit ? 'is-hit' : 'is-miss'} stagger-item`;
+                pip.style.animationDelay = `${300 + i * 120}ms`;
+                return pip;
+            }));
+        }
+
+        set('[data-score-verdict]', this.quizScoreVerdict(score));
+    }
+
+    /** Graded, because "you knew yourself" and "your own month surprised you" are different sentences. */
+    quizScoreVerdict(score) {
+        if (score.total === 0) return '';
+        if (score.correct === score.total) return 'You know exactly what you did. Every single one.';
+        if (score.percentage >= 50) return 'You had a decent sense of your own month.';
+        if (score.correct > 0) return 'Your own month managed to surprise you.';
+        return 'Not one. Your month was stranger than you thought.';
     }
 
     /**
@@ -1066,89 +1111,42 @@ class RecapQuizManager {
         options.forEach(option => {
             option.addEventListener('click', (e) => this.handleOptionClick(e, slideEl, slideType));
         });
-
-        // Set up submit button for multi-select quizzes
-        const submitBtn = slideEl.querySelector('[data-quiz-submit]');
-        if (submitBtn) {
-            submitBtn.addEventListener('click', () => this.handleMultiSelectSubmit(slideEl, slideType));
-        }
     }
 
     /**
-     * Handle click on a single-select quiz option
+     * Handle a quiz answer. Every quiz in the deck is single-select: the multi-select branch that used to
+     * live here served only `get_quiz_platinum_options`, which had no caller and no template emitting
+     * `[data-quiz-submit]`, so nothing could ever reach it.
      */
     handleOptionClick(e, slideEl, slideType) {
         if (this.isAnswered(slideType)) return;
 
         const option = e.currentTarget;
-        const isMultiSelect = slideEl.querySelector('[data-quiz-submit]') !== null;
+        const selectedValue = option.dataset.quizOption;
 
-        if (isMultiSelect) {
-            // Toggle selection for multi-select
-            option.classList.toggle('is-selected');
-        } else {
-            const selectedValue = option.dataset.quizOption;
-
-            // Find the element with data-quiz-correct (it's on the inner card, not slideEl)
-            const quizContainer = slideEl.querySelector('[data-quiz-correct]');
-            const correctValue = quizContainer ? quizContainer.dataset.quizCorrect : null;
-
-            // Compare as strings to handle both numeric and string values consistently
-            const isCorrect = String(selectedValue) === String(correctValue);
-
-            // Record BEFORE rendering feedback: the recorded result IS the answered flag, so it has to
-            // exist before anything can re-enter and re-answer.
-            this.recordResult(slideType, isCorrect);
-            this.showSingleSelectFeedback(slideEl, option, isCorrect, correctValue);
-
-            // Show answer detail for closest badge quiz
-            if (slideType === 'quiz_closest_badge') {
-                const answerDetail = slideEl.querySelector('[data-quiz-answer-detail]');
-                if (answerDetail) {
-                    answerDetail.hidden = false;
-                    answerDetail.classList.add('animate-bounce-in');
-                }
-            }
-
-            // Keep buttons disabled - they'll be re-enabled when the next slide loads
-            // Auto-advance after feedback
-            setTimeout(() => {
-                this.recapManager.nextSlide();
-            }, 2000);
-        }
-    }
-
-    /**
-     * Handle submit for multi-select quizzes (like spot the platinums)
-     */
-    handleMultiSelectSubmit(slideEl, slideType) {
-        if (this.isAnswered(slideType)) return;
-
-        const selectedOptions = slideEl.querySelectorAll('[data-quiz-option].is-selected');
-        // Find the element with data-quiz-correct (it's on the inner card, not slideEl)
+        // `data-quiz-correct` sits on the .rcp shell, not on slideEl.
         const quizContainer = slideEl.querySelector('[data-quiz-correct]');
-        const correctValues = JSON.parse(quizContainer ? quizContainer.dataset.quizCorrect : '[]');
+        const correctValue = quizContainer ? quizContainer.dataset.quizCorrect : null;
 
-        const selectedValues = Array.from(selectedOptions).map(el => el.dataset.quizOption);
+        // Compare as strings: option values are numbers on some quizzes and ids on others.
+        const isCorrect = String(selectedValue) === String(correctValue);
 
-        // Calculate score
-        const correctSelections = selectedValues.filter(v => correctValues.includes(v)).length;
-        const incorrectSelections = selectedValues.filter(v => !correctValues.includes(v)).length;
-        const missedSelections = correctValues.filter(v => !selectedValues.includes(v)).length;
+        // Record BEFORE rendering feedback: the recorded result IS the answered flag, so it has to exist
+        // before anything can re-enter and re-answer.
+        this.recordResult(slideType, isCorrect);
+        this.showSingleSelectFeedback(slideEl, option, isCorrect, correctValue);
 
-        const isFullyCorrect = incorrectSelections === 0 && missedSelections === 0;
+        // The closest-badge quiz reveals how far along the correct answer actually is.
+        if (slideType === 'quiz_closest_badge') {
+            const answerDetail = slideEl.querySelector('[data-quiz-answer-detail]');
+            if (answerDetail) {
+                answerDetail.hidden = false;
+                answerDetail.classList.add('animate-bounce-in');
+            }
+        }
 
-        this.recordResult(slideType, isFullyCorrect, {
-            correct: correctSelections,
-            incorrect: incorrectSelections,
-            missed: missedSelections
-        });
-        this.showMultiSelectFeedback(slideEl, selectedValues, correctValues);
-
-        // Auto-advance after feedback
-        setTimeout(() => {
-            this.recapManager.nextSlide();
-        }, 2500);
+        // Navigation buttons stay disabled; they re-enable when the next slide loads.
+        setTimeout(() => this.recapManager.nextSlide(), 2000);
     }
 
     /**
@@ -1172,45 +1170,6 @@ class RecapQuizManager {
 
         // Show feedback message
         this.showFeedbackMessage(slideEl, isCorrect);
-    }
-
-    /**
-     * Show feedback for multi-select quiz
-     */
-    showMultiSelectFeedback(slideEl, selectedValues, correctValues) {
-        const allOptions = slideEl.querySelectorAll('[data-quiz-option]');
-
-        allOptions.forEach(option => {
-            const value = option.dataset.quizOption;
-            const wasSelected = selectedValues.includes(value);
-            const isCorrect = correctValues.includes(value);
-
-            option.classList.add('is-locked', 'is-selected');
-            option.classList.remove('is-selected');
-
-            if (isCorrect && wasSelected) {
-                option.classList.add('is-correct');
-            } else if (isCorrect && !wasSelected) {
-                option.classList.add('is-missed');
-            } else if (!isCorrect && wasSelected) {
-                option.classList.add('is-wrong');
-            } else {
-                option.classList.add('is-dimmed');
-            }
-        });
-
-        // Hide submit button
-        const submitBtn = slideEl.querySelector('[data-quiz-submit]');
-        if (submitBtn) {
-            submitBtn.hidden = true;
-        }
-
-        // Show feedback
-        const correct = selectedValues.filter(v => correctValues.includes(v)).length;
-        const total = correctValues.length;
-        const isFullyCorrect = correct === total && selectedValues.length === total;
-
-        this.showFeedbackMessage(slideEl, isFullyCorrect, `${correct}/${total} correct`);
     }
 
     /**
@@ -1277,6 +1236,13 @@ class RecapQuizManager {
             details: details,
             timestamp: Date.now()
         };
+    }
+
+    /** Correct/incorrect in the order the quizzes were answered -- one pip each on the score slide. */
+    orderedResults() {
+        return Object.values(this.quizResults)
+            .sort((a, b) => a.timestamp - b.timestamp)
+            .map((r) => r.correct);
     }
 
     /**

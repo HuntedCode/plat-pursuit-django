@@ -99,9 +99,43 @@ Immutable pattern: once `is_finalized=True`, regeneration is skipped even with `
 ### Slide Rendering
 
 1. Frontend requests individual slides via `RecapSlidePartialView`
-2. API maps 18 slide types to Django template partials in `recap/partials/slides/`
+2. API maps each `DECK` beat to a Django template partial in `recap/partials/slides/` (`SLIDE_TEMPLATES`; `test_recap_deck_order` pins that the two sets match exactly)
 3. Flavor text system: `SLIDE_FLAVOR_TEXT` dict with random selection per slide type
 4. Slides: intro, total_trophies, platinums, rarest_trophy, most_active_day, activity_calendar, games, badges, comparison, summary, 4 quiz types, streak, time_analysis
+
+### The deck arc (`DECK`)
+
+Slide order is **data**, not control flow. `MonthlyRecapService.DECK` is an ordered list of `RecapBeat`
+(type, `when`, `payload`), and `build_slides_response` walks it. It used to be ~110 lines of
+`if ...: slides.append(...)`, so the arc could only be read by tracing branches.
+
+The arc is **open -> build -> peak -> payoff -> close**:
+
+| | |
+|---|---|
+| Open | `intro` |
+| Build (how much) | `quiz_total_trophies` -> `total_trophies` -> `games` |
+| Build (when, how consistently) | `quiz_active_day` -> `most_active_day` -> `activity_calendar` -> `streak` -> `time_analysis` |
+| Peak (what it was worth) | `quiz_rarest_trophy` -> `rarest_trophy` -> `platinums` |
+| Peak (what it moved) | `quiz_closest_badge` -> `badges` -> `comparison` |
+| Payoff + close | `quiz_score` -> `summary` |
+
+Two editorial rules are pinned by `test_recap_deck_order.py`:
+
+- **Every quiz sits immediately before the thing it asks about.** Guess, then find out. Insert a slide
+  between a quiz and its reveal and the pairing breaks silently.
+- **The peak comes after the build.** Platinums used to be the *fourth* slide, spending the deck's biggest
+  moment before it had built anything.
+
+`quiz_score` is the payoff, and the only beat with **no server payload**: `RecapQuizManager.getScore()`
+has always been computed and never shown, so the controller fills the slide from the answers actually
+given this sitting. It is dropped when the deck contains no other quiz -- and the check must exclude
+itself, since `quiz_score` also starts with `quiz_` (a naive prefix test always found "a quiz" and shipped
+"0 / 0 guessed right" into months with nothing to grade).
+
+**Payloads must stay JSON-serialisable** -- the deck array is serialised into the response. Template-only
+shapes (the calendar's `first_day_offset` range) are built in `_build_slide_context`, not in the beat. A
+`range` in a payload 500s every recap page.
 
 ### The slide shell (`.rcp`)
 

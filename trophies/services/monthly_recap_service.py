@@ -10,7 +10,9 @@ This service manages the creation of "Spotify Wrapped" style monthly recaps:
 import calendar
 import logging
 import pytz
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Callable, Optional
 from django.db import transaction
 from django.db.models import Count, Min, Q, F
 from django.db.models.functions import TruncDate, TruncMonth
@@ -1155,84 +1157,6 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def get_quiz_platinum_options(cls, profile, year, month, user_tz=None):
-        """
-        Generate quiz options for "spot your platinums" quiz.
-
-        Returns platinum games + decoy games from the month.
-
-        Returns:
-            dict: {correct_game_ids: [], options: [{id, name, image}, ...]}
-        """
-        import random
-        from trophies.models import EarnedTrophy
-
-        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
-
-        # Get games platinumed this month
-        platinum_games = EarnedTrophy.objects.filter(
-            profile=profile,
-            earned=True,
-            trophy__trophy_type='platinum',
-            earned_date_time__gte=start_date,
-            earned_date_time__lt=end_date
-        ).select_related('trophy__game').values_list('trophy__game', flat=True).distinct()
-
-        platinum_game_ids = list(platinum_games)
-
-        if not platinum_game_ids:
-            return None
-
-        # Get games played this month but NOT platinumed (decoys)
-        from trophies.models import Game
-        games_with_activity = EarnedTrophy.objects.filter(
-            profile=profile,
-            earned=True,
-            earned_date_time__gte=start_date,
-            earned_date_time__lt=end_date
-        ).exclude(
-            trophy__game_id__in=platinum_game_ids
-        ).values_list('trophy__game_id', flat=True).distinct()
-
-        decoy_game_ids = list(games_with_activity)
-
-        # We need at least some decoys to make it a challenge
-        target_total = min(8, len(platinum_game_ids) + max(3, len(decoy_game_ids)))
-        num_decoys = target_total - len(platinum_game_ids)
-
-        if num_decoys > len(decoy_game_ids):
-            num_decoys = len(decoy_game_ids)
-
-        if num_decoys < 2 and len(platinum_game_ids) < 3:
-            # Not enough variety for a good quiz
-            return None
-
-        selected_decoys = random.sample(decoy_game_ids, num_decoys) if decoy_game_ids else []
-
-        # Fetch game data
-        all_game_ids = platinum_game_ids + selected_decoys
-        games = Game.objects.filter(id__in=all_game_ids)
-        games_map = {g.id: g for g in games}
-
-        # Build options
-        options = []
-        for game_id in all_game_ids:
-            game = games_map.get(game_id)
-            if game:
-                options.append({
-                    'id': str(game.id),
-                    'name': game.title_name,
-                    'image': game.display_image_url,
-                })
-
-        random.shuffle(options)
-
-        return {
-            'correct_game_ids': [str(gid) for gid in platinum_game_ids],
-            'options': options,
-        }
-
-    @classmethod
     def get_quiz_active_day_options(cls, profile, year, month, user_tz=None):
         """
         Generate quiz data for "guess your most active day of week" quiz.
@@ -1425,148 +1349,144 @@ class MonthlyRecapService:
 
     @classmethod
     def build_slides_response(cls, recap, include_quizzes=True):
-        """
-        Build the slides array for API response.
+        """Build the ordered slide array for the deck.
+
+        Order is DATA (`DECK`, below), not an append sequence. It used to be ~110 lines of
+        `if ...: slides.append(...)`, which meant the arc could only be understood by reading control flow
+        and could only be changed by editing it. See the module-level `DECK` for the arc itself.
 
         Args:
             recap: MonthlyRecap instance
-            include_quizzes: Whether to include interactive quiz slides
+            include_quizzes: Whether to include the interactive quiz beats
 
         Returns:
             list: Slides array suitable for frontend rendering
         """
+        ctx = {'month_name': calendar.month_name[recap.month], 'year': recap.year}
         slides = []
-        month_name = calendar.month_name[recap.month]
+        for beat in DECK:
+            if beat.is_quiz and not include_quizzes:
+                continue
+            if beat.when is not None and not beat.when(recap):
+                continue
+            slides.append({'type': beat.type, **beat.payload(recap, ctx)})
 
-        # Slide 1: Intro
-        slides.append({
-            'type': 'intro',
-            'title': f"Your {month_name} {recap.year}",
-            'subtitle': "Let's see what you accomplished",
-        })
-
-        # Quiz: Guess total trophies (before reveal)
-        if include_quizzes and recap.quiz_total_trophies_data:
-            slides.append({
-                'type': 'quiz_total_trophies',
-                **recap.quiz_total_trophies_data,
-            })
-
-        # Total Trophies reveal
-        if recap.total_trophies_earned > 0:
-            slides.append({
-                'type': 'total_trophies',
-                'value': recap.total_trophies_earned,
-                'breakdown': {
-                    'bronze': recap.bronzes_earned,
-                    'silver': recap.silvers_earned,
-                    'gold': recap.golds_earned,
-                    'platinum': recap.platinums_earned,
-                },
-            })
-
-        # Platinums reveal
-        if recap.platinums_earned > 0:
-            slides.append({
-                'type': 'platinums',
-                'count': recap.platinums_earned,
-                'games': recap.platinums_data or [],
-            })
-
-        # Quiz: Which was your rarest? (before reveal)
-        if include_quizzes and recap.quiz_rarest_trophy_data:
-            slides.append({
-                'type': 'quiz_rarest_trophy',
-                **recap.quiz_rarest_trophy_data,
-            })
-
-        # Rarest Trophy reveal
-        if recap.rarest_trophy_data:
-            slides.append({
-                'type': 'rarest_trophy',
-                **recap.rarest_trophy_data,
-            })
-
-        # Quiz: Guess most active day of week (before calendar)
-        if include_quizzes and recap.quiz_active_day_data:
-            slides.append({
-                'type': 'quiz_active_day',
-                **recap.quiz_active_day_data,
-            })
-
-        # Most Active Day reveal
-        if recap.most_active_day:
-            slides.append({
-                'type': 'most_active_day',
-                **recap.most_active_day,
-            })
-
-        # Activity Calendar
-        if recap.activity_calendar and recap.activity_calendar.get('days'):
-            slides.append({
-                'type': 'activity_calendar',
-                **recap.activity_calendar,
-                'month_name': month_name,
-                'year': recap.year,
-            })
-
-        # Streak slide (NEW)
-        if recap.streak_data and recap.streak_data.get('longest_streak', 0) >= 2:
-            slides.append({
-                'type': 'streak',
-                **recap.streak_data,
-            })
-
-        # Time-of-day analysis (NEW)
-        if recap.time_analysis_data:
-            slides.append({
-                'type': 'time_analysis',
-                **recap.time_analysis_data,
-            })
-
-        # Games Started/Completed
-        if recap.games_started > 0 or recap.games_completed > 0:
-            slides.append({
-                'type': 'games',
-                'started': recap.games_started,
-                'completed': recap.games_completed,
-            })
-
-        # Quiz: Which badge are you closest to? (before badges slide)
-        if include_quizzes and recap.badge_progress_quiz_data:
-            slides.append({
-                'type': 'quiz_closest_badge',
-                **recap.badge_progress_quiz_data,
-            })
-
-        # Badges earned
-        if recap.badges_earned_count > 0:
-            slides.append({
-                'type': 'badges',
-                'xp_earned': recap.badge_xp_earned,
-                'badges_count': recap.badges_earned_count,
-                'badges': recap.badges_data or [],
-            })
-
-        # Comparison
-        comparison = recap.comparison_data or {}
-        slides.append({
-            'type': 'comparison',
-            'vs_prev_month': comparison.get('vs_prev_month_pct', '0%'),
-            'personal_bests': comparison.get('personal_bests', []),
-        })
-
-        # Summary
-        highlights = []
-        if recap.platinums_earned > 0:
-            highlights.append(f"{recap.platinums_earned} platinum{'s' if recap.platinums_earned != 1 else ''}")
-        highlights.append(f"{recap.total_trophies_earned} trophies")
-        if recap.games_started > 0:
-            highlights.append(f"{recap.games_started} new game{'s' if recap.games_started != 1 else ''}")
-
-        slides.append({
-            'type': 'summary',
-            'highlights': highlights,
-        })
+        # The score beat only makes sense if there is something to score, so the check runs on the
+        # assembled deck rather than being guessed at up front. It must exclude ITSELF from the count:
+        # `quiz_score` starts with `quiz_` too, so a naive prefix test always found a quiz and the slide
+        # survived into months with nothing to grade, reading "0 / 0 guessed right".
+        scorable = any(s['type'].startswith('quiz_') and s['type'] != 'quiz_score' for s in slides)
+        if not scorable:
+            slides = [s for s in slides if s['type'] != 'quiz_score']
 
         return slides
+
+
+@dataclass(frozen=True)
+class RecapBeat:
+    """One slide in the deck: what it is, whether this month earns it, and what it carries.
+
+    `payload` receives (recap, ctx) and returns the slide's data. `when` receives the recap; None means
+    the beat always appears.
+    """
+    type: str
+    payload: Callable
+    when: Optional[Callable] = None
+    is_quiz: bool = False
+
+
+def _has_streak(recap):
+    # A "streak" of one day is just a day. Two is the smallest number that means anything.
+    return bool(recap.streak_data) and recap.streak_data.get('longest_streak', 0) >= 2
+
+
+def _summary_highlights(recap):
+    """The closing chips. Deliberately not every stat -- three things someone would actually say out loud."""
+    highlights = []
+    if recap.platinums_earned:
+        highlights.append(f"{recap.platinums_earned} platinum{'' if recap.platinums_earned == 1 else 's'}")
+    highlights.append(f"{recap.total_trophies_earned} trophies")
+    if recap.games_started:
+        highlights.append(f"{recap.games_started} new game{'' if recap.games_started == 1 else 's'}")
+    if recap.badges_earned_count:
+        highlights.append(f"{recap.badges_earned_count} badge{'' if recap.badges_earned_count == 1 else 's'}")
+    return highlights
+
+
+# The arc, in order: OPEN -> BUILD -> PEAK -> PAYOFF -> CLOSE.
+#
+# Each quiz sits IMMEDIATELY BEFORE the thing it asks about, so every guess is followed by its answer --
+# guess, then find out. That pairing is the reason the order is data: it is an editorial decision, and it
+# should be legible as a list rather than inferred from a hundred lines of appends.
+#
+# The peak moved. Platinums used to be the FOURTH slide, spending the deck's biggest moment before it had
+# built anything; they now land after rarity, so the sequence climbs volume -> habit -> rarity -> platinums
+# rather than opening on its loudest note and coasting.
+#
+# The payoff is the quiz score, which the deck has always computed (`RecapQuizManager.getScore`) and never
+# shown. It is filled in client-side from the answers actually given, so it has no server payload.
+DECK = [
+    # -- OPEN ------------------------------------------------------------------------------------------
+    RecapBeat('intro', lambda r, c: {
+        'month_name': c['month_name'], 'year': r.year,
+    }),
+
+    # -- BUILD: how much ------------------------------------------------------------------------------
+    RecapBeat('quiz_total_trophies', lambda r, c: dict(r.quiz_total_trophies_data),
+              when=lambda r: bool(r.quiz_total_trophies_data), is_quiz=True),
+    RecapBeat('total_trophies', lambda r, c: {
+        'value': r.total_trophies_earned,
+        'breakdown': {
+            'bronze': r.bronzes_earned, 'silver': r.silvers_earned,
+            'gold': r.golds_earned, 'platinum': r.platinums_earned,
+        },
+    }, when=lambda r: r.total_trophies_earned > 0),
+    RecapBeat('games', lambda r, c: {
+        'started': r.games_started, 'completed': r.games_completed,
+    }, when=lambda r: r.games_started > 0 or r.games_completed > 0),
+
+    # -- BUILD: when, and how consistently ------------------------------------------------------------
+    RecapBeat('quiz_active_day', lambda r, c: dict(r.quiz_active_day_data),
+              when=lambda r: bool(r.quiz_active_day_data), is_quiz=True),
+    RecapBeat('most_active_day', lambda r, c: dict(r.most_active_day),
+              when=lambda r: bool(r.most_active_day)),
+    RecapBeat('activity_calendar', lambda r, c: {
+        **r.activity_calendar, 'month_name': c['month_name'], 'year': r.year,
+    }, when=lambda r: bool(r.activity_calendar) and bool(r.activity_calendar.get('days'))),
+    RecapBeat('streak', lambda r, c: dict(r.streak_data), when=_has_streak),
+    RecapBeat('time_analysis', lambda r, c: {
+        **r.time_analysis_data,
+        # Bar heights are a percentage of the busiest period; never 0, which would divide by zero.
+        'max_period_count': max((r.time_analysis_data.get('periods') or {}).values(), default=1) or 1,
+    }, when=lambda r: bool(r.time_analysis_data)),
+
+    # -- PEAK: what it was worth ----------------------------------------------------------------------
+    RecapBeat('quiz_rarest_trophy', lambda r, c: dict(r.quiz_rarest_trophy_data),
+              when=lambda r: bool(r.quiz_rarest_trophy_data), is_quiz=True),
+    RecapBeat('rarest_trophy', lambda r, c: dict(r.rarest_trophy_data),
+              when=lambda r: bool(r.rarest_trophy_data)),
+    RecapBeat('platinums', lambda r, c: {
+        'count': r.platinums_earned, 'games': r.platinums_data or [],
+    }, when=lambda r: r.platinums_earned > 0),
+
+    # -- PEAK: and what it moved ----------------------------------------------------------------------
+    RecapBeat('quiz_closest_badge', lambda r, c: dict(r.badge_progress_quiz_data),
+              when=lambda r: bool(r.badge_progress_quiz_data), is_quiz=True),
+    RecapBeat('badges', lambda r, c: {
+        'xp_earned': r.badge_xp_earned,
+        'badges_count': r.badges_earned_count,
+        'badges': r.badges_data or [],
+    }, when=lambda r: r.badges_earned_count > 0),
+    RecapBeat('comparison', lambda r, c: {
+        'vs_prev_month': (r.comparison_data or {}).get('vs_prev_month_pct', '0%'),
+        'personal_bests': (r.comparison_data or {}).get('personal_bests', []),
+    }),
+
+    # -- PAYOFF + CLOSE -------------------------------------------------------------------------------
+    # No payload: the score is whatever the hunter actually answered, so the controller fills it in.
+    RecapBeat('quiz_score', lambda r, c: {}, is_quiz=True),
+    RecapBeat('summary', lambda r, c: {'highlights': _summary_highlights(r)}),
+]
+
+# By type, for the slide-partial view -- so the API renders the same payload the deck was built from.
+DECK_BY_TYPE = {beat.type: beat for beat in DECK}

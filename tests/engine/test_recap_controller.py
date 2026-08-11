@@ -71,18 +71,24 @@ def test_navigation_gate_is_asked_about_a_specific_slide(js):
 def test_the_answer_is_recorded_before_feedback_renders(js):
     """The recorded result IS the answered flag, so it has to exist before anything can re-enter and
     re-answer. Both quiz paths."""
-    for name, feedback in (('handleOptionClick', 'showSingleSelectFeedback'),
-                           ('handleMultiSelectSubmit', 'showMultiSelectFeedback')):
-        body = _method(js, name)
-        assert 'this.recordResult(' in body and feedback in body, name
-        assert body.index('this.recordResult(') < body.index(feedback), (
-            f'{name} renders feedback before recording the result, so the answered flag lags the UI'
-        )
+    body = _method(js, 'handleOptionClick')
+    assert 'this.recordResult(' in body and 'showSingleSelectFeedback' in body
+    assert body.index('this.recordResult(') < body.index('showSingleSelectFeedback'), (
+        'feedback renders before the result is recorded, so the answered flag lags the UI'
+    )
 
 
-def test_both_quiz_paths_guard_on_the_per_slide_state(js):
-    for name in ('handleOptionClick', 'handleMultiSelectSubmit'):
-        assert 'this.isAnswered(slideType)' in _method(js, name), f'{name} does not guard re-answering'
+def test_the_quiz_path_guards_on_the_per_slide_state(js):
+    assert 'this.isAnswered(slideType)' in _method(js, 'handleOptionClick'), 're-answering is not guarded'
+
+
+def test_the_unreachable_multiselect_branch_is_gone(js):
+    """It served only `get_quiz_platinum_options`, which had no caller, and no template ever emitted
+    `[data-quiz-submit]`. Dead code that still had to be maintained through every quiz change."""
+    code = _code(js)
+    assert 'handleMultiSelectSubmit' not in code
+    assert 'showMultiSelectFeedback' not in code
+    assert 'data-quiz-submit' not in code
 
 
 # --- Document-level keyboard handler ---------------------------------------------------------------

@@ -30,7 +30,9 @@ DECK_CSS = ROOT / 'static' / 'css' / 'components' / 'recap-deck.css'
 CONTROLLER = ROOT / 'static' / 'js' / 'monthly-recap.js'
 
 SLIDES = sorted(SLIDE_DIR.glob('*.html'))
-QUIZ_SLIDES = [p for p in SLIDES if p.name.startswith('quiz_')]
+# `quiz_score` is named for the beat it reports on, but it asks nothing -- it has no options, no correct
+# answer and no feedback container, so it is not held to the interactive-quiz contract.
+QUIZ_SLIDES = [p for p in SLIDES if p.name.startswith('quiz_') and p.stem != 'quiz_score']
 
 # Substrings that only appear in the pre-rebuild vocabulary. `card-body`/`card-title` rather than bare
 # `card`, because "scard" and "cover__art" would false-positive on a naive `card` search.
@@ -63,8 +65,8 @@ def deck_css():
 
 def test_every_slide_exists():
     """A guard on the parametrised tests below: an empty glob would make them all vacuously pass."""
-    assert len(SLIDES) == 16, f'expected 16 slides, found {[p.name for p in SLIDES]}'
-    assert len(QUIZ_SLIDES) == 4
+    assert len(SLIDES) == 17, f'expected 17 slides, found {[p.name for p in SLIDES]}'
+    assert len(QUIZ_SLIDES) == 4, f'expected 4 interactive quizzes, found {[p.name for p in QUIZ_SLIDES]}'
 
 
 @pytest.mark.parametrize('slide', SLIDES, ids=lambda p: p.stem)
@@ -143,7 +145,7 @@ def test_quiz_dom_contract(slide):
     assert 'rcp-quiz__opt' in html, f'{slide.name}: choices must use the shared option treatment'
 
 
-@pytest.mark.parametrize('state', ['is-correct', 'is-wrong', 'is-dimmed', 'is-locked', 'is-selected'])
+@pytest.mark.parametrize('state', ['is-correct', 'is-wrong', 'is-dimmed', 'is-locked'])
 def test_every_answered_state_the_controller_writes_is_styled(controller, deck_css, state):
     # Scoped to the grading function, not the whole file: `is-correct` also appears on the verdict
     # container, so a file-wide search would still pass with the option grading broken.
@@ -151,8 +153,9 @@ def test_every_answered_state_the_controller_writes_is_styled(controller, deck_c
     # call site inside handleSingleSelectAnswer first and captures the wrong function body.
     grading = re.search(r'\n    showSingleSelectFeedback\(.*?\n    \}\n', controller, re.S)
     assert grading, 'showSingleSelectFeedback not found'
-    haystack = grading.group(0) if state != 'is-selected' else controller
-    assert f"'{state}'" in haystack, f'controller never applies {state} where it grades an answer'
+    assert f"'{state}'" in grading.group(0), (
+        f'controller never applies {state} where it grades an answer'
+    )
     assert f'.rcp-quiz__opt.{state}' in deck_css, (
         f'{state} is applied by the controller but has no rule -- answering the quiz would show nothing'
     )

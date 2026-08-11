@@ -18,7 +18,7 @@ from core.services.tracking import track_site_event
 from django_ratelimit.decorators import ratelimit
 
 from trophies.models import MonthlyRecap
-from trophies.services.monthly_recap_service import MonthlyRecapService
+from trophies.services.monthly_recap_service import DECK_BY_TYPE, MonthlyRecapService
 from trophies.recap_utils import (
     get_user_local_now, is_most_recent_completed_month, check_sync_freshness, MIN_RECAP_YEAR,
 )
@@ -503,6 +503,8 @@ class RecapSlidePartialView(APIView):
         # New stat slides
         'streak': 'recap/partials/slides/streak.html',
         'time_analysis': 'recap/partials/slides/time_analysis.html',
+        # No server payload: the controller fills it from the answers actually given.
+        'quiz_score': 'recap/partials/slides/quiz_score.html',
     }
 
     def get(self, request, year, month, slide_type):
@@ -547,134 +549,36 @@ class RecapSlidePartialView(APIView):
         return Response({'html': html, 'slide_type': slide_type})
 
     def _build_slide_context(self, slide_type, recap, profile, year, month):
-        """Build context for a specific slide type."""
-        month_name = calendar.month_name[month]
+        """Context for one slide partial.
 
-        if slide_type == 'intro':
-            return {
-                'month_name': month_name,
-                'year': year,
+        Delegates to the SAME `DECK` beat that `build_slides_response` used to order the deck. This used
+        to be a parallel ~110-line if/elif chain rebuilding every payload a second time, and the two had
+        already drifted -- the summary's highlight chips differed between them. One catalogue, one payload.
+
+        Only genuinely view-level things are layered on here: flavour text (random per render, so it
+        cannot be part of a persisted payload), the viewer's identity for the intro, and the year/month
+        the summary's share links need.
+        """
+        beat = DECK_BY_TYPE.get(slide_type)
+        if beat is None:
+            return {}
+
+        context = dict(beat.payload(recap, {'month_name': calendar.month_name[month], 'year': year}))
+
+        if slide_type == 'activity_calendar':
+            # A range, purely so the template can loop blank cells before day 1. It is built HERE and not
+            # in the payload because the payload is JSON-serialised into the deck response, and a range is
+            # not serialisable -- putting it there 500s every recap page.
+            context['first_day_offset'] = range(context.get('first_day_weekday', 0))
+        elif slide_type == 'intro':
+            context.update({
                 'username': profile.display_psn_username or profile.psn_username,
                 'avatar_url': profile.avatar_url or '',
-                'is_premium': profile.user_is_premium,
-            }
-
-        elif slide_type == 'total_trophies':
-            return {
-                'value': recap.total_trophies_earned,
-                'breakdown': {
-                    'bronze': recap.bronzes_earned,
-                    'silver': recap.silvers_earned,
-                    'gold': recap.golds_earned,
-                    'platinum': recap.platinums_earned,
-                },
-                'flavor_text': get_flavor_text('total_trophies'),
-            }
-
-        elif slide_type == 'platinums':
-            return {
-                'count': recap.platinums_earned,
-                'games': recap.platinums_data or [],
-                'flavor_text': get_flavor_text('platinums'),
-            }
-
-        elif slide_type == 'rarest_trophy':
-            data = recap.rarest_trophy_data or {}
-            return {
-                'name': data.get('name', ''),
-                'game': data.get('game', ''),
-                'earn_rate': data.get('earn_rate', 0),
-                'icon_url': data.get('icon_url', ''),
-                'trophy_type': data.get('trophy_type', ''),
-                # PSN's own band ("Ultra Rare"), not the site's community rarity scale -- see
-                # get_rarest_trophy_in_month. Empty for recaps generated before this was stored.
-                'rarity_label': data.get('rarity_label', ''),
-                'flavor_text': get_flavor_text('rarest_trophy'),
-            }
-
-        elif slide_type == 'most_active_day':
-            data = recap.most_active_day or {}
-            return {
-                'date': data.get('date', ''),
-                'day_name': data.get('day_name', ''),
-                'trophy_count': data.get('trophy_count', 0),
-                'flavor_text': get_flavor_text('most_active_day'),
-            }
-
-        elif slide_type == 'activity_calendar':
-            data = recap.activity_calendar or {}
-            first_day_weekday = data.get('first_day_weekday', 0)
-            return {
-                'days': data.get('days', []),
-                'max_count': data.get('max_count', 0),
-                'total_active_days': data.get('total_active_days', 0),
-                'first_day_weekday': first_day_weekday,
-                'first_day_offset': range(first_day_weekday),
-                'days_in_month': data.get('days_in_month', 30),
-                'month_name': month_name,
-                'year': year,
-                'flavor_text': get_flavor_text('activity_calendar'),
-            }
-
-        elif slide_type == 'games':
-            return {
-                'started': recap.games_started,
-                'completed': recap.games_completed,
-                'flavor_text': get_flavor_text('games'),
-            }
-
-        elif slide_type == 'badges':
-            return {
-                'xp_earned': recap.badge_xp_earned,
-                'badges_count': recap.badges_earned_count,
-                'badges': recap.badges_data or [],
-                'flavor_text': get_flavor_text('badges'),
-            }
-
-        elif slide_type == 'comparison':
-            data = recap.comparison_data or {}
-            return {
-                'vs_prev_month': data.get('vs_prev_month_pct', '0%'),
-                'personal_bests': data.get('personal_bests', []),
-                'flavor_text': get_flavor_text('comparison'),
-            }
-
+            })
         elif slide_type == 'summary':
-            highlights = []
-            if recap.platinums_earned > 0:
-                highlights.append(f"{recap.platinums_earned} platinum{'s' if recap.platinums_earned != 1 else ''}")
-            highlights.append(f"{recap.total_trophies_earned} trophies")
-            if recap.games_started > 0:
-                highlights.append(f"{recap.games_started} new game{'s' if recap.games_started != 1 else ''}")
+            context.update({'year': year, 'month': month})
 
-            return {
-                'highlights': highlights,
-                'year': year,
-                'month': month,
-            }
-
-        # Quiz slides (all denormalized from recap model)
-        elif slide_type == 'quiz_total_trophies':
-            return recap.quiz_total_trophies_data or {}
-
-        elif slide_type == 'quiz_rarest_trophy':
-            return recap.quiz_rarest_trophy_data or {}
-
-        elif slide_type == 'quiz_active_day':
-            return recap.quiz_active_day_data or {}
-
-        elif slide_type == 'quiz_closest_badge':
-            return recap.badge_progress_quiz_data or {}
-
-        # New stat slides (denormalized from recap model)
-        elif slide_type == 'streak':
-            return recap.streak_data or {}
-
-        elif slide_type == 'time_analysis':
-            time_data = recap.time_analysis_data or {}
-            if time_data and time_data.get('periods'):
-                # Add max for template bar chart scaling
-                time_data['max_period_count'] = max(time_data['periods'].values(), default=1) or 1
-            return time_data
-
-        return {}
+        flavor = get_flavor_text(slide_type)
+        if flavor:
+            context['flavor_text'] = flavor
+        return context

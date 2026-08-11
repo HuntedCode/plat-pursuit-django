@@ -577,12 +577,6 @@
     display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
 }
 
-/* Pre-submit selection (multi-select quizzes only) */
-.rcp-quiz__opt.is-selected {
-    border-color: var(--opt-accent);
-    background: color-mix(in oklab, var(--opt-accent) 14%, var(--pp-bg-2));
-}
-
 /* Answered states */
 .rcp-quiz__opt.is-correct {
     border-color: var(--pp-success);
@@ -679,3 +673,16 @@
 }
 .rcp-plats__seal { margin-left: auto; flex: none; color: var(--rcp-accent); }
 .rcp-plats__seal svg { width: 1.15rem; height: 1.15rem; }
+
+/* ---- Quiz score (the payoff) --------------------------------------------------------------------- */
+.rcp-score__pips { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.5rem; }
+.rcp-score__pip {
+    width: 0.85rem; height: 0.85rem; border-radius: 50%;
+    border: 2px solid color-mix(in oklab, var(--pp-text-mute) 45%, transparent);
+}
+.rcp-score__pip.is-hit {
+    background: var(--pp-success);
+    border-color: var(--pp-success);
+    box-shadow: 0 0 8px color-mix(in oklab, var(--pp-success) 55%, transparent);
+}
+.rcp-score__pip.is-miss { background: transparent; }

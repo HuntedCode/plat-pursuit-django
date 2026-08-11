@@ -1,0 +1,25 @@
+{% comment %}
+Recap Slide: Quiz Score -- the payoff.
+Variables: none.
+
+The deck has always computed this (`RecapQuizManager.getScore`) and never shown it, so every guess the
+hunter made was thrown away. It is the one slide with NO server payload: the score is whatever they
+actually answered this sitting, so `monthly-recap.js` fills the marked elements in when the slide opens.
+
+The verdict line is graded client-side too, because "you knew yourself" and "your own month surprised you"
+are different sentences and only one of them is true.
+{% endcomment %}
+<div class="rcp rcp--hero rcp-score">
+    <p class="rcp__kicker">How well do you know your own month?</p>
+
+    <div class="rcp__figure pp-tally pp-tally--hero">
+        <span data-score-correct>0</span><span class="rcp__unit" data-score-total>/ 0</span>
+    </div>
+    <p class="rcp__caption">guessed right</p>
+
+    <div class="rcp__body">
+        <div class="rcp-score__pips" data-score-pips aria-hidden="true"></div>
+    </div>
+
+    <p class="rcp__flavor" data-score-verdict></p>
+</div>
