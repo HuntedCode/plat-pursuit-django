@@ -39,6 +39,9 @@ class MonthlyRecapManager {
         // DOM elements
         this.slidesContainer = document.getElementById('recap-slides');
         this.progressDots = document.getElementById('progress-dots');
+        this.BEAT_MS = 5200;          // long enough to read a beat, short enough to keep moving
+        this.beatTimer = null;
+        this.stageOpen = false;       // the deck does not run until the hunter enters
         this.prevBtn = document.getElementById('prev-slide');
         this.nextBtn = document.getElementById('next-slide');
         this.shareSection = document.getElementById('share-section');
@@ -201,28 +204,95 @@ class MonthlyRecapManager {
         this.goToSlide(0);
     }
 
+    /**
+     * Enter the ceremony. The stage is already built and its slides already prefetched -- it renders
+     * hidden on the page, so the wait happens while the hunter is reading the cover and entering is
+     * instant. It moves to <body> because a `position: fixed` element inside a transformed ancestor
+     * (the page-recede wrapper) is positioned against THAT ancestor, not the viewport, and would sit
+     * scaled down in the corner.
+     */
+    openStage() {
+        if (this.stageOpen) return;
+        this.stageOpen = true;
+
+        document.body.appendChild(this.container);
+        this.container.hidden = false;
+        void this.container.offsetWidth;              // let the un-hide land before the fade starts
+        this.container.classList.add('is-in');
+
+        this.handle = PlatPursuit.takeover(this.container, {
+            focusSel: '#recap-exit',
+            exitMs: 280,
+            onClose: () => this.onStageClosed(),
+        });
+
+        // Start the deck at the top every time it is entered, so "watch it again" actually replays.
+        this.goToSlide(0);
+    }
+
+    /** takeover() has already removed the stage and restored focus; put the page back in order. */
+    onStageClosed() {
+        this.stageOpen = false;
+        this.stopBeatTimer();
+        this.handle = null;
+        const shareSection = document.getElementById('share-section');
+        if (shareSection && this.seenSummary) {
+            shareSection.classList.add('visible');
+            shareSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    /**
+     * The segmented timer, one bar per beat. A row of dots can say "you are on 3 of 16"; only a filling
+     * bar can say "this is paced, and it is moving" -- which is the difference between a carousel widget
+     * and a story. Bars are not clickable: on a paced deck, jumping to an arbitrary beat is meaningless,
+     * and the tap zones already own moving.
+     */
     createProgressDots() {
         this.progressDots.innerHTML = '';
-        this.slides.forEach((_, index) => {
-            const dot = document.createElement('span');
-            dot.className = 'progress-dot';
-            dot.dataset.slide = index;
-            dot.addEventListener('click', () => {
-                // Block navigation if on unanswered quiz
-                const currentSlideType = this.slides[this.currentSlide]?.type;
-                if (this.quizManager.isQuizSlide(currentSlideType) && !this.quizManager.canNavigate(currentSlideType)) {
-                    // Shake the slide to indicate they need to answer
-                    const slideEl = this.slidesContainer.querySelectorAll('.recap-slide')[this.currentSlide];
-                    if (slideEl) {
-                        slideEl.classList.add('animate-shake');
-                        setTimeout(() => slideEl.classList.remove('animate-shake'), 500);
-                    }
-                    return;
-                }
-                this.goToSlide(index);
-            });
-            this.progressDots.appendChild(dot);
+        this.bars = this.slides.map(() => {
+            const bar = document.createElement('span');
+            bar.className = 'rcx__bar';
+            bar.appendChild(document.createElement('i'));
+            this.progressDots.appendChild(bar);
+            return bar;
         });
+    }
+
+    /**
+     * The colour world. Read off the slide's OWN `.rcp--accent-*` modifier rather than a type->colour
+     * map in here, so the template stays the single source: a slide that changes its accent changes the
+     * whole stage with it, and the two can never disagree.
+     */
+    applyBeatAccent(slideEl) {
+        const shell = slideEl && slideEl.querySelector('.rcp');
+        const map = { 'rcp--accent-secondary': 'secondary', 'rcp--accent-warm': 'accent',
+                      'rcp--accent-success': 'success' };
+        let accent = 'primary';
+        if (shell) {
+            Object.keys(map).some((cls) => shell.classList.contains(cls) && (accent = map[cls]));
+        }
+        this.container.dataset.accent = accent;
+    }
+
+    /** Paint the bars for the active beat and restart its fill from zero. */
+    paintBars(index) {
+        if (!this.bars) return;
+        this.bars.forEach((bar, n) => {
+            bar.classList.remove('is-live', 'is-done');
+            if (n < index) bar.classList.add('is-done');
+        });
+        const live = this.bars[index];
+        if (!live) return;
+        if (this.prefersReducedMotion) { live.classList.add('is-done'); return; }
+        // Reset without a transition, force layout, then let it run -- otherwise the fill animates
+        // BACKWARDS from wherever the previous beat left it.
+        const fill = live.querySelector('i');
+        fill.style.transition = 'none';
+        fill.style.width = '0';
+        void fill.offsetWidth;
+        fill.style.transition = '';
+        live.classList.add('is-live');
     }
 
     setupEventListeners() {
@@ -232,6 +302,31 @@ class MonthlyRecapManager {
 
         this.nextBtn.addEventListener('click', () => {
             this.nextSlide();
+        });
+
+        const begin = document.getElementById('recap-begin');
+        if (begin) begin.addEventListener('click', () => this.openStage());
+
+        const exit = document.getElementById('recap-exit');
+        if (exit) exit.addEventListener('click', () => this.handle && this.handle.close());
+
+        const done = document.getElementById('recap-done');
+        if (done) done.addEventListener('click', () => this.handle && this.handle.close());
+
+        const share = document.getElementById('recap-share');
+        if (share) share.addEventListener('click', () => {
+            this.seenSummary = true;
+            if (this.handle) this.handle.close();     // onStageClosed opens and scrolls to the panel
+        });
+
+        // Hold to pause -- the affordance every story UI has. Pointer events rather than touch, so a
+        // mouse press pauses too.
+        ['pointerdown', 'pointerup', 'pointercancel', 'pointerleave'].forEach((evt) => {
+            this.container.addEventListener(evt, () => {
+                const held = evt === 'pointerdown';
+                this.container.classList.toggle('is-held', held);
+                if (held) this.stopBeatTimer(); else this.startBeatTimer();
+            });
         });
 
         // Keyboard navigation. Bound at the DOCUMENT, so it has to yield: to anyone typing (the share
@@ -395,8 +490,27 @@ class MonthlyRecapManager {
         });
     }
 
+    /** Pacing. A quiz holds the deck until it is answered -- the gate already exists, this just stops
+     *  the clock so the timer bar does not keep running against a beat that cannot advance. */
+    startBeatTimer() {
+        this.stopBeatTimer();
+        if (this.prefersReducedMotion || !this.stageOpen) return;
+        const type = this.slides[this.currentSlide]?.type;
+        const waiting = this.quizManager.isQuizSlide(type) && !this.quizManager.canNavigate(type);
+        this.container.classList.toggle('is-waiting', waiting);
+        if (waiting || this.currentSlide >= this.slides.length - 1) return;
+        this.beatTimer = setTimeout(() => this.nextSlide(), this.BEAT_MS);
+    }
+
+    stopBeatTimer() {
+        if (this.beatTimer) { clearTimeout(this.beatTimer); this.beatTimer = null; }
+    }
+
     goToSlide(index) {
         if (index < 0 || index >= this.slides.length) return;
+        // Direction drives the transition: the outgoing beat leaves the way you sent it.
+        this.container.classList.toggle('is-back', index < this.currentSlide);
+        this.container.classList.add('is-underway');
 
         // Update current slide
         const prevIndex = this.currentSlide;
@@ -418,11 +532,10 @@ class MonthlyRecapManager {
             }
         });
 
-        // Update progress dots
-        const dots = this.progressDots.querySelectorAll('.progress-dot');
-        dots.forEach((dot, i) => {
-            dot.classList.toggle('active', i === index);
-        });
+        this.paintBars(index);
+        this.startBeatTimer();
+        this.applyBeatAccent(slideEls[index]);
+
 
         // Trigger slide-specific animations (only on first visit)
         const slideType = this.slides[index].type;
@@ -453,13 +566,15 @@ class MonthlyRecapManager {
         // Trigger celebration effects on specific slides
         this.triggerSlideEffects(this.slides[index]);
 
-        // Show share section on summary slide
+        // The closing beat hands over: the stage offers Share / Done, and the panel below opens once
+        // they leave. Revealing it mid-ceremony was pointless -- it sits behind a full-screen takeover.
+        const out = document.getElementById('recap-out');
         if (slideType === 'summary') {
-            this.shareSection.classList.add('visible');
-            // Load share preview and setup buttons
+            this.seenSummary = true;
+            if (out) out.hidden = false;
             this.loadSharePreview();
-        } else {
-            this.shareSection.classList.remove('visible');
+        } else if (out) {
+            out.hidden = true;
         }
 
         // Update navigation button states for non-quiz slides

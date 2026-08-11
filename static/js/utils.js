@@ -1663,6 +1663,81 @@ function onPageReady(fn) {
     document.body.addEventListener('htmx:historyRestore', function () { fn(false); });
 }
 
+/**
+ * Takeover: put an element in front of everything and hand it the whole screen.
+ *
+ * The correctness-critical half of a full-screen surface -- scroll lock, the page-recede depth cue, focus
+ * capture and restore, a Tab trap, and Escape -- factored out because three surfaces now do it (the claim
+ * ceremony, the Lightbox, and the recap stage) and every one of them re-implemented the accessibility
+ * parts slightly differently. Presentation stays entirely with the caller; this owns none of it.
+ *
+ * The Tab trap is not optional politeness: `aria-modal` alone does NOT stop the browser walking Tab onto
+ * the page still sitting behind the scrim, so without it a keyboard user tabs straight out of the
+ * takeover into content they cannot see.
+ *
+ * @param {HTMLElement} root  the takeover element; the caller has already built and inserted it
+ * @param {Object} [opts]
+ * @param {Function} [opts.onClose]  called once, after teardown
+ * @param {boolean}  [opts.recede=true]  step the page back behind it (skipped under reduced motion)
+ * @param {number}   [opts.exitMs=240]   how long the caller's exit transition needs before removal
+ * @param {string}   [opts.focusSel]     what to focus on open; defaults to the first focusable
+ * @param {Function} [opts.onKey]        extra key handling; return true to signal "handled"
+ * @returns {{close: Function}}
+ */
+function takeover(root, opts) {
+    opts = opts || {};
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var lastFocus = document.activeElement;
+    var zoom = (opts.recede === false || reduce) ? null : document.getElementById('zoom-container');
+    var prevOverflow = document.body.style.overflow;
+    var closed = false;
+
+    var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+        'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    function focusable() {
+        return Array.prototype.filter.call(root.querySelectorAll(FOCUSABLE), function (el) {
+            return el.offsetParent !== null;      // skip anything hidden
+        });
+    }
+
+    function onKey(e) {
+        if (opts.onKey && opts.onKey(e) === true) { return; }
+        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+        if (e.key !== 'Tab') { return; }
+        var items = focusable();
+        if (!items.length) { e.preventDefault(); return; }
+        var first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+
+    function close() {
+        if (closed) { return; }                   // scrim, Escape and the caller's own control all land here
+        closed = true;
+        document.removeEventListener('keydown', onKey, true);
+        document.body.style.overflow = prevOverflow;
+        if (zoom) { zoom.classList.remove('pp-receded'); }
+        var finish = function () {
+            if (root.parentNode) { root.parentNode.removeChild(root); }
+            // Return focus to whatever opened it, or the keyboard user is dumped at the top of the page.
+            if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (err) { /* gone */ } }
+            if (opts.onClose) { opts.onClose(); }
+        };
+        if (reduce) { finish(); } else { setTimeout(finish, opts.exitMs != null ? opts.exitMs : 240); }
+    }
+
+    document.body.style.overflow = 'hidden';
+    if (zoom) { zoom.classList.add('pp-receded'); }
+    document.addEventListener('keydown', onKey, true);
+
+    var target = opts.focusSel ? root.querySelector(opts.focusSel) : focusable()[0];
+    if (target && target.focus) { target.focus(); }
+
+    return { close: close };
+}
+
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -1673,6 +1748,7 @@ window.PlatPursuit.UnsavedChangesManager = UnsavedChangesManager;
 window.PlatPursuit.HTMLUtils = HTMLUtils;
 window.PlatPursuit.debounce = debounce;
 window.PlatPursuit.countUp = countUp;
+window.PlatPursuit.takeover = takeover;
 window.PlatPursuit.animatePanel = animatePanel;
 window.PlatPursuit.InfiniteScroller = InfiniteScroller;
 window.PlatPursuit.DragReorderManager = DragReorderManager;

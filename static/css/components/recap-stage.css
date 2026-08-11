@@ -1,0 +1,237 @@
+/* ============================================================
+ * MONTHLY RECAP -- the STAGE and the ENTRANCE.
+ *
+ * The slides live in recap-deck.css. This file is the thing around them, and it exists because that was
+ * the actual problem: the deck was rebuilt onto `--pp-*` while its presentation stayed a breadcrumb plus
+ * three nested `card bg-base-200/90 border-2 border-base-300` wrappers with a row of dots and two ghost
+ * circle buttons. Anti-reference #1 in its purest form, and the frame announced "dashboard panel" before
+ * anyone read a word.
+ *
+ * Direction chosen from the three built at /design/recap-stage/: CEREMONY. The recap is an EVENT.
+ *
+ *   1. The Entrance -- the page you land on. A cover, not a dashboard. You choose to begin.
+ *   2. The Stage    -- a full-screen takeover. Story grammar, and a colour world per beat.
+ *
+ * The one move that matters most: on the stage, `.rcp` DISSOLVES. In a takeover the stage IS the frame,
+ * so a bordered card inside it is a frame within a frame -- the same nesting the old presentation had.
+ * The shell keeps doing its real job (type scale, rhythm, anatomy) and stops drawing a box.
+ * ============================================================ */
+
+/* ---- 1. The Entrance -----------------------------------------------------------------------------
+ * Deliberately quiet and deliberately NOT a card grid. One object, centred, with a single action. The
+ * anticipation is the product: this is the moment that makes someone come back on the 1st.
+ */
+.rcx-enter {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0; text-align: center;
+    min-height: min(72vh, 640px);
+    padding: 2rem 1.25rem;
+}
+
+.rcx-enter__cover {
+    position: relative;
+    width: min(24rem, 100%);
+    padding: 2.5rem 1.75rem 2rem;
+    border-radius: var(--pp-radius-lg);
+    background: linear-gradient(180deg,
+        color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-1)) 0%, var(--pp-bg-1) 65%);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 24px 60px -28px rgba(0, 0, 0, 0.9);
+    overflow: hidden;
+}
+/* A slow sheen across the cover. One gesture, not motion everywhere -- it says "ready" without shouting. */
+.rcx-enter__cover::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(105deg, transparent 35%,
+        color-mix(in oklab, var(--pp-primary) 16%, transparent) 50%, transparent 65%);
+    transform: translateX(-100%);
+}
+@media (prefers-reduced-motion: no-preference) {
+    .rcx-enter__cover::after { animation: rcxSheen 7s ease-in-out 1.2s infinite; }
+}
+@keyframes rcxSheen {
+    0% { transform: translateX(-100%); }
+    38%, 100% { transform: translateX(100%); }
+}
+
+.rcx-enter__eyebrow {
+    font-size: 0.72rem; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.rcx-enter__month {
+    font-family: var(--pp-font-display); font-weight: 800; line-height: 0.95;
+    font-size: clamp(2.75rem, 12vw, 4rem); color: var(--pp-primary); margin-top: 0.5rem;
+}
+.rcx-enter__year {
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 1.5rem;
+    color: var(--pp-text-dim); line-height: 1;
+}
+.rcx-enter__line { font-size: 0.92rem; color: var(--pp-text-dim); margin-top: 1.25rem; }
+.rcx-enter__begin {
+    display: inline-flex; align-items: center; gap: 0.55rem; margin-top: 1.75rem;
+    padding: 0.7rem 1.6rem; border-radius: 999px; cursor: pointer;
+    font-size: 0.9rem; font-weight: 800; letter-spacing: 0.04em;
+    color: var(--pp-bg-0); background: var(--pp-primary); border: 0;
+    box-shadow: 0 8px 24px -10px color-mix(in oklab, var(--pp-primary) 80%, transparent);
+    transition: transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.2s ease;
+}
+.rcx-enter__begin:hover { box-shadow: 0 12px 30px -10px color-mix(in oklab, var(--pp-primary) 90%, transparent); }
+.rcx-enter__begin:active { transform: scale(0.97); }
+.rcx-enter__begin:focus-visible { outline: 2px solid var(--pp-text); outline-offset: 3px; }
+.rcx-enter__begin svg { width: 1rem; height: 1rem; }
+.rcx-enter__meta { display: flex; gap: 1.25rem; justify-content: center; margin-top: 1.5rem; }
+.rcx-enter__stat { display: flex; flex-direction: column; gap: 0.15rem; }
+.rcx-enter__stat b { font-family: var(--pp-font-display); font-size: 1.15rem; color: var(--pp-text); }
+.rcx-enter__stat span { font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+.rcx-enter__aside { margin-top: 1.5rem; font-size: 0.8rem; color: var(--pp-text-mute); }
+.rcx-enter__aside a { color: var(--pp-primary); }
+
+/* ---- 2. The Stage --------------------------------------------------------------------------------- */
+.rcx {
+    position: fixed; inset: 0; z-index: 90;
+    display: flex; flex-direction: column;
+    background: var(--pp-bg-0);
+    opacity: 0;
+    transition: opacity 0.28s ease;
+}
+.rcx.is-in { opacity: 1; }
+
+/* Every beat sets its own accent; the WHOLE stage takes it, not just the card. This is what makes the
+   surface change character between beats instead of being one box with swapped contents. */
+.rcx { --rcx-accent: var(--pp-primary); }
+.rcx[data-accent="secondary"] { --rcx-accent: var(--pp-secondary); }
+.rcx[data-accent="accent"]    { --rcx-accent: var(--pp-accent); }
+.rcx[data-accent="success"]   { --rcx-accent: var(--pp-success); }
+
+.rcx__ground {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(130% 85% at 50% 0%,
+        color-mix(in oklab, var(--rcx-accent) 24%, var(--pp-bg-0)) 0%, var(--pp-bg-0) 62%);
+    transition: background 0.7s ease;
+}
+/* Two slow blooms. Behind everything, never animated per-frame over a backdrop-filter, and the only
+   ambient motion on the surface -- restraint is the difference between atmosphere and a screensaver. */
+.rcx__aura { position: absolute; inset: -20%; pointer-events: none; opacity: 0.45; }
+.rcx__aura span {
+    position: absolute; width: 46%; aspect-ratio: 1; border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in oklab, var(--rcx-accent) 55%, transparent) 0%, transparent 70%);
+    filter: blur(40px);
+}
+.rcx__aura span:nth-child(1) { left: 4%; top: 6%; }
+.rcx__aura span:nth-child(2) { right: 2%; bottom: 2%; width: 38%; }
+@media (prefers-reduced-motion: no-preference) {
+    .rcx__aura span:nth-child(1) { animation: rcxDrift 17s ease-in-out infinite alternate; }
+    .rcx__aura span:nth-child(2) { animation: rcxDrift 21s ease-in-out infinite alternate-reverse; }
+}
+@keyframes rcxDrift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(6%, 5%, 0) scale(1.15); } }
+
+/* Segmented timer. The clearest possible "this is a story, it has a length and a pace" signal, and the
+   thing a row of dots can never say. */
+.rcx__bars { position: relative; display: flex; gap: 4px; padding: 0.85rem 1rem 0; }
+.rcx__bar { flex: 1; height: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.rcx__bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: #fff; }
+.rcx__bar.is-done i { width: 100%; }
+.rcx__bar.is-live i { width: 100%; transition: width var(--rcx-beat, 5s) linear; }
+/* Held (finger down) or on an unanswered quiz: the timer must visibly STOP, or "hold to pause" is a lie. */
+.rcx.is-held .rcx__bar.is-live i,
+.rcx.is-waiting .rcx__bar.is-live i { transition: none; }
+
+.rcx__top {
+    position: relative; display: flex; align-items: center; justify-content: space-between;
+    gap: 0.75rem; padding: 0.75rem 1rem;
+}
+.rcx__who { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--pp-text-dim); min-width: 0; }
+.rcx__who img { width: 1.4rem; height: 1.4rem; border-radius: 50%; object-fit: cover; flex: none; }
+.rcx__who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rcx__exit {
+    display: grid; place-items: center; width: 2rem; height: 2rem; flex: none;
+    border: 0; border-radius: 50%; background: none; color: var(--pp-text-mute); cursor: pointer;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+.rcx__exit:hover { color: var(--pp-text); background: rgba(255, 255, 255, 0.07); }
+.rcx__exit:focus-visible { outline: 2px solid var(--rcx-accent); outline-offset: 2px; }
+.rcx__exit svg { width: 1.1rem; height: 1.1rem; }
+
+.rcx__stage { position: relative; flex: 1; min-height: 0; display: grid; padding: 0.5rem 1rem 1.5rem; }
+/* The controller builds these as `.recap-slide` (unchanged, so its six query sites keep working); the
+   STAGE owns where they sit. Centred by default, top-aligned when taller than the stage -- a centred
+   flex child that overflows clips its own top and becomes unreachable. */
+.rcx .recap-slide {
+    position: absolute; inset: 0.5rem 1rem 1.5rem;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    overflow-y: auto; opacity: 0; pointer-events: none; z-index: 1;
+}
+.rcx .recap-slide.active { opacity: 1; pointer-events: auto; }
+.rcx .recap-slide.has-overflow { justify-content: flex-start; }
+.rcx .recap-slide::-webkit-scrollbar { width: 5px; }
+.rcx .recap-slide::-webkit-scrollbar-track { background: transparent; }
+.rcx .recap-slide::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 3px; }
+/* Directional, with a spring settle. The outgoing beat leaves the way you sent it and the incoming one
+   arrives from the other side: ONE gesture with two halves, which is what "exits choreographed as
+   carefully as entrances" means in practice. A symmetric fade cannot say which way you went. */
+@media (prefers-reduced-motion: no-preference) {
+    .rcx .recap-slide.active { animation: rcxInFwd 0.52s cubic-bezier(0.22, 1.1, 0.36, 1) both; }
+    .rcx.is-back .recap-slide.active { animation-name: rcxInBack; }
+}
+@keyframes rcxInFwd  { from { opacity: 0; transform: translateX(36px) scale(0.965); } to { opacity: 1; transform: none; } }
+@keyframes rcxInBack { from { opacity: 0; transform: translateX(-36px) scale(0.965); } to { opacity: 1; transform: none; } }
+
+/* Tap zones, the way every story UI works. UNDER the slide, so a quiz option always wins the click. */
+.rcx__zone { position: absolute; top: 0; bottom: 0; width: 30%; z-index: 0; border: 0; background: none; cursor: pointer; }
+.rcx__zone--prev { left: 0; }
+.rcx__zone--next { right: 0; }
+.rcx__zone:focus-visible { outline: 2px solid var(--rcx-accent); outline-offset: -4px; }
+
+/* THE DISSOLVE. See the file header: on the stage the shell stops drawing a box, and the type grows to
+   carry the beat in its place. */
+.rcx .rcp {
+    background: none; border: 0; box-shadow: none;
+    padding: 0; max-width: 34rem;
+}
+.rcx .rcp .pp-tally--hero { font-size: clamp(3.25rem, 13vw, 5.5rem); }
+.rcx .rcp__kicker {
+    font-size: 0.95rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-dim);
+}
+.rcx .rcp__caption { font-size: 1.1rem; }
+/* The parts that ARE objects keep their surfaces -- dissolving the shell must not dissolve the content. */
+.rcx .rcp .scard,
+.rcx .rcp .rcp-date,
+.rcx .rcp .rcp-quiz__opt,
+.rcx .rcp .rcp-badge,
+.rcx .rcp .rcp-quiz__reveal { background: color-mix(in oklab, var(--pp-bg-1) 82%, transparent); }
+
+.rcx__hint {
+    position: absolute; left: 50%; bottom: 0.5rem; transform: translateX(-50%);
+    font-size: 0.68rem; color: var(--pp-text-mute); pointer-events: none;
+    transition: opacity 0.4s ease;
+}
+.rcx.is-underway .rcx__hint { opacity: 0; }
+
+/* The closing beat hands over to sharing without leaving the stage. */
+.rcx__out { position: relative; display: flex; justify-content: center; gap: 0.6rem; padding: 0 1rem 1.25rem; }
+.rcx__out[hidden] { display: none; }
+.rcx__btn {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    padding: 0.6rem 1.2rem; border-radius: 999px; cursor: pointer;
+    font-size: 0.82rem; font-weight: 700;
+    color: var(--pp-text); background: rgba(255, 255, 255, 0.07);
+    border: 1px solid color-mix(in oklab, var(--rcx-accent) 30%, var(--pp-border));
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.rcx__btn:hover { border-color: var(--rcx-accent); background: rgba(255, 255, 255, 0.11); }
+.rcx__btn:focus-visible { outline: 2px solid var(--rcx-accent); outline-offset: 2px; }
+.rcx__btn--primary { color: var(--pp-bg-0); background: var(--rcx-accent); border-color: transparent; }
+.rcx__btn--primary:hover { background: var(--rcx-accent); filter: brightness(1.08); }
+
+/* The share panel below the stage. It is hidden until the closing beat hands over to it -- the rule that
+   does that went missing when the deck CSS was extracted, so it had been permanently visible while the
+   controller toggled a `.visible` class nothing read. */
+.share-section { display: none; }
+.share-section.visible { display: block; }
+
+@media (min-width: 768px) {
+    .rcx__bars { padding: 1rem 1.5rem 0; }
+    .rcx__top { padding: 0.85rem 1.5rem; }
+    .rcx__stage { padding: 1rem 1.5rem 2rem; }
+    .rcx .recap-slide { inset: 1rem 1.5rem 2rem; }
+}

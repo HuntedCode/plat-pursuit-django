@@ -32,6 +32,7 @@
 @import "./components/game-detail.css";
 @import "./components/plat-cards.css";
 @import "./components/recap-deck.css";
+@import "./components/recap-stage.css";
 @plugin "daisyui";
 
 @theme {

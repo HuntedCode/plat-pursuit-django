@@ -7,11 +7,10 @@
  * document each time the calendar was re-rendered.
  *
  * Sections, in order:
- *   1. Deck chrome   -- slide transitions, progress dots, the share section reveal
- *   2. Motion        -- the named animations the controller adds, and the reduced-motion contract
- *   3. Activity ramp -- the calendar's dot scale
- *   4. `.rcp`        -- the shared slide shell every one of the 16 slides is built on
- *   5. Slide parts   -- the content pieces, all inheriting `--rcp-accent` from the shell
+ *   1. Motion        -- the named animations the controller adds, and the reduced-motion contract
+ *   2. Activity ramp -- the calendar's dot scale
+ *   3. `.rcp`        -- the shared slide shell every slide is built on
+ *   4. Slide parts   -- the content pieces, all inheriting `--rcp-accent` from the shell
  *
  * TWO ordering traps live in here, both of which produced dead CSS that read as a fix. Source order
  * decides at equal specificity, so a reduced-motion restore or a mobile clamp count declared BEFORE the
@@ -19,67 +18,14 @@
  * not by reading the diff -- neither failure is visible in source.
  * ============================================================ */
 
-    /* Recap deck height: viewport-aware so the deck fits the screen on
-       laptops without pushing share content below the fold, and caps out
-       on tall monitors so slides don't get a wall of dead space. The
-       360px subtraction is navbar + sub-nav + page header + dots + nav
-       controls + breathing room. */
-    :root {
-        --recap-deck-height: clamp(520px, calc(100vh - 360px), 720px);
-    }
-
-    /* Recap slide transitions */
-    .recap-slide {
-        opacity: 0;
-        transform: translateY(30px);
-        transition: opacity 0.6s ease, transform 0.6s ease;
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 1rem;
-        pointer-events: none;
-        height: var(--recap-deck-height);
-        overflow-y: auto;
-    }
-
-    .recap-slide.active {
-        opacity: 1;
-        transform: translateY(0);
-        position: relative;
-        pointer-events: auto;
-    }
-
-    .recap-slide.exiting {
-        opacity: 0;
-        transform: translateY(-30px);
-        pointer-events: none;
-    }
-
-    /* When content overflows, align to top for better scrolling */
-    .recap-slide.has-overflow {
-        justify-content: flex-start;
-    }
-
-    /* Custom scrollbar for slides */
-    .recap-slide::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .recap-slide::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .recap-slide::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 3px;
-    }
-
-    .recap-slide::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.4);
-    }
+    /* The boxed deck is GONE. What used to live here -- `--recap-deck-height`, the absolutely-positioned
+       `.recap-slide` inside a fixed-height box, and its custom scrollbars -- described a widget sitting
+       on a page. The recap is a full-screen ceremony now, so slide POSITIONING belongs to the stage and
+       is defined there, scoped to `.rcx`, in components/recap-stage.css.
+       (The rest of that old chrome -- `.progress-dot`, `.recap-container`, `.share-section` -- turned out
+       never to have made it into this file when the deck CSS was extracted, so the dots rendered
+       unstyled and `.share-section` never hid despite the controller toggling `.visible` on it. The
+       stage replaces the first two outright; the share reveal is restored in recap-stage.css.) */
 
     /* Trophy bounce animation for intro */
     .animate-trophy-bounce {
