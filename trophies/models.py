@@ -4595,6 +4595,11 @@ class MonthlyRecap(models.Model):
     )
 
     # Badge/XP stats
+    badge_xp_earned = models.PositiveIntegerField(
+        default=0,
+        help_text="Badge XP earned in this month, bucketed from the engine's stage/badge completion "
+                  "dates (badge_xp.monthly_xp). Snapshotted at generation; there is no XP ledger.",
+    )
     badges_earned_count = models.PositiveIntegerField(default=0)
     badges_data = models.JSONField(
         default=list,

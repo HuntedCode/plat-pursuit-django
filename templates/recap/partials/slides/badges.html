@@ -1,14 +1,16 @@
+{% load humanize %}
 {% comment %}
 Recap Slide: Badges Earned
-Variables: badges_count, badges (list of Medallion frame dicts), flavor_text
+Variables: badges_count, xp_earned, badges (list of Medallion frame dicts), flavor_text
 
 Badges render as the Medallion, the same object treatment they get everywhere else on the site -- the
 payload from `get_badge_stats_for_month` IS a frame dict, so this composes the shared partial rather than
 restating it. An earlier pass hand-rolled a plate-plus-subject stack because the recap was still reading
 the legacy Badge model, which has no frame; it reads UserGroupBadge now, so the real component fits.
 
-There is no XP figure. The badge subsystem has no XP ledger (standings are recomputed from scratch), so
-"XP earned in March" is not a question it can answer -- see get_badge_stats_for_month.
+The badges are the headline and the XP is the footnote, not the other way round: a hunter remembers which
+badges they closed out, not the number attached to them. XP also appears on months with no completed
+badge (stage clears alone earn it), which is why it sits below and can stand on its own.
 {% endcomment %}
 <div class="rcp rcp--wide rcp--accent-warm">
     <p class="rcp__kicker">You earned</p>
@@ -31,6 +33,10 @@ There is no XP figure. The badge subsystem has no XP ledger (standings are recom
         <p class="rcp__hint">and {{ badges_count|add:"-4" }} more</p>
         {% endif %}
     </div>
+    {% endif %}
+
+    {% if xp_earned %}
+    <span class="rcp__stamp"><span data-countup="{{ xp_earned }}">{{ xp_earned|intcomma }}</span> badge XP</span>
     {% endif %}
 
     {% if flavor_text %}<p class="rcp__flavor">{{ flavor_text }}</p>{% endif %}

@@ -2574,7 +2574,7 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
         ('Badge Stats', {
-            'fields': ('badges_earned_count', 'badges_data'),
+            'fields': ('badge_xp_earned', 'badges_earned_count', 'badges_data'),
             'classes': ('collapse',)
         }),
         ('Comparison Data', {

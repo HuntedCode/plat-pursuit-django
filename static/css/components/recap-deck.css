@@ -258,7 +258,7 @@
     --rcp-accent: var(--pp-primary);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 0; width: 100%; max-width: 34rem; margin-inline: auto;
-    padding: 2rem 1.5rem; border-radius: var(--pp-radius-lg);
+    padding: 1.5rem 1.25rem; border-radius: var(--pp-radius-lg);
     text-align: center;
     background: linear-gradient(180deg,
         color-mix(in oklab, var(--rcp-accent) 7%, var(--pp-bg-1)) 0%, var(--pp-bg-1) 70%);
@@ -273,11 +273,13 @@
 }
 .rcp__figure { color: var(--rcp-accent); line-height: 0.9; }
 .rcp__caption { font-size: 1.05rem; color: var(--pp-text-dim); margin-top: 0.6rem; }
-.rcp__body { width: 100%; margin-top: 1.75rem; }
+.rcp__body { width: 100%; margin-top: 1.25rem; }
+@media (min-width: 768px) { .rcp__body { margin-top: 1.75rem; } }
 .rcp__flavor {
     font-size: 0.85rem; font-style: italic; color: var(--pp-text-mute);
-    margin-top: 1.5rem; padding-right: 1px;   /* italic glyphs slant past their box */
+    margin-top: 1rem; padding-right: 1px;   /* italic glyphs slant past their box */
 }
+@media (min-width: 768px) { .rcp__flavor { margin-top: 1.5rem; } }
 
 /* HERO -- the peak beats (the platinum, the rarest trophy). Bigger frame, and the accent actually
    present rather than implied, because these are the moments the whole month builds toward. */
@@ -332,7 +334,7 @@
 
 /* Stamp: the deck's one small "fact pill" -- rarity band, peak hour, active days. */
 .rcp__stamp {
-    align-self: center; margin-top: 0.9rem;
+    align-self: center; margin-top: 0.6rem;
     padding: 0.3rem 0.8rem; border-radius: 999px;
     font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--rcp-accent);
@@ -462,10 +464,13 @@
 /* Badges as Medallions. The component owns its own rendering; these rules only place and caption it.
    `--sz` on the nested .pp-med is the Medallion's width knob (default 160px), set the same way the
    badge-detail and collection surfaces do it. */
-.rcp-meds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+/* Four badges in a 2x2 on mobile is the densest thing in the deck, and it is the slide that sits closest
+   to the 375px deck ceiling. The medallions are sized to leave real headroom there, not to fit exactly --
+   a longer series name or a different font should not be able to push it into an internal scroll. */
+.rcp-meds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
 @media (min-width: 768px) { .rcp-meds { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; } }
-.rcp-med { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
-.rcp-med .pp-med { --sz: 56px; }
+.rcp-med { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
+.rcp-med .pp-med { --sz: 46px; }
 @media (min-width: 768px) { .rcp-med .pp-med { --sz: 104px; } .rcp-med { gap: 0.4rem; } }
 /* Clamp count lives IN the base rule, not a later override -- source order decides at equal specificity
    and a 2x2 of two-line captions puts this slide past the mobile deck. */

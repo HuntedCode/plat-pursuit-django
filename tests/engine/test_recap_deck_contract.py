@@ -188,15 +188,13 @@ def test_recap_reads_no_legacy_badge_tables():
         assert 'UserBadge.objects' not in code, f'{path} still reads legacy UserBadge'
 
 
-def test_no_badge_xp_figure_anywhere_in_the_recap():
-    """The badge subsystem has no XP ledger -- standings are recomputed from scratch -- so a per-month XP
-    number cannot be derived without running the evaluator on the request path. It was removed rather
-    than approximated."""
-    for path in ('trophies/services/monthly_recap_service.py', 'api/recap_views.py',
-                 'core/services/monthly_recap_message_service.py',
-                 'templates/recap/partials/slides/badges.html'):
-        code = _code_only(ROOT / path)
-        assert 'badge_xp_earned' not in code, f'{path} still reads the removed badge_xp_earned field'
+def test_badge_xp_is_derived_from_the_engine_not_a_ledger():
+    """Monthly badge XP is a re-bucketing of the engine's own dates (badge_xp.monthly_xp), so the recap
+    must call THAT rather than reinvent a total. Reconciliation against the standings is pinned in
+    test_badge_monthly_xp.py; this only pins that the recap is wired to it."""
+    src = _code_only(ROOT / 'trophies/services/monthly_recap_service.py')
+    assert 'monthly_xp' in src, 'the recap no longer derives badge XP from the engine'
+    assert 'evaluate_profile' in src, 'monthly_xp needs the engine results to bucket'
 
 
 def test_verdict_is_hidden_by_attribute_not_a_utility_class(controller):

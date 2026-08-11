@@ -171,14 +171,22 @@ Shared parts (`.rcp__stamp`, `.rcp__chips`, `.rcp__pair`, `.rcp-quiz__*`, ...) a
   payloads ARE Medallion frame dicts, so both templates compose `components/badge_medallion.html`.
   Pinned by `test_recap_deck_contract.py`.
 
-- **There is no badge-XP figure, deliberately.** The badge subsystem has no XP ledger --
-  `ProfileBadgeStanding.total_xp` is recomputed from scratch on every evaluation -- so "XP earned in
-  March" is not a question it can answer. It *is* derivable by re-running the engine and bucketing
-  `StageResult.base_date`, but that is the evaluator, and recap generation sits on the request path
-  behind a prefetch firing 8-16 concurrent slide requests. Approximating from completion bonuses alone
-  would undercount by roughly the whole stage drip. If monthly XP is wanted, the fix is an XP event
-  ledger (the shape `ContractXPGrant` already uses for jobs), not an engine run per page view.
-  `MonthlyRecap.badge_xp_earned` was dropped in `0287_drop_recap_badge_xp`.
+- **Monthly badge XP comes from the engine's dates, not a ledger.** There is no badge-XP ledger and
+  none is needed: every cleared gating stage carries `StageResult.base_date` and every earned badge
+  carries `GroupBadgeResult.earned_date`, so `badge_xp.monthly_xp` buckets the same two components
+  `_group_badge_xp` sums. **That coupling is load-bearing** -- change how XP is scored and both must
+  move, or the recap and the profile's standing show different numbers for the same work.
+  `test_badge_monthly_xp.py` pins the reconciliation (buckets sum to the scored total, short only by
+  clears that have no date to be placed by).
+
+  Attribution is by COMPLETION date, not badge creation date: a 2016 platinum is credited to 2016 even
+  if the series was authored in 2025. That matches `UserGroupBadge.earned_at`, so a slide's earned count
+  and its XP always agree. (The legacy `StageCompletionEvent` clamped retroactive credit to
+  `badge.created_at` instead; matching it would put XP in months the earned badges do not appear in.)
+
+  Cost: one evaluation per recap GENERATION -- ~6 catalog queries (profile-independent) plus the two
+  bounded, whale-safe completion reads. `get_or_generate_recap` persists the result, so the deck's 8-16
+  concurrent slide requests read the stored number, not the engine.
 
 - **The closest-badge quiz only appears on the most recent completed month.** `SeriesBadgeStanding` is
   live state with no history. Now that every month is openable, generating an old recap would freeze

@@ -77,6 +77,52 @@ def compute_badge_xp(results_by_series: dict) -> tuple:
     return sum(per_series.values()), per_series
 
 
+def monthly_xp(results, tz=None) -> dict:
+    """Pure. XP bucketed by the LOCAL month it was earned in: {(year, month): xp}.
+
+    There is no badge-XP ledger and there does not need to be one -- the engine already carries the dates.
+    Each gating stage that has been cleared knows WHEN (`StageResult.base_date`, the earliest date a
+    qualifying game met the base bar) and each earned badge knows when its bar fell
+    (`GroupBadgeResult.earned_date`). So the same two components `_group_badge_xp` SUMS are simply bucketed
+    here instead. That coupling is deliberate and load-bearing: any change to how XP is scored has to move
+    both, and `test_badge_monthly_xp` pins that these buckets reconcile against the standing total.
+
+    `results` is any iterable of GroupBadgeResult (the engine's DesiredState values).
+
+    Attribution is by COMPLETION date, not by when the badge was created. A hunter who platted Bloodborne
+    in 2016 has that stage credited to 2016, even if the Soulsborne series was authored in 2025. That is
+    the same rule the badge's own `earned_at` follows, so the earned count and the XP on a recap slide
+    always agree with each other. The legacy StageCompletionEvent clamped retroactive credit to
+    `badge.created_at` instead; the subsystem does not, and matching it would put XP in a month the
+    hunter's earned badges do not appear in.
+
+    Stages and badges with no date contribute nothing -- they cannot be placed in a month. Those are
+    exactly the rows that make the reconciliation a `<=` rather than an `==`.
+    """
+    buckets = defaultdict(int)
+
+    def _key(value):
+        if value is None:
+            return None
+        localized = value.astimezone(tz) if (tz is not None and hasattr(value, 'astimezone')) else value
+        return localized.year, localized.month
+
+    for res in results:
+        if res.gating_count == 0:
+            continue                       # not earnable in this group; contributes no XP at all
+        for stage in res.stages:
+            if stage.gates and stage.base_satisfied:
+                key = _key(stage.base_date)
+                if key:
+                    buckets[key] += XP_PER_STAGE
+        if res.base_earned:
+            key = _key(res.earned_date)
+            if key:
+                buckets[key] += XP_BADGE_COMPLETION_BONUS
+
+    return dict(buckets)
+
+
 def _results_by_series(desired: dict, group_badges) -> dict:
     """Group the engine's desired {group_badge_id: GroupBadgeResult} by series_slug using the GroupBadge rows."""
     by_series = defaultdict(list)

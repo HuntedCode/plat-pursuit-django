@@ -214,6 +214,7 @@ class MonthlyRecapService:
             'quiz_total_trophies_data': quiz_total_trophies or {},
             'quiz_rarest_trophy_data': quiz_rarest_trophy or {},
             'quiz_active_day_data': quiz_active_day or {},
+            'badge_xp_earned': badge_stats['xp_earned'],
             'badges_earned_count': badge_stats['badges_count'],
             'badges_data': badge_stats['badges_data'],
             'badge_progress_quiz_data': badge_progress_quiz or {},
@@ -544,24 +545,26 @@ class MonthlyRecapService:
         calls (evaluation runs through `badge_apply` from the `evaluate_badges` command). So the slide
         was showing an empty or frozen set for everybody.
 
-        NO XP figure. The badge subsystem deliberately has no XP ledger -- `ProfileBadgeStanding.total_xp`
-        is recomputed from scratch on every evaluation (badge_xp.recompute_standing), so "XP earned in
-        March" is not a question it can answer. It IS derivable by re-running the engine and bucketing
-        `StageResult.base_date`, but that is the evaluator, and recap generation sits on the request path
-        behind a prefetch that fires 8-16 concurrent slide requests. Inventing a number from the
-        completion bonuses alone would undercount by roughly the whole stage drip. If monthly XP is
-        wanted, the honest fix is an XP event ledger (the shape `ContractXPGrant` already uses for jobs),
-        not an engine run per page view.
+        XP comes from the engine's dates, not from a ledger -- there is no badge-XP ledger and none is
+        needed. Every cleared gating stage carries the date it fell and every earned badge carries its
+        earn date, so `badge_xp.monthly_xp` buckets the same two components the standings SUM. This runs
+        one evaluation: ~6 catalog queries (profile-independent) plus the two bounded, whale-safe
+        completion reads. It happens once per (profile, month) at GENERATION time, not per page view --
+        `get_or_generate_recap` persists the result -- so the deck's 8-16 concurrent slide requests read
+        the stored number.
 
         `art_layers` are absolute static URLs and are SNAPSHOTTED onto the recap. Safe because the project
         serves static through whitenoise's CompressedStaticFilesStorage, which does not hash filenames.
 
         Returns:
-            dict: {badges_count, badges_data}
+            dict: {xp_earned, badges_count, badges_data}
         """
         from trophies.models import UserGroupBadge
         from trophies.services.badge_detail_service import group_medallion_layers
+        from trophies.services.badge_orchestrator import evaluate_profile
+        from trophies.services.badge_xp import monthly_xp
 
+        user_tz = user_tz or cls._resolve_user_tz(profile)
         start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         earned = (
@@ -594,7 +597,16 @@ class MonthlyRecapService:
                 'set_number': gb.set_number,
             })
 
+        # One evaluation yields EVERY month's buckets; we keep the one being generated.
+        try:
+            xp_by_month = monthly_xp(evaluate_profile(profile).values(), user_tz)
+        except Exception:
+            logger.exception("Badge XP evaluation failed for profile %s; recording 0 for %s/%s",
+                             profile.id, year, month)
+            xp_by_month = {}
+
         return {
+            'xp_earned': xp_by_month.get((year, month), 0),
             'badges_count': len(badges_data),
             'badges_data': badges_data,
         }
@@ -1531,6 +1543,7 @@ class MonthlyRecapService:
         if recap.badges_earned_count > 0:
             slides.append({
                 'type': 'badges',
+                'xp_earned': recap.badge_xp_earned,
                 'badges_count': recap.badges_earned_count,
                 'badges': recap.badges_data or [],
             })
