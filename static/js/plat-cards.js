@@ -296,7 +296,7 @@
                 }
                 buildArtSwatches(data.art_options);
                 syncRateButton();
-                var label = dlg.querySelector('[data-share-download-label]');
+                var label = dlg.querySelector('[data-dl-label]');
                 if (label) { label.textContent = data.variant === 'platinum' ? 'Download platinum card' : 'Download 100% card'; }
                 // The card ships with its own inline ground; paint the SELECTED one over it straight
                 // away so the preview matches the checked radio before anyone touches the picker.

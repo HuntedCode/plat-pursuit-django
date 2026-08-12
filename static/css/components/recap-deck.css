@@ -25,7 +25,8 @@
        (The rest of that old chrome -- `.progress-dot`, `.recap-container`, `.share-section` -- turned out
        never to have made it into this file when the deck CSS was extracted, so the dots rendered
        unstyled and `.share-section` never hid despite the controller toggling `.visible` on it. The
-       stage replaces the first two outright; the share reveal is restored in recap-stage.css.) */
+       stage replaces the dots outright, and the share panel was removed altogether: it was a second
+       card surface below the fold, and the ceremony's own card scene is the only one now.) */
 
     /* Trophy bounce animation for intro */
     .animate-trophy-bounce {

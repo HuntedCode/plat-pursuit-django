@@ -325,7 +325,7 @@ def _figure_cells(recap, calendar):
         cells.append({'value': games, 'label': f"Game{'' if games == 1 else 's'}", 'accent': False})
     else:
         streak = (recap.streak_data or {}).get('longest_streak') or 0
-        cells.append({'value': streak, 'label': f"Day streak", 'accent': False})
+        cells.append({'value': streak, 'label': 'Day streak', 'accent': False})
 
     return cells
 
