@@ -193,9 +193,8 @@ and nobody posts a stat readout) and the evidence is a spread rather than a sing
 | Zone | Carries |
 |---|---|
 | Identity | Avatar, username, "Monthly Recap", and the brand block. Constructed exactly as the plat card's. |
-| The month | `RECAP` / month + year, tier dots; the figures pushed to the opposite edge so the row spans the card. |
-| The proof | Left: platinum covers, or the rarest find when there were none. Right: the **activity calendar**. |
-| The spine | Best day, badges, and the rarest find when the covers took its place. |
+| The month | `RECAP` / month + year and tier dots, the **rarest find** mid-row, the figures hard against the far edge. |
+| The proof | Platinum covers, the month's **texture** (best day, badges), and the **activity calendar** -- three blocks spread across the full width. |
 
 Constraints worth knowing before editing it:
 
@@ -217,6 +216,14 @@ Constraints worth knowing before editing it:
   A platinum day takes a warm ring rather than more colour: level 4 is "busy", the ring is "you closed
   something out", and the ring is deliberately off the ramp's hue or it vanishes on exactly the days
   most likely to be level 4.
+- **Emptiness is the failure mode to check for.** Two iterations of this card looked composed in
+  isolation and read as barren in practice, both times because a ~700x150px hole sat mid-card. The
+  fixes were structural, not decorative: the rarest find moved from a bottom text row into the gap
+  between the month and the figures; best day and badges moved from that same bottom row into the
+  gap between the covers and the calendar (which retired the bottom band entirely); and cover width
+  scales with count, so a three-platinum month fills its slot instead of leaving 630px empty.
+  `scratchpad/voids.py` maps the empty regions by hit-testing a grid of points -- use it rather
+  than judging by eye, because the holes are where content ISN'T and the eye slides past them.
 - **Zero figures are dropped, never printed.** A row of zeroes is a worse card than a shorter row, and
   nobody should be talked out of sharing by their own card.
 

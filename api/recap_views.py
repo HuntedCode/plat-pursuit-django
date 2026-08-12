@@ -410,32 +410,27 @@ class RecapShareImageHTMLView(APIView):
         tier_counts = [(tier, colour, counts.get(tier) or 0)
                        for tier, colour in TIER_DISPLAY if counts.get(tier)]
 
-        # The spine carries what did not fit above, and only what actually happened. Composed here rather
-        # than in the template because the template would otherwise need the same "is there anything to
-        # show" question asked four times and then again for the band itself.
-        spine = []
+        # The month's texture, as stat blocks between the covers and the calendar. These were a thin text
+        # row along the bottom while a 470x150 hole sat in the middle of the card -- so they moved into
+        # the hole and the bottom band went away. Composed here rather than in the template because the
+        # template would otherwise ask the same "is there anything to show" question three times over.
+        #
+        # The rarest find is NOT here: it leads the row above now, with its icon, in what used to be the
+        # largest empty region on the card.
+        stats = []
         # Keys come from `get_most_active_day` / `get_rarest_trophy_in_month`: `date` and `name`, NOT
         # `date_display` and `trophy_name`. Both were guessed wrong first, and a wrong key here fails
         # silently -- the block simply never renders and the card looks like a design decision.
         if best_day.get('date') and best_day.get('trophy_count'):
-            spine.append({
+            stats.append({
                 'label': 'Best day',
                 'value': best_day['date'],
                 'meta': f"{best_day['trophy_count']} trophies",
             })
         # The rarest find moves down here when the platinums took the space above it, and is otherwise
         # already shown -- never both, or the card says the same thing twice.
-        # ...and only when the proof band did not already show it. The band's left slot is the covers
-        # when there are any and the rarest find when there are not, so the two are never both shown.
-        if rarest.get('name') and platinums_with_images:
-            rarity = rarest.get('earn_rate')
-            spine.append({
-                'label': 'Rarest',
-                'value': rarest['name'],
-                'meta': f'{rarity}% earn rate' if rarity else '',
-            })
         if recap.badges_earned_count:
-            spine.append({
+            stats.append({
                 'label': 'Badges',
                 'value': recap.badges_earned_count,
                 'meta': f'+{intcomma(recap.badge_xp_earned)} XP' if recap.badge_xp_earned else '',
@@ -465,8 +460,16 @@ class RecapShareImageHTMLView(APIView):
                 'plat': bool(day.get('platinum_count')),
             })
 
+        # Covers scale to how many there are. Fixed-width covers left a 630px hole beside a three-platinum
+        # month and only just fitted eight, so the band looked half-empty exactly when the month was
+        # modest -- which is the month whose card most needs to look composed.
+        n_plats = len(platinums_with_images)
+        cover_w = 132 if n_plats <= 2 else 116 if n_plats <= 4 else 100 if n_plats <= 6 else 88
+
         return {
             'format': format_type,
+            'cover_w': cover_w,
+            'cover_h': round(cover_w * 4 / 3),
             # `first_day_weekday` is 0=Sunday, matching the Su-first header the grid draws.
             'calendar_offset': range(cal.get('first_day_weekday') or 0),
             'calendar_days': cal_days,
@@ -488,7 +491,7 @@ class RecapShareImageHTMLView(APIView):
             'platinums_overflow': max(0, len(all_plats) - SHARE_CARD_PLATINUM_SLOTS),
             'rarest_trophy': rarest,
             'rarest_trophy_icon': rarest_icon,
-            'spine_items': spine,
+            'stat_items': stats,
             # Identity
             'is_plus': getattr(profile, 'is_plus', False),
         }

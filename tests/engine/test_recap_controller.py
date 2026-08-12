@@ -715,3 +715,22 @@ def test_no_component_class_overrides_the_hidden_utility():
             f'.{cls} sets `display` and is toggled with the `hidden` utility, which it silently '
             f'outranks -- add `.{cls}.hidden {{ display: none; }}`'
         )
+
+
+def test_the_playhead_does_not_move_while_only_the_card_is_showing(js):
+    """"Just get the card" opens the stage straight at its ending, where `is-ending` is the only thing
+    making `.rcx__card` visible.
+
+    `init()` is async: it awaits the whole-deck fetch and THEN calls `goToSlide(0)`. The quick-download
+    button is on screen for that entire flight, so opening the card early meant the late `goToSlide(0)`
+    arrived afterwards, took the non-summary branch, stripped `is-ending` -- and the card the hunter had
+    just asked for vanished. Reproduced in a browser: visibility went `visible` -> `hidden` on that call.
+
+    There is no deck on screen in this mode, so moving the playhead cannot show anything; it can only
+    hide something."""
+    body = _method(_code(js), 'goToSlide')
+    guard = body[:body.index('\n', body.index('goToSlide(index)')) + 400]
+    assert "classList.contains('is-card-only')" in guard, (
+        'goToSlide runs in card-only mode again, where its only effect is to hide the card'
+    )
+    assert 'return;' in guard

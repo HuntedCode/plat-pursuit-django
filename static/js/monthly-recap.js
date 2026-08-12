@@ -934,6 +934,13 @@ class MonthlyRecapManager {
     }
 
     goToSlide(index) {
+        // Card-only has no deck on screen, so moving the playhead cannot show anything -- but its side
+        // effects can HIDE something: the non-summary branch below strips `is-ending`, which is the only
+        // thing making `.rcx__card` visible. `init()` is async and calls `goToSlide(0)` after awaiting the
+        // whole-deck fetch, and the quick-download button is on screen for that entire flight -- so
+        // opening the card early meant the card vanished the moment the deck finally landed.
+        if (this.container.classList.contains('is-card-only')) return;
+
         if (index < 0 || index >= this.slides.length) return;
         // Direction drives the transition: the outgoing beat leaves the way you sent it.
         this.container.classList.toggle('is-back', index < this.currentSlide);

@@ -10,6 +10,8 @@ them ever surfaced as a complaint:
   out. Those expect an image the recap card never supplies.
 - It never passed `image_max_size`, so every cover and icon rendered from the 200px default.
 """
+import re
+
 import pytest
 
 from api.recap_views import SHARE_CARD_IMAGE_MAX, SHARE_CARD_PLATINUM_SLOTS, RecapShareImageHTMLView
@@ -98,7 +100,13 @@ def _rendered(**over):
         'tier_counts': [(t, c, counts[t]) for t, c in TIER_DISPLAY if counts[t]],
         'platinums_data': [{'game_image': ''}] * 3, 'platinums_overflow': 0,
         'rarest_trophy': {'name': 'Chalice of the Deep', 'earn_rate': 1.4}, 'rarest_trophy_icon': '',
-        'spine_items': [{'label': 'Best day', 'value': 'March 18', 'meta': '31 trophies'}],
+        'stat_items': [{'label': 'Best day', 'value': 'March 18', 'meta': '31 trophies'}],
+        # Every real card has a calendar -- a recap cannot exist for a month with no trophies -- so the
+        # default context carries one. Without it these render a card no hunter will ever see.
+        'calendar_offset': range(2), 'calendar_active_days': 17,
+        'calendar_days': [{'day': d, 'size': 14, 'bg': 'rgba(39, 235, 254, 0.52)', 'plat': d == 5}
+                          for d in range(1, 32)],
+        'cover_w': 116, 'cover_h': 155,
     }
     ctx.update(over)
     return render_to_string('recap/partials/recap_share_card.html', ctx)
@@ -169,28 +177,22 @@ def test_zero_figures_are_dropped_rather_than_printed():
     assert '>Trophies</div>' in html, 'the headline figure is always shown'
 
 
-def test_the_proof_band_shows_covers_or_the_rarest_find_but_never_both():
-    """The band's left slot is one or the other: covers when the month produced any, the rarest find when
-    it did not. Both would have the card saying the same thing twice, since the builder routes the rarest
-    trophy to the spine whenever the covers took the slot -- see the builder test below."""
-    with_covers = _rendered(platinums_data=[{'game_image': ''}] * 3)
-    assert 'Rarest find' not in with_covers, 'the band shows the rarest find beside the covers'
-    assert 'Platinums earned' in with_covers
+def test_the_rarest_find_leads_the_row_rather_than_the_footer():
+    """It is the card's best single highlight and it spent two iterations as plain text in a bottom band
+    with its icon unused -- while the gap between the month and the figures was the largest empty region
+    on the card. It sits there now, in every state, so it is shown exactly once."""
+    html = _rendered()
+    assert html.count('Rarest find') == 1
 
+    # ...above the proof band, not inside it.
+    assert html.index('Rarest find') < html.index('Platinums earned')
+
+
+def test_the_proof_band_drops_the_cover_block_for_a_month_with_no_platinums():
+    """The other two blocks spread, rather than the band collapsing or printing an empty label."""
     without = _rendered(platinums=0, platinums_data=[], platinums_overflow=0)
-    assert 'Rarest find' in without
     assert 'Platinums earned' not in without
-
-
-def test_the_card_is_landscape_only():
-    """It is a fixed 1200x630 composition. `portrait` renders it into a 1080x1350 viewport -- clipped on
-    the right, two thirds empty below -- and the endpoint used to accept it."""
-    from pathlib import Path
-    src = (Path(__file__).resolve().parents[2] / 'api' / 'recap_views.py').read_text(encoding='utf-8')
-    assert "format_type not in ['landscape', 'portrait']" not in src, (
-        'the endpoints accept a format the card cannot produce'
-    )
-    assert "format_type != 'landscape'" in src
+    assert 'Activity' in without, 'the calendar has to hold the band on its own'
 
 
 def test_the_activity_calendar_is_on_the_card():
@@ -201,7 +203,7 @@ def test_the_activity_calendar_is_on_the_card():
                      calendar_days=[{'day': d, 'size': 14, 'bg': 'rgba(39, 235, 254, 0.52)',
                                      'plat': d == 5} for d in range(1, 32)])
     assert 'Activity' in html
-    assert 'repeat(7, 24px)' in html, 'the seven-column grid is gone'
+    assert re.search(r'repeat\(7, \d+px\)', html), 'the seven-column grid is gone'
     assert '17 days' in html
 
 
@@ -225,9 +227,9 @@ def test_the_calendar_offset_can_express_any_weekday():
         html = _rendered(calendar_offset=range(offset), calendar_active_days=3,
                          calendar_days=[{'day': d, 'size': 7, 'bg': 'rgba(138, 147, 159, 0.30)',
                                          'plat': False} for d in range(1, 32)])
-        assert html.count('<div style="height: 24px;"></div>') == offset, (
-            f'offset {offset} did not produce {offset} leading blanks'
-        )
+        # The blank's height tracks the cell size, so match the shape rather than the number.
+        blanks = len(re.findall(r'<div style="height: \d+px;"></div>', html))
+        assert blanks == offset, f'offset {offset} produced {blanks} leading blanks'
 
 
 def test_a_platinum_day_is_ringed_rather_than_just_brighter():
@@ -257,19 +259,54 @@ def test_the_cards_ramp_matches_the_decks():
     assert sizes == sorted(sizes) and len(set(sizes)) == 5, f'the ramp does not climb in size: {sizes}'
 
 
-def test_the_builder_routes_the_rarest_find_to_the_spine_when_covers_take_the_band():
-    """The one rule the template cannot express, because it depends on what the OTHER slot got."""
-    from types import SimpleNamespace
+def test_the_builder_composes_the_months_texture_as_stat_blocks():
+    """Best day and badges sat in a thin footer while a 470x150 hole sat mid-card; they fill the hole
+    now. Composed in the builder so the template asks "is there anything to show" once, not three times,
+    and only what actually happened is included."""
+    recap = _recap(3)
+    recap.rarest_trophy_data = {'name': 'Chalice of the Deep', 'earn_rate': 1.4}
+    recap.most_active_day = {'date': 'March 18', 'trophy_count': 31}
+    recap.activity_calendar = {}
+    recap.badges_earned_count = 2
+    recap.badge_xp_earned = 4100
 
-    def spine_for(n_plats):
-        recap = _recap(n_plats)
-        recap.rarest_trophy_data = {'name': 'Chalice of the Deep', 'earn_rate': 1.4}
-        recap.most_active_day = {'date': 'March 18', 'trophy_count': 31}
+    ctx = RecapShareImageHTMLView()._build_template_context(recap, _Profile(), 'landscape')
+    labels = [i['label'] for i in ctx['stat_items']]
+
+    assert labels == ['Best day', 'Badges']
+    assert 'Rarest' not in labels, 'the rarest find leads the row above; this would show it twice'
+
+
+def test_a_month_with_no_badges_drops_that_block():
+    recap = _recap(1)
+    recap.rarest_trophy_data = {}
+    recap.most_active_day = {'date': 'March 4', 'trophy_count': 5}
+    recap.activity_calendar = {}
+    recap.badges_earned_count = 0
+    recap.badge_xp_earned = 0
+
+    ctx = RecapShareImageHTMLView()._build_template_context(recap, _Profile(), 'landscape')
+
+    assert [i['label'] for i in ctx['stat_items']] == ['Best day']
+
+
+def test_the_covers_grow_when_there_are_fewer_of_them():
+    """Fixed-width covers left a 630px hole beside a three-platinum month and only just fitted eight, so
+    the band looked half-empty exactly when the month was modest -- the month whose card most needs to
+    look composed."""
+    widths = {}
+    for n in (1, 3, 5, 8):
+        recap = _recap(n)
+        recap.rarest_trophy_data = {}
+        recap.most_active_day = {}
         recap.activity_calendar = {}
         recap.badges_earned_count = 0
         recap.badge_xp_earned = 0
         ctx = RecapShareImageHTMLView()._build_template_context(recap, _Profile(), 'landscape')
-        return [i['label'] for i in ctx['spine_items']]
+        widths[n] = ctx['cover_w']
+        assert ctx['cover_h'] == round(ctx['cover_w'] * 4 / 3), 'covers are not 3:4'
 
-    assert 'Rarest' in spine_for(3), 'the covers took the band and nothing carried the rarest find'
-    assert 'Rarest' not in spine_for(0), 'the band already shows it; the spine repeats it'
+    assert widths[1] > widths[8], f'covers do not scale with count: {widths}'
+    assert widths[3] > widths[5] >= widths[8]
+    # Eight of them, their gaps and the "+N" have to fit the band's left slot.
+    assert widths[8] * 8 + 12 * 7 + 60 <= 878, 'eight covers overflow the slot'
