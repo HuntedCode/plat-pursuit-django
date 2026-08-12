@@ -121,6 +121,53 @@ def test_no_game_card_offers_to_add_to_a_list():
         assert 'GameListQuickAdd' not in src, f'{rel} still boots the add-to-list widget'
 
 
+def test_live_pages_do_not_ship_the_dead_list_controller():
+    """`game-lists.js` is ~1,200 lines whose only entry point on these pages was the add-to-list button.
+    Left in place it downloads, parses and binds nothing -- on game detail and Browse Games, which are
+    two of the busiest pages on the site. It stays on the two list pages themselves, which are hidden."""
+    for rel in ('templates/trophies/game_detail.html', 'templates/trophies/game_list.html',
+                'templates/trophies/recently_added.html', 'templates/trophies/tag_detail.html'):
+        src = (ROOT / rel).read_text(encoding='utf-8')
+        src = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', src, flags=re.S)
+        assert 'game-lists.js' not in src, f'{rel} still ships the list controller'
+
+
+def test_no_url_conf_imports_a_view_it_no_longer_routes():
+    """A name imported with nothing using it is the residue a teardown leaves, and it is what makes the
+    next person think the routes are still there."""
+    import ast
+
+    for rel in ('plat_pursuit/urls.py', 'api/urls.py'):
+        tree = ast.parse((ROOT / rel).read_text(encoding='utf-8'))
+        imported = {a.asname or a.name for n in ast.walk(tree)
+                    if isinstance(n, ast.ImportFrom) for a in n.names}
+        used = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+        dead = sorted(i for i in imported - used if 'GameList' in i or i in {'BrowseListsView', 'MyListsView'})
+        assert not dead, f'{rel} imports {dead} but routes none of them'
+
+
+def test_the_community_hub_grid_fits_what_is_left_in_it():
+    """The Game Lists card was the third of three in a `lg:grid-cols-3` row. Removing it without the
+    column count left two cards and a hole on a main navigation surface."""
+    hub = (ROOT / 'templates' / 'community' / 'hub.html').read_text(encoding='utf-8')
+    i = hub.index('mt-3 grid grid-cols-1')
+    grid_open = hub[i:hub.index('>', i)]
+
+    depth, k, children = 1, hub.index('>', i) + 1, 0
+    while depth > 0:
+        m = re.compile(r'</?(?:div|section)\b').search(hub, k)
+        if m.group(0).startswith('</'):
+            depth -= 1
+        else:
+            if depth == 1:
+                children += 1
+            depth += 1
+        k = m.end()
+
+    cols = int(re.search(r'lg:grid-cols-(\d)', grid_open).group(1))
+    assert cols == children, f'{children} cards in a {cols}-column row leaves {cols - children} empty'
+
+
 def test_the_data_is_untouched():
     """The point of hiding rather than removing. Somebody's carefully ordered backlog is still there."""
     owner = ProfileFactory(is_linked=True)

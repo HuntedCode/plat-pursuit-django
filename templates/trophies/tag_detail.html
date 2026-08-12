@@ -302,6 +302,8 @@
     <script src="{% static 'js/browse-filters.js' %}"></script>
     <script src="{% static 'js/tag-detail.js' %}"></script>
     {% if user.is_authenticated and user.profile %}
-    <script src="{% static 'js/game-lists.js' %}"></script>
+    {% comment %}game-lists.js is not loaded here while the lists system is hidden: its only entry
+    point on this page was the add-to-list button, so it would download and parse ~1,200 lines to
+    bind nothing. Restore with the button.{% endcomment %}
     {% endif %}
 {% endblock %}

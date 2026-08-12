@@ -23,12 +23,11 @@ from .recap_views import (
 from .tracking_views import TrackSiteEventView
 from .easter_egg_views import RollEasterEggView
 from .share_temp_views import serve_share_temp_image
-from .game_list_views import (
-    GameListCreateView, GameListDetailView, GameListUpdateView, GameListDeleteView,
-    GameListAddItemView, GameListRemoveItemView, GameListUpdateItemView, GameListReorderView,
-    GameListLikeView, GameListQuickAddView, UserGameListsView, GameListCopyView,
-    GameSearchView,
-)
+# The twelve list views are no longer imported: their paths are withdrawn while the lists system is
+# hidden, and an import with no route is just a name to trip over later. They are untouched in
+# api/game_list_views.py -- restoring the system restores this import alongside the paths.
+# GameSearchView stays: it is a general game-search endpoint that happens to live in this module.
+from .game_list_views import GameSearchView
 from .game_picker_views import GameBackgroundSearchView, ConceptBannerImagesView
 from .game_family_views import (
     GameFamilyCreateView, GameFamilyUpdateView, GameFamilyDeleteView,

@@ -87,7 +87,10 @@ See docs/features/community-hub.md for the design rationale.
     {# Feature Grid — 3-up on lg, 1-col on mobile                          #}
     {# Each card: icon + title + tagline + 3-item preview + hero CTA       #}
     {# ─────────────────────────────────────────────────────────────────── #}
-    <div class="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-3">
+    {% comment %}Two columns, not three: the Game Lists card was the third and is gone while that
+    system is hidden. Left at three, the row rendered two cards and an empty column at lg.
+    Back to three when lists returns.{% endcomment %}
+    <div class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
 
         {# ── Rate My Games feature card ── #}
         {# Anatomy (shared by all 4 cards):                                    #}
