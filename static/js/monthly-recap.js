@@ -192,44 +192,53 @@ class MonthlyRecapManager {
         const card = frame.firstElementChild;
         if (!card) return;
 
-        // Height available to the card, derived from the COLUMN rather than the frame's own box. Reading
-        // the frame's height would be circular once the frame hugs its scaled content, and clearing the
-        // height to re-measure would force a synchronous layout every time.
-        const availableHeight = () => {
-            const wrap = frame.parentElement;
-            const cs = getComputedStyle(wrap);
-            const gap = parseFloat(cs.rowGap) || 0;
-            let used = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)
-                     + gap * Math.max(0, wrap.children.length - 1);
-            for (const el of wrap.children) {
-                if (el !== frame) used += el.getBoundingClientRect().height;
-            }
-            return Math.max(0, wrap.clientHeight - used);
-        };
-
-        const fit = () => {
-            const bw = frame.clientWidth, bh = availableHeight();
-            const cw = card.offsetWidth, ch = card.offsetHeight;
-            if (!cw || !ch) return;
-            // Never scale UP: past 1:1 it is a blurry enlargement of a fixed-size render.
-            const scale = Math.min(1, bw / cw, bh / ch);
-            frame.style.setProperty('--rcx-card-scale', String(scale));
-            // Hug the SCALED card. `transform` does not affect layout, so a frame left to size itself
-            // stays full card-height however far down the card was scaled -- on a phone that is a 630px
-            // box around a 180px card, which pushed the label to the top of the stage and left the
-            // buttons stranded at the bottom. With the frame hugging, the column centres as one stack.
-            frame.style.height = `${Math.round(ch * scale)}px`;
-        };
-        fit();
+        this.fitCard();
         // The mounted HTML carries the card template's own ground. Paint the hunter's choice straight
         // away, or the card shows the default until they happen to change swatch.
         this.applyBackground(card);
-        // Kept UNdebounced as well, because the ending has to re-fit in the same breath as the class
-        // that changes the room -- see showCardScene. The debounced one is for resize, where coalescing
-        // is the whole point.
-        this._fitCardNow = fit;
-        this._fitCard = PlatPursuit.debounce(fit, 120);
+        this._fitCard = PlatPursuit.debounce(() => this.fitCard(), 120);
         window.addEventListener('resize', this._fitCard);
+    }
+
+    /**
+     * Scale the mounted card to whatever room the scene has RIGHT NOW.
+     *
+     * A method that looks its elements up, not a closure captured at mount. It was a closure, and the
+     * ending's re-fit was reached through a `this._fitCardNow` handle -- which every non-summary
+     * `goToSlide` nulls along with the resize listener. The card is mounted mid-deck by `warmCard`, so
+     * on any real run the handle was nulled by the twenty beats between the mount and the ending, and
+     * the card arrived still sized for the 62% band it had been waiting in. It survived the test only
+     * because the harness jumped straight to the summary and never walked the beats that clear it.
+     */
+    fitCard() {
+        const frame = document.getElementById('recap-card-frame');
+        const card = frame && frame.firstElementChild;
+        if (!card) return;
+
+        // Height available to the card, derived from the COLUMN rather than the frame's own box. Reading
+        // the frame's height would be circular once the frame hugs its scaled content, and clearing the
+        // height to re-measure would force a synchronous layout every time.
+        const wrap = frame.parentElement;
+        const cs = getComputedStyle(wrap);
+        const gap = parseFloat(cs.rowGap) || 0;
+        let used = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)
+                 + gap * Math.max(0, wrap.children.length - 1);
+        for (const el of wrap.children) {
+            if (el !== frame) used += el.getBoundingClientRect().height;
+        }
+        const bh = Math.max(0, wrap.clientHeight - used);
+
+        const bw = frame.clientWidth;
+        const cw = card.offsetWidth, ch = card.offsetHeight;
+        if (!cw || !ch) return;
+        // Never scale UP: past 1:1 it is a blurry enlargement of a fixed-size render.
+        const scale = Math.min(1, bw / cw, bh / ch);
+        frame.style.setProperty('--rcx-card-scale', String(scale));
+        // Hug the SCALED card. `transform` does not affect layout, so a frame left to size itself stays
+        // full card-height however far down the card was scaled -- on a phone that is a 630px box around
+        // a 180px card, which pushed the label to the top of the stage and left the buttons stranded at
+        // the bottom. With the frame hugging, the column centres as one stack.
+        frame.style.height = `${Math.round(ch * scale)}px`;
     }
 
     showCardScene() {
@@ -243,12 +252,11 @@ class MonthlyRecapManager {
         // rises into the stage it vacates, carrying its own header -- one object arriving, not two
         // negotiating for the same stage. That negotiation was every bug this transition ever had.
         this.container.classList.add('is-ending');
-        // RE-FIT, now that the class has landed. The card is mounted while the scene is still waiting
-        // offstage at `height: 62%`, so the first fit measured a box less than half the one it ends up
-        // in -- the card arrived at scale 0.45 and a stray window resize would silently double it to
-        // 0.90. Reading geometry here forces a synchronous layout that includes the new class, which is
-        // exactly what is wanted: the card is sized once, before it is ever painted at the wrong size.
-        if (this._fitCardNow) { this._fitCardNow(); }
+        // RE-FIT, now that the class has landed. The card is mounted mid-deck while the scene is still
+        // waiting offstage at `height: 62%`, so its first fit measured a box less than half the one it
+        // ends up in. Reading geometry here forces a synchronous layout that includes the new class,
+        // which is exactly what is wanted: the card is sized once, before it is ever painted wrong.
+        this.fitCard();
 
         this.wireDownload();
         // "Change the look" used to close the ceremony to land the hunter on a picker below the fold.
@@ -336,7 +344,6 @@ class MonthlyRecapManager {
         this.stopBeatTimer();
         this.container.classList.remove('is-ending');
         if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
-        this._fitCardNow = null;
         this.handle = null;
     }
 
@@ -972,7 +979,6 @@ class MonthlyRecapManager {
             this.container.classList.remove('is-ending');
             if (card) card.setAttribute('aria-hidden', 'true');
             if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
-            this._fitCardNow = null;
         }
 
         // Update navigation button states for non-quiz slides

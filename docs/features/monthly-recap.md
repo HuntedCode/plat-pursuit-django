@@ -420,11 +420,21 @@ Load-bearing details, each of which was a bug first:
   needed the `is-ending` guard the tap zones already had -- the card now lives inside the swipe container,
   so most swipes land on it, and scrubbing the deck from the end screen is not a thing.)
 
-  And the card is mounted while the scene is still waiting offstage at `height: 62%`, so the first `fit()`
-  measured a box less than half the one it ends up in: the card arrived at **scale 0.45** and any stray
-  resize silently doubled it to 0.90. `showCardScene` re-fits in the same breath as the class that changes
-  the room -- reading geometry there forces a synchronous layout including the new class, so the card is
-  sized once, before it is ever painted at the wrong size. 283px -> 565px tall at a 900px stage.
+  And the card is mounted MID-DECK by `warmCard`, while the scene is still waiting offstage at
+  `height: 62%`, so its first fit measures a box less than half the one it ends up in. `showCardScene`
+  re-fits in the same breath as the class that changes the room -- reading geometry there forces a
+  synchronous layout including the new class, so the card is sized once, before it is ever painted wrong.
+  At 1920x940 that is the difference between a 493x259 card and an 1118x587 one.
+
+  **The re-fit has to still be REACHABLE twenty beats later**, and the first attempt was not. The fit was
+  a closure captured at mount, reached through a `this._fitCardNow` handle that every non-summary
+  `goToSlide` nulled alongside the resize listener -- so on any real run the ending's re-fit silently did
+  nothing. It is a method that looks its elements up now, with nothing in between to clear.
+
+  The reason that shipped is worth more than the fix: the browser probe reached the ending with
+  `goToSlide(summaryIndex)`, which skipped every beat between the mount and the ending -- exactly the
+  beats doing the clearing. A harness that takes a shortcut through the state machine is testing a path
+  no hunter walks. `card_size_probe.py` presses through beat by beat.
 
 - **The Download button is shared, and it had to be.** The ceremony's was a bare
   `window.location.href`. That cannot show progress on a call that runs headless Chromium, cannot name the

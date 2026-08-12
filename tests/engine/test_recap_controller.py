@@ -590,8 +590,7 @@ def test_the_card_frame_hugs_the_scaled_card():
     assert 'flex: 0 0 auto' in frame, 'a growing frame makes justify-content a no-op'
     assert 'justify-content: center' in css[css.index('.rcx__card {'):css.index('.rcx__card {') + 300]
 
-    fit = code[code.index('const fit = ()'):]
-    fit = fit[:fit.index('\n        };')]
+    fit = _method(code, 'fitCard')
     assert 'frame.style.height' in fit, 'the frame never hugs, so the stack cannot centre'
     assert 'ch * scale' in fit, 'hugging the UNSCALED height reintroduces the empty box'
 
@@ -601,10 +600,9 @@ def test_the_available_height_is_not_read_from_the_frame_itself():
     the second fit (a resize) would measure the hugged box and lock the card at whatever size it already
     had. The measurement has to come from the column."""
     code = _code(CONTROLLER.read_text(encoding='utf-8'))
-    fit = code[code.index('const fit = ()'):]
-    fit = fit[:fit.index('\n        };')]
+    fit = _method(code, 'fitCard')
     assert 'frame.clientHeight' not in fit, 'the fit measures the box it is about to set'
-    assert 'availableHeight()' in fit
+    assert 'wrap.clientHeight' in fit, 'the measurement no longer comes from the column'
 
 
 # --- The month page around the ceremony -----------------------------------------------------------
@@ -856,6 +854,32 @@ def test_both_routes_end_on_the_same_screen():
     assert 'pp_logo.html' in head[:600] and 'rcx__card-title' in head[:600], (
         'the end screen has no header of its own, so it is back to borrowing the summary\'s'
     )
+
+
+def test_the_card_is_refitted_when_the_ending_hands_it_the_stage(js):
+    """The card is mounted MID-DECK by `warmCard` -- while the scene is still waiting offstage at
+    `height: 62%` -- so its first fit measures a box less than half the one it ends up in. The ending has
+    to re-fit, and the re-fit has to still be reachable twenty beats later.
+
+    It was not. The fit was a closure captured at mount and reached through a `this._fitCardNow` handle
+    that every non-summary `goToSlide` nulled alongside the resize listener, so on any real run the
+    ending's re-fit silently did nothing and the card arrived at scale 0.41 (measured at 1920x940: a
+    493x259 card in a stage with room for 1118x587). It passed review because the browser probe jumped
+    straight to the summary with goToSlide() and never walked the beats that clear it.
+
+    So: a method that looks its elements up, with nothing in between to null."""
+    code = _code(js)
+    assert '_fitCardNow' not in code, 'the re-fit is behind a nullable handle again'
+
+    scene = _method(code, 'showCardScene')
+    assert 'this.fitCard()' in scene, 'the ending never re-fits, so the card keeps its 62% size'
+    assert scene.index("classList.add('is-ending')") < scene.index('this.fitCard()'), (
+        'it re-fits before the class that changes the room, which measures the old box'
+    )
+    # And nothing may clear the path to it. The resize listener is fair game; the fit itself is not.
+    # `this._fitCard = null` (the debounced resize handler) is fine and contains this as a substring,
+    # so match the method itself rather than the tail of the private field's name.
+    assert not re.search(r'(?<!_)fitCard\s*=\s*null', code), 'something clears the fit again'
 
 
 def test_the_end_screen_is_a_scene_ON_the_stage():
