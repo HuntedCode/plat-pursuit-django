@@ -1,4 +1,3 @@
-from core.services.tracking import track_page_view
 from django.db.models import Count, Subquery, OuterRef, Q, Exists, IntegerField
 from django.db.models.functions import Lower
 from django.urls import reverse_lazy
@@ -162,7 +161,6 @@ class FranchiseListView(HtmxListMixin, ListView):
             "Explore umbrella IPs like Resident Evil and Final Fantasy and the "
             "specific series within them."
         )
-        track_page_view('franchises_list', 'list', self.request)
         return context
 
 
@@ -300,5 +298,4 @@ class FranchiseDetailView(DetailView):
             f"{versions_count} version{'s' if versions_count != 1 else ''}."
         )
 
-        track_page_view('franchise_detail', franchise.id, self.request)
         return context

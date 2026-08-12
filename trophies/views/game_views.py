@@ -3,7 +3,7 @@ import logging
 import math
 
 from core.services import completion_card_service as cards
-from core.services.tracking import track_page_view, track_site_event
+from core.services.tracking import track_site_event
 from core.services.site_heartbeat import get_cached_heartbeat
 from datetime import datetime, timedelta
 from django.core.cache import cache
@@ -293,7 +293,6 @@ class GamesListView(HtmxListMixin, ListView):
         # this page. Shared, batched, whale-safe -- see build_game_card_context (also used by Recently Added).
         context.update(build_game_card_context(context['object_list'], self.request))
 
-        track_page_view('games_list', 'list', self.request)
         return context
 
 
@@ -1494,8 +1493,6 @@ class GameDetailView(DetailView):
             f"Track your progress on Platinum Pursuit."
         )
 
-        track_page_view('game', game.id, self.request)
-        context['view_count'] = game.view_count
 
         # Game Detail Tour: auto-show once, only after Welcome Tour is done.
         # Always keyed to the viewer's own profile, regardless of whose page is being viewed.
@@ -1574,7 +1571,6 @@ class GuideListView(ListView):
         context['form'] = GuideSearchForm(self.request.GET)
 
         track_site_event('guide_visit', 'list', self.request)
-        track_page_view('guides_list', 'list', self.request)
 
         return context
 
@@ -1777,5 +1773,4 @@ class RecentlyAddedView(HtmxListMixin, ListView):
             "and DLC packs discovered by the Platinum Pursuit scout network."
         )
 
-        track_page_view('recently_added', 'list', self.request)
         return context

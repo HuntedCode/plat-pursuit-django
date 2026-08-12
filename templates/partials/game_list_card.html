@@ -1,6 +1,6 @@
 {% load static custom_filters %}
 {# Game list card component - used in browse lists and my lists pages #}
-{# Expects: game_list with id, name, description, profile, game_count, like_count, view_count, first_game_image, user_has_liked (optional), show_author (default true), show_edit (optional) #}
+{# Expects: game_list with id, name, description, profile, game_count, like_count, first_game_image, user_has_liked (optional), show_author (default true), show_edit (optional) #}
 <a href="{% url 'list_detail' game_list.id %}"
    class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral
           transition-all duration-300 hover:shadow-lg hover:shadow-primary/30 hover:border-primary
@@ -75,13 +75,6 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
                         </svg>
                         {{ game_list.like_count }}
-                    </span>
-                    <span class="flex items-center gap-0.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                        </svg>
-                        {{ game_list.view_count }}
                     </span>
                 </div>
                 <span>{{ game_list.created_at|timesince }} ago</span>

@@ -5,7 +5,6 @@ Handles page-level views for game lists: browse, detail, edit, create, and my li
 """
 import logging
 
-from core.services.tracking import track_page_view
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import (
@@ -166,7 +165,6 @@ class BrowseListsView(HtmxListMixin, ListView):
             "Browse curated PlayStation game lists from the Platinum Pursuit community."
         )
 
-        track_page_view('game_lists_browse', 'content', self.request)
         return context
 
 
@@ -350,7 +348,6 @@ class GameListDetailView(DetailView):
             f"with {game_list.game_count} games."
         )
 
-        track_page_view('game_list', game_list.id, self.request)
         return context
 
 
@@ -411,7 +408,6 @@ class GameListEditView(LoginRequiredMixin, DetailView):
             {'text': 'Edit'},
         ]
 
-        track_page_view('game_list_edit', game_list.id, self.request)
         return context
 
 
@@ -525,5 +521,4 @@ class MyListsView(LoginRequiredMixin, TemplateView):
             {'text': 'My Lists'},
         ]
 
-        track_page_view('my_lists', 'user', self.request)
         return context

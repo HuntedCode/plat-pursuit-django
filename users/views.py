@@ -3,7 +3,6 @@ import json
 from datetime import datetime
 
 from allauth.account.views import ConfirmEmailView
-from core.services.tracking import track_page_view
 from django.conf import settings
 from django.core import signing
 from django.utils import timezone
@@ -96,7 +95,6 @@ class SettingsView(LoginRequiredMixin, View):
                 {'text': 'Settings'},
             ],
         }
-        track_page_view('settings', 'user', request)
         return render(request, self.template_name, context)
     
     def post(self, request):
@@ -503,7 +501,6 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
             {'text': 'My Premium'},
         ]
 
-        track_page_view('subscription', 'user', self.request)
         return context
 
 
@@ -569,7 +566,6 @@ class EmailPreferencesView(View):
 
         context['form'] = form
         context['user_email'] = user.email
-        track_page_view('email_prefs', 'user', request)
         return render(request, self.template_name, context)
 
     def post(self, request):

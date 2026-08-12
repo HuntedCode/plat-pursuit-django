@@ -234,7 +234,7 @@ Staff-managed list of banned words for automatic comment filtering. Supports who
 User-created trophy guides with trackable progress.
 
 ### Checklist
-A user-created guide for a game Concept. Supports draft/published states, soft deletion, and a `selected_game` FK for trophy item resolution. Denormalized `upvote_count`, `progress_save_count`, and `view_count`.
+A user-created guide for a game Concept. Supports draft/published states, soft deletion, and a `selected_game` FK for trophy item resolution. Denormalized `upvote_count` and `progress_save_count`.
 
 Key relationships:
 - `concept` FK to `Concept`
@@ -305,7 +305,7 @@ Key relationships:
 - Unique together on (profile, year, month)
 
 ### GameList
-User-created game collection (e.g., "My Backlog", "Favorites"). Free users: up to 3 private lists, 100 games each. Premium users: unlimited, public visibility, notes. Denormalized `game_count`, `like_count`, `view_count`. Supports soft deletion.
+User-created game collection (e.g., "My Backlog", "Favorites"). Free users: up to 3 private lists, 100 games each. Premium users: unlimited, public visibility, notes. Denormalized `game_count` and `like_count`. Supports soft deletion.
 
 Key relationships:
 - `profile` FK to `Profile`
@@ -375,17 +375,13 @@ Key relationships:
 
 ## Core/Infrastructure Models (core app)
 
-### SiteSettings
-Singleton model (id=1) for site-wide settings. Currently stores `index_page_view_count` and `session_tracking_enabled_at`.
-
-### PageView
-Deduplicated page view records. One row per unique session+page per 30-minute window. Tracks `page_type`, `object_id`, viewer identity, and analytics session.
-
 ### SiteEvent
 Internal event tracking for admin analytics. Event types include guide visits, share card downloads, recap interactions, game list actions, challenge events, easter eggs, and sync searches.
 
-### AnalyticsSession
-Analytics session with 30-minute inactivity timeout. Tracks page sequence, referrer, and user agent. Separate from Django sessions.
+> **Removed 2026-08**: `AnalyticsSession`, `PageView` and `SiteSettings` were deleted along with the
+> per-request page-view tracking system. Its background threads leaked Postgres connections under
+> scraper load and its per-response cookie disabled Cloudflare edge caching site-wide. Traffic
+> analytics now come from Cloudflare and Search Console. `SiteEvent` (deliberate user actions) stayed.
 
 ### EmailLog
 Audit trail for all emails sent from the platform. Tracks email type (subscription lifecycle, account, content, fundraiser), status (sent/suppressed/failed), and trigger source.
@@ -541,7 +537,7 @@ Notification
 
 ### Key Design Patterns
 
-- **Denormalized counters**: Most entities store pre-computed counts (`earned_count`, `upvote_count`, `view_count`) updated via signals or service methods, avoiding expensive COUNT queries at read time.
+- **Denormalized counters**: Most entities store pre-computed counts (`earned_count`, `upvote_count`, `like_count`) updated via signals or service methods, avoiding expensive COUNT queries at read time.
 - **Soft delete**: Comments, Reviews, Checklists, GameLists, and Challenges use `is_deleted` + `deleted_at` fields rather than hard deletion, preserving thread structure and audit trails.
 - **Concept as unifier**: Regional/platform stacks are separate Game rows, but all user-facing content (comments, ratings, reviews, checklists) is attached to the shared Concept.
 - **Stage-Badge linkage**: Stages connect to Badges via `series_slug` (a string match) rather than a direct FK, allowing flexible tier-based stage filtering via `required_tiers`.

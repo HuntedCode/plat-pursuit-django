@@ -25,7 +25,6 @@ from django.utils import timezone
 from django.views.generic import ListView, TemplateView
 
 from core.services import completion_card_service as cards
-from core.services.tracking import track_page_view
 from trophies.mixins import HtmxListMixin
 from trophies.themes import get_available_themes_for_grid, get_plat_card_themes
 
@@ -163,7 +162,6 @@ class PlatCardsView(LoginRequiredMixin, _RequireLinkedProfileMixin, HtmxListMixi
                 {'text': 'Plat Cards'},
             ],
         })
-        track_page_view('my_shareables', 'user', self.request)
         return context
 
 
@@ -221,5 +219,4 @@ class MyProfileCardView(LoginRequiredMixin, _RequireLinkedProfileMixin, Template
             {'text': 'Profile Card'},
         ]
 
-        track_page_view('my_shareables', 'user', self.request)
         return context

@@ -1,7 +1,6 @@
 import logging
 from datetime import timedelta
 
-from core.services.tracking import track_page_view
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
@@ -158,7 +157,6 @@ class ProfilesListView(HtmxListMixin, ListView):
             "Browse PlayStation trophy hunter profiles and leaderboards on Platinum Pursuit."
         )
 
-        track_page_view('profiles_list', 'list', self.request)
         return context
 
 
@@ -962,8 +960,6 @@ class ProfileDetailView(DetailView):
             f"{profile.total_games} games."
         )
 
-        track_page_view('profile', profile.id, self.request)
-        context['view_count'] = profile.view_count
 
         return context
 

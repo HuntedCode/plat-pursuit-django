@@ -1,5 +1,4 @@
 import logging
-from core.services.tracking import track_page_view
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q, F, Case, When, IntegerField, OrderBy
 from django.db.models.functions import Lower
@@ -148,7 +147,6 @@ class TrophyCaseView(ListView):
         max_selections = 20 if is_own_profile else 0
         context['max_selections'] = max_selections
 
-        track_page_view('trophy_case', profile.id, self.request)
         return context
 
 class ToggleSelectionView(LoginRequiredMixin, View):

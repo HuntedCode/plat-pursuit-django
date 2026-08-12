@@ -138,7 +138,6 @@ class Profile(models.Model):
     hide_zeros = models.BooleanField(default=False, help_text="If true, hide games with no trophies earned.")
     guidelines_agreed = models.BooleanField(default=False, help_text="True if user has agreed to community guidelines for commenting.")
     guidelines_agreed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user agreed to community guidelines.")
-    view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
     roadmap_role = models.CharField(
         max_length=20,
         choices=[
@@ -528,7 +527,6 @@ class Game(models.Model):
     # maintain: it is one more filtered Count on the ProfileGame GROUP BY recalc_earn_rates already
     # runs. Indexed because Trending ORDERS BY it across the whole filtered catalogue.
     monthly_earners_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that earned a trophy in this game in the last 30 days.")
-    view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
     is_regional = models.BooleanField(default=False)
     region_lock = models.BooleanField(default=False, help_text="Admin region override lock - won't be automatically updated.")
     concept_lock = models.BooleanField(default=False, help_text="Admin concept override lock - won't be automatically updated.")
@@ -1965,7 +1963,6 @@ class Badge(models.Model):
     submitted_by = models.ForeignKey('Profile', on_delete=models.SET_NULL, null=True, blank=True, related_name='submitted_badges', help_text='Profile who submitted this badge concept.')
     created_at = models.DateTimeField(auto_now_add=True)
     earned_count = models.PositiveIntegerField(default=0, help_text="Count of users who have earned this badge tier")
-    view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count (only tracked on tier=1 badge rows).")
     required_stages = models.PositiveIntegerField(default=0, help_text="Denormalized count of required stages for series badges")
     required_value = models.PositiveIntegerField(default=0, help_text="Denormalized required value for misc badges")
     is_live = models.BooleanField(default=False, help_text="Whether this badge is visible to regular users. New badges start hidden until explicitly released.")
@@ -4135,7 +4132,6 @@ class Checklist(models.Model):
         default=0,
         help_text="Number of users who have saved progress on this checklist"
     )
-    view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -4721,7 +4717,6 @@ class GameList(models.Model):
     # Denormalized counts
     game_count = models.PositiveIntegerField(default=0)
     like_count = models.PositiveIntegerField(default=0)
-    view_count = models.PositiveIntegerField(default=0)
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)

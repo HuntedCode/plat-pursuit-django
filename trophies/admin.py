@@ -1321,7 +1321,7 @@ class BadgeAdmin(admin.ModelAdmin):
     list_editable = ['is_live']
     search_fields = ['name', 'series_slug', 'description']
     autocomplete_fields = ['franchise', 'collection', 'developer']
-    readonly_fields = ['created_at', 'earned_count', 'view_count', 'required_stages', 'required_value', 'rarity_pct', 'rarity_rank', 'rarity_class']
+    readonly_fields = ['created_at', 'earned_count', 'required_stages', 'required_value', 'rarity_pct', 'rarity_rank', 'rarity_class']
     date_hierarchy = 'created_at'
     fields = [
         'name', 'is_live', 'series_slug', 'description', 'badge_image', 'base_badge',
@@ -1329,7 +1329,7 @@ class BadgeAdmin(admin.ModelAdmin):
         'title', 'display_title', 'display_series',
         'requires_all', 'min_required', 'requirements',
         'most_recent_concept', 'funded_by', 'submitted_by',
-        'earned_count', 'view_count', 'required_stages', 'required_value',
+        'earned_count', 'required_stages', 'required_value',
         'rarity_pct', 'rarity_rank', 'rarity_class',
         'created_at',
     ]
@@ -2204,7 +2204,7 @@ class ChecklistSectionInline(admin.TabularInline):
 
 @admin.register(Checklist)
 class ChecklistAdmin(_DeprecatedReadOnlyAdmin):
-    list_display = ('id', 'title', 'profile', 'concept', 'status', 'upvote_count', 'progress_save_count', 'view_count', 'is_deleted', 'created_at')
+    list_display = ('id', 'title', 'profile', 'concept', 'status', 'upvote_count', 'progress_save_count', 'is_deleted', 'created_at')
     list_select_related = ('profile', 'concept')
     list_filter = ('status', 'is_deleted')
     search_fields = ('title', 'description', 'profile__psn_username', 'concept__unified_title')
@@ -2789,7 +2789,6 @@ class GameListAdmin(admin.ModelAdmin):
     readonly_fields = [
         'game_count',
         'like_count',
-        'view_count',
         'created_at',
         'updated_at',
         'deleted_at',

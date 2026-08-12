@@ -149,6 +149,7 @@ CONTENT_SECURITY_POLICY = {
             "https://fundingchoicesmessages.google.com",  # Funding Choices CMP
             "https://ep1.adtrafficquality.google",    # AdSense traffic quality (SODAR sodar2.js)
             "https://ep2.adtrafficquality.google",    # AdSense traffic quality (SODAR sodar2.js, backup)
+            "https://static.cloudflareinsights.com",  # Cloudflare Web Analytics beacon. Omitting this is why the CF dashboard read 0 traffic: the beacon was silently CSP-blocked, so the zone looked dead while the site was in fact being hammered.
         ],
         "style-src": [
             "'self'",
@@ -201,6 +202,7 @@ CONTENT_SECURITY_POLICY = {
             "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR, backup)
             "https://fundingchoicesmessages.google.com",  # Funding Choices CMP consent event logging
             "https://images.igdb.com",                 # AdSense content-categorization scanner fetches cover art via XHR (same origin already trusted on img-src)
+            "https://cloudflareinsights.com",          # Cloudflare Web Analytics beacon POSTs its payload here (script itself is on script-src)
         ],
         "worker-src": [
             "'self'",
@@ -275,10 +277,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     # Staff-only gate for the beta deployment (no-op unless IS_BETA). Runs right
-    # after auth so request.user is populated, and before analytics so blocked
-    # non-staff traffic isn't tracked.
+    # after auth so request.user is populated.
     "plat_pursuit.middleware.BetaStaffGateMiddleware",
-    "core.middleware.AnalyticsSessionMiddleware",  # Analytics session tracking (after auth)
     'allauth.account.middleware.AccountMiddleware',
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",

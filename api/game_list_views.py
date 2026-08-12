@@ -84,7 +84,6 @@ def _serialize_game_list(game_list, profile=None):
         'is_public': game_list.is_public,
         'game_count': game_list.game_count,
         'like_count': game_list.like_count,
-        'view_count': game_list.view_count,
         'created_at': game_list.created_at.isoformat(),
         'updated_at': game_list.updated_at.isoformat(),
         'author': {

@@ -530,7 +530,7 @@ Each challenge type has HTML + PNG share card generation endpoints. The HTML vie
 
 ### Page View Tracking
 
-All challenge page views are tracked via `track_page_view()` from `core/services/tracking.py`. Challenge creation events tracked via `track_site_event('challenge_create', ...)`.
+`Challenge.view_count` is incremented inline by each challenge detail view (`trophies/views/challenge_views.py`). Challenge creation events tracked via `track_site_event('challenge_create', ...)` from `core/services/tracking.py`. The site-wide page-view tracking system that also fed this counter was removed 2026-08; the inline increment is now the only writer.
 
 ---
 

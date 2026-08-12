@@ -1,6 +1,5 @@
 import logging
 
-from core.services.tracking import track_page_view
 from django.db.models import (
     Q, F, Count, Avg, Sum, Subquery, OuterRef, IntegerField, FloatField,
 )
@@ -161,7 +160,6 @@ class GenreThemeListView(HtmxListMixin, ListView):
             "Find shooters, RPGs, horror games, and more on Platinum Pursuit."
         )
 
-        track_page_view('genres_list', 'list', self.request)
         return context
 
 
@@ -317,7 +315,6 @@ class GenreDetailView(TagDetailBaseView):
             f"Find trophies, track progress, and discover new games."
         )
         context = self.get_shared_context(context)
-        track_page_view('genre_detail', self.genre.id, self.request)
         return context
 
 
@@ -360,7 +357,6 @@ class ThemeDetailView(TagDetailBaseView):
             f"Browse {self.theme.name} themed games on Platinum Pursuit."
         )
         context = self.get_shared_context(context)
-        track_page_view('theme_detail', self.theme.id, self.request)
         return context
 
 

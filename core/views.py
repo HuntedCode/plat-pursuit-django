@@ -13,7 +13,6 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView, View
 
-from core.services.analytics_service import get_dashboard_data as get_analytics_dashboard_data
 from core.services.community_hub_service import build_community_hub_context
 from trophies.mixins import StaffRequiredMixin
 from trophies.util_modules.cache import redis_client
@@ -1617,78 +1616,6 @@ class CommunityHubView(TemplateView):
             {'text': 'Community Hub'},
         ]
         return context
-
-
-class AnalyticsDashboardView(StaffRequiredMixin, TemplateView):
-    """Staff-only analytics dashboard at /staff/analytics/.
-
-    Bookmark-only (not in nav). Reads existing AnalyticsSession / PageView /
-    SiteEvent data, no schema changes. Date window via ?range= (7d, 30d, 90d,
-    all); page-type filter via ?page_type= for the Top Pages table.
-    """
-    template_name = 'core/analytics_dashboard.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        range_key = self.request.GET.get('range', '30d')
-        page_type_filter = self.request.GET.get('page_type') or None
-        include_bots = self.request.GET.get('include_bots') == '1'
-        exclude_recent_hours = self.request.GET.get('exclude_recent_hours')
-        force_refresh = self.request.GET.get('refresh') == '1'
-
-        kwargs_for_data = dict(
-            range_key=range_key,
-            page_type_filter=page_type_filter,
-            include_bots=include_bots,
-            force_refresh=force_refresh,
-        )
-        if exclude_recent_hours is not None:
-            kwargs_for_data['exclude_recent_hours'] = exclude_recent_hours
-
-        data = get_analytics_dashboard_data(**kwargs_for_data)
-        context.update(data)
-        return context
-
-
-class AnalyticsReportView(StaffRequiredMixin, View):
-    """Markdown report download for the staff analytics dashboard.
-
-    Renders the same payload as AnalyticsDashboardView via the cached
-    get_dashboard_data helper, but formats it as a markdown document that
-    downloads as a .md file. Useful for sharing the snapshot in chat / Discord
-    / docs without having to copy-paste each panel by hand.
-    """
-
-    def get(self, request, *args, **kwargs):
-        range_key = request.GET.get('range', '30d')
-        page_type_filter = request.GET.get('page_type') or None
-        include_bots = request.GET.get('include_bots') == '1'
-        exclude_recent_hours = request.GET.get('exclude_recent_hours')
-        force_refresh = request.GET.get('refresh') == '1'
-
-        kwargs_for_data = dict(
-            range_key=range_key,
-            page_type_filter=page_type_filter,
-            include_bots=include_bots,
-            force_refresh=force_refresh,
-        )
-        if exclude_recent_hours is not None:
-            kwargs_for_data['exclude_recent_hours'] = exclude_recent_hours
-
-        data = get_analytics_dashboard_data(**kwargs_for_data)
-        context = {**data, 'generated_at': timezone.now()}
-        body = render_to_string('core/analytics_report.md', context)
-
-        now = timezone.now()
-        bots_tag = 'with-bots' if include_bots else 'humans'
-        filter_tag = f'-{page_type_filter}' if page_type_filter else ''
-        lag_h = data.get('window', {}).get('exclude_recent_hours', 0) or 0
-        lag_tag = f'-lag{lag_h}h' if lag_h else ''
-        filename = f"platpursuit-analytics-{range_key}{filter_tag}-{bots_tag}{lag_tag}-{now.strftime('%Y%m%d-%H%M')}.md"
-
-        response = HttpResponse(body, content_type='text/markdown; charset=utf-8')
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        return response
 
 
 class SupportHubView(TemplateView):

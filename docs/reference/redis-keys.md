@@ -257,14 +257,6 @@ Position markers, not caches: they carry no payload and losing one costs coverag
 
 **Files**: `plat_pursuit/context_processors.py`
 
-### Analytics
-
-| Key Pattern | TTL | Purpose |
-|-------------|-----|---------|
-| `analytics_session:{session_uuid}` | 1800s (30m, sliding) | Session metadata dict for page view tracking |
-
-**Files**: `core/services/session_tracking.py`
-
 ### PayPal Integration
 
 | Key Pattern | TTL | Purpose |

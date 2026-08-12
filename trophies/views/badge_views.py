@@ -1,7 +1,6 @@
 import logging
 from collections import defaultdict
 
-from core.services.tracking import track_page_view
 from trophies.constants import EVALUATABLE_BADGE_TYPES
 from trophies.services.xp_service import get_tier_xp
 from trophies.util_modules.constants import BADGE_TIER_XP
@@ -314,9 +313,6 @@ class BadgeListView(ListView):
                 "your next platinum to chase."
             ),
         })
-        # Only count a real page view, not each infinite-scroll ?page=N XHR fetch (which would inflate it).
-        if not is_xhr:
-            track_page_view('badges_list', 'gallery', self.request)
         return context
 
     def _catalog_header_stats(self):
@@ -439,9 +435,6 @@ class BadgeListView(ListView):
                 "collections and platform generations."
             ),
         })
-        # Only count a real page view, not each infinite-scroll ?page=N XHR fetch.
-        if not is_xhr:
-            track_page_view('badges_list', 'list', self.request)
         return context
 
 
@@ -621,7 +614,6 @@ class BadgeDetailView(DetailView):
             f"{series.name} badge series on Platinum Pursuit. Earn the badge on each platform, "
             f"track your progress, and climb the leaderboards."
         )
-        track_page_view('badge', series.series_slug, self.request)
         return context
 
 
@@ -721,7 +713,6 @@ class BadgeLeaderboardsView(DetailView):
             active_tab = 'earners'
         context['active_tab'] = active_tab
 
-        track_page_view('badge_leaderboard', badge.series_slug, self.request)
         return context
 
 
@@ -812,7 +803,6 @@ class OverallBadgeLeaderboardsView(TemplateView):
         elif active_tab == 'country':
             context.update(self._get_country_tab_context(user, paginate_by))
 
-        track_page_view('overall_leaderboard', 'global', self.request)
         return context
 
     def _get_country_tab_context(self, user, paginate_by):
