@@ -737,3 +737,46 @@ def test_the_playhead_does_not_move_while_only_the_card_is_showing(js):
         'goToSlide runs in card-only mode again, where its only effect is to hide the card'
     )
     assert 'return;' in guard
+
+
+def test_choosing_a_ground_repaints_every_mounted_card(js):
+    """There are TWO cards in the DOM: the one in the card scene, which the swatches sit directly under,
+    and the one in the share panel below the fold. The repaint used to find only the panel's by id, so
+    picking a ground changed a preview the hunter could not see while the card in front of them did not
+    move. Verified in a browser: four grounds, four distinct computed backgrounds on the card scene's own
+    copy."""
+    body = _method(_code(js), 'updatePreviewBackground')
+    assert 'querySelectorAll' in body and 'share-image-content' in body, (
+        'the repaint targets a single element again'
+    )
+    assert 'share-preview-inner' not in body, 'it is back to finding only the share panel'
+
+
+def test_the_grounds_are_wired_before_the_deck_arrives(js):
+    """`setupShareButtons` runs only once the whole-deck prefetch resolves, and card-only can open before
+    that lands -- the same race that made the card vanish. A swatch that does nothing because a fetch has
+    not returned is indistinguishable from a broken one."""
+    code = _code(js)
+    listeners = _method(code, 'setupEventListeners')
+    assert "querySelectorAll('[data-recap-theme]')" in listeners, (
+        'the grounds are wired somewhere that waits on the network'
+    )
+    assert "querySelectorAll('[data-recap-theme]')" not in _method(code, 'setupShareButtons')
+
+
+def test_a_freshly_mounted_card_takes_the_chosen_ground(js):
+    """The mounted HTML carries the card template's own ground, so without this the card shows the default
+    until the hunter happens to change swatch -- and the swatch already showing as selected would be
+    lying about what is on screen."""
+    body = _method(_code(js), 'mountCard')
+    assert 'this.applyBackground(card)' in body, 'the mounted card keeps the template default'
+
+
+def test_the_download_asks_for_the_ground_being_shown(js):
+    """The preview and the file disagreeing is a failure this card family has already had once. Verified
+    in a browser too: picking Tide then Retro Wave left the download key matching each time."""
+    code = _code(js)
+    assert 'this.currentBackground = this.selectedTheme()' in code, (
+        'the download key is not updated from the swatch'
+    )
+    assert 'theme=${this.currentBackground}' in code or 'encodeURIComponent(this.currentBackground)' in code

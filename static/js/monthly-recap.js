@@ -220,6 +220,9 @@ class MonthlyRecapManager {
             frame.style.height = `${Math.round(ch * scale)}px`;
         };
         fit();
+        // The mounted HTML carries the card template's own ground. Paint the hunter's choice straight
+        // away, or the card shows the default until they happen to change swatch.
+        this.applyBackground(card);
         this._fitCard = PlatPursuit.debounce(fit, 120);
         window.addEventListener('resize', this._fitCard);
     }
@@ -395,6 +398,16 @@ class MonthlyRecapManager {
         // `test_no_inline_event_handlers` exists to keep off this page.
         const retry = document.getElementById('error-retry');
         if (retry) retry.addEventListener('click', () => window.location.reload());
+
+        // The grounds. Wired HERE rather than in setupShareButtons, which only runs once the deck
+        // prefetch resolves -- card-only can open before that lands, and a swatch that does nothing
+        // because a fetch has not returned yet is indistinguishable from a broken one.
+        document.querySelectorAll('[data-recap-theme]').forEach((input) => {
+            input.addEventListener('change', () => {
+                this.currentBackground = this.selectedTheme();
+                this.updatePreviewBackground();
+            });
+        });
 
         const done = document.getElementById('recap-done');
         if (done) done.addEventListener('click', () => this.handle && this.handle.close());
@@ -1279,16 +1292,6 @@ class MonthlyRecapManager {
             downloadBtn._hasListener = true;
         }
 
-        // Background selector
-        // The grounds are radios the server rendered; a change repaints the preview in place.
-        document.querySelectorAll('[data-recap-theme]').forEach((input) => {
-            if (input._hasListener) return;
-            input.addEventListener('change', () => {
-                this.currentBackground = this.selectedTheme();
-                this.updatePreviewBackground();
-            });
-            input._hasListener = true;
-        });
     }
 
     _trackAndDownload() {
@@ -1310,14 +1313,16 @@ class MonthlyRecapManager {
     /**
      * Update preview background when theme changes
      */
+    /**
+     * Repaint every card currently mounted.
+     *
+     * There are TWO: the one in the card scene (`#recap-card-frame`, which is what the swatches sit
+     * under) and the one in the share panel below the fold. This used to find only the panel's, so
+     * picking a ground under the card changed a preview the hunter could not see while the card in front
+     * of them stayed as it was.
+     */
     updatePreviewBackground() {
-        const previewInner = document.getElementById('share-preview-inner');
-        if (!previewInner) return;
-
-        const shareContent = previewInner.querySelector('.share-image-content');
-        if (shareContent) {
-            this.applyBackground(shareContent);
-        }
+        document.querySelectorAll('.share-image-content').forEach((card) => this.applyBackground(card));
     }
 
     async downloadShareImage() {
