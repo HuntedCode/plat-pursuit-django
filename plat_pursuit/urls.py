@@ -25,7 +25,7 @@ from django.views.generic import RedirectView, TemplateView
 from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, SupportHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, BadgePresentationView, RequirementsChecklistWorkshopView, StageCardsWorkshopView, GameCardWorkshopView, BadgeJourneyWorkshopView, ChromeWorkshopView, RecapStageWorkshopView, PursuerCardPreviewView, PursuerCardRanksPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView as DesignResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
-    BadgeSitemap, GameListSitemap, RoadmapSitemap,
+    BadgeSitemap, RoadmapSitemap,
 )
 
 sitemaps = {
@@ -34,7 +34,8 @@ sitemaps = {
     'profiles': ProfileSitemap,
     'badges': BadgeSitemap,
     'roadmaps': RoadmapSitemap,
-    'lists': GameListSitemap,
+    # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
+    # for the revamp, since nothing else about the system was deleted.
 }
 from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
@@ -214,11 +215,22 @@ urlpatterns = [
     path('my-guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_guides'),
 
     # Game Lists (canonical paths under /community/lists/)
-    path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
-    path('community/lists/create/', GameListCreateView.as_view(), name='list_create'),
-    path('community/lists/<int:list_id>/', GameListDetailView.as_view(), name='list_detail'),
-    path('community/lists/<int:list_id>/edit/', GameListEditView.as_view(), name='list_edit'),
-    path('my-lists/', MyListsView.as_view(), name='my_lists'),
+    # ── Game Lists: HIDDEN pending a revamp ──────────────────────────────────────────────────────
+    # Every entry point is gone (sub-nav, footer, community hub, sitemap, and the add-to-list button on
+    # game cards), and these send anyone arriving on an old link or bookmark to the homepage instead.
+    #
+    # TEMPORARY on purpose, so `permanent=False` (302). A 301 is cached by browsers indefinitely and
+    # would keep redirecting to the homepage long after the rebuilt system ships -- for exactly the
+    # people who used lists most, since they are the ones holding the bookmarks.
+    #
+    # The NAMES stay resolvable. Templates that are no longer reachable still contain
+    # `{% url 'list_detail' %}`, and the views, models, data and the rebuilt browse page are all intact:
+    # this is a curtain, not a demolition. Restoring it is putting these four lines back.
+    path('community/lists/', RedirectView.as_view(url='/', permanent=False), name='lists_browse'),
+    path('community/lists/create/', RedirectView.as_view(url='/', permanent=False), name='list_create'),
+    path('community/lists/<int:list_id>/', RedirectView.as_view(url='/', permanent=False), name='list_detail'),
+    path('community/lists/<int:list_id>/edit/', RedirectView.as_view(url='/', permanent=False), name='list_edit'),
+    path('my-lists/', RedirectView.as_view(url='/', permanent=False), name='my_lists'),
 
     # Rate My Games wizard (ratings-only; lives outside the archived
     # /community/reviews/ subtree).
@@ -293,11 +305,13 @@ urlpatterns = [
     path('leaderboard/badges/', RedirectView.as_view(pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),
     path('leaderboard/badges/<str:series_slug>/', RedirectView.as_view(pattern_name='badge_leaderboards', permanent=True, query_string=True)),
 
-    # Game Lists
-    path('lists/', RedirectView.as_view(pattern_name='lists_browse', permanent=True, query_string=True)),
-    path('lists/create/', RedirectView.as_view(pattern_name='list_create', permanent=True, query_string=True)),
-    path('lists/<int:list_id>/', RedirectView.as_view(pattern_name='list_detail', permanent=True, query_string=True)),
-    path('lists/<int:list_id>/edit/', RedirectView.as_view(pattern_name='list_edit', permanent=True, query_string=True)),
+    # Game Lists (hidden -- see the note above). These already 301'd to the /community/lists/ paths, which
+    # now 302 to the homepage; sending them straight there saves the double hop. Kept as 301 because the
+    # /lists/ -> /community/lists/ move IS permanent, whatever happens to the system itself.
+    path('lists/', RedirectView.as_view(url='/', permanent=True)),
+    path('lists/create/', RedirectView.as_view(url='/', permanent=True)),
+    path('lists/<int:list_id>/', RedirectView.as_view(url='/', permanent=True)),
+    path('lists/<int:list_id>/edit/', RedirectView.as_view(url='/', permanent=True)),
 
 
     # Reviews

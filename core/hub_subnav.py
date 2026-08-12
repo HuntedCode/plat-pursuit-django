@@ -134,7 +134,7 @@ COMMUNITY_HUB = HubSubnavConfig(
         HubSubnavItem('profiles', 'Profiles', 'profiles_list', 'user', group='Explore'),
         HubSubnavItem('leaderboards', 'Leaderboards', 'overall_badge_leaderboards', 'bar-chart', group='Explore'),
         HubSubnavItem('rate_my_games', 'Rate My Games', 'rate_my_games', 'star', group='Create'),
-        HubSubnavItem('lists', 'Lists', 'lists_browse', 'list', group='Create'),
+        # Lists: hidden pending a revamp. Restoring it is this one line.
     ),
 )
 
@@ -220,9 +220,6 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'reviews_landing': ('community', 'hub'),
     'review_hub': ('community', 'hub'),
     'rate_my_games': ('community', 'rate_my_games'),
-    'list_detail': ('community', 'lists'),
-    'list_create': ('community', 'lists'),
-    'list_edit': ('community', 'lists'),
     'badge_leaderboards': ('community', 'leaderboards'),
     # (badge_detail now highlights the Browse > Badges tab -- see the Browse block above.)
     # My Pursuit: nested sub-pages of the moved items. Shareables is plat-cards-only as of 2026-08,

@@ -24,7 +24,15 @@ from django.urls import reverse
 from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory
 from trophies.models import GameList, GameListItem
 
-pytestmark = pytest.mark.django_db
+# The lists system is HIDDEN pending a revamp (2026-08): every entry point is gone and the pages redirect
+# to the homepage, so everything below drives URLs that no longer render. Skipped rather than deleted --
+# the views, models and templates are all intact, and these are the pins for the query-flatness work that
+# made both pages stop scaling with their own content (23 -> 3, and 82 -> 2). Deleting them would mean
+# rediscovering that at revamp time. Unskip with the routes; see test_lists_hidden.py for what holds now.
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.skip(reason='Game Lists is hidden pending its revamp -- these pages redirect to /'),
+]
 
 BROWSE = '/community/lists/'
 ROOT = Path(__file__).resolve().parents[2]

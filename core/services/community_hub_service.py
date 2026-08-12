@@ -125,6 +125,10 @@ def _get_most_rated_games_spotlight(limit=SPOTLIGHT_LIMIT):
 def _get_recent_lists_spotlight(limit=SPOTLIGHT_LIMIT):
     """Most recent published public game lists — Game Lists card top half.
 
+    UNUSED while the lists system is hidden: the hub card it fed was removed and `get_hub_context` no
+    longer calls this. Kept rather than deleted because the system is parked for a revamp, not retired,
+    and this is the query shape that card needs when it comes back.
+
     Mirrors BrowseListsView's queryset shape: gated to public + non-deleted,
     open to ALL users (no premium gate). The publish toggle in the
     GameList API is also open to all users, so any free user who marks a
@@ -365,11 +369,9 @@ def build_community_hub_context(viewer_profile=None):
         logger.exception("Failed to load community hub most_rated_games")
         context['most_rated_games'] = []
 
-    try:
-        context['recent_lists'] = _get_recent_lists_spotlight()
-    except Exception:
-        logger.exception("Failed to load community hub recent_lists")
-        context['recent_lists'] = []
+    # recent_lists: not computed while Game Lists is hidden. The card that read it is gone from the hub,
+    # so this was a query per page load feeding a template variable nobody renders. The helper below is
+    # left in place for the revamp -- see _get_recent_lists_spotlight.
 
     try:
         context['xp_leaderboard'] = _get_xp_leaderboard_spotlight(viewer_profile)

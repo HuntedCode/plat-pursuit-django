@@ -303,6 +303,5 @@
     <script src="{% static 'js/tag-detail.js' %}"></script>
     {% if user.is_authenticated and user.profile %}
     <script src="{% static 'js/game-lists.js' %}"></script>
-    <script>document.addEventListener('DOMContentLoaded', () => GameListQuickAdd.init());</script>
     {% endif %}
 {% endblock %}

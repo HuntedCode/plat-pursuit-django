@@ -177,19 +177,14 @@ urlpatterns = [
     # Temp share image serving
     path('share-temp/<str:filename>', serve_share_temp_image, name='share-temp-image'),
 
-    # Game list endpoints
-    path('lists/', GameListCreateView.as_view(), name='game-list-create'),
-    path('lists/my/', UserGameListsView.as_view(), name='game-list-my'),
-    path('lists/quick-add/', GameListQuickAddView.as_view(), name='game-list-quick-add'),
-    path('lists/<int:list_id>/', GameListDetailView.as_view(), name='game-list-detail'),
-    path('lists/<int:list_id>/update/', GameListUpdateView.as_view(), name='game-list-update'),
-    path('lists/<int:list_id>/delete/', GameListDeleteView.as_view(), name='game-list-delete'),
-    path('lists/<int:list_id>/items/', GameListAddItemView.as_view(), name='game-list-add-item'),
-    path('lists/<int:list_id>/items/<int:item_id>/', GameListRemoveItemView.as_view(), name='game-list-remove-item'),
-    path('lists/<int:list_id>/items/<int:item_id>/update/', GameListUpdateItemView.as_view(), name='game-list-update-item'),
-    path('lists/<int:list_id>/items/reorder/', GameListReorderView.as_view(), name='game-list-reorder'),
-    path('lists/<int:list_id>/like/', GameListLikeView.as_view(), name='game-list-like'),
-    path('lists/<int:list_id>/copy/', GameListCopyView.as_view(), name='game-list-copy'),
+    # Game list endpoints -- WITHDRAWN while the lists system is hidden.
+    #
+    # Unrouted rather than left answering: the only caller was the add-to-list button on game cards,
+    # which is gone with the rest of the entry points, and an endpoint that still accepts writes into a
+    # system nobody can open collects data the revamp then has to reconcile. Checked before pulling
+    # them: PlatBot does not call `/api/v1/lists/` (its only "lists" matches are in vendored packages).
+    #
+    # The views are untouched in api/game_list_views.py; restoring the system is restoring these paths.
 
     # Game search (for list typeahead)
     path('games/search/', GameSearchView.as_view(), name='game-search'),

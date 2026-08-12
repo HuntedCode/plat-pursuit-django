@@ -61,7 +61,9 @@ def test_browse_items_grouped_catalog_curation():
 def test_community_items_grouped_explore_create():
     groups = _grouped(hub_subnav(_req('/community/')))
     assert groups['Explore'] == ['hub', 'profiles', 'leaderboards']
-    assert groups['Create'] == ['rate_my_games', 'lists']   # Challenges retired (Lane 2 teardown)
+    # Challenges retired (Lane 2 teardown); Lists hidden 2026-08 pending its revamp -- both are out of
+    # the URL conf and the sub-nav, so 'Create' is down to the one item that is actually reachable.
+    assert groups['Create'] == ['rate_my_games']
 
 
 def test_my_pursuit_items_grouped_progress_tools():

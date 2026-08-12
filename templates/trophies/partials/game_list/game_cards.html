@@ -11,13 +11,9 @@
 
             {% include 'trophies/partials/_game_flags.html' with game=game variant='overlay' %}
 
-            {% if user.is_authenticated and user.profile %}
-            <button type="button" class="pp-gcard__add quick-add-trigger" data-game-id="{{ game.id }}"
-                    onclick="event.preventDefault(); event.stopPropagation();"
-                    aria-label="Add {{ game.title_name }} to a list">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            </button>
-            {% endif %}
+            {% comment %}Add-to-list: removed while the Game Lists system is hidden pending its revamp. A
+        button that files a game into somewhere nobody can open is worse than no button -- it
+        collects data the revamp then has to reconcile. Restore with the system.{% endcomment %}
 
             {% comment %} Progress fill colour encodes completion state (5 states): plat+100% = platinum;
             plat earned but <100% (post-plat DLC) = muted teal; 100% w/o a plat = green; a plat available but
