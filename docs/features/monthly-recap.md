@@ -245,6 +245,20 @@ Constraints worth knowing before editing it:
   the same thing the plat card's rebuild moved away from. `applyBackground` reads `--pc-theme-bg`
   off the checked swatch rather than a JS registry, so the thing clicked and the thing that paints
   are one value, and the PNG endpoint resolves the same key server-side.
+- **Consistency lives in the SKELETON, not the content.** Every card shares one set of coordinates:
+  header, both body panels, the footer, the three figure cells and the calendar all land at
+  identical positions and sizes whether the month produced 0 platinums or 12. Two things make that
+  true, and both were bugs first:
+  - **The footer has a fixed height (176px).** The body is `flex: 1`, so it absorbed whatever the
+    footer did not use -- and the footer's height depended on whether the platinum container
+    existed, that being its tallest element. A month with none got body panels 347px tall instead
+    of 255px and its dividing rule 92px further down the card.
+  - **The figure row always has exactly three cells.** It was two or three depending on whether a
+    platinum landed, which changed the shape of the most-read zone. Each slot now falls back to
+    something that happened (`_figure_cells`): platinums or active days, games or the longest
+    streak. Never a printed zero -- a zero in 40px type states an absence in the largest thing on
+    the card -- and only the platinum cell ever takes the accent, so a fallback never dresses up
+    as a boast.
 - **No placeholder cover slots, ever.** Padding the container to a fixed six so every card looks
   identical was considered and rejected: an empty slot advertises what the hunter did NOT do, and
   six is a display limit rather than a target. The same call the plat card already made on its DLC

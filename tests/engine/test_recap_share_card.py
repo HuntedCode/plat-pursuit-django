@@ -166,15 +166,69 @@ def test_a_month_with_no_platinums_shows_its_rarest_find_instead():
     assert 'Platinums earned' not in html
 
 
-def test_zero_figures_are_dropped_rather_than_printed():
-    """A row of zeroes is a worse card than a shorter row, and nobody should be talked out of sharing by
-    their own card."""
-    html = _rendered(platinums=0, games_total=0, platinums_data=[], platinums_overflow=0)
-    # Matched on the LABEL markup, not the bare word: "Platinum" also appears in "Platinum Pursuit",
-    # which is on every card, so a substring check here passes or fails for the wrong reason.
-    assert '>Games</div>' not in html
-    assert '>Platinum</div>' not in html and '>Platinums</div>' not in html
-    assert '>Trophies</div>' in html, 'the headline figure is always shown'
+def test_there_are_always_exactly_three_figure_cells():
+    """The row used to be two cells or three depending on whether a platinum landed, which changed the
+    shape of the card's most-read zone between two cards from the same hunter. Consistency belongs at the
+    level of the SKELETON: the zones are fixed, what fills them varies."""
+    from api.recap_views import _figure_cells
+
+    busy = _recap(3)
+    busy.games_started, busy.games_completed = 4, 2
+    busy.streak_data = {'longest_streak': 9}
+    quiet = _recap(0)
+    quiet.games_started = quiet.games_completed = 0
+    quiet.streak_data = {'longest_streak': 4}
+
+    assert len(_figure_cells(busy, {'total_active_days': 17})) == 3
+    assert len(_figure_cells(quiet, {'total_active_days': 6})) == 3
+
+
+def test_a_slot_falls_back_rather_than_printing_a_zero():
+    """A zero in 40px type states an absence in the largest thing on the card. Every fallback is a fact
+    the month already carries -- a month with no platinum still had active days, and one that started no
+    new games still had a streak."""
+    from api.recap_views import _figure_cells
+
+    quiet = _recap(0)
+    quiet.games_started = quiet.games_completed = 0
+    quiet.streak_data = {'longest_streak': 4}
+
+    cells = _figure_cells(quiet, {'total_active_days': 6})
+    labels = [c['label'] for c in cells]
+
+    assert labels == ['Trophies', 'Active days', 'Day streak']
+    assert all(c['value'] for c in cells), f'a zero reached the card: {cells}'
+
+
+def test_only_the_platinum_cell_takes_the_accent():
+    """The accent marks the figure worth boasting about. A fallback wearing it would dress up an absence."""
+    from api.recap_views import _figure_cells
+
+    busy = _recap(2)
+    busy.games_started, busy.games_completed = 1, 1
+    assert [c['accent'] for c in _figure_cells(busy, {'total_active_days': 9})] == [False, True, False]
+
+    quiet = _recap(0)
+    quiet.games_started, quiet.games_completed = 1, 0
+    assert not any(c['accent'] for c in _figure_cells(quiet, {'total_active_days': 9}))
+
+
+def test_every_card_shares_one_skeleton():
+    """Measured in a browser across 0/1/3/6 platinums: header, both body panels, the footer, the figure
+    cells and the calendar all landed at identical coordinates.
+
+    The footer's height is what made that possible. The body is `flex: 1`, so it absorbed whatever the
+    footer did not use -- and the footer's height depended on whether the platinum container existed,
+    which is by far its tallest element. A month with none got body panels 347px tall instead of 255px
+    and its dividing rule 92px further down the card."""
+    from pathlib import Path
+    tpl = (Path(__file__).resolve().parents[2] / 'templates' / 'recap' / 'partials' /
+           'recap_share_card.html').read_text(encoding='utf-8')
+
+    foot = tpl[tpl.index('border-top: 1px solid rgba(64, 72, 83') - 400:]
+    foot = foot[:foot.index('>') + 1]
+    assert 'height: 176px' in foot, 'the footer sizes to its content again, which moves every zone above it'
+    assert 'box-sizing: border-box' in foot
 
 
 def test_the_rarest_find_is_shown_exactly_once():

@@ -303,6 +303,33 @@ class RecapRegenerateView(APIView):
         })
 
 
+def _figure_cells(recap, calendar):
+    """The card's three headline figures, always three, never a zero.
+
+    Slot 1 is the trophy count, which a recap cannot exist without. Slots 2 and 3 fall back when their
+    first choice did not happen: a month with no platinum still had active days, and a month that started
+    no new games still had a longest streak. Printing "0" in 40px type states an absence in the largest
+    thing on the card, and a share image should not do that.
+    """
+    cells = [{'value': recap.total_trophies_earned, 'label': 'Trophies', 'accent': False}]
+
+    plats = recap.platinums_earned or 0
+    if plats:
+        cells.append({'value': plats, 'label': f"Platinum{'' if plats == 1 else 's'}", 'accent': True})
+    else:
+        days = (calendar or {}).get('total_active_days') or 0
+        cells.append({'value': days, 'label': f"Active day{'' if days == 1 else 's'}", 'accent': False})
+
+    games = (recap.games_started or 0) + (recap.games_completed or 0)
+    if games:
+        cells.append({'value': games, 'label': f"Game{'' if games == 1 else 's'}", 'accent': False})
+    else:
+        streak = (recap.streak_data or {}).get('longest_streak') or 0
+        cells.append({'value': streak, 'label': f"Day streak", 'accent': False})
+
+    return cells
+
+
 class RecapShareImageHTMLView(APIView):
     """
     GET /api/v1/recap/<year>/<month>/html/
@@ -502,6 +529,13 @@ class RecapShareImageHTMLView(APIView):
             # Games. One figure, not two: "6 started, 3 completed" beside a trophy count reads as though
             # the reader should reconcile them, and a share card gets a moment's glance.
             'games_total': (recap.games_started or 0) + (recap.games_completed or 0),
+            # Exactly three figure cells on every card, so the most-read zone has one shape.
+            #
+            # The row used to be two cells or three depending on whether a platinum landed, and games can
+            # be zero too (a month spent grinding a game started earlier counts none). Rather than print a
+            # zero -- which states an absence in the largest type on the card -- each slot falls back to
+            # something that DID happen. Every fallback is a fact the month already carries.
+            'figure_cells': _figure_cells(recap, cal),
             # Highlights
             'platinums_data': platinums_with_images,
             'platinums_overflow': max(0, len(all_plats) - SHARE_CARD_PLATINUM_SLOTS),

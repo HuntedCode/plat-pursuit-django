@@ -126,26 +126,17 @@ Context: api/recap_views.RecapShareImageHTMLView._build_template_context.
                 {% endif %}
 
                 {% comment %}The figures, each in its own cell so they read as a set rather than three
-                numbers sharing a line. Trophies always; platinums and games only when they happened,
-                because a row of zeroes is a worse card than a shorter row and nobody should be talked out
-                of sharing by their own card.{% endcomment %}
+                numbers sharing a line. ALWAYS three: the row used to be two or three depending on whether
+                a platinum landed, which changed the shape of the card's most-read zone between two cards
+                from the same hunter. The builder fills every slot with something that happened -- never a
+                printed zero, which would state an absence in the largest type on the card.{% endcomment %}
                 <div style="display: flex; align-items: stretch; gap: 12px; margin-top: 20px;">
-                    <div style="flex: 1; min-width: 0; padding: 13px 16px; border-radius: 10px; border: 1px solid rgba(64, 72, 83, 0.55); background: rgba(5, 8, 12, 0.35);">
-                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 40px; font-weight: 800; color: #f0f6fd; letter-spacing: -0.02em; line-height: 0.95;">{{ total_trophies|intcomma }}</div>
-                        <div style="font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 7px;">Trophies</div>
+                    {% for cell in figure_cells %}
+                    <div style="flex: 1; min-width: 0; padding: 13px 16px; border-radius: 10px; border: 1px solid {% if cell.accent %}rgba(103, 209, 248, 0.4){% else %}rgba(64, 72, 83, 0.55){% endif %}; background: {% if cell.accent %}rgba(103, 209, 248, 0.08){% else %}rgba(5, 8, 12, 0.35){% endif %};">
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 40px; font-weight: 800; color: {% if cell.accent %}#67d1f8{% else %}#f0f6fd{% endif %}; letter-spacing: -0.02em; line-height: 0.95;">{{ cell.value|intcomma }}</div>
+                        <div style="font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 7px;">{{ cell.label }}</div>
                     </div>
-                    {% if platinums %}
-                    <div style="flex: 1; min-width: 0; padding: 13px 16px; border-radius: 10px; border: 1px solid rgba(103, 209, 248, 0.4); background: rgba(103, 209, 248, 0.08);">
-                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 40px; font-weight: 800; color: #67d1f8; letter-spacing: -0.02em; line-height: 0.95;">{{ platinums|intcomma }}</div>
-                        <div style="font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 7px;">Platinum{{ platinums|pluralize }}</div>
-                    </div>
-                    {% endif %}
-                    {% if games_total %}
-                    <div style="flex: 1; min-width: 0; padding: 13px 16px; border-radius: 10px; border: 1px solid rgba(64, 72, 83, 0.55); background: rgba(5, 8, 12, 0.35);">
-                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 40px; font-weight: 800; color: #f0f6fd; letter-spacing: -0.02em; line-height: 0.95;">{{ games_total|intcomma }}</div>
-                        <div style="font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 7px;">Games</div>
-                    </div>
-                    {% endif %}
+                    {% endfor %}
                 </div>
             </div>
 
@@ -187,7 +178,19 @@ Context: api/recap_views.RecapShareImageHTMLView._build_template_context.
         Discord scale, so the platinums lead the row. Everything here is optional: a month with no
         platinums drops the strip and the rest slides left, which is why nothing is positioned against the
         strip's width.{% endcomment %}
-        <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: {% if platinums_data %}space-between{% else %}flex-start{% endif %}; gap: {% if platinums_data %}30px{% else %}64px{% endif %}; padding-top: 15px; border-top: 1px solid rgba(64, 72, 83, 0.55); overflow: hidden;">
+        {% comment %}FIXED HEIGHT, and this is what makes cards consistent with each other.
+
+        The body is `flex: 1`, so it absorbs whatever the footer does not use -- and the footer's height
+        depended on whether there were any platinums, because the cover container is by far its tallest
+        element. A month with none therefore got a footer 92px shorter, body panels 347px tall instead of
+        255px, and its dividing rule 92px lower down the card. Two cards from the same hunter did not
+        share a skeleton.
+
+        Pinned to the tallest case (176px) so the rule, both panels and the calendar occupy identical
+        space on EVERY card. The zones are fixed; what fills them varies. That is the level consistency
+        belongs at -- not padding the content out to a uniform count, which only advertises what a hunter
+        did not do.{% endcomment %}
+        <div style="flex-shrink: 0; height: 176px; box-sizing: border-box; display: flex; align-items: center; justify-content: {% if platinums_data %}space-between{% else %}flex-start{% endif %}; gap: {% if platinums_data %}30px{% else %}64px{% endif %}; padding-top: 15px; border-top: 1px solid rgba(64, 72, 83, 0.55); overflow: hidden;">
 
             {% comment %}A titled CONTAINER, not a loose strip. Bare covers were context-less art: you could
             not tell what you were looking at, or that they were this month's platinums rather than
