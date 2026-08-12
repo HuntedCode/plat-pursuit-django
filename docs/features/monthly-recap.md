@@ -259,6 +259,12 @@ Constraints worth knowing before editing it:
     streak. Never a printed zero -- a zero in 40px type states an absence in the largest thing on
     the card -- and only the platinum cell ever takes the accent, so a fallback never dresses up
     as a boast.
+- **Game names wrap to two lines, in a FIXED two-line box.** Clamping alone would leave "Hades" one
+  line tall and "Ghost of Tsushima" two, so covers in a row would sit at different heights and the
+  container's height would depend on which games a hunter happened to finish -- the drift the fixed
+  footer exists to stop. The second line costs ~14px, which came out of the container's padding and
+  two pixels a cover rather than out of the footer height (the calendar needs every pixel it has: a
+  31-day month starting on a Saturday runs to SIX rows).
 - **No placeholder cover slots, ever.** Padding the container to a fixed six so every card looks
   identical was considered and rejected: an empty slot advertises what the hunter did NOT do, and
   six is a display limit rather than a target. The same call the plat card already made on its DLC

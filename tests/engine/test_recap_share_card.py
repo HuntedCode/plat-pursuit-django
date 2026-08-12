@@ -378,10 +378,13 @@ def test_the_slot_count_matches_what_the_footer_can_hold():
 
     html = _rendered(platinums=12, platinums_overflow=6,
                      platinums_data=[{'game_image': '', 'name': f'Game {i}'} for i in range(6)])
-    assert html.count('width: 66px; height: 88px') == 6
+    assert len(re.findall(r'width: \d+px; height: \d+px; border-radius: 6px', html)) == 6
     assert '+6' in html
-    # Six covers, their gaps and the "+N", inside the container's own padding.
-    assert 66 * 6 + 10 * 5 + 30 + 30 < 560
+
+    # Each cover carries a TWO-LINE name box of fixed height, so covers in a row align and the
+    # container's height cannot depend on which games a hunter happened to finish.
+    assert html.count('-webkit-line-clamp: 2') == 6
+    assert html.count('height: 27px; display: -webkit-box') == 6
 
 
 # ── The grounds ───────────────────────────────────────────────────────────────
@@ -473,9 +476,8 @@ def test_the_platinum_container_is_never_padded_to_a_fixed_count():
     for n in (1, 2, 3):
         html = _rendered(platinums=n, platinums_overflow=0,
                          platinums_data=[{'game_image': '', 'name': f'Game {i}'} for i in range(n)])
-        assert html.count('width: 66px; height: 88px') == n, (
-            f'{n} platinums rendered a different number of cover slots'
-        )
+        slots = len(re.findall(r'width: \d+px; height: \d+px; border-radius: 6px', html))
+        assert slots == n, f'{n} platinums rendered {slots} cover slots'
 
 
 def test_the_footer_fills_with_real_stats_instead():
