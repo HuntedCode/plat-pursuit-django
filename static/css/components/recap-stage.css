@@ -102,6 +102,10 @@
     background: var(--pp-bg-0);
     opacity: 0;
     transition: opacity 0.28s ease;
+    /* The top bar's height, declared ONCE. The bar sits in flow while the card scene is absolute, so the
+       scene cannot ask what it is clearing -- it has to be told, and a second hardcoded number here would
+       drift the moment the bar's padding changes. */
+    --rcx-bar: 3.75rem;
 }
 .rcx.is-in { opacity: 1; }
 /* The stage is `position: fixed; inset: 0; z-index: 90` and merely TRANSPARENT when idle, so it must
@@ -220,6 +224,7 @@
     position: relative; z-index: 4;
     display: flex; align-items: center; justify-content: space-between;
     gap: 0.75rem; padding: 0.75rem 1rem;
+    min-height: var(--rcx-bar);
 }
 .rcx__who { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--pp-text-dim); min-width: 0; }
 .rcx__who img { width: 1.4rem; height: 1.4rem; border-radius: 50%; object-fit: cover; flex: none; }
@@ -447,69 +452,32 @@
  *
  * That is why the card is NOT an inset overlay: it occupies the lower half of the same stage, and the
  * summary is moved up out of its way. Both are visible together, which is the whole point. */
-/* The summary becomes the header of the end screen. TRANSFORM AND OPACITY ONLY, which is the whole
-   difference between this reading as smooth and reading as a jump:
+/* The summary LEAVES. It used to shrink into the end screen's header, and that one decision is what every
+   bug in this transition came out of: two things moving in the same moment, over a band that had to be
+   split between them, with a header whose layout box then had to be argued down to fit its half. The lift
+   scaled the picture but not the box, so on a short stage the title landed on the card's label; the band
+   made the content taller than its box, so the closing line arrived in a scroll well.
  *
- *   - `font-size` was animated. That is a layout property -- every frame reflows the text, and the
- *     glyphs snap between whole pixel sizes rather than gliding.
- *   - `max-height` was animated to collapse the body. Also layout, and it eases against a value nothing
- *     can interpolate cleanly, so it lurches.
- *   - `justify-content` was flipped to flex-start at the START of the transition. That is not animatable
- *     at all: the content teleported to the top and THEN began scaling. That was the jump.
+ * The end screen brings its own mark and title instead (`.rcx__card-head`). So the close is ONE object
+ * arriving -- the card scene, header and all, rising into a stage the summary has vacated -- and the
+ * summary only has to do the simplest thing an element can do on its way out.
  *
- * So: one composite transform on the slide, opacity on the parts that leave. The scale shrinks the
- * headline in place, which is what the font-size transition was reaching for anyway.
- *
- * Slower, too -- 1.15s. This is the deck's closing gesture and the only one nobody is waiting to skip. */
+ * It stays an ANIMATION rather than a transition, which is not stylistic: the entrance (`rcxInFwd`) runs
+ * with fill `both`, so opacity is animation-controlled even after it finishes, and per spec a transition
+ * does not start on a property the previous style was animating. A transition here gives no interpolation
+ * at all -- the browser jumps straight to the end value. A second animation simply replaces the entrance. */
 .rcx.is-ending .recap-slide.active {
-    /* An ANIMATION, not a transition, and this is the whole reason the lift kept snapping.
-     *
-     * The entrance (`rcxInFwd`) runs with fill `both`, so `transform` is animation-controlled even after
-     * it finishes. Per spec a transition does not start on a property the previous style was animating --
-     * so setting `animation: none` and a new transform in the same recalculation gives no interpolation
-     * at all: the browser jumps straight to the end value. Profiling caught it, one moving frame out of
-     * a 1.15s window.
-     *
-     * A second animation has no such conflict: animations always play, and this one simply replaces the
-     * entrance. `forwards` holds the end state so it does not snap back. */
-    animation: rcxLift 1.15s cubic-bezier(0.32, 0.72, 0.24, 1) forwards;
-    will-change: transform;
-    /* The end screen is TWO BANDS: this becomes the header over the card scene's bottom 62%. Without the
-       constraint the slide kept the whole stage and was merely scaled, so its (invisible) lower half sat
-       behind the card and its visible half floated in a void -- roughly 80px of dead air between the
-       title and the card, with the summary's own chips hidden rather than dismissed. */
-    bottom: 62%;
-    justify-content: center;
-    /* NOT scrollable any more. The base slide is `overflow-y: auto` so a dense beat can be scrolled to,
-       and constraining this one to the band made its content taller than its box -- so the closing line
-       arrived in a little scroll well with a visible thumb. During the ending this is a header, not a
-       beat: it has no more content than you can see, and the lift's own scale keeps the type inside the
-       band it is drawn in. */
-    overflow: visible;
+    animation: rcxBow 0.55s cubic-bezier(0.4, 0, 0.8, 1) forwards;
+    pointer-events: none;
 }
-@keyframes rcxLift {
-    from { transform: none; }
-    /* A short settle, not a big shrink. The band above is what positions the header now; the scale only
-       has to take the summary's display type down to header size. */
-    to   { transform: translate3d(0, -6%, 0) scale(0.82); }
+/* A small recede on the way out, not just a dissolve: it reads as the beat stepping BACK to let the card
+   through, which is the handoff. The card's own rise starts at 0.32s, so the two overlap by a beat. */
+@keyframes rcxBow {
+    from { opacity: 1; transform: none; }
+    to   { opacity: 0; transform: translate3d(0, -2%, 0) scale(0.96); }
 }
-/* Out of the LAYOUT, not just faded. Fading alone left them holding the slide's full height, which is
-   what put a void under the title -- the summary is meant to reduce to its header, and a reduction that
-   keeps its original footprint is just a hidden thing taking up room. */
-.rcx.is-ending .recap-slide.active .rcp__body,
-.rcx.is-ending .recap-slide.active .rcp__cue,
-/* The mark goes too. `transform: scale()` shrinks what you SEE while the layout box stays full size, so
-   on a shorter stage the header's box still ran past the band and the title landed on the card's label
-   -- measured at a 700px stage, where the band is only 180px tall. Taking the mark out reduces the box
-   itself rather than the picture of it, and the moment loses nothing: the brand is already in the bar
-   above and on the card below. The line is what carries the ending. */
-.rcx.is-ending .recap-slide.active .rcp__mark { display: none; }
 @media (prefers-reduced-motion: reduce) {
-    /* Still recomposes -- it is the layout of the end screen, not decoration -- just without the travel. */
-    .rcx.is-ending .recap-slide.active {
-        animation: none;
-        transform: translate3d(0, -6%, 0) scale(0.82);
-    }
+    .rcx.is-ending .recap-slide.active { animation: none; opacity: 0; }
 }
 
 /* Card-only: the stage opened straight at its ending, with the deck's chrome dropped. There is no deck
@@ -518,7 +486,16 @@
 .rcx.is-card-only .rcx__zone,
 .rcx.is-card-only .rcx__hint,
 .rcx.is-card-only .recap-slide { display: none; }
-.rcx.is-card-only .rcx__card { inset: 0; height: auto; justify-content: center; }
+/* Both routes end on the SAME screen, so the card scene takes the whole stage in both. It is bottom-62%
+   only while it waits offstage, back when it had to share the stage with the summary's header.
+ *
+ * Not quite the WHOLE stage: it starts below the bar. The scene is centred in its box, so on the card-only
+ * route -- where the card is at or near full size and the column is tallest -- the header centred into the
+ * bar's row and the mark sat behind the close X. Measured at 900px: header top 5, bar bottom 59. Clearing
+ * it here rather than nudging the header keeps the scene centred in the space it actually has, and the
+ * card's fit() reads that box, so the card scales to the smaller room instead of running off the bottom. */
+.rcx.is-card-only .rcx__card,
+.rcx.is-ending .rcx__card { inset: var(--rcx-bar) 0 0 0; height: auto; justify-content: center; }
 
 .rcx__card {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
@@ -546,9 +523,19 @@
 }
 @keyframes rcxCardIn { from { opacity: 0; transform: translate3d(0, 56px, 0); } to { opacity: 1; transform: none; } }
 
-.rcx__card-label {
-    font-size: 0.78rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
-    color: var(--pp-text-mute);
+/* The end screen's own header. Deliberately QUIETER than the deck's hero beats -- the card underneath is
+   the thing being presented, and a display-size title above it would compete with the card's own header
+   for the same job. Same display face and accent as the deck's titles so it still reads as the same
+   voice closing, a size down. */
+.rcx__card-head {
+    display: flex; flex-direction: column; align-items: center; gap: 0.45rem;
+    text-align: center;
+}
+.rcx__card-mark { display: block; line-height: 0; }
+.rcx__card-title {
+    font-family: var(--pp-font-display);
+    font-size: clamp(1.15rem, 4.5vw, 1.6rem); font-weight: 800; line-height: 1.1;
+    color: var(--rcx-accent);
 }
 /* The card renders at its natural share size; the frame scales it to fit whatever room there is rather
    than letting it overflow or forcing a re-layout of markup that must stay pixel-exact for the PNG. */

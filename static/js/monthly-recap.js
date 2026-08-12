@@ -234,8 +234,9 @@ class MonthlyRecapManager {
         this.stopBeatTimer();
         this.mountCard();                       // no-op if it is already mounted, which it should be
         scene.setAttribute('aria-hidden', 'false');
-        // The only work in this frame: one class. `is-ending` lifts the summary out of the way and the
-        // card rises into the space it leaves -- one composition recomposing itself.
+        // The only work in this frame: one class. `is-ending` sends the summary away and the card scene
+        // rises into the stage it vacates, carrying its own header -- one object arriving, not two
+        // negotiating for the same stage. That negotiation was every bug this transition ever had.
         this.container.classList.add('is-ending');
 
         const dl = document.getElementById('recap-download');
@@ -611,9 +612,8 @@ class MonthlyRecapManager {
     }
 
     checkSlideOverflow() {
-        // The ending re-boxes the summary into a header band, where "taller than its box" is expected and
-        // means nothing -- it is not scrollable there. Marking it would only top-align a header that is
-        // deliberately centred.
+        // The deck is over. The summary is mid-fade and the card scene has the stage, so re-boxing a
+        // departing slide as scrollable would only make it twitch on its way out.
         if (this.container.classList.contains('is-ending')) return;
         const slideEls = this.slidesContainer.querySelectorAll('.recap-slide');
         slideEls.forEach(el => {

@@ -352,23 +352,37 @@ Load-bearing details, each of which was a bug first:
   mode, so it covered `.rcx__top` entirely -- the close X was on screen, looked live, and every click on
   it landed on the card while the stage stayed open. `elementFromPoint` on the button returned
   `recap-card`. The bar carries `z-index: 4` now.
-- **The ending is two BANDS, not one element scaled over another.** The summary is meant to reduce to a
-  header the card rises beneath. Its body was only faded, so it kept the slide's full height: the visible
-  half floated above ~80px of dead air and the invisible half sat behind the card -- the chips were never
-  dismissed, just covered. The slide is constrained to `bottom: 62%` during the ending (the card scene's
-  own band) and the body leaves the LAYOUT rather than fading. Measured after: summary 103-346, card scene
-  from 342 -- two bands that meet.
+- **The ending HANDS OVER; it does not share the stage.** The summary used to shrink into the end screen's
+  header, and that one decision produced every bug this transition ever had. Sharing meant splitting the
+  stage into two bands and then arguing the header's layout box down to fit its half:
 
-  Two follow-on traps came with that constraint, both worth knowing before touching it:
-  - The base slide is `overflow-y: auto` so a dense beat can be scrolled to. Boxing the summary into the
-    band made its content taller than its box, so the closing line arrived **in a little scroll well with
-    a visible thumb**. During the ending it is a header, not a beat: `overflow: visible`, and
-    `checkSlideOverflow` skips while ending rather than top-aligning a header that is deliberately centred.
-  - `transform: scale()` shrinks what you SEE while the layout box stays full size. So on a shorter stage
-    the header's box still ran past the band and the title landed on the card's label -- measured at a
-    700px stage, where the band is only 180px tall. The fix reduces the BOX: the summary's mark leaves the
-    layout too, and the moment loses nothing (the brand is already in the bar above and on the card
-    below). Clearance is now 76 / 34 / 17px at 900 / 700 / 620px stages.
+  - Its body was only faded, so it kept the slide's full height -- the visible half floated above ~80px of
+    dead air and the invisible half sat behind the card. The chips were never dismissed, just covered.
+  - The base slide is `overflow-y: auto` so a dense beat can be scrolled to. Boxing the summary into its
+    band made the content taller than the box, so the closing line arrived **in a little scroll well with
+    a visible thumb**.
+  - `transform: scale()` shrinks what you SEE while the layout box stays full size, so on a shorter stage
+    the header still ran past its band and the title landed on the card's label -- caught at 700px, where
+    the band is only 180px tall.
+
+  Each fix was real and each exposed the next, which is the tell. Now the summary simply **leaves**
+  (`rcxBow`: fade with a 4% recede, reading as the beat stepping back) and the card scene owns the whole
+  stage carrying **its own** mark and title (`.rcx__card-head`). One object arrives instead of two
+  negotiating, and nothing has to be dismantled child by child on the way out. Verified at 900 / 760 / 700
+  / 620px and at 375 / 390 / 768 wide: header, card, grounds and buttons stack in order, none overlapping,
+  all inside the stage.
+
+  The same header is why **both routes end identically**. "Just take me to the card" has no summary to
+  borrow a header from, so before this it landed on a bare card; now it reaches the same screen.
+
+- **The end screen starts below the bar, not at the top of the stage.** `--rcx-bar` is declared once on
+  `.rcx` and used by both `.rcx__top` (as `min-height`) and the full-stage card scene (as its top inset) --
+  the bar is in flow while the scene is absolute, so the scene cannot measure what it is clearing and a
+  second hardcoded number would drift. Without it the card-only route, where the card is largest and the
+  column tallest, centred its header *into* the bar's row: measured header top 5, bar bottom 59, the mark
+  sitting behind the close X. Clearing it in the inset rather than nudging the header keeps the scene
+  centred in the room it actually has, and `fit()` reads that box -- so the card scales down to suit
+  (630 -> 578px at 900) instead of running off the bottom.
 
 - **A component stylesheet outranks Tailwind's `hidden`.** Utilities live in a layer and these component
   files do not, so an unlayered `display: flex` beats `.hidden { display: none }` whatever the source

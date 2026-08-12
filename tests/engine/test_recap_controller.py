@@ -800,28 +800,54 @@ def test_the_chrome_outranks_the_card_scene():
     )
 
 
-def test_the_ending_reduces_the_summary_instead_of_hiding_it_behind_the_card():
-    """The summary is meant to become a header the card rises beneath. Fading its body left it holding the
-    slide's full height, so the visible half floated above ~80px of dead air and the invisible half sat
-    behind the card -- the chips were not dismissed, just covered.
+def test_the_ending_hands_the_stage_over_rather_than_sharing_it():
+    """The summary used to shrink into the end screen's header, which meant splitting the stage into two
+    bands and arguing the header's layout box down to fit its half. Every bug in this transition came out
+    of that: the lift scaled the picture but not the box, so on a 700px stage the title landed on the card
+    label; the band made the content taller than its box, so the closing line arrived in a scroll well.
 
-    Measured after the fix: summary 103-346, card scene from 342. Two bands that meet, rather than one
-    element scaled on top of another."""
+    Now the summary just leaves and the card scene owns the whole stage with its own header. What this
+    pins is that it is not shared: no band on the summary, and no partial dismantling of its children."""
     css = _css()
     block = css[css.index('.rcx.is-ending .recap-slide.active {'):]
     block = block[:block.index('}')]
-    assert 'bottom: 62%' in block, 'the summary still occupies the whole stage during the ending'
+    assert 'bottom:' not in block, (
+        'the summary is banded again, which is what forced the header to fit a half-stage'
+    )
+    assert not re.search(r'\.rcx\.is-ending \.recap-slide\.active \.rcp__\w+[^{]*\{[^}]*display:\s*none', css), (
+        'the ending is dismantling the summary child by child again -- it leaves whole now'
+    )
 
-    hidden = re.search(r'\.rcx\.is-ending \.recap-slide\.active \.rcp__body,.*?\{([^}]*)\}', css, re.S)
-    assert hidden and 'display: none' in hidden.group(1), (
-        'the summary body only fades, so it keeps its footprint and leaves a void under the title'
+
+def test_both_routes_end_on_the_same_screen():
+    """"Just get the card" and watching the deck through arrive at one end screen. It carries its own mark
+    and title (`.rcx__card-head`) precisely so neither route depends on a summary being there to borrow a
+    header from -- the card-only route has no summary at all."""
+    # The selector list spans lines once lightningcss has reformatted it, so walk back to the previous
+    # rule's close rather than to the previous newline. The inset starts at `--rcx-bar` rather than 0
+    # because the scene clears the top bar; what matters here is that it stops being the 62% band.
+    card_rule = re.search(r'\}([^{}]*)\{[^}]*inset:[^;]*rcx-bar[^}]*height:\s*auto', _css())
+    assert card_rule, 'the card scene never takes the full stage'
+    selector = card_rule.group(1)
+    assert 'is-card-only' in selector and 'is-ending' in selector, (
+        f'only one route gets the full-stage end screen: {selector.strip()}'
     )
-    assert 'overflow: visible' in block, (
-        'the header is still scrollable -- the base slide is `overflow-y: auto`, so constraining it to '
-        'the band put the closing line in a scroll well with a visible thumb'
+
+    markup = (ROOT / 'templates' / 'recap' / 'monthly_recap.html').read_text(encoding='utf-8')
+    head = markup[markup.index('rcx__card-head'):]
+    assert 'pp_logo.html' in head[:600] and 'rcx__card-title' in head[:600], (
+        'the end screen has no header of its own, so it is back to borrowing the summary\'s'
     )
-    assert '.rcp__mark' in hidden.group(0), (
-        '`transform: scale()` shrinks what you see while the layout box stays full size, so on a shorter '
-        'stage the header ran past the band and the title landed on the card label -- the box has to '
-        'shrink, not the picture of it'
+
+
+def test_the_end_screen_clears_the_bar_from_one_declared_height():
+    """The bar is in flow and the card scene is absolute, so the scene cannot measure what it is clearing.
+    Without the clearance the card-only route -- card largest, column tallest -- centred its header into
+    the bar's row and the mark sat behind the close X (measured: header top 5, bar bottom 59). Two
+    hardcoded numbers would drift apart the first time the bar's padding changed, so both read `--rcx-bar`."""
+    css = _css()
+    assert re.search(r'--rcx-bar:\s*[\d.]+rem', css), 'the bar height is not declared as a token'
+    bar = re.search(r'\.rcx__top\s*\{([^}]*)\}', css)
+    assert bar and 'var(--rcx-bar)' in bar.group(1), (
+        'the bar does not hold itself to the height the card scene is clearing'
     )

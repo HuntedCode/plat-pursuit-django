@@ -145,7 +145,19 @@ PlatPursuit.takeover. {% endcomment %}
     only Download runs the renderer. Theme picking deliberately stays on the page below -- a payoff should
     not turn into a settings panel. {% endcomment %}
     <div class="rcx__card" id="recap-card" aria-hidden="true">
-        <p class="rcx__card-label">Your {{ month_name }} card</p>
+        {% comment %}The end screen carries its OWN header. The summary used to shrink into one, which meant
+        two things moving in the same moment and a header whose layout box had to be argued down to fit the
+        band left over -- the scroll well and the title/label collision were both downstream of that. Here
+        the mark and title belong to the card and arrive with it, so the close is one object landing.
+
+        The same header serves the card-only route ("just take me to the card"), where there is no summary
+        to hand off from at all -- one end screen, reached two ways.{% endcomment %}
+        <div class="rcx__card-head">
+            <span class="rcx__card-mark" aria-hidden="true">
+                {% include 'partials/icons/pp_logo.html' with size='h-9 w-9' %}
+            </span>
+            <h2 class="rcx__card-title">Your {{ month_name }} card</h2>
+        </div>
         <div class="rcx__card-frame" id="recap-card-frame"></div>
 
         {% comment %}The grounds, WITH the card. They were briefly in the share section below the fold,
