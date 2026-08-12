@@ -106,6 +106,42 @@ def test_an_empty_archive_with_a_fresh_sync_still_says_it_is_empty(client):
     assert 'Waiting on a sync' not in html
 
 
+def test_an_older_hero_survives_alongside_the_held_card(client):
+    """The case the first pass did not cover: stale, with history, but nothing yet in the most recent
+    month -- because the sync that would bring it across has not run. The held card still has to offer
+    the refresh (that month is why they came), AND the newest month they CAN open still leads the
+    archive. Neither replaces the other."""
+    profile = _hunter(fresh=False)
+    recent_y, recent_m = _prev_month()
+    older = pytz.UTC.localize(datetime(recent_y - 1, 6, 12))
+    _trophy_at(profile, older)                      # nothing at all in the recent month
+
+    html = _page(client, profile)
+
+    assert 'Waiting on a sync' in html, 'the month they came for is not offered'
+    assert f'/recap/{recent_y - 1}/6/' in html, 'the newest openable month lost its hero'
+    assert 'rca-tile--held' not in html, (
+        'a month with no activity is being held in the grid, where it has no row to hold'
+    )
+
+
+def test_the_held_tile_is_named_without_a_label_on_a_generic_span(client):
+    """`aria-label` on a bare <span> maps to role=generic, where naming is ignored -- it read like
+    accessibility work while doing none."""
+    profile = _hunter(fresh=False)
+    _with_two_months(profile)
+
+    html = _page(client, profile)
+
+    # The held tile's own markup: from its class to the end of its stat block. Slicing on the closing
+    # tag pair would depend on this file's own indentation, so bound it on the next tile instead.
+    held = html[html.index('rca-tile--held'):]
+    nxt = held.find('rca-tile', 20)
+    held = held[:nxt if nxt != -1 else len(held)]
+    assert 'aria-label' not in held, 'the generic span is being named by a label AT will ignore'
+    assert 'sr-only' in held, 'the held tile has no accessible description at all'
+
+
 def test_the_held_month_is_still_gated_when_opened_directly(client):
     """Scoping the landing page must not open the month itself: its data is the thing that is incomplete.
     The per-month gate was already correctly scoped to the recent month and stays as it was."""

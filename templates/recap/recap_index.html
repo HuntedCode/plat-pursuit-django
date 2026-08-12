@@ -217,9 +217,13 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
             it would land on a gate and come straight back. A <span>, so it is not focusable and not
             announced as a link; the label carries the reason.{% endcomment %}
             {% if m.locked %}
-            <span class="rca-tile rca-tile--held"
-                  aria-label="{{ m.month_name }} {{ m.year }}, waiting on a profile refresh">
-                <span class="rca-held__flag">Needs a sync</span>
+            <span class="rca-tile rca-tile--held">
+                {% comment %}An sr-only line rather than `aria-label`: this is a bare <span>, which maps
+                to role=generic, and naming a generic element is ignored -- the label read like
+                accessibility work while doing none. The flag is aria-hidden for the same reason the
+                "New" flag is on the tiles below: the sentence already carries it.{% endcomment %}
+                <span class="sr-only">{{ m.month_name }} {{ m.year }}, waiting on a profile refresh</span>
+                <span class="rca-held__flag" aria-hidden="true">Needs a sync</span>
                 <span class="rca-tile__month">{{ m.short_month_name }}</span>
                 <span class="rca-tile__stats">
                     <span class="rca-tile__stat">
