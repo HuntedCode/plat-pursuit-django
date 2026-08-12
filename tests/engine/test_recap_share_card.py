@@ -177,15 +177,22 @@ def test_zero_figures_are_dropped_rather_than_printed():
     assert '>Trophies</div>' in html, 'the headline figure is always shown'
 
 
-def test_the_rarest_find_leads_the_row_rather_than_the_footer():
-    """It is the card's best single highlight and it spent two iterations as plain text in a bottom band
-    with its icon unused -- while the gap between the month and the figures was the largest empty region
-    on the card. It sits there now, in every state, so it is shown exactly once."""
-    html = _rendered()
-    assert html.count('Rarest find') == 1
+def test_the_rarest_find_is_shown_exactly_once():
+    """It has moved three times across this rebuild -- footer text, mid-row with its icon, and now the
+    footer again beside the covers. What must never change is that it appears once: showing it twice was
+    the failure mode each rearrangement risked."""
+    assert _rendered().count('Rarest find') == 1
 
-    # ...above the proof band, not inside it.
-    assert html.index('Rarest find') < html.index('Platinums earned')
+
+def test_the_body_is_two_panels_not_text_on_a_ground():
+    """Two passes arranged this content as bare blocks floating on the ground and shuffled them to plug
+    the gaps; the holes moved rather than closed and it read as scattered. Real surfaces make the space
+    between them a gutter instead of a hole, and they must be EQUAL height or the shorter one reads as
+    unfinished."""
+    html = _rendered()
+    assert html.count('border-radius: 12px') == 2, 'the body is not two panels'
+    # Both stretch: the row is align-items: stretch, not flex-start.
+    assert 'align-items: stretch' in html
 
 
 def test_the_proof_band_drops_the_cover_block_for_a_month_with_no_platinums():
@@ -290,23 +297,12 @@ def test_a_month_with_no_badges_drops_that_block():
     assert [i['label'] for i in ctx['stat_items']] == ['Best day']
 
 
-def test_the_covers_grow_when_there_are_fewer_of_them():
-    """Fixed-width covers left a 630px hole beside a three-platinum month and only just fitted eight, so
-    the band looked half-empty exactly when the month was modest -- the month whose card most needs to
-    look composed."""
-    widths = {}
-    for n in (1, 3, 5, 8):
-        recap = _recap(n)
-        recap.rarest_trophy_data = {}
-        recap.most_active_day = {}
-        recap.activity_calendar = {}
-        recap.badges_earned_count = 0
-        recap.badge_xp_earned = 0
-        ctx = RecapShareImageHTMLView()._build_template_context(recap, _Profile(), 'landscape')
-        widths[n] = ctx['cover_w']
-        assert ctx['cover_h'] == round(ctx['cover_w'] * 4 / 3), 'covers are not 3:4'
+def test_the_footer_strip_fits_every_cover_it_shows():
+    """The covers are a fixed-size row in the footer, so the widest case has to fit beside the rarest find
+    and the stat blocks rather than pushing either off the card."""
+    html = _rendered(platinums_data=[{'game_image': ''}] * 8, platinums_overflow=4)
+    assert html.count('width: 51px; height: 68px') == 8
+    assert '+4' in html
 
-    assert widths[1] > widths[8], f'covers do not scale with count: {widths}'
-    assert widths[3] > widths[5] >= widths[8]
-    # Eight of them, their gaps and the "+N" have to fit the band's left slot.
-    assert widths[8] * 8 + 12 * 7 + 60 <= 878, 'eight covers overflow the slot'
+    # 8 covers, their gaps and the "+N" against the card's 1108px content width.
+    assert 51 * 8 + 9 * 7 + 40 < 1108

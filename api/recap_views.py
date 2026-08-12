@@ -460,16 +460,8 @@ class RecapShareImageHTMLView(APIView):
                 'plat': bool(day.get('platinum_count')),
             })
 
-        # Covers scale to how many there are. Fixed-width covers left a 630px hole beside a three-platinum
-        # month and only just fitted eight, so the band looked half-empty exactly when the month was
-        # modest -- which is the month whose card most needs to look composed.
-        n_plats = len(platinums_with_images)
-        cover_w = 132 if n_plats <= 2 else 116 if n_plats <= 4 else 100 if n_plats <= 6 else 88
-
         return {
             'format': format_type,
-            'cover_w': cover_w,
-            'cover_h': round(cover_w * 4 / 3),
             # `first_day_weekday` is 0=Sunday, matching the Su-first header the grid draws.
             'calendar_offset': range(cal.get('first_day_weekday') or 0),
             'calendar_days': cal_days,
