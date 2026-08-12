@@ -206,6 +206,29 @@ def test_the_picker_is_shared_rather_than_duplicated():
     assert not (root / 'templates' / 'recap' / '_timezone_section.html').exists()
 
 
+def test_the_page_actually_DELIVERS_the_picker(client):
+    """The gap that let the prompt die silently for a week.
+
+    `test_the_picker_is_shared_rather_than_duplicated` checks that the controller REFERENCES
+    `PlatPursuit.TimezonePicker`. Nothing checked that the page loads it. The script tag lived in the
+    timezone utility row's partial; that row was removed as a duplicate control and the tag went with it,
+    so the controller bailed on its own first line (`if (!TZ ...) return`) -- no error, no console
+    warning, just a button that did nothing.
+
+    So this asserts DELIVERY, from the rendered response, and that it arrives before the code that needs
+    it. A reference test cannot see a missing <script>."""
+    profile = _hunter()
+    _trophy_at(profile, _utc(*_prev_month(), 12))
+    client.force_login(profile.user)
+
+    html = client.get(reverse('recap_index')).content.decode()
+
+    assert 'timezone-picker.js' in html, 'the prompt has no picker to call, so it will bail silently'
+    assert html.index('timezone-picker.js') < html.index('PlatPursuit.TimezonePicker'), (
+        'the picker loads after the controller that reads it at parse time'
+    )
+
+
 def test_the_prompt_falls_through_to_the_picker_when_detection_fails():
     """`Intl` can be unavailable or blocked. A confirmation dialog whose only action is "use this" with
     nothing detected is a dead control, so the absence of a guess has to open the full list instead."""

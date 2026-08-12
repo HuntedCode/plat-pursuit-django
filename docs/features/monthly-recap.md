@@ -343,6 +343,23 @@ unconditionally but only recomputes the remainder when a timer is running: the l
 by which point `pointerup` has already released the hold, so there may be no clock left to stop but there
 is always a bar mid-flight to catch.
 
+**The prompt loads its own picker.** `_timezone_modal_js.html` pulls in `timezone-picker.js` itself,
+next to the only thing that uses it. The tag used to live in the timezone utility row's partial; when
+that row was removed as a duplicate control the tag went with it, and the controller then bailed on its
+own first line -- `if (!TZ || !modal) return`. No error, no console warning, just a header button that
+did nothing and a first-run prompt that never appeared, for a week.
+
+The tests missed it because they checked the REFERENCE (`PlatPursuit.TimezonePicker` appears in the
+controller) and not the DELIVERY (a `<script>` for it appears in the response). `test_the_page_actually_
+DELIVERS_the_picker` asserts the second, from the rendered page, including that it arrives first. A
+silent guard over a missing dependency is a broken feature that looks like a working one.
+
+**`timezone_confirmed_at` is in the Django admin**: editable beside the zone it qualifies (clearing it
+re-arms the prompt for that hunter, the one support action anyone would want), a boolean "TZ confirmed"
+column rather than the raw stamp, and an `EmptyFieldListFilter` so the never-answered population -- the
+one the prompt exists for, and not derivable from `user_timezone`, which is non-null with a UTC default
+-- is selectable.
+
 **A stale sync holds back ONE month, not the archive.** The landing page used to render entirely as a
 gate when `check_sync_freshness` failed, so a hunter who had not synced this calendar month lost every
 recap they had ever earned -- including months finished years ago, whose data a sync cannot change. The

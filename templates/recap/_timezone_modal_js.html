@@ -7,7 +7,15 @@ Opening rules, in order:
      has not dismissed it. Both conditions, because they answer different questions: the server flag is
      "have you ever answered" (durable, cross-device) and localStorage is "not right now" (per-device, and
      deliberately so -- a dismissal on a phone should not silence the prompt on a desktop forever).
+
+The picker itself is loaded HERE, next to its only consumer. It used to be pulled in by the timezone
+utility row that sat further down the archive; that row was removed as a duplicate control and the tag
+went with it, which left this controller bailing on its own first line -- `TZ` undefined, `return`, no
+error anywhere. A silent guard over a missing dependency is a broken feature that looks like a working
+one, so the dependency travels with the thing that needs it now.
 {% endcomment %}
+{% load static %}
+<script src="{% static 'js/timezone-picker.js' %}"></script>
 <script>
 (function () {
     const TZ = PlatPursuit.TimezonePicker;

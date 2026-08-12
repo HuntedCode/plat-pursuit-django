@@ -24,7 +24,7 @@ class CustomUserAdmin(UserAdmin):
     add_form = CustomUserCreationForm
 
     # Fields for list view (efficient, searchable)
-    list_display = ('email', 'is_linked_to_profile', 'premium_tier', 'subscription_provider', 'email_prefs_summary', 'user_timezone', 'is_staff', 'is_active', 'date_joined')
+    list_display = ('email', 'is_linked_to_profile', 'premium_tier', 'subscription_provider', 'email_prefs_summary', 'user_timezone', 'timezone_confirmed', 'is_staff', 'is_active', 'date_joined')
     list_select_related = ('profile',)
     list_filter = (
         'is_staff',
@@ -33,6 +33,7 @@ class CustomUserAdmin(UserAdmin):
         'premium_tier',
         'subscription_provider',
         'user_timezone',
+        ('timezone_confirmed_at', admin.EmptyFieldListFilter),
         PSNLinkedFilter,
     )
     search_fields = ('email', 'profile__psn_username', 'profile__display_psn_username')
@@ -41,7 +42,11 @@ class CustomUserAdmin(UserAdmin):
 
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        ('Personal Info', {'fields': ('user_timezone', 'premium_tier', 'browse_defaults')}),
+        ('Personal Info', {
+            'fields': ('user_timezone', 'timezone_confirmed_at', 'premium_tier', 'browse_defaults'),
+            'description': 'Clearing "timezone confirmed at" re-arms the first-run timezone prompt '
+                           'on the recap for this user. The zone itself is what months are bucketed by.',
+        }),
         ('Subscription', {'fields': ('subscription_provider', 'stripe_customer_id', 'paypal_subscription_id', 'paypal_cancel_at')}),
         ('Email Preferences', {'fields': ('email_preferences',)}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
@@ -54,6 +59,17 @@ class CustomUserAdmin(UserAdmin):
             'fields': ('email', 'user_timezone', 'password1', 'password2'),
         }),
     )
+
+    @admin.display(boolean=True, ordering='timezone_confirmed_at', description='TZ confirmed')
+    def timezone_confirmed(self, obj):
+        """Whether the hunter has ever answered, which is the question the stamp exists to answer.
+
+        `user_timezone` is non-null with a UTC default, so its VALUE cannot distinguish a London user who
+        never touched it from one who deliberately chose UTC. Showing the raw datetime in the list would
+        be noise; showing the boolean makes the never-answered population visible at a glance, and the
+        filter beside it makes them selectable.
+        """
+        return obj.timezone_confirmed_at is not None
 
     class Meta:
         model = CustomUser
