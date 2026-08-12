@@ -214,7 +214,11 @@
 .rcx.is-manual .rcx__hint { opacity: 0; }
 
 .rcx__top {
-    position: relative; display: flex; align-items: center; justify-content: space-between;
+    /* Above the card scene. `.rcx__card` is z-index 3 and takes `inset: 0` in card-only mode, so it
+       covered this bar entirely -- the X was on screen, looked live, and every click on it landed on the
+       card instead. The chrome outranks the content it frames; verified with `elementFromPoint`. */
+    position: relative; z-index: 4;
+    display: flex; align-items: center; justify-content: space-between;
     gap: 0.75rem; padding: 0.75rem 1rem;
 }
 .rcx__who { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--pp-text-dim); min-width: 0; }
@@ -470,24 +474,30 @@
      * entrance. `forwards` holds the end state so it does not snap back. */
     animation: rcxLift 1.15s cubic-bezier(0.32, 0.72, 0.24, 1) forwards;
     will-change: transform;
+    /* The end screen is TWO BANDS: this becomes the header over the card scene's bottom 62%. Without the
+       constraint the slide kept the whole stage and was merely scaled, so its (invisible) lower half sat
+       behind the card and its visible half floated in a void -- roughly 80px of dead air between the
+       title and the card, with the summary's own chips hidden rather than dismissed. */
+    bottom: 62%;
+    justify-content: center;
 }
 @keyframes rcxLift {
     from { transform: none; }
-    to   { transform: translate3d(0, -30%, 0) scale(0.58); }
+    /* A short settle, not a big shrink. The band above is what positions the header now; the scale only
+       has to take the summary's display type down to header size. */
+    to   { transform: translate3d(0, -6%, 0) scale(0.82); }
 }
+/* Out of the LAYOUT, not just faded. Fading alone left them holding the slide's full height, which is
+   what put a void under the title -- the summary is meant to reduce to its header, and a reduction that
+   keeps its original footprint is just a hidden thing taking up room. */
 .rcx.is-ending .recap-slide.active .rcp__body,
-.rcx.is-ending .recap-slide.active .rcp__cue {
-    opacity: 0;
-    transition: opacity 0.55s ease;
-}
+.rcx.is-ending .recap-slide.active .rcp__cue { display: none; }
 @media (prefers-reduced-motion: reduce) {
     /* Still recomposes -- it is the layout of the end screen, not decoration -- just without the travel. */
     .rcx.is-ending .recap-slide.active {
         animation: none;
-        transform: translate3d(0, -30%, 0) scale(0.58);
+        transform: translate3d(0, -6%, 0) scale(0.82);
     }
-    .rcx.is-ending .recap-slide.active .rcp__body,
-    .rcx.is-ending .recap-slide.active .rcp__cue { transition: none; }
 }
 
 /* Card-only: the stage opened straight at its ending, with the deck's chrome dropped. There is no deck

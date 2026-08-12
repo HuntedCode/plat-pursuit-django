@@ -780,3 +780,40 @@ def test_the_download_asks_for_the_ground_being_shown(js):
         'the download key is not updated from the swatch'
     )
     assert 'theme=${this.currentBackground}' in code or 'encodeURIComponent(this.currentBackground)' in code
+
+
+def test_the_chrome_outranks_the_card_scene():
+    """`.rcx__card` is z-index 3 and takes `inset: 0` in card-only mode, so it covered the top bar
+    entirely: the close X was on screen, looked live, and every click on it landed on the card. Confirmed
+    with `elementFromPoint` -- the hit target was `recap-card` and the stage stayed open."""
+    css = _css()
+    top = re.search(r'\.rcx__top \{([^}]*)\}', css)
+    card = re.search(r'\.rcx__card \{([^}]*)\}', css)
+    assert top and card
+
+    def z(block):
+        m = re.search(r'z-index:\s*(\d+)', block)
+        return int(m.group(1)) if m else 0
+
+    assert z(top.group(1)) > z(card.group(1)), (
+        'the card scene sits over the bar that holds the close button'
+    )
+
+
+def test_the_ending_reduces_the_summary_instead_of_hiding_it_behind_the_card():
+    """The summary is meant to become a header the card rises beneath. Fading its body left it holding the
+    slide's full height, so the visible half floated above ~80px of dead air and the invisible half sat
+    behind the card -- the chips were not dismissed, just covered.
+
+    Measured after the fix: summary 103-346, card scene from 342. Two bands that meet, rather than one
+    element scaled on top of another."""
+    css = _css()
+    block = css[css.index('.rcx.is-ending .recap-slide.active {'):]
+    block = block[:block.index('}')]
+    assert 'bottom: 62%' in block, 'the summary still occupies the whole stage during the ending'
+
+    hidden = re.search(r'\.rcx\.is-ending \.recap-slide\.active \.rcp__body,\s*'
+                       r'\.rcx\.is-ending \.recap-slide\.active \.rcp__cue \{([^}]*)\}', css)
+    assert hidden and 'display: none' in hidden.group(1), (
+        'the summary body only fades, so it keeps its footprint and leaves a void under the title'
+    )

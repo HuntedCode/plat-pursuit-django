@@ -348,6 +348,17 @@ that and the timezone now, so the entrance's aside links there instead.
 
 Load-bearing details, each of which was a bug first:
 
+- **The chrome outranks the card scene.** `.rcx__card` is `z-index: 3` and takes `inset: 0` in card-only
+  mode, so it covered `.rcx__top` entirely -- the close X was on screen, looked live, and every click on
+  it landed on the card while the stage stayed open. `elementFromPoint` on the button returned
+  `recap-card`. The bar carries `z-index: 4` now.
+- **The ending is two BANDS, not one element scaled over another.** The summary is meant to reduce to a
+  header the card rises beneath. Its body was only faded, so it kept the slide's full height: the visible
+  half floated above ~80px of dead air and the invisible half sat behind the card -- the chips were never
+  dismissed, just covered. The slide is constrained to `bottom: 62%` during the ending (the card scene's
+  own band) and the body leaves the LAYOUT rather than fading. Measured after: summary 103-346, card scene
+  from 342 -- two bands that meet.
+
 - **A component stylesheet outranks Tailwind's `hidden`.** Utilities live in a layer and these component
   files do not, so an unlayered `display: flex` beats `.hidden { display: none }` whatever the source
   order. Three classes needed guards and each failed differently:
