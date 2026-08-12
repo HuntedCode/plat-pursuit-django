@@ -25,11 +25,12 @@ The frontend renders slides from Django template partials fetched in ONE request
 | `core/services/email_service.py` | Reusable HTML email sender via SendGrid |
 | `static/js/monthly-recap.js` | MonthlyRecapManager: slides, animations, quizzes, themes (~1,100 lines) |
 | `templates/recap/monthly_recap.html` | Main slide presentation page |
-| `templates/recap/recap_index.html` | Month picker + sync gate |
+| `templates/recap/recap_index.html` | **The landing page**: latest month + the archive, by year |
 | `templates/recap/partials/slides/` | 20 slide templates, all built on the `.rcp` shell |
 | `components/badge_medallion.html` | Composed by both badge slides (their payloads are frame dicts) |
 | `static/css/components/recap-deck.css` | Motion, activity ramp, the `.rcp` slide shell + its parts |
 | `static/css/components/recap-stage.css` | The entrance cover and the full-screen stage (`.rcx`) |
+| `static/css/components/recap-archive.css` | The landing page: hero, month tiles, timezone row |
 | `static/js/utils.js` | `PlatPursuit.takeover()` -- scroll lock, page-recede, focus trap, Escape |
 | `templates/recap/partials/recap_share_card.html` | Share card HTML (landscape/portrait) |
 | `templates/emails/monthly_recap.html` | Non-spoiler teaser email with CTA |
@@ -104,6 +105,41 @@ Immutable pattern: once `is_finalized=True`, regeneration is skipped even with `
 2. API maps each `DECK` beat to a Django template partial in `recap/partials/slides/` (`SLIDE_TEMPLATES`; `test_recap_deck_order` pins that the two sets match exactly)
 3. Flavor text system: `SLIDE_FLAVOR_TEXT` dict with random selection per slide type
 4. The deck is a data-driven `DECK` of 20 `RecapBeat`s, each with a `when` condition, not an append sequence. Order and membership live in `monthly_recap_service.py`; `test_recap_deck_order` pins it.
+
+### The landing page (`/recap/`)
+
+**It used to be a redirect.** `RecapIndexView.get` bounced you into your most recent month whenever a
+recap existed, falling back to the current one, so the page only ever RENDERED for a hunter with no
+trophy activity at all. Two consequences, both of which are why this got rebuilt:
+
+- the archive was unreachable from its own URL, the one the nav and footer both point at;
+- a **second** month picker (a 12-cell year calendar) had to live at the bottom of the recap page to
+  compensate -- two pickers, drifting independently, neither at the address people were sent to.
+
+It leads now, and it is shaped as a **record** rather than a picker: the latest month as an object you
+can pick up, then every month you have earned in, stacked by year, each carrying what it actually held.
+The duplicate calendar and its `month-selector.js` are gone.
+
+| Piece | Notes |
+|---|---|
+| Hero | The newest openable month. Trophy total counts in; Begin / Watch it again reflects `has_been_viewed`. |
+| Archive | Free content (no outer card) per the stacked rule. `staggerReveal` on the same grammar as the browse grids. |
+| Tile | Month, trophy count, platinum count, and whether it has been watched. |
+| Timezone | A quiet utility row. It decides which month a trophy falls into, so it stays on the page it governs. |
+
+Three DB-aggregated reads back the whole page, and none of them scale with how much history a hunter has:
+
+- `months_with_activity` -- which months exist (`TruncMonth` in the hunter's own zone).
+- `month_activity_totals` -- the same grouping plus trophy type, giving each tile its numbers. The count
+  was **already being computed and discarded**: `months_with_activity` runs `Count('id')` purely to force
+  the GROUP BY. Adding the type turns ~12 rows a year into ~48.
+- `months_already_seen` -- one bounded read. Absence of a `MonthlyRecap` row IS "unseen", because rows
+  are created BY opening a month, so nothing needs joining.
+
+`get_or_generate_recap` is deliberately NOT called here. Generating a recap for every month someone
+merely glanced at is work nobody asked for, and on a whale it is the expensive kind; opening a month
+still generates it. `test_recap_archive_page` pins the render, the figures, and that the query count does
+not grow with the number of months.
 
 ### Presentation: the Entrance and the Stage
 

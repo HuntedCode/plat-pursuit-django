@@ -31,6 +31,7 @@
 @import "./components/claim-ceremony.css";
 @import "./components/game-detail.css";
 @import "./components/plat-cards.css";
+@import "./components/recap-archive.css";
 @import "./components/recap-deck.css";
 @import "./components/recap-stage.css";
 @plugin "daisyui";
@@ -508,17 +509,6 @@
 }
 #equipped-title-name.title-fade-out {
   opacity: 0;
-}
-
-/* Premium-locked month button hover effect for recap calendar */
-.premium-locked:hover {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.premium-locked.btn-ghost {
-  background-color: rgba(255, 193, 7, 0.1);
-  border: 1px dashed rgba(255, 193, 7, 0.5);
 }
 
 /* Extend DaisyUI text-rotate to support 7-10 items */

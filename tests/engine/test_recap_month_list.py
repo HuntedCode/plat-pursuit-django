@@ -118,58 +118,52 @@ def test_the_current_month_is_not_listed_but_past_months_are():
     assert (now.year, now.month) not in listed
 
 
-def test_the_flat_list_and_the_calendar_agree_for_a_hunter_west_of_utc():
+def test_the_archive_and_the_flat_list_agree_for_a_hunter_west_of_utc():
     """Two month lists render across the recap surfaces, and they must describe the same months.
 
     Deliberately a Los Angeles hunter whose first trophy is in the opening hours of a UTC month -- the
-    exact case where they used to disagree. `months_with_activity` bucketed locally (February) while
-    `earliest_month` was read straight off the UTC value (March), so the flat list offered February
-    while the calendar marked it `is_before_first_trophy` and disabled it. A UTC fixture on the 15th
-    cannot see that at all."""
+    exact case where they used to disagree. `months_with_activity` bucketed locally (February) while the
+    calendar's `earliest_month` was read straight off the UTC value (March), so the flat list offered
+    February while the calendar disabled it. A UTC fixture on the 15th cannot see that at all.
+
+    The 12-month calendar builder is gone (its picker was a duplicate of the landing page's), so this now
+    pins the ARCHIVE -- which shares the same local-time basis through `months_with_activity`, and is
+    therefore the thing that can drift the same way."""
     profile = _hunter(tz='America/Los_Angeles')
     _trophy_at(profile, _utc(2024, 3, 1, 3))     # 2024-02-29 19:00 in LA
     _trophy_at(profile, _utc(2024, 9, 2))
 
     flat = {(m['year'], m['month']) for m in MonthlyRecapService.get_available_months(profile)}
-    cal = MonthlyRecapService.get_available_months_by_year(profile)
-    calendar_has_data = {
-        (y['year'], m['month'])
-        for y in cal['years'] for m in y['months'] if m['has_data']
-    }
+    archive = MonthlyRecapService.get_archive(profile)
+    listed = {(m['year'], m['month']) for y in archive['years'] for m in y['months']}
 
     assert (2024, 2) in flat, 'the local month, not the UTC one'
-    assert flat == calendar_has_data
-    # ...and the calendar must not disable the month it just said has data.
-    feb = next(m for y in cal['years'] if y['year'] == 2024
-               for m in y['months'] if m['month'] == 2)
-    assert feb['is_before_first_trophy'] is False
+    assert flat == listed
 
 
-def test_the_calendar_reaches_back_to_a_local_year_the_utc_date_would_hide():
-    """The sharper half of the same bug: a first trophy on 1 January UTC belongs to the PREVIOUS
-    December locally, and the calendar's year range started at the UTC year -- so that December had no
-    cell at all while the flat list offered it."""
+def test_the_archive_reaches_back_to_a_local_year_the_utc_date_would_hide():
+    """The sharper half of the same bug: a first trophy on 1 January UTC belongs to the PREVIOUS December
+    locally, and a year range started from the UTC year hid that December entirely."""
     profile = _hunter(tz='America/Los_Angeles')
     _trophy_at(profile, _utc(2024, 1, 1, 3))     # 2023-12-31 19:00 in LA
 
-    cal = MonthlyRecapService.get_available_months_by_year(profile)
-    years = {y['year'] for y in cal['years']}
+    archive = MonthlyRecapService.get_archive(profile)
+    years = {y['year'] for y in archive['years']}
 
-    assert 2023 in years, 'the local year must be reachable in the calendar'
-    dec = next(m for y in cal['years'] if y['year'] == 2023
+    assert 2023 in years, 'the local year must be reachable in the archive'
+    dec = next(m for y in archive['years'] if y['year'] == 2023
                for m in y['months'] if m['month'] == 12)
-    assert dec['has_data'] is True
+    assert dec['total'] == 1
 
 
-def test_the_calendar_carries_no_premium_flag():
+def test_the_archive_carries_no_premium_flag():
     """Nothing is premium-required any more; leaving the key would let a template keep gating on it."""
     profile = _hunter()
     _trophy_at(profile, _utc(2024, 3, 15))
 
-    cal = MonthlyRecapService.get_available_months_by_year(profile)
-    every_month = [m for y in cal['years'] for m in y['months']]
+    every_month = [m for y in MonthlyRecapService.get_archive(profile)['years'] for m in y['months']]
 
-    assert every_month, 'calendar built no months'
+    assert every_month, 'archive built no months'
     assert not any('is_premium_required' in m for m in every_month)
 
 

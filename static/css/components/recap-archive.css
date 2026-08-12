@@ -1,0 +1,159 @@
+/* ================================================================
+ * Recap Archive -- the landing page at /recap/
+ *
+ * This page used to be a redirect. `RecapIndexView.get` bounced you into your latest month whenever a
+ * recap existed, so the only hunters who ever saw it were the ones with no trophies to show -- and a
+ * second month picker had to live at the bottom of the recap page to make history reachable at all.
+ *
+ * It leads now. The shape is a RECORD, not a picker: the latest month as an object you can pick up
+ * (`.rca-hero`), then every month you have earned in stacked under it by year, each one carrying what it
+ * actually held. A grid of bare month names is what made the old page read as a list of dates.
+ *
+ * Structure follows the site-wide stacked rule: chrome cards stack (header, hero, timezone), and the
+ * archive itself is FREE content -- no outer card wrapped around the grid.
+ * ================================================================ */
+
+/* ---- The latest month --------------------------------------------------------------------------- */
+
+/* One accent for the whole surface. Declared on BOTH roots because they are siblings, not nested: when
+   this lived only on `.rca-hero`, every `var(--rca-accent)` in a tile resolved to nothing, and a
+   `color-mix()` with an invalid argument drops the whole declaration -- so the "not watched" month label
+   silently kept the ordinary dim colour and the state it existed to signal never appeared. */
+.rca-hero,
+.rca-grid { --rca-accent: var(--pp-primary); }
+
+.rca-hero {
+    position: relative;
+    overflow: hidden;
+}
+/* Ambient bloom, anchored to the corner the eye lands on last. `radial-gradient` on a pseudo-element
+   rather than a `filter` -- this box is page-sized on mobile and filters on page-sized elements are the
+   documented mobile-GPU trap (motion-patterns Gotchas). */
+.rca-hero::after {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(120% 90% at 88% 8%,
+                color-mix(in oklab, var(--rca-accent) 17%, transparent), transparent 62%);
+}
+.rca-hero > * { position: relative; z-index: 1; }
+
+.rca-hero__eyebrow {
+    font-size: 0.65rem; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--rca-accent) 78%, var(--pp-text-mute));
+}
+.rca-hero__month {
+    font-family: var(--pp-font-display, ui-sans-serif, system-ui, sans-serif);
+    font-weight: 800; line-height: 0.92; letter-spacing: -0.02em;
+    font-size: clamp(2.1rem, 7vw, 3.4rem);
+}
+.rca-hero__year { color: var(--pp-text-mute); font-weight: 700; }
+
+/* "New" is the one thing on this page that earns a colour of its own: it is the difference between a
+   thing you have and a thing waiting for you. */
+.rca-new {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    font-size: 0.6rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 0.2rem 0.5rem; border-radius: 999px;
+    color: var(--rca-accent);
+    background: color-mix(in oklab, var(--rca-accent) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--rca-accent) 42%, transparent);
+}
+.rca-new__dot {
+    width: 5px; height: 5px; border-radius: 50%; background: currentColor;
+    box-shadow: 0 0 7px currentColor;
+}
+
+/* ---- The archive -------------------------------------------------------------------------------- */
+
+/* Year rule: the number, then a hairline that carries the eye across to the count. Cheaper than a card
+   and it keeps the grid below it as free content. */
+.rca-year {
+    display: flex; align-items: baseline; gap: 0.75rem;
+    margin: 1.5rem 0 0.75rem;
+}
+.rca-year:first-child { margin-top: 0; }
+.rca-year__n { font-size: 1.15rem; color: var(--pp-text-dim); }
+.rca-year__rule {
+    flex: 1; height: 1px; min-width: 1rem;
+    background: linear-gradient(90deg, var(--pp-border), transparent);
+}
+.rca-year__count {
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--pp-text-mute); white-space: nowrap;
+}
+
+.rca-grid { display: grid; gap: 0.6rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.rca-tile {
+    position: relative;
+    display: flex; flex-direction: column; gap: 0.15rem;
+    padding: 0.85rem 0.9rem 0.95rem;
+    border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    text-align: left;
+    /* Glow on hover, never scale -- house rule. Colour and shadow only, so nothing reflows and nothing
+       gets promoted to its own layer for a hover that lasts 200ms. */
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.rca-tile:hover {
+    background: var(--pp-bg-2);
+    border-color: color-mix(in oklab, var(--rca-accent) 45%, var(--pp-border));
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--rca-accent) 22%, transparent),
+                0 10px 26px -18px rgba(0, 0, 0, 0.9);
+}
+.rca-tile:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px;
+}
+/* Unwatched months carry the accent on their edge so the ones still owed to you read at a glance,
+   without a second badge competing with the number for the tile's attention. */
+.rca-tile--new {
+    border-color: color-mix(in oklab, var(--rca-accent) 38%, var(--pp-border));
+}
+.rca-tile--new::before {
+    content: '';
+    position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    box-shadow: inset 3px 0 0 -1px color-mix(in oklab, var(--rca-accent) 70%, transparent);
+}
+
+.rca-tile__month {
+    font-size: 0.7rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--pp-text-dim);
+}
+.rca-tile--new .rca-tile__month { color: color-mix(in oklab, var(--rca-accent) 70%, var(--pp-text)); }
+.rca-tile__n { color: var(--pp-text); }
+.rca-tile__unit {
+    font-size: 0.68rem; font-weight: 600; color: var(--pp-text-mute);
+    margin-top: -0.1rem;
+}
+.rca-tile__plats {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    margin-top: 0.45rem;
+    font-size: 0.68rem; font-weight: 700;
+    color: var(--pp-rarity-uncommon);
+}
+.rca-tile__plats svg { width: 12px; height: 12px; }
+/* Held rather than omitted: without it the tiles in a row sit at different heights and the grid stops
+   reading as a grid. */
+.rca-tile__plats--none { visibility: hidden; }
+
+/* ---- Timezone ----------------------------------------------------------------------------------- */
+
+/* Deliberately quiet. It matters (it decides which month a trophy falls into) but it is a setting, and a
+   setting should not compete with the recaps for the eye. */
+.rca-tz { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 0.85rem; }
+.rca-tz__ico { width: 1.05rem; height: 1.05rem; color: var(--pp-text-mute); flex: none; }
+.rca-tz__label { font-size: 0.8rem; color: var(--pp-text-dim); }
+.rca-tz__zone { font-weight: 700; color: var(--pp-text); }
+.rca-tz__note { font-size: 0.7rem; color: var(--pp-text-mute); flex-basis: 100%; }
+
+@media (min-width: 768px) {
+    .rca-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+    .rca-year { margin: 2rem 0 1rem; }
+    .rca-year__n { font-size: 1.35rem; }
+    .rca-tile { padding: 1rem 1.1rem 1.15rem; }
+    .rca-tz__note { flex-basis: auto; margin-left: auto; }
+}
+@media (min-width: 1024px) {
+    .rca-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

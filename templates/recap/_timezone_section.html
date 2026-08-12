@@ -1,24 +1,33 @@
-<!-- Timezone Setting -->
-<div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral" id="timezone-section">
-    <div class="card-body p-3 md:p-5 lg:p-7">
-        <div class="flex flex-col lg:flex-row items-start lg:items-center gap-3 lg:gap-4">
-            <div class="flex items-center gap-3 w-full lg:w-auto">
-                <div class="flex items-center gap-2 shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span class="font-semibold text-sm">Timezone</span>
-                </div>
-                <select id="recap-timezone-select"
-                        class="select select-bordered select-sm flex-1 lg:w-72 lg:flex-none"
-                        data-current="{{ user_timezone }}">
-                </select>
-            </div>
-            <p class="text-xs text-base-content/60 lg:ml-auto max-w-md pr-1">
-                Your timezone determines which month trophies fall into. Changing it will regenerate your recaps.
-                <a href="{% url 'settings' %}" class="link link-primary text-xs">Manage in Settings</a>
+{% comment %}
+Timezone, as a quiet utility row.
+
+It decides which month a trophy falls into (a trophy earned at 23:00 on the 31st belongs to the month the
+hunter experienced it in, not the UTC one), so it has to be findable from the archive it governs. But it
+is a SETTING, and the previous treatment gave it the same weight as the recaps themselves: a full card
+with a bordered select, sitting directly under the page header and above the thing people came for.
+
+The `#recap-timezone-select` id and its `data-current` are the contract with _timezone_section_js.html,
+which fills the options and handles the change.
+{% endcomment %}
+<section class="card bg-base-200/60 border border-base-300 mt-6 md:mt-8" id="timezone-section">
+    <div class="card-body p-3 md:p-4">
+        <div class="rca-tz">
+            <svg class="rca-tz__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+            </svg>
+            <label class="rca-tz__label" for="recap-timezone-select">
+                Months are counted in <span class="rca-tz__zone">{{ user_timezone }}</span>
+            </label>
+            <select id="recap-timezone-select"
+                    class="select select-bordered select-sm w-full sm:w-auto sm:min-w-64"
+                    data-current="{{ user_timezone }}">
+            </select>
+            <p class="rca-tz__note">
+                Changing it rebuilds your recaps.
+                <a href="{% url 'settings' %}" class="link link-hover text-primary">Manage in settings</a>
             </p>
         </div>
         <div id="tz-hint-container"></div>
     </div>
-</div>
+</section>

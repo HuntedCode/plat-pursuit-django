@@ -995,6 +995,122 @@ class MonthlyRecapService:
         return {(dt.year, dt.month) for dt in rows if dt}
 
     @classmethod
+    def get_archive(cls, profile):
+        """The whole openable history, grouped by year, with what each month actually held.
+
+        One structure for the landing page rather than three lookups the template has to reconcile. It
+        costs three DB-aggregated reads total, none of which scale with the size of the return: the
+        activity buckets, their per-type totals, and the rows for months already watched.
+
+        The newest month is pulled out as `latest` because the page leads with it -- it is the one almost
+        everybody came for, and burying it in a grid of twelve makes them hunt for it.
+
+        Returns:
+            {
+                'latest': {...month...} | None,
+                'years': [{'year': 2026, 'months': [{...}, ...]}, ...],   # newest first, both levels
+                'month_count': int,
+                'year_count': int,
+            }
+        where a month is {year, month, month_name, short_month_name, total, platinums, seen, is_latest}.
+        """
+        user_tz = cls._resolve_user_tz(profile)
+        now_local = timezone.now().astimezone(user_tz)
+        current = (now_local.year, now_local.month)
+
+        # The in-progress month is excluded for the same reason the picker never offered it: the page
+        # refuses to open it, so listing it is a door that does not open.
+        active = sorted(
+            (ym for ym in cls.months_with_activity(profile, user_tz=user_tz) if ym != current),
+            reverse=True,
+        )
+        if not active:
+            return {'latest': None, 'years': [], 'month_count': 0, 'year_count': 0}
+
+        totals = cls.month_activity_totals(profile, user_tz=user_tz)
+        seen = cls.months_already_seen(profile)
+
+        def _month(year, month):
+            t = totals.get((year, month), {'total': 0, 'platinums': 0})
+            return {
+                'year': year,
+                'month': month,
+                'month_name': calendar.month_name[month],
+                'short_month_name': calendar.month_abbr[month],
+                'total': t['total'],
+                'platinums': t['platinums'],
+                'seen': (year, month) in seen,
+                'is_latest': (year, month) == active[0],
+            }
+
+        years = []
+        for year, month in active:
+            if not years or years[-1]['year'] != year:
+                years.append({'year': year, 'months': []})
+            years[-1]['months'].append(_month(year, month))
+
+        return {
+            'latest': _month(*active[0]),
+            'years': years,
+            'month_count': len(active),
+            'year_count': len(years),
+        }
+
+    @classmethod
+    def month_activity_totals(cls, profile, user_tz=None):
+        """Per-month trophy totals and platinum counts, for the archive tiles.
+
+        `months_with_activity` already runs `Count('id')` purely to force the GROUP BY and then discards
+        the number. Adding the trophy type to the grouping turns roughly twelve rows a year into forty
+        eight and gives the tiles something to say -- a picker made of bare month names is what makes the
+        page read as a list of dates rather than a record of a year.
+
+        Whale-safe by the same rule as its sibling: Postgres does the aggregation and returns tens of
+        rows, never the trophies. Do NOT be tempted to fetch the rows and tally types in Python; a 250k
+        library is a cheap index scan here and hundreds of MB there.
+
+        Returns: {(year, month): {'total': int, 'platinums': int}}
+        """
+        from trophies.models import EarnedTrophy
+
+        user_tz = user_tz or cls._resolve_user_tz(profile)
+        rows = (
+            EarnedTrophy.objects
+            .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+            .annotate(bucket=TruncMonth('earned_date_time', tzinfo=user_tz))
+            .values('bucket', 'trophy__trophy_type')
+            .annotate(n=Count('id'))
+            .values_list('bucket', 'trophy__trophy_type', 'n')
+        )
+
+        totals = {}
+        for bucket, trophy_type, n in rows:
+            if not bucket:
+                continue
+            entry = totals.setdefault((bucket.year, bucket.month), {'total': 0, 'platinums': 0})
+            entry['total'] += n
+            if trophy_type == 'platinum':
+                entry['platinums'] += n
+        return totals
+
+    @classmethod
+    def months_already_seen(cls, profile):
+        """The (year, month)s this hunter has already watched.
+
+        A month with no stored MonthlyRecap row has by definition never been opened, so absence IS
+        "unseen" and there is no need to join anything: one bounded read of the rows that do exist.
+        """
+        from trophies.models import MonthlyRecap
+
+        return {
+            (year, month)
+            for year, month, seen in MonthlyRecap.objects
+            .filter(profile=profile, has_been_viewed=True)
+            .values_list('year', 'month', 'has_been_viewed')
+            if seen
+        }
+
+    @classmethod
     def get_available_months(cls, profile):
         """
         Every month this hunter can open a recap for, newest first.
@@ -1025,123 +1141,6 @@ class MonthlyRecapService:
         ]
 
         return result
-
-    @classmethod
-    def get_available_months_by_year(cls, profile):
-        """
-        Get available months grouped by year for calendar display.
-
-        Returns year-grouped structure with month metadata for rendering
-        a calendar-style month selector.
-
-        Args:
-            profile: Profile instance
-            (no gating argument: every month with activity is openable by any linked hunter)
-
-        Returns:
-            {
-                'years': [
-                    {
-                        'year': 2026,
-                        'months': [
-                            {
-                                'month': 1,
-                                'month_name': 'January',
-                                'short_month_name': 'Jan',
-                                'has_data': True,
-                                'is_current': False,
-                                'is_recent': True,  # Most recent completed month
-                                'is_future': False
-                            },
-                            # ... 11 more months
-                        ]
-                    },
-                    # ... more years back to earliest_year
-                ],
-                'earliest_year': 2024,
-                'current_year': 2026,
-                'current_month': 2,
-                'recent_year': 2026,
-                'recent_month': 1
-            }
-        """
-        # Get user timezone and current datetime
-        user_tz = cls._resolve_user_tz(profile)
-        now_local = timezone.now().astimezone(user_tz)
-        current_year = now_local.year
-        current_month = now_local.month
-
-        # Calculate most recent completed month (previous calendar month)
-        if current_month == 1:
-            recent_year, recent_month = current_year - 1, 12
-        else:
-            recent_year, recent_month = current_year, current_month - 1
-
-        # Which months this hunter can actually open. Trophy activity, NOT stored MonthlyRecap rows:
-        # a row is created BY opening a month, so sourcing the picker from rows meant a month with no
-        # row was never offered, never opened, and so never got a row. See `months_with_activity`.
-        active_months = cls.months_with_activity(profile, user_tz=user_tz)
-
-        # Earliest month, derived from `active_months` -- the SAME local-time source as has_data below.
-        #
-        # This used to read `first_trophy.earned_date_time.year/.month` straight off the UTC value while
-        # active_months was bucketed in local time, and the two disagreed for any hunter west of UTC
-        # whose first trophy landed in the opening hours of a UTC month. A Los Angeles hunter whose first
-        # trophy was 2024-03-01 03:00Z earned it on 2024-02-29 locally: the flat list offered February
-        # while the calendar marked it `is_before_first_trophy` and disabled it. Worse, if that first
-        # trophy fell on 1 January UTC the whole preceding local year was never even emitted by the year
-        # range below, so December vanished from the calendar entirely while the flat list listed it.
-        if active_months:
-            earliest_year, earliest_month = min(active_months)
-        elif profile.created_at:
-            created_local = profile.created_at.astimezone(user_tz)
-            earliest_year, earliest_month = created_local.year, created_local.month
-        else:
-            earliest_year, earliest_month = current_year, 1
-
-        # Build year-by-year structure
-        years_data = []
-        month_names = [calendar.month_name[i] for i in range(1, 13)]
-        short_month_names = [calendar.month_abbr[i] for i in range(1, 13)]
-
-        for year in range(current_year, earliest_year - 1, -1):
-            months = []
-            for month in range(1, 13):
-                has_data = (year, month) in active_months
-                is_current = (year == current_year and month == current_month)
-                is_recent = (year == recent_year and month == recent_month)
-                is_future = (year > current_year or
-                            (year == current_year and month > current_month))
-
-                # Check if month is before first earned trophy
-                is_before_first_trophy = (year == earliest_year and month < earliest_month)
-
-
-                months.append({
-                    'month': month,
-                    'month_name': month_names[month - 1],
-                    'short_month_name': short_month_names[month - 1],
-                    'has_data': has_data,
-                    'is_current': is_current,
-                    'is_recent': is_recent,
-                    'is_future': is_future,
-                    'is_before_first_trophy': is_before_first_trophy,
-                })
-
-            years_data.append({
-                'year': year,
-                'months': months,
-            })
-
-        return {
-            'years': years_data,
-            'earliest_year': earliest_year,
-            'earliest_month': earliest_month,
-            'current_year': current_year,
-            'current_month': current_month,
-            'recent_year': recent_year,
-            'recent_month': recent_month,
-        }
 
     @classmethod
     @transaction.atomic

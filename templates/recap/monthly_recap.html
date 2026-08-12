@@ -185,78 +185,10 @@ PlatPursuit.takeover. {% endcomment %}
         <h2 class="text-sm md:text-base font-bold">More Months & Settings</h2>
     </div>
 
-    {# Month Selector Calendar (Premium Feature) #}
-    {% if calendar_data.years %}
-    <div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral" id="month-calendar-card">
-        <div class="card-body p-3 md:p-5 lg:p-7">
-        <!-- Section Header -->
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold">Select a Month</h3>
-        </div>
-
-        <!-- Year Navigation Header -->
-        <div class="flex items-center justify-between mb-4">
-            <button id="prev-year-btn"
-                    class="btn btn-sm btn-circle btn-ghost"
-                    aria-label="Previous year"
-                    {% if calendar_data.earliest_year == calendar_data.current_year %}disabled{% endif %}>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                </svg>
-            </button>
-
-            <h3 id="calendar-year-display" class="text-xl font-semibold">{{ year }}</h3>
-
-            <button id="next-year-btn"
-                    class="btn btn-sm btn-circle btn-ghost"
-                    aria-label="Next year"
-                    {% if calendar_data.current_year == year %}disabled{% endif %}>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                </svg>
-            </button>
-        </div>
-
-        <!-- 12-Month Grid Container -->
-        <div id="month-calendar-container">
-            {% for year_data in calendar_data.years %}
-            <div class="grid grid-cols-3 md:grid-cols-6 gap-2 year-calendar"
-                 data-year="{{ year_data.year }}"
-                 style="display: {% if year_data.year == year %}grid{% else %}none{% endif %};">
-
-                {% for month_data in year_data.months %}
-                {% comment %}`not has_data` is part of the gate, not decoration: a month the hunter earned
-                no trophies in has no recap to open, and offering it lands them on "No Activity This
-                Month". The aria-label below has always claimed to cover that case; the condition never
-                did.{% endcomment %}
-                {% if month_data.is_future or month_data.is_current or month_data.is_before_first_trophy or not month_data.has_data %}
-                    {# Disabled button for future months, current month (in-progress), or months before first trophy #}
-                    <button class="btn btn-sm btn-ghost opacity-50"
-                            disabled
-                            aria-label="{{ month_data.month_name }} {{ year_data.year }} - {% if month_data.is_future %}Future month{% elif month_data.is_current %}Current month (in-progress){% elif month_data.is_before_first_trophy %}Before first trophy{% else %}No activity{% endif %}">
-                        {{ month_data.short_month_name }}
-                    </button>
-                {% else %}
-                    {# Active link for selectable months #}
-                    <a href="/recap/{{ year_data.year }}/{{ month_data.month }}/"
-                       class="btn btn-sm {% if month_data.month == month and year_data.year == year %}btn-primary{% else %}btn-ghost{% endif %}"
-                       data-year="{{ year_data.year }}"
-                       data-month="{{ month_data.month }}"
-                       aria-label="{{ month_data.month_name }} {{ year_data.year }}">
-                        <span>{{ month_data.short_month_name }}</span>
-                        {% if month_data.is_current %}
-                            <span class="badge badge-xs badge-info ml-1">Now</span>
-                        {% endif %}
-                    </a>
-                {% endif %}
-                {% endfor %}
-            </div>
-            {% endfor %}
-        </div>
-
-        </div>{# /card-body #}
-    </div>
-    {% endif %}
+    {% comment %} The month picker used to live here, a second copy of the one on /recap/. It only
+    existed because the landing page redirected away, so the archive was unreachable from its own URL.
+    That page leads now and carries the picker; a duplicate here would be two places to keep in step.
+    {% endcomment %}
 
     {% include 'recap/_timezone_section.html' %}
 
@@ -273,9 +205,6 @@ PlatPursuit.takeover. {% endcomment %}
         Check out another month or start hunting!
     </p>
     <div class="flex gap-2 justify-center flex-wrap">
-        <button onclick="var card = document.getElementById('month-calendar-card'); if (card) { card.scrollIntoView({behavior: 'smooth', block: 'center'}); card.classList.add('ring-2', 'ring-primary'); setTimeout(function(){ card.classList.remove('ring-2', 'ring-primary'); }, 2000); }" class="btn btn-ghost">
-            Pick Another Month
-        </button>
         <a href="{% url 'games_list' %}" class="btn btn-primary">Browse Games</a>
     </div>
 </div>
@@ -301,33 +230,9 @@ PlatPursuit.takeover. {% endcomment %}
 <script src="{% static 'js/color-grid-modal.js' %}"></script>
 <!-- Monthly recap manager -->
 <script src="{% static 'js/monthly-recap.js' %}"></script>
-<!-- Month selector calendar -->
-<script src="{% static 'js/month-selector.js' %}"></script>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Initialize month selector calendar
-        {% if calendar_data.years %}
-        try {
-            const calendarData = {
-                years: {{ calendar_data.years_json|safe }},
-                earliest_year: {{ calendar_data.earliest_year }},
-                earliest_month: {{ calendar_data.earliest_month }},
-                current_year: {{ calendar_data.current_year }},
-                current_month: {{ calendar_data.current_month }},
-                recent_year: {{ calendar_data.recent_year }},
-                recent_month: {{ calendar_data.recent_month }}
-            };
-
-            window.monthSelector = new PlatPursuit.MonthSelector(
-                calendarData,
-                {{ year }},
-                {{ month }}
-            );
-        } catch (e) {
-            console.error('Error initializing month selector:', e);
-        }
-        {% endif %}
 
         // Initialize recap manager
         const container = document.getElementById('recap-container');

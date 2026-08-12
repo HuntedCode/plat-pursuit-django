@@ -7,7 +7,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 from django.http import Http404
-from django.shortcuts import redirect, render
+from django.shortcuts import render
 
 from core.services.tracking import track_page_view, track_site_event
 from trophies.services.monthly_recap_service import MonthlyRecapService
@@ -19,8 +19,9 @@ from trophies.themes import get_available_themes_for_grid
 
 
 class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
-    """
-    Recap index page - redirects to most recent completed month or shows month picker.
+    """The recap's landing page: the latest month up front, the rest of the history under it.
+
+    Not a redirect any more. See `get` for why that made the archive unreachable from its own URL.
     """
     template_name = 'recap/recap_index.html'
 
@@ -48,24 +49,14 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
                 ],
             })
 
-        # Try to get the target month's recap
-        recap = MonthlyRecapService.get_or_generate_recap(
-            profile, target_year, target_month
-        )
-
-        if recap:
-            # Redirect to the completed month recap
-            return redirect('recap_view', year=target_year, month=target_month)
-
-        # No recap for target month - try current month as fallback
-        current_recap = MonthlyRecapService.get_or_generate_recap(
-            profile, now_local.year, now_local.month
-        )
-
-        if current_recap:
-            return redirect('recap_view', year=now_local.year, month=now_local.month)
-
-        # No activity at all - show index with available months
+        # This used to REDIRECT to the most recent month whenever a recap existed, falling back to the
+        # current one -- which meant the page at this URL only ever rendered for a hunter with no trophy
+        # activity at all. The archive was unreachable from its own address, and a second month picker
+        # had to live at the bottom of the recap page to compensate.
+        #
+        # It is a landing page now: it leads with the latest month and keeps the rest of the history
+        # under it. `get_or_generate_recap` is deliberately NOT called here -- generating every month a
+        # hunter merely looked at is work nobody asked for, and opening a month still generates it.
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -73,10 +64,11 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         profile = self.request.user.profile
 
         # Every month this hunter earned a trophy in -- no gating. See months_with_activity.
-        available_months = MonthlyRecapService.get_available_months(profile)
+        archive = MonthlyRecapService.get_archive(profile)
 
-        context['available_months'] = available_months
-        context['no_activity'] = len(available_months) == 0
+        context['archive'] = archive
+        context['latest'] = archive['latest']
+        context['no_activity'] = archive['month_count'] == 0
         context['user_timezone'] = self.request.user.user_timezone or 'UTC'
 
         context['breadcrumb'] = [
@@ -162,10 +154,6 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         ]
 
         # Calendar month selector
-        calendar_data = MonthlyRecapService.get_available_months_by_year(profile)
-        calendar_data['years_json'] = json.dumps(calendar_data['years'])
-        context['calendar_data'] = calendar_data
-
         # Get or generate the recap
         recap = MonthlyRecapService.get_or_generate_recap(profile, year, month)
 
