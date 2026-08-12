@@ -240,15 +240,8 @@ class MonthlyRecapManager {
             dl._wired = true;
             dl.addEventListener('click', () => this.downloadCard());
         }
-        const custom = document.getElementById('recap-customise');
-        if (custom && !custom._wired) {
-            custom._wired = true;
-            // Customising is a page job, not a ceremony job: leave, and land on the picker below.
-            custom.addEventListener('click', () => {
-                this.seenSummary = true;
-                if (this.handle) this.handle.close();
-            });
-        }
+        // "Change the look" used to close the ceremony to land the hunter on a picker below the fold.
+        // The grounds are eight swatches under the card now, so there is nowhere to send anyone.
     }
 
     /** The one expensive call in the whole flow -- everything else is a template render. */

@@ -610,16 +610,23 @@
    the same object rather than two different layouts of the same data. */
 .rcs__card { width: 1200px; height: 630px; transform-origin: top left; }
 
-/* The grounds. `.pc-theme` itself is the plat card's component (components/plat-cards.css, imported
-   globally) -- only the container differs, because there it lives in a modal box and here it sits under
-   the preview on the page. Eight fixed items, so a fixed track count rather than auto-fit: the row reads
-   as one set of eight rather than reflowing to a different shape at every width. */
-.rcs__themes {
-    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;
-    width: 100%; max-width: 600px; margin: 0 auto;
+/* The grounds, in the CARD SCENE -- under the card they change, not on the page below it. They spent one
+   commit inside the share section, which renders directly beneath the entrance because its preview stays
+   empty until the card has been opened; the swatches therefore sat on the intro screen with nothing to
+   apply themselves to.
+
+   `.pc-theme` itself is the plat card's component (components/plat-cards.css, imported globally); only
+   this container differs. Eight fixed items, so a fixed track count rather than auto-fit: the row reads
+   as one set of eight rather than reflowing to a different shape at every width. The card frame sizes
+   itself from whatever its siblings leave (`availableHeight` in monthly-recap.js), so adding this row
+   simply shrinks the preview to suit rather than pushing anything off the stage. */
+.rcx__grounds {
+    display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px;
+    width: 100%; max-width: 520px; flex: none;
 }
-@media (min-width: 768px) {
-    .rcs__themes { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+@media (max-width: 640px) {
+    .rcx__grounds { grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 300px; }
+    .rcx__grounds .pc-theme__name { font-size: 10px; }
 }
 
 .rcs__controls {

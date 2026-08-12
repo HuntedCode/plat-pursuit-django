@@ -230,8 +230,12 @@ Constraints worth knowing before editing it:
   "+N". At **one** platinum it still reads deliberately -- title, count of 1, one named cover. At
   **zero** the container is dropped entirely: an empty box titled "Platinums earned" is worse than
   no box, and the footer's other blocks spread into the space.
-- **The grounds are the plat card's curated eight**, server-rendered as `.pc-theme` swatches under
-  the preview, with the real gradient as the swatch. The page previously shipped all ~110 site
+- **The grounds are the plat card's curated eight**, server-rendered as `.pc-theme` swatches **inside the
+  card scene** -- under the card they change, above the buttons that act on it. They spent one commit in
+  `#share-section`, which renders directly beneath the entrance because its preview stays empty until the
+  card has been opened, so eight swatches sat on the intro screen with nothing to apply themselves to.
+  ("Change the look" went with that move: it existed to close the ceremony and land you on a picker
+  elsewhere.) The real gradient is the swatch. The page previously shipped all ~110 site
   gradients into a `window.GRADIENT_THEMES` global feeding a `<select>` and a colour-grid wall --
   the same thing the plat card's rebuild moved away from. `applyBackground` reads `--pc-theme-bg`
   off the checked swatch rather than a JS registry, so the thing clicked and the thing that paints

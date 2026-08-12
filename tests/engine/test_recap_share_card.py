@@ -370,3 +370,38 @@ def test_the_ground_is_read_from_the_swatch_not_a_registry():
 
     assert "--pc-theme-bg" in fn, 'the ground no longer comes from the swatch'
     assert "'important'" in fn, "the card's own inline background will win"
+
+
+def test_the_grounds_sit_with_the_card_not_on_the_intro_screen():
+    """They spent one commit inside `#share-section`, which renders directly beneath the entrance because
+    its preview stays empty until the card has been opened -- so eight swatches sat on the intro screen
+    with nothing to apply themselves to.
+
+    They belong in the card scene: under the card they change, above the buttons that act on it. Pinned by
+    ORDER within the scene, because "is it in the right container" is the question that was got wrong."""
+    from pathlib import Path
+    tpl = (Path(__file__).resolve().parents[2] / 'templates' / 'recap' /
+           'monthly_recap.html').read_text(encoding='utf-8')
+
+    scene = tpl[tpl.index('<div class="rcx__card" id="recap-card"'):]
+    scene = scene[:scene.index('</div>\n</div>')]
+
+    assert 'data-recap-theme' in scene, 'the grounds are not in the card scene'
+    assert scene.index('recap-card-frame') < scene.index('data-recap-theme') < scene.index('recap-download'), (
+        'the grounds are not between the card and its buttons'
+    )
+
+    share = tpl[tpl.index('id="share-section"'):]
+    assert 'data-recap-theme' not in share, 'a second copy is back in the share section'
+
+
+def test_change_the_look_is_gone_now_that_the_look_is_changeable_here():
+    """It closed the ceremony to land the hunter on a picker below the fold. The picker is under the card
+    now, so the button had nowhere left to send anyone."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    tpl = (root / 'templates' / 'recap' / 'monthly_recap.html').read_text(encoding='utf-8')
+    js = (root / 'static' / 'js' / 'monthly-recap.js').read_text(encoding='utf-8')
+
+    assert 'recap-customise' not in tpl
+    assert "getElementById('recap-customise')" not in js, 'the handler outlived its button'
