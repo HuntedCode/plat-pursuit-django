@@ -480,6 +480,12 @@
        title and the card, with the summary's own chips hidden rather than dismissed. */
     bottom: 62%;
     justify-content: center;
+    /* NOT scrollable any more. The base slide is `overflow-y: auto` so a dense beat can be scrolled to,
+       and constraining this one to the band made its content taller than its box -- so the closing line
+       arrived in a little scroll well with a visible thumb. During the ending this is a header, not a
+       beat: it has no more content than you can see, and the lift's own scale keeps the type inside the
+       band it is drawn in. */
+    overflow: visible;
 }
 @keyframes rcxLift {
     from { transform: none; }
@@ -491,7 +497,13 @@
    what put a void under the title -- the summary is meant to reduce to its header, and a reduction that
    keeps its original footprint is just a hidden thing taking up room. */
 .rcx.is-ending .recap-slide.active .rcp__body,
-.rcx.is-ending .recap-slide.active .rcp__cue { display: none; }
+.rcx.is-ending .recap-slide.active .rcp__cue,
+/* The mark goes too. `transform: scale()` shrinks what you SEE while the layout box stays full size, so
+   on a shorter stage the header's box still ran past the band and the title landed on the card's label
+   -- measured at a 700px stage, where the band is only 180px tall. Taking the mark out reduces the box
+   itself rather than the picture of it, and the moment loses nothing: the brand is already in the bar
+   above and on the card below. The line is what carries the ending. */
+.rcx.is-ending .recap-slide.active .rcp__mark { display: none; }
 @media (prefers-reduced-motion: reduce) {
     /* Still recomposes -- it is the layout of the end screen, not decoration -- just without the travel. */
     .rcx.is-ending .recap-slide.active {

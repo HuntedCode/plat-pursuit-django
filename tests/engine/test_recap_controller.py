@@ -812,8 +812,16 @@ def test_the_ending_reduces_the_summary_instead_of_hiding_it_behind_the_card():
     block = block[:block.index('}')]
     assert 'bottom: 62%' in block, 'the summary still occupies the whole stage during the ending'
 
-    hidden = re.search(r'\.rcx\.is-ending \.recap-slide\.active \.rcp__body,\s*'
-                       r'\.rcx\.is-ending \.recap-slide\.active \.rcp__cue \{([^}]*)\}', css)
+    hidden = re.search(r'\.rcx\.is-ending \.recap-slide\.active \.rcp__body,.*?\{([^}]*)\}', css, re.S)
     assert hidden and 'display: none' in hidden.group(1), (
         'the summary body only fades, so it keeps its footprint and leaves a void under the title'
+    )
+    assert 'overflow: visible' in block, (
+        'the header is still scrollable -- the base slide is `overflow-y: auto`, so constraining it to '
+        'the band put the closing line in a scroll well with a visible thumb'
+    )
+    assert '.rcp__mark' in hidden.group(0), (
+        '`transform: scale()` shrinks what you see while the layout box stays full size, so on a shorter '
+        'stage the header ran past the band and the title landed on the card label -- the box has to '
+        'shrink, not the picture of it'
     )

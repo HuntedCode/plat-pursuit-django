@@ -611,6 +611,10 @@ class MonthlyRecapManager {
     }
 
     checkSlideOverflow() {
+        // The ending re-boxes the summary into a header band, where "taller than its box" is expected and
+        // means nothing -- it is not scrollable there. Marking it would only top-align a header that is
+        // deliberately centred.
+        if (this.container.classList.contains('is-ending')) return;
         const slideEls = this.slidesContainer.querySelectorAll('.recap-slide');
         slideEls.forEach(el => {
             // Check if content overflows the slide height

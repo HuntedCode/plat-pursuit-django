@@ -359,6 +359,17 @@ Load-bearing details, each of which was a bug first:
   own band) and the body leaves the LAYOUT rather than fading. Measured after: summary 103-346, card scene
   from 342 -- two bands that meet.
 
+  Two follow-on traps came with that constraint, both worth knowing before touching it:
+  - The base slide is `overflow-y: auto` so a dense beat can be scrolled to. Boxing the summary into the
+    band made its content taller than its box, so the closing line arrived **in a little scroll well with
+    a visible thumb**. During the ending it is a header, not a beat: `overflow: visible`, and
+    `checkSlideOverflow` skips while ending rather than top-aligning a header that is deliberately centred.
+  - `transform: scale()` shrinks what you SEE while the layout box stays full size. So on a shorter stage
+    the header's box still ran past the band and the title landed on the card's label -- measured at a
+    700px stage, where the band is only 180px tall. The fix reduces the BOX: the summary's mark leaves the
+    layout too, and the moment loses nothing (the brand is already in the bar above and on the card
+    below). Clearance is now 76 / 34 / 17px at 900 / 700 / 620px stages.
+
 - **A component stylesheet outranks Tailwind's `hidden`.** Utilities live in a layer and these component
   files do not, so an unlayered `display: flex` beats `.hidden { display: none }` whatever the source
   order. Three classes needed guards and each failed differently:
