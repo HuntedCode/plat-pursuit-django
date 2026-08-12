@@ -1502,7 +1502,7 @@ class MonthlyRecapService:
                 return 'day_hunter'
 
         # Aggregate by period
-        periods = {'Morning': 0, 'Afternoon': 0, 'Evening': 0, 'Late Night': 0}
+        periods = {name: 0 for name, _ in TIME_PERIODS}
         for item in hourly_counts:
             period = get_period(item['hour'])
             periods[period] += item['count']
@@ -1606,6 +1606,28 @@ def _summary_highlights(recap):
 #
 # The payoff is the quiz score, which the deck has always computed (`RecapQuizManager.getScore`) and never
 # shown. It is filled in client-side from the answers actually given, so it has no server payload.
+# The day, in order, with the short labels the slide draws. ONE source: the aggregation seeds its dict
+# from this and the deck reads its bars from it.
+#
+# The order has to be imposed at build time because it cannot survive storage. `periods` lives inside the
+# `time_analysis_data` JSONField, and Postgres `jsonb` does not preserve key order -- it normalises to
+# (key length, then bytes), which turns Morning/Afternoon/Evening/Late Night into
+# Evening/Morning/Afternoon/Late Night on the way back out. The slide draws those as a bar chart, so the
+# stored dict was silently redrawing the day out of sequence: evening first, then morning. Verified with a
+# round trip through the test database, not assumed.
+TIME_PERIODS = (
+    ('Morning', 'Morn'),
+    ('Afternoon', 'Aftn'),
+    ('Evening', 'Eve'),
+    ('Late Night', 'Late'),
+)
+
+
+def _period_bars(periods):
+    """The four periods as an ordered list, so the template never iterates a dict whose order is luck."""
+    return [{'label': short, 'count': periods.get(name, 0)} for name, short in TIME_PERIODS]
+
+
 DECK = [
     # -- OPEN ------------------------------------------------------------------------------------------
     RecapBeat('intro', lambda r, c: {
@@ -1639,6 +1661,8 @@ DECK = [
     RecapBeat('streak', lambda r, c: dict(r.streak_data), when=_has_streak),
     RecapBeat('time_analysis', lambda r, c: {
         **r.time_analysis_data,
+        # Chronological, imposed at BUILD time rather than trusted from storage -- see TIME_PERIODS.
+        'period_bars': _period_bars(r.time_analysis_data.get('periods') or {}),
         # Bar heights are a percentage of the busiest period; never 0, which would divide by zero.
         'max_period_count': max((r.time_analysis_data.get('periods') or {}).values(), default=1) or 1,
     }, when=lambda r: bool(r.time_analysis_data)),

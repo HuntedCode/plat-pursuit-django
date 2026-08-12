@@ -436,6 +436,23 @@ Load-bearing details, each of which was a bug first:
   beats doing the clearing. A harness that takes a shortcut through the state machine is testing a path
   no hunter walks. `card_size_probe.py` presses through beat by beat.
 
+- **Two on the time-of-day slide, both invisible in source.**
+
+  `.rcp__stamp` (the deck's small fact pill -- rarity band, peak hour, active days) is a `<span>` inside a
+  plain block, so it was a non-replaced **inline** box, and vertical margins do not apply to those. Both
+  its own `margin-top` and the `.rcp-clock + .rcp__stamp` override written specifically to stop the peak
+  hour crowding the bars were computing correctly and being discarded by the box model: 20px of margin,
+  0px of actual gap, the pill sitting on the bar labels. `display: inline-block` is the whole fix. (It
+  looked fine on the rarest-trophy slide only because a flex ancestor blockified it there.)
+
+  And the bars were drawn **out of clock order** -- evening, morning, afternoon, late. `periods` is a dict
+  inside the `time_analysis_data` JSONField, and Postgres `jsonb` does not preserve key order: it
+  normalises to (key length, then bytes), which is exactly that sequence. The aggregation built it
+  chronologically and storage reordered it on the way back. Order is imposed at build time now from
+  `TIME_PERIODS`, which also seeds the aggregation's dict and carries the short labels the slide draws, so
+  the day is described in one place. The premise is pinned by its own test against the real database, so
+  if a future driver starts preserving order the workaround does not quietly outlive its reason.
+
 - **The Download button is shared, and it had to be.** The ceremony's was a bare
   `window.location.href`. That cannot show progress on a call that runs headless Chromium, cannot name the
   file, and on a failure the browser has already left -- so a render error or the 20/m rate limit replaced

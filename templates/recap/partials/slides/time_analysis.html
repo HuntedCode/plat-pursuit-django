@@ -43,16 +43,17 @@ the warm accent rather than inventing a third hue for a distinction nobody would
 
     <div class="rcp__body">
         <div class="rcp-clock">
-            {% for period, count in periods.items %}
+            {% comment %}`period_bars`, not `periods.items` -- the dict comes back from jsonb in key-length
+            order, which drew the evening before the morning. The short labels come with it, so the day is
+            described in one place instead of a name-to-abbreviation chain living in the markup.{% endcomment %}
+            {% for bar in period_bars %}
             <div class="rcp-clock__col">
                 <div class="rcp-clock__track">
-                    {% if count > 0 %}
-                    <div class="rcp-clock__fill" style="height: {% widthratio count max_period_count 100 %}%;"></div>
+                    {% if bar.count > 0 %}
+                    <div class="rcp-clock__fill" style="height: {% widthratio bar.count max_period_count 100 %}%;"></div>
                     {% endif %}
                 </div>
-                <span class="rcp-clock__label">
-                    {% if period == 'Morning' %}Morn{% elif period == 'Afternoon' %}Aftn{% elif period == 'Evening' %}Eve{% else %}Late{% endif %}
-                </span>
+                <span class="rcp-clock__label">{{ bar.label }}</span>
             </div>
             {% endfor %}
         </div>

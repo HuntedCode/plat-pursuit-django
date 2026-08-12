@@ -258,6 +258,13 @@
 
 /* Stamp: the deck's one small "fact pill" -- rarity band, peak hour, active days. */
 .rcp__stamp {
+    /* INLINE-BLOCK, and that is the whole rule. It is a <span> and `.rcp__body` is a plain block, so it
+       was a non-replaced inline box -- and vertical margins do not apply to those. Both its own
+       `margin-top` and the `.rcp-clock + .rcp__stamp` override written specifically to stop the
+       peak-hour pill crowding the bars were computing correctly and being discarded by the box model:
+       measured 20px of margin and 0px of actual gap, with the pill sitting against the bar labels.
+       (It looked fine on the rarest-trophy slide only because a flex ancestor blockified it there.) */
+    display: inline-block;
     align-self: center; margin-top: 0.6rem;
     padding: 0.3rem 0.8rem; border-radius: 999px;
     font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
