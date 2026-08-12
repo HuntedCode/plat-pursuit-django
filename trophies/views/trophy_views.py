@@ -1,5 +1,4 @@
 import logging
-from core.services.tracking import track_page_view
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q, F, Case, When, Value, IntegerField, OrderBy, FloatField, Subquery, OuterRef, Avg
 from django.db.models.functions import Lower, Coalesce
@@ -164,7 +163,6 @@ class TrophiesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             if k not in ('page', 'view') and any(v)
         )
 
-        track_page_view('trophies_list', 'list', self.request)
         return context
 
 
@@ -302,7 +300,6 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
         max_selections = 20 if is_own_profile else 0
         context['max_selections'] = max_selections
 
-        track_page_view('trophy_case', profile.id, self.request)
         return context
 
 class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):

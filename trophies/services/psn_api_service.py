@@ -847,7 +847,6 @@ class PsnApiService:
             'display_series': f"{name} {badge_type_name}",
             'tier': 1,
             'badge_type': form_data['badge_type'],
-            'view_count': 0,
         }
         if submitted_by:
             create_kwargs['submitted_by'] = submitted_by
@@ -863,7 +862,6 @@ class PsnApiService:
                 'base_badge': base_badge,
                 'tier': i + 2,
                 'badge_type': form_data['badge_type'],
-                'view_count': 0,
             }
             if submitted_by:
                 tier_kwargs['submitted_by'] = submitted_by

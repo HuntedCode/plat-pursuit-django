@@ -10,7 +10,6 @@ all three "tag-style" browse pages.
 """
 import logging
 
-from core.services.tracking import track_page_view
 from django.db.models import (
     Q, F, Count, Avg, Subquery, OuterRef, IntegerField, FloatField,
 )
@@ -112,7 +111,6 @@ class EngineListView(ProfileHotbarMixin, TemplateView):
             "Find Unreal, Unity, Decima, and RE Engine titles on Platinum Pursuit."
         )
 
-        track_page_view('engines_list', 'list', self.request)
         return context
 
 
@@ -205,5 +203,4 @@ class EngineDetailView(TagDetailBaseView):
         )
 
         context = self.get_shared_context(context)
-        track_page_view('engine_detail', self.engine.id, self.request)
         return context

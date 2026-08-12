@@ -24,7 +24,6 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
 | Weekly (Saturday 09:00 UTC) | `enrich_from_igdb --missing-or-no-match --max-minutes 60` | Weekly | None |
 | Weekly (Sunday 07:00 UTC) | `enrich_from_igdb --refresh --max-minutes 90` | Weekly | None |
-| Weekly (Sunday) | `cleanup_old_analytics --force` | Weekly | None |
 | Weekly (Monday 08:00 UTC) | `send_weekly_digest` | Weekly | None |
 | 3rd of month, 00:05 UTC | `generate_monthly_recaps --finalize` | Monthly | All profile syncs for the previous month should be complete |
 | 3rd of month, 06:00 UTC | `send_monthly_recap_emails` | Monthly | `generate_monthly_recaps` must have completed first |
@@ -190,16 +189,6 @@ historical pass after Phase 3's rematch run.
 - **Failure impact**: IGDB-side data slowly ages. No user-facing impact for several weeks (IGDB metadata changes slowly), but eventually new franchise relationships, time-to-beat updates, and release-date status data won't surface in PlatPursuit. A skipped week is recovered automatically on the next run since the queue rolls forward.
 - **One-time backfill**: After deploying changes that broaden the IGDB query (new fields requested), run `enrich_from_igdb --refresh` **without** `--max-minutes` from the web shell to drain the entire catalog in one pass (1-2 hours typical). The weekly cron then keeps things fresh from there.
 
-### cleanup_old_analytics
-
-- **Schedule**: Weekly (recommended)
-- **Command**: `python manage.py cleanup_old_analytics --force`
-- **What it does**: Deletes `AnalyticsSession` records older than 90 days and anonymizes IP addresses in `PageView` records older than 90 days (sets `ip_address` to NULL). The `--force` flag skips the interactive confirmation prompt required for unattended cron execution. PageView records themselves are preserved (view counts remain intact).
-- **Batching**: Both the session delete and the IP-anonymization update run in batches of `--batch-size` rows (default 5000) so each individual statement stays under the Postgres `statement_timeout`. A single sweep over a large backlog (1M+ rows) exceeds the timeout and aborts. Because the delete ran before the update, a timeout there previously left IPs un-anonymized while sessions kept deleting, so the un-scrubbed PageView backlog only grew run over run. Raise `--batch-size` for a faster drain on a quiet DB, lower it if batches still approach the timeout.
-- **Dependencies**: None.
-- **Idempotency**: Fully safe to re-run. Deleting already-deleted records and nullifying already-null IPs are both no-ops. A partial run (some batches committed before an interruption) simply resumes where it left off on the next run, since each batch commits independently.
-- **Failure impact**: Old analytics data accumulates in the database. No user-facing impact, but storage grows and GDPR compliance may be affected if sessions/IPs are retained beyond the 90-day window.
-
 ### generate_monthly_recaps
 
 - **Schedule**: 3rd of month at 00:05 UTC
@@ -274,7 +263,6 @@ The following diagram shows ordering constraints between jobs. Jobs on the same 
 
     WEEKLY ─────────── enrich_from_igdb --missing-or-no-match --max-minutes 60  [Saturday 09:00 UTC]
                         enrich_from_igdb --refresh --max-minutes 90   [Sunday 07:00 UTC]
-                        cleanup_old_analytics --force       [Sunday]
                         send_weekly_digest                  [Monday 08:00 UTC]
 
 
@@ -288,7 +276,7 @@ Key ordering rules:
 
 1. `refresh_profiles` depends on TokenKeeper being alive to process queued syncs.
 2. `send_monthly_recap_emails` **must** run after `generate_monthly_recaps --finalize`. The 6-hour gap (00:05 to 06:00) on the 3rd of each month ensures this.
-3. `send_weekly_digest` runs Monday morning, covering the previous ISO week (Monday to Sunday). The Sunday `cleanup_old_analytics` job has no dependency relationship.
+3. `send_weekly_digest` runs Monday morning, covering the previous ISO week (Monday to Sunday).
 4. All other jobs are independent and can run in any order relative to each other.
 
 ---

@@ -669,7 +669,6 @@ class LegacyChecklistListView(StaffOrRoadmapAuthorRequiredMixin, HtmxListMixin, 
         ('oldest', 'Oldest first'),
         ('most_upvoted', 'Most upvoted'),
         ('most_saved', 'Most saved'),
-        ('most_viewed', 'Most viewed'),
         ('most_sections', 'Most sections'),
     ]
 
@@ -717,8 +716,6 @@ class LegacyChecklistListView(StaffOrRoadmapAuthorRequiredMixin, HtmxListMixin, 
             qs = qs.order_by('-upvote_count', '-created_at')
         elif sort == 'most_saved':
             qs = qs.order_by('-progress_save_count', '-created_at')
-        elif sort == 'most_viewed':
-            qs = qs.order_by('-view_count', '-created_at')
         elif sort == 'most_sections':
             qs = qs.order_by('-section_count', '-created_at')
         else:
