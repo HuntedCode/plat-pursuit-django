@@ -94,6 +94,106 @@
 .pp-gtile__stat { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 700; color: var(--pp-primary); font-variant-numeric: tabular-nums; padding: 1px 6px; border-radius: 5px; background: color-mix(in oklab, var(--pp-primary) 20%, rgba(0, 0, 0, 0.45)); }
 .pp-gtile__stat svg { width: 11px; height: 11px; }
 
+/* ---- Game lists: the cover mosaic + author line ------------------------------------------------
+ * A community list is a COLLECTION, so its tile shows several of its covers rather than one backdrop --
+ * otherwise a list tile is indistinguishable from a game tile in the same grid.
+ *
+ * The composition adapts to how many covers there actually are, because a fixed 2x2 with holes in it
+ * looks broken rather than sparse: one fills, two split down the middle, three give the first a full
+ * column beside a stacked pair, four quarter. Ships as a variant of .pp-gtile rather than its own
+ * component -- hover, focus, scrim, body and the reveal states are all already there.
+ */
+.pp-gtile__mosaic {
+    position: absolute; inset: 0;
+    display: grid; gap: 2px;
+    background: var(--pp-bg-0);          /* the gap colour: a hairline between covers, not a light seam */
+    transition: transform 0.35s ease;
+}
+.pp-gtile__mosaic.is-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.pp-gtile__mosaic.is-2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+.pp-gtile__mosaic.is-3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.pp-gtile__mosaic.is-3 > :first-child { grid-row: span 2; }
+.pp-gtile__mosaic.is-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+
+/* object-top for the same reason every cover on the site uses it: PSN fallback art is wider than the
+   portrait IGDB cover, and anchoring to the top keeps the game's logo in frame when it crops. */
+.pp-gtile__tile-art { width: 100%; height: 100%; object-fit: cover; object-position: top; min-width: 0; min-height: 0; }
+.pp-gtile__tile-art--icon { object-fit: contain; padding: 8px; opacity: 0.85; background: var(--pp-bg-2); }
+
+@media (hover: hover) {
+    .pp-gtile:hover .pp-gtile__mosaic { transform: scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pp-gtile__mosaic { transition: none; }
+}
+
+/* The author, between the name and the counts. Quieter than either: whose list it is matters, but not
+   more than what the list IS. */
+.pp-gtile__author {
+    font-size: 10.5px; font-weight: 600; color: rgba(255, 255, 255, 0.66);
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* The game-count range in the lists toolbar. One control rather than two loose number boxes with a
+   stray label between them -- it reads as a single filter, which is what it is. */
+.pp-gl-range {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 0 10px; height: 36px;
+    border-radius: 9px;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    color: var(--pp-text-dim); font-size: 12px; font-weight: 600;
+}
+.pp-gl-range__label { text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; color: var(--pp-text-mute); }
+.pp-gl-range__dash { color: var(--pp-text-mute); }
+.pp-gl-range input {
+    width: 48px; background: none; border: 0; color: var(--pp-text);
+    font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center;
+    -moz-appearance: textfield;
+}
+/* The spinners would put two more tap targets inside a 48px box; the field is typed into, not nudged. */
+.pp-gl-range input::-webkit-outer-spin-button,
+.pp-gl-range input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pp-gl-range input:focus { outline: none; }
+.pp-gl-range:focus-within { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+
+/* ---- List detail: the bits the browse tile does not cover -------------------------------------- */
+
+/* Item stack. The cards carry their own shape; this only sets the rhythm between them. */
+.pp-lrow-stack { display: flex; flex-direction: column; gap: 8px; }
+
+.pp-lprivate {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--pp-warning);
+    background: color-mix(in oklab, var(--pp-warning) 13%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 30%, transparent);
+}
+.pp-lprivate svg { width: 11px; height: 11px; }
+
+/* Whose list it is. A real link with a real target, so it gets a hover state rather than being decoration
+   that happens to be clickable. */
+.pp-lauthor {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: var(--pp-text-dim); text-decoration: none;
+    transition: color 0.18s ease;
+}
+.pp-lauthor:hover { color: var(--pp-text); }
+.pp-lauthor__av {
+    width: 26px; height: 26px; border-radius: 999px; overflow: hidden; flex-shrink: 0;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+}
+.pp-lauthor__av img { width: 100%; height: 100%; object-fit: cover; }
+.pp-lauthor__name { font-size: 13px; font-weight: 700; }
+.pp-lauthor:hover .pp-lauthor__name { color: var(--pp-primary); }
+
+/* The toolbar's left-hand label, so the sort control is not floating alone on a bar. */
+.pp-ltoolbar__title {
+    display: inline-flex; align-items: center; gap: 7px; margin-right: auto;
+    font-size: 13px; font-weight: 800; color: var(--pp-text);
+}
+.pp-ltoolbar__title svg { width: 15px; height: 15px; color: var(--pp-primary); }
+
 /* Empty state (spans the grid); reuses the shared ppResultsEmptyIn fade (browse-gallery.css). */
 .pp-gtile-empty { grid-column: 1 / -1; text-align: center; color: var(--pp-text-mute); padding: 48px 16px; }
 .pp-gtile-empty svg { width: 40px; height: 40px; margin: 0 auto 8px; opacity: 0.55; }

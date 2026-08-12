@@ -1,0 +1,57 @@
+{% comment %} A community game list, on the shared grouping tile (.pp-gtile).
+
+Deliberately the SAME component as the genre/franchise/company tiles rather than a parallel one. That tile
+already adapts to what an object carries -- companies add a logo chip and a country line, franchises a
+type badge -- and a list adds two more: a cover MOSAIC instead of one backdrop, and its author. Everything
+underneath (hover glow, focus ring, scrim, the reveal states, the empty state) is shared, which is the
+whole point of having a tile component.
+
+The mosaic is what makes a list read as a COLLECTION at a glance instead of looking like a game. It draws
+from `cover_items` -- the first four items, prefetched in BrowseListsView -- and lays them out by how many
+there actually are, so a two-game list looks composed rather than like a four-slot grid with holes.
+
+Expects: `game_list` with `cover_items` (prefetched), `name`, `game_count`, `like_count`, `profile`.
+{% endcomment %}
+{% load humanize %}
+<a href="{% url 'list_detail' game_list.id %}" class="pp-gtile" data-gtile
+   aria-label="{{ game_list.name }} by {{ game_list.profile.display_psn_username|default:game_list.profile.psn_username }}, {{ game_list.game_count }} game{{ game_list.game_count|pluralize }}, {{ game_list.like_count }} like{{ game_list.like_count|pluralize }}">
+    {% if game_list.cover_items %}
+    {% comment %} `is-N` picks the composition: 1 fills, 2 splits down the middle, 3 gives the first a full
+    column beside a stacked pair, 4 quarters. Covers come from `display_image_url` (the single-source
+    IGDB-first chain) -- this tile used to read `game.title_image` directly, which is why lists were the
+    one surface showing PSN art where the rest of the site shows the IGDB cover. {% endcomment %}
+    <span class="pp-gtile__mosaic is-{{ game_list.cover_items|length }}" aria-hidden="true">
+        {% for item in game_list.cover_items %}
+        <img src="{{ item.game.display_image_url }}" alt="" loading="lazy"
+             class="pp-gtile__tile-art{% if not item.game.has_cover_art %} pp-gtile__tile-art--icon{% endif %}" />
+        {% endfor %}
+    </span>
+    {% else %}
+    {% comment %} Same placeholder treatment as a coverless grouping tile: a quiet tinted field and a
+    glyph, so an empty list still reads as deliberate rather than broken. {% endcomment %}
+    <span class="pp-gtile__art pp-gtile__art--empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+        </svg>
+    </span>
+    {% endif %}
+
+    <span class="pp-gtile__scrim" aria-hidden="true"></span>
+
+    <span class="pp-gtile__body">
+        <span class="pp-gtile__name">{{ game_list.name }}</span>
+        <span class="pp-gtile__author">{{ game_list.profile.display_psn_username|default:game_list.profile.psn_username }}</span>
+        <span class="pp-gtile__meta">
+            <span class="pp-gtile__count">{{ game_list.game_count|intcomma }} game{{ game_list.game_count|pluralize }}</span>
+            {% comment %} The like count earns its accent pill only when there is one -- a "0" in the
+            highlight colour advertises the wrong thing about somebody's list. {% endcomment %}
+            {% if game_list.like_count %}
+            <span class="pp-gtile__stat">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                {{ game_list.like_count|intcomma }}
+            </span>
+            {% endif %}
+        </span>
+    </span>
+</a>

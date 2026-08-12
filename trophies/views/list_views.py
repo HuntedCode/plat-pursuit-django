@@ -18,16 +18,21 @@ from django.shortcuts import redirect
 from django.urls import reverse_lazy, reverse
 from django.views.generic import ListView, DetailView, TemplateView
 
+from ..mixins import HtmxListMixin
 from ..models import (
     GameList, GameListItem, GameListLike, ProfileGame,
     GAME_LIST_FREE_MAX_LISTS, GAME_LIST_FREE_MAX_ITEMS,
 )
 from .browse_helpers import annotate_community_ratings
 
+# How many covers the browse tile's mosaic can show. The prefetch is sliced to it, so the page carries
+# exactly the art it draws and not one row more.
+LIST_TILE_COVERS = 4
+
 logger = logging.getLogger("psn_api")
 
 
-class BrowseListsView(ListView):
+class BrowseListsView(HtmxListMixin, ListView):
     """
     Public hub for browsing user-created game lists.
 
@@ -36,8 +41,26 @@ class BrowseListsView(ListView):
     """
     model = GameList
     template_name = 'trophies/browse_lists.html'
+    partial_template_name = 'trophies/partials/lists/browse_results.html'
     context_object_name = 'game_lists'
     paginate_by = 24
+
+    # Sort options as DATA, so the toolbar select, the mini-bar proxy and the queryset all read one
+    # list. The old template hand-wrote an <option> per sort, which is a second copy to keep in step.
+    SORT_CHOICES = (
+        ('popular', 'Most liked'),
+        ('recent', 'Newest'),
+        ('updated', 'Recently updated'),
+        ('most_games', 'Most games'),
+        ('alpha', 'A-Z'),
+    )
+    _DEFAULT_SORT = 'popular'
+
+    def _selected_sort(self):
+        """Clamped ?sort= value. A junk value falls through to the default rather than silently
+        dropping to no ordering, which is how a browse grid ends up in an arbitrary order."""
+        raw = self.request.GET.get('sort', self._DEFAULT_SORT)
+        return raw if raw in dict(self.SORT_CHOICES) else self._DEFAULT_SORT
 
     def get_queryset(self):
         """Return public game lists with optimized queries and optional filtering."""
@@ -48,10 +71,34 @@ class BrowseListsView(ListView):
         # anywhere on the site. The same gate was lifted from
         # `_get_recent_lists_spotlight()` and the total_lists count below
         # in the same change.
+        #
+        # The tile draws a mosaic of the list's first few covers. Prefetching them is what stops the
+        # page scaling with its own length: `GameList.first_game_image` is a PROPERTY that runs its own
+        # query, so rendering 24 tiles cost 24 extra round trips while reading like a plain field.
+        # Measured before this: 8 queries for 5 lists, 23 for 20.
+        #
+        # `display_image_url` is IGDB-first, so the concept + match travel with the game, and
+        # `raw_response` (the ~30 KB IGDB blob no cover template reads) is deferred -- the standing rule
+        # for every queryset that renders cover art.
+        #
+        # Bounded by POSITION rather than a slice, because Django cannot prefetch a sliced queryset.
+        # Positions are 0-indexed and re-compacted when an item is removed (`api/game_list_views.py`
+        # shifts everything after it down), so `< 4` is reliably the first four and rides the existing
+        # `(game_list, position)` index. Without the bound, a 200-game list would load 200 rows per tile
+        # to draw four covers.
+        cover_items = (
+            GameListItem.objects
+            .filter(position__lt=LIST_TILE_COVERS)
+            .select_related('game', 'game__concept', 'game__concept__igdb_match')
+            .defer('game__concept__igdb_match__raw_response')
+            .order_by('position')
+        )
         queryset = GameList.objects.filter(
             is_public=True,
             is_deleted=False,
-        ).select_related('profile')
+        ).select_related('profile').prefetch_related(
+            Prefetch('items', queryset=cover_items, to_attr='cover_items'),
+        )
 
         # Search query
         query = self.request.GET.get('q')
@@ -71,7 +118,7 @@ class BrowseListsView(ListView):
             queryset = queryset.filter(game_count__lte=int(max_games))
 
         # Sort options
-        sort = self.request.GET.get('sort', 'popular')
+        sort = self._selected_sort()
         if sort == 'recent':
             queryset = queryset.order_by('-created_at')
         elif sort == 'most_games':
@@ -87,10 +134,13 @@ class BrowseListsView(ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['total_lists'] = GameList.objects.filter(
-            is_public=True, is_deleted=False,
-        ).count()
-        context['sort'] = self.request.GET.get('sort', 'popular')
+        # `paginator.count` is the same number the page already paid for -- the filtered public total.
+        # It used to run a second unfiltered COUNT(*) alongside it, which also meant the header figure
+        # disagreed with the grid the moment anyone searched.
+        context['total_lists'] = context['paginator'].count
+        context['sort_choices'] = self.SORT_CHOICES
+        context['current_sort'] = self._selected_sort()
+        context['sort'] = context['current_sort']       # kept: the old name is still read by templates
         context['query'] = self.request.GET.get('q', '')
 
         # Annotate user_has_liked for authenticated users
@@ -129,8 +179,33 @@ class GameListDetailView(DetailView):
     """
     model = GameList
     template_name = 'trophies/game_list_detail.html'
+    # Sorting swaps just the item list. `HtmxListMixin` is for ListViews and this is a DetailView, so the
+    # same contract is spelled out here rather than bent into the mixin: the list is UNPAGINATED, so a
+    # full reload to re-sort re-renders every item and throws the scroll position away.
+    partial_template_name = 'trophies/partials/lists/detail_items.html'
     context_object_name = 'game_list'
     pk_url_kwarg = 'list_id'
+
+    def get_template_names(self):
+        if self.request.htmx:
+            return [self.partial_template_name]
+        return super().get_template_names()
+
+    # The nine sorts the page offers, as data rather than nine hand-written links. The view implements
+    # four more (`rating_inv`, `played_inv`, `time_to_beat_inv`, `trophy_count_inv`) that the toolbar has
+    # never exposed -- left as-is rather than quietly adding product surface in a rebuild pass.
+    SORT_CHOICES = (
+        ('custom', 'List order'),
+        ('alpha', 'A-Z'),
+        ('added', 'Recently added'),
+        ('platform', 'Platform'),
+        ('rating', 'Top rated'),
+        ('played', 'Most played'),
+        ('time_to_beat', 'Shortest first'),
+        ('trophy_count', 'Most trophies'),
+    )
+    # Only offered to a signed-in hunter: it sorts by THEIR completion, which is meaningless logged out.
+    SORT_CHOICE_OWNED = ('completion', 'My progress')
 
     def get_queryset(self):
         return GameList.objects.filter(is_deleted=False).select_related('profile')
@@ -156,7 +231,17 @@ class GameListDetailView(DetailView):
         profile = user.profile if user.is_authenticated and hasattr(user, 'profile') else None
 
         # Get items with game data
-        items = game_list.items.select_related('game').order_by('position')
+        # The item card renders `game.display_image_url`, whose chain is IGDB-FIRST -- so without the
+        # concept + igdb_match join every item costs its own two queries, and a 40-game list measured 82.
+        # `raw_response` is deferred with it: that is the ~30 KB IGDB blob no cover template reads, and
+        # the documented trigger for the May 2026 web-server OOM when concurrent renders pile the join
+        # payload up. Both are the standing rule in CLAUDE.md, not a local optimisation.
+        items = (
+            game_list.items
+            .select_related('game', 'game__concept', 'game__concept__igdb_match')
+            .defer('game__concept__igdb_match__raw_response')
+            .order_by('position')
+        )
 
         # Sort option for viewing
         sort = self.request.GET.get('sort', 'custom')
@@ -238,6 +323,10 @@ class GameListDetailView(DetailView):
 
         context['items'] = items
         context['sort'] = sort
+        choices = list(self.SORT_CHOICES)
+        if self.request.user.is_authenticated:
+            choices.append(self.SORT_CHOICE_OWNED)
+        context['sort_choices'] = choices
         context['is_owner'] = profile and game_list.profile_id == profile.id
         context['is_premium'] = getattr(profile, 'user_is_premium', False) if profile else False
 
@@ -300,7 +389,17 @@ class GameListEditView(LoginRequiredMixin, DetailView):
         game_list = self.object
         profile = self.request.user.profile
 
-        items = game_list.items.select_related('game').order_by('position')
+        # The item card renders `game.display_image_url`, whose chain is IGDB-FIRST -- so without the
+        # concept + igdb_match join every item costs its own two queries, and a 40-game list measured 82.
+        # `raw_response` is deferred with it: that is the ~30 KB IGDB blob no cover template reads, and
+        # the documented trigger for the May 2026 web-server OOM when concurrent renders pile the join
+        # payload up. Both are the standing rule in CLAUDE.md, not a local optimisation.
+        items = (
+            game_list.items
+            .select_related('game', 'game__concept', 'game__concept__igdb_match')
+            .defer('game__concept__igdb_match__raw_response')
+            .order_by('position')
+        )
         context['items'] = items
         context['is_premium'] = profile.user_is_premium
         context['max_items'] = None if profile.user_is_premium else GAME_LIST_FREE_MAX_ITEMS
