@@ -62,6 +62,13 @@
     width: 5px; height: 5px; border-radius: 50%; background: currentColor;
     box-shadow: 0 0 7px currentColor;
 }
+/* Same pill, flagged to a tile's corner. The accent edge alone asked you to infer what the colour meant;
+   this says it. One pill language for both surfaces rather than a second bespoke badge. */
+.rca-new--flag {
+    position: absolute; top: 0.5rem; right: 0.5rem;
+    font-size: 0.5rem; letter-spacing: 0.12em; padding: 0.12rem 0.36rem; gap: 0.25rem;
+}
+.rca-new--flag .rca-new__dot { width: 4px; height: 4px; }
 
 /* ---- The archive -------------------------------------------------------------------------------- */
 
@@ -120,22 +127,32 @@
     font-size: 0.7rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
     color: var(--pp-text-dim);
 }
+/* Room for the flag. Only on flagged tiles, so a watched month still uses the full width. */
+.rca-tile--new .rca-tile__month { padding-right: 3.1rem; }
 .rca-tile--new .rca-tile__month { color: color-mix(in oklab, var(--rca-accent) 70%, var(--pp-text)); }
-.rca-tile__n { color: var(--pp-text); }
+/* Two figures of EQUAL weight. Platinums were a footnote under the trophy count, which got the emphasis
+   backwards: the trophy total says how busy the month was, the platinum count says what it was worth. */
+.rca-tile__stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
+    margin-top: 0.35rem;
+}
+.rca-tile__n { color: var(--pp-text); display: block; }
 .rca-tile__unit {
-    font-size: 0.68rem; font-weight: 600; color: var(--pp-text-mute);
-    margin-top: -0.1rem;
+    display: block;
+    font-size: 0.62rem; font-weight: 600; color: var(--pp-text-mute);
+    margin-top: 0.05rem;
 }
-.rca-tile__plats {
-    display: inline-flex; align-items: center; gap: 0.3rem;
-    margin-top: 0.45rem;
-    font-size: 0.68rem; font-weight: 700;
-    color: var(--pp-rarity-uncommon);
+/* The site's platinum colour, not a new one. Trophy-type colour is fixed vocabulary everywhere else on
+   the site, and a platinum count in some other hue would be a worse inconsistency than its proximity to
+   the unwatched accent -- which is carried by an edge and a labelled pill, never by a number. */
+.rca-tile__stat--plat .rca-tile__n {
+    color: var(--color-trophy-platinum);
+    --pp-tally-glow: var(--color-trophy-platinum);
 }
-.rca-tile__plats svg { width: 12px; height: 12px; }
-/* Held rather than omitted: without it the tiles in a row sit at different heights and the grid stops
-   reading as a grid. */
-.rca-tile__plats--none { visibility: hidden; }
+/* A month with no platinum keeps its cell, greyed. Dropping it would leave neighbouring tiles with their
+   figures on different baselines, and the zero is honest information rather than an absence. */
+.rca-tile__stat--empty .rca-tile__n { color: var(--pp-text-mute); opacity: 0.45; }
+.rca-tile__stat--empty .rca-tile__unit { opacity: 0.55; }
 
 /* ---- Timezone ----------------------------------------------------------------------------------- */
 

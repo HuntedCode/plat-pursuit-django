@@ -155,16 +155,25 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
             {% for m in y.months %}
             <a href="{% url 'recap_view' year=m.year month=m.month %}"
                class="rca-tile{% if not m.seen %} rca-tile--new{% endif %}"
-               aria-label="{{ m.month_name }} {{ m.year }}, {{ m.total }} trophies{% if not m.seen %}, not watched{% endif %}">
+               aria-label="{{ m.month_name }} {{ m.year }}, {{ m.total }} trophies, {{ m.platinums }} platinum{{ m.platinums|pluralize }}{% if not m.seen %}, not watched{% endif %}">
+                {% comment %} The accent edge marks an unwatched month; this says what the edge means.
+                aria-hidden because the link's own label already carries "not watched" -- announcing both
+                would read the same fact twice. {% endcomment %}
+                {% if not m.seen %}
+                <span class="rca-new rca-new--flag" aria-hidden="true"><span class="rca-new__dot"></span>New</span>
+                {% endif %}
                 <span class="rca-tile__month">{{ m.short_month_name }}</span>
-                <span class="pp-tally pp-tally--lg rca-tile__n">{{ m.total|intcomma }}</span>
-                <span class="rca-tile__unit">trophies</span>
-                {% comment %} Kept in the flow when empty rather than dropped, so tiles in a row stay the
-                same height and the grid keeps reading as a grid. {% endcomment %}
-                <span class="rca-tile__plats{% if not m.platinums %} rca-tile__plats--none{% endif %}"
-                      {% if not m.platinums %}aria-hidden="true"{% endif %}>
-                    {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-3 h-3' %}
-                    {{ m.platinums|default:0 }} platinum{{ m.platinums|pluralize }}
+                <span class="rca-tile__stats">
+                    <span class="rca-tile__stat">
+                        <span class="pp-tally pp-tally--lg rca-tile__n">{{ m.total|intcomma }}</span>
+                        <span class="rca-tile__unit">trophies</span>
+                    </span>
+                    {% comment %} A zero keeps its cell rather than vanishing: neighbouring tiles would
+                    otherwise put their figures on different baselines. {% endcomment %}
+                    <span class="rca-tile__stat rca-tile__stat--plat{% if not m.platinums %} rca-tile__stat--empty{% endif %}">
+                        <span class="pp-tally pp-tally--lg rca-tile__n{% if m.platinums %} pp-tally--glow{% endif %}">{{ m.platinums }}</span>
+                        <span class="rca-tile__unit">platinum{{ m.platinums|pluralize }}</span>
+                    </span>
                 </span>
             </a>
             {% endfor %}

@@ -124,7 +124,8 @@ The duplicate calendar and its `month-selector.js` are gone.
 |---|---|
 | Hero | The newest openable month. Trophy total counts in; Begin / Watch it again reflects `has_been_viewed`. |
 | Archive | Free content (no outer card) per the stacked rule. `staggerReveal` on the same grammar as the browse grids. |
-| Tile | Month, trophy count, platinum count, and whether it has been watched. |
+| Tile | Month, trophy count and platinum count at EQUAL weight, plus a "New" flag when unwatched. |
+| Colour | Unwatched = the brand cyan (edge + labelled pill). Platinums = `--color-trophy-platinum`. |
 | Timezone | A quiet utility row. It decides which month a trophy falls into, so it stays on the page it governs. |
 
 Three DB-aggregated reads back the whole page, and none of them scale with how much history a hunter has:
@@ -140,6 +141,13 @@ Three DB-aggregated reads back the whole page, and none of them scale with how m
 merely glanced at is work nobody asked for, and on a whale it is the expensive kind; opening a month
 still generates it. `test_recap_archive_page` pins the render, the figures, and that the query count does
 not grow with the number of months.
+
+Two colours sit close together here and it is deliberate. "Unwatched" is the brand cyan and the
+platinum figure is `--color-trophy-platinum` (#67d1f8), which are adjacent hues. Trophy-type colour is
+fixed vocabulary across the whole site, so a platinum count in a page-specific hue would be the worse
+inconsistency -- and the two never share a role: the state is carried by an edge and a pill with the
+word "New" on it, never by a number. If they ever do read as one thing, move the STATE (to
+`--pp-accent`, say), not the platinum.
 
 ### Presentation: the Entrance and the Stage
 

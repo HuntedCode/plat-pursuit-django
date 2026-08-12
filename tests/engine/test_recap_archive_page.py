@@ -217,3 +217,88 @@ def test_the_archive_aggregates_in_the_database_and_does_not_scale_with_history(
         f'{baseline} queries for one month but {len(many.captured_queries)} for seventeen -- '
         f'the archive is querying per month'
     )
+
+
+# ── What a tile says out loud ─────────────────────────────────────────────────
+
+
+def test_only_unwatched_months_are_flagged_new(client):
+    """The accent edge alone asked the hunter to infer what a colour meant -- and they had to ask. The
+    pill says it. A flag on a month you have already watched would be worse than no flag at all."""
+    profile = _hunter()
+    year, month = _prev_month()
+    _trophy_at(profile, _utc(year, month, 15))
+    _trophy_at(profile, _utc(2024, 3, 5))
+    MonthlyRecap.objects.create(profile=profile, year=2024, month=3, has_been_viewed=True)
+
+    client.force_login(profile.user)
+    body = client.get(reverse('recap_index')).content.decode()
+
+    # One flag per unwatched tile, and the watched month is not one of them. Counted on the month label,
+    # which appears exactly once per tile -- `class="rca-tile` also matches every BEM child on it.
+    tiles = body.count('rca-tile__month')
+    flagged = body.count('rca-new--flag')
+    assert tiles == 2, f'expected two tiles, found {tiles}'
+    assert flagged == 1, f'expected one flag, found {flagged}'
+
+
+def test_the_flag_is_not_announced_twice(client):
+    """The tile's own link label already carries "not watched"; a visible pill saying the same thing has
+    to be hidden from assistive tech or the state is read out for a second time."""
+    profile = _hunter()
+    year, month = _prev_month()
+    _trophy_at(profile, _utc(year, month, 15))
+    _trophy_at(profile, _utc(2024, 3, 5))          # a second month, so the archive grid renders
+
+    client.force_login(profile.user)
+    body = client.get(reverse('recap_index')).content.decode()
+
+    flag = body[body.index('rca-new--flag') - 200:body.index('rca-new--flag') + 120]
+    assert 'aria-hidden="true"' in flag, 'the flag is announced on top of the link label'
+    assert 'not watched' in body, 'the state is not in the accessible name at all'
+
+
+def test_platinums_are_shown_at_the_same_weight_as_trophies(client):
+    """Platinums sat as a footnote under the trophy count, which has the emphasis backwards: the trophy
+    total says how busy a month was, the platinum count says what it was worth."""
+    profile = _hunter()
+    year, month = _prev_month()
+    _trophy_at(profile, _utc(year, month, 15))
+    _trophy_at(profile, _utc(year, month, 16), trophy_type='platinum')
+    _trophy_at(profile, _utc(2024, 3, 5))          # a second month, so the archive grid renders
+
+    client.force_login(profile.user)
+    body = client.get(reverse('recap_index')).content.decode()
+
+    tile = body[body.index('rca-tile__stats'):body.index('rca-tile__stats') + 900]
+    # Both figures carry the same Tally rung; a smaller one would be the old footnote in new markup.
+    assert tile.count('pp-tally--lg') == 2, 'the two figures are not at the same scale'
+    assert 'rca-tile__stat--plat' in tile
+
+
+def test_a_month_without_a_platinum_keeps_its_cell(client):
+    """Dropping the cell would leave neighbouring tiles with their figures on different baselines, and a
+    zero is honest information rather than an absence."""
+    profile = _hunter()
+    year, month = _prev_month()
+    _trophy_at(profile, _utc(year, month, 15))     # bronze only
+    _trophy_at(profile, _utc(2024, 3, 5))          # a second month, so the archive grid renders
+
+    client.force_login(profile.user)
+    body = client.get(reverse('recap_index')).content.decode()
+
+    assert 'rca-tile__stat--empty' in body, 'the platinum cell vanishes when the count is zero'
+    assert 'platinums' in body or 'platinum' in body
+
+
+def test_the_platinum_figure_uses_the_sites_platinum_colour():
+    """Trophy-type colour is fixed vocabulary across the whole site. A platinum count rendered in some
+    page-specific hue would be a worse inconsistency than its proximity to the unwatched accent -- which
+    is carried by an edge and a labelled pill, never by a number."""
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components' /
+           'recap-archive.css').read_text(encoding='utf-8')
+
+    rule = css[css.index('.rca-tile__stat--plat'):]
+    rule = rule[:rule.index('}')]
+    assert 'var(--color-trophy-platinum)' in rule, 'the platinum figure invents its own colour'
