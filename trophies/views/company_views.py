@@ -1,6 +1,5 @@
 import logging
 
-from core.services.tracking import track_page_view
 from django.db.models import (
     Q, F, Count, Avg, Sum, Prefetch, Subquery, OuterRef, Exists, FloatField,
     IntegerField,
@@ -203,7 +202,6 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             "Find games by your favorite studios."
         )
 
-        track_page_view('companies_list', 'list', self.request)
         return context
 
 
@@ -400,5 +398,4 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
             f"View games developed and published by {company.name} on Platinum Pursuit."
         )
 
-        track_page_view('company_detail', company.id, self.request)
         return context

@@ -67,12 +67,10 @@ PlatPursuit has **70 custom management commands** spread across 5 Django apps: `
 | `generate_monthly_recaps` | Generate monthly recap data for active profiles. Defaults to previous month. | `--dry-run`, `--finalize`, `--profile-id`, `--year`, `--month`, `--current-month` | `python manage.py generate_monthly_recaps --finalize` |
 | `send_monthly_recap_emails` | Send monthly recap emails and in-app notifications to users with finalized recaps. Respects email opt-out preferences. | `--dry-run`, `--year`, `--month`, `--profile-id`, `--force`, `--batch-size` (default: 100) | `python manage.py send_monthly_recap_emails --dry-run` |
 | `mark_recaps_sent` | One-time fix: mark all existing recaps as `email_sent` and `notification_sent` to prevent stale sends. | `--dry-run` | `python manage.py mark_recaps_sent` |
-| `cleanup_old_analytics` | Delete old AnalyticsSession records and anonymize IP addresses from PageView records for GDPR compliance. Batches both operations to stay under the DB statement_timeout. | `--dry-run`, `--days` (default: 90), `--force`, `--batch-size` (default: 5000) | `python manage.py cleanup_old_analytics --force` |
 | `refresh_homepage_hourly` | Compute and cache the site heartbeat ribbon data ("PlatPursuit at a Glance"). Single cache key per hour. See [Homepage Services](../reference/homepage-services.md). | (none) | `python manage.py refresh_homepage_hourly` |
 | `post_community_trophy_tracker` | Compute previous ET day's community trophy stats from Discord-linked profiles and post a daily summary to Discord via webhook. Idempotent via `CommunityTrophyDay.posted_at`. See [Community Trophy Tracker](../features/community-trophy-tracker.md). | `--date YYYY-MM-DD`, `--force-repost`, `--dry-run`, `--test-data`, `--test-scenario {record\|normal}`, `--use-platinum-webhook` | `python manage.py post_community_trophy_tracker --test-data` |
 | `populate_title_ids` | Populate TitleID table from external PlayStation Titles GitHub repository (PS4 + PS5 TSV files). | (none) | `python manage.py populate_title_ids` |
 | `backfill_game_families_from_igdb` | Populate `GameFamily` records from accepted `IGDBMatch` rows, keyed on `igdb_id`. One-shot historical pass; live enrichment hooks handle new matches. | `--dry-run` | `python manage.py backfill_game_families_from_igdb --dry-run` |
-| `backfill_guide_view_counts` | Reconcile `Checklist.view_count` from actual PageView records after the `page_type` rename from `checklist` to `guide`. | `--dry-run` | `python manage.py backfill_guide_view_counts` |
 | `send_weekly_digest` | Send "This Week in PlatPursuit" community newsletter with site-wide stats, top platted games, review of the week, and condensed personal stats. Community data fetched once per batch. Only suppressed if the community had zero activity. | `--dry-run`, `--profile-id`, `--force`, `--batch-size` (default: 100) | `python manage.py send_weekly_digest --dry-run` |
 | `test_email_system` | Send test emails for any template to verify email delivery. Supports 17+ email template previews. | `recipient_email` (positional, required), `--recap-preview`, `--verification-preview`, `--password-reset-preview`, `--payment-failed-preview`, `--payment-failed-final-preview`, `--cancelled-preview`, `--welcome-preview`, `--payment-succeeded-preview`, `--payment-action-required-preview`, `--donation-receipt-preview`, `--badge-claim-preview`, `--artwork-complete-preview`, `--badge-earned-preview`, `--milestone-preview`, `--free-welcome-preview`, `--broadcast-preview`, `--weekly-digest-preview` | `python manage.py test_email_system your@email.com --recap-preview` |
 | `update_leaderboards` | Recompute and cache all badge leaderboards: per-series earners, per-series progress, total progress, total XP, country XP, and community series XP. | `--series <slug>`, `--country <CC>` | `python manage.py update_leaderboards` |
@@ -127,7 +125,6 @@ These commands run on automated schedules. See your hosting provider's cron conf
 | `update_leaderboards` | Every 6 hours | Badge leaderboards (7h cache TTL) |
 | `process_scheduled_notifications` | Every hour | Delivers due scheduled notifications |
 | `check_subscription_milestones` | Daily | Checks subscription duration milestones |
-| `cleanup_old_analytics` | Weekly or monthly | GDPR cleanup of old session/IP data |
 | `generate_monthly_recaps` | 3rd of month, 00:05 UTC | Generate and finalize previous month's recaps |
 | `send_monthly_recap_emails` | 3rd of month, 06:00 UTC | Send recap emails + in-app notifications |
 | `send_weekly_digest` | Monday 08:00 UTC | Send "This Week in PlatPursuit" community newsletter |
@@ -177,7 +174,6 @@ Commands that were run once (or a few times) for data migration. They remain in 
 | `backfill_stub_concept_icons` | Copy game icons to PP_ stub Concepts |
 | `backfill_concept_trophy_groups` | Create ConceptTrophyGroup records from game TrophyGroups |
 | `backfill_game_regions` | Populate Game.region from TitleID data |
-| `backfill_guide_view_counts` | Fix guide view counts after page_type rename |
 | `backfill_subscription_periods` | Create SubscriptionPeriod for existing subscribers |
 | `backfill_stage_completions` | Backfill historical StageCompletionEvent rows |
 | `backfill_platted_subgenre_count` | Fix subgenre counts and revoke bad milestones |
@@ -218,7 +214,7 @@ Commands for debugging and monitoring. These do not modify data (except where no
 
 The most common flag across the codebase. When provided, the command previews what changes would be made without writing to the database. Always run with `--dry-run` first when using a command for the first time or on production data.
 
-Commands that support `--dry-run`: `backfill_default_concepts`, `backfill_concept_slugs`, `backfill_stub_concept_icons`, `backfill_game_regions`, `backfill_guide_view_counts`, `backfill_subscription_periods`, `backfill_platted_subgenre_count`, `check_all_badges`, `check_subscription_milestones`, `clean_titles`, `cleanup_old_analytics`, `enforce_az_challenge_rules`, `generate_monthly_recaps`, `grant_milestone`, `lock_admin_concepts`, `mark_recaps_sent`, `match_game_families`, `populate_banned_words`, `populate_milestones`, `populate_user_titles`, `process_scheduled_notifications`, `recalc_earn_rates`, `recalculate_gamification`, `send_monthly_recap_emails`, `send_weekly_digest`, `sync_all_discord_roles`, `update_shovelware`.
+Commands that support `--dry-run`: `backfill_default_concepts`, `backfill_concept_slugs`, `backfill_stub_concept_icons`, `backfill_game_regions`, `backfill_subscription_periods`, `backfill_platted_subgenre_count`, `check_all_badges`, `check_subscription_milestones`, `clean_titles`, `enforce_az_challenge_rules`, `generate_monthly_recaps`, `grant_milestone`, `lock_admin_concepts`, `mark_recaps_sent`, `match_game_families`, `populate_banned_words`, `populate_milestones`, `populate_user_titles`, `process_scheduled_notifications`, `recalc_earn_rates`, `recalculate_gamification`, `send_monthly_recap_emails`, `send_weekly_digest`, `sync_all_discord_roles`, `update_shovelware`.
 
 ### `--username` / `--profile`
 
@@ -248,7 +244,7 @@ Suppresses in-app notifications when awarding milestones. Used by: `populate_use
 
 ### `--force`
 
-Skips confirmation prompts or re-processes already-completed records. Used by: `cleanup_old_analytics` (skip prompt), `send_monthly_recap_emails` (resend to already-emailed users), `send_weekly_digest` (bypass EmailLog dedup).
+Skips confirmation prompts or re-processes already-completed records. Used by: `send_monthly_recap_emails` (resend to already-emailed users), `send_weekly_digest` (bypass EmailLog dedup).
 
 ---
 

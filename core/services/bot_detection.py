@@ -1,20 +1,19 @@
 """
 Centralized bot detection from User-Agent strings.
 
-Single source of truth used by:
-- AnalyticsSessionMiddleware (sets AnalyticsSession.is_bot at session creation)
-- analytics_service (device/browser breakdown, default-filter on dashboard)
-- backfill_session_bots management command (one-time historical pass)
-- track_page_view / track_site_event (skip DB writes for bots)
+Sole remaining caller is track_site_event, which uses it to keep scripted
+traffic out of the SiteEvent funnel. The analytics session/page-view system
+that was its other consumer was removed in 2026-08 (see core.services.tracking).
 
 Catches three classes:
 1. Self-identifying bots: UA contains 'bot'/'spider'/'crawler' or a known crawler name.
 2. Empty UA: legitimate browsers always send one; an empty UA is almost always scripted.
 3. Very short UA (< 20 chars): too short to be any real browser.
 
-Cannot catch UA spoofers (bots claiming to be Chrome). Behavioral detection
-(referrer absence + page_count=1 + IP in known datacenter range) would be
-the next layer; deferred until we see how much residual remains.
+Cannot catch UA spoofers (bots claiming to be Chrome) -- the 2026-08 scraper was
+exactly that, and sailed straight through this check. Anything that needs to stop
+spoofers belongs at the Cloudflare edge, not here: this is a cheap funnel filter,
+not a defence.
 """
 import re
 

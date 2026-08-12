@@ -5,7 +5,6 @@ from django.contrib import messages
 from django.utils import timezone
 from datetime import datetime
 
-from core.services.tracking import track_page_view
 from trophies.mixins import ProfileHotbarMixin, StaffRequiredMixin
 from notifications.models import (
     NotificationTemplate, ScheduledNotification, NotificationLog
@@ -44,7 +43,6 @@ class NotificationInboxView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView
             ('system_alert', 'System Alert'),
         ]
 
-        track_page_view('notifications', 'inbox', self.request)
         return context
 
 

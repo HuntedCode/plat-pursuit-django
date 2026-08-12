@@ -2,7 +2,6 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from core.services.tracking import track_page_view
 from trophies.constants import EVALUATABLE_BADGE_TYPES
 from trophies.services.xp_service import get_tier_xp
 from trophies.util_modules.constants import (
@@ -406,7 +405,6 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             "Track your progress across game collections and earn every tier."
         )
 
-        track_page_view('badges_list', 'list', self.request)
         return context
 
 
@@ -1024,9 +1022,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             f"Track your progress across stages and compete on leaderboards."
         )
 
-        track_page_view('badge', series_slug, self.request)
         tier1_badge = series_badges.filter(tier=1).first()
-        context['view_count'] = tier1_badge.view_count if tier1_badge else 0
 
         # Fundraiser CTA: show when tier1 badge has no custom artwork and no pending claim
         show_fundraiser_cta = False
@@ -1153,7 +1149,6 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
             active_tab = 'earners'
         context['active_tab'] = active_tab
 
-        track_page_view('badge_leaderboard', badge.series_slug, self.request)
         return context
 
 
@@ -1244,7 +1239,6 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
         elif active_tab == 'country':
             context.update(self._get_country_tab_context(user, paginate_by))
 
-        track_page_view('overall_leaderboard', 'global', self.request)
         return context
 
     def _get_country_tab_context(self, user, paginate_by):
@@ -1615,5 +1609,4 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
             {'text': 'Milestones'},
         ]
 
-        track_page_view('milestones_list', 'list', self.request)
         return context

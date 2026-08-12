@@ -32,7 +32,6 @@ from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import TemplateView
 
-from core.services.tracking import track_page_view
 from trophies.mixins import ProfileHotbarMixin
 from trophies.models import EarnedTrophy, Challenge
 from trophies.themes import get_available_themes_for_grid
@@ -80,7 +79,6 @@ class MyShareablesView(LoginRequiredMixin, _RequireLinkedProfileMixin, ProfileHo
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'My Shareables'},
         ]
-        track_page_view('my_shareables', 'user', self.request)
         return context
 
 
@@ -176,7 +174,6 @@ class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Profi
             {'text': 'Platinum Cards'},
         ]
 
-        track_page_view('my_shareables', 'user', self.request)
         return context
 
 
@@ -260,7 +257,6 @@ class MyChallengeSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Prof
             {'text': 'Challenge Cards'},
         ]
 
-        track_page_view('my_shareables', 'user', self.request)
         return context
 
 
@@ -308,5 +304,4 @@ class MyProfileCardView(LoginRequiredMixin, _RequireLinkedProfileMixin, ProfileH
             {'text': 'Profile Card'},
         ]
 
-        track_page_view('my_shareables', 'user', self.request)
         return context

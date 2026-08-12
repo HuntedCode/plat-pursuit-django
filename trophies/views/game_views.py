@@ -2,7 +2,7 @@ import json
 import logging
 import math
 
-from core.services.tracking import track_page_view, track_site_event
+from core.services.tracking import track_site_event
 from datetime import datetime, timedelta
 from django.core.cache import cache
 from django.contrib import messages
@@ -158,7 +158,6 @@ class GamesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             )
             context['rating_map'] = {r['concept_id']: r for r in ratings}
 
-        track_page_view('games_list', 'list', self.request)
         return context
 
 
@@ -1011,8 +1010,6 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             f"Track your progress on Platinum Pursuit."
         )
 
-        track_page_view('game', game.id, self.request)
-        context['view_count'] = game.view_count
 
         # Game Detail Tour: auto-show once, only after Welcome Tour is done.
         # Always keyed to the viewer's own profile, regardless of whose page is being viewed.
@@ -1103,7 +1100,6 @@ class GuideListView(ProfileHotbarMixin, ListView):
         context['form'] = GuideSearchForm(self.request.GET)
 
         track_site_event('guide_visit', 'list', self.request)
-        track_page_view('guides_list', 'list', self.request)
 
         return context
 
@@ -1258,7 +1254,6 @@ class FlaggedGamesView(HtmxListMixin, ProfileHotbarMixin, ListView):
             "unobtainable trophies, online-required trophies, and buggy trophies."
         )
 
-        track_page_view('flagged_games', 'list', self.request)
         return context
 
 
@@ -1455,5 +1450,4 @@ class RecentlyAddedView(HtmxListMixin, ProfileHotbarMixin, ListView):
             "and DLC packs discovered by the Platinum Pursuit scout network."
         )
 
-        track_page_view('recently_added', 'list', self.request)
         return context

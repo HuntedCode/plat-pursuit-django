@@ -7,7 +7,7 @@
 {% block extra_head %}{% jsonld_profile profile request %}{% endblock %}
 
 {% block content %}
-    {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
     {% include 'trophies/partials/profile_detail/profile_detail_header.html' %}
 

@@ -15,7 +15,7 @@
          data-base-url="{% if url_psn_username %}{% url 'game_detail_with_profile' np_communication_id=game.np_communication_id psn_username=url_psn_username %}{% else %}{% url 'game_detail' np_communication_id=game.np_communication_id %}{% endif %}"
          data-scroll-key="gameDetailScrollPos_{{ game.np_communication_id }}">
         <section>
-            {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
+            {% include 'partials/breadcrumb.html' with items=breadcrumb %}
             {% include 'trophies/partials/game_detail/game_detail_header.html' %}
         </section>
 

@@ -8,7 +8,7 @@ create, setup wizard, detail, and edit.
 import json
 import logging
 
-from core.services.tracking import track_page_view, track_site_event
+from core.services.tracking import track_site_event
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, F, Q
@@ -178,7 +178,6 @@ class ChallengeHubView(ProfileHotbarMixin, TemplateView):
                 "Community trophy challenges on Platinum Pursuit. "
                 "A-Z Challenges, Platinum Calendars, and Genre Challenges."
             )
-            track_page_view('challenges_browse', 'hub', self.request)
 
         return context
 
@@ -271,7 +270,6 @@ class MyChallengesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             {'text': 'My Challenges'},
         ]
 
-        track_page_view('my_challenges', 'hub', self.request)
         return context
 
 
@@ -385,7 +383,6 @@ class AZChallengeSetupView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
             {'text': 'Setup'},
         ]
 
-        track_page_view('az_challenge_setup', str(challenge.id), self.request)
         return context
 
 
@@ -483,7 +480,6 @@ class AZChallengeDetailView(ProfileHotbarMixin, DetailView):
         # Increment view count atomically
         Challenge.objects.filter(pk=challenge.pk).update(view_count=F('view_count') + 1)
 
-        track_page_view('az_challenge', str(challenge.id), self.request)
         return context
 
 
@@ -545,7 +541,6 @@ class AZChallengeEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
             {'text': 'Edit'},
         ]
 
-        track_page_view('az_challenge_edit', str(challenge.id), self.request)
         return context
 
 
@@ -668,7 +663,6 @@ class CalendarChallengeDetailView(ProfileHotbarMixin, DetailView):
         # Increment view count atomically to avoid race conditions
         Challenge.objects.filter(pk=challenge.pk).update(view_count=F('view_count') + 1)
 
-        track_page_view('calendar_challenge', str(challenge.id), self.request)
         return context
 
 
@@ -811,7 +805,6 @@ class GenreChallengeSetupView(LoginRequiredMixin, ProfileHotbarMixin, DetailView
             {'text': 'Setup'},
         ]
 
-        track_page_view('genre_challenge_setup', str(challenge.id), self.request)
         return context
 
 
@@ -998,7 +991,6 @@ class GenreChallengeDetailView(ProfileHotbarMixin, DetailView):
         # Increment view count atomically
         Challenge.objects.filter(pk=challenge.pk).update(view_count=F('view_count') + 1)
 
-        track_page_view('genre_challenge', str(challenge.id), self.request)
         return context
 
 
@@ -1127,7 +1119,6 @@ class GenreChallengeEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView)
             {'text': 'Edit'},
         ]
 
-        track_page_view('genre_challenge_edit', str(challenge.id), self.request)
         return context
 
 
