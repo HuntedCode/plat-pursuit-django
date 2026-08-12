@@ -313,63 +313,12 @@
 .pc-skel__col .pc-skel__bar:nth-child(4) { height: 11%; width: 92%; }
 .pc-skel__col .pc-skel__bar:nth-child(5) { height: 13%; width: 68%; }
 
-/* ── Download feedback ─────────────────────────────────────────────────────────────────────────────
- * Three states in one button: idle -> busy -> done. The PNG is rendered by headless Chromium on the
- * server, which is slow enough that an unannotated `disabled` reads as a dead click -- so the busy
- * state is the load-bearing one here, not the success state.
- *
- * The button is min-width'd to its longest label and centres its content, so moving through the three
- * states never resizes it. Without that, "Download" -> "Processing..." -> "Saved" would shuffle the
- * whole right-aligned action row twice per download.
- */
-.pc-btn--go { min-width: 152px; justify-content: center; }
-
-.pc-btn__icons { position: relative; width: 16px; height: 16px; flex-shrink: 0; }
-.pc-btn__i { position: absolute; inset: 0; display: none; }
-.pc-btn__i--idle { display: block; }
-
-.pc-btn--go.is-busy .pc-btn__i--idle,
-.pc-btn--go.is-done .pc-btn__i--idle { display: none; }
-.pc-btn--go.is-busy .pc-btn__i--busy { display: block; }
-.pc-btn--go.is-done .pc-btn__i--done { display: block; }
-
-/* Muted, not merely `disabled` -- the greying is what tells you the button is deliberately out of
-   play rather than broken. `disabled` is still set in JS; this is its visible half.
-   Muted TOWARD the primary rather than to a flat grey: dropped all the way to --pp-bg-2 it became
-   indistinguishable from the Close button sitting next to it, so the primary action appeared to
-   vanish mid-download. The tint also gives the currentColor spinner enough contrast to read. */
-.pc-btn--go.is-busy {
-    background: color-mix(in oklab, var(--pp-primary) 13%, var(--pp-bg-2));
-    border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border));
-    color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-text-dim));
-    box-shadow: none; cursor: progress;
-}
-.pc-btn--go.is-busy:hover {
-    background: color-mix(in oklab, var(--pp-primary) 13%, var(--pp-bg-2));
-    color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-text-dim));
-}
-
-.pc-btn__i--busy {
-    border: 2px solid color-mix(in oklab, currentColor 25%, transparent);
-    border-top-color: currentColor; border-radius: 50%;
-    animation: pcSpin 0.7s linear infinite;
-}
-@keyframes pcSpin { to { transform: rotate(360deg); } }
-
-.pc-btn--go.is-done {
-    background: var(--pp-success); border-color: var(--pp-success); color: var(--pp-bg-0);
-    box-shadow: 0 8px 22px -10px color-mix(in oklab, var(--pp-success) 75%, #000);
-}
-.pc-btn--go.is-done:hover { background: var(--pp-success); color: var(--pp-bg-0); }
 
 @media (prefers-reduced-motion: reduce) {
     .pc-modal[open], .pc-modal.is-closing,
     .pc-modal[open]::backdrop, .pc-modal.is-closing::backdrop { animation: none; }
     .pc-modal__scaler { transition: none; opacity: 1; }
     .pc-skel__bar::after { animation: none; }
-    /* The "Processing..." label and the greyed button carry the busy state on their own, so the ring
-       can hold still rather than being the one thing left spinning on a reduced-motion page. */
-    .pc-btn__i--busy { animation: none; }
 }
 
 /* Swipe-to-close grabber (dismissableSheet adds .pp-dismissable; the pill itself is the shared

@@ -1664,6 +1664,149 @@ function onPageReady(fn) {
 }
 
 /**
+ * CardDownload: the three-state button for a server-rendered share card.
+ *
+ * Every share card on the site is a PNG composed by headless Chromium on the server, which is slow
+ * enough that a plain click reads as a dead one -- so `busy` is the load-bearing state here, not `done`.
+ * And because the file lands in a folder the page cannot see, the save has to be confirmed from the
+ * button itself or it looks like nothing happened at all.
+ *
+ * Extracted from the plat card modal, which is where the states were worked out, once the recap needed
+ * the same thing. The recap's ceremony button was a bare `window.location.href` -- no busy state, no
+ * confirmation, and a failed render navigated the hunter off the stage into a JSON error.
+ *
+ * The blob-and-anchor dance is not ceremony either: a direct navigation to the PNG endpoint cannot
+ * report a failure (the browser has already left), cannot name the file, and on the recap would have
+ * torn down the ceremony to do it.
+ *
+ * @param {HTMLElement} button    the button; it holds the state classes and gets disabled
+ * @param {Object} opts
+ * @param {function(): string} opts.url        resolved at CLICK time -- the ground can change between
+ *                                             presses, and a URL captured at bind time downloads the
+ *                                             card the hunter was looking at a minute ago
+ * @param {function(): string} opts.filename   likewise; the name should describe what was rendered
+ * @param {string|false} [opts.toast]          success toast text, or false for none
+ * @param {function(string, Error)} [opts.onError]  given a ready-to-show message; defaults to a toast
+ * @param {function()} [opts.onStart]          before the fetch -- somewhere to clear a stale error line
+ * @param {Object} [opts.labels]               overrides for {idle, busy, done}
+ * @param {boolean} [opts.autoBind=true]       false when the press is not a plain download: the plat
+ *                                             card may open a rating prompt first and only reach the
+ *                                             save through its callback, so it calls run() itself
+ * @returns {{run: function(), setBlocked: function(boolean), state: function(): string}}
+ */
+const CardDownload = {
+    LABELS: { idle: 'Download', busy: 'Processing...', done: 'Saved' },
+    // Long enough to be read, short enough that the button is ready again before anyone reaches for it.
+    DONE_MS: 2400,
+
+    attach(button, opts) {
+        if (!button || button._ppDownload) { return button && button._ppDownload; }
+
+        const labels = Object.assign({}, this.LABELS, opts.labels || {});
+        const labelEl = button.querySelector('[data-dl-label]');
+        // The idle label belongs to the CALLER, not to us: the plat card names the variant it is about
+        // to save ("Download 100% card"), and a fixed idle string overwrote that the first time the
+        // button was used -- so a saved card silently demoted its own button to a generic "Download".
+        // Unless one is passed explicitly, idle means "whatever it said before we borrowed it", captured
+        // at press time because the caller may not know the label until its payload lands.
+        const fixedIdle = opts.labels && opts.labels.idle;
+        let idleText = labelEl ? labelEl.textContent : labels.idle;
+        const doneMs = this.DONE_MS;
+        // Two independent reasons to be disabled -- the caller's (a preview still loading, say) and a
+        // download already in flight -- so `disabled` is DERIVED from both. Setting it directly from
+        // either one is how a finished download re-enables a button its owner wanted kept shut.
+        let blocked = false, busy = false, revertTimer = null, state = 'idle';
+
+        const sync = () => { button.disabled = blocked || busy; };
+
+        const setState = (next) => {
+            clearTimeout(revertTimer);
+            state = next;
+            busy = next === 'busy';
+            button.classList.toggle('is-busy', busy);
+            button.classList.toggle('is-done', next === 'done');
+            sync();
+            if (labelEl) {
+                labelEl.textContent = next === 'idle' ? (fixedIdle || idleText) : labels[next];
+            }
+            // Release the pin with the label that needed it. Surfaces that reuse one button across
+            // cards get a different idle label each time ("...100% card" / "...platinum card"), and a
+            // pin held from the previous one would size the button to the wrong word.
+            if (next === 'idle') { button.style.minWidth = ''; }
+            // Swapping the label mid-press is a change a screen reader should hear; the button is the
+            // only progress indicator, so it has to announce like one.
+            button.setAttribute('aria-busy', busy ? 'true' : 'false');
+            if (next === 'done') { revertTimer = setTimeout(() => setState('idle'), doneMs); }
+        };
+
+        const fail = (message, err) => {
+            setState('idle');
+            if (opts.onError) { opts.onError(message, err); }
+            else if (window.PlatPursuit && window.PlatPursuit.ToastManager) {
+                window.PlatPursuit.ToastManager.show(message, 'error', 4000);
+            }
+        };
+
+        const run = () => {
+            if (busy) { return; }
+            if (labelEl && !fixedIdle && state === 'idle') { idleText = labelEl.textContent; }
+            // Pin the width before the label changes. The stylesheet's min-width sizes the button to the
+            // longest of OUR three labels, which is only the whole story when the caller uses the default
+            // idle text -- the plat card's "Download 100% card" is wider than all three, so pressing it
+            // shrank the button by 50px and shuffled the action row it sits in. Measured, not guessed,
+            // because the width depends on the font that actually loaded.
+            if (state === 'idle') { button.style.minWidth = `${Math.ceil(button.offsetWidth)}px`; }
+            setState('busy');
+            if (opts.onStart) { opts.onStart(); }
+            fetch(opts.url(), { credentials: 'same-origin' })
+                .then((res) => {
+                    if (!res.ok) { throw new Error(String(res.status)); }
+                    return res.blob();
+                })
+                .then((blob) => {
+                    const href = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = href;
+                    a.download = opts.filename();
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    // Revoking immediately races the download in Safari, which has not necessarily
+                    // read the blob by the time the click handler returns.
+                    setTimeout(() => URL.revokeObjectURL(href), 1000);
+                    setState('done');
+                    if (opts.toast !== false && window.PlatPursuit && window.PlatPursuit.ToastManager) {
+                        window.PlatPursuit.ToastManager.show(
+                            opts.toast || 'Card saved to your downloads.', 'success', 3200);
+                    }
+                })
+                .catch((err) => fail(
+                    // The renderer is rate-limited per user, and "try again" is bad advice for the one
+                    // failure where trying again is exactly what caused it.
+                    err && err.message === '403'
+                        ? 'Too many cards at once. Give it a minute.'
+                        : "Couldn't render that card. Try again in a moment.",
+                    err));
+        };
+
+        if (opts.autoBind !== false) {
+            button.addEventListener('click', () => { if (!button.disabled) { run(); } });
+        }
+
+        const handle = {
+            run,
+            setBlocked(on) { blocked = !!on; sync(); },
+            // For surfaces that reuse one button across several cards: a new card must never be greeted
+            // with the previous one's "Saved", and the pending revert timer has to be cancelled with it.
+            reset() { setState('idle'); },
+            state() { return state; },
+        };
+        button._ppDownload = handle;
+        return handle;
+    },
+};
+
+/**
  * Takeover: put an element in front of everything and hand it the whole screen.
  *
  * The correctness-critical half of a full-screen surface -- scroll lock, the page-recede depth cue, focus
@@ -1769,6 +1912,7 @@ window.PlatPursuit.wireTablist = wireTablist;
 window.PlatPursuit.syncViewParam = syncViewParam;
 window.PlatPursuit.staggerReveal = staggerReveal;
 window.PlatPursuit.dismissableSheet = dismissableSheet;
+window.PlatPursuit.CardDownload = CardDownload;
 window.PlatPursuit.onPageReady = onPageReady;
 
 /**

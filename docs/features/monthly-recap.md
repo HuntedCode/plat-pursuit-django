@@ -384,6 +384,23 @@ Load-bearing details, each of which was a bug first:
   centred in the room it actually has, and `fit()` reads that box -- so the card scales down to suit
   (630 -> 578px at 900) instead of running off the bottom.
 
+- **The Download button is shared, and it had to be.** The ceremony's was a bare
+  `window.location.href`. That cannot show progress on a call that runs headless Chromium, cannot name the
+  file, and on a failure the browser has already left -- so a render error or the 20/m rate limit replaced
+  the whole ceremony with a JSON error document and no way back. It now runs on
+  `PlatPursuit.CardDownload` with the plat card modal and the below-fold panel, which between them had
+  three copies of fetch-blob-anchor with three different ideas of what a slow press looks like.
+
+  Two things are specific to the stage. It opts out of the success toast (the toast host is `z-50` and the
+  stage is `z-90`, so one fired from inside renders behind the ceremony) and carries its own
+  `#recap-dl-error` line instead -- which is an in-flow sibling of the card frame, so showing it re-fits
+  the card, the same trap the plat card modal hit and only on the failure path. And `--pp-dl-accent` points
+  the busy tint at the beat's accent rather than the site primary, since the whole surface is keyed to it.
+
+  `recap_image_download` moved with the button. It hung off the below-fold panel, which was the only way
+  to get the card when it was written; leaving it there would have quietly zeroed the metric as the
+  ceremony took over.
+
 - **A component stylesheet outranks Tailwind's `hidden`.** Utilities live in a layer and these component
   files do not, so an unlayered `display: flex` beats `.hidden { display: none }` whatever the source
   order. Three classes needed guards and each failed differently:

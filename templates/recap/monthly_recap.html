@@ -182,15 +182,23 @@ PlatPursuit.takeover. {% endcomment %}
         </div>
         {% endif %}
         <div class="rcx__out">
-            <button type="button" class="rcx__btn rcx__btn--primary" id="recap-download">
-                Download
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M12 4v12M6 12l6 6 6-6M4 21h16" />
-                </svg>
+            {% comment %}The same three-state button the plat card modal uses -- idle, busy, done. The
+            PNG is composed by headless Chromium on the server, so the press is not instant and this used
+            to be a bare navigation: no busy state, no confirmation, and a failed render replaced the
+            ceremony with a JSON error document. Glyphs and states are shared; see
+            partials/download_button_icons.html and components/download-button.css.{% endcomment %}
+            <button type="button" class="rcx__btn rcx__btn--primary pp-dl" id="recap-download">
+                {% include 'partials/download_button_icons.html' %}
+                <span data-dl-label>Download</span>
             </button>
             <button type="button" class="rcx__btn" id="recap-done">Done</button>
         </div>
+        {% comment %}The failure line. It is here rather than a toast because the stage is z-index 90 and
+        the page's toast host is z-50, so a toast fired from inside the ceremony renders BEHIND it -- the
+        plat card modal gets a top-layer host for free from <dialog>; a takeover div does not. A download
+        that fails silently is worse than one that never had a busy state. `aria-live` because the press
+        that caused it has already moved focus nowhere.{% endcomment %}
+        <p class="rcx__err" id="recap-dl-error" role="status" aria-live="polite" hidden></p>
     </div>
 </div>
 

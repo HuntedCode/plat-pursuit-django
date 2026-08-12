@@ -1,0 +1,19 @@
+{% comment %}
+The icon slot for a three-state download button (PlatPursuit.CardDownload + components/download-button.css).
+
+All three glyphs ship and CSS shows one: swapping innerHTML mid-press would throw away the button's
+contents and, with them, whatever focus or a screen reader was holding onto. The busy glyph is an empty
+span the stylesheet draws as a spinning ring from `currentColor`, so it takes the button's own colour in
+whatever state it is in.
+
+Usage:
+    <button type="button" class="<surface button classes> pp-dl">
+        {% include 'partials/download_button_icons.html' %}
+        <span data-dl-label>Download</span>
+    </button>
+{% endcomment %}
+<span class="pp-dl__icons" aria-hidden="true">
+    <svg class="pp-dl__i pp-dl__i--idle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    <span class="pp-dl__i pp-dl__i--busy"></span>
+    <svg class="pp-dl__i pp-dl__i--done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+</span>

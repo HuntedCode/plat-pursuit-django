@@ -30,6 +30,7 @@
 @import "./components/home.css";
 @import "./components/claim-ceremony.css";
 @import "./components/game-detail.css";
+@import "./components/download-button.css";
 @import "./components/plat-cards.css";
 @import "./components/recap-archive.css";
 @import "./components/recap-deck.css";

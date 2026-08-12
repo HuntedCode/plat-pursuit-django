@@ -234,12 +234,18 @@ def test_download_button_carries_all_three_states(client):
     """Idle, busy and done glyphs all ship in the markup; CSS picks one.
 
     The busy state is the load-bearing one: the PNG render is slow, so a button that only goes
-    `disabled` reads as a dead click."""
+    `disabled` reads as a dead click.
+
+    The glyphs and the state machine are shared with the recap ceremony's button now
+    (`partials/download_button_icons.html` + `PlatPursuit.CardDownload`), so this also pins that the
+    button still opts IN -- the states key off `.pp-dl` and a button without it is styleless."""
     profile = _hunter()
     _completed_game(profile, with_platinum=True)
     client.force_login(profile.user)
 
     html = client.get(URL).content.decode()
 
-    for glyph in ('pc-btn__i--idle', 'pc-btn__i--busy', 'pc-btn__i--done'):
+    for glyph in ('pp-dl__i--idle', 'pp-dl__i--busy', 'pp-dl__i--done'):
         assert glyph in html, f'{glyph} missing from the download button'
+    assert 'pc-btn--go pp-dl' in html, 'the download button is not on the shared state machine'
+    assert 'data-dl-label' in html, 'the label has no hook, so busy/done would never be announced'

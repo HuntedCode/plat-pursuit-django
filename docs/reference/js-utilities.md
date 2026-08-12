@@ -243,6 +243,39 @@ can't FLIP its disc back from a dragged-off position, so on swipe it instead **r
 the source medallion reappears in the grid with a subtle materialize settle -- while the tap/close button
 keeps the grow/shrink "put-down". Both routes send the object back to its slot.
 
+### PlatPursuit.CardDownload
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `attach(button, opts)` | HTMLElement, `{url, filename, toast?, onStart?, onError?, labels?, autoBind?}` | Wire a three-state download button. Returns `{run, setBlocked, reset, state}` |
+
+**The common practice for every server-rendered share card.** Pairs with
+`components/download-button.css` (the `.pp-dl` state classes) and
+`partials/download_button_icons.html` (the three glyphs, all shipped, CSS picks one). Live on the plat
+card modal, the recap ceremony, and the recap's below-fold panel — which between them had three copies of
+fetch-blob-anchor before this.
+
+The PNG is composed by headless Chromium on the server, so the press is **not** instant: `busy` is the
+load-bearing state, not `done`. And the file lands somewhere the page cannot see, so `done` is the only
+confirmation there is. Both are why the button is the progress indicator and announces like one
+(`aria-busy`, and the label swaps in place rather than the button being rebuilt).
+
+Fetch-then-save rather than navigating, which is the whole reason it exists: `location.href` is fine
+while the endpoint returns an attachment but its failure paths are not — a render error returns JSON and
+the per-user rate limit returns an HTML 403, either of which replaces the page with a bare error
+document. On the recap that took the open ceremony with it.
+
+Points worth knowing before you touch it:
+
+| Thing | Why |
+|---|---|
+| `url` / `filename` are **functions** | Resolved at press time. The ground and the art index both change while a modal is open, and a URL captured at bind time saves the card the hunter was looking at a minute ago |
+| `disabled` is **derived** | From the caller's reason (`setBlocked`, e.g. preview still loading) and the in-flight one, never written by either. They used to race: a theme swap re-disabled the button while the "Saved" revert timer was queued to re-enable it, and whichever fired last won |
+| idle label belongs to the **caller** | Unless `labels.idle` is passed, idle means "whatever it said before" — the plat card names its variant ("Download 100% card") and a fixed string demoted it to a generic "Download" the first time it was used |
+| the width is **pinned** at press | The stylesheet's `min-width` only knows OUR three labels, so a longer caller label shrank the button 50px mid-press and shuffled the row it sits in. Measured, not guessed — it depends on the font that loaded |
+| `toast: false` inside a takeover | The page toast host is `z-50`. A `<dialog>` gets a top-layer host for free; a takeover div (the recap stage, `z-90`) does not, so a toast fired from inside renders *behind* it. Those surfaces carry their own error line instead |
+| a **download** failure must not block | "Give it a minute" was being shown by the same call that disabled the only button that could take the advice. A *preview* failure blocks (no card exists); a download failure does not |
+
 ### PlatPursuit.wireGuidelinesSheet
 
 | Method | Parameters | Purpose |

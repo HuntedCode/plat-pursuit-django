@@ -239,21 +239,58 @@ class MonthlyRecapManager {
         // negotiating for the same stage. That negotiation was every bug this transition ever had.
         this.container.classList.add('is-ending');
 
-        const dl = document.getElementById('recap-download');
-        if (dl && !dl._wired) {
-            dl._wired = true;
-            dl.addEventListener('click', () => this.downloadCard());
-        }
+        this.wireDownload();
         // "Change the look" used to close the ceremony to land the hunter on a picker below the fold.
         // The grounds are eight swatches under the card now, so there is nowhere to send anyone.
     }
 
-    /** The one expensive call in the whole flow -- everything else is a template render. */
-    downloadCard() {
+    /**
+     * The one expensive call in the whole flow -- everything else is a template render, this is headless
+     * Chromium composing a PNG. It was a bare `window.location.href`, which is the worst possible shape
+     * for a slow call inside a takeover: no busy state (the press read as dead), no confirmation of a
+     * file that lands somewhere the page cannot see, and on a render error or the rate limit the browser
+     * had already left -- so the ceremony was replaced by a JSON error document with no way back.
+     *
+     * PlatPursuit.CardDownload owns all of that, shared with the plat card modal where it was worked out.
+     */
+    wireDownload() {
+        const dl = document.getElementById('recap-download');
+        if (!dl || !PlatPursuit.CardDownload) { return; }
+        PlatPursuit.CardDownload.attach(dl, {
+            // Resolved at press time: the hunter can change ground between opening the card and saving
+            // it, and the file has to be the card they are looking at.
+            url: () => this.cardPngUrl(),
+            filename: () => this.cardFilename(),
+            onStart: () => { this.trackDownload(); this.showDownloadError(''); },
+            // No toast: the page's toast host is z-50 and the stage is z-90, so one fired from in here
+            // renders behind the ceremony. The button's own "Saved" carries the success -- it is centre
+            // stage rather than in a modal's corner action row, so it is not missable the way the plat
+            // card's is. Failures get the line instead, which is the half that actually needed saying.
+            toast: false,
+            onError: (message) => this.showDownloadError(message),
+        });
+    }
+
+    /** One URL for both surfaces -- the ceremony's button and the below-fold panel's render the same
+     *  card, and they drifted once already (the panel sent a bare `theme=`, the ceremony omitted it). */
+    cardPngUrl() {
         const theme = this.currentBackground
             ? `&theme=${encodeURIComponent(this.currentBackground)}` : '';
-        window.location.href =
-            `/api/v1/recap/${this.year}/${this.month}/png/?image_format=landscape${theme}`;
+        return `/api/v1/recap/${this.year}/${this.month}/png/?image_format=landscape${theme}`;
+    }
+
+    cardFilename() {
+        return `platpursuit-recap-${this.year}-${String(this.month).padStart(2, '0')}.png`;
+    }
+
+    showDownloadError(message) {
+        const line = document.getElementById('recap-dl-error');
+        if (!line) { return; }
+        line.textContent = message || '';
+        line.hidden = !message;
+        // The line is an IN-FLOW sibling of the card frame, so showing it eats room the fit already
+        // handed to the card. Same trap the plat card modal hit, and it only bites on the failure path.
+        if (this._fitCard) { this._fitCard(); }
     }
 
     /** takeover() has already removed the stage and restored focus; put the page back in order. */
@@ -1219,9 +1256,9 @@ class MonthlyRecapManager {
                     </div>
 
                     <div class="rcs__controls">
-                        <button id="download-recap-image" class="btn btn-sm md:btn-md btn-primary rcs__dl"
+                        <button id="download-recap-image" class="btn btn-sm md:btn-md btn-primary rcs__dl pp-dl"
                                 data-year="${this.year}" data-month="${this.month}">
-                            Download
+                            <span data-dl-label>Download</span>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <path d="M12 4v12M6 12l6 6 6-6M4 21h16" />
@@ -1286,26 +1323,39 @@ class MonthlyRecapManager {
     triggerSlideEffects() {}
 
     setupShareButtons() {
-        // Download button
+        // The nudge that used to sit here asked "want to pick a background first?" and offered to open
+        // the colour wall. The eight grounds are swatches on the page now, directly under the preview --
+        // there is nothing left to nudge anyone towards.
+        //
+        // Same three states as the ceremony's button and the plat card's, through the same helper. This
+        // panel had its own third copy of fetch-blob-anchor with a DaisyUI spinner swapped into
+        // innerHTML, which threw away the button's contents on every press.
         const downloadBtn = document.getElementById('download-recap-image');
-        if (downloadBtn && !downloadBtn._hasListener) {
-            // The nudge that used to sit here asked "want to pick a background first?" and offered to
-            // open the colour wall. The eight grounds are swatches on the page now, directly under the
-            // preview -- there is nothing left to nudge anyone towards.
-            downloadBtn.addEventListener('click', () => this._trackAndDownload());
-            downloadBtn._hasListener = true;
+        if (downloadBtn && PlatPursuit.CardDownload) {
+            PlatPursuit.CardDownload.attach(downloadBtn, {
+                url: () => this.cardPngUrl(),
+                filename: () => this.cardFilename(),
+                onStart: () => this.trackDownload(),
+            });
         }
 
     }
 
-    _trackAndDownload() {
+    /**
+     * Fired on every press, including a retry -- which is what it always did. Read it as intent to save,
+     * not as a completed save.
+     *
+     * It used to hang off the below-fold panel only. That panel was the sole way to get the card when
+     * this was written; the ceremony is now the primary route, so leaving the event down there would
+     * have quietly zeroed the metric as the ceremony took over.
+     */
+    trackDownload() {
         PlatPursuit.API.post('/api/v1/tracking/site-event/', {
             event_type: 'recap_image_download',
             object_id: `${this.year}-${String(this.month).padStart(2, '0')}`
         }).catch(err => {
             console.error('[RECAP] Failed to track download:', err);
         });
-        this.downloadShareImage();
     }
 
     /** The chosen ground, from the swatch row. Falls back to the first, which is always checked. */
@@ -1327,50 +1377,6 @@ class MonthlyRecapManager {
      */
     updatePreviewBackground() {
         document.querySelectorAll('.share-image-content').forEach((card) => this.applyBackground(card));
-    }
-
-    async downloadShareImage() {
-        const btn = document.getElementById('download-recap-image');
-
-        const originalText = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Generating...';
-
-        try {
-            // Fetch PNG from server-side Playwright renderer
-            const url = `/api/v1/recap/${this.year}/${this.month}/png/?image_format=landscape&theme=${this.currentBackground}`;
-
-            const response = await fetch(url, {
-                credentials: 'same-origin',
-                headers: {
-                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
-                },
-            });
-
-            if (!response.ok) {
-                throw new Error(`Server rendering failed: ${response.status}`);
-            }
-
-            const blob = await response.blob();
-
-            const downloadUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = `platpursuit_recap_${this.year}_${this.month}.png`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(downloadUrl);
-
-        } catch (error) {
-            console.error('Error generating share image:', error);
-            if (window.PlatPursuit && window.PlatPursuit.ToastManager) {
-                window.PlatPursuit.ToastManager.show('Failed to generate share image', 'error');
-            }
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = originalText;
-        }
     }
 
     nextSlide() {

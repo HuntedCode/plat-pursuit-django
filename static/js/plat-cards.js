@@ -240,12 +240,21 @@
         previewBlocked = !!on;                 // nothing to download until the card exists
         syncDownloadEnabled();
     }
-    function showError(msg) {
+    /**
+     * @param {string} msg              the line to show, or '' to clear it
+     * @param {boolean} [blocks=true]   whether it also holds the download button shut
+     *
+     * A PREVIEW failure blocks: there is no card, so there is nothing to download. A DOWNLOAD failure
+     * does not -- the card is right there and the message says to try again in a minute, which the
+     * hunter could not do, because the same call that showed the advice disabled the only button that
+     * could take it. Both went through here unqualified.
+     */
+    function showError(msg, blocks) {
         var e = dlg && dlg.querySelector('[data-share-error]');
         if (!e) { return; }
         e.hidden = !msg;
         e.textContent = msg || '';
-        if (msg) { previewBlocked = true; syncDownloadEnabled(); }
+        if (msg && blocks !== false) { previewBlocked = true; syncDownloadEnabled(); }
         // Re-fit: the error line is an IN-FLOW sibling of the frame, so showing it eats room fit()
         // already handed to the preview. The box is overflow:hidden, so without this the swatch row is
         // clipped with no scrollbar -- silently, and only on the failure path.
@@ -253,13 +262,13 @@
     }
 
     // Two things independently want the download button disabled -- the preview still loading (or
-    // failed), and a download already in flight -- so `disabled` is derived from both rather than
+    // failed), and a download already in flight -- so `disabled` is DERIVED from both rather than
     // written by each. They used to race: a theme swap re-disabled the button while the "Saved" revert
-    // timer was still queued to re-enable it, and whichever fired last won.
-    var previewBlocked = false, downloading = false;
+    // timer was still queued to re-enable it, and whichever fired last won. The helper owns the
+    // in-flight half; this side only reports its own.
+    var previewBlocked = false;
     function syncDownloadEnabled() {
-        var go = dlg && dlg.querySelector('[data-share-download]');
-        if (go) { go.disabled = previewBlocked || downloading; }
+        if (downloader) { downloader.setBlocked(previewBlocked); }
     }
 
     function loadPreview() {
@@ -335,7 +344,7 @@
         var link = dlg.querySelector('[data-share-game]');
         if (name) { name.textContent = current.gameName; }
         if (link) { link.hidden = !current.gameName; link.removeAttribute('href'); }
-        setDownloadState('idle');       // never greet a new card with the previous one's "Saved"
+        if (downloader) { downloader.reset(); }   // never greet a new card with the previous one's "Saved"
         // Hidden until the card loads: there is nothing to rate yet, and the PREVIOUS card's label
         // would otherwise sit there offering to edit a rating that belongs to a different game.
         syncRateButton();
@@ -362,62 +371,37 @@
         return i === null ? url : url + '&art=' + encodeURIComponent(i);
     }
 
-    // Fetch-then-save rather than navigating. location.href is fine while the endpoint returns an
-    // attachment, but its failure paths don't: a render error returns JSON and the 20/m rate limit
-    // returns an HTML 403, either of which would replace the page with a bare error document and take
-    // the open modal with it.
-    // Download button state machine. The PNG is rendered by headless Chromium on the server and takes
-    // a beat, so `busy` is the load-bearing state here: without it the button just goes inert and the
-    // click reads as having done nothing. `done` then confirms the save, which is otherwise invisible
-    // from the page -- the file lands in a folder we can't see.
-    var revertTimer = null;
-    var DL_LABELS = { idle: 'Download', busy: 'Processing...', done: 'Saved' };
+    // The state machine, the fetch and the blob-and-anchor save are PlatPursuit.CardDownload -- shared
+    // with the recap ceremony's button, which needed exactly this and had none of it. What stays here is
+    // what is specific to this modal: where an error goes (an in-flow line rather than a toast, because
+    // the modal is on top of the page's toast host), and the fact that a press might open a rating
+    // prompt before it saves anything.
+    //
+    // Fetch-then-save rather than navigating, which the shared helper is also FOR: location.href is fine
+    // while the endpoint returns an attachment, but its failure paths are not -- a render error returns
+    // JSON and the 20/m rate limit returns an HTML 403, either of which would replace the page with a
+    // bare error document and take the open modal with it.
+    var downloader = null;
 
-    function setDownloadState(state) {
-        clearTimeout(revertTimer);
+    function wireDownload() {
         var go = dlg && dlg.querySelector('[data-share-download]');
-        var label = dlg && dlg.querySelector('[data-share-download-label]');
-        if (!go) { return; }
-        go.classList.toggle('is-busy', state === 'busy');
-        go.classList.toggle('is-done', state === 'done');
-        downloading = state === 'busy';
+        if (!go || !PP.CardDownload) { return; }
+        downloader = PP.CardDownload.attach(go, {
+            // Resolved at press time: the ground and the art index both change while the modal is open.
+            url: pngUrl,
+            filename: function () {
+                return (current && current.gameName || 'plat-card')
+                    .replace(/[^A-Za-z0-9 _-]/g, '').trim() + '.png';
+            },
+            // ToastManager routes this into the modal's own .modal-toast-container (a top-layer
+            // popover) rather than the page container, so it lands ABOVE the dialog instead of behind
+            // its backdrop.
+            toast: 'Card saved to your downloads.',
+            onStart: function () { showError(''); },
+            onError: function (msg) { showError(msg, false); },
+            autoBind: false,                    // the press goes through download(), which may prompt
+        });
         syncDownloadEnabled();
-        if (label) { label.textContent = DL_LABELS[state]; }
-        // Swapping the label mid-press is a change a screen reader should hear; the button is the only
-        // progress indicator, so it has to announce like one.
-        go.setAttribute('aria-busy', state === 'busy' ? 'true' : 'false');
-        if (state === 'done') { revertTimer = setTimeout(function () { setDownloadState('idle'); }, 2400); }
-    }
-
-    function saveCard() {
-        setDownloadState('busy');
-        showError('');
-        fetch(pngUrl(), { credentials: 'same-origin' })
-            .then(function (res) {
-                if (!res.ok) { throw new Error(String(res.status)); }
-                return res.blob();
-            })
-            .then(function (blob) {
-                var a = document.createElement('a');
-                var href = URL.createObjectURL(blob);
-                a.href = href;
-                a.download = (current.gameName || 'plat-card').replace(/[^A-Za-z0-9 _-]/g, '').trim() + '.png';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                setTimeout(function () { URL.revokeObjectURL(href); }, 1000);
-                setDownloadState('done');
-                // Second, louder confirmation. ToastManager routes this into the modal's own
-                // .modal-toast-container (a top-layer popover) rather than the page container, so it
-                // lands ABOVE the dialog instead of behind its backdrop.
-                if (PP.ToastManager) { PP.ToastManager.show('Card saved to your downloads.', 'success', 3200); }
-            })
-            .catch(function (err) {
-                setDownloadState('idle');
-                showError(err && err.message === '403'
-                    ? 'Too many cards at once. Give it a minute.'
-                    : "Couldn't render that card. Try again in a moment.");
-            });
     }
 
     // ── Rating ────────────────────────────────────────────────────────────────────────────────────
@@ -490,9 +474,9 @@
     }
 
     function download() {
-        if (!current) { return; }
-        if (!current.hasRating && current.conceptId && !asked) { promptRating(saveCard); return; }
-        saveCard();
+        if (!current || !downloader) { return; }
+        if (!current.hasRating && current.conceptId && !asked) { promptRating(downloader.run); return; }
+        downloader.run();
     }
 
     // Exits are choreographed as carefully as entrances: a native close() is instant, which reads as
@@ -517,6 +501,9 @@
     function wireModal(first) {
         dlg = document.getElementById('pc-share');
         if (!dlg) { return; }
+        // Same reason as the listeners below: after a history restore this is a FRESH button node, so
+        // the handle has to be re-made against it or every press is inert.
+        wireDownload();
 
         // Bound EVERY boot, not only the first. The dialog is outside the HTMX filter swap, but NOT
         // outside a history restore: base.html sets no hx-history-elt, so htmx replaces document.body

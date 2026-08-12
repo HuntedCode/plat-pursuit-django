@@ -569,6 +569,16 @@
 .rcx__btn:focus-visible { outline: 2px solid var(--rcx-accent); outline-offset: 2px; }
 .rcx__btn--primary { color: var(--pp-bg-0); background: var(--rcx-accent); border-color: transparent; }
 .rcx__btn--primary:hover { background: var(--rcx-accent); filter: brightness(1.08); }
+.rcx__err {
+    margin: 0 auto; max-width: 32rem; padding: 0 1rem 1rem;
+    font-size: 0.78rem; font-weight: 600; text-align: center;
+    color: var(--pp-error);
+}
+.rcx__err[hidden] { display: none; }
+/* The shared three-state download button (components/download-button.css) tints its busy state from
+   this, so on the stage it mutes toward the beat's own accent rather than the site primary -- the whole
+   surface is keyed to the accent and a stock-blue busy button would be the one thing that is not. */
+.rcx__btn--primary.pp-dl { --pp-dl-accent: var(--rcx-accent); }
 
 /* The share panel below the stage. It is hidden until the closing beat hands over to it -- the rule that
    does that went missing when the deck CSS was extracted, so it had been permanently visible while the
