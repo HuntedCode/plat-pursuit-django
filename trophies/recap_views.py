@@ -42,7 +42,6 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
                 'profile': profile,
                 'stale_month_name': calendar.month_name[target_month],
                 'stale_year': target_year,
-                'user_timezone': request.user.user_timezone or 'UTC',
                 'breadcrumb': [
                     {'text': 'Home', 'url': reverse_lazy('home')},
                     {'text': 'Monthly Recap'},
@@ -125,7 +124,6 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
                 'profile': profile,
                 'stale_month_name': calendar.month_name[month],
                 'stale_year': year,
-                'user_timezone': request.user.user_timezone or 'UTC',
                 'breadcrumb': [
                     {'text': 'Home', 'url': reverse_lazy('home')},
                     {'text': 'Monthly Recap'},
@@ -152,7 +150,6 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         context['year'] = year
         context['month'] = month
         context['month_name'] = calendar.month_name[month]
-        context['user_timezone'] = self.request.user.user_timezone or 'UTC'
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},

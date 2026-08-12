@@ -104,6 +104,13 @@
     transition: opacity 0.28s ease;
 }
 .rcx.is-in { opacity: 1; }
+/* The stage is `position: fixed; inset: 0; z-index: 90` and merely TRANSPARENT when idle, so it must
+   actually leave the layout when hidden -- not just fade. It is dismissed two different ways and only one
+   of them worked: the `hidden` ATTRIBUTE is fine, but the no-activity and error paths add the `hidden`
+   CLASS, and Tailwind's utilities are layered while this file is not, so `display: flex` won.
+   The result was an invisible full-screen sheet over the error state, swallowing every click including
+   the Try again button underneath it. Confirmed with `elementFromPoint` at the viewport centre. */
+.rcx.hidden { display: none; }
 
 /* Every beat sets its own accent; the WHOLE stage takes it, not just the card. This is what makes the
    surface change character between beats instead of being one box with swapped contents.
@@ -578,12 +585,12 @@
  * ================================================================ */
 
 .rcs { display: flex; flex-direction: column; gap: 0.9rem; }
-.rcs__head { text-align: center; }
-.rcs__title {
-    font-family: var(--pp-font-display, ui-sans-serif, system-ui, sans-serif);
-    font-size: 1.05rem; font-weight: 800; letter-spacing: -0.01em; color: var(--pp-text);
-}
-.rcs__sub { margin-top: 0.15rem; font-size: 0.75rem; color: var(--pp-text-mute); }
+/* Same layer trap as `.rcs-state` below, and this one is reached from JS rather than the template: the
+   no-activity and error paths both do `#share-section.classList.add('hidden')`, and an unlayered
+   `display: flex` here outranks the utility. Latent today only because the panel happens to be empty when
+   those paths run -- the moment it is not, a hidden panel renders. */
+.rcs.hidden,
+.rcs[hidden] { display: none; }
 
 .rcs__stack { display: flex; flex-direction: column; align-items: center; gap: 1rem; }
 
@@ -665,6 +672,5 @@
 
 @media (min-width: 768px) {
     .rcs { gap: 1.1rem; }
-    .rcs__title { font-size: 1.2rem; }
     .rcs-state { padding: 4rem 1rem 5rem; }
 }

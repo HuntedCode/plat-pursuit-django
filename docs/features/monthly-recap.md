@@ -245,10 +245,18 @@ Load-bearing details, each of which was a bug first:
 
 - **A component stylesheet outranks Tailwind's `hidden`.** Utilities live in a layer and these component
   files do not, so an unlayered `display: flex` beats `.hidden { display: none }` whatever the source
-  order. Both terminal states (no-activity, error) rendered on every month page that loaded fine, stacked
-  under the share panel. Any component class that sets `display` AND gets toggled needs its own
-  `.cls.hidden { display: none }` guard; `test_no_component_class_overrides_the_hidden_utility` checks
-  this generally rather than for one class.
+  order. Three classes needed guards and each failed differently:
+  `.rcs-state` (both terminal states rendered on every month page that loaded fine),
+  `.rcs` (latent -- the share panel is empty on the paths that hide it, so it cost only a stray margin),
+  and `.rcx`, which was the bad one. The stage is `position: fixed; inset: 0; z-index: 90` and merely
+  TRANSPARENT when idle, and it is dismissed two ways: the `hidden` attribute (which worked) and the
+  `hidden` class, used by the no-activity and error paths (which did not). So a recap that failed to load
+  put an invisible full-screen sheet over its own error state, swallowing every click including Try again
+  -- `elementFromPoint` on that button returned `.recap-slide` rather than the button.
+  Any component class that sets `display` and gets toggled needs a `.cls.hidden { display: none }` guard.
+  `test_no_component_class_overrides_the_hidden_utility` checks this generally, and scans BOTH the markup
+  and runtime `classList.add('hidden')` calls -- its first version read only `class=` attributes, which is
+  exactly how `.rcs` and `.rcx` slipped past a test written to catch them.
 - **The share preview's scaler is anchored on a NAMED class** (`.rcs__frame`), not a utility. It finds its
   box with `closest(...)` and bails silently when it finds nothing, so when it was anchored on `.relative`
   and the panel was rebuilt, the 1200px card would have sat unscaled in a 600px frame with no error.

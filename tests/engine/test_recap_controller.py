@@ -682,12 +682,28 @@ def test_no_component_class_overrides_the_hidden_utility():
     css = '\n'.join((ROOT / 'static' / 'css' / 'components' / name).read_text(encoding='utf-8')
                     for name in ('recap-stage.css', 'recap-deck.css', 'recap-archive.css'))
 
-    # Every class= that mentions the `hidden` utility, and the component classes sharing that attribute.
+    # There are TWO ways an element gets `hidden`, and the first version of this test knew about one.
     toggled = set()
-    for attr in re.findall(r'class="([^"]*\bhidden\b[^"]*)"', tpl):
-        for cls in attr.split():
+
+    def _collect(class_attr):
+        for cls in class_attr.split():
             if re.match(r'^(rc[xsa]|rca)[\w-]*$', cls):
                 toggled.add(cls)
+
+    # (a) Written into the markup.
+    for attr in re.findall(r'class="([^"]*\bhidden\b[^"]*)"', tpl):
+        _collect(attr)
+
+    # (b) Added at RUNTIME. `#share-section` is hidden this way by the no-activity and error paths, so its
+    # `class=` never contains `hidden` and it sailed straight past the first version of this check -- which
+    # is how `.rcs` shipped without a guard even with this test already in place.
+    sources = tpl + CONTROLLER.read_text(encoding='utf-8')
+    for el_id in re.findall(r"getElementById\('([\w-]+)'\)\.classList\.add\('hidden'\)", sources):
+        tag = (re.search(r'id="' + re.escape(el_id) + r'"[^>]*class="([^"]*)"', tpl)
+               or re.search(r'class="([^"]*)"[^>]*id="' + re.escape(el_id) + r'"', tpl))
+        if tag:
+            _collect(tag.group(1))
+
     assert toggled, 'no toggled component classes found -- has the markup changed shape?'
 
     for cls in sorted(toggled):
