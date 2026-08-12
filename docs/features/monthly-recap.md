@@ -126,7 +126,7 @@ The duplicate calendar and its `month-selector.js` are gone.
 | Archive | Free content (no outer card) per the stacked rule. `staggerReveal` on the same grammar as the browse grids. |
 | Tile | Month, trophy count and platinum count at EQUAL weight, plus a "New" flag when unwatched. |
 | Colour | Unwatched = the brand cyan (edge + labelled pill). Platinums = `--color-trophy-platinum`. |
-| Timezone | A header button opens a confirmation prompt; the inline picker stays at the foot. |
+| Timezone | A header button opens the prompt. That is the ONLY timezone control on the page. |
 
 **The first-run prompt.** `user_timezone` is `default='UTC'` and non-null, so it cannot tell a London
 hunter who never touched it from one who deliberately chose UTC -- and that is exactly the population a
@@ -150,11 +150,11 @@ mis-filed if it is wrong.
 The zone list, browser detection and save path live in `static/js/timezone-picker.js`, shared by the
 prompt and the inline row. The list is data, and data duplicated across two files diverges quietly.
 
-Why the timezone is split in two: it decides which month a trophy falls into, so a hunter surprised by
-a month boundary should not have to hunt for the reason -- but it is a **set-once** setting, and a
-page that opens on a form control instead of on the month you came for has its priorities backwards.
-The header states the zone and anchors down to the `<select>`, which stays under the archive it
-governs. The chip drops to the city alone below `md` (a bare clock icon says nothing).
+One control, not two. The header button states the current zone and opens the prompt; there is no second
+`<select>` anywhere on the page. A utility row used to sit at the foot doing the same job, which left one
+setting with two controls that had to be kept in step and no answer to which was the real one. The button
+names the city rather than the full zone -- "America/New_York" does not fit a 375 header and a bare clock
+icon says nothing.
 
 Three DB-aggregated reads back the whole page, and none of them scale with how much history a hunter has:
 
@@ -235,7 +235,8 @@ unconditionally but only recomputes the remainder when a timer is running: the l
 by which point `pointerup` has already released the hold, so there may be no clock left to stop but there
 is always a bar mid-flight to catch.
 
-**Below the fold** sits the share panel and nothing else. The card leads it and the controls sit under
+**Below the fold** sits the share panel and nothing else -- no heading either: it said "Your July card"
+directly under an entrance that had just said the month twice. The card leads it and the controls sit under
 the card -- they were above, which opened the panel on a settings row rather than on the thing being made.
 A "More Months & Settings" section used to follow, holding the duplicate month picker; the archive carries
 that and the timezone now, so the entrance's aside links there instead.

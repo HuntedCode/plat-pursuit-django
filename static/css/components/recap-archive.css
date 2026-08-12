@@ -154,7 +154,7 @@
 .rca-tile__stat--empty .rca-tile__n { color: var(--pp-text-mute); opacity: 0.45; }
 .rca-tile__stat--empty .rca-tile__unit { opacity: 0.55; }
 
-/* ---- Timezone ----------------------------------------------------------------------------------- */
+/* ---- Timezone ------------------------------------------------------------------------------- */
 
 /* The header control. Outlined and carrying a caret, because it OPENS something now -- it used to be an
    anchor down the page, and a control that opens a dialog has to look like a control. Still quiet enough
@@ -177,33 +177,6 @@
 .rca-tzchip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .rca-tzchip svg { width: 0.85rem; height: 0.85rem; flex: none; }
 .rca-tzchip__caret { width: 0.7rem; height: 0.7rem; opacity: 0.6; }
-
-/* Anchored from the header, so it must not land under the sticky chrome. */
-#timezone-section { scroll-margin-top: 5rem; }
-
-@media (min-width: 768px) {
-    .rca-tzchip__zone { display: inline; }
-    .rca-tzchip__zone--short { display: none; }
-}
-
-/* Deliberately quiet. It matters (it decides which month a trophy falls into) but it is a setting, and a
-   setting should not compete with the recaps for the eye. */
-.rca-tz { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 0.85rem; }
-.rca-tz__ico { width: 1.05rem; height: 1.05rem; color: var(--pp-text-mute); flex: none; }
-.rca-tz__label { font-size: 0.8rem; color: var(--pp-text-dim); }
-.rca-tz__zone { font-weight: 700; color: var(--pp-text); }
-.rca-tz__note { font-size: 0.7rem; color: var(--pp-text-mute); flex-basis: 100%; }
-
-@media (min-width: 768px) {
-    .rca-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
-    .rca-year { margin: 2rem 0 1rem; }
-    .rca-year__n { font-size: 1.35rem; }
-    .rca-tile { padding: 1rem 1.1rem 1.15rem; }
-    .rca-tz__note { flex-basis: auto; margin-left: auto; }
-}
-@media (min-width: 1024px) {
-    .rca-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
 
 /* ---- First-run timezone prompt ------------------------------------------------------------------ */
 
@@ -280,3 +253,15 @@
     margin-top: 1.25rem;
 }
 .rca-tzm__note { margin-top: 0.85rem; font-size: 0.68rem; color: var(--pp-text-mute); }
+
+/* Responsive. These sat below the timezone row and were removed with it -- the archive would have stayed
+   two columns at every width, which reads as a phone layout stretched across a desktop. */
+@media (min-width: 768px) {
+    .rca-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+    .rca-year { margin: 2rem 0 1rem; }
+    .rca-year__n { font-size: 1.35rem; }
+    .rca-tile { padding: 1rem 1.1rem 1.15rem; }
+}
+@media (min-width: 1024px) {
+    .rca-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

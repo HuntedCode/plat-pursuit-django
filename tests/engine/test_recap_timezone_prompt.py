@@ -59,22 +59,22 @@ def _page(client, profile):
 # ── Where the control lives ───────────────────────────────────────────────────
 
 
-def test_the_header_opens_the_prompt_and_does_not_become_it(client):
-    """A page that opens on a form control instead of on the month you came for has its priorities
-    backwards. The header holds a BUTTON; the `<select>` stays under the archive."""
+def test_there_is_exactly_one_timezone_control_and_it_is_the_header(client):
+    """There were two: a header button opening the prompt, and a utility row with its own `<select>` at
+    the foot of the archive. One setting with two controls on one page is a page that cannot say which is
+    the real one, and both had to be kept in step."""
     profile = _hunter(tz='America/New_York')
     year, month = _prev_month()
     _trophy_at(profile, _utc(year, month, 15))
 
     body = _page(client, profile)
-    head = body[:body.index('rca-hero')]
 
-    assert 'id="tz-open"' in head, 'no way to reach the timezone from the header'
-    assert 'aria-haspopup="dialog"' in head, 'the control does not announce that it opens a dialog'
-    assert 'recap-timezone-select' not in head, 'the picker itself was moved above the hero'
-    assert body.index('rca-hero') < body.index('recap-timezone-select'), (
-        'the timezone control now precedes the latest month'
-    )
+    assert 'id="tz-open"' in body[:body.index('rca-hero')], 'no way to reach the timezone from the header'
+    assert 'aria-haspopup="dialog"' in body, 'the control does not announce that it opens a dialog'
+    assert 'id="recap-timezone-select"' not in body, 'the retired utility row is back on the page'
+    assert 'id="timezone-section"' not in body
+    # The prompt's own picker is the one that survives, and it lives inside the dialog.
+    assert body.count('id="tz-modal-select"') == 1
 
 
 def test_the_header_control_names_the_zone(client):
@@ -195,13 +195,15 @@ def test_the_picker_is_shared_rather_than_duplicated():
     from pathlib import Path
     root = Path(__file__).resolve().parents[2]
     module = (root / 'static' / 'js' / 'timezone-picker.js').read_text(encoding='utf-8')
-    row = (root / 'templates' / 'recap' / '_timezone_section_js.html').read_text(encoding='utf-8')
     modal = (root / 'templates' / 'recap' / '_timezone_modal_js.html').read_text(encoding='utf-8')
 
     assert 'America/New_York' in module, 'the shared module carries no zone data'
-    for name, src in (('row', row), ('modal', modal)):
-        assert 'America/New_York' not in src, f'the {name} keeps its own copy of the zone list'
-        assert 'PlatPursuit.TimezonePicker' in src, f'the {name} does not use the shared picker'
+    assert 'America/New_York' not in modal, 'the prompt keeps its own copy of the zone list'
+    assert 'PlatPursuit.TimezonePicker' in modal, 'the prompt does not use the shared picker'
+    # The inline utility row that was the module's other consumer is gone; the module stays because the
+    # zone list is data and belongs in a file, not inlined into a template that renders one dialog.
+    assert not (root / 'templates' / 'recap' / '_timezone_section_js.html').exists()
+    assert not (root / 'templates' / 'recap' / '_timezone_section.html').exists()
 
 
 def test_the_prompt_falls_through_to_the_picker_when_detection_fails():

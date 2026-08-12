@@ -203,15 +203,12 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
     </section>
     {% endif %}
 
-    {# ── Timezone: quiet, but findable ─────────────────────────────────────────────────────────── #}
-    {% include 'recap/_timezone_section.html' %}
 {% endif %}
 </div>
 {% endblock %}
 
 {% block js_scripts %}
 {% if not sync_gate %}
-{% include 'recap/_timezone_section_js.html' %}
 {% include 'recap/_timezone_modal_js.html' %}
 {% endif %}
 {% comment %} Only where there is an archive to animate. The selectors below would find nothing on the
