@@ -133,6 +133,62 @@ A data attribute rather than a literal in the controller so the URL stays with `
                  aria-hidden="true"><path d="M8 5l11 7-11 7z" /></svg>
         </span>
         <p class="rcx__hint">Tap the edges to move<span class="rcx__hint-pause"> &middot; tap the middle to pause</span></p>
+        <div class="rcx__card" id="recap-card" aria-hidden="true">
+            {% comment %}The end screen carries its OWN header. The summary used to shrink into one, which meant
+            two things moving in the same moment and a header whose layout box had to be argued down to fit the
+            band left over -- the scroll well and the title/label collision were both downstream of that. Here
+            the mark and title belong to the card and arrive with it, so the close is one object landing.
+
+            The same header serves the card-only route ("just take me to the card"), where there is no summary
+            to hand off from at all -- one end screen, reached two ways.{% endcomment %}
+            <div class="rcx__card-head">
+                <span class="rcx__card-mark" aria-hidden="true">
+                    {% include 'partials/icons/pp_logo.html' with size='h-9 w-9' %}
+                </span>
+                <h2 class="rcx__card-title">Your {{ month_name }} card</h2>
+            </div>
+            <div class="rcx__card-frame" id="recap-card-frame"></div>
+
+            {% comment %}The grounds, WITH the card. They were briefly in the share section below the fold,
+            which renders directly under the entrance because its preview is empty until you have opened the
+            card -- so they sat on the intro screen with nothing to apply themselves to.
+
+            Server-rendered with their REAL gradient as the swatch, so the choice is visible before it is
+            made, and only the curated eight ship. Same component and same set as the plat card
+            (`.pc-theme`, shareables/partials/share_modal.html): the two cards are siblings and a hunter
+            should not meet a different palette on each. Game-art backings are excluded upstream -- they
+            need a game, and a month is not one.{% endcomment %}
+            {% if card_themes %}
+            <div class="rcx__grounds" role="radiogroup" aria-label="Card background">
+                {% for key, theme in card_themes %}
+                <label class="pc-theme" title="{{ theme.description }}" style="--pc-theme-bg: {{ theme.background_css }};">
+                    <input type="radio" name="recap-theme" value="{{ key }}" class="sr-only"
+                           {% if forloop.first %}checked{% endif %} data-recap-theme />
+                    <span class="pc-theme__swatch" aria-hidden="true"></span>
+                    <span class="pc-theme__name">{{ theme.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="rcx__out">
+                {% comment %}The same three-state button the plat card modal uses -- idle, busy, done. The
+                PNG is composed by headless Chromium on the server, so the press is not instant and this used
+                to be a bare navigation: no busy state, no confirmation, and a failed render replaced the
+                ceremony with a JSON error document. Glyphs and states are shared; see
+                partials/download_button_icons.html and components/download-button.css.{% endcomment %}
+                <button type="button" class="rcx__btn rcx__btn--primary pp-dl" id="recap-download">
+                    {% include 'partials/download_button_icons.html' %}
+                    <span data-dl-label>Download</span>
+                </button>
+                <button type="button" class="rcx__btn" id="recap-done">Done</button>
+            </div>
+            {% comment %}The failure line. It is here rather than a toast because the stage is z-index 90 and
+            the page's toast host is z-50, so a toast fired from inside the ceremony renders BEHIND it -- the
+            plat card modal gets a top-layer host for free from <dialog>; a takeover div does not. A download
+            that fails silently is worse than one that never had a busy state. `aria-live` because the press
+            that caused it has already moved focus nowhere.{% endcomment %}
+            <p class="rcx__err" id="recap-dl-error" role="status" aria-live="polite" hidden></p>
+        </div>
     </div>
 
     {% comment %} Beats you interact with advance on THIS, not on a timer -- see MANUAL_BEATS. {% endcomment %}
@@ -150,62 +206,6 @@ A data attribute rather than a literal in the controller so the URL stays with `
     The card is live HTML from /html/ (a template render, not Playwright) so the transition is instant;
     only Download runs the renderer. Theme picking deliberately stays on the page below -- a payoff should
     not turn into a settings panel. {% endcomment %}
-    <div class="rcx__card" id="recap-card" aria-hidden="true">
-        {% comment %}The end screen carries its OWN header. The summary used to shrink into one, which meant
-        two things moving in the same moment and a header whose layout box had to be argued down to fit the
-        band left over -- the scroll well and the title/label collision were both downstream of that. Here
-        the mark and title belong to the card and arrive with it, so the close is one object landing.
-
-        The same header serves the card-only route ("just take me to the card"), where there is no summary
-        to hand off from at all -- one end screen, reached two ways.{% endcomment %}
-        <div class="rcx__card-head">
-            <span class="rcx__card-mark" aria-hidden="true">
-                {% include 'partials/icons/pp_logo.html' with size='h-9 w-9' %}
-            </span>
-            <h2 class="rcx__card-title">Your {{ month_name }} card</h2>
-        </div>
-        <div class="rcx__card-frame" id="recap-card-frame"></div>
-
-        {% comment %}The grounds, WITH the card. They were briefly in the share section below the fold,
-        which renders directly under the entrance because its preview is empty until you have opened the
-        card -- so they sat on the intro screen with nothing to apply themselves to.
-
-        Server-rendered with their REAL gradient as the swatch, so the choice is visible before it is
-        made, and only the curated eight ship. Same component and same set as the plat card
-        (`.pc-theme`, shareables/partials/share_modal.html): the two cards are siblings and a hunter
-        should not meet a different palette on each. Game-art backings are excluded upstream -- they
-        need a game, and a month is not one.{% endcomment %}
-        {% if card_themes %}
-        <div class="rcx__grounds" role="radiogroup" aria-label="Card background">
-            {% for key, theme in card_themes %}
-            <label class="pc-theme" title="{{ theme.description }}" style="--pc-theme-bg: {{ theme.background_css }};">
-                <input type="radio" name="recap-theme" value="{{ key }}" class="sr-only"
-                       {% if forloop.first %}checked{% endif %} data-recap-theme />
-                <span class="pc-theme__swatch" aria-hidden="true"></span>
-                <span class="pc-theme__name">{{ theme.name }}</span>
-            </label>
-            {% endfor %}
-        </div>
-        {% endif %}
-        <div class="rcx__out">
-            {% comment %}The same three-state button the plat card modal uses -- idle, busy, done. The
-            PNG is composed by headless Chromium on the server, so the press is not instant and this used
-            to be a bare navigation: no busy state, no confirmation, and a failed render replaced the
-            ceremony with a JSON error document. Glyphs and states are shared; see
-            partials/download_button_icons.html and components/download-button.css.{% endcomment %}
-            <button type="button" class="rcx__btn rcx__btn--primary pp-dl" id="recap-download">
-                {% include 'partials/download_button_icons.html' %}
-                <span data-dl-label>Download</span>
-            </button>
-            <button type="button" class="rcx__btn" id="recap-done">Done</button>
-        </div>
-        {% comment %}The failure line. It is here rather than a toast because the stage is z-index 90 and
-        the page's toast host is z-50, so a toast fired from inside the ceremony renders BEHIND it -- the
-        plat card modal gets a top-layer host for free from <dialog>; a takeover div does not. A download
-        that fails silently is worse than one that never had a busy state. `aria-live` because the press
-        that caused it has already moved focus nowhere.{% endcomment %}
-        <p class="rcx__err" id="recap-dl-error" role="status" aria-live="polite" hidden></p>
-    </div>
 </div>
 
 {% endif %}

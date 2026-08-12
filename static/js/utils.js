@@ -1825,6 +1825,10 @@ const CardDownload = {
  * @param {number}   [opts.exitMs=240]   how long the caller's exit transition needs before removal
  * @param {string}   [opts.focusSel]     what to focus on open; defaults to the first focusable
  * @param {Function} [opts.onKey]        extra key handling; return true to signal "handled"
+ * @param {Function} [opts.onDismiss]    Escape calls THIS instead of closing. For surfaces where being
+ *                                       dismissed does not mean being torn down -- the recap navigates
+ *                                       away instead, and closing first would play a teardown the new
+ *                                       page immediately replaces. The caller may still call close().
  * @returns {{close: Function}}
  */
 function takeover(root, opts) {
@@ -1850,7 +1854,13 @@ function takeover(root, opts) {
         // the capture-phase listener fires first and tears down the whole surface on the keypress that
         // was meant to dismiss the dialog -- the takeover would vanish out from under an open modal.
         if (root.querySelector('dialog[open]')) { return; }
-        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            // Deliberately AFTER the dialog check above: a modal open inside the takeover still owns
+            // Escape, so dismissing it must not trigger the surface's own dismissal either.
+            if (opts.onDismiss) { opts.onDismiss(); } else { close(); }
+            return;
+        }
         if (e.key !== 'Tab') { return; }
         var items = focusable();
         if (!items.length) { e.preventDefault(); return; }

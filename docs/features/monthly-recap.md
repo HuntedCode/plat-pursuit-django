@@ -349,13 +349,23 @@ finishing the recap dropped you back on the intro screen with a second copy of t
 entrance offering to start something you had just finished, above the thing you had just been shown. One
 surface shows the card now, and it is the one the ceremony ends on.
 
-**Closing the ceremony leaves the page.** `data-exit` on the stage carries `{% url 'recap_index' %}` and
-`onStageClosed` navigates there, by every route out -- Done, the close X, Escape, and from the card-only
-route as well. The month page's only job is to start the ceremony, so returning to it afterwards puts the
-hunter in front of a button they have just finished pressing; the archive is where the next choice (another
-month) actually lives. The teardown still runs first: the navigation is a real page load, and a stage left
-half-alive would keep a beat timer running and a resize listener attached for the whole of it. Note this
-applies to bailing MID-deck too, which is a deliberate simplification -- one exit that always means the
+**Closing the ceremony leaves the page, and does not close first.** `data-exit` carries
+`{% url 'recap_index' %}` and `leaveForArchive()` navigates straight there, by every route out -- Done,
+the close X, Escape, and from the card-only route as well. The month page's only job is to start the
+ceremony, so returning to it afterwards puts the hunter in front of a button they have just finished
+pressing; the archive is where the next choice (another month) actually lives.
+
+Closing *first* was the version before this, and it read as two exits for one intent: the stage lifts
+away, the page behind it un-recedes and paints, and then the navigation replaces all of it a moment
+later. Now the ceremony simply holds until the archive paints -- one move, and honest, because the page
+is not gone, it is going. The stage is left standing on purpose: its timers stop, but everything a
+teardown would tidy is about to be discarded by the page load anyway, and tidying it visibly IS the jump.
+
+Escape is takeover's, so `takeover()` grew `opts.onDismiss` -- called instead of `close()`, and
+deliberately after its `dialog[open]` deferral so dismissing the platinum modal still does not dismiss
+the surface. Any takeover where being dismissed does not mean being torn down can use it.
+
+Note this applies to bailing MID-deck too, a deliberate simplification: one exit that always means the
 same thing, rather than a rule about when you pressed it.
 
 A "More Months & Settings" section used to follow the panel, holding a duplicate month picker; the archive
@@ -398,6 +408,23 @@ Load-bearing details, each of which was a bug first:
   sitting behind the close X. Clearing it in the inset rather than nudging the header keeps the scene
   centred in the room it actually has, and `fit()` reads that box -- so the card scales down to suit
   (630 -> 578px at 900) instead of running off the bottom.
+
+- **The card scene is a scene ON the stage, and is fitted after it gets it.** Two bugs, one shape.
+
+  It was a SIBLING of `.rcx__stage`, positioned against the whole surface, so it had to be *told* where
+  the chrome ended -- a `--rcx-bar` token the top bar and the scene both read. Right on desktop, wrong on
+  a phone: the progress timer sits above the bar and pushes it ~17px further down, so the header centred
+  into the bar's row and the mark sat behind the close X. Moving it inside `.rcx__stage` makes `inset: 0`
+  mean the stage, correct at every breakpoint with no number. (Safe because the controller only ever
+  removes `.recap-slide` children from that container, never its innerHTML. It did mean the swipe handler
+  needed the `is-ending` guard the tap zones already had -- the card now lives inside the swipe container,
+  so most swipes land on it, and scrubbing the deck from the end screen is not a thing.)
+
+  And the card is mounted while the scene is still waiting offstage at `height: 62%`, so the first `fit()`
+  measured a box less than half the one it ends up in: the card arrived at **scale 0.45** and any stray
+  resize silently doubled it to 0.90. `showCardScene` re-fits in the same breath as the class that changes
+  the room -- reading geometry there forces a synchronous layout including the new class, so the card is
+  sized once, before it is ever painted at the wrong size. 283px -> 565px tall at a 900px stage.
 
 - **The Download button is shared, and it had to be.** The ceremony's was a bare
   `window.location.href`. That cannot show progress on a call that runs headless Chromium, cannot name the

@@ -645,15 +645,24 @@ def test_closing_the_ceremony_leaves_for_the_archive(js):
            'monthly_recap.html').read_text(encoding='utf-8')
     assert "data-exit=\"{% url 'recap_index' %}\"" in tpl, 'the exit target is not wired from the URL conf'
 
-    closed = _method(_code(js), 'onStageClosed')
-    assert 'dataset.exit' in closed and 'window.location.href' in closed, (
-        'closing the stage no longer leaves the month page'
+    code = _code(js)
+    leave = _method(code, 'leaveForArchive')
+    assert 'dataset.exit' in leave and 'window.location.href' in leave, (
+        'the exit no longer leaves the month page'
     )
-    # The teardown has to happen FIRST: the navigation is a real page load, and a stage left half-alive
-    # keeps a beat timer running and a resize listener attached for the whole of it.
-    assert closed.index('stopBeatTimer') < closed.index('dataset.exit'), (
-        'it navigates before tearing the stage down'
+    # It must NOT close on the way out. Closing plays the full teardown -- the stage lifts away, the page
+    # behind it un-recedes and paints -- and the navigation then replaces all of it a moment later. Two
+    # exits for one intent, and the jump the hunter actually sees.
+    assert leave.index('window.location.href') < leave.index('handle.close()'), (
+        'it tears the ceremony down before navigating, which is the jarring double-exit'
     )
+    assert 'stopBeatTimer' in leave, 'the beat clock keeps running while the next page loads'
+
+    # All three routes out go through it: the two buttons, and Escape via takeover's onDismiss hook.
+    assert code.count('this.leaveForArchive()') >= 3, 'a route out still closes instead of leaving'
+    assert 'onDismiss: () => this.leaveForArchive()' in code, 'Escape still tears the stage down'
+    utils = (ROOT / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+    assert 'opts.onDismiss' in utils, 'takeover has no way to be dismissed without closing'
 
 
 def test_the_page_carries_no_inline_event_handlers():
@@ -833,9 +842,9 @@ def test_both_routes_end_on_the_same_screen():
     and title (`.rcx__card-head`) precisely so neither route depends on a summary being there to borrow a
     header from -- the card-only route has no summary at all."""
     # The selector list spans lines once lightningcss has reformatted it, so walk back to the previous
-    # rule's close rather than to the previous newline. The inset starts at `--rcx-bar` rather than 0
-    # because the scene clears the top bar; what matters here is that it stops being the 62% band.
-    card_rule = re.search(r'\}([^{}]*)\{[^}]*inset:[^;]*rcx-bar[^}]*height:\s*auto', _css())
+    # rule's close rather than to the previous newline. `inset: 0` means the STAGE, which the scene is a
+    # child of; what matters here is that it stops being the 62% waiting band.
+    card_rule = re.search(r'\}([^{}]*)\{[^}]*inset:\s*0[^}]*height:\s*auto', _css())
     assert card_rule, 'the card scene never takes the full stage'
     selector = card_rule.group(1)
     assert 'is-card-only' in selector and 'is-ending' in selector, (
@@ -849,14 +858,28 @@ def test_both_routes_end_on_the_same_screen():
     )
 
 
-def test_the_end_screen_clears_the_bar_from_one_declared_height():
-    """The bar is in flow and the card scene is absolute, so the scene cannot measure what it is clearing.
-    Without the clearance the card-only route -- card largest, column tallest -- centred its header into
-    the bar's row and the mark sat behind the close X (measured: header top 5, bar bottom 59). Two
-    hardcoded numbers would drift apart the first time the bar's padding changed, so both read `--rcx-bar`."""
+def test_the_end_screen_is_a_scene_ON_the_stage():
+    """It used to be a SIBLING of `.rcx__stage`, positioned against the whole surface, so it had to be
+    told where the chrome ended -- a `--rcx-bar` token the top bar and the scene both read. That number
+    was right on desktop and wrong on a phone, where the progress timer sits above the bar and pushes it
+    ~17px further down: the header centred into the bar's row and the mark sat behind the close X.
+
+    Being inside the box makes the offset correct at every breakpoint with no number at all. The stage
+    only ever removes `.recap-slide` children (never innerHTML), so the card is safe in there."""
+    tpl = (ROOT / 'templates' / 'recap' / 'monthly_recap.html').read_text(encoding='utf-8')
+    stage = tpl.index('<div class="rcx__stage" id="recap-slides">')
+    card = tpl.index('<div class="rcx__card" id="recap-card"')
+    advance = tpl.index('id="recap-advance"')
+    assert stage < card < advance, 'the card scene is outside the stage again'
+
     css = _css()
-    assert re.search(r'--rcx-bar:\s*[\d.]+rem', css), 'the bar height is not declared as a token'
-    bar = re.search(r'\.rcx__top\s*\{([^}]*)\}', css)
-    assert bar and 'var(--rcx-bar)' in bar.group(1), (
-        'the bar does not hold itself to the height the card scene is clearing'
+    assert '--rcx-bar:' not in css and 'var(--rcx-bar)' not in css, (
+        'the hardcoded chrome height is back'
+    )   # declaration and use, not the word -- the comment explaining its removal mentions it by name
+
+    swipe = CONTROLLER.read_text(encoding='utf-8')
+    swipe = swipe[swipe.index("addEventListener('touchend'"):][:700]
+    assert 'is-ending' in swipe, (
+        'the swipe can scrub the deck from the end screen -- the card scene lives inside the swipe '
+        'container now, so most swipes land on it'
     )

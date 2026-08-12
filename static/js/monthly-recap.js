@@ -137,6 +137,9 @@ class MonthlyRecapManager {
             focusSel: '#recap-exit',
             exitMs: 280,
             onClose: () => this.onStageClosed(),
+            // Escape is a way OUT, not a teardown. Without this takeover closes the stage itself and the
+            // hunter watches the ceremony dismantle before the archive replaces the result.
+            onDismiss: () => this.leaveForArchive(),
         });
 
         // Warm the card while the deck plays. It is a template render (/html/), not Playwright, so this
@@ -221,6 +224,10 @@ class MonthlyRecapManager {
         // The mounted HTML carries the card template's own ground. Paint the hunter's choice straight
         // away, or the card shows the default until they happen to change swatch.
         this.applyBackground(card);
+        // Kept UNdebounced as well, because the ending has to re-fit in the same breath as the class
+        // that changes the room -- see showCardScene. The debounced one is for resize, where coalescing
+        // is the whole point.
+        this._fitCardNow = fit;
         this._fitCard = PlatPursuit.debounce(fit, 120);
         window.addEventListener('resize', this._fitCard);
     }
@@ -236,6 +243,12 @@ class MonthlyRecapManager {
         // rises into the stage it vacates, carrying its own header -- one object arriving, not two
         // negotiating for the same stage. That negotiation was every bug this transition ever had.
         this.container.classList.add('is-ending');
+        // RE-FIT, now that the class has landed. The card is mounted while the scene is still waiting
+        // offstage at `height: 62%`, so the first fit measured a box less than half the one it ends up
+        // in -- the card arrived at scale 0.45 and a stray window resize would silently double it to
+        // 0.90. Reading geometry here forces a synchronous layout that includes the new class, which is
+        // exactly what is wanted: the card is sized once, before it is ever painted at the wrong size.
+        if (this._fitCardNow) { this._fitCardNow(); }
 
         this.wireDownload();
         // "Change the look" used to close the ceremony to land the hunter on a picker below the fold.
@@ -292,15 +305,30 @@ class MonthlyRecapManager {
     }
 
     /**
-     * takeover() has already removed the stage and restored focus. Closing the ceremony LEAVES: the month
-     * page's only job is to start it, so landing back on it puts the hunter in front of a button they
-     * have just finished pressing, with the same month's card underneath. The archive is where the next
-     * choice actually lives -- another month.
+     * Every way out of the ceremony -- Done, the close X, Escape -- comes here, and it LEAVES rather than
+     * closing. The month page's only job is to start the ceremony, so landing back on it puts the hunter
+     * in front of a button they have just finished pressing; the archive is where the next choice lives.
      *
-     * The teardown still runs first. The navigation is not instant (it is a real page load), and a stage
-     * left half-alive behind it would keep a beat timer running and a resize listener attached for the
-     * whole of it.
+     * It does NOT close first. Closing plays the full teardown -- the stage lifts away, the page behind
+     * it un-recedes and paints -- and then the navigation replaces all of it a moment later. Two exits
+     * for one intent, and the second one throws away the first. Holding the ceremony up until the archive
+     * paints is one move instead of two, and it is also honest: the page is not gone, it is going.
+     *
+     * The stage is left standing on purpose. Its timers are stopped, but nothing is unmounted: everything
+     * a teardown would tidy is about to be discarded by the page load anyway, and tidying it visibly is
+     * the exact jump this avoids.
      */
+    leaveForArchive() {
+        this.cancelResume();
+        this.stopBeatTimer();
+        const exit = this.container.dataset.exit;
+        if (exit) { window.location.href = exit; return; }
+        // No exit configured (a harness, or a page that renders the stage standalone). Fall back to the
+        // ordinary close so the surface is still dismissible.
+        if (this.handle) { this.handle.close(); }
+    }
+
+    /** Only reached through the fallback above -- takeover() has removed the stage and restored focus. */
     onStageClosed() {
         this.stageOpen = false;
         this.container.classList.remove('is-card-only');
@@ -308,9 +336,8 @@ class MonthlyRecapManager {
         this.stopBeatTimer();
         this.container.classList.remove('is-ending');
         if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
+        this._fitCardNow = null;
         this.handle = null;
-        const exit = this.container.dataset.exit;
-        if (exit) { window.location.href = exit; }
     }
 
     /**
@@ -425,7 +452,7 @@ class MonthlyRecapManager {
         if (begin) begin.addEventListener('click', () => this.openStage());
 
         const exit = document.getElementById('recap-exit');
-        if (exit) exit.addEventListener('click', () => this.handle && this.handle.close());
+        if (exit) exit.addEventListener('click', () => this.leaveForArchive());
 
         // Coming back for the card should not mean sitting through the deck again.
         const quick = document.getElementById('recap-quick-download');
@@ -452,7 +479,7 @@ class MonthlyRecapManager {
         });
 
         const done = document.getElementById('recap-done');
-        if (done) done.addEventListener('click', () => this.handle && this.handle.close());
+        if (done) done.addEventListener('click', () => this.leaveForArchive());
 
         window.addEventListener('pagehide', () => this.abortLoad());
 
@@ -538,6 +565,11 @@ class MonthlyRecapManager {
         }, { passive: true });
 
         this.slidesContainer.addEventListener('touchend', (e) => {
+            // The same guard the tap zones carry. The deck is over on the end screen, so a swipe there
+            // must not scrub it -- and the card scene is a child of this container now, which is where
+            // most of those swipes would land.
+            if (this.container.classList.contains('is-ending')
+                || this.container.classList.contains('is-card-only')) { return; }
             touchEndX = e.changedTouches[0].screenX;
             touchEndY = e.changedTouches[0].screenY;
 
@@ -940,6 +972,7 @@ class MonthlyRecapManager {
             this.container.classList.remove('is-ending');
             if (card) card.setAttribute('aria-hidden', 'true');
             if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
+            this._fitCardNow = null;
         }
 
         // Update navigation button states for non-quiz slides

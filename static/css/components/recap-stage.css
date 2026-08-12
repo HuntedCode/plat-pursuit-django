@@ -102,10 +102,6 @@
     background: var(--pp-bg-0);
     opacity: 0;
     transition: opacity 0.28s ease;
-    /* The top bar's height, declared ONCE. The bar sits in flow while the card scene is absolute, so the
-       scene cannot ask what it is clearing -- it has to be told, and a second hardcoded number here would
-       drift the moment the bar's padding changes. */
-    --rcx-bar: 3.75rem;
 }
 .rcx.is-in { opacity: 1; }
 /* The stage is `position: fixed; inset: 0; z-index: 90` and merely TRANSPARENT when idle, so it must
@@ -224,7 +220,6 @@
     position: relative; z-index: 4;
     display: flex; align-items: center; justify-content: space-between;
     gap: 0.75rem; padding: 0.75rem 1rem;
-    min-height: var(--rcx-bar);
 }
 .rcx__who { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--pp-text-dim); min-width: 0; }
 .rcx__who img { width: 1.4rem; height: 1.4rem; border-radius: 50%; object-fit: cover; flex: none; }
@@ -487,15 +482,16 @@
 .rcx.is-card-only .rcx__hint,
 .rcx.is-card-only .recap-slide { display: none; }
 /* Both routes end on the SAME screen, so the card scene takes the whole stage in both. It is bottom-62%
-   only while it waits offstage, back when it had to share the stage with the summary's header.
+   only while it waits offstage, back when it had to share the room with the summary's header.
  *
- * Not quite the WHOLE stage: it starts below the bar. The scene is centred in its box, so on the card-only
- * route -- where the card is at or near full size and the column is tallest -- the header centred into the
- * bar's row and the mark sat behind the close X. Measured at 900px: header top 5, bar bottom 59. Clearing
- * it here rather than nudging the header keeps the scene centred in the space it actually has, and the
- * card's fit() reads that box, so the card scales to the smaller room instead of running off the bottom. */
+ * `inset: 0` means THE STAGE, not the viewport -- the scene is a child of `.rcx__stage`, which is the flex
+ * area between the chrome and whatever sits below it. It used to be a sibling, positioned against the whole
+ * surface, so it had to be TOLD where the chrome ended: a `--rcx-bar` token the top bar and the scene both
+ * read. That number was right on desktop and wrong on a phone, where the progress timer sits above the bar
+ * and pushes it 17px further down -- so the header centred into the bar's row and the mark sat behind the
+ * close X. Being inside the box is what makes the offset correct at every breakpoint without a number. */
 .rcx.is-card-only .rcx__card,
-.rcx.is-ending .rcx__card { inset: var(--rcx-bar) 0 0 0; height: auto; justify-content: center; }
+.rcx.is-ending .rcx__card { inset: 0; height: auto; justify-content: center; }
 
 .rcx__card {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
