@@ -343,6 +343,19 @@ unconditionally but only recomputes the remainder when a timer is running: the l
 by which point `pointerup` has already released the hold, so there may be no clock left to stop but there
 is always a bar mid-flight to catch.
 
+**The prompt opens on TWO conditions**, and they answer different questions: the server stamp
+(`timezone_confirmed_at`) is "have you ever answered", durable and cross-device; localStorage
+(`pp.tz.prompt.dismissed`) is "not right now", per-device on purpose -- a dismissal on a phone should not
+silence the prompt on a desktop.
+
+The local half **expires after 30 days**, which it did not at first. It was a permanent flag, so one
+close silenced the prompt on that device forever for a hunter who had never answered the question -- and
+it quietly made the admin's "clearing the stamp re-arms the prompt" false on any browser that had closed
+the dialog once. Found exactly that way: the stamp was cleared on a dev account and nothing happened.
+The stored value is a timestamp now; the old literal `'1'` parses to a 1970 stamp and so reads as long
+expired, which is the right answer for it and needs no migration. Anything unparseable also reads as
+expired -- a prompt should fail OPEN.
+
 **The prompt loads its own picker.** `_timezone_modal_js.html` pulls in `timezone-picker.js` itself,
 next to the only thing that uses it. The tag used to live in the timezone utility row's partial; when
 that row was removed as a duplicate control the tag went with it, and the controller then bailed on its

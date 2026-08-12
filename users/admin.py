@@ -44,8 +44,10 @@ class CustomUserAdmin(UserAdmin):
         (None, {'fields': ('email', 'password')}),
         ('Personal Info', {
             'fields': ('user_timezone', 'timezone_confirmed_at', 'premium_tier', 'browse_defaults'),
-            'description': 'Clearing "timezone confirmed at" re-arms the first-run timezone prompt '
-                           'on the recap for this user. The zone itself is what months are bucketed by.',
+            'description': 'Clearing "timezone confirmed at" re-arms the recap’s first-run timezone '
+                           'prompt. A device that dismissed the prompt stays quiet for 30 days from that '
+                           'dismissal, so it may not reappear instantly on the browser it was closed on. '
+                           'The zone itself is what months are bucketed by.',
         }),
         ('Subscription', {'fields': ('subscription_provider', 'stripe_customer_id', 'paypal_subscription_id', 'paypal_cancel_at')}),
         ('Email Preferences', {'fields': ('email_preferences',)}),

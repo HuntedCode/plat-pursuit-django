@@ -4,9 +4,14 @@ Controller for the first-run timezone prompt.
 Opening rules, in order:
   1. The header button always opens it, on purpose, forever.
   2. It opens BY ITSELF only when the server says the hunter has never confirmed a zone AND this device
-     has not dismissed it. Both conditions, because they answer different questions: the server flag is
-     "have you ever answered" (durable, cross-device) and localStorage is "not right now" (per-device, and
-     deliberately so -- a dismissal on a phone should not silence the prompt on a desktop forever).
+     has not dismissed it in the last 30 days. Both conditions, because they answer different questions:
+     the server stamp is "have you ever answered" (durable, cross-device) and localStorage is "not right
+     now" (per-device, and deliberately so -- a dismissal on a phone should not silence the prompt on a
+     desktop).
+
+     The local half EXPIRES, which it did not at first. A permanent flag meant one dismissal silenced the
+     prompt on that device forever, for someone who had never answered the question -- and it made the
+     admin's "clearing the stamp re-arms the prompt" false on any device that had closed the dialog once.
 
 The picker itself is loaded HERE, next to its only consumer. It used to be pulled in by the timezone
 utility row that sat further down the archive; that row was removed as a duplicate control and the tag
@@ -24,6 +29,11 @@ one, so the dependency travels with the thing that needs it now.
     if (!TZ || !modal) { return; }
 
     const DISMISS_KEY = 'pp.tz.prompt.dismissed';
+    // "Not right now" has to actually MEAN not right now. This was a permanent flag, so one dismissal
+    // silenced the prompt on that device forever -- for a hunter who had never answered the question.
+    // It also made the admin's "clearing the stamp re-arms the prompt" untrue on any device that had
+    // ever closed the dialog, which is where this was noticed.
+    const DISMISS_DAYS = 30;
     const confirmed = {{ timezone_confirmed|yesno:"true,false" }};
     const currentTz = '{{ user_timezone|escapejs }}';
 
@@ -56,10 +66,16 @@ one, so the dependency travels with the thing that needs it now.
     otherBtn.addEventListener('click', function () { picking = true; render(); select.focus(); });
 
     function dismissedHere() {
-        try { return localStorage.getItem(DISMISS_KEY) === '1'; } catch (e) { return false; }
+        try {
+            // A timestamp, not a flag. The old value was the literal '1', which parses to a 1970 stamp
+            // and so reads as long expired -- exactly the right answer for it, and no migration needed.
+            const at = parseInt(localStorage.getItem(DISMISS_KEY), 10);
+            if (!at) { return false; }
+            return (Date.now() - at) < DISMISS_DAYS * 86400000;
+        } catch (e) { return false; }
     }
     function rememberDismissal() {
-        try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) { /* private mode; ask again */ }
+        try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) { /* private mode */ }
     }
 
     confirmBtn.addEventListener('click', async function () {

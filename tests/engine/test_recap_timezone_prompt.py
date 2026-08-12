@@ -229,6 +229,38 @@ def test_the_page_actually_DELIVERS_the_picker(client):
     )
 
 
+def test_not_right_now_actually_expires():
+    """The local dismissal was a permanent flag, so one close silenced the prompt on that device forever
+    -- for a hunter who had never answered the question. It also made the admin's "clearing the stamp
+    re-arms the prompt" false on any browser that had closed the dialog once, which is how it was found:
+    the stamp was cleared on a dev account and nothing happened.
+
+    Verified in a browser across the window: no flag opens, just-dismissed and 29 days stay quiet, 31 days
+    opens, and both a legacy '1' and a garbage value read as expired -- a prompt should fail OPEN."""
+    from pathlib import Path
+    modal = (Path(__file__).resolve().parents[2] / 'templates' / 'recap' /
+             '_timezone_modal_js.html').read_text(encoding='utf-8')
+
+    assert 'DISMISS_DAYS' in modal, 'the dismissal never expires again'
+    assert "setItem(DISMISS_KEY, String(Date.now()))" in modal, (
+        'the dismissal is stored as a flag rather than a time, so it cannot expire'
+    )
+    assert "=== '1'" not in modal, 'the permanent-flag comparison is back'
+    # Fails OPEN on anything unparseable: an unreadable dismissal must not silence the prompt for good.
+    assert 'if (!at) { return false; }' in modal
+
+
+def test_the_admin_does_not_promise_an_instant_re_prompt():
+    """The description said clearing the stamp re-arms the prompt, full stop. On the device that
+    dismissed it, that is not true for up to 30 days, and an admin hint that is confidently wrong is
+    worse than none -- it sends support down the wrong path."""
+    from users.admin import CustomUserAdmin
+    personal = next(o for name, o in CustomUserAdmin.fieldsets if name == 'Personal Info')
+    assert '30 days' in personal['description'], (
+        'the admin still implies the prompt returns immediately everywhere'
+    )
+
+
 def test_the_prompt_falls_through_to_the_picker_when_detection_fails():
     """`Intl` can be unavailable or blocked. A confirmation dialog whose only action is "use this" with
     nothing detected is a dead control, so the absence of a guess has to open the full list instead."""
