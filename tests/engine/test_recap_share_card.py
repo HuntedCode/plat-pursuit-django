@@ -169,17 +169,17 @@ def test_zero_figures_are_dropped_rather_than_printed():
     assert '>Trophies</div>' in html, 'the headline figure is always shown'
 
 
-def test_the_rarest_find_is_never_shown_twice():
-    """It rides the proof band beside a few covers, and moves to the spine when the covers earn the
-    width. Both at once would have the card saying the same thing twice."""
-    beside = _rendered(platinums_data=[{'game_image': ''}] * 3)
-    assert beside.count('Rarest') == 1
+def test_the_proof_band_shows_covers_or_the_rarest_find_but_never_both():
+    """The band's left slot is one or the other: covers when the month produced any, the rarest find when
+    it did not. Both would have the card saying the same thing twice, since the builder routes the rarest
+    trophy to the spine whenever the covers took the slot -- see the builder test below."""
+    with_covers = _rendered(platinums_data=[{'game_image': ''}] * 3)
+    assert 'Rarest find' not in with_covers, 'the band shows the rarest find beside the covers'
+    assert 'Platinums earned' in with_covers
 
-    many = _rendered(platinums_data=[{'game_image': ''}] * 8, platinums_overflow=4,
-                     spine_items=[{'label': 'Rarest', 'value': 'Chalice of the Deep',
-                                   'meta': '1.4% earn rate'}])
-    assert 'Rarest find' not in many, 'the band still shows it when the covers have taken the width'
-    assert 'Rarest' in many, 'and the spine did not pick it up'
+    without = _rendered(platinums=0, platinums_data=[], platinums_overflow=0)
+    assert 'Rarest find' in without
+    assert 'Platinums earned' not in without
 
 
 def test_the_card_is_landscape_only():
@@ -191,3 +191,85 @@ def test_the_card_is_landscape_only():
         'the endpoints accept a format the card cannot produce'
     )
     assert "format_type != 'landscape'" in src
+
+
+def test_the_activity_calendar_is_on_the_card():
+    """The element that makes this read as a MONTH rather than a total: a figure says how much, the grid
+    says how it happened. It was dropped in the first pass of the rebuild, which is what made the card
+    feel barren and left the right of it empty."""
+    html = _rendered(calendar_offset=range(2), calendar_active_days=17,
+                     calendar_days=[{'day': d, 'size': 14, 'bg': 'rgba(39, 235, 254, 0.52)',
+                                     'plat': d == 5} for d in range(1, 32)])
+    assert 'Activity' in html
+    assert 'repeat(7, 24px)' in html, 'the seven-column grid is gone'
+    assert '17 days' in html
+
+
+def test_the_calendar_offset_can_express_any_weekday():
+    """The old card counted leading blanks with a `forloop.counter0` check inside a seven-item loop, which
+    cannot express an offset of more than six and silently drew the wrong month for any that needed one.
+    The range is built in the view now, so the template just iterates it."""
+    import re
+    from pathlib import Path
+    tpl = (Path(__file__).resolve().parents[2] / 'templates' / 'recap' / 'partials' /
+           'recap_share_card.html').read_text(encoding='utf-8')
+    # Comments stripped first. The header explains the old bug and QUOTES it, so scanning raw source
+    # finds the explanation and reports it as the live code -- the same trap `_code()` exists for in the
+    # controller tests.
+    live = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', tpl, flags=re.S)
+    live = re.sub(r'\{#.*?#\}', '', live, flags=re.S)
+    assert 'calendar_offset' in live
+    assert 'forloop.counter0' not in live, 'the offset is being counted out in the template again'
+
+    for offset in range(7):
+        html = _rendered(calendar_offset=range(offset), calendar_active_days=3,
+                         calendar_days=[{'day': d, 'size': 7, 'bg': 'rgba(138, 147, 159, 0.30)',
+                                         'plat': False} for d in range(1, 32)])
+        assert html.count('<div style="height: 24px;"></div>') == offset, (
+            f'offset {offset} did not produce {offset} leading blanks'
+        )
+
+
+def test_a_platinum_day_is_ringed_rather_than_just_brighter():
+    """Level 4 is "busy" and the ring is "you closed something out". They are different facts, and the
+    ring is deliberately OFF the ramp's hue -- ringing it in the ramp colour made the marker invisible on
+    exactly the days most likely to be level 4."""
+    html = _rendered(calendar_offset=range(0), calendar_active_days=1,
+                     calendar_days=[{'day': 1, 'size': 20, 'bg': '#27ebfe', 'plat': True}])
+    assert '#ff9350' in html, 'the platinum ring is gone'
+    assert 'border: 2px solid #ff9350' in html
+
+
+def test_the_cards_ramp_matches_the_decks():
+    """The card ports `.activity-level-*` from recap-deck.css by hand, because `color-mix()` against
+    --pp-* tokens resolves to nothing in the renderer's about:blank origin. A port that drifts means the
+    calendar a hunter watched in the ceremony and the one on their card are different pictures."""
+    from pathlib import Path
+    from api.recap_views import CALENDAR_RAMP
+    css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components' /
+           'recap-deck.css').read_text(encoding='utf-8')
+
+    assert len(CALENDAR_RAMP) == 5, 'the deck has five levels, 0-4'
+    for level in range(5):
+        assert f'.activity-level-{level}' in css, f'level {level} is not in the deck stylesheet'
+    # The ramp must CLIMB in size, which is what stops it depending on hue alone.
+    sizes = [size for size, _ in CALENDAR_RAMP]
+    assert sizes == sorted(sizes) and len(set(sizes)) == 5, f'the ramp does not climb in size: {sizes}'
+
+
+def test_the_builder_routes_the_rarest_find_to_the_spine_when_covers_take_the_band():
+    """The one rule the template cannot express, because it depends on what the OTHER slot got."""
+    from types import SimpleNamespace
+
+    def spine_for(n_plats):
+        recap = _recap(n_plats)
+        recap.rarest_trophy_data = {'name': 'Chalice of the Deep', 'earn_rate': 1.4}
+        recap.most_active_day = {'date': 'March 18', 'trophy_count': 31}
+        recap.activity_calendar = {}
+        recap.badges_earned_count = 0
+        recap.badge_xp_earned = 0
+        ctx = RecapShareImageHTMLView()._build_template_context(recap, _Profile(), 'landscape')
+        return [i['label'] for i in ctx['spine_items']]
+
+    assert 'Rarest' in spine_for(3), 'the covers took the band and nothing carried the rarest find'
+    assert 'Rarest' not in spine_for(0), 'the band already shows it; the spine repeats it'

@@ -23,6 +23,14 @@ WHY IT LOOKS LIKE THIS
     off, and cover art is the only thing on this card that is instantly readable at Discord scale.
     Eight slots, and the builder reports the overflow separately so "+N more" can actually fire --
     it used to cap at three while the grid held eight, so the two counts could never differ.
+  - THE ACTIVITY CALENDAR EARNS ITS SPACE. It is the one element that makes this read as a MONTH rather
+    than a total: a figure says how much, the grid says how it happened -- a fortnight's binge and a
+    steady thirty days can share a trophy count and are not the same month. It was dropped in the first
+    pass of this rebuild and the card immediately felt barren, which is also what left the right of the
+    card empty. Its ramp climbs in BOTH size and colour (`CALENDAR_RAMP`, a literal port of
+    `.activity-level-*` in recap-deck.css) so it never depends on hue alone, and a day carrying a
+    platinum takes a warm ring instead of more colour -- level 4 is "busy", the ring is "you closed
+    something out", and those are different facts that must not collapse into one.
   - No community comparisons, same reasoning as the plat card: our population selects for
     completionists, so any "vs other hunters" figure reads systematically less impressive than it is.
 
@@ -140,53 +148,81 @@ Context: api/recap_views.RecapShareImageHTMLView._build_template_context.
                 </div>
             </div>
 
-            {% comment %}The proof, full width. Cover art is the only thing here instantly readable at
-            Discord scale, so the platinums take the band when there are any; the rarest find takes it
-            when there are not, and a month with neither simply ends after the row above.{% endcomment %}
-            {% if platinums_data %}
-            <div>
-                <div style="font-size: 14px; font-weight: 700; color: #8a939f; letter-spacing: 0.14em; text-transform: uppercase;">Platinums earned</div>
-                <div style="display: flex; align-items: flex-end; gap: 13px; margin-top: 12px;">
-                    {% for plat in platinums_data %}
-                    <div style="width: 84px; height: 112px; flex-shrink: 0; border-radius: 8px; overflow: hidden; background: #232a31; border: 1px solid #404853; box-sizing: border-box; box-shadow: 0 12px 28px rgba(5, 8, 12, 0.6);">
-                        {% if plat.game_image %}
-                        <img src="{{ plat.game_image }}" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: top;" />
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                    {% if platinums_overflow %}
-                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 24px; font-weight: 700; color: #8a939f; flex-shrink: 0; padding: 0 4px 10px;">+{{ platinums_overflow }}</div>
-                    {% endif %}
+            {% comment %}The proof band, full width: what the month produced on the left, its SHAPE on the
+            right.
 
-                    {% comment %}The rarest find rides the end of this band while there is room for it --
-                    up to five covers. Past that the covers are the better use of the width, and the
-                    builder puts the rarest trophy in the spine instead. The two are never both shown, or
-                    the card says the same thing twice.{% endcomment %}
-                    {% if rarest_trophy.name and platinums_data|length <= 5 %}
-                    <div style="margin-left: 34px; min-width: 0; align-self: center;">
-                        <div style="font-size: 14px; font-weight: 700; color: #8a939f; letter-spacing: 0.14em; text-transform: uppercase;">Rarest find</div>
-                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 26px; font-weight: 700; color: #f0f6fd; line-height: 1.25; margin-top: 3px; max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rarest_trophy.name }}</div>
-                        {% if rarest_trophy.earn_rate %}
-                        <div style="font-size: 16px; font-weight: 500; color: #9da5b1; margin-top: 2px;">{{ rarest_trophy.earn_rate }}% earn rate</div>
+            The calendar is the card's most distinctive element and the reason it reads as a month rather
+            than a total -- a bare figure says how much, the grid says how it happened. Dropping it in the
+            first pass is exactly what left the card feeling barren, and it is also what was leaving the
+            right of the card empty.
+
+            Left slot: the platinum covers when there are any, because cover art is the only thing here
+            instantly readable at Discord scale; the rarest find when there are not. Never both, and the
+            builder puts the rarest trophy in the spine whenever the covers took this slot.{% endcomment %}
+            {% comment %}Tops aligned, so "Platinums earned" and "Activity" sit on one line. Bottom-aligned,
+            the shorter slot floated down and the two labels landed at different heights.{% endcomment %}
+            <div style="display: flex; align-items: flex-start; gap: 40px; min-height: 0;">
+
+                <div style="flex: 1; min-width: 0;">
+                    {% if platinums_data %}
+                    <div style="font-size: 14px; font-weight: 700; color: #8a939f; letter-spacing: 0.14em; text-transform: uppercase;">Platinums earned</div>
+                    <div style="display: flex; align-items: flex-end; gap: 12px; margin-top: 12px;">
+                        {% for plat in platinums_data %}
+                        <div style="width: 76px; height: 101px; flex-shrink: 0; border-radius: 8px; overflow: hidden; background: #232a31; border: 1px solid #404853; box-sizing: border-box; box-shadow: 0 12px 28px rgba(5, 8, 12, 0.6);">
+                            {% if plat.game_image %}
+                            <img src="{{ plat.game_image }}" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: top;" />
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                        {% if platinums_overflow %}
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 23px; font-weight: 700; color: #8a939f; flex-shrink: 0; padding: 0 2px 8px;">+{{ platinums_overflow }}</div>
                         {% endif %}
+                    </div>
+                    {% elif rarest_trophy.name %}
+                    <div style="display: flex; align-items: center; gap: 16px; min-width: 0;">
+                        {% if rarest_trophy_icon %}
+                        <img src="{{ rarest_trophy_icon }}" alt="" style="width: 62px; height: 62px; object-fit: cover; border-radius: 9px; flex-shrink: 0; border: 1px solid #404853; box-sizing: border-box;" />
+                        {% endif %}
+                        <div style="min-width: 0;">
+                            <div style="font-size: 14px; font-weight: 700; color: #8a939f; letter-spacing: 0.14em; text-transform: uppercase;">Rarest find</div>
+                            <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 28px; font-weight: 700; color: #f0f6fd; line-height: 1.25; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rarest_trophy.name }}</div>
+                            {% if rarest_trophy.earn_rate %}
+                            <div style="font-size: 16px; font-weight: 500; color: #9da5b1; margin-top: 2px;">{{ rarest_trophy.earn_rate }}% earn rate</div>
+                            {% endif %}
+                        </div>
                     </div>
                     {% endif %}
                 </div>
-            </div>
-            {% elif rarest_trophy.name %}
-            <div style="display: flex; align-items: center; gap: 16px; min-width: 0;">
-                {% if rarest_trophy_icon %}
-                <img src="{{ rarest_trophy_icon }}" alt="" style="width: 62px; height: 62px; object-fit: cover; border-radius: 9px; flex-shrink: 0; border: 1px solid #404853; box-sizing: border-box;" />
-                {% endif %}
-                <div style="min-width: 0;">
-                    <div style="font-size: 14px; font-weight: 700; color: #8a939f; letter-spacing: 0.14em; text-transform: uppercase;">Rarest find</div>
-                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 28px; font-weight: 700; color: #f0f6fd; line-height: 1.25; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rarest_trophy.name }}</div>
-                    {% if rarest_trophy.earn_rate %}
-                    <div style="font-size: 16px; font-weight: 500; color: #9da5b1; margin-top: 2px;">{{ rarest_trophy.earn_rate }}% earn rate</div>
-                    {% endif %}
+
+                {% comment %}The month's shape. Sunday-first, matching `first_day_weekday`'s 0=Sunday, with
+                the leading blanks emitted from a range built in the view -- the old card counted them out
+                with a `forloop.counter0` check inside a seven-item loop, which cannot express an offset of
+                more than six and silently drew the wrong month for any that needed one.{% endcomment %}
+                {% if calendar_days %}
+                <div style="flex-shrink: 0;">
+                    <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 14px;">
+                        <span style="font-size: 14px; font-weight: 700; color: #8a939f; letter-spacing: 0.14em; text-transform: uppercase;">Activity</span>
+                        <span style="font-size: 15px; font-weight: 600; color: #9da5b1;">{{ calendar_active_days }} day{{ calendar_active_days|pluralize }}</span>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(7, 24px); gap: 4px; margin-top: 11px;">
+                        {% for label in 'SMTWTFS'|make_list %}
+                        <div style="height: 13px; font-size: 11px; font-weight: 600; line-height: 1; color: #8a939f; text-align: center;">{{ label }}</div>
+                        {% endfor %}
+
+                        {% for _ in calendar_offset %}
+                        <div style="height: 24px;"></div>
+                        {% endfor %}
+
+                        {% for day in calendar_days %}
+                        <div style="height: 24px; display: flex; align-items: center; justify-content: center;">
+                            <span style="display: block; width: {{ day.size }}px; height: {{ day.size }}px; border-radius: 50%; background: {{ day.bg }};{% if day.plat %} border: 2px solid #ff9350; box-sizing: border-box; box-shadow: 0 0 9px rgba(255, 147, 80, 0.65);{% endif %}"></span>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
 
         {% comment %}── 3. The spine band: the month's texture. Its best day, its rarest find (when the

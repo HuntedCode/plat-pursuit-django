@@ -194,7 +194,7 @@ and nobody posts a stat readout) and the evidence is a spread rather than a sing
 |---|---|
 | Identity | Avatar, username, "Monthly Recap", and the brand block. Constructed exactly as the plat card's. |
 | The month | `RECAP` / month + year, tier dots; the figures pushed to the opposite edge so the row spans the card. |
-| The proof | Platinum covers full-width, with the rarest find beside them; the rarest find alone for a quiet month. |
+| The proof | Left: platinum covers, or the rarest find when there were none. Right: the **activity calendar**. |
 | The spine | Best day, badges, and the rarest find when the covers took its place. |
 
 Constraints worth knowing before editing it:
@@ -208,6 +208,15 @@ Constraints worth knowing before editing it:
   `static/fonts/`; anything else silently falls back.
 - **It is seen at ~450px wide in a Discord embed** (~37%), which is what sets the type scale -- the same
   constraint the plat card documents. Check any change at that size, not just at 1200.
+- **The activity calendar earns its space.** It is the one element that makes the card read as a MONTH
+  rather than a total: a figure says how much, the grid says how it happened, and a fortnight's binge
+  and a steady thirty days can share a trophy count without being the same month. Dropping it in the
+  first pass is what made the card feel barren. Its ramp (`CALENDAR_RAMP` in `api/recap_views.py`) is
+  a hand port of `.activity-level-*` from `recap-deck.css` -- climbing in size AND colour so it never
+  depends on hue alone -- because `color-mix()` against `--pp-*` resolves to nothing in the renderer.
+  A platinum day takes a warm ring rather than more colour: level 4 is "busy", the ring is "you closed
+  something out", and the ring is deliberately off the ramp's hue or it vanishes on exactly the days
+  most likely to be level 4.
 - **Zero figures are dropped, never printed.** A row of zeroes is a worse card than a shorter row, and
   nobody should be talked out of sharing by their own card.
 

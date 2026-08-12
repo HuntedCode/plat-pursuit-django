@@ -35,6 +35,22 @@ SHARE_CARD_PLATINUM_SLOTS = 8
 #: Longest edge for images embedded in the card, matching the plat card's budget.
 SHARE_CARD_IMAGE_MAX = 1000
 
+#: The activity calendar's ramp, as (dot diameter, background), keyed by level 0-4.
+#:
+#: A literal port of `.activity-level-*` in components/recap-deck.css, scaled for the card. The ramp
+#: climbs in BOTH size and colour so a month reads at a glance and never depends on hue alone -- it
+#: replaced four unrelated hardcoded hues that made the grid look like four metrics stacked together.
+#: Ported by hand because the renderer serves an about:blank origin: `color-mix()` against --pp-* tokens
+#: resolves to nothing there, so the ramp has to arrive as literal values.
+#: Level 0 is --pp-text-mute at 30%; 1-4 ride the house accent at 30 / 52 / 76 / 100%.
+CALENDAR_RAMP = [
+    (7,  'rgba(138, 147, 159, 0.30)'),
+    (11, 'rgba(39, 235, 254, 0.30)'),
+    (14, 'rgba(39, 235, 254, 0.52)'),
+    (17, 'rgba(39, 235, 254, 0.76)'),
+    (20, '#27ebfe'),
+]
+
 
 def _check_profile_synced(request):
     """Returns a 403 Response if the user has no linked profile or hasn't finished syncing."""
@@ -409,9 +425,9 @@ class RecapShareImageHTMLView(APIView):
             })
         # The rarest find moves down here when the platinums took the space above it, and is otherwise
         # already shown -- never both, or the card says the same thing twice.
-        # ...and only when the proof band did NOT already show it. The band carries the rarest
-        # find alongside up to five covers; past that the covers earn the width and it goes here.
-        if rarest.get('name') and len(platinums_with_images) > 5:
+        # ...and only when the proof band did not already show it. The band's left slot is the covers
+        # when there are any and the rarest find when there are not, so the two are never both shown.
+        if rarest.get('name') and platinums_with_images:
             rarity = rarest.get('earn_rate')
             spine.append({
                 'label': 'Rarest',
@@ -425,8 +441,36 @@ class RecapShareImageHTMLView(APIView):
                 'meta': f'+{intcomma(recap.badge_xp_earned)} XP' if recap.badge_xp_earned else '',
             })
 
+        # The activity calendar -- the card's most distinctive element and the one that makes it
+        # unmistakably about a MONTH rather than a total. Dropped in the first rebuild, which is exactly
+        # what left the card feeling barren.
+        #
+        # The ramp climbs in BOTH size and colour, matching `.activity-level-*` in recap-deck.css, so a
+        # month reads at a glance and never depends on hue alone. Resolved here rather than in the
+        # template because the renderer has no stylesheet: `color-mix()` and the --pp-* tokens the deck
+        # uses do not exist in an about:blank origin, so the ramp has to arrive as literal values.
+        cal = recap.activity_calendar or {}
+        cal_days = []
+        for day in cal.get('days') or []:
+            level = day.get('level') or 0
+            size, bg = CALENDAR_RAMP[min(level, 4)]
+            cal_days.append({
+                'day': day.get('day'),
+                'size': size,
+                'bg': bg,
+                # A platinum day gets a RING, not just more colour: level 4 is "busy" and this is "you
+                # closed something out", and they are different facts that must not collapse into one.
+                # Warm, off the ramp's hue entirely -- ringing it in the ramp colour made the marker
+                # invisible on exactly the days most likely to be level 4.
+                'plat': bool(day.get('platinum_count')),
+            })
+
         return {
             'format': format_type,
+            # `first_day_weekday` is 0=Sunday, matching the Su-first header the grid draws.
+            'calendar_offset': range(cal.get('first_day_weekday') or 0),
+            'calendar_days': cal_days,
+            'calendar_active_days': cal.get('total_active_days') or 0,
             'year': recap.year,
             'month': recap.month,
             'month_name': month_name,
