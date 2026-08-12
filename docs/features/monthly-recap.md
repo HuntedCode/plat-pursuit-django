@@ -235,7 +235,12 @@ Constraints worth knowing before editing it:
   `#share-section`, which renders directly beneath the entrance because its preview stays empty until the
   card has been opened, so eight swatches sat on the intro screen with nothing to apply themselves to.
   ("Change the look" went with that move: it existed to close the ceremony and land you on a picker
-  elsewhere.) The real gradient is the swatch. The page previously shipped all ~110 site
+  elsewhere.) The real gradient is the swatch, and choosing one repaints **every** mounted card: there
+  are two -- the card scene's and the share panel's -- and an id lookup found only the panel's, so the
+  card in front of the hunter did not move. A freshly mounted card also takes the current choice, since
+  the HTML arrives carrying the template's own ground. The listeners are wired in `setupEventListeners`,
+  NOT `setupShareButtons`: the latter runs only once the whole-deck prefetch resolves, and card-only can
+  open before that lands. The page previously shipped all ~110 site
   gradients into a `window.GRADIENT_THEMES` global feeding a `<select>` and a colour-grid wall --
   the same thing the plat card's rebuild moved away from. `applyBackground` reads `--pc-theme-bg`
   off the checked swatch rather than a JS registry, so the thing clicked and the thing that paints
