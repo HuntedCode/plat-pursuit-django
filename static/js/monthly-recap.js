@@ -13,7 +13,6 @@
  */
 /** The share card's own pixel width. It renders at its natural size and is SCALED to fit, because the
  *  thing on screen and the thing downloaded have to be the same object. */
-const SHARE_CARD_WIDTH = 1200;
 
 class MonthlyRecapManager {
     constructor(containerId, recapData, year, month) {
@@ -61,7 +60,6 @@ class MonthlyRecapManager {
         this.prevBtn = document.getElementById('prev-slide');
         this.nextBtn = document.getElementById('next-slide');
         this.holdBtn = document.getElementById('hold-slide');
-        this.shareSection = document.getElementById('share-section');
 
         this.init();
     }
@@ -293,7 +291,16 @@ class MonthlyRecapManager {
         if (this._fitCard) { this._fitCard(); }
     }
 
-    /** takeover() has already removed the stage and restored focus; put the page back in order. */
+    /**
+     * takeover() has already removed the stage and restored focus. Closing the ceremony LEAVES: the month
+     * page's only job is to start it, so landing back on it puts the hunter in front of a button they
+     * have just finished pressing, with the same month's card underneath. The archive is where the next
+     * choice actually lives -- another month.
+     *
+     * The teardown still runs first. The navigation is not instant (it is a real page load), and a stage
+     * left half-alive behind it would keep a beat timer running and a resize listener attached for the
+     * whole of it.
+     */
     onStageClosed() {
         this.stageOpen = false;
         this.container.classList.remove('is-card-only');
@@ -302,11 +309,8 @@ class MonthlyRecapManager {
         this.container.classList.remove('is-ending');
         if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
         this.handle = null;
-        const shareSection = document.getElementById('share-section');
-        if (shareSection && this.seenSummary) {
-            shareSection.classList.add('visible');
-            shareSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        const exit = this.container.dataset.exit;
+        if (exit) { window.location.href = exit; }
     }
 
     /**
@@ -437,9 +441,9 @@ class MonthlyRecapManager {
         const retry = document.getElementById('error-retry');
         if (retry) retry.addEventListener('click', () => window.location.reload());
 
-        // The grounds. Wired HERE rather than in setupShareButtons, which only runs once the deck
-        // prefetch resolves -- card-only can open before that lands, and a swatch that does nothing
-        // because a fetch has not returned yet is indistinguishable from a broken one.
+        // The grounds. Wired on boot rather than when the card scene opens: card-only can open before
+        // the deck prefetch lands, and a swatch that does nothing because a fetch has not returned yet is
+        // indistinguishable from a broken one.
         document.querySelectorAll('[data-recap-theme]').forEach((input) => {
             input.addEventListener('change', () => {
                 this.currentBackground = this.selectedTheme();
@@ -449,12 +453,6 @@ class MonthlyRecapManager {
 
         const done = document.getElementById('recap-done');
         if (done) done.addEventListener('click', () => this.handle && this.handle.close());
-
-        const share = document.getElementById('recap-share');
-        if (share) share.addEventListener('click', () => {
-            this.seenSummary = true;
-            if (this.handle) this.handle.close();     // onStageClosed opens and scrolls to the panel
-        });
 
         window.addEventListener('pagehide', () => this.abortLoad());
 
@@ -625,9 +623,6 @@ class MonthlyRecapManager {
 
             this.slidesContainer.appendChild(slideEl);
         });
-
-        // Set up share button listeners after slides are rendered
-        this.setupShareButtons();
 
         // Check for overflow on each slide after a brief delay for rendering
         setTimeout(() => this.checkSlideOverflow(), 100);
@@ -936,15 +931,12 @@ class MonthlyRecapManager {
         // Trigger celebration effects on specific slides
         this.triggerSlideEffects(this.slides[index]);
 
-        // The closing beat hands over: the stage offers Share / Done, and the panel below opens once
-        // they leave. Revealing it mid-ceremony was pointless -- it sits behind a full-screen takeover.
-        const card = document.getElementById('recap-card');
-        if (slideType === 'summary') {
-            this.seenSummary = true;
-            this.loadSharePreview();
-            // The hold before the hand-over is this beat's OWN beat, armed by the normal path like every
-            // other -- so pausing it actually pauses it. `endOfBeat` decides what happens when it expires.
-        } else {
+        // On the summary, hold. That beat is armed by the normal path like every other one -- so pausing
+        // it actually pauses it -- and `endOfBeat` hands over to the card scene when it expires.
+        // Stepping BACK off the summary has to undo that hand-over, or the card scene stays mounted over
+        // a beat that is no longer the last one.
+        if (slideType !== 'summary') {
+            const card = document.getElementById('recap-card');
             this.container.classList.remove('is-ending');
             if (card) card.setAttribute('aria-hidden', 'true');
             if (this._fitCard) { window.removeEventListener('resize', this._fitCard); this._fitCard = null; }
@@ -1234,83 +1226,6 @@ class MonthlyRecapManager {
         });
     }
 
-    async loadSharePreview() {
-        const shareContent = document.getElementById('share-content');
-        if (!shareContent || shareContent._loaded) return;
-
-        shareContent.innerHTML = '<div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg text-primary"></span></div>';
-
-        try {
-            // Fetch landscape preview
-            const data = await PlatPursuit.API.get(`/api/v1/recap/${this.year}/${this.month}/html/`);
-
-            // Create preview with background selector and scaled-down share card
-            // The card leads; the controls sit UNDER it. They used to sit above, which made the panel
-            // open on a settings row rather than on the thing being made.
-            shareContent.innerHTML = `
-                <div class="rcs__stack">
-                    <div class="rcs__frame">
-                        <div class="rcs__scaler">
-                            <div id="share-preview-inner" class="rcs__card">${data.html}</div>
-                        </div>
-                    </div>
-
-                    <div class="rcs__controls">
-                        <button id="download-recap-image" class="btn btn-sm md:btn-md btn-primary rcs__dl pp-dl"
-                                data-year="${this.year}" data-month="${this.month}">
-                            <span data-dl-label>Download</span>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <path d="M12 4v12M6 12l6 6 6-6M4 21h16" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            `;
-
-            // Apply dynamic scaling based on container width
-            this.scaleSharePreview();
-
-            shareContent._loaded = true;
-            this.setupShareButtons();
-
-            // Handle window resize
-            window.addEventListener('resize', () => this.scaleSharePreview());
-
-        } catch (error) {
-            console.error('Error loading share preview:', error);
-            shareContent.innerHTML = `
-                <div class="text-center py-4">
-                    <p class="text-base-content/70 mb-4">Preview unavailable</p>
-                    <div class="flex justify-center">
-                        <button id="download-recap-image" class="btn btn-primary gap-2" data-year="${this.year}" data-month="${this.month}">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                            Download Image
-                        </button>
-                    </div>
-                </div>
-            `;
-            this.setupShareButtons();
-        }
-    }
-
-    scaleSharePreview() {
-        const previewInner = document.getElementById('share-preview-inner');
-        if (!previewInner) return;
-
-        // Anchored on a NAMED class, not on `.relative`. A utility class is not a contract: the panel
-        // around this was rebuilt and the utility went with it, which would have left the 1200px card
-        // sitting unscaled inside a 600px frame with no error anywhere -- `closest` simply returns null
-        // and this bails.
-        const container = previewInner.closest('.rcs__frame');
-        if (!container) return;
-
-        const scale = container.offsetWidth / SHARE_CARD_WIDTH;
-        previewInner.style.transform = `scale(${scale})`;
-    }
-
     /**
      * Deliberately empty, and kept as a seam rather than deleted so the call site stays honest about
      * where a per-beat effect WOULD go.
@@ -1321,25 +1236,6 @@ class MonthlyRecapManager {
      * paced ceremony the beats now carry their own weight through choreography instead.
      */
     triggerSlideEffects() {}
-
-    setupShareButtons() {
-        // The nudge that used to sit here asked "want to pick a background first?" and offered to open
-        // the colour wall. The eight grounds are swatches on the page now, directly under the preview --
-        // there is nothing left to nudge anyone towards.
-        //
-        // Same three states as the ceremony's button and the plat card's, through the same helper. This
-        // panel had its own third copy of fetch-blob-anchor with a DaisyUI spinner swapped into
-        // innerHTML, which threw away the button's contents on every press.
-        const downloadBtn = document.getElementById('download-recap-image');
-        if (downloadBtn && PlatPursuit.CardDownload) {
-            PlatPursuit.CardDownload.attach(downloadBtn, {
-                url: () => this.cardPngUrl(),
-                filename: () => this.cardFilename(),
-                onStart: () => this.trackDownload(),
-            });
-        }
-
-    }
 
     /**
      * Fired on every press, including a retry -- which is what it always did. Read it as intent to save,

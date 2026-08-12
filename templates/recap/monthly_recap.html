@@ -81,7 +81,13 @@ unconditionally reached for attributes that were never provided. {% endcomment %
 {% comment %} Hidden until Begin. The controller mounts against it on load so the prefetch is already
 done by the time anyone enters; monthly-recap.js moves it to <body> and hands it to
 PlatPursuit.takeover. {% endcomment %}
+{% comment %}`data-exit` is where closing the stage sends you: the archive, not back here. The month
+page's only job is to start the ceremony, so returning to it after the ceremony ends puts you in front of
+a button you have just finished pressing. The archive is where the next choice actually lives.
+
+A data attribute rather than a literal in the controller so the URL stays with `{% url %}`.{% endcomment %}
 <div id="recap-container" class="rcx" data-year="{{ year }}" data-month="{{ month }}"
+     data-exit="{% url 'recap_index' %}"
      role="dialog" aria-modal="true" aria-label="{{ month_name }} {{ year }} recap" hidden>
     <div class="rcx__ground" aria-hidden="true"></div>
     <div class="rcx__aura" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -204,16 +210,6 @@ PlatPursuit.takeover. {% endcomment %}
 
 {% endif %}
 
-{% comment %} The share panel, below the fold and reached from the stage's closing beat. Deliberately
-quiet chrome: the CARD is the thing worth looking at, and a panel competing with it for attention would be
-the frame outshouting the picture. {% endcomment %}
-<section id="share-section" class="share-section rcs mt-4 md:mt-6">
-    <div id="share-content">
-        {# The card preview, mounted by the controller once the recap loads. #}
-    </div>
-
-</section>
-
 </div>{# /max-w-4xl wrapper #}
 
 {# No Activity State (month exists but no trophies earned) #}
@@ -282,13 +278,11 @@ the frame outshouting the picture. {% endcomment %}
                     // Show no-activity state (handled by template via no_activity flag)
                     // If no slides but container exists, it means backend returned empty
                     document.getElementById('recap-container').classList.add('hidden');
-                    document.getElementById('share-section').classList.add('hidden');
                     // Don't show error state - no_activity state is already visible from template
                 }
             } catch (e) {
                 console.error('Error initializing recap:', e);
                 document.getElementById('recap-container').classList.add('hidden');
-                document.getElementById('share-section').classList.add('hidden');
                 document.getElementById('error-state').classList.remove('hidden');
                 document.getElementById('error-message').textContent = 'Error loading recap: ' + e.message;
             }

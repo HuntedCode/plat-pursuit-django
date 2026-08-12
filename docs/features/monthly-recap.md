@@ -92,12 +92,16 @@ Immutable pattern: once `is_finalized=True`, regeneration is skipped even with `
 
 ### Share Card Generation
 
-1. User clicks share/download button on summary slide
+1. The ceremony fetches the card's HTML as it opens and mounts it in the card scene, so the closing beat
+   hands over to a card that is already there rather than to a spinner
 2. `RecapShareImageHTMLView` renders `recap_share_card.html` with cached external images
 3. `ShareImageCache` downloads and caches avatars, game icons, trophy icons as temp files
 4. Tracks `recap_share_generate` site event
-5. For PNG: `RecapShareImagePNGView` renders HTML via Playwright headless browser
-6. Client-side tracks `recap_image_download` event on download button click
+5. Download presses `RecapShareImagePNGView`, which renders that HTML via Playwright headless browser.
+   The button is `PlatPursuit.CardDownload` (idle -> busy -> done), NOT a navigation -- see the stage
+   notes below for why that distinction is load-bearing inside a takeover
+6. Client-side tracks `recap_image_download` on the press, which is intent to save rather than a
+   completed save (a retry fires it again)
 
 ### Slide Rendering
 
@@ -232,15 +236,14 @@ Constraints worth knowing before editing it:
   no box, and the footer's other blocks spread into the space.
 - **The grounds are the plat card's curated eight**, server-rendered as `.pc-theme` swatches **inside the
   card scene** -- under the card they change, above the buttons that act on it. They spent one commit in
-  `#share-section`, which renders directly beneath the entrance because its preview stays empty until the
-  card has been opened, so eight swatches sat on the intro screen with nothing to apply themselves to.
-  ("Change the look" went with that move: it existed to close the ceremony and land you on a picker
-  elsewhere.) The real gradient is the swatch, and choosing one repaints **every** mounted card: there
-  are two -- the card scene's and the share panel's -- and an id lookup found only the panel's, so the
-  card in front of the hunter did not move. A freshly mounted card also takes the current choice, since
-  the HTML arrives carrying the template's own ground. The listeners are wired in `setupEventListeners`,
-  NOT `setupShareButtons`: the latter runs only once the whole-deck prefetch resolves, and card-only can
-  open before that lands. The page previously shipped all ~110 site
+  the since-removed below-fold panel, which rendered directly beneath the entrance and whose preview stayed
+  empty until the card had been opened -- so eight swatches sat on the intro screen with nothing to apply
+  themselves to. ("Change the look" went with that move: it existed to close the ceremony and land you on
+  a picker elsewhere.) The real gradient is the swatch, and choosing one repaints **every** mounted card,
+  which was a real bug back when there were two of them and an id lookup found only the panel's, leaving
+  the card in front of the hunter unmoved. A freshly mounted card also takes the current choice, since the
+  HTML arrives carrying the template's own ground. The listeners are wired in `setupEventListeners` rather
+  than anywhere that waits on the deck prefetch: card-only can open before that lands. The page previously shipped all ~110 site
   gradients into a `window.GRADIENT_THEMES` global feeding a `<select>` and a colour-grid wall --
   the same thing the plat card's rebuild moved away from. `applyBackground` reads `--pc-theme-bg`
   off the checked swatch rather than a JS registry, so the thing clicked and the thing that paints
@@ -340,11 +343,23 @@ unconditionally but only recomputes the remainder when a timer is running: the l
 by which point `pointerup` has already released the hold, so there may be no clock left to stop but there
 is always a bar mid-flight to catch.
 
-**Below the fold** sits the share panel and nothing else -- no heading either: it said "Your July card"
-directly under an entrance that had just said the month twice. The card leads it and the controls sit under
-the card -- they were above, which opened the panel on a settings row rather than on the thing being made.
-A "More Months & Settings" section used to follow, holding the duplicate month picker; the archive carries
-that and the timezone now, so the entrance's aside links there instead.
+**Below the fold there is nothing**, and the month page is the shorter for it. A share panel used to sit
+there -- its own preview, its own scaler, its own download button -- revealed by closing the ceremony. So
+finishing the recap dropped you back on the intro screen with a second copy of the card underneath it: the
+entrance offering to start something you had just finished, above the thing you had just been shown. One
+surface shows the card now, and it is the one the ceremony ends on.
+
+**Closing the ceremony leaves the page.** `data-exit` on the stage carries `{% url 'recap_index' %}` and
+`onStageClosed` navigates there, by every route out -- Done, the close X, Escape, and from the card-only
+route as well. The month page's only job is to start the ceremony, so returning to it afterwards puts the
+hunter in front of a button they have just finished pressing; the archive is where the next choice (another
+month) actually lives. The teardown still runs first: the navigation is a real page load, and a stage left
+half-alive would keep a beat timer running and a resize listener attached for the whole of it. Note this
+applies to bailing MID-deck too, which is a deliberate simplification -- one exit that always means the
+same thing, rather than a rule about when you pressed it.
+
+A "More Months & Settings" section used to follow the panel, holding a duplicate month picker; the archive
+carries that and the timezone now, so the entrance's aside links there instead.
 
 Load-bearing details, each of which was a bug first:
 
@@ -388,8 +403,9 @@ Load-bearing details, each of which was a bug first:
   `window.location.href`. That cannot show progress on a call that runs headless Chromium, cannot name the
   file, and on a failure the browser has already left -- so a render error or the 20/m rate limit replaced
   the whole ceremony with a JSON error document and no way back. It now runs on
-  `PlatPursuit.CardDownload` with the plat card modal and the below-fold panel, which between them had
-  three copies of fetch-blob-anchor with three different ideas of what a slow press looks like.
+  `PlatPursuit.CardDownload` with the plat card modal (and, until it was removed a commit later, the
+  below-fold panel -- the three of them had three copies of fetch-blob-anchor with three different ideas
+  of what a slow press looks like).
 
   Two things are specific to the stage. It opts out of the success toast (the toast host is `z-50` and the
   stage is `z-90`, so one fired from inside renders behind the ceremony) and carries its own
@@ -405,7 +421,8 @@ Load-bearing details, each of which was a bug first:
   files do not, so an unlayered `display: flex` beats `.hidden { display: none }` whatever the source
   order. Three classes needed guards and each failed differently:
   `.rcs-state` (both terminal states rendered on every month page that loaded fine),
-  `.rcs` (latent -- the share panel is empty on the paths that hide it, so it cost only a stray margin),
+  `.rcs` (latent -- the share panel was empty on the paths that hid it, so it cost only a stray margin;
+  that panel is gone now and the guard went with it),
   and `.rcx`, which was the bad one. The stage is `position: fixed; inset: 0; z-index: 90` and merely
   TRANSPARENT when idle, and it is dismissed two ways: the `hidden` attribute (which worked) and the
   `hidden` class, used by the no-activity and error paths (which did not). So a recap that failed to load

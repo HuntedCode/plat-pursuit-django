@@ -448,8 +448,10 @@ def test_the_grounds_sit_with_the_card_not_on_the_intro_screen():
         'the grounds are not between the card and its buttons'
     )
 
-    share = tpl[tpl.index('id="share-section"'):]
-    assert 'data-recap-theme' not in share, 'a second copy is back in the share section'
+    # There is only one card surface now (the panel that used to hold a second copy is gone), so the
+    # count is the check: a stray duplicate anywhere on the page would give the hunter two swatch rows
+    # disagreeing about which ground is selected.
+    assert tpl.count('data-recap-theme') == 1, 'a second copy of the grounds is on the page'
 
 
 def test_change_the_look_is_gone_now_that_the_look_is_changeable_here():

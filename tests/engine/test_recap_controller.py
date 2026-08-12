@@ -613,35 +613,46 @@ def _page_tpl():
     return (ROOT / 'templates' / 'recap' / 'monthly_recap.html').read_text(encoding='utf-8')
 
 
-def test_the_preview_scaler_and_the_markup_it_measures_agree(js):
-    """The scaler finds its box with `closest(...)` and bails when it finds nothing -- silently, leaving a
-    1200px card unscaled inside a 600px frame. It used to anchor on `.relative`, a Tailwind utility that
-    vanished the moment the panel around it was rebuilt. A utility class is not a contract; this pins the
-    named one, on both sides."""
-    code = _code(js)
-    fn = _method(code, 'scaleSharePreview')
-    anchor = re.search(r"closest\('\.([\w-]+)'\)", fn)
-    assert anchor, 'the scaler no longer looks up a container at all'
-    cls = anchor.group(1)
-    assert cls != 'relative', 'anchored on a utility class again'
+def test_the_month_page_has_exactly_one_card_surface(js):
+    """The share panel below the fold is GONE. It was a second copy of the card scene -- its own preview,
+    its own scaler, its own download button -- reached by closing the ceremony, which meant finishing the
+    recap dropped you back on the intro screen with the card sitting under it. One surface shows the card
+    now, and it is the one the ceremony ends on.
 
-    built = code[code.index('shareContent.innerHTML = `'):]
-    built = built[:built.index('`;')]
-    assert cls in built, f'the scaler measures .{cls}, which the markup it builds does not contain'
-    assert 'share-preview-inner' in built, 'the element the scaler transforms is not rendered'
+    Pinned on both halves because the panel died in pieces: markup, styles, and the three methods that
+    drove it."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    tpl = (root / 'templates' / 'recap' / 'monthly_recap.html').read_text(encoding='utf-8')
+    css = (root / 'static' / 'css' / 'components' / 'recap-stage.css').read_text(encoding='utf-8')
+
+    assert 'share-section' not in tpl and 'share-content' not in tpl, 'the panel is back in the markup'
+    for dead in ('loadSharePreview', 'scaleSharePreview', 'setupShareButtons'):
+        assert dead not in js, f'{dead} outlived the panel it drove'
+    assert '.rcs__' not in css and '.share-section' not in css, 'the panel styles are back'
+    # `.rcs-state` is the no-activity / error page and is NOT part of the panel -- it shares a prefix and
+    # was removed by accident once already.
+    assert '.rcs-state' in css, 'the terminal states went with the panel'
 
 
-def test_the_card_leads_the_panel_and_the_controls_follow(js):
-    """The panel opened on a background dropdown, which put a settings row above the thing being made.
-    The dropdown is gone entirely now -- the grounds are swatches the page renders under the preview --
-    so what is pinned here is that the preview still comes before whatever controls remain."""
-    built = _code(js)
-    built = built[built.index('shareContent.innerHTML = `'):]
-    built = built[:built.index('`;')]
+def test_closing_the_ceremony_leaves_for_the_archive(js):
+    """The month page's only job is to start the ceremony, so returning to it afterwards puts the hunter
+    in front of a button they have just finished pressing. The archive is where the next choice lives.
 
-    assert 'recap-background-select' not in built, 'the ~110-theme dropdown is back in the panel'
-    assert built.index('share-preview-inner') < built.index('download-recap-image'), (
-        'the controls are above the card again'
+    The URL comes from `{% url %}` through a data attribute rather than a literal in the controller."""
+    from pathlib import Path
+    tpl = (Path(__file__).resolve().parents[2] / 'templates' / 'recap' /
+           'monthly_recap.html').read_text(encoding='utf-8')
+    assert "data-exit=\"{% url 'recap_index' %}\"" in tpl, 'the exit target is not wired from the URL conf'
+
+    closed = _method(_code(js), 'onStageClosed')
+    assert 'dataset.exit' in closed and 'window.location.href' in closed, (
+        'closing the stage no longer leaves the month page'
+    )
+    # The teardown has to happen FIRST: the navigation is a real page load, and a stage left half-alive
+    # keeps a beat timer running and a resize listener attached for the whole of it.
+    assert closed.index('stopBeatTimer') < closed.index('dataset.exit'), (
+        'it navigates before tearing the stage down'
     )
 
 
@@ -753,15 +764,13 @@ def test_choosing_a_ground_repaints_every_mounted_card(js):
 
 
 def test_the_grounds_are_wired_before_the_deck_arrives(js):
-    """`setupShareButtons` runs only once the whole-deck prefetch resolves, and card-only can open before
-    that lands -- the same race that made the card vanish. A swatch that does nothing because a fetch has
-    not returned is indistinguishable from a broken one."""
+    """Card-only can open before the whole-deck prefetch resolves -- the same race that made the card
+    vanish -- so the swatches cannot be wired from anything that waits on the network. A swatch that does
+    nothing because a fetch has not returned is indistinguishable from a broken one."""
     code = _code(js)
-    listeners = _method(code, 'setupEventListeners')
-    assert "querySelectorAll('[data-recap-theme]')" in listeners, (
+    assert "querySelectorAll('[data-recap-theme]')" in _method(code, 'setupEventListeners'), (
         'the grounds are wired somewhere that waits on the network'
     )
-    assert "querySelectorAll('[data-recap-theme]')" not in _method(code, 'setupShareButtons')
 
 
 def test_a_freshly_mounted_card_takes_the_chosen_ground(js):
