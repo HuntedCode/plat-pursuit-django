@@ -11,6 +11,10 @@
  * - Background theme selection (uses GRADIENT_THEMES from server)
  * - Slides rendered from Django templates via API
  */
+/** The share card's own pixel width. It renders at its natural size and is SCALED to fit, because the
+ *  thing on screen and the thing downloaded have to be the same object. */
+const SHARE_CARD_WIDTH = 1200;
+
 class MonthlyRecapManager {
     constructor(containerId, recapData, year, month) {
         this.container = document.getElementById(containerId);
@@ -502,6 +506,11 @@ class MonthlyRecapManager {
         if (advance) advance.addEventListener('click', (e) => {
             if (e.target.closest('[data-advance]')) this.nextSlide();
         });
+
+        // The error state's retry used to be an inline `onclick` in the template -- the one thing
+        // `test_no_inline_event_handlers` exists to keep off this page.
+        const retry = document.getElementById('error-retry');
+        if (retry) retry.addEventListener('click', () => window.location.reload());
 
         const done = document.getElementById('recap-done');
         if (done) done.addEventListener('click', () => this.handle && this.handle.close());
@@ -1292,39 +1301,36 @@ class MonthlyRecapManager {
             const data = await PlatPursuit.API.get(`/api/v1/recap/${this.year}/${this.month}/html/`);
 
             // Create preview with background selector and scaled-down share card
+            // The card leads; the controls sit UNDER it. They used to sit above, which made the panel
+            // open on a settings row rather than on the thing being made.
             shareContent.innerHTML = `
-                <div class="flex flex-col items-center gap-6">
-                    <!-- Background Selector -->
-                    <div class="flex flex-col sm:flex-row items-center gap-3 w-full max-w-xl">
-                        <label for="recap-background-select" class="text-sm text-base-content/70 whitespace-nowrap">Background:</label>
-                        <select id="recap-background-select" class="select select-sm select-bordered bg-base-200 flex-1">
-                            ${this.renderBackgroundOptions()}
-                        </select>
-                        <button type="button" id="open-recap-color-grid" class="btn btn-sm btn-primary btn-square" title="Choose from grid">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                            </svg>
-                        </button>
-                    </div>
-
-                    <!-- Scaled Preview Container -->
-                    <div class="w-full" style="max-width: 600px;">
-                        <div class="relative rounded-lg border-2 border-primary/30 shadow-lg overflow-hidden" style="aspect-ratio: 1200 / 630;">
-                            <div class="absolute inset-0" style="transform-origin: top left;">
-                                <div id="share-preview-inner" style="width: 1200px; height: 630px; transform-origin: top left;">
-                                    ${data.html}
-                                </div>
-                            </div>
+                <div class="rcs__stack">
+                    <div class="rcs__frame">
+                        <div class="rcs__scaler">
+                            <div id="share-preview-inner" class="rcs__card">${data.html}</div>
                         </div>
                     </div>
 
-                    <!-- Download Button -->
-                    <div class="flex justify-center">
-                        <button id="download-recap-image" class="btn btn-primary gap-2" data-year="${this.year}" data-month="${this.month}">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    <div class="rcs__controls">
+                        <label class="rcs__ctl-label" for="recap-background-select">Background</label>
+                        <select id="recap-background-select" class="select select-bordered select-sm rcs__select">
+                            ${this.renderBackgroundOptions()}
+                        </select>
+                        <button type="button" id="open-recap-color-grid" class="rcs__grid-btn"
+                                aria-label="Choose a background from the grid">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <rect width="7" height="7" x="3" y="3" rx="1" /><rect width="7" height="7" x="14" y="3" rx="1" />
+                                <rect width="7" height="7" x="3" y="14" rx="1" /><rect width="7" height="7" x="14" y="14" rx="1" />
                             </svg>
-                            Download Image
+                        </button>
+                        <button id="download-recap-image" class="btn btn-sm md:btn-md btn-primary rcs__dl"
+                                data-year="${this.year}" data-month="${this.month}">
+                            Download
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M12 4v12M6 12l6 6 6-6M4 21h16" />
+                            </svg>
                         </button>
                     </div>
                 </div>
@@ -1362,13 +1368,14 @@ class MonthlyRecapManager {
         const previewInner = document.getElementById('share-preview-inner');
         if (!previewInner) return;
 
-        const container = previewInner.closest('.relative');
+        // Anchored on a NAMED class, not on `.relative`. A utility class is not a contract: the panel
+        // around this was rebuilt and the utility went with it, which would have left the 1200px card
+        // sitting unscaled inside a 600px frame with no error anywhere -- `closest` simply returns null
+        // and this bails.
+        const container = previewInner.closest('.rcs__frame');
         if (!container) return;
 
-        // Calculate scale based on container width vs original card width (1200px)
-        const containerWidth = container.offsetWidth;
-        const scale = containerWidth / 1200;
-
+        const scale = container.offsetWidth / SHARE_CARD_WIDTH;
         previewInner.style.transform = `scale(${scale})`;
     }
 

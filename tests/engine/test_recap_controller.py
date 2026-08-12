@@ -605,3 +605,97 @@ def test_the_available_height_is_not_read_from_the_frame_itself():
     fit = fit[:fit.index('\n        };')]
     assert 'frame.clientHeight' not in fit, 'the fit measures the box it is about to set'
     assert 'availableHeight()' in fit
+
+
+# --- The month page around the ceremony -----------------------------------------------------------
+
+def _page_tpl():
+    return (ROOT / 'templates' / 'recap' / 'monthly_recap.html').read_text(encoding='utf-8')
+
+
+def test_the_preview_scaler_and_the_markup_it_measures_agree(js):
+    """The scaler finds its box with `closest(...)` and bails when it finds nothing -- silently, leaving a
+    1200px card unscaled inside a 600px frame. It used to anchor on `.relative`, a Tailwind utility that
+    vanished the moment the panel around it was rebuilt. A utility class is not a contract; this pins the
+    named one, on both sides."""
+    code = _code(js)
+    fn = _method(code, 'scaleSharePreview')
+    anchor = re.search(r"closest\('\.([\w-]+)'\)", fn)
+    assert anchor, 'the scaler no longer looks up a container at all'
+    cls = anchor.group(1)
+    assert cls != 'relative', 'anchored on a utility class again'
+
+    built = code[code.index('shareContent.innerHTML = `'):]
+    built = built[:built.index('`;')]
+    assert cls in built, f'the scaler measures .{cls}, which the markup it builds does not contain'
+    assert 'share-preview-inner' in built, 'the element the scaler transforms is not rendered'
+
+
+def test_the_card_leads_the_panel_and_the_controls_follow(js):
+    """The panel opened on a background dropdown, which put a settings row above the thing being made."""
+    built = _code(js)
+    built = built[built.index('shareContent.innerHTML = `'):]
+    built = built[:built.index('`;')]
+
+    assert built.index('share-preview-inner') < built.index('recap-background-select'), (
+        'the controls are above the card again'
+    )
+
+
+def test_the_page_carries_no_inline_event_handlers():
+    """The error state's retry was an `onclick` attribute. Everything else on this page binds in the
+    controller, and one exception is how a page stops having a rule."""
+    assert 'onclick=' not in _page_tpl(), 'an inline handler is back on the recap page'
+
+
+def test_the_terminal_states_do_not_use_emoji_as_iconography():
+    """`text-6xl` emoji were the largest thing on both terminal states -- somebody else's artwork, at the
+    size of a hero image, on a page that has its own icon set."""
+    tpl = _page_tpl()
+    for state in ('no-activity-state', 'error-state'):
+        block = tpl[tpl.index(f'id="{state}"'):]
+        block = block[:block.index('</div>\n\n') if '</div>\n\n' in block else 1200]
+        assert 'text-6xl' not in block, f'{state} still sizes something as a display glyph'
+        assert not re.search(r'[\U0001F300-\U0001FAFF]', block), f'{state} still uses an emoji as its icon'
+
+
+def test_the_entrance_sends_you_to_the_archive_for_another_month():
+    """"Pick a different month" pointed at `#recap-options`, an on-page section whose month picker had
+    been removed -- so it scrolled you to a timezone dropdown. The archive is where months live now."""
+    tpl = _page_tpl()
+    aside = tpl[tpl.index('rcx-enter__aside'):]
+    aside = aside[:aside.index('</p>')]
+    assert "{% url 'recap_index' %}" in aside, 'the month link still points at a section, not the archive'
+    assert '#recap-options' not in tpl, 'the retired options section is still referenced'
+
+
+def test_no_component_class_overrides_the_hidden_utility():
+    """Tailwind's utilities live in a LAYER; these component stylesheets do not. An unlayered
+    `display: flex` therefore beats `.hidden { display: none }` regardless of source order -- so any
+    element toggled with `hidden` whose class ALSO carries a `display` rule here is permanently visible.
+
+    That shipped once: both the no-activity state and the error state rendered on every month page that
+    loaded fine, stacked under the share panel, telling the hunter nothing had happened on a page full of
+    what happened. Generalised rather than pinned to that one class, because the next component to set
+    `display` and get toggled will hit it the same way and look just as correct in the source."""
+    tpl = _page_tpl()
+    css = '\n'.join((ROOT / 'static' / 'css' / 'components' / name).read_text(encoding='utf-8')
+                    for name in ('recap-stage.css', 'recap-deck.css', 'recap-archive.css'))
+
+    # Every class= that mentions the `hidden` utility, and the component classes sharing that attribute.
+    toggled = set()
+    for attr in re.findall(r'class="([^"]*\bhidden\b[^"]*)"', tpl):
+        for cls in attr.split():
+            if re.match(r'^(rc[xsa]|rca)[\w-]*$', cls):
+                toggled.add(cls)
+    assert toggled, 'no toggled component classes found -- has the markup changed shape?'
+
+    for cls in sorted(toggled):
+        rule = re.search(r'\.' + re.escape(cls) + r'\s*\{([^}]*)\}', css)
+        if not rule or 'display:' not in rule.group(1):
+            continue        # sets no display, so the utility wins on its own
+        guard = re.search(r'\.' + re.escape(cls) + r'(?:\.hidden|\[hidden\])', css)
+        assert guard, (
+            f'.{cls} sets `display` and is toggled with the `hidden` utility, which it silently '
+            f'outranks -- add `.{cls}.hidden {{ display: none; }}`'
+        )

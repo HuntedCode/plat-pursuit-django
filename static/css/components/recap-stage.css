@@ -566,3 +566,105 @@
     .rcx__stage { padding: 1rem 1.5rem 2rem; }
     .rcx .recap-slide { inset: 1rem 1.5rem 2rem; }
 }
+/* ================================================================
+ * The share panel and the page's terminal states.
+ *
+ * Below the fold on the month page, reached from the stage's closing beat. Deliberately quiet chrome: the
+ * CARD is the thing worth looking at, and the panel it sits in used to be a full bordered card with a
+ * centred "Share Your Recap" heading -- the frame outshouting the picture.
+ *
+ * The controls sit UNDER the card now. They were above it, which meant the panel opened on a settings row
+ * rather than on the thing being made.
+ * ================================================================ */
+
+.rcs { display: flex; flex-direction: column; gap: 0.9rem; }
+.rcs__head { text-align: center; }
+.rcs__title {
+    font-family: var(--pp-font-display, ui-sans-serif, system-ui, sans-serif);
+    font-size: 1.05rem; font-weight: 800; letter-spacing: -0.01em; color: var(--pp-text);
+}
+.rcs__sub { margin-top: 0.15rem; font-size: 0.75rem; color: var(--pp-text-mute); }
+
+.rcs__stack { display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+
+/* The frame is the SCALE REFERENCE -- `scaleSharePreview` measures this box. Named, not a utility class:
+   the scaler used to find it with `closest('.relative')`, and a utility is not a contract. */
+.rcs__frame {
+    position: relative;
+    width: 100%; max-width: 600px;
+    aspect-ratio: 1200 / 630;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border);
+    overflow: hidden;
+    box-shadow: 0 24px 60px -32px rgba(0, 0, 0, 0.9);
+}
+.rcs__scaler { position: absolute; inset: 0; transform-origin: top left; }
+/* Rendered at its natural share size and scaled down, so the thing on screen and the thing downloaded are
+   the same object rather than two different layouts of the same data. */
+.rcs__card { width: 1200px; height: 630px; transform-origin: top left; }
+
+.rcs__controls {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem;
+    width: 100%; max-width: 600px;
+}
+.rcs__ctl-label {
+    font-size: 0.62rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.rcs__select { flex: 1 1 12rem; min-width: 0; }
+.rcs__grid-btn {
+    display: grid; place-items: center; width: 2rem; height: 2rem; flex: none;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-1);
+    color: var(--pp-text-dim);
+    cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+.rcs__grid-btn:hover {
+    color: var(--pp-text); background: var(--pp-bg-2);
+    border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+}
+.rcs__grid-btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.rcs__grid-btn svg { width: 1rem; height: 1rem; }
+.rcs__dl { flex: none; }
+
+/* Terminal states: nothing this month, and the load failed. Both used an emoji at `text-6xl` as their
+   icon, which the rebuild brief calls out by name -- an emoji renders as somebody else's artwork at a
+   size where that is the loudest thing on the page. */
+.rcs-state {
+    max-width: 30rem; margin: 0 auto; padding: 3rem 1rem 4rem;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+}
+/* Tailwind's utilities live in a LAYER and this component file does not, so an unlayered `display: flex`
+   here beats `.hidden { display: none }` no matter what the source order is. Both of these states ship
+   with `hidden` on a month that loaded fine, and both were rendering underneath the share panel -- an
+   empty-state and an error telling the hunter nothing happened, on a page full of what happened.
+   `.rcx__out[hidden]` above has the same guard for the same reason. */
+.rcs-state.hidden,
+.rcs-state[hidden] { display: none; }
+.rcs-state__ico {
+    display: grid; place-items: center; width: 3rem; height: 3rem; margin-bottom: 0.9rem;
+    border-radius: 50%;
+    color: var(--pp-text-mute);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+}
+.rcs-state__ico--warn {
+    color: var(--pp-warning);
+    border-color: color-mix(in oklab, var(--pp-warning) 34%, transparent);
+    background: color-mix(in oklab, var(--pp-warning) 10%, transparent);
+}
+.rcs-state__ico svg { width: 1.5rem; height: 1.5rem; }
+.rcs-state__title {
+    font-family: var(--pp-font-display, ui-sans-serif, system-ui, sans-serif);
+    font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em;
+}
+.rcs-state__body { margin-top: 0.45rem; font-size: 0.85rem; line-height: 1.55; color: var(--pp-text-dim); }
+.rcs-state__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 1.35rem; }
+
+@media (min-width: 768px) {
+    .rcs { gap: 1.1rem; }
+    .rcs__title { font-size: 1.2rem; }
+    .rcs-state { padding: 4rem 1rem 5rem; }
+}

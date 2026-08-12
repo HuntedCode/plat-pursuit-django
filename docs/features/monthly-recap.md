@@ -235,7 +235,22 @@ unconditionally but only recomputes the remainder when a timer is running: the l
 by which point `pointerup` has already released the hold, so there may be no clock left to stop but there
 is always a bar mid-flight to catch.
 
+**Below the fold** sits the share panel and nothing else. The card leads it and the controls sit under
+the card -- they were above, which opened the panel on a settings row rather than on the thing being made.
+A "More Months & Settings" section used to follow, holding the duplicate month picker; the archive carries
+that and the timezone now, so the entrance's aside links there instead.
+
 Load-bearing details, each of which was a bug first:
+
+- **A component stylesheet outranks Tailwind's `hidden`.** Utilities live in a layer and these component
+  files do not, so an unlayered `display: flex` beats `.hidden { display: none }` whatever the source
+  order. Both terminal states (no-activity, error) rendered on every month page that loaded fine, stacked
+  under the share panel. Any component class that sets `display` AND gets toggled needs its own
+  `.cls.hidden { display: none }` guard; `test_no_component_class_overrides_the_hidden_utility` checks
+  this generally rather than for one class.
+- **The share preview's scaler is anchored on a NAMED class** (`.rcs__frame`), not a utility. It finds its
+  box with `closest(...)` and bails silently when it finds nothing, so when it was anchored on `.relative`
+  and the panel was rebuilt, the 1200px card would have sat unscaled in a 600px frame with no error.
 
 - **`.rcp` DISSOLVES on the stage.** In a takeover the stage IS the frame, so a bordered card inside one
   is a frame within a frame. The shell keeps its real job (type scale, rhythm, anatomy) and stops drawing
