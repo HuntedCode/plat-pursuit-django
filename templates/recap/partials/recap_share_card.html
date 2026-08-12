@@ -187,7 +187,7 @@ Context: api/recap_views.RecapShareImageHTMLView._build_template_context.
         Discord scale, so the platinums lead the row. Everything here is optional: a month with no
         platinums drops the strip and the rest slides left, which is why nothing is positioned against the
         strip's width.{% endcomment %}
-        <div style="flex-shrink: 0; display: flex; align-items: center; gap: 30px; padding-top: 15px; border-top: 1px solid rgba(64, 72, 83, 0.55); overflow: hidden;">
+        <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: {% if platinums_data %}space-between{% else %}flex-start{% endif %}; gap: {% if platinums_data %}30px{% else %}64px{% endif %}; padding-top: 15px; border-top: 1px solid rgba(64, 72, 83, 0.55); overflow: hidden;">
 
             {% comment %}A titled CONTAINER, not a loose strip. Bare covers were context-less art: you could
             not tell what you were looking at, or that they were this month's platinums rather than
@@ -234,16 +234,19 @@ Context: api/recap_views.RecapShareImageHTMLView._build_template_context.
                 <div style="min-width: 0;">
                     <div style="font-size: 12px; font-weight: 700; color: #8a939f; letter-spacing: 0.14em; text-transform: uppercase;">Rarest find</div>
                     <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 21px; font-weight: 700; color: #f0f6fd; line-height: 1.25; margin-top: 2px; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rarest_trophy.name }}</div>
-                    {% if rarest_trophy.earn_rate %}
-                    <div style="font-size: 14px; font-weight: 500; color: #9da5b1; margin-top: 1px;">{{ rarest_trophy.earn_rate }}% earn rate</div>
-                    {% endif %}
+                    <div style="font-size: 14px; font-weight: 500; color: #9da5b1; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        {% if rarest_trophy.earn_rate %}{{ rarest_trophy.earn_rate }}% earn rate{% endif %}{% if rarest_trophy.earn_rate and rarest_game %} &middot; {% endif %}{{ rarest_game }}
+                    </div>
                 </div>
             </div>
             {% endif %}
 
-            {# The month's texture, pushed to the far edge so the row spans the card. #}
+            {% comment %}The month's texture. NOT pushed to the far edge: `margin-left: auto` pooled every
+            bit of slack into one hole in the middle of the footer -- 590px of it for a month with no
+            platinums. The row distributes instead, so a quiet month reads as evenly spaced rather than as
+            two groups with a gap between them.{% endcomment %}
             {% if stat_items %}
-            <div style="display: flex; align-items: center; gap: 30px; flex-shrink: 0; margin-left: auto;">
+            <div style="display: flex; align-items: center; gap: 30px; flex-shrink: 0;">
                 {% for item in stat_items %}
                 <div style="min-width: 0;">
                     <div style="font-size: 12px; font-weight: 700; color: #8a939f; letter-spacing: 0.14em; text-transform: uppercase;">{{ item.label }}</div>

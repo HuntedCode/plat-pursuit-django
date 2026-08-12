@@ -245,6 +245,13 @@ Constraints worth knowing before editing it:
   the same thing the plat card's rebuild moved away from. `applyBackground` reads `--pc-theme-bg`
   off the checked swatch rather than a JS registry, so the thing clicked and the thing that paints
   are one value, and the PNG endpoint resolves the same key server-side.
+- **No placeholder cover slots, ever.** Padding the container to a fixed six so every card looks
+  identical was considered and rejected: an empty slot advertises what the hunter did NOT do, and
+  six is a display limit rather than a target. The same call the plat card already made on its DLC
+  pill, which only ever ADDS. A sparse month's space is filled with things that HAPPENED instead --
+  the longest streak (stored since launch, shown nowhere until now) and the rarest trophy's GAME,
+  both widest exactly when the platinum container is absent. Measured across 0/1/3/6 platinums, the
+  footer's largest internal gap went from 466/370/310/82px to 64/138/108/30px.
 - **Zero figures are dropped, never printed.** A row of zeroes is a worse card than a shorter row, and
   nobody should be talked out of sharing by their own card.
 

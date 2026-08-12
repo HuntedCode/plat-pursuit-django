@@ -441,6 +441,18 @@ class RecapShareImageHTMLView(APIView):
             })
         # The rarest find moves down here when the platinums took the space above it, and is otherwise
         # already shown -- never both, or the card says the same thing twice.
+        # The month's longest run of consecutive days. Stored since launch and never shown anywhere, and
+        # it is the stat that most fills the footer for a month with few platinums -- which is exactly the
+        # month whose footer has the most room. Filling with SUBSTANCE rather than with placeholder cover
+        # slots: an empty slot advertises what the hunter did not do, and a card should not do that.
+        streak = recap.streak_data or {}
+        if (streak.get('longest_streak') or 0) > 1:
+            stats.append({
+                'label': 'Best streak',
+                'value': f"{streak['longest_streak']} days",
+                'meta': streak.get('streak_start') or '',
+            })
+
         if recap.badges_earned_count:
             stats.append({
                 'label': 'Badges',
@@ -494,6 +506,7 @@ class RecapShareImageHTMLView(APIView):
             'platinums_data': platinums_with_images,
             'platinums_overflow': max(0, len(all_plats) - SHARE_CARD_PLATINUM_SLOTS),
             'rarest_trophy': rarest,
+            'rarest_game': rarest.get('game') or '',
             'rarest_trophy_icon': rarest_icon,
             'stat_items': stats,
             # Identity

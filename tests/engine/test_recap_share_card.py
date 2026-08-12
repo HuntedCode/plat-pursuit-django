@@ -405,3 +405,53 @@ def test_change_the_look_is_gone_now_that_the_look_is_changeable_here():
 
     assert 'recap-customise' not in tpl
     assert "getElementById('recap-customise')" not in js, 'the handler outlived its button'
+
+
+# ── Filling space with substance, not scaffolding ─────────────────────────────
+
+
+def test_the_platinum_container_is_never_padded_to_a_fixed_count():
+    """Placeholder slots were considered so every card would look identical, and rejected: an empty slot
+    advertises what the hunter did NOT do. A one-platinum month would show five gaps against a number
+    that is only a display limit, not a target -- and this codebase already made that call once, on the
+    plat card's DLC pill, which "only ever ADDS ... because nobody should be talked out of sharing by
+    their own card"."""
+    for n in (1, 2, 3):
+        html = _rendered(platinums=n, platinums_overflow=0,
+                         platinums_data=[{'game_image': '', 'name': f'Game {i}'} for i in range(n)])
+        assert html.count('width: 66px; height: 88px') == n, (
+            f'{n} platinums rendered a different number of cover slots'
+        )
+
+
+def test_the_footer_fills_with_real_stats_instead():
+    """The space a sparse month leaves is filled with things that HAPPENED. `streak_data` has been stored
+    since launch and shown nowhere, and it is widest exactly when the platinum container is absent."""
+    recap = _recap(0)
+    recap.rarest_trophy_data = {'name': 'Chalice of the Deep', 'earn_rate': 1.4, 'game': 'Bloodborne'}
+    recap.most_active_day = {'date': 'March 18', 'trophy_count': 31}
+    recap.activity_calendar = {}
+    recap.streak_data = {'longest_streak': 9, 'streak_start': 'Mar 06'}
+    recap.badges_earned_count = 2
+    recap.badge_xp_earned = 4100
+
+    ctx = RecapShareImageHTMLView()._build_template_context(recap, _Profile(), 'landscape')
+
+    assert [i['label'] for i in ctx['stat_items']] == ['Best day', 'Best streak', 'Badges']
+    assert ctx['rarest_game'] == 'Bloodborne', 'the trophy has no game to give it context'
+
+
+def test_a_one_day_streak_is_not_worth_saying():
+    """"Best streak: 1 day" is not a streak, and a card should not pad itself with a fact that reads as
+    an absence."""
+    recap = _recap(0)
+    recap.rarest_trophy_data = {}
+    recap.most_active_day = {}
+    recap.activity_calendar = {}
+    recap.streak_data = {'longest_streak': 1, 'streak_start': 'Mar 06'}
+    recap.badges_earned_count = 0
+    recap.badge_xp_earned = 0
+
+    ctx = RecapShareImageHTMLView()._build_template_context(recap, _Profile(), 'landscape')
+
+    assert 'Best streak' not in [i['label'] for i in ctx['stat_items']]
