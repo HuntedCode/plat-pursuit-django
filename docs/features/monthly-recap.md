@@ -177,6 +177,40 @@ inconsistency -- and the two never share a role: the state is carried by an edge
 word "New" on it, never by a number. If they ever do read as one thing, move the STATE (to
 `--pp-accent`, say), not the platinum.
 
+### The share card
+
+**A sibling of the plat card, not a copy.** Someone who has seen one should recognise where the other came
+from before reading a word, so everything carrying the identity is shared verbatim with
+`shareables/plat_card.html`: the ground gradient, both inner scrims, the Frame, the `40px 46px` padding,
+the identity strip and its brand block, the `rgba(64,72,83,0.55)` hairline, the tier-dot colours
+(`TIER_DISPLAY`), and the two-voice type. `test_the_card_shares_the_plat_cards_identity` compares against
+the plat card FILE rather than copied literals, so neither can drift alone.
+
+What differs is the subject, so what differs is the middle. A plat card is about one game; this is about a
+month, so **the month leads** (not the trophy count -- a card that opens with a number is a stat readout,
+and nobody posts a stat readout) and the evidence is a spread rather than a single cover.
+
+| Zone | Carries |
+|---|---|
+| Identity | Avatar, username, "Monthly Recap", and the brand block. Constructed exactly as the plat card's. |
+| The month | `RECAP` / month + year, tier dots; the figures pushed to the opposite edge so the row spans the card. |
+| The proof | Platinum covers full-width, with the rarest find beside them; the rarest find alone for a quiet month. |
+| The spine | Best day, badges, and the rarest find when the covers took its place. |
+
+Constraints worth knowing before editing it:
+
+- **Landscape only, 1200x630.** Both endpoints used to accept `image_format=portrait`, which renders this
+  fixed composition into a 1080x1350 viewport: clipped right, two thirds empty below. They reject it now.
+- **Inline styles, hex only.** Playwright renders via `set_content()` in an `about:blank` origin, so there
+  is no stylesheet and `var(--pp-*)` resolves to nothing. The token values are ported by hand at the top
+  of the template and pinned by `test_no_css_custom_properties_reach_the_card`.
+- **Only two font families exist here.** The renderer embeds Bricolage Grotesque and Inter from
+  `static/fonts/`; anything else silently falls back.
+- **It is seen at ~450px wide in a Discord embed** (~37%), which is what sets the type scale -- the same
+  constraint the plat card documents. Check any change at that size, not just at 1200.
+- **Zero figures are dropped, never printed.** A row of zeroes is a worse card than a shorter row, and
+  nobody should be talked out of sharing by their own card.
+
 ### Presentation: the Entrance and the Stage
 
 The recap is a **ceremony**, not a dashboard panel. Direction chosen from three built at

@@ -23,6 +23,9 @@ from trophies.recap_utils import (
     get_user_local_now, is_most_recent_completed_month, check_sync_freshness, MIN_RECAP_YEAR,
 )
 from core.services.share_image_cache import ShareImageCache
+# The trophy-tier dot colours, shared with the plat card so the tiers read identically on both.
+from core.services.completion_card_service import TIER_DISPLAY
+from django.contrib.humanize.templatetags.humanize import intcomma
 
 logger = logging.getLogger(__name__)
 
@@ -279,7 +282,7 @@ class RecapShareImageHTMLView(APIView):
     GET /api/v1/recap/<year>/<month>/html/
 
     Returns rendered HTML for the monthly recap share image card.
-    Query params: image_format=landscape|portrait
+    Query params: image_format=landscape (the only shape this card has)
 
     Returns: { "html": "<rendered html>", ... }
     """
@@ -307,9 +310,12 @@ class RecapShareImageHTMLView(APIView):
 
         # Get format
         format_type = request.query_params.get('image_format', 'landscape')
-        if format_type not in ['landscape', 'portrait']:
+        # Landscape only: the card is a fixed 1200x630 composition, and `portrait` would render it
+        # into a 1080x1350 viewport -- clipped on the right, two thirds empty below. The plat card
+        # hardcodes landscape for the same reason.
+        if format_type != 'landscape':
             return Response(
-                {'error': 'Invalid format. Must be landscape or portrait.'},
+                {'error': 'Invalid format. This card is landscape only.'},
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
@@ -373,6 +379,52 @@ class RecapShareImageHTMLView(APIView):
                     logger.warning(f"[RECAP-SHARE] Failed to cache platinum game image: {original_url}")
             platinums_with_images.append(plat_copy)
 
+        rarest = recap.rarest_trophy_data or {}
+        best_day = recap.most_active_day or {}
+
+        # Tier dots, in TIER_DISPLAY's order and colours, so the trophy tiers read identically on this
+        # card and the plat card. A tier with nothing in it is dropped rather than shown as a zero: four
+        # dots where one says 0 invites the reader to do arithmetic on a share image.
+        counts = {
+            'platinum': recap.platinums_earned,
+            'gold': recap.golds_earned,
+            'silver': recap.silvers_earned,
+            'bronze': recap.bronzes_earned,
+        }
+        tier_counts = [(tier, colour, counts.get(tier) or 0)
+                       for tier, colour in TIER_DISPLAY if counts.get(tier)]
+
+        # The spine carries what did not fit above, and only what actually happened. Composed here rather
+        # than in the template because the template would otherwise need the same "is there anything to
+        # show" question asked four times and then again for the band itself.
+        spine = []
+        # Keys come from `get_most_active_day` / `get_rarest_trophy_in_month`: `date` and `name`, NOT
+        # `date_display` and `trophy_name`. Both were guessed wrong first, and a wrong key here fails
+        # silently -- the block simply never renders and the card looks like a design decision.
+        if best_day.get('date') and best_day.get('trophy_count'):
+            spine.append({
+                'label': 'Best day',
+                'value': best_day['date'],
+                'meta': f"{best_day['trophy_count']} trophies",
+            })
+        # The rarest find moves down here when the platinums took the space above it, and is otherwise
+        # already shown -- never both, or the card says the same thing twice.
+        # ...and only when the proof band did NOT already show it. The band carries the rarest
+        # find alongside up to five covers; past that the covers earn the width and it goes here.
+        if rarest.get('name') and len(platinums_with_images) > 5:
+            rarity = rarest.get('earn_rate')
+            spine.append({
+                'label': 'Rarest',
+                'value': rarest['name'],
+                'meta': f'{rarity}% earn rate' if rarity else '',
+            })
+        if recap.badges_earned_count:
+            spine.append({
+                'label': 'Badges',
+                'value': recap.badges_earned_count,
+                'meta': f'+{intcomma(recap.badge_xp_earned)} XP' if recap.badge_xp_earned else '',
+            })
+
         return {
             'format': format_type,
             'year': recap.year,
@@ -382,23 +434,17 @@ class RecapShareImageHTMLView(APIView):
             'avatar_url': avatar_data,
             # Trophy counts
             'total_trophies': recap.total_trophies_earned,
-            'bronzes': recap.bronzes_earned,
-            'silvers': recap.silvers_earned,
-            'golds': recap.golds_earned,
             'platinums': recap.platinums_earned,
-            # Game stats
-            'games_started': recap.games_started,
-            'games_completed': recap.games_completed,
+            'tier_counts': tier_counts,
+            # Games. One figure, not two: "6 started, 3 completed" beside a trophy count reads as though
+            # the reader should reconcile them, and a share card gets a moment's glance.
+            'games_total': (recap.games_started or 0) + (recap.games_completed or 0),
             # Highlights
             'platinums_data': platinums_with_images,
             'platinums_overflow': max(0, len(all_plats) - SHARE_CARD_PLATINUM_SLOTS),
-            'rarest_trophy': recap.rarest_trophy_data or {},
+            'rarest_trophy': rarest,
             'rarest_trophy_icon': rarest_icon,
-            'most_active_day': recap.most_active_day or {},
-            'activity_calendar': recap.activity_calendar or {},
-            # Badge stats
-            'badge_xp': recap.badge_xp_earned,
-            'badges_count': recap.badges_earned_count,
+            'spine_items': spine,
             # Identity
             'is_plus': getattr(profile, 'is_plus', False),
         }
@@ -407,7 +453,7 @@ class RecapShareImageHTMLView(APIView):
 
 class RecapShareImagePNGView(APIView):
     """
-    GET /api/v1/recap/<year>/<month>/png/?image_format=landscape&theme=default
+    GET /api/v1/recap/<year>/<month>/png/?theme=default
 
     Server-side PNG rendering via Playwright. Returns the finished PNG as a download.
     """
@@ -439,9 +485,12 @@ class RecapShareImagePNGView(APIView):
             return stale_gate
 
         format_type = request.query_params.get('image_format', 'landscape')
-        if format_type not in ['landscape', 'portrait']:
+        # Landscape only: the card is a fixed 1200x630 composition, and `portrait` would render it
+        # into a 1080x1350 viewport -- clipped on the right, two thirds empty below. The plat card
+        # hardcodes landscape for the same reason.
+        if format_type != 'landscape':
             return Response(
-                {'error': 'Invalid format. Must be landscape or portrait.'},
+                {'error': 'Invalid format. This card is landscape only.'},
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
