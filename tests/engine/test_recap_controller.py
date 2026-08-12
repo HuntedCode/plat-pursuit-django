@@ -632,12 +632,15 @@ def test_the_preview_scaler_and_the_markup_it_measures_agree(js):
 
 
 def test_the_card_leads_the_panel_and_the_controls_follow(js):
-    """The panel opened on a background dropdown, which put a settings row above the thing being made."""
+    """The panel opened on a background dropdown, which put a settings row above the thing being made.
+    The dropdown is gone entirely now -- the grounds are swatches the page renders under the preview --
+    so what is pinned here is that the preview still comes before whatever controls remain."""
     built = _code(js)
     built = built[built.index('shareContent.innerHTML = `'):]
     built = built[:built.index('`;')]
 
-    assert built.index('share-preview-inner') < built.index('recap-background-select'), (
+    assert 'recap-background-select' not in built, 'the ~110-theme dropdown is back in the panel'
+    assert built.index('share-preview-inner') < built.index('download-recap-image'), (
         'the controls are above the card again'
     )
 

@@ -168,8 +168,27 @@ quiet chrome: the CARD is the thing worth looking at, and a panel competing with
 the frame outshouting the picture. {% endcomment %}
 <section id="share-section" class="share-section rcs mt-4 md:mt-6">
     <div id="share-content">
-        {# Populated by the controller once the recap loads. #}
+        {# The card preview, mounted by the controller once the recap loads. #}
     </div>
+
+    {% comment %}The grounds. Server-rendered with their REAL gradient as the swatch, so the choice is
+    visible before it is made -- and only the curated eight ship, not the ~110 site gradients the old
+    `<select>` and colour-grid modal offered. Same set and same component as the plat card
+    (`.pc-theme`, shareables/partials/share_modal.html): the two cards are siblings and a hunter should
+    not meet a different palette on each. Game-art backings are excluded upstream -- they need a game,
+    and a month is not one.{% endcomment %}
+    {% if card_themes %}
+    <div class="rcs__themes" role="radiogroup" aria-label="Card background">
+        {% for key, theme in card_themes %}
+        <label class="pc-theme" title="{{ theme.description }}" style="--pc-theme-bg: {{ theme.background_css }};">
+            <input type="radio" name="recap-theme" value="{{ key }}" class="sr-only"
+                   {% if forloop.first %}checked{% endif %} data-recap-theme />
+            <span class="pc-theme__swatch" aria-hidden="true"></span>
+            <span class="pc-theme__name">{{ theme.name }}</span>
+        </label>
+        {% endfor %}
+    </div>
+    {% endif %}
 </section>
 
 </div>{# /max-w-4xl wrapper #}
@@ -211,13 +230,10 @@ the frame outshouting the picture. {% endcomment %}
 </div>
 
 {# Color Grid Modal - for background selection in share card #}
-{% include 'partials/color_grid_modal.html' %}
-{% include 'partials/theme_nudge_modal.html' %}
 {% endblock %}
 
 {% block js_scripts %}
 <!-- Gradient themes from server (single source of truth) -->
-<script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
 <!-- Color grid modal -->
 <script src="{% static 'js/color-grid-modal.js' %}"></script>
 <!-- Monthly recap manager -->

@@ -194,7 +194,7 @@ and nobody posts a stat readout) and the evidence is a spread rather than a sing
 |---|---|
 | Header | Avatar, username, "Monthly Recap", and the brand block. Constructed exactly as the plat card's. |
 | Body | Two equal-height **panels**: the month, its tier dots and three figure cells on the left; the **activity calendar** on the right. |
-| Footer | Platinum covers, the rarest find, then best day and badges pushed to the far edge. |
+| Footer | A titled **platinums container** (covers + game names, 6 slots then "+N"), the rarest find, then best day and badges at the far edge. |
 
 Constraints worth knowing before editing it:
 
@@ -224,6 +224,18 @@ Constraints worth knowing before editing it:
   as a set rather than as items sharing a line. `scratchpad/voids.py` maps empty regions by hit-testing
   a grid of points; useful for confirming, but note it diagnoses WHERE the space is, not what to do
   about it -- the answer was structural both times.
+- **The platinum container answers three questions at once.** Its title says what the covers ARE (bare
+  art is context-less), its count says how many, and each cover carries its game's name. Six slots,
+  down from eight, because a name needs the width the eighth cover was using; the rest become
+  "+N". At **one** platinum it still reads deliberately -- title, count of 1, one named cover. At
+  **zero** the container is dropped entirely: an empty box titled "Platinums earned" is worse than
+  no box, and the footer's other blocks spread into the space.
+- **The grounds are the plat card's curated eight**, server-rendered as `.pc-theme` swatches under
+  the preview, with the real gradient as the swatch. The page previously shipped all ~110 site
+  gradients into a `window.GRADIENT_THEMES` global feeding a `<select>` and a colour-grid wall --
+  the same thing the plat card's rebuild moved away from. `applyBackground` reads `--pc-theme-bg`
+  off the checked swatch rather than a JS registry, so the thing clicked and the thing that paints
+  are one value, and the PNG endpoint resolves the same key server-side.
 - **Zero figures are dropped, never printed.** A row of zeroes is a worse card than a shorter row, and
   nobody should be talked out of sharing by their own card.
 

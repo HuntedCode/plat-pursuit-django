@@ -170,6 +170,12 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         track_site_event('recap_page_view', f"{year}-{month:02d}", self.request)
         track_page_view('recap', f"{year}-{month:02d}", self.request)
 
+        # The card's grounds: the SAME curated eight the plat card offers, because the two cards are
+        # siblings and a hunter picking a ground should not find a different palette on each. Game-art
+        # backings are filtered out -- they need a game, and a month is not one.
+        from trophies.themes import get_plat_card_themes
+        context['card_themes'] = [(k, t) for k, t in get_plat_card_themes() if not t.get('is_game_art')]
+
         # Build slides response
         slides = MonthlyRecapService.build_slides_response(recap)
 

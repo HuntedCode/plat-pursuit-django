@@ -189,23 +189,45 @@ Context: api/recap_views.RecapShareImageHTMLView._build_template_context.
         strip's width.{% endcomment %}
         <div style="flex-shrink: 0; display: flex; align-items: center; gap: 30px; padding-top: 15px; border-top: 1px solid rgba(64, 72, 83, 0.55); overflow: hidden;">
 
+            {% comment %}A titled CONTAINER, not a loose strip. Bare covers were context-less art: you could
+            not tell what you were looking at, or that they were this month's platinums rather than
+            decoration. The title says what they are, the count says how many, and each cover carries its
+            game's name -- which is what took the slot count from eight to six, since a name needs width.
+
+            Dropped entirely at zero platinums: an empty box titled "Platinums earned" is worse than no box,
+            and the footer's other blocks spread into the space.{% endcomment %}
             {% if platinums_data %}
-            <div style="display: flex; align-items: center; gap: 9px; flex-shrink: 0;">
-                {% for plat in platinums_data %}
-                <div style="width: 51px; height: 68px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: #232a31; border: 1px solid #404853; box-sizing: border-box; box-shadow: 0 8px 18px rgba(5, 8, 12, 0.6);">
-                    {% if plat.game_image %}
-                    <img src="{{ plat.game_image }}" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: top;" />
+            <div style="flex-shrink: 0; padding: 11px 15px 12px; border-radius: 11px; border: 1px solid rgba(64, 72, 83, 0.7); background: rgba(24, 29, 35, 0.55);">
+                <div style="display: flex; align-items: baseline; gap: 10px;">
+                    <span style="font-size: 12px; font-weight: 700; color: #8a939f; letter-spacing: 0.14em; text-transform: uppercase;">Platinums earned</span>
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 14px; font-weight: 700; color: #67d1f8;">{{ platinums }}</span>
+                </div>
+                <div style="display: flex; align-items: flex-start; gap: 10px; margin-top: 9px;">
+                    {% for plat in platinums_data %}
+                    <div style="width: 66px; flex-shrink: 0;">
+                        <div style="width: 66px; height: 88px; border-radius: 6px; overflow: hidden; background: #232a31; border: 1px solid #404853; box-sizing: border-box; box-shadow: 0 8px 18px rgba(5, 8, 12, 0.6);">
+                            {% if plat.game_image %}
+                            <img src="{{ plat.game_image }}" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: top;" />
+                            {% endif %}
+                        </div>
+                        {% comment %}One line, clipped. A wrapped title would push the container taller than
+                        the rest of the footer and the row would stop reading as one thing.{% endcomment %}
+                        <div style="font-size: 11px; font-weight: 600; line-height: 1.25; color: #9da5b1; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ plat.name }}</div>
+                    </div>
+                    {% endfor %}
+                    {% if platinums_overflow %}
+                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 18px; font-weight: 700; color: #8a939f; flex-shrink: 0; align-self: center; padding: 0 2px 14px;">+{{ platinums_overflow }}</div>
                     {% endif %}
                 </div>
-                {% endfor %}
-                {% if platinums_overflow %}
-                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 20px; font-weight: 700; color: #8a939f; flex-shrink: 0; padding-left: 2px;">+{{ platinums_overflow }}</div>
-                {% endif %}
             </div>
             {% endif %}
 
+            {% comment %}The block that gives, when the footer is tight. The container and the stats are
+            fixed-size, so this one carries `min-width: 0` and an ellipsis: the widest real case (six
+            covers, a long trophy name and all three stats) comes to within 76px of the card's width, and
+            the squeeze has to land somewhere that can absorb it.{% endcomment %}
             {% if rarest_trophy.name %}
-            <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+            <div style="display: flex; align-items: center; gap: 12px; min-width: 0; flex-shrink: 1;">
                 {% if rarest_trophy_icon %}
                 <img src="{{ rarest_trophy_icon }}" alt="" style="width: 46px; height: 46px; object-fit: cover; border-radius: 7px; flex-shrink: 0; border: 1px solid #404853; box-sizing: border-box;" />
                 {% endif %}

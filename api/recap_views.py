@@ -31,7 +31,17 @@ logger = logging.getLogger(__name__)
 
 #: Platinum covers the share card's grid can hold. The builder must fill up to this, not fewer, or the
 #: template's "+N more" badge is unreachable.
-SHARE_CARD_PLATINUM_SLOTS = 8
+#: How many platinum covers the card's footer container holds before it starts counting.
+#:
+#: Six, down from eight. Each cover now carries its game's NAME underneath -- eight bare covers were
+#: context-less art, and a name needs width the eighth cover was using. Six at 76px still fits the
+#: container beside the rarest find and the month's stats; the rest become "+N more", which the builder
+#: reports separately so the badge can actually fire (it once capped at three while the grid held eight,
+#: so the shown count and the earned count could never differ and the badge was unreachable).
+#:
+#: The container is dropped entirely at zero: a month with no platinum gets no empty box, and the footer's
+#: other two blocks spread into the space.
+SHARE_CARD_PLATINUM_SLOTS = 6
 #: Longest edge for images embedded in the card, matching the plat card's budget.
 SHARE_CARD_IMAGE_MAX = 1000
 
@@ -388,6 +398,8 @@ class RecapShareImageHTMLView(APIView):
         platinums_with_images = []
         for plat in all_plats[:SHARE_CARD_PLATINUM_SLOTS]:
             plat_copy = dict(plat)
+            # `game_name` is what the payload calls it; the template shows it under the cover.
+            plat_copy['name'] = plat_copy.get('game_name') or ''
             if plat_copy.get('game_image'):
                 original_url = plat_copy['game_image']
                 plat_copy['game_image'] = ShareImageCache.fetch_and_cache(original_url)

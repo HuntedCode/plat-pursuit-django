@@ -8,7 +8,7 @@
  * - Manual navigation (prev/next, progress dots)
  * - Confetti celebrations on key slides
  * - Share image generation on final slide
- * - Background theme selection (uses GRADIENT_THEMES from server)
+ * - Background selection from the curated grounds the page renders as swatches
  * - Slides rendered from Django templates via API
  */
 /** The share card's own pixel width. It renders at its natural size and is SCALED to fit, because the
@@ -25,8 +25,7 @@ class MonthlyRecapManager {
         this.currentSlide = 0;
 
         // Background selection
-        this.currentBackground = 'default';
-        this.backgroundStyles = this._buildBackgroundStyles();
+        this.currentBackground = 'ppSubstrate';   // the first swatch, which the template marks checked
 
         // Cache for fetched slide HTML
         this.slideCache = {};
@@ -68,130 +67,22 @@ class MonthlyRecapManager {
     }
 
     /**
-     * Build background styles from window.GRADIENT_THEMES
+     * Paint the chosen ground onto a rendered card.
+     *
+     * The gradient comes off the SWATCH the server rendered (`--pc-theme-bg`), not from a theme registry
+     * in JS. That registry used to be built from a `window.GRADIENT_THEMES` global carrying all ~110 site
+     * gradients for a picker that offered every one of them; the card renders eight. Reading the value
+     * back off the swatch means the thing you clicked and the thing that paints are the same value, and
+     * the PNG endpoint resolves the same key server-side.
      */
-    _buildBackgroundStyles() {
-        // Check if themes are loaded from server
-        if (window.GRADIENT_THEMES && Object.keys(window.GRADIENT_THEMES).length > 0) {
-            return this._buildFromExternalThemes(window.GRADIENT_THEMES);
-        }
-
-        // Error: themes should always be provided by server
-        console.error('GRADIENT_THEMES not loaded. Ensure gradient_themes_json template tag is included.');
-
-        // Minimal fallback with just default theme
-        return {
-            'default': {
-                name: 'Default',
-                description: 'Default gradient',
-                accentColor: '#67d1f8',
-                getStyle: () => ({
-                    background: 'linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34)'
-                }),
-                getHeaderStyle: () => ({
-                    background: 'linear-gradient(135deg, rgba(103, 209, 248, 0.15) 0%, rgba(103, 209, 248, 0.05) 100%)',
-                    borderColor: '#67d1f8'
-                })
-            }
-        };
-    }
-
-    /**
-     * Convert server-provided themes to the format expected by this class
-     * Filters out game art themes since recaps don't have game context
-     */
-    _buildFromExternalThemes(themes) {
-        const styles = {};
-
-        for (const [key, theme] of Object.entries(themes)) {
-            // Skip game art themes - recaps don't have game images to use
-            if (theme.requiresGameImage) {
-                continue;
-            }
-
-            styles[key] = {
-                name: theme.name,
-                description: theme.description,
-                accentColor: theme.accentColor,
-                getStyle: function() {
-                    const result = {
-                        background: theme.background,
-                        backgroundSize: theme.backgroundSize || undefined,
-                        backgroundPosition: theme.backgroundPosition || undefined,
-                        backgroundRepeat: theme.backgroundRepeat || undefined
-                    };
-                    // Remove undefined properties
-                    Object.keys(result).forEach(k => result[k] === undefined && delete result[k]);
-                    return result;
-                },
-                getHeaderStyle: function() {
-                    return {
-                        background: theme.bannerBackground,
-                        borderColor: theme.bannerBorderColor
-                    };
-                }
-            };
-        }
-
-        return styles;
-    }
-
-    /**
-     * Render background dropdown options
-     */
-    renderBackgroundOptions() {
-        const entries = Object.entries(this.backgroundStyles);
-
-        // Separate default from others
-        const defaultEntry = entries.find(([key]) => key === 'default');
-        const otherEntries = entries.filter(([key]) => key !== 'default');
-
-        // Sort others alphabetically by name
-        otherEntries.sort((a, b) => a[1].name.localeCompare(b[1].name));
-
-        // Combine with default first
-        const sortedEntries = defaultEntry ? [defaultEntry, ...otherEntries] : otherEntries;
-
-        return sortedEntries
-            .map(([key, style]) => `<option value="${key}">${style.name}</option>`)
-            .join('');
-    }
-
-    /**
-     * Apply selected background style to an element and its header
-     */
-    async applyBackground(element) {
+    applyBackground(element) {
         if (!element) return;
-
-        const styleKey = this.currentBackground;
-        const styleDef = this.backgroundStyles[styleKey];
-
-        if (!styleDef) return;
-
-        const styles = styleDef.getStyle();
-
-        // Apply background styles to main element
-        Object.entries(styles).forEach(([prop, value]) => {
-            element.style[prop] = value;
-        });
-
-        // Apply header styles if getHeaderStyle exists
-        if (styleDef.getHeaderStyle) {
-            const header = element.querySelector('[data-element="recap-header"]');
-            if (header) {
-                const headerStyles = styleDef.getHeaderStyle();
-
-                // Apply background
-                if (headerStyles.background) {
-                    header.style.background = headerStyles.background;
-                }
-
-                // Apply border color
-                if (headerStyles.borderColor) {
-                    header.style.borderLeftColor = headerStyles.borderColor;
-                }
-            }
-        }
+        const label = document.querySelector('[data-recap-theme]:checked')?.closest('.pc-theme');
+        const ground = label && getComputedStyle(label).getPropertyValue('--pc-theme-bg').trim();
+        if (!ground) return;
+        // `!important` because the card's own inline `background` on `.share-image-content` would
+        // otherwise win -- the same reason the Playwright renderer stamps the ground with it.
+        element.style.setProperty('background', ground, 'important');
     }
 
     async init() {
@@ -362,7 +253,7 @@ class MonthlyRecapManager {
 
     /** The one expensive call in the whole flow -- everything else is a template render. */
     downloadCard() {
-        const theme = this.currentBackground && this.currentBackground !== 'default'
+        const theme = this.currentBackground
             ? `&theme=${encodeURIComponent(this.currentBackground)}` : '';
         window.location.href =
             `/api/v1/recap/${this.year}/${this.month}/png/?image_format=landscape${theme}`;
@@ -969,7 +860,6 @@ class MonthlyRecapManager {
         this.armBeat(index, slideEls[index]);
         this.applyBeatAccent(slideEls[index]);
 
-
         // Trigger slide-specific animations (only on first visit)
         const slideType = this.slides[index].type;
         const slideEl = slideEls[index];
@@ -1319,18 +1209,6 @@ class MonthlyRecapManager {
                     </div>
 
                     <div class="rcs__controls">
-                        <label class="rcs__ctl-label" for="recap-background-select">Background</label>
-                        <select id="recap-background-select" class="select select-bordered select-sm rcs__select">
-                            ${this.renderBackgroundOptions()}
-                        </select>
-                        <button type="button" id="open-recap-color-grid" class="rcs__grid-btn"
-                                aria-label="Choose a background from the grid">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <rect width="7" height="7" x="3" y="3" rx="1" /><rect width="7" height="7" x="14" y="3" rx="1" />
-                                <rect width="7" height="7" x="3" y="14" rx="1" /><rect width="7" height="7" x="14" y="14" rx="1" />
-                            </svg>
-                        </button>
                         <button id="download-recap-image" class="btn btn-sm md:btn-md btn-primary rcs__dl"
                                 data-year="${this.year}" data-month="${this.month}">
                             Download
@@ -1401,33 +1279,23 @@ class MonthlyRecapManager {
         // Download button
         const downloadBtn = document.getElementById('download-recap-image');
         if (downloadBtn && !downloadBtn._hasListener) {
-            downloadBtn.addEventListener('click', () => {
-                // Theme nudge: prompt if still on default
-                if (this.currentBackground === 'default') {
-                    this._showThemeNudge();
-                    return;
-                }
-                this._trackAndDownload();
-            });
+            // The nudge that used to sit here asked "want to pick a background first?" and offered to
+            // open the colour wall. The eight grounds are swatches on the page now, directly under the
+            // preview -- there is nothing left to nudge anyone towards.
+            downloadBtn.addEventListener('click', () => this._trackAndDownload());
             downloadBtn._hasListener = true;
         }
 
         // Background selector
-        const backgroundSelect = document.getElementById('recap-background-select');
-        if (backgroundSelect && !backgroundSelect._hasListener) {
-            backgroundSelect.addEventListener('change', (e) => {
-                this.currentBackground = e.target.value;
+        // The grounds are radios the server rendered; a change repaints the preview in place.
+        document.querySelectorAll('[data-recap-theme]').forEach((input) => {
+            if (input._hasListener) return;
+            input.addEventListener('change', () => {
+                this.currentBackground = this.selectedTheme();
                 this.updatePreviewBackground();
             });
-            backgroundSelect._hasListener = true;
-        }
-
-        // Color grid modal button
-        const colorGridBtn = document.getElementById('open-recap-color-grid');
-        if (colorGridBtn && !colorGridBtn._hasListener) {
-            colorGridBtn.addEventListener('click', () => this.openColorModal());
-            colorGridBtn._hasListener = true;
-        }
+            input._hasListener = true;
+        });
     }
 
     _trackAndDownload() {
@@ -1440,32 +1308,10 @@ class MonthlyRecapManager {
         this.downloadShareImage();
     }
 
-    _showThemeNudge() {
-        const modal = document.getElementById('theme-nudge-modal');
-        if (!modal) {
-            this._trackAndDownload();
-            return;
-        }
-
-        const browseBtn = document.getElementById('nudge-browse-themes');
-        const continueBtn = document.getElementById('nudge-continue');
-
-        const newBrowse = browseBtn?.cloneNode(true);
-        const newContinue = continueBtn?.cloneNode(true);
-        browseBtn?.replaceWith(newBrowse);
-        continueBtn?.replaceWith(newContinue);
-
-        newBrowse?.addEventListener('click', () => {
-            modal.close();
-            this.openColorModal();
-        });
-
-        newContinue?.addEventListener('click', () => {
-            modal.close();
-            this._trackAndDownload();
-        });
-
-        modal.showModal();
+    /** The chosen ground, from the swatch row. Falls back to the first, which is always checked. */
+    selectedTheme() {
+        const picked = document.querySelector('[data-recap-theme]:checked');
+        return picked ? picked.value : 'ppSubstrate';
     }
 
     /**
@@ -1479,38 +1325,6 @@ class MonthlyRecapManager {
         if (shareContent) {
             this.applyBackground(shareContent);
         }
-    }
-
-    /**
-     * Open color grid modal for visual theme selection
-     */
-    openColorModal() {
-        if (!window.PlatPursuit?.getColorGridModal) {
-            console.warn('ColorGridModal not initialized');
-            return;
-        }
-
-        const colorModal = window.PlatPursuit.getColorGridModal();
-
-        // Open modal with current background and callback
-        colorModal.open(this.currentBackground, (selectedTheme) => {
-            // Update internal state
-            this.currentBackground = selectedTheme;
-
-            // Sync dropdown to match selection
-            const selectElement = document.getElementById('recap-background-select');
-            if (selectElement) {
-                const optionExists = Array.from(selectElement.options).some(opt => opt.value === selectedTheme);
-                if (optionExists) {
-                    selectElement.value = selectedTheme;
-                } else {
-                    selectElement.value = 'default';
-                }
-            }
-
-            // Update preview
-            this.updatePreviewBackground();
-        }, 'landscape', {});
     }
 
     async downloadShareImage() {

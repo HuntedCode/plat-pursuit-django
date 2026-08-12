@@ -610,6 +610,18 @@
    the same object rather than two different layouts of the same data. */
 .rcs__card { width: 1200px; height: 630px; transform-origin: top left; }
 
+/* The grounds. `.pc-theme` itself is the plat card's component (components/plat-cards.css, imported
+   globally) -- only the container differs, because there it lives in a modal box and here it sits under
+   the preview on the page. Eight fixed items, so a fixed track count rather than auto-fit: the row reads
+   as one set of eight rather than reflowing to a different shape at every width. */
+.rcs__themes {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;
+    width: 100%; max-width: 600px; margin: 0 auto;
+}
+@media (min-width: 768px) {
+    .rcs__themes { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+}
+
 .rcs__controls {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem;
     width: 100%; max-width: 600px;

@@ -297,12 +297,76 @@ def test_a_month_with_no_badges_drops_that_block():
     assert [i['label'] for i in ctx['stat_items']] == ['Best day']
 
 
-def test_the_footer_strip_fits_every_cover_it_shows():
-    """The covers are a fixed-size row in the footer, so the widest case has to fit beside the rarest find
-    and the stat blocks rather than pushing either off the card."""
-    html = _rendered(platinums_data=[{'game_image': ''}] * 8, platinums_overflow=4)
-    assert html.count('width: 51px; height: 68px') == 8
-    assert '+4' in html
+def test_the_platinum_container_names_its_games():
+    """Bare covers were context-less art: you could not tell what you were looking at, or that they were
+    this month's platinums rather than decoration. The container's title says what they are, its count
+    says how many, and each cover carries its game's name."""
+    html = _rendered(platinums_data=[{'game_image': '', 'name': 'Bloodborne'},
+                                     {'game_image': '', 'name': 'Elden Ring'}],
+                     platinums=2, platinums_overflow=0)
+    assert 'Platinums earned' in html
+    assert 'Bloodborne' in html and 'Elden Ring' in html
 
-    # 8 covers, their gaps and the "+N" against the card's 1108px content width.
-    assert 51 * 8 + 9 * 7 + 40 < 1108
+
+def test_the_container_is_dropped_entirely_at_zero_platinums():
+    """An empty box titled "Platinums earned" is worse than no box, and the footer's other blocks spread
+    into the space."""
+    html = _rendered(platinums=0, platinums_data=[], platinums_overflow=0)
+    assert 'Platinums earned' not in html
+
+
+def test_the_slot_count_matches_what_the_footer_can_hold():
+    """Six, down from eight: each cover carries a name now, and a name needs width the eighth was using.
+    The widest real case -- six covers, a long trophy name and all the stats -- measured to within 76px of
+    the card's content width, so this is not a number with room to grow casually."""
+    from api.recap_views import SHARE_CARD_PLATINUM_SLOTS
+    assert SHARE_CARD_PLATINUM_SLOTS == 6
+
+    html = _rendered(platinums=12, platinums_overflow=6,
+                     platinums_data=[{'game_image': '', 'name': f'Game {i}'} for i in range(6)])
+    assert html.count('width: 66px; height: 88px') == 6
+    assert '+6' in html
+    # Six covers, their gaps and the "+N", inside the container's own padding.
+    assert 66 * 6 + 10 * 5 + 30 + 30 < 560
+
+
+# ── The grounds ───────────────────────────────────────────────────────────────
+
+
+def test_the_page_offers_the_same_curated_grounds_as_the_plat_card():
+    """Eight, server-rendered as swatches with their real gradient. The page used to ship ALL ~110 site
+    gradients into a `window.GRADIENT_THEMES` global feeding a `<select>` and a colour-grid wall, for a
+    card that renders eight -- the same thing the plat card's rebuild moved away from. The two cards are
+    siblings, so a hunter should not meet a different palette on each."""
+    from trophies.themes import get_plat_card_themes
+    grounds = [(k, t) for k, t in get_plat_card_themes() if not t.get('is_game_art')]
+
+    assert len(grounds) == 8
+    assert all(t.get('background_css') for _, t in grounds), 'a swatch with no gradient renders blank'
+
+
+def test_the_recap_page_no_longer_ships_every_site_gradient():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    tpl = (root / 'templates' / 'recap' / 'monthly_recap.html').read_text(encoding='utf-8')
+    js = (root / 'static' / 'js' / 'monthly-recap.js').read_text(encoding='utf-8')
+
+    assert 'gradient_themes_json' not in tpl, 'the ~110-theme global is back on the page'
+    assert 'color_grid_modal' not in tpl, 'the colour wall is back'
+    assert 'data-recap-theme' in tpl, 'the swatch row is missing'
+    # The controller reads the ground off the swatch, so it needs no theme data of its own.
+    assert 'window.GRADIENT_THEMES' not in js.replace('window.GRADIENT_THEMES` global', '')
+
+
+def test_the_ground_is_read_from_the_swatch_not_a_registry():
+    """The swatch the hunter clicked and the value that paints have to be the same thing, or the preview
+    and the download disagree -- which is the failure this card has already had once, with the theme
+    picker painting a tint the PNG never had."""
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[2] / 'static' / 'js' /
+          'monthly-recap.js').read_text(encoding='utf-8')
+    fn = js[js.index('    applyBackground(element) {'):]
+    fn = fn[:fn.index('\n    }')]
+
+    assert "--pc-theme-bg" in fn, 'the ground no longer comes from the swatch'
+    assert "'important'" in fn, "the card's own inline background will win"
