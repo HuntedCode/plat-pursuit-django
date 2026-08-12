@@ -37,16 +37,19 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
             the reason -- but it is a set-once setting, and a page that opens on a form control instead of on
             the month you came for has its priorities backwards. So: a statement here that jumps to the row
             at the foot. A plain anchor, so it works before any JS runs. {% endcomment %}
-            {% if not sync_gate and not no_activity %}
-            <a class="rca-tzchip" href="#timezone-section">
+            {% if not sync_gate %}
+            <button type="button" class="rca-tzchip" id="tz-open" aria-haspopup="dialog">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
                 </svg>
-                <span class="rca-tzchip__zone">{{ user_timezone }}</span>
-                <span class="rca-tzchip__zone--short">{{ user_timezone_short }}</span>
+                <span class="rca-tzchip__zone">{{ user_timezone_short }}</span>
+                <svg class="rca-tzchip__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M6 9l6 6 6-6" />
+                </svg>
                 <span class="sr-only">Change the timezone months are counted in</span>
-            </a>
+            </button>
             {% endif %}
         </div>
         {% comment %} Contextual, per the subtitle guideline -- it says what this hunter's archive actually
@@ -62,6 +65,8 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
         </p>
     </div>
 </div>
+
+{% if not sync_gate %}{% include 'recap/_timezone_modal.html' %}{% endif %}
 
 {% if sync_gate %}
     {# ── Gates: the four ways in are blocked ──────────────────────────────────────────────────── #}
@@ -205,7 +210,10 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
 {% endblock %}
 
 {% block js_scripts %}
+{% if not sync_gate %}
 {% include 'recap/_timezone_section_js.html' %}
+{% include 'recap/_timezone_modal_js.html' %}
+{% endif %}
 {% comment %} Only where there is an archive to animate. The selectors below would find nothing on the
 gate and empty states, so the script was harmless there -- but shipping code that cannot do anything is
 still shipping it, and it put `rca-hero` in the markup of a page that has no hero. {% endcomment %}

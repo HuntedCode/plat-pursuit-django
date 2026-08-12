@@ -156,23 +156,27 @@
 
 /* ---- Timezone ----------------------------------------------------------------------------------- */
 
-/* The fact, in the header. Reads as metadata rather than as a control, which is the point: the control
-   itself is a set-once setting and belongs at the foot, under the thing it governs. */
+/* The header control. Outlined and carrying a caret, because it OPENS something now -- it used to be an
+   anchor down the page, and a control that opens a dialog has to look like a control. Still quiet enough
+   not to compete with the page title beside it. */
 .rca-tzchip {
-    display: inline-flex; align-items: center; gap: 0.3rem;
-    padding: 0.12rem 0.5rem 0.12rem 0.4rem; border-radius: 999px;
-    font-size: 0.68rem; font-weight: 600;
-    color: var(--pp-text-mute);
-    border: 1px solid var(--pp-divider);
-    transition: color 0.18s ease, border-color 0.18s ease;
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.22rem 0.5rem 0.22rem 0.45rem; border-radius: var(--pp-radius-md);
+    font-size: 0.72rem; font-weight: 700;
+    color: var(--pp-text-dim);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
 }
-.rca-tzchip:hover { color: var(--pp-text-dim); border-color: var(--pp-border); }
+.rca-tzchip:hover {
+    color: var(--pp-text);
+    background: var(--pp-bg-2);
+    border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+}
 .rca-tzchip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-.rca-tzchip svg { width: 0.8rem; height: 0.8rem; flex: none; }
-/* The full "America/New_York" is too long for a 375 header, but hiding it entirely leaves a bare clock
-   icon that says nothing. The city alone fits and carries the meaning. */
-.rca-tzchip__zone { display: none; }
-.rca-tzchip__zone--short { display: inline; }
+.rca-tzchip svg { width: 0.85rem; height: 0.85rem; flex: none; }
+.rca-tzchip__caret { width: 0.7rem; height: 0.7rem; opacity: 0.6; }
 
 /* Anchored from the header, so it must not land under the sticky chrome. */
 #timezone-section { scroll-margin-top: 5rem; }
@@ -200,3 +204,79 @@
 @media (min-width: 1024px) {
     .rca-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+/* ---- First-run timezone prompt ------------------------------------------------------------------ */
+
+/* A native <dialog>, so the top layer, the backdrop and the focus trap are the browser's job rather than
+   ours -- the same reasoning as the ceremony's platinum dialog. */
+.rca-tzm {
+    width: min(30rem, calc(100vw - 2rem));
+    /* A <dialog> centres itself with the UA's `margin: auto`, which the CSS reset zeroes along with every
+       other element's -- so it rendered pinned to the top-left corner of the viewport. Restated here
+       rather than fought with positioning, because auto margins are how the top layer is meant to centre. */
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1);
+    color: var(--pp-text);
+    box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.95);
+}
+.rca-tzm::backdrop { background: rgba(0, 0, 0, 0.62); }
+
+.rca-tzm__x { position: absolute; top: 0.5rem; right: 0.5rem; margin: 0; }
+.rca-tzm__xbtn {
+    display: grid; place-items: center; width: 1.9rem; height: 1.9rem;
+    border: 0; border-radius: 50%; background: none; color: var(--pp-text-mute); cursor: pointer;
+    transition: color 0.18s ease, background-color 0.18s ease;
+}
+.rca-tzm__xbtn:hover { color: var(--pp-text); background: rgba(255, 255, 255, 0.07); }
+.rca-tzm__xbtn svg { width: 1rem; height: 1rem; }
+
+.rca-tzm__body { padding: 1.75rem 1.5rem 1.35rem; text-align: center; }
+.rca-tzm__ico {
+    display: grid; place-items: center; width: 2.75rem; height: 2.75rem; margin: 0 auto 0.85rem;
+    border-radius: 50%;
+    color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 13%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 32%, transparent);
+}
+.rca-tzm__ico svg { width: 1.35rem; height: 1.35rem; }
+
+.rca-tzm__title {
+    font-family: var(--pp-font-display, ui-sans-serif, system-ui, sans-serif);
+    font-size: 1.25rem; font-weight: 800; letter-spacing: -0.01em;
+}
+.rca-tzm__lede {
+    margin-top: 0.5rem; font-size: 0.82rem; line-height: 1.5; color: var(--pp-text-dim);
+}
+
+/* The guess. Given its own surface because it is the answer, not a field to fill in. */
+.rca-tzm__guess {
+    margin-top: 1.1rem; padding: 0.75rem 1rem; border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-2);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 26%, var(--pp-border));
+}
+.rca-tzm__guess-label {
+    display: block;
+    font-size: 0.6rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.rca-tzm__guess-zone {
+    display: block; margin-top: 0.2rem;
+    font-family: var(--pp-font-display, ui-sans-serif, system-ui, sans-serif);
+    font-size: 1.02rem; font-weight: 800; color: var(--pp-text);
+}
+
+.rca-tzm__pick { margin-top: 1.1rem; text-align: left; }
+.rca-tzm__pick-label {
+    display: block; margin-bottom: 0.35rem;
+    font-size: 0.6rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+.rca-tzm__actions {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem;
+    margin-top: 1.25rem;
+}
+.rca-tzm__note { margin-top: 0.85rem; font-size: 0.68rem; color: var(--pp-text-mute); }

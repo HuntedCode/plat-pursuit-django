@@ -1,0 +1,94 @@
+{% comment %}
+Controller for the first-run timezone prompt.
+
+Opening rules, in order:
+  1. The header button always opens it, on purpose, forever.
+  2. It opens BY ITSELF only when the server says the hunter has never confirmed a zone AND this device
+     has not dismissed it. Both conditions, because they answer different questions: the server flag is
+     "have you ever answered" (durable, cross-device) and localStorage is "not right now" (per-device, and
+     deliberately so -- a dismissal on a phone should not silence the prompt on a desktop forever).
+{% endcomment %}
+<script>
+(function () {
+    const TZ = PlatPursuit.TimezonePicker;
+    const modal = document.getElementById('tz-modal');
+    const openBtn = document.getElementById('tz-open');
+    if (!TZ || !modal) { return; }
+
+    const DISMISS_KEY = 'pp.tz.prompt.dismissed';
+    const confirmed = {{ timezone_confirmed|yesno:"true,false" }};
+    const currentTz = '{{ user_timezone|escapejs }}';
+
+    const guess = TZ.detect();
+    const guessBox = document.getElementById('tz-modal-guess');
+    const guessZone = document.getElementById('tz-modal-guess-zone');
+    const pickBox = document.getElementById('tz-modal-pick');
+    const select = document.getElementById('tz-modal-select');
+    const confirmBtn = document.getElementById('tz-modal-confirm');
+    const confirmLabel = document.getElementById('tz-modal-confirm-label');
+    const otherBtn = document.getElementById('tz-modal-other');
+
+    // Fall straight through to the picker when the browser will not tell us where it is: a confirm button
+    // with nothing to confirm is a dead control.
+    let picking = !guess;
+    if (guess) {
+        guessZone.textContent = TZ.label(guess) + ' (' + guess + ')';
+        guessBox.hidden = false;
+    }
+    TZ.populate(select, currentTz);
+
+    function render() {
+        guessBox.hidden = picking || !guess;
+        pickBox.hidden = !picking;
+        otherBtn.hidden = picking || !guess;
+        confirmLabel.textContent = picking ? 'Save' : 'Use this';
+    }
+    render();
+
+    otherBtn.addEventListener('click', function () { picking = true; render(); select.focus(); });
+
+    function dismissedHere() {
+        try { return localStorage.getItem(DISMISS_KEY) === '1'; } catch (e) { return false; }
+    }
+    function rememberDismissal() {
+        try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) { /* private mode; ask again */ }
+    }
+
+    confirmBtn.addEventListener('click', async function () {
+        const tz = picking ? select.value : guess;
+        if (!tz) { return; }
+        confirmBtn.disabled = true;
+        try {
+            const result = await TZ.save(tz);
+            // Close BEFORE reloading, so the page does not appear to freeze behind an open dialog.
+            modal.close();
+            if (result.changed) {
+                PlatPursuit.ToastManager.success('Timezone set. Rebuilding your months...');
+                setTimeout(function () { window.location.reload(); }, 1200);
+            } else {
+                PlatPursuit.ToastManager.success('Timezone confirmed.');
+            }
+        } catch (err) {
+            PlatPursuit.ToastManager.error(err.message);
+            confirmBtn.disabled = false;
+        }
+    });
+
+    // Any close that is not a successful save counts as "not now" on this device. Confirming stamps the
+    // server flag instead, which outranks this and works everywhere.
+    modal.addEventListener('close', rememberDismissal);
+
+    if (openBtn) {
+        openBtn.addEventListener('click', function () {
+            picking = false; render();          // reopening starts from the guess again, not mid-flow
+            confirmBtn.disabled = false;
+            modal.showModal();
+        });
+    }
+
+    if (!confirmed && !dismissedHere()) {
+        // A frame's grace so the prompt lands on a painted page rather than over a blank one.
+        requestAnimationFrame(function () { modal.showModal(); });
+    }
+})();
+</script>

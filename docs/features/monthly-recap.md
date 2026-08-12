@@ -126,7 +126,29 @@ The duplicate calendar and its `month-selector.js` are gone.
 | Archive | Free content (no outer card) per the stacked rule. `staggerReveal` on the same grammar as the browse grids. |
 | Tile | Month, trophy count and platinum count at EQUAL weight, plus a "New" flag when unwatched. |
 | Colour | Unwatched = the brand cyan (edge + labelled pill). Platinums = `--color-trophy-platinum`. |
-| Timezone | The FACT is a chip in the header; the CONTROL is a quiet row at the foot, anchored from it. |
+| Timezone | A header button opens a confirmation prompt; the inline picker stays at the foot. |
+
+**The first-run prompt.** `user_timezone` is `default='UTC'` and non-null, so it cannot tell a London
+hunter who never touched it from one who deliberately chose UTC -- and that is exactly the population a
+timezone prompt is for. `CustomUser.timezone_confirmed_at` answers that and nothing else: null means never
+answered, and only an explicit save sets it (including a save that picks the same zone back -- confirming
+UTC is an answer).
+
+It opens by itself only when **both** are true: the server says never confirmed, and this device has not
+dismissed it (`localStorage['pp.tz.prompt.dismissed']`). The two answer different questions, which is why
+both exist -- the server flag is durable and cross-device, the local one is "not right now" and
+deliberately per-device, so dismissing on a phone does not silence the prompt on a desktop forever. The
+header button opens it on purpose, always.
+
+It is a **confirmation, not a picker**: the browser already knows the answer, so it shows the detected zone
+and asks "right?", with the full list behind "Pick a different one" for VPNs, travellers and shared
+machines. Where `Intl` is unavailable it falls straight through to the list, because a confirm button with
+nothing to confirm is a dead control. The prompt renders for gate-free hunters *including those with no
+months yet* -- that hunter is the most likely never to have set a zone, and the one whose first recap gets
+mis-filed if it is wrong.
+
+The zone list, browser detection and save path live in `static/js/timezone-picker.js`, shared by the
+prompt and the inline row. The list is data, and data duplicated across two files diverges quietly.
 
 Why the timezone is split in two: it decides which month a trophy falls into, so a hunter surprised by
 a month boundary should not have to hunt for the reason -- but it is a **set-once** setting, and a

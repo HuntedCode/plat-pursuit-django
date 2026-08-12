@@ -67,6 +67,14 @@ class CustomUser(AbstractUser):
     """
     email = models.EmailField(_("email address"), unique=True, blank=False, null=False)
     user_timezone = models.CharField(max_length=63, choices=[(tz, tz) for tz in pytz.common_timezones], default='UTC', help_text="User's preferred timezone. UTC default.")
+    # The field above cannot answer "did they choose this?" -- it defaults to UTC and is non-null, so a
+    # London hunter who never touched it is indistinguishable from one who deliberately picked UTC. That
+    # is exactly the population the recap's timezone prompt exists for, hence a separate stamp: null means
+    # never confirmed, and only an explicit save sets it.
+    timezone_confirmed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the user explicitly confirmed or changed their timezone. Null = never asked/answered.",
+    )
     default_region = models.CharField(max_length=2, choices=[(r, r) for r in REGIONS], null=True, blank=True, default=None, help_text="User's preferred default region filter for games.")
     use_24hr_clock = models.BooleanField(default=False, help_text="Use 24-hour time format (23:00) instead of 12-hour AM/PM format (11:00 PM)")
     stripe_customer_id = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe Customer ID for this user.")

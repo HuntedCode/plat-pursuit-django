@@ -1,0 +1,214 @@
+"""The timezone control in the recap header, and the first-run prompt behind it.
+
+The timezone decides which month a trophy falls into: one earned at 23:00 on the 31st belongs to the month
+the hunter experienced it in, not to UTC's. Getting it wrong quietly mis-files their entire archive.
+
+The problem this solves is that we could not tell who needed asking. `CustomUser.user_timezone` is
+`default='UTC'` and non-null, so a London hunter who never touched it is indistinguishable from one who
+deliberately chose UTC. `timezone_confirmed_at` answers that question and nothing else: null means never
+answered, and only an explicit save sets it.
+
+Placement is the other half. The control sits in the header (so a hunter surprised by a month boundary can
+find the reason) while the picker stays at the foot under the archive it governs -- a set-once setting
+does not get to be the first thing on a page people came to look at their year on.
+"""
+from datetime import datetime
+
+import pytest
+import pytz
+from django.urls import reverse
+from django.utils import timezone
+
+from trophies.models import MonthlyRecap
+from tests.factories import (
+    EarnedTrophyFactory, GameFactory, ProfileFactory, TrophyFactory,
+)
+
+pytestmark = pytest.mark.django_db
+
+
+def _hunter(tz='UTC'):
+    profile = ProfileFactory(is_linked=True, sync_status='synced')
+    profile.user.user_timezone = tz
+    profile.user.save(update_fields=['user_timezone'])
+    profile.last_synced = timezone.now()
+    profile.save(update_fields=['last_synced'])
+    return profile
+
+
+def _trophy_at(profile, when):
+    return EarnedTrophyFactory(
+        profile=profile, trophy=TrophyFactory(game=GameFactory()), earned=True, earned_date_time=when,
+    )
+
+
+def _utc(y, m, d, h=12):
+    return pytz.UTC.localize(datetime(y, m, d, h))
+
+
+def _prev_month():
+    now = timezone.now()
+    return (now.year - 1, 12) if now.month == 1 else (now.year, now.month - 1)
+
+
+def _page(client, profile):
+    client.force_login(profile.user)
+    return client.get(reverse('recap_index')).content.decode()
+
+
+# ── Where the control lives ───────────────────────────────────────────────────
+
+
+def test_the_header_opens_the_prompt_and_does_not_become_it(client):
+    """A page that opens on a form control instead of on the month you came for has its priorities
+    backwards. The header holds a BUTTON; the `<select>` stays under the archive."""
+    profile = _hunter(tz='America/New_York')
+    year, month = _prev_month()
+    _trophy_at(profile, _utc(year, month, 15))
+
+    body = _page(client, profile)
+    head = body[:body.index('rca-hero')]
+
+    assert 'id="tz-open"' in head, 'no way to reach the timezone from the header'
+    assert 'aria-haspopup="dialog"' in head, 'the control does not announce that it opens a dialog'
+    assert 'recap-timezone-select' not in head, 'the picker itself was moved above the hero'
+    assert body.index('rca-hero') < body.index('recap-timezone-select'), (
+        'the timezone control now precedes the latest month'
+    )
+
+
+def test_the_header_control_names_the_zone(client):
+    """A bare clock icon says nothing, and "America/New_York" does not fit a 375 header. The city does."""
+    profile = _hunter(tz='America/New_York')
+    _trophy_at(profile, _utc(*_prev_month(), 15))
+
+    assert 'rca-tzchip__zone">New York<' in _page(client, profile), (
+        'the header control does not name the zone -- the view is not supplying the short form'
+    )
+
+
+# ── When the prompt opens by itself ───────────────────────────────────────────
+
+
+def test_the_prompt_is_armed_for_a_hunter_who_has_never_confirmed(client):
+    profile = _hunter(tz='UTC')
+    _trophy_at(profile, _utc(*_prev_month(), 15))
+    assert profile.user.timezone_confirmed_at is None
+
+    body = _page(client, profile)
+
+    assert 'id="tz-modal"' in body, 'the prompt is not on the page at all'
+    assert 'const confirmed = false' in body, 'the prompt would not open for an unconfirmed hunter'
+
+
+def test_the_prompt_is_disarmed_once_the_zone_has_been_confirmed(client):
+    """Confirming is durable and cross-device, so it must outrank any per-device dismissal."""
+    profile = _hunter(tz='UTC')
+    profile.user.timezone_confirmed_at = timezone.now()
+    profile.user.save(update_fields=['timezone_confirmed_at'])
+    _trophy_at(profile, _utc(*_prev_month(), 15))
+
+    body = _page(client, profile)
+
+    assert 'const confirmed = true' in body, 'the prompt still opens itself after being answered'
+    assert 'id="tz-open"' in body, 'but it must still be reachable on purpose'
+
+
+def test_the_prompt_reaches_a_hunter_with_no_months_yet(client):
+    """The hunter with an empty archive is precisely the one most likely never to have set a timezone, and
+    the one whose FIRST recap gets mis-filed if it is wrong. Gating on having an archive would skip them."""
+    profile = _hunter(tz='UTC')          # no trophies at all
+
+    body = _page(client, profile)
+
+    assert 'No months to wrap yet' in body
+    assert 'id="tz-modal"' in body, 'the prompt is hidden from the hunter who most needs it'
+
+
+def test_a_gated_hunter_is_not_prompted(client):
+    """Someone who has not linked cannot have a recap to mis-file; asking them to settle a timezone is a
+    question about nothing."""
+    profile = ProfileFactory(is_linked=False, sync_status='never')
+
+    body = _page(client, profile)
+
+    assert 'id="tz-modal"' not in body
+    assert 'id="tz-open"' not in body
+
+
+# ── What saving records ───────────────────────────────────────────────────────
+
+
+def test_saving_records_that_the_zone_was_confirmed(client):
+    """Including a save that picks the SAME zone back. The stamp answers "have you ever answered", not
+    "what did you pick" -- confirming UTC is an answer, and that hunter must not be asked again."""
+    profile = _hunter(tz='UTC')
+    client.force_login(profile.user)
+
+    response = client.post(reverse('api:user-timezone-update'),
+                           data={'timezone': 'UTC'}, content_type='application/json')
+
+    assert response.status_code == 200
+    profile.user.refresh_from_db()
+    assert profile.user.timezone_confirmed_at is not None, (
+        'confirming the zone you already had leaves you marked as never having answered'
+    )
+    assert response.json()['changed'] is False
+
+
+def test_changing_the_zone_reports_it_and_unfinalizes_the_recaps(client):
+    """The page around the control was built from the OLD month boundaries, so the caller needs to know
+    whether anything actually moved before deciding to reload."""
+    profile = _hunter(tz='UTC')
+    MonthlyRecap.objects.create(profile=profile, year=2024, month=3, is_finalized=True)
+    client.force_login(profile.user)
+
+    response = client.post(reverse('api:user-timezone-update'),
+                           data={'timezone': 'America/New_York'}, content_type='application/json')
+
+    assert response.json()['changed'] is True
+    assert response.json()['recaps_reset'] == 1
+    assert not MonthlyRecap.objects.filter(profile=profile, is_finalized=True).exists()
+
+
+def test_an_invalid_zone_confirms_nothing(client):
+    """A rejected save must not leave the hunter marked as having answered -- they would never be asked
+    again, and their months would stay wrong."""
+    profile = _hunter(tz='UTC')
+    client.force_login(profile.user)
+
+    response = client.post(reverse('api:user-timezone-update'),
+                           data={'timezone': 'Mars/Olympus_Mons'}, content_type='application/json')
+
+    assert response.status_code == 400
+    profile.user.refresh_from_db()
+    assert profile.user.timezone_confirmed_at is None
+
+
+# ── One picker, not two ───────────────────────────────────────────────────────
+
+
+def test_the_picker_is_shared_rather_than_duplicated():
+    """The utility row and the modal need the same curated zone list, the same browser detection and the
+    same save path. A second copy of the zone list is DATA duplicated across two files, which diverges
+    quietly and is never noticed until someone reports a missing timezone on one surface only."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    module = (root / 'static' / 'js' / 'timezone-picker.js').read_text(encoding='utf-8')
+    row = (root / 'templates' / 'recap' / '_timezone_section_js.html').read_text(encoding='utf-8')
+    modal = (root / 'templates' / 'recap' / '_timezone_modal_js.html').read_text(encoding='utf-8')
+
+    assert 'America/New_York' in module, 'the shared module carries no zone data'
+    for name, src in (('row', row), ('modal', modal)):
+        assert 'America/New_York' not in src, f'the {name} keeps its own copy of the zone list'
+        assert 'PlatPursuit.TimezonePicker' in src, f'the {name} does not use the shared picker'
+
+
+def test_the_prompt_falls_through_to_the_picker_when_detection_fails():
+    """`Intl` can be unavailable or blocked. A confirmation dialog whose only action is "use this" with
+    nothing detected is a dead control, so the absence of a guess has to open the full list instead."""
+    from pathlib import Path
+    modal = (Path(__file__).resolve().parents[2] / 'templates' / 'recap' /
+             '_timezone_modal_js.html').read_text(encoding='utf-8')
+
+    assert 'let picking = !guess;' in modal, 'no fallback when the browser will not report a zone'

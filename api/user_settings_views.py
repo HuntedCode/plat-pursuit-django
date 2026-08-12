@@ -4,6 +4,7 @@ REST API views for user settings updates.
 import logging
 
 import pytz
+from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status as http_status
@@ -42,7 +43,12 @@ class UpdateTimezoneAPIView(APIView):
 
         old_timezone = request.user.user_timezone or 'UTC'
         request.user.user_timezone = timezone_value
-        request.user.save(update_fields=['user_timezone'])
+        # Stamped on EVERY successful save, including one that picks the same zone back. The point of the
+        # stamp is not "what did you pick" -- the field above already holds that -- but "have you ever
+        # answered", which `user_timezone` cannot express because it defaults to UTC and is non-null.
+        # Confirming UTC is an answer, and a hunter who does it must not be asked again.
+        request.user.timezone_confirmed_at = timezone.now()
+        request.user.save(update_fields=['user_timezone', 'timezone_confirmed_at'])
 
         recaps_reset = 0
         if old_timezone != timezone_value:
@@ -63,6 +69,7 @@ class UpdateTimezoneAPIView(APIView):
             'success': True,
             'timezone': timezone_value,
             'recaps_reset': recaps_reset,
+            'changed': old_timezone != timezone_value,
         })
 
 

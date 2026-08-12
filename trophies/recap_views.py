@@ -74,6 +74,9 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         # "America/New_York" -> "New York". The header chip has room for the city but not the region on a
         # narrow screen, and a bare clock icon there says nothing at all.
         context['user_timezone_short'] = tz_name.rsplit('/', 1)[-1].replace('_', ' ')
+        # Drives whether the prompt opens by itself. Null means never answered -- NOT "is UTC", which the
+        # timezone field cannot distinguish from an untouched default.
+        context['timezone_confirmed'] = self.request.user.timezone_confirmed_at is not None
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
