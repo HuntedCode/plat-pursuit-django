@@ -69,7 +69,11 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         context['archive'] = archive
         context['latest'] = archive['latest']
         context['no_activity'] = archive['month_count'] == 0
-        context['user_timezone'] = self.request.user.user_timezone or 'UTC'
+        tz_name = self.request.user.user_timezone or 'UTC'
+        context['user_timezone'] = tz_name
+        # "America/New_York" -> "New York". The header chip has room for the city but not the region on a
+        # narrow screen, and a bare clock icon there says nothing at all.
+        context['user_timezone_short'] = tz_name.rsplit('/', 1)[-1].replace('_', ' ')
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},

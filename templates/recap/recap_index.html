@@ -32,6 +32,22 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
             {% if archive.month_count %}
             <span class="badge badge-sm badge-ghost">{{ archive.month_count }} month{{ archive.month_count|pluralize }}</span>
             {% endif %}
+            {% comment %} The timezone FACT belongs up here; the timezone CONTROL does not. It decides which
+            month a trophy falls into, so a hunter surprised by a month boundary should not have to hunt for
+            the reason -- but it is a set-once setting, and a page that opens on a form control instead of on
+            the month you came for has its priorities backwards. So: a statement here that jumps to the row
+            at the foot. A plain anchor, so it works before any JS runs. {% endcomment %}
+            {% if not sync_gate and not no_activity %}
+            <a class="rca-tzchip" href="#timezone-section">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+                </svg>
+                <span class="rca-tzchip__zone">{{ user_timezone }}</span>
+                <span class="rca-tzchip__zone--short">{{ user_timezone_short }}</span>
+                <span class="sr-only">Change the timezone months are counted in</span>
+            </a>
+            {% endif %}
         </div>
         {% comment %} Contextual, per the subtitle guideline -- it says what this hunter's archive actually
         is, not what the feature is. {% endcomment %}

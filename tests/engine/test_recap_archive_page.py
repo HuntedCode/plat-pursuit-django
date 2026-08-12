@@ -302,3 +302,40 @@ def test_the_platinum_figure_uses_the_sites_platinum_colour():
     rule = css[css.index('.rca-tile__stat--plat'):]
     rule = rule[:rule.index('}')]
     assert 'var(--color-trophy-platinum)' in rule, 'the platinum figure invents its own colour'
+
+
+def test_the_timezone_fact_is_in_the_header_and_the_control_is_not(client):
+    """The zone decides which month a trophy falls into, so a hunter surprised by a month boundary should
+    not have to hunt for the reason. But it is a SET-ONCE setting, and a page that opens on a form control
+    instead of on the month you came for has its priorities backwards. So the header states it and links
+    down; the `<select>` stays at the foot, under the archive it governs."""
+    profile = _hunter(tz='America/New_York')
+    year, month = _prev_month()
+    _trophy_at(profile, _utc(year, month, 15))
+
+    client.force_login(profile.user)
+    body = client.get(reverse('recap_index')).content.decode()
+
+    head = body[:body.index('rca-hero')]
+    assert 'rca-tzchip' in head, 'the zone is not stated before the content it governs'
+    assert 'href="#timezone-section"' in head
+    assert 'recap-timezone-select' not in head, 'the control itself was moved above the hero'
+    assert body.index('rca-hero') < body.index('recap-timezone-select'), (
+        'the timezone control now precedes the latest month'
+    )
+
+
+def test_the_header_chip_carries_a_short_zone_for_narrow_screens(client):
+    """"America/New_York" does not fit a 375 header, and hiding the label entirely leaves a bare clock
+    icon that says nothing. The city alone fits and carries the meaning."""
+    profile = _hunter(tz='America/New_York')
+    year, month = _prev_month()
+    _trophy_at(profile, _utc(year, month, 15))
+
+    client.force_login(profile.user)
+    body = client.get(reverse('recap_index')).content.decode()
+
+    assert 'rca-tzchip__zone--short">New York<' in body, (
+        'the narrow-screen label is missing or empty -- the view is not supplying the short zone'
+    )
+    assert 'America/New_York' in body, 'the full zone is gone from the wide-screen label'

@@ -156,6 +156,32 @@
 
 /* ---- Timezone ----------------------------------------------------------------------------------- */
 
+/* The fact, in the header. Reads as metadata rather than as a control, which is the point: the control
+   itself is a set-once setting and belongs at the foot, under the thing it governs. */
+.rca-tzchip {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0.12rem 0.5rem 0.12rem 0.4rem; border-radius: 999px;
+    font-size: 0.68rem; font-weight: 600;
+    color: var(--pp-text-mute);
+    border: 1px solid var(--pp-divider);
+    transition: color 0.18s ease, border-color 0.18s ease;
+}
+.rca-tzchip:hover { color: var(--pp-text-dim); border-color: var(--pp-border); }
+.rca-tzchip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.rca-tzchip svg { width: 0.8rem; height: 0.8rem; flex: none; }
+/* The full "America/New_York" is too long for a 375 header, but hiding it entirely leaves a bare clock
+   icon that says nothing. The city alone fits and carries the meaning. */
+.rca-tzchip__zone { display: none; }
+.rca-tzchip__zone--short { display: inline; }
+
+/* Anchored from the header, so it must not land under the sticky chrome. */
+#timezone-section { scroll-margin-top: 5rem; }
+
+@media (min-width: 768px) {
+    .rca-tzchip__zone { display: inline; }
+    .rca-tzchip__zone--short { display: none; }
+}
+
 /* Deliberately quiet. It matters (it decides which month a trophy falls into) but it is a setting, and a
    setting should not compete with the recaps for the eye. */
 .rca-tz { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 0.85rem; }

@@ -126,7 +126,13 @@ The duplicate calendar and its `month-selector.js` are gone.
 | Archive | Free content (no outer card) per the stacked rule. `staggerReveal` on the same grammar as the browse grids. |
 | Tile | Month, trophy count and platinum count at EQUAL weight, plus a "New" flag when unwatched. |
 | Colour | Unwatched = the brand cyan (edge + labelled pill). Platinums = `--color-trophy-platinum`. |
-| Timezone | A quiet utility row. It decides which month a trophy falls into, so it stays on the page it governs. |
+| Timezone | The FACT is a chip in the header; the CONTROL is a quiet row at the foot, anchored from it. |
+
+Why the timezone is split in two: it decides which month a trophy falls into, so a hunter surprised by
+a month boundary should not have to hunt for the reason -- but it is a **set-once** setting, and a
+page that opens on a form control instead of on the month you came for has its priorities backwards.
+The header states the zone and anchors down to the `<select>`, which stays under the archive it
+governs. The chip drops to the city alone below `md` (a bare clock icon says nothing).
 
 Three DB-aggregated reads back the whole page, and none of them scale with how much history a hunter has:
 
