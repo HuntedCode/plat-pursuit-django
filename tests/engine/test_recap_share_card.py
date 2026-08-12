@@ -511,3 +511,67 @@ def test_a_one_day_streak_is_not_worth_saying():
     ctx = RecapShareImageHTMLView()._build_template_context(recap, _Profile(), 'landscape')
 
     assert 'Best streak' not in [i['label'] for i in ctx['stat_items']]
+
+
+def test_the_rarest_find_shows_the_grade_that_makes_the_number_mean_something():
+    """"Ultra Rare" is the vocabulary PSN hunters use, and a bare 1.4% means much less without it. It has
+    been in `rarest_trophy_data` since launch under `rarity_label`."""
+    recap = _recap(1)
+    recap.rarest_trophy_data = {'name': 'Chalice of the Deep', 'earn_rate': 1.4,
+                                'game': 'Bloodborne', 'rarity_label': 'Ultra Rare'}
+    recap.most_active_day = {}
+    recap.activity_calendar = {}
+    recap.streak_data = {}
+    recap.taste_data = {}
+    recap.badges_earned_count = 0
+    recap.badge_xp_earned = 0
+
+    ctx = RecapShareImageHTMLView()._build_template_context(recap, _Profile(), 'landscape')
+    assert ctx['rarest_rarity'] == 'Ultra Rare'
+
+    html = _rendered(rarest_rarity='Ultra Rare')
+    assert 'Ultra Rare' in html
+
+
+def test_the_month_says_what_it_was_made_of():
+    """`taste_data` has carried the dominant genre since the deck's taste beat shipped, and it is the one
+    stat in the footer that says something about the HUNTER rather than about the numbers."""
+    recap = _recap(1)
+    recap.rarest_trophy_data = {}
+    recap.most_active_day = {}
+    recap.activity_calendar = {}
+    recap.streak_data = {}
+    recap.taste_data = {'genre': 'Action RPG', 'genre_count': 64}
+    recap.badges_earned_count = 0
+    recap.badge_xp_earned = 0
+
+    ctx = RecapShareImageHTMLView()._build_template_context(recap, _Profile(), 'landscape')
+    played = [i for i in ctx['stat_items'] if i['label'] == 'Most played']
+
+    assert played and played[0]['value'] == 'Action RPG'
+    assert played[0]['meta'] == '64 trophies'
+
+
+def test_a_month_with_no_dominant_genre_simply_omits_it():
+    recap = _recap(1)
+    recap.rarest_trophy_data = {}
+    recap.most_active_day = {}
+    recap.activity_calendar = {}
+    recap.streak_data = {}
+    recap.taste_data = {}
+    recap.badges_earned_count = 0
+    recap.badge_xp_earned = 0
+
+    ctx = RecapShareImageHTMLView()._build_template_context(recap, _Profile(), 'landscape')
+    assert 'Most played' not in [i['label'] for i in ctx['stat_items']]
+
+
+def test_the_stats_are_a_grid_so_four_of_them_use_the_height():
+    """One row of four would push the card wide and leave the footer's height unused; the rarest find
+    beside it needs that width more than the stats do."""
+    from pathlib import Path
+    tpl = (Path(__file__).resolve().parents[2] / 'templates' / 'recap' / 'partials' /
+           'recap_share_card.html').read_text(encoding='utf-8')
+    block = tpl[tpl.index('{% if stat_items %}'):]
+    block = block[:block.index('{% endfor %}')]
+    assert 'grid-template-columns: repeat(2, auto)' in block, 'the stats are a single row again'

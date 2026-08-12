@@ -236,14 +236,25 @@ Context: api/recap_views.RecapShareImageHTMLView._build_template_context.
             {% if rarest_trophy.name %}
             <div style="display: flex; align-items: center; gap: 12px; min-width: 0; flex-shrink: 1;">
                 {% if rarest_trophy_icon %}
-                <img src="{{ rarest_trophy_icon }}" alt="" style="width: 46px; height: 46px; object-fit: cover; border-radius: 7px; flex-shrink: 0; border: 1px solid #404853; box-sizing: border-box;" />
+                <img src="{{ rarest_trophy_icon }}" alt="" style="width: 62px; height: 62px; object-fit: cover; border-radius: 9px; flex-shrink: 0; border: 1px solid #404853; box-sizing: border-box;" />
                 {% endif %}
                 <div style="min-width: 0;">
                     <div style="font-size: 12px; font-weight: 700; color: #8a939f; letter-spacing: 0.14em; text-transform: uppercase;">Rarest find</div>
                     <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 21px; font-weight: 700; color: #f0f6fd; line-height: 1.25; margin-top: 2px; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rarest_trophy.name }}</div>
-                    <div style="font-size: 14px; font-weight: 500; color: #9da5b1; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                        {% if rarest_trophy.earn_rate %}{{ rarest_trophy.earn_rate }}% earn rate{% endif %}{% if rarest_trophy.earn_rate and rarest_game %} &middot; {% endif %}{{ rarest_game }}
+                    <div style="font-size: 14px; font-weight: 500; color: #9da5b1; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rarest_game }}</div>
+                    {% comment %}The grade and the figure together: "Ultra Rare" is the word hunters use and
+                    the percentage is the proof. Pill construction is the plat card's (4px 11px, 999px, the
+                    accent at 50% border / 10% fill), so the two cards agree on what a pill looks like.{% endcomment %}
+                    {% if rarest_trophy.earn_rate or rarest_rarity %}
+                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 7px;">
+                        {% if rarest_rarity %}
+                        <span style="display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; border: 1px solid rgba(39, 235, 254, 0.5); background: rgba(39, 235, 254, 0.1); font-size: 12px; line-height: 1.2; font-weight: 700; color: #27ebfe; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;">{{ rarest_rarity }}</span>
+                        {% endif %}
+                        {% if rarest_trophy.earn_rate %}
+                        <span style="font-size: 14px; font-weight: 600; color: #9da5b1; white-space: nowrap;">{{ rarest_trophy.earn_rate }}%</span>
+                        {% endif %}
                     </div>
+                    {% endif %}
                 </div>
             </div>
             {% endif %}
@@ -253,7 +264,10 @@ Context: api/recap_views.RecapShareImageHTMLView._build_template_context.
             platinums. The row distributes instead, so a quiet month reads as evenly spaced rather than as
             two groups with a gap between them.{% endcomment %}
             {% if stat_items %}
-            <div style="display: flex; align-items: center; gap: 24px; flex-shrink: 0;">
+            {% comment %}A GRID, not a row. One row of stats used 46px of the footer's 161 and pushed the
+            card wide; two columns use the height the two-line game names bought and leave the width to the
+            rarest find beside it.{% endcomment %}
+            <div style="display: grid; grid-template-columns: repeat(2, auto); gap: 16px 30px; flex-shrink: 0;">
                 {% for item in stat_items %}
                 <div style="min-width: 0;">
                     <div style="font-size: 12px; font-weight: 700; color: #8a939f; letter-spacing: 0.14em; text-transform: uppercase;">{{ item.label }}</div>

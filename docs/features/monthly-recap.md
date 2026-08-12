@@ -265,6 +265,13 @@ Constraints worth knowing before editing it:
   footer exists to stop. The second line costs ~14px, which came out of the container's padding and
   two pixels a cover rather than out of the footer height (the calendar needs every pixel it has: a
   31-day month starting on a Saturday runs to SIX rows).
+- **All three footer columns carry their height.** Two-line game names set the footer at 176px, but
+  the other two columns were still one short row each -- 68px and 46px of a usable 161. Both fill it
+  now, using payload the card had never shown: the rarest trophy's **rarity grade** ("Ultra Rare",
+  which is what makes a bare 1.4% mean anything, carried in `rarity_label` since launch) and the
+  month's **dominant genre** from `taste_data` -- the one stat here that says something about the
+  hunter rather than about the numbers. The stats became a two-column grid so four of them use the
+  height rather than pushing the card wide; the rarest find beside them needs that width more.
 - **No placeholder cover slots, ever.** Padding the container to a fixed six so every card looks
   identical was considered and rejected: an empty slot advertises what the hunter did NOT do, and
   six is a display limit rather than a target. The same call the plat card already made on its DLC

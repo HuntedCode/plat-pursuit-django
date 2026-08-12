@@ -480,6 +480,18 @@ class RecapShareImageHTMLView(APIView):
                 'meta': streak.get('streak_start') or '',
             })
 
+        # What the month was made OF. `taste_data` has carried the dominant genre since the deck's taste
+        # beat shipped and the card has never shown it -- and it is the one stat here that says something
+        # about the hunter rather than about the numbers.
+        taste = recap.taste_data or {}
+        if taste.get('genre'):
+            count = taste.get('genre_count') or 0
+            stats.append({
+                'label': 'Most played',
+                'value': taste['genre'],
+                'meta': f'{count} trophies' if count else '',
+            })
+
         if recap.badges_earned_count:
             stats.append({
                 'label': 'Badges',
@@ -541,6 +553,9 @@ class RecapShareImageHTMLView(APIView):
             'platinums_overflow': max(0, len(all_plats) - SHARE_CARD_PLATINUM_SLOTS),
             'rarest_trophy': rarest,
             'rarest_game': rarest.get('game') or '',
+            # "Ultra Rare" is the vocabulary PSN hunters actually use, and it is what makes a bare 1.4%
+            # mean something at a glance. Carried in the payload since launch and never shown.
+            'rarest_rarity': rarest.get('rarity_label') or '',
             'rarest_trophy_icon': rarest_icon,
             'stat_items': stats,
             # Identity
