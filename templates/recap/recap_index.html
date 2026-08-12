@@ -100,7 +100,7 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
         </div>
     </div>
 
-{% elif no_activity %}
+{% elif no_activity and not needs_refresh %}
     <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
         <div class="card-body p-5 md:p-8 lg:p-10 items-center text-center">
             <svg class="h-12 w-12 md:h-16 md:w-16 text-base-content/30" viewBox="0 0 24 24" fill="none"
@@ -117,6 +117,44 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
 
 {% else %}
     {# ── The latest month ──────────────────────────────────────────────────────────────────────── #}
+    {% if needs_refresh %}
+    {% comment %}The hero, held. A stale sync used to replace this whole PAGE with a gate, which took
+    every finished month in the archive with it -- years of history a sync could not change. Only the
+    most recent completed month is actually at risk of being incomplete, so only that one is held, and
+    the hero says so instead of the page. Everything below stays open.
+
+    Not a link: the month behind it would bounce straight back here, and a door that reopens the room
+    you are standing in is worse than no door.{% endcomment %}
+    <div class="card rca-hero rca-hero--held bg-base-200/90 border-2 border-base-300 border-l-4 shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-6 lg:p-8 pp-head-cascade">
+            <p class="rca-hero__eyebrow">Waiting on a sync</p>
+            <h2 class="rca-hero__month mt-1">
+                {{ refresh_month_name }} <span class="rca-hero__year">{{ refresh_year }}</span>
+            </h2>
+            <p class="rca-held__body mt-2.5">
+                Your trophies have not come across since {{ refresh_month_name }} ended, so this one is
+                still missing pieces. Refresh your profile and it will be here.
+            </p>
+            <div class="mt-5 md:mt-6 flex flex-wrap items-center gap-3">
+                <button type="button" class="btn btn-sm md:btn-md btn-primary" data-recap-refresh>
+                    Refresh my profile
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" />
+                    </svg>
+                </button>
+                {% comment %}Says where it is as well as doing it, because the button opens a menu rather
+                than finishing the job -- being told "top right, under your avatar" is what makes it
+                findable next month without this card.{% endcomment %}
+                <span class="rca-held__where">Sync Now lives under your avatar, top right</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% comment %}The newest month you CAN open, kept as the hero. Skipped only when it is the held one --
+    the card above already is that month, and two heroes for one month is just a repeat.{% endcomment %}
+    {% if latest and not latest.locked %}
     {% with m=latest %}
     <a href="{% url 'recap_view' year=m.year month=m.month %}"
        class="card rca-hero bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3 block">
@@ -161,6 +199,7 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
         </div>
     </a>
     {% endwith %}
+    {% endif %}
 
     {# ── The archive: free content, no outer card ──────────────────────────────────────────────── #}
     {% if archive.month_count > 1 %}
@@ -174,6 +213,22 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
         </div>
         <div class="rca-grid" data-rca-grid>
             {% for m in y.months %}
+            {% comment %}The held month keeps its place in the record but stops being a door -- following
+            it would land on a gate and come straight back. A <span>, so it is not focusable and not
+            announced as a link; the label carries the reason.{% endcomment %}
+            {% if m.locked %}
+            <span class="rca-tile rca-tile--held"
+                  aria-label="{{ m.month_name }} {{ m.year }}, waiting on a profile refresh">
+                <span class="rca-held__flag">Needs a sync</span>
+                <span class="rca-tile__month">{{ m.short_month_name }}</span>
+                <span class="rca-tile__stats">
+                    <span class="rca-tile__stat">
+                        <span class="pp-tally pp-tally--lg rca-tile__n">{{ m.total|intcomma }}</span>
+                        <span class="rca-tile__unit">so far</span>
+                    </span>
+                </span>
+            </span>
+            {% else %}
             <a href="{% url 'recap_view' year=m.year month=m.month %}"
                class="rca-tile{% if not m.seen %} rca-tile--new{% endif %}"
                aria-label="{{ m.month_name }} {{ m.year }}, {{ m.total }} trophies, {{ m.platinums }} platinum{{ m.platinums|pluralize }}{% if not m.seen %}, not watched{% endif %}">
@@ -197,6 +252,7 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
                     </span>
                 </span>
             </a>
+            {% endif %}
             {% endfor %}
         </div>
         {% endfor %}
@@ -214,9 +270,34 @@ site-wide stacked rule -- chrome cards stack (header, hero, timezone), the archi
 {% comment %} Only where there is an archive to animate. The selectors below would find nothing on the
 gate and empty states, so the script was harmless there -- but shipping code that cannot do anything is
 still shipping it, and it put `rca-hero` in the markup of a page that has no hero. {% endcomment %}
-{% if not sync_gate and not no_activity %}
+{% comment %}`or needs_refresh`: a stale sync with nothing listed yet still renders the refresh card,
+and its button needs wiring. The countUp and reveal selectors below simply find nothing there.{% endcomment %}
+{% if not sync_gate and not no_activity or not sync_gate and needs_refresh %}
 <script>
     PlatPursuit.onPageReady(function () {
+{% if needs_refresh %}
+        // "Refresh my profile" opens the account panel and puts focus on Sync Now rather than pressing it.
+        // The panel is where the control actually lives, and a hunter who is SHOWN that finds it again
+        // next month without this card; a button that syncs invisibly from here teaches nothing. The
+        // dropdown opens on focus, and focus moving to a child keeps it open.
+        var refresh = document.querySelector('[data-recap-refresh]');
+        if (refresh) {
+            refresh.addEventListener('click', function () {
+                var avatar = document.querySelector('[data-nav-avatar]');
+                if (!avatar) { return; }                     // no sync panel (unlinked): nothing to open
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                avatar.focus();
+                // NEXT frame. The panel is a `:focus-within` dropdown, so it is still display:none in
+                // this one -- focusing a hidden element does nothing, and the press landed on <body>.
+                // Focus staying inside the dropdown is what keeps it open once it is.
+                requestAnimationFrame(function () {
+                    var now = document.querySelector('[data-nav-syncnow]');
+                    if (now && now.offsetParent !== null) { now.focus(); }
+                });
+            });
+        }
+{% endif %}
+
         // The hero's headline number counts in. Only the hero: running it on every tile would turn a
         // calm archive into a slot machine, which is the anti-reference this house style keeps away from.
         var hero = document.querySelector('.rca-hero [data-countup]');

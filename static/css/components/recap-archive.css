@@ -265,3 +265,44 @@
 @media (min-width: 1024px) {
     .rca-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+
+/* ---- Held: waiting on a sync -------------------------------------------------------------------
+ * A stale sync used to replace the whole page with a gate, taking every finished month in the archive
+ * with it. Only the most recent completed month can actually be incomplete, so only that one is held --
+ * and it is held in PLACE rather than removed: a month that vanishes reads as data loss, and a hunter
+ * who cannot see July listed cannot tell whether July is missing or merely late.
+ *
+ * Deliberately not an alarm. This is a "come back in a minute", not an error, so it borrows the warning
+ * hue at low strength and keeps the archive's own calm.
+ */
+/* The whole card re-keys, not just its edge. `--rca-accent` is what the eyebrow, the edge and the corner
+   bloom are all derived from, so overriding the one variable moves them together -- a card bordered amber
+   while it glows in the site's teal reads as two states arguing. */
+.rca-hero--held { --rca-accent: var(--pp-warning); border-left-color: var(--pp-warning); }
+.rca-held__body {
+    font-size: 0.85rem; line-height: 1.55; color: var(--pp-text-dim); max-width: 46ch;
+}
+.rca-held__where {
+    font-size: 0.72rem; color: var(--pp-text-mute);
+}
+
+/* The tile keeps the grid's shape so the row does not reflow around it, and loses every affordance that
+   would suggest it opens: no hover glow, no pointer, no focus ring. */
+.rca-tile--held {
+    background: color-mix(in oklab, var(--pp-warning) 5%, var(--pp-bg-1));
+    border-color: color-mix(in oklab, var(--pp-warning) 22%, var(--pp-border));
+    cursor: default;
+}
+.rca-tile--held:hover { box-shadow: none; border-color: color-mix(in oklab, var(--pp-warning) 22%, var(--pp-border)); }
+.rca-tile--held .rca-tile__month,
+.rca-tile--held .rca-tile__n { color: var(--pp-text-dim); }
+.rca-held__flag {
+    position: absolute; top: 0.5rem; right: 0.5rem;
+    display: inline-flex; align-items: center;
+    padding: 0.12rem 0.36rem; border-radius: 999px;
+    font-size: 0.5rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--pp-warning);
+    background: color-mix(in oklab, var(--pp-warning) 14%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 30%, transparent);
+}

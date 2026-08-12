@@ -29,25 +29,6 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         gate = self._get_sync_gate_response(request)
         if gate:
             return gate
-        profile = request.user.profile
-        now_local = get_user_local_now(request)
-
-        # Default to the most recent fully completed month (always previous month)
-        target_year, target_month = get_most_recent_completed_month(now_local)
-
-        # Check sync freshness: user must have synced within the current month
-        if not check_sync_freshness(profile, now_local):
-            return render(request, 'recap/recap_index.html', {
-                'sync_gate': 'sync_stale',
-                'profile': profile,
-                'stale_month_name': calendar.month_name[target_month],
-                'stale_year': target_year,
-                'breadcrumb': [
-                    {'text': 'Home', 'url': reverse_lazy('home')},
-                    {'text': 'Monthly Recap'},
-                ],
-            })
-
         # This used to REDIRECT to the most recent month whenever a recap existed, falling back to the
         # current one -- which meant the page at this URL only ever rendered for a hunter with no trophy
         # activity at all. The archive was unreachable from its own address, and a second month picker
@@ -64,6 +45,26 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
 
         # Every month this hunter earned a trophy in -- no gating. See months_with_activity.
         archive = MonthlyRecapService.get_archive(profile)
+
+        # A stale sync blocks ONE month, not the archive. It used to render the whole page as a gate:
+        # a hunter who had not synced this calendar month lost access to every recap they had ever
+        # earned, including years of finished months a sync could not possibly change. The only month
+        # genuinely at risk is the most recent completed one -- it may still be missing trophies -- so
+        # that is the only one held back, and the page says so where the month is rather than instead
+        # of the page.
+        now_local = get_user_local_now(self.request)
+        recent = get_most_recent_completed_month(now_local)
+        stale = not check_sync_freshness(profile, now_local)
+
+        context['needs_refresh'] = stale
+        context['refresh_month_name'] = calendar.month_name[recent[1]]
+        context['refresh_year'] = recent[0]
+        if stale:
+            # Mark the month itself rather than making the template re-derive "is this the held one?"
+            # in two places (the hero and its tile in the grid) and drift between them.
+            for month in [archive['latest']] + [m for y in archive['years'] for m in y['months']]:
+                if month and (month['year'], month['month']) == recent:
+                    month['locked'] = True
 
         context['archive'] = archive
         context['latest'] = archive['latest']

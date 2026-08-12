@@ -343,6 +343,31 @@ unconditionally but only recomputes the remainder when a timer is running: the l
 by which point `pointerup` has already released the hold, so there may be no clock left to stop but there
 is always a bar mid-flight to catch.
 
+**A stale sync holds back ONE month, not the archive.** The landing page used to render entirely as a
+gate when `check_sync_freshness` failed, so a hunter who had not synced this calendar month lost every
+recap they had ever earned -- including months finished years ago, whose data a sync cannot change. The
+only month genuinely at risk is the most recent completed one: its trophies may not have come across yet.
+
+So the freshness check moved into the context. `needs_refresh` puts a held card in the hero's place
+(re-keyed to `--pp-warning` through `--rca-accent`, so edge, eyebrow and bloom move together), and the
+view marks `locked` on the one month it applies to -- the hero and its tile in the grid both read that
+flag rather than re-deriving "is this the held one?" and drifting. The held tile stays in the record as a
+`<span>`: a month that vanishes reads as data loss, and following a link there would land on a gate that
+returns you here. Everything else stays open.
+
+Two edges that are easy to miss:
+- A stale hunter may have **no listed months at all** -- the sync that would bring them across has not
+  run. "No months to wrap yet" is not merely unhelpful there, it is wrong, so `needs_refresh` wins that
+  branch.
+- The **per-month gate is unchanged** and still refuses the recent month directly. Scoping the landing
+  page is about the archive being reachable, not about opening a month whose data is incomplete.
+
+The button opens the account panel and puts focus on **Sync Now** rather than pressing it: that panel is
+where the control actually lives, and a hunter who is shown it finds it again next month without this
+card. It defers a frame before focusing -- the panel is a `:focus-within` dropdown, so it is still
+`display: none` in the frame the click happens in, and focusing a hidden element silently does nothing
+(the press landed on `<body>`).
+
 **Below the fold there is nothing**, and the month page is the shorter for it. A share panel used to sit
 there -- its own preview, its own scaler, its own download button -- revealed by closing the ceremony. So
 finishing the recap dropped you back on the intro screen with a second copy of the card underneath it: the
