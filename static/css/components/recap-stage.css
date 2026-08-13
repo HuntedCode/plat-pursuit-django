@@ -86,11 +86,17 @@
 .rcx-enter__aside {
     display: flex; align-items: center; justify-content: center; gap: 0.6rem;
     margin-top: 1.5rem; font-size: 0.8rem; color: var(--pp-text-mute);
+    min-height: 44px;   /* the links' hit areas overhang their text; keep the row's own box honest */
 }
+/* Both of these are TEXT links by design -- the primary action is the button above, and giving these
+   button chrome would flatten that hierarchy. But at 0.8rem they were 19px tall, well under the ~44px a
+   thumb needs, on the one screen that is almost only ever seen on a phone. The padding buys the hit area
+   and the equal negative margin gives the layout back, so they still read as text on one quiet line. */
 .rcx-enter__aside a,
 .rcx-enter__link {
-    color: var(--pp-primary); background: none; border: 0; padding: 0; cursor: pointer;
+    color: var(--pp-primary); background: none; border: 0; cursor: pointer;
     font-size: inherit; font-family: inherit;
+    padding: 0.7rem 0.4rem; margin: -0.7rem -0.4rem;
 }
 .rcx-enter__aside a:hover, .rcx-enter__link:hover { text-decoration: underline; }
 .rcx-enter__link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }

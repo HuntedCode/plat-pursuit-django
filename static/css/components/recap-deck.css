@@ -650,7 +650,11 @@
     display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .rcp-vs { display: flex; flex-direction: column; gap: 0.6rem; }
-.rcp-vs__row { display: grid; grid-template-columns: 4.5rem 1fr 3rem; align-items: center; gap: 0.6rem; }
+/* The value column must fit "100%" at .pp-tally--sm (18px bold) -- 3rem clipped the % against the
+   viewport edge on a phone. It stays a FIXED width rather than `auto`: each row is its own grid, so an
+   auto column would size to its own content and the two bars would stop sharing a baseline, which is the
+   entire point of the slide. */
+.rcp-vs__row { display: grid; grid-template-columns: 4.5rem 1fr 3.75rem; align-items: center; gap: 0.6rem; }
 .rcp-vs__label { font-size: 0.75rem; color: var(--pp-text-dim); text-align: right; }
 .rcp-vs__track { height: 0.7rem; border-radius: 999px; background: var(--pp-bg-2); overflow: hidden; }
 .rcp-vs__fill {

@@ -41,7 +41,7 @@ IGDB's cover and loses its logo without the anchor.
         </div>
 
         <p class="rcp__sub">
-            {{ played_count }} hunter{{ played_count|pluralize }} have played it{% if plats_earned_count %},
+            {{ played_count }} hunter{{ played_count|pluralize }} {{ played_count|pluralize:"has,have" }} played it{% if plats_earned_count %},
             {{ plats_earned_count }} platinum{{ plats_earned_count|pluralize }} earned{% endif %}.
         </p>
     </div>
