@@ -1158,14 +1158,16 @@ const TrophyListRenderer = {
         const counts = {};
         trophies.forEach(t => { counts[t.trophy_type] = (counts[t.trophy_type] || 0) + 1; });
 
-        // Summary, in tier order rather than whatever order the trophies happen to arrive in.
+        // Summary, in tier order rather than whatever order the trophies happen to arrive in. No grand
+        // total: the host's own panel header carries the count, and printing it twice an inch apart is
+        // noise -- a host that needs one can render it beside this.
         let html = '<div class="pp-trolist__sum">';
         for (const tier of this.TIERS) {
             if (counts[tier]) {
                 html += `<span class="pp-trolist__tier" data-tier="${tier}">${counts[tier]} ${tier}</span>`;
             }
         }
-        html += `<span class="pp-trolist__total">${trophies.length} total</span></div>`;
+        html += '</div>';
 
         html += '<div class="pp-trolist__rows">';
         for (const t of trophies) {

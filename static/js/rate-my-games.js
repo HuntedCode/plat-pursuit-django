@@ -19,6 +19,7 @@ window.PlatPursuit = window.PlatPursuit || {};
     var PP = window.PlatPursuit;
     var PAGE = 20;              // queue page size
     var PREFETCH_AT = 5;        // fetch the next page once this many games are left
+    var ORDER = ['base', 'dlc'];   // tab order -- drives the direction the incoming queue slides from
 
     function el(id) { return document.getElementById(id); }
 
@@ -35,9 +36,10 @@ window.PlatPursuit = window.PlatPursuit || {};
         fields: null,           // the RatingFields handle
 
         init() {
-            // Deep-link straight to the DLC queue (?queue_type=dlc), which is what the DLC count on the
-            // Community hub links to.
-            if (new URLSearchParams(window.location.search).get('queue_type') === 'dlc') {
+            // `?view=` is the site-wide view param (PlatPursuit.syncViewParam writes it); `?queue_type=`
+            // is the older spelling this page shipped with and is still read so existing links land right.
+            var params = new URLSearchParams(window.location.search);
+            if (params.get('view') === 'dlc' || params.get('queue_type') === 'dlc') {
                 this.queueType = 'dlc';
             }
 
@@ -74,9 +76,13 @@ window.PlatPursuit = window.PlatPursuit || {};
 
         setQueue(type) {
             if (!type || type === this.queueType) { return; }
+            var from = this.queueType;
             this.queueType = type;
             this.syncTabs();
-            this.reset();
+            if (PP.syncViewParam) { PP.syncViewParam(type, { default: 'base' }); }
+            // Settle rather than blank: the stage dims in place and the incoming queue slides in from the
+            // side its tab lives on. Tearing down to a spinner read as a full-page reload.
+            this.reset({ settle: true, slideFrom: from });
         },
 
         syncTabs() {
@@ -100,18 +106,20 @@ window.PlatPursuit = window.PlatPursuit || {};
             this.includeShovelware = box.checked;
             box.addEventListener('change', function () {
                 self.includeShovelware = box.checked;
-                self.reset();
+                // Same settle as a queue switch -- it re-queries the same queue, so there is no direction
+                // to slide from, just the dim.
+                self.reset({ settle: true });
             });
         },
 
-        reset() {
+        reset(opts) {
             this.queue = [];
             this.index = 0;
             this.done = 0;
             this.total = 0;
             this.offset = 0;
             this.hasMore = false;
-            this.load();
+            this.load(opts);
         },
 
         // ---------------------------------------------------------------- //
@@ -160,14 +168,24 @@ window.PlatPursuit = window.PlatPursuit || {};
             }
         },
 
-        async load() {
+        async load(opts) {
             if (this.loading) { return; }
+            var o = opts || {};
             this.loading = true;
-            this.show('loading');
+            var stage = el('rmg-stage');
+
+            // The spinner is for the FIRST load, when there is nothing on screen yet. Every later fetch --
+            // switching queue, toggling shovelware -- dims what is already there instead, so the page never
+            // blanks out from under the hunter.
+            if (o.settle && stage) { stage.classList.add('is-swapping'); } else { this.show('loading'); }
 
             try {
                 this.take(await PP.API.get(this.url()));
                 if (this.queue.length === 0) { this.showDone(); } else { this.render(); }
+                // Directional: forward in the tab order enters from the right, backward from the left.
+                if (o.slideFrom && stage && PP.slideViewIn) {
+                    PP.slideViewIn(stage, o.slideFrom, this.queueType, ORDER);
+                }
             } catch (error) {
                 var data = await error.response?.json().catch(function () { return null; });
                 var msg = data?.error || 'Could not load your games. Try again in a moment.';
@@ -178,6 +196,9 @@ window.PlatPursuit = window.PlatPursuit || {};
                 if (line) { line.textContent = msg; }
                 this.show('fail');
             } finally {
+                // In `finally`, not after the render: a settle-load that THROWS would otherwise leave the
+                // stage dimmed and pointer-events:none forever -- including the retry button inside it.
+                if (stage) { stage.classList.remove('is-swapping'); }
                 this.loading = false;
             }
         },

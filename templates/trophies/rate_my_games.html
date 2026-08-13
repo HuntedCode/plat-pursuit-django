@@ -16,8 +16,9 @@ surfaces cannot drift apart again.
 Shape is unchanged, because the wizard shape is right for the job: one game, the trophy list beside it to
 jog the memory, the form, skip or submit, next.
 
-Everything below the toolbar is populated by rate-my-games.js from the queue endpoint; the markup here is
-the empty frame it fills.
+Everything below the switcher is populated by rate-my-games.js from the queue endpoint; the markup here is
+the empty frame it fills. Switching queues dims the stage and slides the replacement in (playbook §7/§8) --
+it never tears down to a spinner, which read as a full-page reload.
 {% endcomment %}
 
 {% block content %}
@@ -44,17 +45,31 @@ the empty frame it fills.
                         <div class="scard__label">Games waiting</div>
                         <div class="scard__value pp-tally text-primary" data-countup="{{ unrated_count }}">{{ unrated_count|intcomma }}</div>
                     </div>
+                    {% comment %}Neutral on purpose: one accent per surface, and it is spent on the count
+                    that leads.{% endcomment %}
                     <div class="scard">
                         <div class="scard__label">DLC waiting</div>
-                        <div class="scard__value pp-tally text-secondary" data-countup="{{ unrated_dlc_count }}">{{ unrated_dlc_count|intcomma }}</div>
+                        <div class="scard__value pp-tally" data-countup="{{ unrated_dlc_count }}">{{ unrated_dlc_count|intcomma }}</div>
                     </div>
                 </div>
             </div>
         </div>
     </section>
 
-    {# -- Toolbar: which queue, and whether the junk comes with it. -- #}
-    <div class="pp-toolbar-card rmg__toolbar">
+    {% comment %}Which queue, and whether the junk comes with it.
+
+    The switcher is the site-standard segmented control in its own right-aligned row (playbook §3 /
+    design-system Tab Group) -- NOT inside a `.pp-toolbar-card`. A toolbar card is quiet chrome for a
+    search/sort/filter bar (§5); wrapping the switcher in one both put it on the wrong side and gave it a
+    container it does not have anywhere else on the site. The one opt-in rides the same row opposite it,
+    which is all the "toolbar" a single checkbox earns.{% endcomment %}
+    <div class="flex flex-col-reverse items-center gap-2.5 mt-5 mb-3 md:flex-row md:justify-between md:gap-3">
+        <label class="pp-bgal__chip pp-bgal__chip--warn" title="Asset-flip platinums are left out of the queue by default. They're still yours to rate if you want them.">
+            <input type="checkbox" id="rmg-shovelware" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            Shovelware
+        </label>
+
         <div class="pp-switch" role="tablist" aria-label="Rating queue">
             <button type="button" id="rmg-tab-base" aria-controls="rmg-stage" class="pp-switch__chip is-active rmg-qtab" data-queue="base" role="tab" aria-selected="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
@@ -65,12 +80,6 @@ the empty frame it fills.
                 DLC
             </button>
         </div>
-
-        <label class="pp-bgal__chip pp-bgal__chip--warn" title="Asset-flip platinums are left out of the queue by default. They're still yours to rate if you want them.">
-            <input type="checkbox" id="rmg-shovelware" />
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-            Shovelware
-        </label>
     </div>
 
     {# -- Progress: how far through this queue you are. Hidden until there's a queue to be through. -- #}
@@ -86,7 +95,7 @@ the empty frame it fills.
 
         <div id="rmg-card" class="hidden">
             {# The game being rated. #}
-            <section class="pp-toolbar-card">
+            <section class="rmg__card">
                 <div class="rmg__game">
                     <div class="rmg__cover rmg__cover--none" id="rmg-cover">
                         <img id="rmg-cover-img" src="" alt="" />
@@ -103,8 +112,9 @@ the empty frame it fills.
                             <span class="rmg__flag rmg__flag--shovel hidden" id="rmg-flag-shovel">Shovelware</span>
                         </div>
                     </div>
-                </div>
-                {# Your own record with this game, as reference for the scores you're about to give it. #}
+                {% comment %}Your own record with this game, as reference for the scores you're about to
+                give it. INSIDE the identity row so it can sit at the right of it on a wide card and wrap
+                underneath on a narrow one.{% endcomment %}
                 <div class="rmg__stats hidden" id="rmg-stats">
                     <span class="rmg__stat hidden" id="rmg-stat-plat">
                         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3h14a2 2 0 012 2v2a5 5 0 01-3.07 4.62A5 5 0 0113 16.92V19h2a1 1 0 010 2H9a1 1 0 010-2h2v-2.08A5 5 0 016.07 11.62 5 5 0 013 7V5a2 2 0 012-2z"/></svg>
@@ -123,12 +133,13 @@ the empty frame it fills.
                         <span id="rmg-stat-playtime-text"></span>
                     </span>
                 </div>
+                </div>{# /rmg__game #}
             </section>
 
             <div class="rmg__cols">
                 {% comment %}Reference panel. Open on desktop where there's room beside the form; collapsed
                 below it on smaller screens, where an open list would push the form off the screen.{% endcomment %}
-                <section class="pp-toolbar-card">
+                <section class="rmg__card">
                     <button type="button" class="rmg__phead" id="rmg-trophy-toggle" aria-expanded="false" aria-controls="rmg-trophy-body">
                         <span class="rmg__ptitle">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -143,7 +154,7 @@ the empty frame it fills.
                 </section>
 
                 {# The rating itself. #}
-                <section class="pp-toolbar-card">
+                <section class="rmg__card">
                     <div class="rmg__form">
                         <h3 class="rmg__fhead">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -175,7 +186,7 @@ the empty frame it fills.
         </div>
 
         {# The queue request failed. A toast alone would leave an empty stage with nothing to press. #}
-        <div id="rmg-fail" class="pp-toolbar-card rmg__done hidden">
+        <div id="rmg-fail" class="rmg__card rmg__done hidden">
             <svg class="rmg__done-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--pp-text-mute);"><circle cx="12" cy="12" r="10"/><path d="M12 8v5"/><path d="M12 17h.01"/></svg>
             <p class="rmg__done-title">That didn't load</p>
             <p class="rmg__done-copy" id="rmg-fail-text">Could not load your games. Try again in a moment.</p>
@@ -185,7 +196,7 @@ the empty frame it fills.
         </div>
 
         {# Nothing left in this queue. #}
-        <div id="rmg-done" class="pp-toolbar-card rmg__done hidden">
+        <div id="rmg-done" class="rmg__card rmg__done hidden">
             {% comment %}pp-draw-in needs pathLength="1" on each shape so the dash maths is uniform whatever
             the real path length is -- without it the circle and the tick trace at wildly different rates.{% endcomment %}
             <svg class="rmg__done-mark pp-draw-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" pathLength="1"/><polyline points="16 9 11 15 8 12" pathLength="1"/></svg>

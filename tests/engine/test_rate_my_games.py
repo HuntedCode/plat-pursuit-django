@@ -177,21 +177,82 @@ def test_the_page_is_off_daisyui():
     """The rebuild test. Every one of these was on the old page, and each has a house primitive now:
     .pp-switch for the queue toggle, .pp-horizon for progress, .pp-bgal__chip for the opt-in,
     .pp-gbrowse__spinner for loading."""
-    html = (ROOT / 'templates' / 'trophies' / 'rate_my_games.html').read_text(encoding='utf-8')
-    # Strip the notes explaining the rebuild, which naturally name what they replaced.
-    html = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', html, flags=re.S)
+    html = _markup()
 
     for legacy in ('range-error', 'range-accent', 'progress-primary', 'checkbox-warning',
                    'loading-dots', 'input-secondary', 'badge-lg'):
         assert legacy not in html, f'{legacy} survived the rebuild'
 
 
+def _markup(name='trophies/rate_my_games.html'):
+    """The template with its {% comment %} blocks stripped.
+
+    Load-bearing: these comments explain what was replaced and therefore NAME it, so a bare substring
+    check against the raw file passes on the prose. `pp-toolbar-card` did exactly that after the switcher
+    moved out of one -- the assertion went on passing against a sentence saying the class is not used."""
+    src = (ROOT / 'templates' / name).read_text(encoding='utf-8')
+    return re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', src, flags=re.S)
+
+
 def test_the_page_uses_the_shared_primitives():
-    html = (ROOT / 'templates' / 'trophies' / 'rate_my_games.html').read_text(encoding='utf-8')
+    html = _markup()
 
     for primitive in ('pp-switch', 'pp-horizon', 'pp-bgal__chip', 'pp-gbrowse__spinner',
-                      'pp-head-cascade', 'pp-tally', 'pp-toolbar-card'):
+                      'pp-head-cascade', 'pp-tally', 'scard'):
         assert primitive in html, f'{primitive} is not used -- something was hand-rolled instead'
+
+
+def test_the_switcher_follows_the_site_standard():
+    """Playbook §3 / design-system (Tab Group): a bare `.pp-switch` in its own RIGHT-ALIGNED row. The first
+    cut put it left-aligned inside a `.pp-toolbar-card`, which is a treatment it has nowhere else on the
+    site -- a toolbar card is quiet chrome for a search/sort bar (§5), not a frame for the view toggle."""
+    html = _markup()
+
+    assert 'pp-toolbar-card' not in html, 'the switcher (or a content panel) is back in a toolbar card'
+
+    # The switcher's OWN opening tag, then the wrapper that encloses it -- one `<div` further back, since
+    # rindex from `class="pp-switch"` lands on the switcher itself.
+    own = html.rindex('<div', 0, html.index('class="pp-switch"'))
+    row = html[html.rindex('<div', 0, own):own]
+    assert 'md:justify-between' in row or 'md:justify-end' in row, (
+        f'the switcher row is not right-aligned at md: {" ".join(row.split())[:140]}'
+    )
+
+
+def test_the_content_panels_are_content_not_chrome():
+    """The three panels are the CONTENT, so they take the content-card depth (§4): base rung, catch a
+    highlight, cast a shadow. `.pp-toolbar-card` is the quiet chrome surface and reads flat here."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
+    card = css[css.index('.rmg__card {'):css.index('}', css.index('.rmg__card {'))]
+
+    assert '--pp-bg-1' in card, 'the content card is off the base surface rung'
+    assert 'inset 0 1px 0' in card and '0 6px 20px' in card, 'it has no depth-pass shadow'
+
+
+def test_switching_queues_settles_instead_of_blanking():
+    """Playbook §7/§8. The stage used to tear down to a spinner on every switch, which reads as a full-page
+    reload even though nothing navigates -- and §7 is explicit that a switcher must never do that. It dims
+    in place now and the incoming queue slides in directionally."""
+    js = (ROOT / 'static' / 'js' / 'rate-my-games.js').read_text(encoding='utf-8')
+    css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
+
+    assert 'slideViewIn' in js, 'the incoming queue does not slide in'
+    assert "classList.add('is-swapping')" in js, 'the stage does not settle while the queue loads'
+    assert '.rmg__stage.is-swapping' in css, 'the settle class has no rule, so the dim never shows'
+    # The dim must be released even when the fetch throws, or the retry button sits under pointer-events:none.
+    tail = js[js.index('async load(opts)'):js.index('/** Top up the queue')]
+    assert tail.index("classList.remove('is-swapping')") > tail.index('} finally {'), (
+        'the settle is cleared before the catch, so a failed switch leaves the stage dimmed and dead'
+    )
+
+
+def test_the_switcher_syncs_the_url_like_every_other_view_toggle():
+    """§3: sync with `syncViewParam`. Reload/Back should keep the queue you were in, and the legacy
+    `?queue_type=` links (the Community hub's "Rate DLC") must keep working."""
+    js = (ROOT / 'static' / 'js' / 'rate-my-games.js').read_text(encoding='utf-8')
+
+    assert 'syncViewParam' in js
+    assert "get('queue_type')" in js, 'the older deep-link spelling stopped being read'
 
 
 def test_the_header_counts_both_queues(client):

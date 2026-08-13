@@ -2,8 +2,8 @@
  * RATE MY GAMES -- the rating wizard (/community/rate-my-games/).
  *
  * One game at a time: a game card, a trophy list to jog the memory, and the shared rating form beside it.
- * Layout + the deal motion only. The surfaces come from the shared .pp-toolbar-card, the progress meter
- * from .pp-horizon, the queue toggle from .pp-switch, and the form itself from .gd-qr__* (the fields are
+ * Layout, the surface, and the motion only. The progress meter comes from .pp-horizon, the queue toggle
+ * from .pp-switch, the opt-in from .pp-bgal__chip, and the form itself from .gd-qr__* (the fields are
  * `partials/_rating_fields.html`, shared with the quick-rate modal).
  *
  * The trophy list (.pp-trolist) is separate on purpose: it is rendered by the shared
@@ -22,7 +22,20 @@
 .rmg__flag.hidden,
 .rmg__done-acts .gd-btn.hidden { display: none; }
 
-.rmg__toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; }
+/* ---- Content card. NOT .pp-toolbar-card: that is quiet CHROME (playbook §5) and these three panels are
+ * the content. Base-card rung (--pp-bg-1) with the §4 content-card depth -- catch a highlight, cast a
+ * shadow -- so they separate from the substrate by the gap rather than by lightening. ---- */
+.rmg__card {
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
+}
+
+/* ---- Queue swap settle. The stage used to tear down to a spinner on every queue switch, which reads as
+ * a page reload even though nothing navigates (playbook §7/§8: dim, never blank). The spinner is only for
+ * the FIRST load, when there is nothing on screen to dim. The dim is a STATE, so reduced-motion viewers
+ * keep it; only the fade is motion. ---- */
+.rmg__stage.is-swapping { opacity: 0.4; pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) { .rmg__stage { transition: opacity 0.18s ease; } }
 
 /* ---- Progress: the queue's own Horizon, with the count beside it. ---- */
 .rmg__prog { display: flex; align-items: center; gap: 12px; margin: 14px 2px 12px; }
@@ -30,10 +43,12 @@
 .rmg__prog-text { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; }
 .rmg__prog-pct { font-size: 12px; font-weight: 700; color: var(--pp-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-/* ---- The game being rated. ---- */
-.rmg__game { display: flex; align-items: center; gap: 14px; padding: 14px; }
+/* ---- The game being rated. One row at desktop -- cover, identity, and the facts pushed to the far
+ * right -- because with the facts stacked underneath, the card was mostly empty space beside a short
+ * title. They wrap under the identity when there isn't room. ---- */
+.rmg__game { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px; }
 .rmg__cover {
-    width: 66px; flex: 0 0 auto; aspect-ratio: 3 / 4; overflow: hidden;
+    width: 72px; flex: 0 0 auto; aspect-ratio: 3 / 4; overflow: hidden;
     border-radius: var(--pp-radius-lg); border: 1px solid var(--pp-border); background: var(--pp-bg-2);
 }
 .rmg__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
@@ -43,9 +58,13 @@
 .rmg__cover--none img { display: none; }
 .rmg__cover:not(.rmg__cover--none) .rmg__cover-ph { display: none; }
 .rmg__cover-ph { width: 26px; height: 26px; }
-.rmg__ident { min-width: 0; flex: 1 1 auto; }
+/* `flex: 1 1 240px` (not `auto`): it takes the slack on a wide card, but is allowed to drop to its own
+   line and push the facts under it once the row gets tight. */
+.rmg__ident { min-width: 0; flex: 1 1 240px; }
 .rmg__title { font-family: var(--pp-font-display); font-size: 1.05rem; font-weight: 800; line-height: 1.2; color: var(--pp-text); overflow-wrap: anywhere; }
-.rmg__group { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 12px; font-weight: 600; color: var(--pp-secondary); }
+/* Neutral: the DLC pill below already carries that signal in violet, and colouring the name too was a
+   second hue spent on the same fact (colour restraint). */
+.rmg__group { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 12px; font-weight: 600; color: var(--pp-text-dim); }
 .rmg__group svg { width: 12px; height: 12px; flex: none; }
 .rmg__flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 /* Most games carry no flags at all, and an empty row still spends its margin -- a 6px gap under the
@@ -59,15 +78,20 @@
 .rmg__flag--dlc { color: var(--pp-secondary); border-color: color-mix(in oklab, var(--pp-secondary) 45%, var(--pp-border)); }
 .rmg__flag--shovel { color: var(--pp-warning); border-color: color-mix(in oklab, var(--pp-warning) 45%, var(--pp-border)); }
 
-/* Gameplay facts, kept quiet: they are reference for the rating, not the subject of the card. */
-.rmg__stats { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 0 14px 14px; }
+/* Gameplay facts, kept quiet: they are reference for the rating, not the subject of the card. Column at
+   desktop so they read as a small ledger on the right; a wrapped row when they fall under the identity. */
+.rmg__stats { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+@media (min-width: 768px) { .rmg__stats { flex-direction: column; gap: 5px; margin-left: auto; align-items: flex-start; } }
 .rmg__stat { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--pp-text-dim); }
 .rmg__stat svg { width: 14px; height: 14px; flex: none; color: var(--pp-text-mute); }
 .rmg__stat b { color: var(--pp-text); font-weight: 700; font-variant-numeric: tabular-nums; }
 
-/* ---- Two columns at desktop: the trophy list to refer to, the form to fill in. ---- */
+/* ---- Two columns at desktop. The TROPHY LIST takes the width: it is the panel with something to read
+ * (icon + name + description per row, times fifty), and it was the one being squeezed. The form is five
+ * sliders, a number and a small textarea -- none of which get better with more width, and the quick-rate
+ * modal renders the identical fields comfortably at 460px. ---- */
 .rmg__cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 12px; }
-@media (min-width: 1024px) { .rmg__cols { grid-template-columns: 340px minmax(0, 1fr); align-items: start; } }
+@media (min-width: 1024px) { .rmg__cols { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; } }
 
 .rmg__phead {
     display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
@@ -88,7 +112,11 @@
 
 .rmg__form { padding: 14px; }
 .rmg__fhead { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; font-weight: 700; color: var(--pp-text); }
-.rmg__fhead svg { width: 16px; height: 16px; flex: none; color: var(--pp-primary); }
+/* Muted, not primary: the accent on this surface is spent on the submit button (colour restraint). */
+.rmg__fhead svg { width: 16px; height: 16px; flex: none; color: var(--pp-text-mute); }
+/* Tighter than the modal's 15px. Five sliders in a column don't need that much air, and every pixel here
+   is a pixel the trophy list beside it doesn't get. */
+.rmg__form .gd-qr { gap: 11px; }
 
 /* The one requirement, stated where the eye lands before the button rather than only as a toast on refusal. */
 .rmg__req { display: flex; align-items: center; gap: 7px; margin-top: 12px; font-size: 12px; color: var(--pp-text-mute); }
@@ -130,20 +158,23 @@
     font-variant-numeric: tabular-nums;
 }
 .pp-trolist__tier::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--tro-c, var(--pp-text-mute)); }
-.pp-trolist__total { margin-left: auto; font-size: 11px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-.pp-trolist__rows { display: flex; flex-direction: column; gap: 3px; }
+.pp-trolist__rows { display: flex; flex-direction: column; gap: 4px; }
 .pp-trolist__row {
-    display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: var(--pp-radius-md);
+    display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: var(--pp-radius-md);
     border-left: 2px solid transparent; transition: background 0.15s ease;
 }
 @media (hover: hover) { .pp-trolist__row:hover { background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); } }
 .pp-trolist__row.is-earned { background: color-mix(in oklab, var(--tro-c, var(--pp-primary)) 9%, transparent); border-left-color: var(--tro-c, var(--pp-primary)); }
-.pp-trolist__icon { width: 30px; height: 30px; flex: none; border-radius: var(--pp-radius-sm); object-fit: cover; background: var(--pp-bg-2); }
+.pp-trolist__icon { width: 36px; height: 36px; flex: none; border-radius: var(--pp-radius-sm); object-fit: cover; background: var(--pp-bg-2); }
 .pp-trolist__txt { min-width: 0; flex: 1 1 auto; }
 /* display:block is load-bearing -- these are <span>s, and text-overflow does nothing on an inline box. */
-.pp-trolist__name { display: block; font-size: 12px; font-weight: 600; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Italic + clipped: the slant overhangs the box, so it needs the padding or the last glyph is cut. */
-.pp-trolist__desc { display: block; font-size: 11px; font-style: italic; color: var(--pp-text-mute); padding-right: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-trolist__name { display: block; font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The description is the half worth reading, so it wraps to a second line rather than being cut at one.
+   Italic overhangs its box, so the right padding is what stops `line-clamp` shaving the last glyph. */
+.pp-trolist__desc {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+    margin-top: 1px; font-size: 11.5px; font-style: italic; line-height: 1.35; color: var(--pp-text-mute); padding-right: 4px;
+}
 .pp-trolist__check { width: 14px; height: 14px; flex: none; color: var(--pp-success); }
 .pp-trolist__empty { padding: 10px 2px; font-size: 12.5px; font-style: italic; color: var(--pp-text-mute); padding-right: 4px; }
 .pp-trolist__err { padding: 10px 2px; font-size: 12.5px; color: var(--pp-error); padding-right: 4px; }
