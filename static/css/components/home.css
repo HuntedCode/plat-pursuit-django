@@ -15,6 +15,29 @@
    state carries a ZERO-blur drop-shadow of the same colour (invisible), not `none`, so the hover
    only grows the blur (0 -> 7px) and the glow fades in/out -- browsers can't interpolate
    `none` -> drop-shadow, which pops. */
+/* ---- Welcome-back header. The lobby's page-header card: identity, freshness, one headline number. ---- */
+.home-hi__av { flex: none; width: 48px; height: 48px; border-radius: 50%; overflow: hidden; background: var(--pp-bg-2); box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-primary) 45%, transparent), 0 0 0 4px var(--pp-bg-1); }
+@media (min-width: 768px) { .home-hi__av { width: 60px; height: 60px; } }
+.home-hi__av img, .home-hi__av svg { width: 100%; height: 100%; object-fit: cover; }
+.home-hi__eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-text-mute); }
+.home-hi__name { font-family: var(--pp-font-display); font-size: clamp(1.35rem, 3.2vw, 1.9rem); font-weight: 800; line-height: 1.1; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-hi__sync { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: 12.5px; color: var(--pp-text-dim); }
+/* The freshness dot BREATHES while the data is current and sits still once an update is due -- the state
+   is the animation, so it reads without being read. */
+.home-hi__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--pp-text-mute); }
+.home-hi__dot.is-ready { background: var(--pp-success); box-shadow: 0 0 0 0 color-mix(in oklab, var(--pp-success) 60%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+    .home-hi__dot.is-ready { animation: homeBreathe 3.2s ease-in-out infinite; }
+}
+@keyframes homeBreathe {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(94, 234, 190, 0.55); }
+    50%      { box-shadow: 0 0 0 5px rgba(94, 234, 190, 0); }
+}
+.home-hi__sync-btn { padding: 0; border: none; background: none; font: inherit; font-weight: 700; color: var(--pp-primary); cursor: pointer; }
+.home-hi__sync-btn:hover { text-decoration: underline; }
+.home-hi__sync-btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 3px; }
+.home-hi__tally { flex: none; min-width: 190px; text-align: center; }
+
 /* ---- The two moats. The lobby's whole outbound job: two destinations at band weight, each carrying a
  * live tease. Career takes the accent (it is the identity), Collection sits one step back -- one accent
  * per surface, and the trophy block above already spends the primary on its numbers. ---- */
@@ -66,7 +89,46 @@
 @media (max-width: 767px) { .home-moat__med:nth-child(n+3) { display: none; } }
 .home-moat__ring--glyph svg { width: 42px; height: 42px; }
 
+/* ---- D. The moats respond BEFORE you commit -- the object reacts to approach, not just to the click.
+ * Transform / opacity / animation-duration only, so nothing reflows and nothing repaints a filter. ---- */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    /* Career: the ring picks up pace and its dominant-discipline glow blooms. The arcs already spin
+       (labDnaSpin, 26s); this just leans on the accelerator rather than starting a new animation. */
+    .home-moat--career:hover .lab-dna__arcs { animation-duration: 11s; }
+    .home-moat--career .lab-dna__arcs { transition: none; }
+    .home-moat--career::after { transition: opacity 0.25s ease, transform 0.25s ease; }
+    .home-moat--career:hover::after { opacity: 1; transform: scale(1.06); }
+
+    /* Collection: the medallions fan like lifting the top of a deck. Fixed angles rather than nth-child
+       maths -- there are at most three, and hand-set angles read better than a formula. */
+    .home-moat__med { transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .home-moat--collection:hover .home-moat__med:nth-child(1) { transform: rotate(-5deg) translateY(-3px); }
+    .home-moat--collection:hover .home-moat__med:nth-child(2) { transform: translateY(-5px); }
+    .home-moat--collection:hover .home-moat__med:nth-child(3) { transform: rotate(5deg) translateY(-3px); }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .home-reveal { animation: none; }
-    .home-moat, .home-moat__arrow { transition: none; }
+    .home-moat, .home-moat__arrow, .home-moat__med { transition: none; }
+}
+
+/* ---- E. Mobile fit. The lobby ran 3.2 screens at 375; the standard prefers compacting AIRINESS over
+ * scrolling. Padding, gaps and the marquee come down on small screens and are restored at md: -- nothing
+ * that carries weight (the counts themselves, the medallions) is shrunk. ---- */
+@media (max-width: 767px) {
+    /* The headline stat stops being a card and becomes a line: same information, ~60px less page. The
+       scard chrome is what costs the height, not the number. */
+    .home-hi__tally {
+        min-width: 0; width: 100%; display: flex; align-items: baseline; gap: 8px;
+        padding: 0; border: none; background: none; box-shadow: none; text-align: left;
+    }
+    .home-hi__tally .scard__label { margin-bottom: 0; order: 2; }
+    .home-hi__tally .scard__value { order: 1; font-size: 22px; }
+    .home-hi__tally .scard__sub { display: none; }          /* "across N games" is in the row below */
+    .home-moat { padding: 13px 14px; gap: 10px; }
+    .home-moat__go { margin-top: 9px; }
+    .home-marquee__track { gap: 8px; }
+    /* Two of the six secondary figures are the ones nobody scrolls a phone for -- omitted here and
+       restored at md:, which is the standard's "omit the expendable rather than scroll". */
+    .home-secondary [data-mobile-drop] { display: none; }
 }

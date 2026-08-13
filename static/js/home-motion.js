@@ -1,35 +1,87 @@
-/* Home premium motion -- count-up on the headline numbers as the page settles in.
+/* Home (the lobby) premium motion.
  *
- * The entrance stagger itself is pure CSS (.home-reveal in home.css); this file handles only the
- * count-ups, which need JS. The reveal holds each section at opacity 0 while its numbers reset,
- * so there's no flicker of the final value. Reduced-motion: skipped entirely -- numbers show their
- * final (server-rendered) value. Loaded on the home only, via base.html's js_scripts block.
+ * The entrance stagger itself is pure CSS (.home-reveal / .pp-head-cascade in home.css + motion.css);
+ * this file handles the beats that need JS:
+ *
+ *   1. Count-ups that LAND. The figures roll up in a left-to-right cascade rather than all at once, and
+ *      each one gets a small scale spring as it settles. The VALUE easing stays monotonic on purpose --
+ *      an overshoot on a number means rendering a figure that is briefly wrong, which reads as a glitch
+ *      rather than as physics. The overshoot belongs on the transform, not on the truth.
+ *   2. The Horizon bar fills from 0 instead of rendering pre-filled, so the meter is something that
+ *      happened rather than something that was already there.
+ *   3. "Sync now" in the header delegates to the avatar panel's real control (navsync.js owns that state
+ *      machine -- disabled while syncing, progress, queue position -- and a second copy would drift).
+ *
+ * Reduced motion: 1 and 2 are skipped entirely (server-rendered values stand); 3 still works, since it is
+ * an affordance rather than a flourish.
  */
 (function () {
     'use strict';
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-    // Roll a number element from 0 up to its rendered integer value (cubic ease-out). Re-formats
-    // with toLocaleString so grouped values (1,234) match the server's intcomma rendering.
-    function tickUp(el, dur) {
+    var STILL = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // --- 3. Sync now -> the navbar's real control -------------------------------------------------
+    function wireSyncNow() {
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest('[data-home-syncnow]')) { return; }
+            e.preventDefault();
+            // Open the avatar panel, then press ITS button -- so the disabled/progress states that panel
+            // manages stay the single source of truth.
+            var avatar = document.querySelector('[data-nav-avatar]');
+            var btn = document.querySelector('[data-nav-syncnow]');
+            if (avatar) { avatar.click(); }
+            if (btn) { btn.click(); }
+        });
+    }
+
+    // --- 1. Count-ups -----------------------------------------------------------------------------
+    function tickUp(el, dur, delay) {
         var target = parseInt((el.textContent || '').replace(/[^\d]/g, ''), 10);
-        if (!(target > 1)) return;
+        if (!(target > 1)) { return; }
         el.textContent = '0';
         var t0 = null;
         function step(ts) {
-            if (t0 === null) t0 = ts;
+            if (t0 === null) { t0 = ts; }
             var p = Math.min(1, (ts - t0) / dur), e = 1 - Math.pow(1 - p, 3);
             el.textContent = Math.round(target * e).toLocaleString();
-            if (p < 1) requestAnimationFrame(step); else el.textContent = target.toLocaleString();
+            if (p < 1) { requestAnimationFrame(step); return; }
+            el.textContent = target.toLocaleString();
+            // The landing: a small damped pop once the value is final. Transform only, so it composites
+            // on the GPU and cannot reflow the stat grid it sits in.
+            if (el.animate) {
+                el.animate(
+                    [{ transform: 'scale(1)' }, { transform: 'scale(1.08)' }, { transform: 'scale(1)' }],
+                    { duration: 340, easing: 'cubic-bezier(0.2, 0.9, 0.3, 1.4)' }
+                );
+            }
         }
-        requestAnimationFrame(step);
+        setTimeout(function () { requestAnimationFrame(step); }, delay);
+    }
+
+    // --- 2. Horizon fill --------------------------------------------------------------------------
+    function fillHorizons(delay) {
+        document.querySelectorAll('.home-hi ~ * .pp-horizon__fill, main .pp-horizon__fill').forEach(function (fill) {
+            var target = fill.style.getPropertyValue('--horizon-progress');
+            if (!target) { return; }
+            fill.style.setProperty('--horizon-progress', '0%');
+            setTimeout(function () {
+                // The primitive already transitions `width`; restoring the value plays it.
+                fill.style.setProperty('--horizon-progress', target);
+            }, delay);
+        });
     }
 
     function run() {
+        wireSyncNow();
+        if (STILL) { return; }
+
+        // Left-to-right, top-to-bottom: DOM order IS reading order here, so a flat per-index step reads
+        // as a cascade without measuring anything. Capped so a long stat row never trickles.
         var nums = document.querySelectorAll('[data-countup]');
-        for (var i = 0; i < nums.length; i++) tickUp(nums[i], 900);
+        for (var i = 0; i < nums.length; i++) { tickUp(nums[i], 900, Math.min(i * 55, 500)); }
+        fillHorizons(Math.min(nums.length * 55, 500) + 120);
     }
 
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
-    else run();
+    if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', run); }
+    else { run(); }
 })();

@@ -26,10 +26,46 @@ community, recent, profile_url.
 
 {% block content %}
 
+{% comment %}Welcome-back header -- the accented page-header card every rebuilt page leads with
+(playbook §2), carrying what a lobby owes you on arrival: who you are, whether your data is fresh, and the
+one number that sums the rest up.
+
+The freshness line is the page's reason to exist, so it lives HERE rather than buried in the block below.
+"Sync now" delegates to the avatar panel's real control instead of rendering a second one: that button has
+a state machine (disabled while syncing, progress, queue position) driven by navsync.js, and a duplicate
+would be a second copy of it to keep in step.{% endcomment %}
+<section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+            <div class="flex items-center gap-3 md:gap-4 min-w-0">
+                <span class="home-hi__av">{% include 'partials/_avatar.html' with url=hero.avatar_url alt=hero.pursuer_name %}</span>
+                <div class="min-w-0">
+                    <p class="home-hi__eyebrow">Welcome back</p>
+                    <h1 class="home-hi__name">{{ hero.pursuer_name|default:"Pursuer" }}</h1>
+                    {% if sync %}
+                    <p class="home-hi__sync">
+                        <span class="home-hi__dot{% if sync.ready %} is-ready{% endif %}" aria-hidden="true"></span>
+                        {% if sync.last_synced %}Updated {{ sync.last_synced|naturaltime }}{% else %}Not synced yet{% endif %}
+                        <button type="button" class="home-hi__sync-btn" data-home-syncnow>Sync now</button>
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+            {% if glances.snapshot %}
+            <div class="scard home-hi__tally">
+                <div class="scard__label">Trophies earned</div>
+                <div class="scard__value pp-tally text-primary" data-countup="{{ glances.snapshot.total_earned }}">{{ glances.snapshot.total_earned|intcomma }}</div>
+                <div class="scard__sub">across {{ glances.snapshot.total_games|intcomma }} games</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
 {# ── Trophy collection: at-a-glance stats + sync + recent platinums -> the full profile ── #}
 {% if glances.snapshot %}
 <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 home-reveal" style="--rev: 2">
-    <div class="card-body p-4 md:p-5 lg:p-6">
+    <div class="card-body p-3 md:p-5 lg:p-6">
         <div class="flex items-center justify-between gap-2 mb-3">
             <div class="flex items-center gap-2 flex-wrap">
                 <h2 class="text-xs uppercase tracking-[0.15em] text-base-content/50 font-semibold">Trophy collection</h2>
@@ -40,9 +76,10 @@ community, recent, profile_url.
         </div>
         {% if sync %}
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs md:text-sm mb-4">
+            {% comment %}"Updated X ago" moved to the header, where freshness leads. What stays is the
+            forward-looking half, which the header does not carry.{% endcomment %}
             <span class="inline-flex items-center gap-1.5 font-semibold text-success"><span class="w-2 h-2 rounded-full bg-success"></span>Synced</span>
-            {% if sync.last_synced %}<span class="text-base-content/60">Updated {{ sync.last_synced|naturaltime }}</span>{% endif %}
-            {% if not sync.ready and sync.next_sync_time %}<span class="text-base-content/30" aria-hidden="true">&middot;</span><span class="text-base-content/60">Next update {{ sync.next_sync_time|naturaltime }}</span>{% endif %}
+            {% if not sync.ready and sync.next_sync_time %}<span class="text-base-content/60">Next update {{ sync.next_sync_time|naturaltime }}</span>{% endif %}
         </div>
         {% endif %}
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
@@ -58,17 +95,16 @@ community, recent, profile_url.
             </div>
             {% include 'components/horizon.html' with progress=glances.snapshot.avg_progress tone='band' height='8px' %}
         </div>
-        <div class="grid grid-cols-3 lg:grid-cols-6 gap-x-3 gap-y-3 mt-4 pt-4 border-t border-base-content/10 text-center">
-            <div><div class="text-sm md:text-base font-bold pp-tally text-success">{{ glances.snapshot.total_earned|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Earned</div></div>
-            <div><div class="text-sm md:text-base font-bold pp-tally text-base-content/70">{{ glances.snapshot.total_unearned|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Unearned</div></div>
+        <div class="home-secondary grid grid-cols-3 lg:grid-cols-5 gap-x-3 gap-y-2 md:gap-y-3 mt-3 md:mt-4 pt-3 md:pt-4 border-t border-base-content/10 text-center">
+            <div data-mobile-drop><div class="text-sm md:text-base font-bold pp-tally text-base-content/70">{{ glances.snapshot.total_unearned|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Unearned</div></div>
             <div><div class="text-sm md:text-base font-bold pp-tally">{{ glances.snapshot.total_games|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Games</div></div>
             <div><div class="text-sm md:text-base font-bold pp-tally text-success">{{ glances.snapshot.total_completes|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">100%</div></div>
-            <div><div class="text-sm md:text-base font-bold pp-tally">{{ glances.snapshot.total_hiddens|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Hidden</div></div>
+            <div data-mobile-drop><div class="text-sm md:text-base font-bold pp-tally">{{ glances.snapshot.total_hiddens|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Hidden</div></div>
             <div><div class="text-sm md:text-base font-bold pp-tally">{{ glances.snapshot.earn_rate }}%</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Earn rate</div></div>
         </div>
         {# Recent platinums, merged onto the trophy card -- it's the profile at the end of the day #}
         {% if recent %}
-        <div class="mt-4 pt-4 border-t border-base-content/10">
+        <div class="mt-3 md:mt-4 pt-3 md:pt-4 border-t border-base-content/10">
             <div class="text-[0.7rem] uppercase tracking-wider text-base-content/50 font-semibold mb-2">Recent platinums</div>
             <div class="home-marquee">
                 <div class="home-marquee__track">

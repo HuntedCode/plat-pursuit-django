@@ -65,3 +65,57 @@ def test_the_lobby_leads_with_the_trophy_floor(client):
     assert body.index(b'Trophy collection') < body.index(b'home-moats'), (
         'the moat CTAs moved above the trophy block'
     )
+
+
+# --- Premium pass: header, landing numbers, hover responses, mobile fit ---
+
+def test_the_lobby_leads_with_an_accented_header_card(client):
+    """Every rebuilt page opens with one (playbook §2). The lobby used to start on an 11px uppercase
+    label, which gave the site's front door no identity and no sense of place."""
+    profile = ProfileFactory(is_linked=True, sync_status='synced')
+    client.force_login(profile.user)
+
+    body = client.get('/', **CF).content
+
+    assert b'border-l-primary' in body, 'no accented header card'
+    assert b'Welcome back' in body
+    assert b'pp-head-cascade' in body, 'the header has no opening beat'
+    # Freshness leads: it is the lobby's reason to exist, so it belongs in the header.
+    assert body.index(b'home-hi__sync') < body.index(b'Trophy collection')
+
+
+def test_sync_now_delegates_rather_than_duplicating_the_control(client):
+    """navsync.js owns a state machine for that button (disabled while syncing, progress, queue
+    position) and binds it with a SINGLE querySelector scoped to the navbar. A second real button would
+    neither bind nor stay in step, so the header's affordance presses the real one."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'home-motion.js').read_text(encoding='utf-8')
+
+    assert 'data-home-syncnow' in js
+    assert "querySelector('[data-nav-syncnow]')" in js, 'the header no longer delegates to the real control'
+
+
+def test_numbers_land_without_ever_rendering_a_wrong_value():
+    """The count-up gets a spring, but on the TRANSFORM -- overshooting the value would mean painting a
+    figure that is briefly untrue, which reads as a glitch rather than as physics."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'home-motion.js').read_text(encoding='utf-8')
+    tick = js[js.index('function tickUp'):js.index('function fillHorizons')]
+
+    assert 'scale(1.08)' in tick, 'the landing pop is gone'
+    assert '1 - Math.pow(1 - p, 3)' in tick, 'the value easing is no longer monotonic ease-out'
+
+
+def test_the_premium_beats_are_reduced_motion_gated():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    js = (root / 'static' / 'js' / 'home-motion.js').read_text(encoding='utf-8')
+    css = (root / 'static' / 'css' / 'components' / 'home.css').read_text(encoding='utf-8')
+
+    assert 'prefers-reduced-motion: reduce' in js, 'count-ups run regardless of the setting'
+    # The hover responses and the breathing dot are motion, so both sit behind no-preference.
+    assert 'hover: hover) and (prefers-reduced-motion: no-preference)' in css
+    assert css.count('prefers-reduced-motion: no-preference') >= 2
