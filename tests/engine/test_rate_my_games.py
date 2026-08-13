@@ -351,15 +351,67 @@ def test_the_switcher_syncs_the_url_like_every_other_view_toggle():
     assert "get('queue_type')" in js, 'the older deep-link spelling stopped being read'
 
 
-def test_the_header_counts_both_queues(client):
-    """Base and DLC are separate queues, and a hunter who has cleared one still has the other waiting.
-    Showing only the base count made the DLC tab look like a dead end."""
+def test_the_header_states_both_halves_of_both_queues(client):
+    """Four numbers: what is left in each queue, and how much there is to rate at all. The totals are the
+    denominators the progress meter is measured in, so without them "Game 12 of 79" is unanchored."""
     profile = _hunter()
+    _ratable(profile, name='Rated already')
+    _dlc_ready(profile, name='Untouched')
+    client.force_login(profile.user)
+    # Rate one base game so the totals and the remainders have to differ.
+    first = client.get(QUEUE).json()['queue'][0]
+    client.post(
+        f"/api/v1/ratings/{first['concept_id']}/group/default/rate/",
+        {'difficulty': 5, 'grindiness': 5, 'hours_to_platinum': 10,
+         'fun_ranking': 5, 'overall_rating': 3, 'blurb': ''},
+        content_type='application/json',
+    )
 
     ctx = _page(client, profile).context
+    p = ctx['rating_progress']
 
-    assert 'unrated_count' in ctx
-    assert 'unrated_dlc_count' in ctx
+    assert p['games_total'] == 2, p
+    assert p['games_waiting'] == 1, p
+    assert p['dlc_total'] == 1, p
+    assert p['dlc_waiting'] == 1, p
+    # The JS still reads the two remainders by their old names.
+    assert ctx['unrated_count'] == p['games_waiting']
+    assert ctx['unrated_dlc_count'] == p['dlc_waiting']
+
+
+def test_an_unfinished_dlc_is_not_something_you_can_rate(client):
+    """`dlc_total` counts COMPLETED groups, the same set the wizard queue paginates -- otherwise the
+    header's denominator and the meter's would disagree."""
+    from tests.factories import TrophyFactory, TrophyGroupFactory
+
+    profile = _hunter()
+    game = _ratable(profile)
+    TrophyGroupFactory(game=game, trophy_group_id='001')
+    ConceptTrophyGroupFactory(concept=game.concept, trophy_group_id='001', display_name='Unfinished')
+    TrophyFactory(game=game, trophy_type='gold', trophy_group_id='001')   # never earned
+
+    client.force_login(profile.user)
+    ctx = _page(client, profile).context
+
+    assert ctx['rating_progress']['dlc_total'] == 0, 'an unfinished DLC counted as ratable'
+
+
+def test_the_header_counts_do_not_scale_with_the_library(client):
+    """The DLC count used to run a query PAIR per DLC group of every ratable concept -- hundreds of
+    queries to render one header number for a big completed library."""
+    def _measure(rows):
+        profile = _hunter()
+        for i in range(rows):
+            _dlc_ready(profile, name=f'Game {i:02d}')
+        client.force_login(profile.user)
+        client.get(URL)                                     # warm session/auth
+        with CaptureQueriesContext(connection) as ctx:
+            assert client.get(URL).status_code == 200
+        return len(ctx)
+
+    small, big = _measure(2), _measure(10)
+
+    assert small == big, f'header queries grew with the library: {small} -> {big}'
 
 
 def test_everything_the_wizard_hides_can_actually_be_hidden():

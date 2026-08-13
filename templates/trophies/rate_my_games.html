@@ -27,11 +27,11 @@ it never tears down to a spinner, which read as a full-page reload.
 
     {# -- Header: what this is, and how much of it is left. -- #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-        {% comment %}The cascade sits on the flex row, not the card-body: it staggers DIRECT children, and
-        the card-body has exactly one, so up there it was a single block rise. Here it plays as two beats,
-        title then counts, which is the layered entrance the class exists for.{% endcomment %}
-        <div class="card-body p-4 md:p-5 lg:p-6">
-            <div class="pp-head-cascade flex items-start justify-between gap-4 flex-wrap">
+        {% comment %}Cascade on the card-body, which has one direct child -- so the header rises as ONE
+        block rather than staggering title-then-counts. Deliberate: a two-beat header drew attention to
+        the page still assembling itself underneath it.{% endcomment %}
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
                 <div class="min-w-0">
                     <div class="flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -42,19 +42,35 @@ it never tears down to a spinner, which read as a full-page reload.
                     </p>
                 </div>
 
-                {% comment %}How much is waiting, full stop -- unfiltered by the toolbar. These tick DOWN
-                live as you rate, because a counter that only moves on refresh reads as broken on a page
-                whose entire purpose is emptying it.{% endcomment %}
-                <div class="grid grid-cols-2 gap-2 md:gap-3 shrink-0 w-full md:w-auto">
+                {% comment %}The substance in the header, on the Collection header's label / Tally / sub
+                scard grid. Each queue states both halves: what is left, and how much there is to rate at
+                all -- the totals are the denominators the progress meter is measured in, so seeing them
+                here is what makes "Game 12 of 79" mean something.
+
+                The two "waiting" figures tick DOWN live as you rate; the totals do not move, because
+                rating a game does not change how many you could rate.{% endcomment %}
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 shrink-0 w-full md:w-auto">
                     <div class="scard">
                         <div class="scard__label">Games waiting</div>
-                        <div class="scard__value pp-tally text-primary" id="rmg-waiting-base" data-countup="{{ unrated_count }}">{{ unrated_count|intcomma }}</div>
+                        <div class="scard__value pp-tally text-primary" id="rmg-waiting-base" data-countup="{{ rating_progress.games_waiting }}">{{ rating_progress.games_waiting|intcomma }}</div>
+                        <div class="scard__sub">still to rate</div>
                     </div>
-                    {% comment %}Neutral on purpose: one accent per surface, and it is spent on the count
-                    that leads.{% endcomment %}
+                    {% comment %}Neutral: one accent per surface, and it is spent on what is left rather
+                    than on the totals, which are context.{% endcomment %}
+                    <div class="scard">
+                        <div class="scard__label">Games total</div>
+                        <div class="scard__value pp-tally" data-countup="{{ rating_progress.games_total }}">{{ rating_progress.games_total|intcomma }}</div>
+                        <div class="scard__sub">you can rate</div>
+                    </div>
                     <div class="scard">
                         <div class="scard__label">DLC waiting</div>
-                        <div class="scard__value pp-tally" id="rmg-waiting-dlc" data-countup="{{ unrated_dlc_count }}">{{ unrated_dlc_count|intcomma }}</div>
+                        <div class="scard__value pp-tally" id="rmg-waiting-dlc" data-countup="{{ rating_progress.dlc_waiting }}">{{ rating_progress.dlc_waiting|intcomma }}</div>
+                        <div class="scard__sub">still to rate</div>
+                    </div>
+                    <div class="scard">
+                        <div class="scard__label">DLC total</div>
+                        <div class="scard__value pp-tally" data-countup="{{ rating_progress.dlc_total }}">{{ rating_progress.dlc_total|intcomma }}</div>
+                        <div class="scard__sub">you can rate</div>
                     </div>
                 </div>
             </div>

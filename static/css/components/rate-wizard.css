@@ -47,6 +47,15 @@
  * a page reload even though nothing navigates (playbook §7/§8: dim, never blank). The spinner is only for
  * the FIRST load, when there is nothing on screen to dim. The dim is a STATE, so reduced-motion viewers
  * keep it; only the fade is motion. ---- */
+/* Hold the page's height while the first queue is in flight. The card arrives from a fetch, so without
+ * this the document is only a header and a spinner tall on first paint -- short enough that the FOOTER is
+ * on screen for a moment before the card lands and shoves it back down. That bounce is the one thing on
+ * this page that reads differently from the rest of the site, and it is a layout problem, not a motion
+ * one: no entrance timing fixes a page that is genuinely too short for a beat. Scoped to the loading
+ * state via :has(), so the short empty/failure panels are never padded out to fill a screen they do not
+ * need. */
+.rmg__stage:has(> #rmg-loading:not(.hidden)) { min-height: 70vh; }
+
 .rmg__stage.is-swapping { opacity: 0.4; pointer-events: none; }
 @media (prefers-reduced-motion: no-preference) { .rmg__stage { transition: opacity 0.18s ease; } }
 

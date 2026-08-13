@@ -91,8 +91,8 @@ class RateMyGamesView(LoginRequiredMixin, TemplateView):
 
     The page ships as an empty frame: the queue itself comes from
     ``WizardQueueView`` (``/api/v1/ratings/wizard/queue/``) so it can page
-    and prefetch. All this needs to render is the two waiting-counts in the
-    header and the guidelines flag the shared rating form reads.
+    and prefetch. All this needs to render is the header's four counts and
+    the guidelines flag the shared rating form reads.
     """
 
     template_name = 'trophies/rate_my_games.html'
@@ -107,14 +107,17 @@ class RateMyGamesView(LoginRequiredMixin, TemplateView):
         ]
 
         profile = getattr(self.request.user, 'profile', None)
-        if profile:
-            context['unrated_count'] = ReviewHubService.get_unrated_platinum_count(profile)
-            context['unrated_dlc_count'] = ReviewHubService.get_unrated_dlc_count(profile)
-            context['guidelines_agreed'] = profile.guidelines_agreed
-        else:
-            context['unrated_count'] = 0
-            context['unrated_dlc_count'] = 0
-            context['guidelines_agreed'] = False
+        # One call for all four numbers: each of the old per-count helpers re-derived the ratable set
+        # from scratch, and the DLC one did it with a query pair per group.
+        progress = (
+            ReviewHubService.get_rating_progress(profile) if profile
+            else {'games_total': 0, 'games_waiting': 0, 'dlc_total': 0, 'dlc_waiting': 0}
+        )
+        context['rating_progress'] = progress
+        # The wizard's JS still reads these two by their old names.
+        context['unrated_count'] = progress['games_waiting']
+        context['unrated_dlc_count'] = progress['dlc_waiting']
+        context['guidelines_agreed'] = bool(profile and profile.guidelines_agreed)
 
         return context
 
