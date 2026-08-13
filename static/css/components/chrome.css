@@ -29,8 +29,11 @@
    hub button does -- the same underline + glow, so it reads as "you are here" rather than as a logo that
    happens to be lit. The logo IMAGE stays untinted; only the word carries the state. */
 .pp-nav__brand.is-active .pp-nav__word { color: var(--pp-primary); }
+/* bottom: -4px, not -1px like .pp-navhub. Both are centre-aligned in the same 58px bar, but the hub
+   buttons carry 8px block padding the brand does not, so the brand's box ends 3px higher and an identical
+   offset would draw its line 3px above theirs. Derived, not eyeballed: (36px hub - 30px brand) / 2 = 3. */
 .pp-nav__brand.is-active::after {
-    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px;
+    content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 2px; border-radius: 2px;
     background: var(--pp-primary); box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 55%, transparent);
 }
 .pp-nav__logo { width: 30px; height: 30px; border-radius: var(--pp-radius-md); object-fit: cover; }
