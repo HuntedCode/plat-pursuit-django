@@ -133,8 +133,8 @@ COMMUNITY_HUB = HubSubnavConfig(
         HubSubnavItem('hub', 'Hub', 'community_hub', 'home', group='Explore'),
         HubSubnavItem('profiles', 'Profiles', 'profiles_list', 'user', group='Explore'),
         HubSubnavItem('leaderboards', 'Leaderboards', 'overall_badge_leaderboards', 'bar-chart', group='Explore'),
-        HubSubnavItem('rate_my_games', 'Rate My Games', 'rate_my_games', 'star', group='Create'),
-        # Lists: hidden pending a revamp. Restoring it is this one line.
+        # Rate My Games moved to My Pursuit > Tools (2026-08): it is a personal tool that produces
+        # community data, not a community surface. Lists: hidden pending a revamp.
     ),
 )
 
@@ -150,7 +150,7 @@ MY_PURSUIT_HUB = HubSubnavConfig(
     icon='layers',   # matches the navbar's My Pursuit hub icon
     prefixes=(
         '/collection/', '/career/', '/milestones/', '/titles/',
-        '/profile-editor/', '/shareables/', '/recap/',
+        '/profile-editor/', '/shareables/', '/recap/', '/rate-my-games/',
     ),
     # Grouped rail: Progress = the gamification progression surfaces (Career merges the old Lab +
     # Research Panel); Tools = personal outputs. Profile is appended to Tools as a dynamic extra.
@@ -162,6 +162,7 @@ MY_PURSUIT_HUB = HubSubnavConfig(
         HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True, group='Progress'),
         HubSubnavItem('shareables', 'Plat Cards', 'my_shareables', 'image', auth_required=True, group='Tools'),
         HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True, group='Tools'),
+        HubSubnavItem('rate_my_games', 'Rate My Games', 'rate_my_games', 'star', auth_required=True, group='Tools'),
     ),
 )
 
@@ -214,12 +215,9 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # Community
     'profile_detail': ('community', 'profiles'),
     'trophy_case': ('community', 'profiles'),
-    # Reviews archived 2026-05; the notice page highlights the Community hub
-    # root. Rate My Games is its own sub-nav item now that it lives at
-    # /community/rate-my-games/.
+    # Reviews archived 2026-05; the notice page highlights the Community hub root.
     'reviews_landing': ('community', 'hub'),
     'review_hub': ('community', 'hub'),
-    'rate_my_games': ('community', 'rate_my_games'),
     'badge_leaderboards': ('community', 'leaderboards'),
     # (badge_detail now highlights the Browse > Badges tab -- see the Browse block above.)
     # My Pursuit: nested sub-pages of the moved items. Shareables is plat-cards-only as of 2026-08,
@@ -227,6 +225,7 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # URLs bounce to the landing (no override needed for a redirect).
     'my_shareables_platinums': ('my_pursuit', 'shareables'),
     'recap_view': ('my_pursuit', 'recap'),
+    'rate_my_games': ('my_pursuit', 'rate_my_games'),
     # (The fundraiser + fundraiser_success pages resolve to the Support hub via its /fundraiser/
     # prefix -- no override needed. Support has no sub-nav items, so no active slug.)
 }

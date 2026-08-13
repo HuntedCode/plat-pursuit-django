@@ -337,15 +337,29 @@ def test_navbar_search_wired_to_site_suggest(client):
 # --- Sub-nav: grouped rail rebuild (--pp-* house style, workshop direction) ---
 
 def test_subnav_renders_grouped_pp_rail(client):
-    # /community/ renders 200 with the Explore/Create rail (/games/ 302s to add default filters).
+    # /community/ renders 200 with the rail (/games/ 302s to add default filters).
     resp = client.get('/community/')
     assert resp.status_code == 200
     c = resp.content
     assert b'class="pp-sub"' in c                    # house-style rail, not the old DaisyUI strip
     assert b'data-subnav-rail' in c
     assert b'data-subnav-pill' in c
-    assert b'Explore' in c and b'Create' in c        # the Community groups
+    # Community is down to one group: Challenges retired, Lists hidden, and Rate My Games rehoused to
+    # My Pursuit > Tools (2026-08), which emptied 'Create'.
+    assert b'Explore' in c
     assert b'data-group="Explore"' in c
+
+
+def test_subnav_renders_every_group_of_a_multi_group_rail(client):
+    """The single-group rail above cannot show that a SECOND group still gets its own labelled run --
+    which is the part of the grouping that would break silently."""
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+
+    c = client.get('/collection/').content
+
+    assert b'data-group="Progress"' in c and b'data-group="Tools"' in c
+    assert b'pp-sub__gl">Progress' in c and b'pp-sub__gl">Tools' in c
 
 
 def test_subnav_marks_active_pill(client):

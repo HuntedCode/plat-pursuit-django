@@ -232,9 +232,14 @@ urlpatterns = [
     path('community/lists/<int:list_id>/edit/', RedirectView.as_view(url='/', permanent=False), name='list_edit'),
     path('my-lists/', RedirectView.as_view(url='/', permanent=False), name='my_lists'),
 
-    # Rate My Games wizard (ratings-only; lives outside the archived
-    # /community/reviews/ subtree).
-    path('community/rate-my-games/', RateMyGamesView.as_view(), name='rate_my_games'),
+    # Rate My Games wizard (ratings-only). Rehoused 2026-08 from /community/ to a root path under the
+    # My Pursuit hub: it is login-required, noindex, and works only on YOUR library -- a personal tool
+    # that happens to produce community data, the same shape as Plat Cards and Recap beside it. Root path
+    # matches the rest of that hub (/collection/, /career/, /shareables/, /recap/).
+    path('rate-my-games/', RateMyGamesView.as_view(), name='rate_my_games'),
+    # The path it lived at for its whole life. Permanent: this move is not coming back.
+    path('community/rate-my-games/', RedirectView.as_view(
+        pattern_name='rate_my_games', permanent=True, query_string=True)),
 
     # Reviews ARCHIVED (2026-05). The former Review Hub URLs now serve a
     # notice page; the detail route redirects to it. URL names are kept so

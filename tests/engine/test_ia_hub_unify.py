@@ -32,6 +32,7 @@ def _req(path, user=None):
     ('/titles/', 'titles'),
     ('/shareables/', 'shareables'),
     ('/recap/', 'recap'),
+    ('/rate-my-games/', 'rate_my_games'),
 ])
 def test_personal_pages_resolve_to_my_pursuit(path, slug):
     match = resolve_hub_subnav(_req(path))
@@ -61,9 +62,10 @@ def test_browse_items_grouped_catalog_curation():
 def test_community_items_grouped_explore_create():
     groups = _grouped(hub_subnav(_req('/community/')))
     assert groups['Explore'] == ['hub', 'profiles', 'leaderboards']
-    # Challenges retired (Lane 2 teardown); Lists hidden 2026-08 pending its revamp -- both are out of
-    # the URL conf and the sub-nav, so 'Create' is down to the one item that is actually reachable.
-    assert groups['Create'] == ['rate_my_games']
+    # 'Create' is empty and therefore absent: Challenges retired, Lists hidden pending a revamp, and
+    # Rate My Games rehoused to My Pursuit > Tools (2026-08) -- it makes community DATA, but the act is
+    # personal and login-only, which is the Tools shape. What is left here is all Explore.
+    assert 'Create' not in groups
 
 
 def test_my_pursuit_items_grouped_progress_tools():
@@ -71,7 +73,7 @@ def test_my_pursuit_items_grouped_progress_tools():
     groups = _grouped(hub_subnav(_req('/', user=profile.user)))
     assert groups['Progress'] == ['overview', 'collection', 'career', 'milestones', 'titles']
     # My Stats is hidden for 1.0 (staff-gated, off the rail). Profile is the dynamic extra.
-    assert groups['Tools'] == ['shareables', 'recap', 'profile']
+    assert groups['Tools'] == ['shareables', 'recap', 'rate_my_games']
     assert resolve_hub_subnav(_req('/games/'))['hub'].key == 'browse'
 
 
@@ -110,13 +112,23 @@ def test_support_landing_renders(client):
     assert b'Support Platinum Pursuit' in resp.content
 
 
-# --- Profile ownership-aware chrome (phase 3) ---
+# --- Profile chrome ---
 
-def test_own_profile_shows_my_pursuit_chrome():
+def test_your_own_profile_is_chromed_like_anyone_elses():
+    """The Profile strip-item and the ownership-aware chrome swap were removed together (2026-08).
+    They only ever made sense as a pair: the swap put your own profile under the personal strip so the
+    Profile TAB could be highlighted, and without that tab it would have rendered a strip highlighting
+    nothing and naming nothing in the mobile collapse bar. Your profile is reached from the avatar menu
+    now, and the page looks the same whoever is viewing it."""
     me = ProfileFactory(is_linked=True)
     ctx = hub_subnav(_req(f'/community/profiles/{me.psn_username}/', user=me.user))
-    assert ctx['hub_section'] == 'my_pursuit'
-    assert ctx['hub_subnav_active_slug'] == 'profile'
+    assert ctx['hub_section'] == 'community'
+
+
+def test_no_profile_tab_in_the_personal_strip():
+    profile = ProfileFactory(is_linked=True)
+    slugs = [i.slug for i in hub_subnav(_req('/', user=profile.user))['hub_subnav_items']]
+    assert 'profile' not in slugs
 
 
 def test_other_profile_shows_community_chrome():
@@ -132,14 +144,13 @@ def test_anon_on_profile_shows_community_chrome():
     assert ctx['hub_section'] == 'community'
 
 
-def test_strip_shown_for_authed_home_with_overview_profile_and_divider():
-    profile = ProfileFactory(is_linked=True)   # Profile item needs a linked PSN profile
+def test_strip_shown_for_authed_home_with_overview_and_divider():
+    profile = ProfileFactory(is_linked=True)
     ctx = hub_subnav(_req('/', user=profile.user))
     assert ctx['hub_section'] == 'my_pursuit'
     assert ctx['hub_subnav_active_slug'] == 'overview'
     slugs = [i.slug for i in ctx['hub_subnav_items']]
     assert slugs[0] == 'overview'
-    assert 'profile' in slugs                                   # dynamic extra for linked viewers
     shareables = next(i for i in ctx['hub_subnav_items'] if i.slug == 'shareables')
     assert shareables.group == 'Tools'                          # the Progress|Tools group boundary
 

@@ -100,9 +100,10 @@ class RateMyGamesView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
+        # Home -> page, matching the other My Pursuit tools (Plat Cards, Collection): the personal hub is
+        # rooted at Home, so there is no intermediate crumb to sit under.
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse('home')},
-            {'text': 'Community', 'url': reverse('community_hub')},
             {'text': 'Rate My Games'},
         ]
 

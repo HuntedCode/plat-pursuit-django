@@ -1,4 +1,4 @@
-"""Rate My Games -- the rating wizard at /community/rate-my-games/.
+"""Rate My Games -- the rating wizard at /rate-my-games/.
 
 Rebuilt 2026-08. The page was pre-rebuild DaisyUI AND a second hand-rolled copy of the rating form, which
 had already drifted: no quick take, no live slider readouts, no field-level errors. What these pin is the
@@ -22,7 +22,7 @@ from trophies.models import UserConceptRating
 pytestmark = pytest.mark.django_db
 
 ROOT = Path(__file__).resolve().parents[2]
-URL = '/community/rate-my-games/'
+URL = '/rate-my-games/'
 QUEUE = '/api/v1/ratings/wizard/queue/'
 
 # The API contract. Renaming any of these silently breaks the POST on BOTH surfaces at once now.
@@ -45,6 +45,38 @@ def _ratable(profile, name=None):
     game, _, _ = _completed_game(profile, with_platinum=True, name=name)
     ConceptTrophyGroupFactory(concept=game.concept, trophy_group_id='default', display_name='Base Game')
     return game
+
+
+# ── Where it lives ────────────────────────────────────────────────────────────────────────────────
+
+def test_the_old_community_path_still_lands(client):
+    """It lived at /community/rate-my-games/ for its whole life, and the page is bookmarked by exactly
+    the people who use it most. Permanent, because this move is not coming back."""
+    resp = client.get('/community/rate-my-games/?queue_type=dlc')
+
+    assert resp.status_code == 301
+    assert resp['Location'].startswith(URL)
+    assert 'queue_type=dlc' in resp['Location'], 'the deep-link into the DLC queue was dropped'
+
+
+def test_it_sits_with_the_other_personal_tools():
+    """It produces community data, but the act is personal: your library, login-only, noindex. That is
+    the same shape as Plat Cards and Recap, which is why it sits beside them rather than in Community."""
+    from django.contrib.auth.models import AnonymousUser
+    from django.test import RequestFactory
+    from django.urls import resolve
+
+    from core.hub_subnav import resolve_hub_subnav
+
+    req = RequestFactory().get(URL)
+    req.resolver_match = resolve(URL)
+    req.user = AnonymousUser()
+    match = resolve_hub_subnav(req)
+
+    assert match['hub'].key == 'my_pursuit', 'the page no longer resolves to the personal hub'
+    assert match['active_slug'] == 'rate_my_games'
+    tools = [i.slug for i in match['hub'].items if i.group == 'Tools']
+    assert tools == ['shareables', 'recap', 'rate_my_games'], tools
 
 
 # ── One form, two hosts ───────────────────────────────────────────────────────────────────────────

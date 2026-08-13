@@ -172,12 +172,7 @@ def hub_subnav(request):
     the URL prefix matching algorithm.
     """
     try:
-        from core.hub_subnav import (
-            MY_PURSUIT_HUB,
-            RenderedSubnavItem,
-            build_rendered_items,
-            resolve_hub_subnav,
-        )
+        from core.hub_subnav import build_rendered_items, resolve_hub_subnav
 
         match = resolve_hub_subnav(request)
         if match is None:
@@ -186,12 +181,10 @@ def hub_subnav(request):
         hub = match['hub']
         active_slug = match['active_slug']
 
-        # Ownership-aware Profile chrome: viewing your OWN profile swaps the page's chrome from
-        # Community to the personal My Pursuit strip (Profile active); anyone else's profile keeps
-        # the Community chrome the resolver returned. Same shared URL either way.
-        if _is_own_profile_page(request):
-            hub = MY_PURSUIT_HUB
-            active_slug = 'profile'
+        # Ownership-aware Profile chrome was removed with the Profile strip-item (2026-08): the swap
+        # existed to put your own profile under a personal strip WITH a Profile tab to highlight, and
+        # with no such tab it would have rendered a strip highlighting nothing. Every profile page now
+        # carries the same chrome whoever is looking, and the avatar menu is the single route to yours.
 
         is_auth = bool(getattr(request, 'user', None) and request.user.is_authenticated)
 
@@ -201,13 +194,9 @@ def hub_subnav(request):
         if hub.key == 'my_pursuit' and not is_auth:
             return {'hub_section': None}
 
-        extras: tuple[RenderedSubnavItem, ...] = ()
-        if hub.key == 'my_pursuit' and _viewer_has_linked_profile(request):
-            # Profile (its URL needs the viewer's own username). The fundraiser lives in the
-            # Support hub now, not as a personal-strip item.
-            extras = _profile_subnav_extra(request)
-
-        items = build_rendered_items(hub, is_authenticated=is_auth, extras=extras)
+        # No dynamic extras: Profile is reached from the avatar menu, and the fundraiser lives in the
+        # Support hub.
+        items = build_rendered_items(hub, is_authenticated=is_auth)
         active_label = next((i.label for i in items if i.slug == active_slug), '')
 
         return {
@@ -221,41 +210,6 @@ def hub_subnav(request):
     except Exception:
         logger.debug("Failed to resolve hub_subnav for path %s", request.path, exc_info=True)
         return {'hub_section': None}
-
-
-def _profile_subnav_extra(request):
-    """The viewer's own Profile as a dynamic sub-nav item -- its URL needs their username, so it
-    can't be a static config item. Part of the personal hub's tools group (appended after Recap).
-    Returns an empty tuple if the viewer has no reversible profile URL."""
-    from django.urls import NoReverseMatch, reverse
-
-    from core.hub_subnav import RenderedSubnavItem
-
-    profile = getattr(getattr(request, 'user', None), 'profile', None)
-    if not profile or not getattr(profile, 'psn_username', None):
-        return ()
-    try:
-        url = reverse('profile_detail', kwargs={'psn_username': profile.psn_username})
-    except NoReverseMatch:
-        return ()
-    return (RenderedSubnavItem(slug='profile', label='Profile', url=url, icon='user', group='Tools'),)
-
-
-def _is_own_profile_page(request):
-    """True when the request is the viewer's OWN, LINKED profile (detail or trophy-case) page --
-    used to swap the profile chrome from Community to the personal My Pursuit strip. Gated on
-    is_linked so it agrees with the Profile strip-item (which also needs a linked profile), so an
-    unlinked-own viewer degrades cleanly to Community chrome rather than getting a strip with no
-    Profile tab. Cheap: reads resolver kwargs + the already-loaded profile, no query."""
-    rm = getattr(request, 'resolver_match', None)
-    if rm is None or rm.url_name not in ('profile_detail', 'trophy_case'):
-        return False
-    profile = getattr(getattr(request, 'user', None), 'profile', None)
-    if not profile or not getattr(profile, 'is_linked', False):
-        return False
-    viewed = (rm.kwargs or {}).get('psn_username')
-    own = getattr(profile, 'psn_username', None)
-    return bool(viewed and own) and viewed.lower() == own.lower()
 
 
 def _active_fundraiser_or_none(request=None):
