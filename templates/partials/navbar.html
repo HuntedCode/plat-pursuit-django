@@ -22,8 +22,8 @@ JS hooks (navbar-search.js / notifications.js); only their trigger buttons are r
         {% endif %}
         <a href="{% url 'games_list' %}" class="pp-navhub{% if hub_section == 'browse' %} is-active{% endif %}"{% if hub_section == 'browse' %} aria-current="page"{% endif %}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Browse</a>
-        <a href="{% url 'community_hub' %}" class="pp-navhub{% if hub_section == 'community' %} is-active{% endif %}"{% if hub_section == 'community' %} aria-current="page"{% endif %}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>Community</a>
+        <a href="{% url 'overall_badge_leaderboards' %}" class="pp-navhub{% if hub_section == 'leaderboards' %} is-active{% endif %}"{% if hub_section == 'leaderboards' %} aria-current="page"{% endif %}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Leaderboards</a>
         <a href="{% url 'support_hub' %}" class="pp-navhub{% if hub_section == 'support' %} is-active{% endif %}"{% if hub_section == 'support' %} aria-current="page"{% endif %}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>Support</a>
     </div>

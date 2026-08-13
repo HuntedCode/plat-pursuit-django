@@ -3,7 +3,7 @@
 {% comment %}
 Mobile bottom tab bar — the hub navigation for <lg: viewports.
 
-Mirrors the desktop navbar's hub buttons (My Pursuit / Browse / Community /
+Mirrors the desktop navbar's hub buttons (My Pursuit / Browse / Leaderboards /
 Support) at the bottom of the viewport so mobile users have one-tap access to
 every hub at all scroll positions. The desktop navbar's hub buttons are hidden
 on <lg: precisely because this bar takes over. My Pursuit is login-gated (the
@@ -45,15 +45,14 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
             <span>Browse</span>
         </a>
 
-        <!-- Community -->
-        <a href="{% url 'community_hub' %}" class="mobile-tabbar-item {% if hub_section == 'community' %}active{% endif %}" {% if hub_section == 'community' %}aria-current="page"{% endif %} aria-label="Community">
+        <!-- Leaderboards -->
+        <a href="{% url 'overall_badge_leaderboards' %}" class="mobile-tabbar-item {% if hub_section == 'leaderboards' %}active{% endif %}" {% if hub_section == 'leaderboards' %}aria-current="page"{% endif %} aria-label="Leaderboards">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                <line x1="18" y1="20" x2="18" y2="10"/>
+                <line x1="12" y1="20" x2="12" y2="4"/>
+                <line x1="6" y1="20" x2="6" y2="14"/>
             </svg>
-            <span>Community</span>
+            <span>Leaderboards</span>
         </a>
 
         <!-- Support -->

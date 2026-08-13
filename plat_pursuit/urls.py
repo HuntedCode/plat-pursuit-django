@@ -203,9 +203,21 @@ urlpatterns = [
 
     path('notifications/', NotificationInboxView.as_view(), name='notification_inbox'),
 
-    # Leaderboards (canonical paths under /community/leaderboards/)
-    path('community/leaderboards/badges/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
-    path('community/leaderboards/badges/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards'),
+    # Leaderboards -- their own hub as of 2026-08 (they were the substance left in Community).
+    # `/leaderboards/` is the landing; the type segment stays on the per-series route so a second kind of
+    # leaderboard can land beside `badges/` without colliding with a series slug.
+    path('leaderboards/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
+    path('leaderboards/badges/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards'),
+    # So the per-series route has a resolvable parent rather than a 404 above it.
+    path('leaderboards/badges/', RedirectView.as_view(
+        pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),
+    # The paths they lived at under Community. RedirectView resolves `pattern_name` at REQUEST time, so
+    # the older /leaderboard/badges/* redirects further down already point straight at the new canonicals
+    # -- no chain to collapse.
+    path('community/leaderboards/badges/', RedirectView.as_view(
+        pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),
+    path('community/leaderboards/badges/<str:series_slug>/', RedirectView.as_view(
+        pattern_name='badge_leaderboards', permanent=True, query_string=True)),
 
     # Guide/checklist URLs - all redirected to home (system removed, replaced by roadmaps)
     path('guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='guides_browse'),

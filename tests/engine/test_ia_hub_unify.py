@@ -61,11 +61,20 @@ def test_browse_items_grouped_catalog_curation():
 
 def test_community_items_grouped_explore_create():
     groups = _grouped(hub_subnav(_req('/community/')))
-    assert groups['Explore'] == ['hub', 'profiles', 'leaderboards']
-    # 'Create' is empty and therefore absent: Challenges retired, Lists hidden pending a revamp, and
-    # Rate My Games rehoused to My Pursuit > Tools (2026-08) -- it makes community DATA, but the act is
-    # personal and login-only, which is the Tools shape. What is left here is all Explore.
+    # What Community has been reduced to: Challenges retired, Lists hidden pending a revamp, Rate My
+    # Games rehoused to My Pursuit > Tools, and Leaderboards promoted to its own hub (all 2026-08).
+    assert groups['Explore'] == ['hub', 'profiles']
     assert 'Create' not in groups
+
+
+def test_leaderboards_is_its_own_hub():
+    match = resolve_hub_subnav(_req('/leaderboards/'))
+    assert match['hub'].key == 'leaderboards'
+    assert match['hub'].label == 'Leaderboards'
+    # No rail on purpose: badge leaderboards are the only kind, so a strip would be one pill naming the
+    # page you are already on. It starts rendering by itself the moment a second kind is added.
+    assert match['hub'].items == ()
+    assert hub_subnav(_req('/leaderboards/'))['hub_section'] == 'leaderboards'
 
 
 def test_my_pursuit_items_grouped_progress_tools():

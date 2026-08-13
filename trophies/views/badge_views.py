@@ -702,7 +702,6 @@ class BadgeLeaderboardsView(DetailView):
             context['image_urls'] = {'recent_concept_icon_url': ''}
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Badges', 'url': reverse_lazy('badges_list')},
             {'text': 'Leaderboards', 'url': reverse_lazy('overall_badge_leaderboards')},
             {'text': context['badge'].effective_display_series, 'url': reverse_lazy('badge_detail', kwargs={'series_slug': badge.series_slug})},
             {'text': 'Series Leaderboards'},
@@ -772,9 +771,9 @@ class OverallBadgeLeaderboardsView(TemplateView):
                 context['user_total_xp'] = 0
                 context['user_total_badges'] = 0
 
+        # Leaderboards is its own hub as of 2026-08, so it no longer hangs off Badges.
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Badges', 'url': reverse_lazy('badges_list')},
             {'text': 'Leaderboards'},
         ]
 

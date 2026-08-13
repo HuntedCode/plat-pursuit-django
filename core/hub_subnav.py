@@ -132,9 +132,8 @@ COMMUNITY_HUB = HubSubnavConfig(
     items=(
         HubSubnavItem('hub', 'Hub', 'community_hub', 'home', group='Explore'),
         HubSubnavItem('profiles', 'Profiles', 'profiles_list', 'user', group='Explore'),
-        HubSubnavItem('leaderboards', 'Leaderboards', 'overall_badge_leaderboards', 'bar-chart', group='Explore'),
-        # Rate My Games moved to My Pursuit > Tools (2026-08): it is a personal tool that produces
-        # community data, not a community surface. Lists: hidden pending a revamp.
+        # Leaderboards became its own hub and Rate My Games moved to My Pursuit > Tools (both 2026-08);
+        # Lists is hidden pending a revamp.
     ),
 )
 
@@ -171,6 +170,18 @@ MY_PURSUIT_HUB = HubSubnavConfig(
 # landing-focused, so it carries NO sub-nav items -- the /support/ page features the fundraiser +
 # store instead. The /fundraiser/ prefix maps the campaign page here too. ("Support" is a
 # placeholder name, room for PlatPursuit charm.)
+# The Leaderboards hub. Carries NO sub-nav items on purpose: badge leaderboards are the only kind today,
+# so a rail would be a single pill naming the page you are already on. Add items here the moment a second
+# kind lands (game leaderboards, country XP) and the strip starts rendering on its own.
+LEADERBOARDS_HUB = HubSubnavConfig(
+    key='leaderboards',
+    label='Leaderboards',
+    icon='bar-chart',
+    prefixes=('/leaderboards/',),
+    items=(),
+)
+
+
 SUPPORT_HUB = HubSubnavConfig(
     key='support',
     label='Support',
@@ -187,6 +198,7 @@ HUB_SUBNAV_CONFIG: tuple[HubSubnavConfig, ...] = (
     COMMUNITY_HUB,
     MY_PURSUIT_HUB,
     BROWSE_HUB,
+    LEADERBOARDS_HUB,
     SUPPORT_HUB,
 )
 
@@ -218,7 +230,6 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # Reviews archived 2026-05; the notice page highlights the Community hub root.
     'reviews_landing': ('community', 'hub'),
     'review_hub': ('community', 'hub'),
-    'badge_leaderboards': ('community', 'leaderboards'),
     # (badge_detail now highlights the Browse > Badges tab -- see the Browse block above.)
     # My Pursuit: nested sub-pages of the moved items. Shareables is plat-cards-only as of 2026-08,
     # so its one nested child is the cards browse; profile_card + platinum_grid are retired and their
