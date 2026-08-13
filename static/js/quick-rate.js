@@ -1,28 +1,31 @@
 /*
- * QuickRate -- the one controller for the quick-rate modal (`#gd-qr-modal`, quick_rate_modal.html).
+ * The rating form, in two layers.
  *
- * The modal is composed on two surfaces now: the Game Detail Ratings tab and the plat-card share modal.
- * Both need the identical form behaviour -- prefill, live slider readouts, the blurb counter, the hours
- * gate, agree-to-guidelines-on-submit, the POST, and the close affordances -- and differ only in what
- * happens AFTER a save. So all of that lives here, and each page passes callbacks.
+ *   PlatPursuit.RatingFields -- the FORM. Prefill, live slider readouts, the blurb counter, the hours
+ *                               gate, agree-to-guidelines-on-submit, the POST, and field-level error
+ *                               surfacing. Knows nothing about how it is presented.
+ *   PlatPursuit.QuickRate    -- the MODAL (`#gd-qr-modal`, quick_rate_modal.html). Opens, closes, and
+ *                               hands its form to RatingFields.
  *
- * Before this, each page carried its own driver. They had already drifted: only Game Detail surfaced the
- * endpoint's field-level `errors` (so a blurb rejected for a banned word explained itself on one page and
- * showed a generic failure on the other), and only Game Detail preserved scroll position on open.
+ * The split exists because the form has three hosts and only two of them are modals: the Game Detail
+ * Ratings tab, the plat-card share modal, and the Rate My Games wizard, which renders it INLINE beside
+ * a trophy list because its whole job is rating many games in a row. The wizard used to carry its own
+ * copy, and the copies had drifted -- it had no quick take, no live readouts and no field-level errors.
+ * That is the same drift QuickRate was created to end when Game Detail and the plat card had each grown
+ * their own driver, so this time the form itself is the shared thing rather than the dialog around it.
  *
- *   PlatPursuit.QuickRate.open({
- *       conceptId, groupId,            // required -- the POST target
- *       existing,                      // {difficulty, grindiness, fun_ranking, overall_rating,
- *                                      //  hours_to_platinum} or null for a fresh rating
- *       blurb,                         // existing quick take, if any
- *       title, submitLabel, cancelLabel, hoursLabel, playtimeHint,
- *       onSaved(data, payload),        // the save landed
- *       onCancel(),                    // the explicit secondary button (NOT a dismiss)
- *       onDismiss(),                   // X / backdrop / Esc / swipe
- *       onOpen(), onClose(),           // lifecycle, for page chrome (e.g. the recede)
- *   });
+ *   PlatPursuit.RatingFields.attach(formEl, {
+ *       conceptId, groupId,            // required -- the POST target, and re-settable per game
+ *       existing, blurb,               // prefill; null for a fresh rating
+ *       submitEl,                      // defaults to [data-gd-qr-submit] inside the form
+ *       submitLabel, hoursLabel, playtimeHint,
+ *       onSaved(data, payload), onError(message), onChange(state),
+ *   })  ->  { setTarget, prefill, submit, state, detach }
  *
- * The form INPUT NAMES are the API contract (see quick_rate_modal.html) -- do not rename them.
+ *   PlatPursuit.QuickRate.open({ ...the same, plus... title, cancelLabel,
+ *                                onCancel(), onDismiss(), onOpen(), onClose() })  ->  bool
+ *
+ * The form INPUT NAMES are the API contract (see partials/_rating_fields.html) -- do not rename them.
  */
 (function () {
     var PP = window.PlatPursuit = window.PlatPursuit || {};
@@ -80,6 +83,143 @@
             .catch(function () { return 'Failed to save rating.'; });
     }
 
+    /**
+     * Attach the form behaviour to a <form>. The host owns where that form lives and what happens after
+     * a save; everything between the first keystroke and the POST landing belongs here.
+     */
+    function attach(form, opts) {
+        var o = opts || {};
+        if (!form) { return null; }
+
+        var submitEl = o.submitEl || form.querySelector('[data-gd-qr-submit]');
+        var submitLabel = o.submitLabel || (o.existing ? 'Update rating' : 'Submit rating');
+        var conceptId = o.conceptId;
+        var groupId = o.groupId;
+        var busy = false;
+
+        function hoursValue() {
+            var hoursEl = field(form, 'hours_to_platinum');
+            return parseInt(hoursEl && hoursEl.value, 10);
+        }
+        function ready() {
+            var h = hoursValue();
+            return Boolean(h) && h >= 1;
+        }
+        function announce() {
+            if (o.onChange) { o.onChange({ ready: ready(), hours: hoursValue() || null }); }
+        }
+
+        function onInput(e) {
+            if (e.target.matches('[data-gd-qr-slider]')) { setReadout(form, e.target.name); }
+            if (e.target.matches('[data-gd-qr-blurb]')) { refreshCount(form); }
+            if (e.target.name === 'hours_to_platinum') { announce(); }
+        }
+
+        function doSubmit() {
+            // One save in flight at a time, whatever fired it. The modal used to get this from its own
+            // `modal.open` guard; a host with an external button (the wizard) has no such guard, and a
+            // double-press would post twice.
+            if (busy) { return; }
+            var hours = hoursValue();
+            if (!hours || hours < 1) {
+                // The hours gate. A host that renders its own requirement line hears about it through
+                // onChange and says so inline; one that does not gets the toast.
+                if (!o.onChange && PP.ToastManager) { PP.ToastManager.show('Enter the hours it took you.', 'warning'); }
+                announce();
+                return;
+            }
+            var area = form.querySelector('[data-gd-qr-blurb]');
+            var blurb = area ? area.value.trim() : '';
+            var payload = {
+                difficulty: parseInt(field(form, 'difficulty').value, 10),
+                grindiness: parseInt(field(form, 'grindiness').value, 10),
+                fun_ranking: parseInt(field(form, 'fun_ranking').value, 10),
+                overall_rating: parseFloat(field(form, 'overall_rating').value),
+                hours_to_platinum: hours,
+                blurb: blurb,
+            };
+            busy = true;
+            if (submitEl) { submitEl.disabled = true; submitEl.textContent = 'Saving...'; }
+
+            // Posting a public quick take records guidelines agreement (the notice above the action IS
+            // the fine print). Done FIRST so the rate call can't 403 with needs_guidelines. Idempotent.
+            var agreed = form.dataset.guidelinesAgreed === '1';
+            var pre = (blurb && !agreed)
+                ? PP.API.post('/api/v1/guidelines/agree/', {})
+                    .then(function () { form.dataset.guidelinesAgreed = '1'; })
+                    .catch(function () { /* the rate call surfaces needs_guidelines if this failed */ })
+                : Promise.resolve();
+
+            return pre.then(function () {
+                return PP.API.post('/api/v1/ratings/' + conceptId + '/group/' + groupId + '/rate/', payload);
+            }).then(function (data) {
+                busy = false;
+                if (submitEl) { submitEl.disabled = false; submitEl.textContent = submitLabel; }
+                if (o.onSaved) { o.onSaved(data || {}, payload); }
+            }).catch(function (error) {
+                // Never treat a failure as a save: the hunter's input is still in the form, and a caller
+                // that downloads on success must not be told the rating landed when it didn't.
+                busy = false;
+                if (submitEl) { submitEl.disabled = false; submitEl.textContent = submitLabel; }
+                return messageFor(error).then(function (msg) {
+                    if (o.onError) { o.onError(msg); }
+                    else if (PP.ToastManager) { PP.ToastManager.show(msg, 'error'); }
+                });
+            });
+        }
+
+        function onSubmitEvent(e) { e.preventDefault(); doSubmit(); }
+
+        form.addEventListener('input', onInput);
+        form.addEventListener('submit', onSubmitEvent);
+
+        // Labels and the playtime hint vary per host -- and in the wizard, per GAME, which is why they
+        // are re-settable rather than read once at attach.
+        function label(next) {
+            if (next.submitLabel) {
+                submitLabel = next.submitLabel;
+                if (submitEl) { submitEl.textContent = submitLabel; }
+            }
+            var hoursLbl = form.querySelector('[data-gd-qr-hours-label]');
+            if (hoursLbl && next.hoursLabel) { hoursLbl.textContent = next.hoursLabel; }
+            // The hint is SSR'd where playtime is a page-level fact (Game Detail). Where it varies per
+            // card or per game, the caller passes it in.
+            if (next.playtimeHint !== undefined) {
+                var hint = form.querySelector('.gd-qr__hint');
+                if (hint) {
+                    hint.textContent = next.playtimeHint || "We don't have your playtime for this game.";
+                    hint.classList.toggle('gd-qr__hint--muted', !next.playtimeHint);
+                }
+            }
+        }
+
+        function fill(existing, blurb) {
+            prefill(form, existing, blurb);
+            announce();
+        }
+
+        label(o);
+        fill(o.existing, o.blurb);
+        if (submitEl) { submitEl.disabled = false; submitEl.textContent = submitLabel; }
+
+        return {
+            // Re-point at the next game without re-binding anything -- the wizard advances through a
+            // queue against one form, and detaching/attaching per game is how listeners stack up.
+            setTarget: function (nextConceptId, nextGroupId) {
+                conceptId = nextConceptId;
+                groupId = nextGroupId;
+            },
+            prefill: fill,
+            label: label,
+            submit: doSubmit,
+            state: function () { return { ready: ready(), busy: busy }; },
+            detach: function () {
+                form.removeEventListener('input', onInput);
+                form.removeEventListener('submit', onSubmitEvent);
+            },
+        };
+    }
+
     function open(opts) {
         var o = opts || {};
         var modal = el('gd-qr-modal');
@@ -95,7 +235,6 @@
         // fire two POSTs -- two downloads on the share flow.
         if (modal.open) { return false; }
 
-        var submit = form.querySelector('[data-gd-qr-submit]');
         var cancel = form.querySelector('[data-gd-qr-cancel]');
         // Everything else that closes: the header X, plus any other close control that ISN'T the
         // secondary action. A dismiss and a cancel are different events and callers rely on the split
@@ -103,28 +242,24 @@
         var closers = Array.prototype.slice.call(
             modal.querySelectorAll('[data-gd-modal-close]:not([data-gd-qr-cancel])')
         );
-        var submitLabel = o.submitLabel || (o.existing ? 'Update rating' : 'Submit rating');
 
-        prefill(form, o.existing, o.blurb);
+        var fields = attach(form, {
+            conceptId: o.conceptId,
+            groupId: o.groupId,
+            existing: o.existing,
+            blurb: o.blurb,
+            submitLabel: o.submitLabel || (o.existing ? 'Update rating' : 'Submit rating'),
+            hoursLabel: o.hoursLabel,
+            playtimeHint: o.playtimeHint,
+            onSaved: function (data, payload) {
+                close();
+                if (o.onSaved) { o.onSaved(data, payload); }
+            },
+        });
 
         var title = el('gd-qr-title');
         if (title) { title.textContent = o.title || (o.existing ? 'Update your rating' : 'Rate this game'); }
-        if (submit) { submit.disabled = false; submit.textContent = submitLabel; }
         if (cancel && o.cancelLabel) { cancel.textContent = o.cancelLabel; }
-        var hoursLbl = form.querySelector('[data-gd-qr-hours-label]');
-        if (hoursLbl && o.hoursLabel) { hoursLbl.textContent = o.hoursLabel; }
-        // The hint is SSR'd where playtime is a page-level fact (Game Detail). Where it varies per card
-        // (the share modal) the caller passes it in.
-        if (o.playtimeHint !== undefined) {
-            var hint = form.querySelector('.gd-qr__hint');
-            if (hint) {
-                hint.textContent = o.playtimeHint || "We don't have your playtime for this game.";
-                hint.classList.toggle('gd-qr__hint--muted', !o.playtimeHint);
-            }
-        }
-
-        function onSlider(e) { if (e.target.matches('[data-gd-qr-slider]')) { setReadout(form, e.target.name); } }
-        function onBlurb(e) { if (e.target.matches('[data-gd-qr-blurb]')) { refreshCount(form); } }
 
         // Idempotent, and bound to the dialog's native `close` as well as to the explicit paths -- that
         // event fires HOWEVER it closes, including the swipe-to-dismiss `pp-dismissable` adds on mobile.
@@ -134,9 +269,7 @@
         function teardown() {
             if (torn) { return; }
             torn = true;
-            form.removeEventListener('input', onSlider);
-            form.removeEventListener('input', onBlurb);
-            form.removeEventListener('submit', onSubmit);
+            if (fields) { fields.detach(); }
             if (cancel) { cancel.removeEventListener('click', onCancel); }
             closers.forEach(function (b) { b.removeEventListener('click', onDismiss); });
             modal.removeEventListener('cancel', onEsc);
@@ -161,53 +294,6 @@
         function onEsc(e) { e.preventDefault(); onDismiss(); }
         function onBackdrop(e) { if (e.target === modal) { onDismiss(); } }
 
-        function onSubmit(e) {
-            e.preventDefault();
-            var hoursEl = field(form, 'hours_to_platinum');
-            var hours = parseInt(hoursEl && hoursEl.value, 10);
-            if (!hours || hours < 1) {
-                if (PP.ToastManager) { PP.ToastManager.show('Enter the hours it took you.', 'warning'); }
-                return;
-            }
-            var area = form.querySelector('[data-gd-qr-blurb]');
-            var blurb = area ? area.value.trim() : '';
-            var payload = {
-                difficulty: parseInt(field(form, 'difficulty').value, 10),
-                grindiness: parseInt(field(form, 'grindiness').value, 10),
-                fun_ranking: parseInt(field(form, 'fun_ranking').value, 10),
-                overall_rating: parseFloat(field(form, 'overall_rating').value),
-                hours_to_platinum: hours,
-                blurb: blurb,
-            };
-            if (submit) { submit.disabled = true; submit.textContent = 'Saving...'; }
-
-            // Posting a public quick take records guidelines agreement (the notice above the action IS
-            // the fine print). Done FIRST so the rate call can't 403 with needs_guidelines. Idempotent.
-            var agreed = form.dataset.guidelinesAgreed === '1';
-            var pre = (blurb && !agreed)
-                ? PP.API.post('/api/v1/guidelines/agree/', {})
-                    .then(function () { form.dataset.guidelinesAgreed = '1'; })
-                    .catch(function () { /* the rate call surfaces needs_guidelines if this failed */ })
-                : Promise.resolve();
-
-            pre.then(function () {
-                return PP.API.post('/api/v1/ratings/' + o.conceptId + '/group/' + o.groupId + '/rate/', payload);
-            }).then(function (data) {
-                close();
-                if (o.onSaved) { o.onSaved(data || {}, payload); }
-            }).catch(function (error) {
-                // Never close on failure: the hunter's input is still in the form, and a caller that
-                // downloads on success must not be told the rating saved when it didn't.
-                if (submit) { submit.disabled = false; submit.textContent = submitLabel; }
-                return messageFor(error).then(function (msg) {
-                    if (PP.ToastManager) { PP.ToastManager.show(msg, 'error'); }
-                });
-            });
-        }
-
-        form.addEventListener('input', onSlider);
-        form.addEventListener('input', onBlurb);
-        form.addEventListener('submit', onSubmit);
         if (cancel) { cancel.addEventListener('click', onCancel); }
         closers.forEach(function (b) { b.addEventListener('click', onDismiss); });
         modal.addEventListener('cancel', onEsc);
@@ -238,5 +324,6 @@
         return true;
     }
 
+    PP.RatingFields = { attach: attach, BLURB_MAX: BLURB_MAX, DEFAULTS: DEFAULTS };
     PP.QuickRate = { open: open, BLURB_MAX: BLURB_MAX };
 })();
