@@ -1,225 +1,215 @@
 {% extends 'base.html' %}
-{% load custom_filters humanize static %}
+{% load humanize static %}
 
 {% block title %}Rate My Games{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
+{% comment %}
+Rate My Games -- rate your finished games one at a time.
+
+Rebuilt from scratch 2026-08. The old page was pre-rebuild DaisyUI (range range-error, progress-primary,
+badge, checkbox-warning, loading-dots) AND, more importantly, a second hand-rolled copy of the rating form:
+no quick take, no live readouts, no field-level errors. The form here is the SAME one the quick-rate modal
+composes -- `partials/_rating_fields.html` driven by `PlatPursuit.RatingFields` -- so the two rating
+surfaces cannot drift apart again.
+
+Shape is unchanged, because the wizard shape is right for the job: one game, the trophy list beside it to
+jog the memory, the form, skip or submit, next.
+
+Everything below the toolbar is populated by rate-my-games.js from the queue endpoint; the markup here is
+the empty frame it fills.
+{% endcomment %}
+
 {% block content %}
-<div id="wizard-container">
-{# ─── Header ─────────────────────────────────────────────────────────── #}
-{% include 'partials/breadcrumb.html' with items=breadcrumb %}
+<div class="rmg">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-<div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-    <div class="card-body p-3 md:p-4">
-        <div class="flex items-center justify-between gap-3">
-            <div class="min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
-                    </svg>
-                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Rate My Games</h1>
+    {# -- Header: what this is, and how much of it is left. -- #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Rate My Games</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        A few seconds each. Every score you leave sharpens what the next hunter sees.
+                    </p>
                 </div>
-                <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                    Quickly rate your platinumed games. The community will thank you!
-                </p>
-            </div>
-            <div id="wizard-progress-badge" class="hidden shrink-0">
-                <div class="badge badge-lg badge-primary gap-1">
-                    <span id="wizard-current-num">0</span> / <span id="wizard-total-num">0</span>
+
+                {# The queue, at a glance. Unfiltered by the toolbar: this is how much is waiting, full stop. #}
+                <div class="grid grid-cols-2 gap-2 md:gap-3 shrink-0 w-full md:w-auto">
+                    <div class="scard">
+                        <div class="scard__label">Games waiting</div>
+                        <div class="scard__value pp-tally text-primary" data-countup="{{ unrated_count }}">{{ unrated_count|intcomma }}</div>
+                    </div>
+                    <div class="scard">
+                        <div class="scard__label">DLC waiting</div>
+                        <div class="scard__value pp-tally text-secondary" data-countup="{{ unrated_dlc_count }}">{{ unrated_dlc_count|intcomma }}</div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-</div>
+    </section>
 
-{# ─── Queue Type Tabs ─────────────────────────────────────────────────── #}
-<div class="flex flex-row items-center justify-between gap-3 mb-3">
-    <div class="flex items-center gap-2">
-        <div class="flex items-center gap-1">
-            <button class="btn btn-sm btn-primary wizard-queue-tab transition-colors" data-queue="base">
+    {# -- Toolbar: which queue, and whether the junk comes with it. -- #}
+    <div class="pp-toolbar-card rmg__toolbar">
+        <div class="pp-switch" role="tablist" aria-label="Rating queue">
+            <button type="button" id="rmg-tab-base" aria-controls="rmg-stage" class="pp-switch__chip is-active rmg-qtab" data-queue="base" role="tab" aria-selected="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
                 Base Games
-                {% if unrated_count %}<span class="badge badge-sm badge-ghost ml-1">{{ unrated_count }}</span>{% endif %}
             </button>
-            <button class="btn btn-sm btn-ghost border border-base-300 wizard-queue-tab transition-colors" data-queue="dlc">DLC</button>
+            <button type="button" id="rmg-tab-dlc" aria-controls="rmg-stage" class="pp-switch__chip rmg-qtab" data-queue="dlc" role="tab" aria-selected="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                DLC
+            </button>
         </div>
+
+        <label class="pp-bgal__chip pp-bgal__chip--warn" title="Asset-flip platinums are left out of the queue by default. They're still yours to rate if you want them.">
+            <input type="checkbox" id="rmg-shovelware" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            Shovelware
+        </label>
     </div>
 
-    {# Shovelware opt-in: off by default so the queue stays junk-free. #}
-    <label class="label cursor-pointer gap-2 py-0"
-           title="Include platinums earned on games flagged as shovelware in the rating queue.">
-        <input type="checkbox" id="wizard-include-shovelware" class="checkbox checkbox-sm checkbox-warning">
-        <span class="label-text text-xs text-base-content/60">Include shovelware</span>
-    </label>
-</div>
-
-{# ─── Progress Bar ────────────────────────────────────────────────────── #}
-<div id="wizard-progress-section" class="hidden mt-4">
-    <div class="flex items-center justify-between text-sm text-base-content/60 mb-1">
-        <span id="wizard-progress-text">Game 0 of 0</span>
-        <span id="wizard-progress-pct">0%</span>
-    </div>
-    <progress id="wizard-progress-bar" class="progress progress-primary w-full" value="0" max="100"></progress>
-</div>
-
-{# ─── Game Card Area ──────────────────────────────────────────────────── #}
-<div id="wizard-game-area" class="mt-4 flex justify-center">
-    {# Loading state #}
-    <div id="wizard-loading" class="flex flex-col items-center py-12">
-        <span class="loading loading-dots loading-lg text-primary"></span>
-        <p class="text-base-content/50 mt-2">Loading your games...</p>
+    {# -- Progress: how far through this queue you are. Hidden until there's a queue to be through. -- #}
+    <div class="rmg__prog hidden" id="rmg-progress">
+        <span class="rmg__prog-text" id="rmg-progress-text">Game 0 of 0</span>
+        <span class="pp-horizon"><span class="pp-horizon__track"><span class="pp-horizon__fill" id="rmg-progress-fill"></span></span></span>
+        <span class="rmg__prog-pct" id="rmg-progress-pct">0%</span>
     </div>
 
-    {# Main wizard card (hidden initially) #}
-    <div id="wizard-card" class="hidden w-full">
-        {# Game header card #}
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-4">
-            <div class="card-body p-4 md:p-5 lg:p-6">
-                <div class="flex items-center gap-4">
-                    <div id="wizard-game-icon" class="w-20 h-20 md:w-22 md:h-22 lg:w-24 lg:h-24 rounded-xl overflow-hidden border-2 border-base-300 shrink-0">
-                        <img id="wizard-game-img" src="" alt="Game cover" class="w-full h-full object-cover" />
+    {# -- Stage: exactly one of loading / card / done is showing at any moment. -- #}
+    <div class="rmg__stage" id="rmg-stage" role="tabpanel" aria-labelledby="rmg-tab-base">
+        <div class="pp-gbrowse__loading" id="rmg-loading"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
+
+        <div id="rmg-card" class="hidden">
+            {# The game being rated. #}
+            <section class="pp-toolbar-card">
+                <div class="rmg__game">
+                    <div class="rmg__cover rmg__cover--none" id="rmg-cover">
+                        <img id="rmg-cover-img" src="" alt="" />
+                        <svg class="rmg__cover-ph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 15l5-5 4 4 3-3 8 7"/></svg>
                     </div>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2">
-                            <h2 id="wizard-game-title" class="text-lg md:text-xl lg:text-2xl font-bold line-clamp-2 pr-1"></h2>
-                            <span id="wizard-dlc-badge" class="hidden badge badge-sm badge-secondary font-bold shrink-0">DLC</span>
-                            <span id="wizard-shovelware-badge" class="hidden badge badge-sm badge-warning font-bold shrink-0" title="Flagged as shovelware">Shovelware</span>
-                        </div>
-                        <p id="wizard-group-name" class="text-sm text-base-content/50 hidden"></p>
-                        <div class="flex items-center gap-2 mt-1">
-                            <span id="wizard-has-rating" class="hidden badge badge-sm badge-success gap-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                                Rated
-                            </span>
+                    <div class="rmg__ident">
+                        <h2 class="rmg__title" id="rmg-title"></h2>
+                        <p class="rmg__group hidden" id="rmg-group">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                            <span id="rmg-group-name"></span>
+                        </p>
+                        <div class="rmg__flags">
+                            <span class="rmg__flag rmg__flag--dlc hidden" id="rmg-flag-dlc">DLC</span>
+                            <span class="rmg__flag rmg__flag--shovel hidden" id="rmg-flag-shovel">Shovelware</span>
                         </div>
                     </div>
                 </div>
-
-                {# User's gameplay stats for reference #}
-                <div id="wizard-stats-bar" class="hidden flex flex-wrap gap-x-5 gap-y-1.5 mt-3 pt-3 border-t border-base-content/10 text-xs text-base-content/60">
-                    <div id="wizard-stat-plat" class="hidden flex items-center gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-info" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3h14a2 2 0 012 2v2a5 5 0 01-3.07 4.62A5 5 0 0113 16.92V19h2a1 1 0 010 2H9a1 1 0 010-2h2v-2.08A5 5 0 016.07 11.62 5 5 0 013 7V5a2 2 0 012-2z"/></svg>
-                        <span id="wizard-stat-plat-text"></span>
-                    </div>
-                    <div id="wizard-stat-trophies" class="hidden flex items-center gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                        <span id="wizard-stat-trophies-text"></span>
-                    </div>
-                    <div id="wizard-stat-progress" class="hidden flex items-center gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        <span id="wizard-stat-progress-text"></span>
-                    </div>
-                    <div id="wizard-stat-playtime" class="hidden flex items-center gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        <span id="wizard-stat-playtime-text"></span>
-                    </div>
+                {# Your own record with this game, as reference for the scores you're about to give it. #}
+                <div class="rmg__stats hidden" id="rmg-stats">
+                    <span class="rmg__stat hidden" id="rmg-stat-plat">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3h14a2 2 0 012 2v2a5 5 0 01-3.07 4.62A5 5 0 0113 16.92V19h2a1 1 0 010 2H9a1 1 0 010-2h2v-2.08A5 5 0 016.07 11.62 5 5 0 013 7V5a2 2 0 012-2z"/></svg>
+                        <span id="rmg-stat-plat-text"></span>
+                    </span>
+                    <span class="rmg__stat hidden" id="rmg-stat-trophies">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        <span id="rmg-stat-trophies-text"></span>
+                    </span>
+                    <span class="rmg__stat hidden" id="rmg-stat-progress">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                        <span id="rmg-stat-progress-text"></span>
+                    </span>
+                    <span class="rmg__stat hidden" id="rmg-stat-playtime">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <span id="rmg-stat-playtime-text"></span>
+                    </span>
                 </div>
+            </section>
 
-            </div>
-        </div>
-
-        {# Trophy + Rating: 2-col at desktop, stacked on tablet #}
-        <div class="flex flex-col lg:flex-row gap-4">
-            {# Trophy Panel (left column on desktop) #}
-            <div id="wizard-trophy-section" class="w-full lg:w-1/3 lg:order-first">
-                <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral lg:h-full">
-                    <div class="card-body p-3 md:p-4">
-                        {# Tablet: collapsible header. Desktop: always visible #}
-                        <button type="button" id="wizard-trophy-toggle" class="w-full flex items-center justify-between cursor-pointer group lg:cursor-default">
-                            <h3 class="text-sm md:text-base font-bold flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 text-warning shrink-0" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                                Trophy List
-                                <span id="wizard-trophy-count" class="badge badge-xs badge-ghost"></span>
-                            </h3>
-                            <svg id="wizard-trophy-chevron" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/50 transition-transform duration-200 shrink-0 group-hover:text-base-content lg:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                        </button>
-                        <div id="wizard-trophy-content" class="hidden lg:block mt-2 max-h-[50vh] lg:max-h-[70vh] overflow-y-auto"></div>
+            <div class="rmg__cols">
+                {% comment %}Reference panel. Open on desktop where there's room beside the form; collapsed
+                below it on smaller screens, where an open list would push the form off the screen.{% endcomment %}
+                <section class="pp-toolbar-card">
+                    <button type="button" class="rmg__phead" id="rmg-trophy-toggle" aria-expanded="false" aria-controls="rmg-trophy-body">
+                        <span class="rmg__ptitle">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                            Trophy list
+                            <span class="rmg__pcount" id="rmg-trophy-count"></span>
+                        </span>
+                        <svg class="rmg__pchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="rmg__pbody hidden lg:block" id="rmg-trophy-body">
+                        <div class="pp-trolist rmg__troscroll" id="rmg-trophy-content"></div>
                     </div>
-                </div>
-            </div>
+                </section>
 
-            {# Rating Panel #}
-            <div id="wizard-rating-section" class="flex-1">
-                <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral h-full">
-                    <div class="card-body p-4 md:p-5 lg:p-6">
-                        <h3 class="text-base md:text-lg font-bold mb-3 flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                            Rate This Game
+                {# The rating itself. #}
+                <section class="pp-toolbar-card">
+                    <div class="rmg__form">
+                        <h3 class="rmg__fhead">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                            <span id="rmg-form-title">Your rating</span>
                         </h3>
-                        <form id="wizard-rating-form" class="space-y-3">
-                            <div class="form-control">
-                                <label class="label py-1"><span class="label-text text-base-content text-sm">Difficulty</span></label>
-                                <input type="range" name="difficulty" min="1" max="10" value="5" class="range range-error range-sm w-full" step="1" />
-                                <div class="w-full flex justify-between text-xs px-1"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
-                            </div>
-                            <div class="form-control">
-                                <label class="label py-1"><span class="label-text text-base-content text-sm">Grindiness</span></label>
-                                <input type="range" name="grindiness" min="1" max="10" value="5" class="range range-accent range-sm w-full" step="1" />
-                                <div class="w-full flex justify-between text-xs px-1"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
-                            </div>
-                            <div class="form-control">
-                                <label class="label py-1"><span class="label-text text-base-content text-sm" id="wizard-hours-label">Hours to Platinum</span></label>
-                                <input type="number" name="hours_to_platinum" value="" min="1" class="input input-secondary input-sm w-full" placeholder="e.g., 20" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label py-1"><span class="label-text text-base-content text-sm">Fun Ranking</span></label>
-                                <input type="range" name="fun_ranking" min="1" max="10" value="5" class="range range-info range-sm w-full" step="1" />
-                                <div class="w-full flex justify-between text-xs px-1"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
-                            </div>
-                            <div class="form-control">
-                                <label class="label py-1"><span class="label-text text-base-content text-sm">Overall Rating</span></label>
-                                <input type="range" name="overall_rating" min="0.5" max="5.0" value="3" class="range range-warning range-sm w-full" step="0.5" />
-                                <div class="w-full flex justify-between text-xs"><span>0.5</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
-                            </div>
+                        {% comment %}The shared fields. `data-guidelines-agreed` lets RatingFields skip the
+                        agree call for a hunter who already agreed -- it is the form's flag, so it lives on the
+                        form element rather than in the partial.{% endcomment %}
+                        <form id="rmg-form" class="gd-qr" data-guidelines-agreed="{% if guidelines_agreed %}1{% else %}0{% endif %}">
+                            {% include 'partials/_rating_fields.html' %}
                         </form>
-                        {# Rating requirement #}
-                        <div class="flex items-center gap-1.5 mt-3 text-xs text-base-content/50" id="wizard-req-hours">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error wizard-req-icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success wizard-req-icon-check hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                            <span>Enter hours to platinum</span>
-                        </div>
+                        <p class="rmg__req" id="rmg-req">
+                            <svg class="rmg__req-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                            <svg class="rmg__req-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                            <span id="rmg-req-text">Hours is the one field we need.</span>
+                        </p>
                     </div>
-                </div>
+                </section>
+            </div>
+
+            <div class="rmg__actions">
+                <button type="button" class="gd-btn gd-btn--ghost" id="rmg-skip">Skip for now</button>
+                <span class="rmg__spacer"></span>
+                {% comment %}Outside the form on purpose: it sits with Skip, as one pair of decisions about
+                this game. RatingFields is handed it explicitly (the data-gd-qr-submit fallback only finds a
+                button INSIDE the form).{% endcomment %}
+                <button type="button" class="gd-btn gd-btn--primary" id="rmg-submit" disabled>Submit rating</button>
             </div>
         </div>
 
-        {# Action buttons #}
-        <div class="flex items-center gap-3 mt-4">
-            <button id="wizard-skip-btn" type="button" class="btn btn-ghost btn-sm">Skip</button>
-            <div class="flex-1"></div>
-            <button id="wizard-submit-btn" type="button" class="btn btn-primary btn-sm gap-2" disabled>
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                Submit Rating
-            </button>
+        {# The queue request failed. A toast alone would leave an empty stage with nothing to press. #}
+        <div id="rmg-fail" class="pp-toolbar-card rmg__done hidden">
+            <svg class="rmg__done-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--pp-text-mute);"><circle cx="12" cy="12" r="10"/><path d="M12 8v5"/><path d="M12 17h.01"/></svg>
+            <p class="rmg__done-title">That didn't load</p>
+            <p class="rmg__done-copy" id="rmg-fail-text">Could not load your games. Try again in a moment.</p>
+            <div class="rmg__done-acts">
+                <button type="button" class="gd-btn gd-btn--primary" id="rmg-retry">Try again</button>
+            </div>
         </div>
-    </div>
 
-    {# Empty state #}
-    <div id="wizard-empty" class="hidden w-full max-w-md">
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
-            <div class="card-body items-center text-center py-12">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-success mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                <h3 class="text-xl font-bold mb-2">All caught up!</h3>
-                <p class="text-base-content/60 mb-4">
-                    You've rated all your platinumed games. Nice work, hunter!
-                </p>
-                <a href="{% url 'community_hub' %}" class="btn btn-primary btn-sm">Back to Community</a>
+        {# Nothing left in this queue. #}
+        <div id="rmg-done" class="pp-toolbar-card rmg__done hidden">
+            {% comment %}pp-draw-in needs pathLength="1" on each shape so the dash maths is uniform whatever
+            the real path length is -- without it the circle and the tick trace at wildly different rates.{% endcomment %}
+            <svg class="rmg__done-mark pp-draw-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" pathLength="1"/><polyline points="16 9 11 15 8 12" pathLength="1"/></svg>
+            <p class="rmg__done-title" id="rmg-done-title">All caught up</p>
+            <p class="rmg__done-copy" id="rmg-done-copy">You've rated everything in this queue. Nice work, hunter.</p>
+            <div class="rmg__done-acts">
+                <button type="button" class="gd-btn gd-btn--primary hidden" id="rmg-done-dlc">Rate your DLC</button>
+                <a href="{% url 'community_hub' %}" class="gd-btn gd-btn--ghost">Back to Community</a>
             </div>
         </div>
     </div>
 </div>
-</div>{# /wizard-container #}
 
+{% comment %}The guidelines sheet the quick-take notice links to. It opens OVER this page, so reading the
+rules never costs an in-progress take.{% endcomment %}
+{% include 'trophies/partials/game_detail/guidelines_sheet.html' %}
 {% endblock %}
 
 {% block js_scripts %}
+{% comment %}RatingFields (in quick-rate.js) owns the form; it must load before the page controller that
+attaches it.{% endcomment %}
+<script src="{% static 'js/quick-rate.js' %}"></script>
 <script src="{% static 'js/rate-my-games.js' %}"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        PlatPursuit.RateMyGames.init({
-            profileId: {{ user.profile.id|default:'null' }},
-        });
-    });
+    PlatPursuit.onPageReady(function () { PlatPursuit.RateMyGames.init(); });
 </script>
 {% endblock %}

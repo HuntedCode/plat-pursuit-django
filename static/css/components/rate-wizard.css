@@ -1,0 +1,156 @@
+/* ============================================================
+ * RATE MY GAMES -- the rating wizard (/community/rate-my-games/).
+ *
+ * One game at a time: a game card, a trophy list to jog the memory, and the shared rating form beside it.
+ * Layout + the deal motion only. The surfaces come from the shared .pp-toolbar-card, the progress meter
+ * from .pp-horizon, the queue toggle from .pp-switch, and the form itself from .gd-qr__* (the fields are
+ * `partials/_rating_fields.html`, shared with the quick-rate modal).
+ *
+ * The trophy list (.pp-trolist) is separate on purpose: it is rendered by the shared
+ * PlatPursuit.TrophyListRenderer, so it is styled as its own primitive rather than as part of this page.
+ * ============================================================ */
+
+/* Tailwind's `.hidden` lives in `@layer utilities`; component CSS is @imported UNLAYERED, and unlayered
+ * always beats layered regardless of specificity. So any rule below that sets `display` silently defeats
+ * the `.hidden` this page toggles from JS -- which shipped a base-game card wearing a DLC pill and a
+ * SHOVELWARE pill, because hiding them did nothing. Restate the utility for every one of them.
+ * Elements with no display of their own (#rmg-card, .rmg__pbody, .pp-gbrowse__loading) are unaffected. */
+.rmg__prog.hidden,
+.rmg__stats.hidden,
+.rmg__stat.hidden,
+.rmg__group.hidden,
+.rmg__flag.hidden,
+.rmg__done-acts .gd-btn.hidden { display: none; }
+
+.rmg__toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; }
+
+/* ---- Progress: the queue's own Horizon, with the count beside it. ---- */
+.rmg__prog { display: flex; align-items: center; gap: 12px; margin: 14px 2px 12px; }
+.rmg__prog .pp-horizon { flex: 1 1 auto; min-width: 0; }
+.rmg__prog-text { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; }
+.rmg__prog-pct { font-size: 12px; font-weight: 700; color: var(--pp-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---- The game being rated. ---- */
+.rmg__game { display: flex; align-items: center; gap: 14px; padding: 14px; }
+.rmg__cover {
+    width: 66px; flex: 0 0 auto; aspect-ratio: 3 / 4; overflow: hidden;
+    border-radius: var(--pp-radius-lg); border: 1px solid var(--pp-border); background: var(--pp-bg-2);
+}
+.rmg__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+/* No cover art at all (a stub concept with no IGDB match, where Concept.cover_url resolves to nothing):
+   a quiet glyph rather than the broken-image icon the old page showed for an empty src. */
+.rmg__cover--none { display: grid; place-items: center; color: var(--pp-text-mute); }
+.rmg__cover--none img { display: none; }
+.rmg__cover:not(.rmg__cover--none) .rmg__cover-ph { display: none; }
+.rmg__cover-ph { width: 26px; height: 26px; }
+.rmg__ident { min-width: 0; flex: 1 1 auto; }
+.rmg__title { font-family: var(--pp-font-display); font-size: 1.05rem; font-weight: 800; line-height: 1.2; color: var(--pp-text); overflow-wrap: anywhere; }
+.rmg__group { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 12px; font-weight: 600; color: var(--pp-secondary); }
+.rmg__group svg { width: 12px; height: 12px; flex: none; }
+.rmg__flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+/* Most games carry no flags at all, and an empty row still spends its margin -- a 6px gap under the
+   title that only some cards have, which reads as the card shifting between games. */
+.rmg__flags:not(:has(.rmg__flag:not(.hidden))) { display: none; }
+.rmg__flag {
+    display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    border: 1px solid var(--pp-border); color: var(--pp-text-mute);
+}
+.rmg__flag--dlc { color: var(--pp-secondary); border-color: color-mix(in oklab, var(--pp-secondary) 45%, var(--pp-border)); }
+.rmg__flag--shovel { color: var(--pp-warning); border-color: color-mix(in oklab, var(--pp-warning) 45%, var(--pp-border)); }
+
+/* Gameplay facts, kept quiet: they are reference for the rating, not the subject of the card. */
+.rmg__stats { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 0 14px 14px; }
+.rmg__stat { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--pp-text-dim); }
+.rmg__stat svg { width: 14px; height: 14px; flex: none; color: var(--pp-text-mute); }
+.rmg__stat b { color: var(--pp-text); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---- Two columns at desktop: the trophy list to refer to, the form to fill in. ---- */
+.rmg__cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 12px; }
+@media (min-width: 1024px) { .rmg__cols { grid-template-columns: 340px minmax(0, 1fr); align-items: start; } }
+
+.rmg__phead {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+    padding: 12px 14px; background: none; border: none; font: inherit; color: var(--pp-text); text-align: left;
+    cursor: pointer;
+}
+@media (min-width: 1024px) { .rmg__phead { cursor: default; } }
+.rmg__ptitle { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
+.rmg__ptitle > svg { width: 16px; height: 16px; flex: none; color: var(--tier-gold); }
+.rmg__pcount { font-size: 11px; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.rmg__pchev { width: 16px; height: 16px; flex: none; color: var(--pp-text-mute); transition: transform 0.2s var(--pp-ease, ease); }
+.rmg__phead[aria-expanded="true"] .rmg__pchev { transform: rotate(180deg); }
+@media (min-width: 1024px) { .rmg__pchev { display: none; } }
+.rmg__pbody { padding: 0 14px 14px; }
+/* The list scrolls inside the panel so the form never gets pushed off the screen by a 60-trophy game. */
+.rmg__troscroll { max-height: 46vh; overflow-y: auto; }
+@media (min-width: 1024px) { .rmg__troscroll { max-height: 62vh; } }
+
+.rmg__form { padding: 14px; }
+.rmg__fhead { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; font-weight: 700; color: var(--pp-text); }
+.rmg__fhead svg { width: 16px; height: 16px; flex: none; color: var(--pp-primary); }
+
+/* The one requirement, stated where the eye lands before the button rather than only as a toast on refusal. */
+.rmg__req { display: flex; align-items: center; gap: 7px; margin-top: 12px; font-size: 12px; color: var(--pp-text-mute); }
+.rmg__req svg { width: 15px; height: 15px; flex: none; }
+.rmg__req .rmg__req-x { color: var(--pp-text-mute); }
+.rmg__req .rmg__req-ok { display: none; color: var(--pp-success); }
+.rmg__req.is-met .rmg__req-x { display: none; }
+.rmg__req.is-met .rmg__req-ok { display: inline; }
+.rmg__req.is-met { color: var(--pp-text-dim); }
+
+.rmg__actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.rmg__actions .rmg__spacer { flex: 1 1 auto; }
+
+/* ---- Deal motion: the finished card leaves to the left, the next one arrives from the right.
+ * The stage keeps the OUTGOING card's height while the swap happens, so the page doesn't jump a
+ * few hundred pixels between two games of different trophy-list lengths. Entrance reuses the shared
+ * .pp-view-in-right (motion.css); only the exit is new. ---- */
+@keyframes rmgDealOut { to { opacity: 0; transform: translateX(-22px) scale(0.985); } }
+@media (prefers-reduced-motion: no-preference) {
+    .rmg__stage.is-dealing > * { animation: rmgDealOut 0.18s cubic-bezier(0.4, 0, 1, 1) forwards; }
+}
+
+/* ---- Empty state: the queue is done. ---- */
+.rmg__done { text-align: center; padding: 56px 20px; }
+.rmg__done-mark { width: 56px; height: 56px; margin: 0 auto 14px; color: var(--pp-success); }
+.rmg__done-title { font-family: var(--pp-font-display); font-size: 1.35rem; font-weight: 800; color: var(--pp-text); }
+.rmg__done-copy { max-width: 42ch; margin: 6px auto 18px; font-size: 13.5px; color: var(--pp-text-mute); }
+.rmg__done-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+
+/* ============================================================
+ * TROPHY LIST (.pp-trolist) -- the condensed reference list built by PlatPursuit.TrophyListRenderer.
+ * Its own primitive because the renderer is shared: any surface that wants "the trophies, briefly" gets
+ * this look for free. Earned rows carry a tier-tinted rail; the rest sit back.
+ * ============================================================ */
+.pp-trolist__sum { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+.pp-trolist__tier {
+    display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px;
+    font-size: 10.5px; font-weight: 700; border: 1px solid var(--pp-border); color: var(--tro-c, var(--pp-text-mute));
+    font-variant-numeric: tabular-nums;
+}
+.pp-trolist__tier::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--tro-c, var(--pp-text-mute)); }
+.pp-trolist__total { margin-left: auto; font-size: 11px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.pp-trolist__rows { display: flex; flex-direction: column; gap: 3px; }
+.pp-trolist__row {
+    display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: var(--pp-radius-md);
+    border-left: 2px solid transparent; transition: background 0.15s ease;
+}
+@media (hover: hover) { .pp-trolist__row:hover { background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); } }
+.pp-trolist__row.is-earned { background: color-mix(in oklab, var(--tro-c, var(--pp-primary)) 9%, transparent); border-left-color: var(--tro-c, var(--pp-primary)); }
+.pp-trolist__icon { width: 30px; height: 30px; flex: none; border-radius: var(--pp-radius-sm); object-fit: cover; background: var(--pp-bg-2); }
+.pp-trolist__txt { min-width: 0; flex: 1 1 auto; }
+/* display:block is load-bearing -- these are <span>s, and text-overflow does nothing on an inline box. */
+.pp-trolist__name { display: block; font-size: 12px; font-weight: 600; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Italic + clipped: the slant overhangs the box, so it needs the padding or the last glyph is cut. */
+.pp-trolist__desc { display: block; font-size: 11px; font-style: italic; color: var(--pp-text-mute); padding-right: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-trolist__check { width: 14px; height: 14px; flex: none; color: var(--pp-success); }
+.pp-trolist__empty { padding: 10px 2px; font-size: 12.5px; font-style: italic; color: var(--pp-text-mute); padding-right: 4px; }
+.pp-trolist__err { padding: 10px 2px; font-size: 12.5px; color: var(--pp-error); padding-right: 4px; }
+
+/* Tier colours come from the site-wide --tier-* set (frame.css :root), not a fourth private copy of the
+   four trophy colours -- the bright rebuild values, since these tint a rail and a dot on a dark surface. */
+.pp-trolist [data-tier="platinum"] { --tro-c: var(--tier-platinum); }
+.pp-trolist [data-tier="gold"]     { --tro-c: var(--tier-gold); }
+.pp-trolist [data-tier="silver"]   { --tro-c: var(--tier-silver); }
+.pp-trolist [data-tier="bronze"]   { --tro-c: var(--tier-bronze); }

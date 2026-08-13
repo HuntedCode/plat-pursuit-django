@@ -42,21 +42,25 @@ def test_no_multiline_hash_comments():
 STATIC_JS = Path(__file__).resolve().parents[2] / 'static' / 'js'
 
 
-def test_the_quick_rate_hosts_do_not_re_implement_the_driver():
-    """The quick-rate modal (`#gd-qr-modal`) is composed on two surfaces -- Game Detail's Ratings tab and
-    the plat-card share modal -- and each used to carry its own driver. They had already drifted: only
-    Game Detail surfaced the endpoint's field-level `errors`, so a blurb rejected for a banned word
-    explained itself on one page and failed generically on the other.
+@pytest.mark.parametrize('name,entry', [
+    ('game-detail.js', 'QuickRate'),
+    ('plat-cards.js', 'QuickRate'),
+    # The wizard is the third host, and the last one to stop carrying its own copy (2026-08). It renders
+    # the form INLINE rather than in a dialog, so it composes the inner layer directly.
+    ('rate-my-games.js', 'RatingFields'),
+])
+def test_the_rating_form_hosts_do_not_re_implement_the_driver(name, entry):
+    """The rating form has three hosts -- Game Detail's Ratings tab, the plat-card share modal, and the
+    Rate My Games wizard -- and each used to carry its own driver. They had already drifted: only Game
+    Detail surfaced the endpoint's field-level `errors`, so a blurb rejected for a banned word explained
+    itself on one page and failed generically on the other, and the wizard's copy had no blurb field at all.
 
-    Both now call `PlatPursuit.QuickRate`, so neither may POST the rating itself. Scoped to these two
-    files on purpose -- other surfaces (the dashboard's legacy prompt, Rate My Games, the review hub)
-    legitimately post ratings from their own forms and are not what this guards."""
-    for name in ('game-detail.js', 'plat-cards.js'):
-        src = (STATIC_JS / name).read_text(encoding='utf-8')
-        assert '/group/' not in src or '/rate/' not in src, (
-            f'{name} posts a rating directly again -- it should call PlatPursuit.QuickRate'
-        )
-        assert 'QuickRate' in src, f'{name} no longer uses the shared controller'
+    All three now compose `quick-rate.js`, so none of them may POST the rating itself."""
+    src = (STATIC_JS / name).read_text(encoding='utf-8')
+    assert '/group/' not in src or '/rate/' not in src, (
+        f'{name} posts a rating directly again -- it should compose {entry}'
+    )
+    assert entry in src, f'{name} no longer uses the shared controller'
 
 
 def test_both_hosts_load_the_shared_controller():
@@ -66,6 +70,7 @@ def test_both_hosts_load_the_shared_controller():
     for page, controller in [
         ('trophies/game_detail.html', 'js/game-detail.js'),
         ('shareables/plat_cards.html', 'js/plat-cards.js'),
+        ('trophies/rate_my_games.html', 'js/rate-my-games.js'),
     ]:
         html = (root / page).read_text(encoding='utf-8')
         assert 'js/quick-rate.js' in html, page

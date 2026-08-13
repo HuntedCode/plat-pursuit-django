@@ -1,0 +1,52 @@
+{% comment %} The rating form's FIELDS -- the five scores, the optional quick take, and the guidelines
+notice. Everything from the first keystroke to the POST landing is owned by `PlatPursuit.RatingFields`
+(static/js/quick-rate.js); this is just what it binds to.
+
+Two hosts include it: the quick-rate modal (Game Detail's Ratings tab + the plat-card share flow) and the
+Rate My Games wizard. Neither owns a copy. That duplication is what this ends -- the wizard had grown its
+own form with no quick take, no live readouts and no field-level errors, which is exactly the drift the
+shared controller was created to stop.
+
+The host supplies the <form> element (and its `data-guidelines-agreed`) plus its own actions, because a
+modal ends in Cancel/Submit and a wizard ends in Skip/Submit sitting outside the form entirely.
+
+The input NAMES are the API contract (difficulty, grindiness, hours_to_platinum, fun_ranking,
+overall_rating, blurb) -- do not rename. Value/label hooks are data-gd-qr-*.
+
+`user_play_hours` is optional: where playtime is a page-level fact (Game Detail) it is SSR'd here; where it
+varies per card the host passes it in through RatingFields' `playtimeHint` and this renders the muted
+default until it does. {% endcomment %}
+<label class="gd-qr__field">
+    <span class="gd-qr__lbl">Difficulty <span class="gd-qr__val" data-gd-qr-val="difficulty">5</span></span>
+    <input type="range" name="difficulty" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
+    <span class="gd-qr__scale"><span>Easy</span><span>Brutal</span></span>
+</label>
+<label class="gd-qr__field">
+    <span class="gd-qr__lbl">Grindiness <span class="gd-qr__val" data-gd-qr-val="grindiness">5</span></span>
+    <input type="range" name="grindiness" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
+    <span class="gd-qr__scale"><span>Breezy</span><span>Grindy</span></span>
+</label>
+<label class="gd-qr__field">
+    <span class="gd-qr__lbl" data-gd-qr-hours-label>Hours to Platinum</span>
+    <input type="number" name="hours_to_platinum" min="1" max="10000" class="gd-qr__num" placeholder="e.g. 40" inputmode="numeric" />
+    {% if user_play_hours %}<span class="gd-qr__hint">Your tracked playtime: about <b>{{ user_play_hours }}</b> hour{{ user_play_hours|pluralize }}.</span>{% else %}<span class="gd-qr__hint gd-qr__hint--muted">We don't have your playtime for this game.</span>{% endif %}
+</label>
+<label class="gd-qr__field">
+    <span class="gd-qr__lbl">Fun <span class="gd-qr__val" data-gd-qr-val="fun_ranking">5</span></span>
+    <input type="range" name="fun_ranking" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
+    <span class="gd-qr__scale"><span>Chore</span><span>A blast</span></span>
+</label>
+<label class="gd-qr__field">
+    <span class="gd-qr__lbl">Overall <span class="gd-qr__val" data-gd-qr-val="overall_rating">3.0</span><span class="gd-qr__of">/ 5</span></span>
+    <input type="range" name="overall_rating" min="0.5" max="5" step="0.5" value="3" class="gd-qr__range" data-gd-qr-slider />
+    <span class="gd-qr__scale"><span>0.5</span><span>5</span></span>
+</label>
+{% comment %} Optional public quick take. The counter shows chars remaining. {% endcomment %}
+<label class="gd-qr__field gd-qr__field--blurb">
+    <span class="gd-qr__lbl">Quick take <span class="gd-qr__opt">optional</span><span class="gd-qr__count" data-gd-qr-count>140</span></span>
+    <textarea name="blurb" maxlength="140" rows="2" class="gd-qr__area" data-gd-qr-blurb placeholder="How was the platinum? One line for fellow hunters."></textarea>
+</label>
+{% comment %} Persistent guidelines notice, right above the action: the act of posting IS the agreement
+(still recorded server-side on submit). Shown every time, never hidden after first agreement. The link
+opens the rules in a sheet OVER the host surface, so reading them never loses the in-progress take. {% endcomment %}
+<p class="gd-qr__notice">By posting a public quick take you agree to our <button type="button" class="gd-qr__guidelink" data-gd-guidelines-open>Community Guidelines</button>: keep it civil, spoiler-free, and useful.</p>

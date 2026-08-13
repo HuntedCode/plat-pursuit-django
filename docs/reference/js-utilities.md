@@ -286,14 +286,39 @@ Opens the sheet OVER whatever compose surface is showing, so reading the rules n
 in-progress quick take. Idempotent and a no-op when the sheet isn't on the page, so every page that
 composes a surface linking to it can just call it. Read-only: agreement is recorded on submit, not here.
 
-### PlatPursuit.QuickRate
+### PlatPursuit.RatingFields / PlatPursuit.QuickRate
 
-Lives in its own file (`static/js/quick-rate.js`), not `utils.js` -- it is one feature's controller
-rather than a general utility, and only the two pages that compose the modal load it.
+Both live in `static/js/quick-rate.js`, not `utils.js` -- one feature's controller rather than a general
+utility, loaded only by the pages that compose it. The file is two layers, because the rating form has
+three hosts and only two of them are modals:
+
+- **`RatingFields`** owns the FORM and knows nothing about presentation.
+- **`QuickRate`** is the modal (`#gd-qr-modal`) wrapped around it.
+
+The fields themselves are one template, `partials/_rating_fields.html`, included by both hosts. The input
+NAMES are the API contract -- do not rename them.
 
 | Method | Parameters | Purpose |
 |--------|-----------|---------|
-| `QuickRate.open(opts)` | see below | Opens + drives the quick-rate modal (`#gd-qr-modal`, `quick_rate_modal.html`) |
+| `RatingFields.attach(form, opts)` | see below | Drives any `<form>` carrying the shared fields; returns a handle |
+| `QuickRate.open(opts)` | the same, plus modal options | Opens + drives the quick-rate modal (`quick_rate_modal.html`) |
+
+```js
+var fields = PlatPursuit.RatingFields.attach(formEl, {
+    conceptId, groupId,          // required -- the POST target
+    existing, blurb,             // prefill; null/'' for a fresh rating
+    submitEl,                    // defaults to [data-gd-qr-submit] INSIDE the form
+    submitLabel, hoursLabel, playtimeHint,
+    onSaved(data, payload), onError(message),
+    onChange({ready, hours}),    // readiness changed -- gate your own button on it
+});
+// -> { setTarget(conceptId, groupId), prefill(existing, blurb), label(opts), submit(), state(), detach() }
+```
+
+`setTarget()` exists for the Rate My Games wizard, which advances through a queue against ONE form:
+detaching and re-attaching per game stacks a fresh set of listeners each time, and one submit then posts
+as many times as you have rated. `onChange` exists for the same host -- its submit button lives outside
+the form, next to Skip, so it gates itself on the hours field rather than letting the controller own it.
 
 ```js
 PlatPursuit.QuickRate.open({
@@ -311,8 +336,10 @@ PlatPursuit.QuickRate.open({
 
 The controller owns **everything except what happens after a save**: prefill (including the blurb),
 slider readouts, the character counter, the hours gate, agree-to-guidelines-on-submit, the POST, error
-surfacing, and every close affordance. Hosts: the Game Detail Ratings tab (its `onSaved` live-updates
-the community panel) and the plat-card share modal (its `onSaved` invalidates the preview cache).
+surfacing, and (in `QuickRate`) every close affordance. Hosts: the Game Detail Ratings tab (its `onSaved`
+live-updates the community panel), the plat-card share modal (its `onSaved` invalidates the preview
+cache), and the Rate My Games wizard, which composes `RatingFields` directly because it renders the form
+inline beside a trophy list.
 
 `onCancel` and `onDismiss` are **deliberately separate**. The share flow opens this as a pre-download
 prompt where the secondary button means "skip, just download" -- so a dismiss must never fire it, or the
@@ -337,6 +364,9 @@ To add a new utility: define it above the export block, then add a `window.PlatP
 - **A modal that rebinds listeners per open must tear down on the dialog's `close` event**, not only
   on its explicit paths. `dismissableSheet`'s swipe bypasses them, so the next open double-binds and a
   single submit fires twice. `QuickRate` binds an idempotent teardown to `close` for this reason.
+- **A host that gates its own submit button must be told LAST.** `RatingFields.attach()` resets the
+  button before prefilling, because prefilling announces readiness through `onChange` -- reversing that
+  order re-enabled a button the host had just correctly disabled.
 - **`PlatPursuit.API.request()` throws an `Error` with a `.response` property** (raw Response object) on non-ok status. Extract messages with `await error.response?.json().catch(() => null)`. Pass `{}` as body for no-body POSTs.
 - **Don't migrate binary fetches** (blob/image downloads) to `PlatPursuit.API`. It's designed for JSON APIs.
 

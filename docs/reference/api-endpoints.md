@@ -199,17 +199,18 @@ Shareable profile card images, forum signatures, and the public badge showcase. 
 
 ### Community Reviews
 
+> **None of the `reviews/` routes below are wired.** The review system was archived 2026-05 and
+> `api/urls.py` routes none of them; the table is kept as the shape a future rebuild would restore. The
+> RATINGS half of the system is live and listed after it.
+
 Review responses include a `body_html` field containing server-rendered markdown (via `ChecklistService.process_markdown()`), ready for direct insertion into the DOM without a client-side markdown library.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/api/v1/reviews/recent/` | No | Recent reviews feed (paginated, for landing page) |
 | GET | `/api/v1/reviews/search/` | No | Search reviews by concept (typeahead) |
-| GET | `/api/v1/reviews/wizard/queue/` | Login | Rate My Games queue (filters: unrated/unreviewed/both, queue_type: base/dlc) |
 | GET | `/api/v1/reviews/<concept_id>/group/<group_id>/` | No | List reviews (sort: helpful/newest/oldest) |
 | POST | `/api/v1/reviews/<concept_id>/group/<group_id>/create/` | Login | Create review (body + recommended) |
-| POST | `/api/v1/reviews/<concept_id>/group/<group_id>/rate/` | Login | Submit/update rating |
-| GET | `/api/v1/reviews/<concept_id>/group/<group_id>/trophies/` | No | Condensed trophy list with earned status |
 | GET | `/api/v1/reviews/<review_id>/` | No | Single review detail |
 | PUT | `/api/v1/reviews/<review_id>/` | Login | Edit own review |
 | DELETE | `/api/v1/reviews/<review_id>/` | Login | Delete own review |
@@ -219,6 +220,15 @@ Review responses include a `body_html` field containing server-rendered markdown
 | POST | `/api/v1/reviews/<review_id>/replies/` | Login | Create reply |
 | PUT | `/api/v1/reviews/replies/<reply_id>/` | Login | Edit own reply |
 | DELETE | `/api/v1/reviews/replies/<reply_id>/` | Login | Delete own reply |
+
+**Ratings** — the live half of this system. The Rate My Games wizard and the quick-rate modal call these:
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/v1/ratings/wizard/queue/` | Login | Rate My Games queue. `queue_type=base\|dlc`, `limit`, `offset`, `include_shovelware=1`. Serves only UNRATED items, so nothing it returns carries an existing rating. |
+| POST | `/api/v1/ratings/<concept_id>/group/<group_id>/rate/` | Login | Submit/update a rating. Body: `difficulty, grindiness, hours_to_platinum, fun_ranking, overall_rating, blurb`. An OMITTED `blurb` preserves the stored one; an empty string clears it. Rate-limited 30/min. |
+| GET | `/api/v1/ratings/<concept_id>/group/<group_id>/trophies/` | No | Condensed trophy list with earned status (the wizard's reference panel) |
+| POST | `/api/v1/ratings/blurb/<rating_id>/report/` | Login | Report a public quick take |
 
 ### Ratings & Quick Takes
 

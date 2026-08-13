@@ -32,6 +32,8 @@
 @import "./components/game-detail.css";
 @import "./components/download-button.css";
 @import "./components/plat-cards.css";
+/* After game-detail.css: the wizard hosts the shared .gd-qr__* rating fields inside its own layout. */
+@import "./components/rate-wizard.css";
 @import "./components/recap-archive.css";
 @import "./components/recap-deck.css";
 @import "./components/recap-stage.css";

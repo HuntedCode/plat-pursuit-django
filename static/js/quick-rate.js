@@ -198,9 +198,12 @@
             announce();
         }
 
+        // Order matters: reset the button FIRST, then prefill -- because prefilling announces readiness, and
+        // a host that gates its button on that (the wizard, whose hours field starts empty) must get the
+        // last word. Enabling after the announcement re-enabled a button its own host had just disabled.
+        if (submitEl) { submitEl.disabled = false; submitEl.textContent = submitLabel; }
         label(o);
         fill(o.existing, o.blurb);
-        if (submitEl) { submitEl.disabled = false; submitEl.textContent = submitLabel; }
 
         return {
             // Re-point at the next game without re-binding anything -- the wizard advances through a

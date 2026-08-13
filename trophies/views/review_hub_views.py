@@ -87,7 +87,13 @@ class ReviewHubLandingView(TemplateView):
 
 
 class RateMyGamesView(LoginRequiredMixin, TemplateView):
-    """Wizard for quickly rating and reviewing platinumed games."""
+    """Wizard for quickly rating finished games, one at a time.
+
+    The page ships as an empty frame: the queue itself comes from
+    ``WizardQueueView`` (``/api/v1/ratings/wizard/queue/``) so it can page
+    and prefetch. All this needs to render is the two waiting-counts in the
+    header and the guidelines flag the shared rating form reads.
+    """
 
     template_name = 'trophies/rate_my_games.html'
 
@@ -103,12 +109,10 @@ class RateMyGamesView(LoginRequiredMixin, TemplateView):
         profile = getattr(self.request.user, 'profile', None)
         if profile:
             context['unrated_count'] = ReviewHubService.get_unrated_platinum_count(profile)
-            context['unreviewed_count'] = ReviewHubService.get_unreviewed_platinum_count(profile)
             context['unrated_dlc_count'] = ReviewHubService.get_unrated_dlc_count(profile)
             context['guidelines_agreed'] = profile.guidelines_agreed
         else:
             context['unrated_count'] = 0
-            context['unreviewed_count'] = 0
             context['unrated_dlc_count'] = 0
             context['guidelines_agreed'] = False
 

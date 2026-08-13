@@ -1,50 +1,19 @@
 {% comment %} Quick-rate modal (rebuilt to the gd-modal standard). SSR once; game-detail.js opens it from any
 `.quick-rate-btn`, prefills from data-existing, and on submit POSTs to
-/api/v1/ratings/<concept>/group/<group>/rate/. The form INPUT NAMES (difficulty, grindiness, hours_to_platinum,
-fun_ranking, overall_rating) are the API contract -- do not rename. Value/label/submit hooks are data-gd-qr-*. {% endcomment %}
+/api/v1/ratings/<concept>/group/<group>/rate/.
+
+This is the MODAL WRAPPER only -- the dialog chrome, the actions, and the toast host. The fields live in
+`partials/_rating_fields.html` (shared with the Rate My Games wizard) and their behaviour in
+`PlatPursuit.RatingFields`. Submit hooks are data-gd-qr-*. {% endcomment %}
 <dialog id="gd-qr-modal" class="gd-modal gd-modal--qr pp-dismissable" aria-labelledby="gd-qr-title">
     <div class="gd-modal__head">
         <h3 id="gd-qr-title">Rate this game</h3>
         <button type="button" class="gd-modal__close" data-gd-modal-close aria-label="Close">&times;</button>
     </div>
     <form id="gd-qr-form" class="gd-modal__body gd-qr" data-guidelines-agreed="{% if request.user.is_authenticated and request.user.profile.guidelines_agreed %}1{% else %}0{% endif %}">
-        <label class="gd-qr__field">
-            <span class="gd-qr__lbl">Difficulty <span class="gd-qr__val" data-gd-qr-val="difficulty">5</span></span>
-            <input type="range" name="difficulty" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
-            <span class="gd-qr__scale"><span>Easy</span><span>Brutal</span></span>
-        </label>
-        <label class="gd-qr__field">
-            <span class="gd-qr__lbl">Grindiness <span class="gd-qr__val" data-gd-qr-val="grindiness">5</span></span>
-            <input type="range" name="grindiness" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
-            <span class="gd-qr__scale"><span>Breezy</span><span>Grindy</span></span>
-        </label>
-        <label class="gd-qr__field">
-            <span class="gd-qr__lbl" data-gd-qr-hours-label>Hours to Platinum</span>
-            <input type="number" name="hours_to_platinum" min="1" max="10000" class="gd-qr__num" placeholder="e.g. 40" inputmode="numeric" />
-            {% if user_play_hours %}<span class="gd-qr__hint">Your tracked playtime: about <b>{{ user_play_hours }}</b> hour{{ user_play_hours|pluralize }}.</span>{% else %}<span class="gd-qr__hint gd-qr__hint--muted">We don't have your playtime for this game this time.</span>{% endif %}
-        </label>
-        <label class="gd-qr__field">
-            <span class="gd-qr__lbl">Fun <span class="gd-qr__val" data-gd-qr-val="fun_ranking">5</span></span>
-            <input type="range" name="fun_ranking" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
-            <span class="gd-qr__scale"><span>Chore</span><span>A blast</span></span>
-        </label>
-        <label class="gd-qr__field">
-            <span class="gd-qr__lbl">Overall <span class="gd-qr__val" data-gd-qr-val="overall_rating">3.0</span><span class="gd-qr__of">/ 5</span></span>
-            <input type="range" name="overall_rating" min="0.5" max="5" step="0.5" value="3" class="gd-qr__range" data-gd-qr-slider />
-            <span class="gd-qr__scale"><span>0.5</span><span>5</span></span>
-        </label>
-        {% comment %} Optional public quick take. Name is "blurb" (form contract). The counter shows chars
-        remaining; the fine print is the guidelines notice and only appears (via JS) when the viewer is writing
-        one and has not agreed before -- posting then records agreement (POST guidelines/agree/ on submit). {% endcomment %}
-        <label class="gd-qr__field gd-qr__field--blurb">
-            <span class="gd-qr__lbl">Quick take <span class="gd-qr__opt">optional</span><span class="gd-qr__count" data-gd-qr-count>140</span></span>
-            <textarea name="blurb" maxlength="140" rows="2" class="gd-qr__area" data-gd-qr-blurb placeholder="How was the platinum? One line for fellow hunters."></textarea>
-        </label>
-        {% comment %} Persistent guidelines notice, right above the action: the act of posting IS the
-        agreement (still recorded server-side on submit). Shown every time, never hidden after first
-        agreement. The link opens the rules in a sheet OVER this modal, so reading them never loses the
-        in-progress take. {% endcomment %}
-        <p class="gd-qr__notice">By posting a public quick take you agree to our <button type="button" class="gd-qr__guidelink" data-gd-guidelines-open>Community Guidelines</button>: keep it civil, spoiler-free, and useful.</p>
+        {% comment %} The fields themselves are shared with the Rate My Games wizard -- one copy, so the two
+        rating surfaces cannot drift apart again. {% endcomment %}
+        {% include 'partials/_rating_fields.html' %}
         {% comment %}The secondary action carries its OWN hook as well as data-gd-modal-close. The share
         modal opens this as a pre-download prompt, where that button means "skip, just download" -- which
         has to be distinguishable from the header X and the backdrop, since a dismiss must never hand over

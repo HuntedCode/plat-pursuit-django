@@ -115,7 +115,10 @@ makes a visibly thinner card. Two ways in, both driving the same modal through t
 
 Both go through **`PlatPursuit.QuickRate`** (`static/js/quick-rate.js`), the one controller for
 **`trophies/partials/game_detail/quick_rate_modal.html`** — the same modal as the Game Detail
-Ratings tab, so the two rating surfaces cannot drift. This page shipped with the legacy
+Ratings tab, so the two rating surfaces cannot drift. Since 2026-08 the fields inside it are a shared
+partial (`partials/_rating_fields.html`) driven by `PlatPursuit.RatingFields`, with `QuickRate` as the
+modal wrapper — that is what let the Rate My Games wizard stop carrying its own copy. `QuickRate.open()`'s
+contract did not change. This page shipped with the legacy
 `rate_before_download_modal.html`, which predates the rebuild: DaisyUI colours and, more importantly, **no
 blurb field**, so the card rendered a quick take the only form that could set it never offered. That
 partial still exists for `dashboard.html`; it is no longer used here. The guidelines sheet is composed

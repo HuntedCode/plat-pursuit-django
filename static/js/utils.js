@@ -1128,24 +1128,23 @@ const ReviewProgressTiers = {
 };
 
 /**
- * TrophyListRenderer: Builds condensed trophy list HTML for review hub sidebar
- * and Rate My Games wizard. Renders compact trophy cards with earned status,
- * type badges, and a summary header showing counts by type.
+ * TrophyListRenderer -- the condensed "here are the trophies, briefly" list.
+ *
+ * Built by the Rate My Games wizard's reference panel, which is what it exists for: a hunter rating a game
+ * they finished months ago needs the trophy list beside the form to jog the memory.
+ *
+ * Emits the shared `.pp-trolist` primitive (components/rate-wizard.css) rather than page classes, so any
+ * surface that wants the same list gets the same look. Earned rows carry a tier-tinted rail; the tier
+ * colours come from the site-wide --tier-* set via the row's `data-tier`.
  */
 const TrophyListRenderer = {
-    /** Tailwind classes for each trophy type (already safeguarded in the app theme). */
-    TROPHY_STYLES: {
-        platinum: { cls: 'text-trophy-platinum', label: 'platinum' },
-        gold:     { cls: 'text-trophy-gold',     label: 'gold' },
-        silver:   { cls: 'text-trophy-silver',   label: 'silver' },
-        bronze:   { cls: 'text-trophy-bronze',   label: 'bronze' },
-    },
+    TIERS: ['platinum', 'gold', 'silver', 'bronze'],
 
     /**
      * Build HTML for a condensed trophy list.
-     * @param {Array} trophies - Array of trophy objects from API
+     * @param {Array} trophies - trophy objects from /api/v1/ratings/<c>/group/<g>/trophies/
      * @param {Object} [options]
-     * @param {boolean} [options.showEarned=true] - Whether to show earned indicators
+     * @param {boolean} [options.showEarned=true] - mark the ones this hunter has
      * @returns {string} HTML string
      */
     buildList(trophies, options = {}) {
@@ -1153,41 +1152,34 @@ const TrophyListRenderer = {
         const esc = HTMLUtils.escape;
 
         if (!trophies || trophies.length === 0) {
-            return '<p class="text-sm text-base-content/50 italic py-2 pr-1">No trophy data available.</p>';
+            return '<p class="pp-trolist__empty">No trophy data for this one.</p>';
         }
 
-        // Count by type for summary header
-        const counts = { platinum: 0, gold: 0, silver: 0, bronze: 0 };
-        trophies.forEach(t => {
-            if (counts[t.trophy_type] !== undefined) counts[t.trophy_type]++;
-        });
+        const counts = {};
+        trophies.forEach(t => { counts[t.trophy_type] = (counts[t.trophy_type] || 0) + 1; });
 
-        let html = '<div class="flex flex-wrap items-center gap-2 mb-2 text-xs">';
-        for (const [type, count] of Object.entries(counts)) {
-            if (count > 0) {
-                const style = this.TROPHY_STYLES[type];
-                html += `<span class="badge badge-xs font-bold ${style.cls}">${count} ${style.label}</span>`;
+        // Summary, in tier order rather than whatever order the trophies happen to arrive in.
+        let html = '<div class="pp-trolist__sum">';
+        for (const tier of this.TIERS) {
+            if (counts[tier]) {
+                html += `<span class="pp-trolist__tier" data-tier="${tier}">${counts[tier]} ${tier}</span>`;
             }
         }
-        html += `<span class="text-base-content/40 ml-auto">${trophies.length} total</span></div>`;
+        html += `<span class="pp-trolist__total">${trophies.length} total</span></div>`;
 
-        html += '<div class="space-y-1 max-h-64 lg:max-h-96 overflow-y-auto pr-1">';
+        html += '<div class="pp-trolist__rows">';
         for (const t of trophies) {
-            const style = this.TROPHY_STYLES[t.trophy_type] || {};
-            const isEarned = showEarned && t.earned;
-            const earnedClasses = isEarned ? 'bg-success/10 border-l-2 border-success' : '';
-            const earnedIcon = isEarned
-                ? '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>'
-                : '';
-
-            html += `<div class="flex items-center gap-2 p-1.5 rounded ${earnedClasses} hover:bg-base-200/50 transition-colors">`;
-            html += `<img src="${esc(t.trophy_icon_url || '')}" alt="" class="w-8 h-8 object-cover rounded shrink-0" loading="lazy" />`;
-            html += '<div class="flex-1 min-w-0">';
-            html += `<p class="text-xs font-semibold line-clamp-1 pr-1">${esc(t.trophy_name)}</p>`;
-            html += `<p class="text-xs text-base-content/50 line-clamp-1 italic pr-1">${esc(t.trophy_detail || '')}</p>`;
-            html += '</div>';
-            html += `<span class="badge badge-xs font-bold shrink-0 ${style.cls || ''}">${esc(t.trophy_type)}</span>`;
-            html += earnedIcon;
+            const tier = this.TIERS.includes(t.trophy_type) ? t.trophy_type : '';
+            const earned = showEarned && t.earned;
+            html += `<div class="pp-trolist__row${earned ? ' is-earned' : ''}"${tier ? ` data-tier="${tier}"` : ''}>`;
+            html += `<img class="pp-trolist__icon" src="${esc(t.trophy_icon_url || '')}" alt="" loading="lazy" />`;
+            html += '<span class="pp-trolist__txt">';
+            html += `<span class="pp-trolist__name">${esc(t.trophy_name)}</span>`;
+            html += `<span class="pp-trolist__desc">${esc(t.trophy_detail || '')}</span>`;
+            html += '</span>';
+            if (earned) {
+                html += '<svg class="pp-trolist__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+            }
             html += '</div>';
         }
         html += '</div>';
