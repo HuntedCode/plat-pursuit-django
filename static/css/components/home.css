@@ -92,24 +92,30 @@
 /* ---- D. The moats respond BEFORE you commit -- the object reacts to approach, not just to the click.
  * Transform / opacity / animation-duration only, so nothing reflows and nothing repaints a filter. ---- */
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-    /* Career: the ring picks up pace and its dominant-discipline glow blooms. The arcs already spin
-       (labDnaSpin, 26s); this just leans on the accelerator rather than starting a new animation. */
-    .home-moat--career:hover .lab-dna__arcs { animation-duration: 11s; }
-    .home-moat--career .lab-dna__arcs { transition: none; }
+    /* Career: the glow blooms and the ring leans forward slightly. It deliberately does NOT touch the
+       arcs' animation. Two reasons, both learned the hard way:
+         1. Changing `animation-duration` mid-flight re-maps elapsed time onto the new duration, so
+            labDnaSpin (0 -> 360 -> 720deg) snaps to a different angle -- it reads as the ring flipping.
+         2. The primitive already owns a hover behaviour -- `.lab-dna:hover .lab-dna__arcs` PAUSES the
+            spin so you can read the thing -- and a second rule on the same element just fights it.
+       So the response lives on the wrapper's transform and the card's glow, which both transition
+       cleanly and leave the primitive's own interaction intact. */
+    .home-moat--career .lab-dna { transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .home-moat--career:hover .lab-dna { transform: scale(1.05); }
     .home-moat--career::after { transition: opacity 0.25s ease, transform 0.25s ease; }
     .home-moat--career:hover::after { opacity: 1; transform: scale(1.06); }
 
-    /* Collection: the medallions fan like lifting the top of a deck. Fixed angles rather than nth-child
-       maths -- there are at most three, and hand-set angles read better than a formula. */
-    .home-moat__med { transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
-    .home-moat--collection:hover .home-moat__med:nth-child(1) { transform: rotate(-5deg) translateY(-3px); }
-    .home-moat--collection:hover .home-moat__med:nth-child(2) { transform: translateY(-5px); }
-    .home-moat--collection:hover .home-moat__med:nth-child(3) { transform: rotate(5deg) translateY(-3px); }
+    /* Collection: each medallion rises only when IT is hovered -- a straight lift, no tilt. An earlier
+       cut fanned all three at an angle whenever the card was hovered; it drew the eye away from the
+       thing being pointed at and made a badge you were not touching move. The object you point at is
+       the object that responds. */
+    .home-moat__med { transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .home-moat__med:hover { transform: translateY(-4px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
     .home-reveal { animation: none; }
-    .home-moat, .home-moat__arrow, .home-moat__med { transition: none; }
+    .home-moat, .home-moat__arrow, .home-moat__med, .home-moat--career .lab-dna { transition: none; }
 }
 
 /* ---- E. Mobile fit. The lobby ran 3.2 screens at 375; the standard prefers compacting AIRINESS over

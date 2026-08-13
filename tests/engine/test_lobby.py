@@ -139,3 +139,41 @@ def test_the_horizon_fill_reads_the_root_and_resets_without_animating():
     assert "querySelectorAll('main .pp-horizon')" in prime, 'the fill is being read instead of the root'
     assert "fill.style.transition = 'none'" in prime, 'the reset will animate backwards'
     assert 'void fill.offsetWidth' in prime, 'the reset is not flushed, so suppressing the transition is a no-op'
+
+
+def test_the_career_cta_hover_does_not_touch_the_rings_animation():
+    """It flipped. Changing `animation-duration` mid-flight re-maps elapsed time onto the new duration,
+    so labDnaSpin (0 -> 360 -> 720deg) snaps to a different angle -- the ring appeared to flip on hover.
+
+    The deeper reason not to: the primitive already OWNS a hover behaviour -- `.lab-dna:hover
+    .lab-dna__arcs` pauses the spin so you can read it -- so a second rule on the same element is
+    fighting the component rather than extending it. The response belongs on the wrapper's transform.
+    """
+    from pathlib import Path
+
+    import re
+
+    css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components' / 'home.css').read_text(encoding='utf-8')
+    hover = css[css.index('/* ---- D. The moats respond'):css.index('@media (prefers-reduced-motion: reduce)')]
+    # Strip comments first: the rule's own explanation NAMES the property it avoids, so a bare substring
+    # check is satisfied by the prose that documents the fix.
+    rules = re.sub(r'/\*.*?\*/', '', hover, flags=re.S)
+
+    assert 'animation-duration' not in rules, 'the CTA is re-timing the ring again, which makes it flip'
+    assert '.home-moat--career:hover .lab-dna { transform: scale' in rules, 'the ring no longer responds at all'
+
+
+def test_only_the_hovered_medallion_moves():
+    """An earlier cut fanned all three whenever the CARD was hovered, so badges you were not pointing at
+    moved and the tilt pulled the eye off the one you were."""
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components' / 'home.css').read_text(encoding='utf-8')
+    rules = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+
+    assert '.home-moat__med:hover' in rules, 'the medallions no longer respond at all'
+    assert '.home-moat--collection:hover .home-moat__med' not in rules, 'the card-level fan is back'
+    assert 'rotate(' not in rules[rules.index('.home-moat__med'):rules.index('.home-moat__med') + 400], (
+        'the medallions are tilting again -- a straight rise was the ask'
+    )
