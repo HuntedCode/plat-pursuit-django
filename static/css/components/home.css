@@ -15,12 +15,6 @@
    state carries a ZERO-blur drop-shadow of the same colour (invisible), not `none`, so the hover
    only grows the blur (0 -> 7px) and the glow fades in/out -- browsers can't interpolate
    `none` -> drop-shadow, which pops. */
-.home-launch__icon {
-    transition: filter 0.25s ease;
-    filter: drop-shadow(0 0 0 color-mix(in oklab, var(--pp-primary) 55%, transparent));
-}
-.home-launch:hover .home-launch__icon { filter: drop-shadow(0 0 7px color-mix(in oklab, var(--pp-primary) 55%, transparent)); }
-
 /* ---- The two moats. The lobby's whole outbound job: two destinations at band weight, each carrying a
  * live tease. Career takes the accent (it is the identity), Collection sits one step back -- one accent
  * per surface, and the trophy block above already spends the primary on its numbers. ---- */
