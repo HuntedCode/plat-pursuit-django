@@ -92,14 +92,11 @@
 /* ---- D. The moats respond BEFORE you commit -- the object reacts to approach, not just to the click.
  * Transform / opacity / animation-duration only, so nothing reflows and nothing repaints a filter. ---- */
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-    /* Career: the glow blooms and the ring leans forward slightly. It deliberately does NOT touch the
-       arcs' animation. Two reasons, both learned the hard way:
-         1. Changing `animation-duration` mid-flight re-maps elapsed time onto the new duration, so
-            labDnaSpin (0 -> 360 -> 720deg) snaps to a different angle -- it reads as the ring flipping.
-         2. The primitive already owns a hover behaviour -- `.lab-dna:hover .lab-dna__arcs` PAUSES the
-            spin so you can read the thing -- and a second rule on the same element just fights it.
-       So the response lives on the wrapper's transform and the card's glow, which both transition
-       cleanly and leave the primitive's own interaction intact. */
+    /* Career: the glow blooms and the ring leans forward slightly. The ring also SPEEDS UP, but that
+       part is deliberately not here -- CSS can only change `animation-duration`, which re-maps elapsed
+       time and makes labDnaSpin snap to a different angle (the flip). home-motion.js does it with
+       updatePlaybackRate() instead, which preserves the current time. The primitive's own pause-on-hover
+       still wins when you point at the ring itself. */
     .home-moat--career .lab-dna { transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
     .home-moat--career:hover .lab-dna { transform: scale(1.05); }
     .home-moat--career::after { transition: opacity 0.25s ease, transform 0.25s ease; }

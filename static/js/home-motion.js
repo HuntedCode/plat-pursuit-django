@@ -11,6 +11,8 @@
  *      happened rather than something that was already there.
  *   3. "Sync now" in the header delegates to the avatar panel's real control (navsync.js owns that state
  *      machine -- disabled while syncing, progress, queue position -- and a second copy would drift).
+ *   4. The Career ring picks up pace while the CTA is hovered, via playback RATE rather than duration --
+ *      the only way to speed a running animation without it jumping to a different frame.
  *
  * Reduced motion: 1 and 2 are skipped entirely (server-rendered values stand); 3 still works, since it is
  * an affordance rather than a flourish.
@@ -93,12 +95,39 @@
         }, delay);
     }
 
+    // --- 4. The Career ring picks up pace on card hover -------------------------------------------
+    // CSS cannot do this without a jump: changing `animation-duration` re-maps elapsed time onto the new
+    // duration, so labDnaSpin (0 -> 360 -> 720deg) snaps to a different angle the moment you hover.
+    // updatePlaybackRate() is the tool built for it -- it changes SPEED while preserving the current
+    // time, so the ring accelerates from wherever it happens to be.
+    //
+    // The primitive's own `.lab-dna:hover -> animation-play-state: paused` is left alone and still wins
+    // when you point at the ring itself: play state and playback rate are independent, so "faster over
+    // the card, stopped over the ring" composes rather than conflicts.
+    var RING_HOVER_RATE = 2.4;
+
+    function wireRingPace() {
+        var card = document.querySelector('.home-moat--career');
+        var arcs = card && card.querySelector('.lab-dna__arcs');
+        if (!card || !arcs || !arcs.getAnimations) { return; }
+
+        function setRate(rate) {
+            arcs.getAnimations().forEach(function (a) {
+                // updatePlaybackRate is the seamless form; playbackRate is the instant fallback.
+                if (a.updatePlaybackRate) { a.updatePlaybackRate(rate); } else { a.playbackRate = rate; }
+            });
+        }
+        card.addEventListener('mouseenter', function () { setRate(RING_HOVER_RATE); });
+        card.addEventListener('mouseleave', function () { setRate(1); });
+    }
+
     function run() {
         wireSyncNow();
         if (STILL) { return; }
 
         // Left-to-right, top-to-bottom: DOM order IS reading order here, so a flat per-index step reads
         // as a cascade without measuring anything. Capped so a long stat row never trickles.
+        wireRingPace();
         var primed = primeHorizons();          // zero them NOW, before anything paints full
         var nums = document.querySelectorAll('[data-countup]');
         for (var i = 0; i < nums.length; i++) { tickUp(nums[i], 900, Math.min(i * 55, 500)); }

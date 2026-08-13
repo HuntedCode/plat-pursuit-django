@@ -16,6 +16,19 @@ pytestmark = pytest.mark.django_db
 CF = {'HTTP_CF_RAY': '8f0000000000abcd-LHR'}
 
 
+def _code(src):
+    """Source with comments stripped.
+
+    Load-bearing for every assertion below that forbids a construct: the comment explaining WHY a rule
+    is forbidden inevitably names it, so a bare substring check is satisfied by the prose documenting
+    the fix rather than by the code. That has bitten four separate guards in this file's history.
+    """
+    import re
+
+    src = re.sub(r'/\*.*?\*/', '', src, flags=re.S)      # /* block */ (CSS + JS)
+    return re.sub(r'(?m)^\s*//.*$', '', src)              # // line (JS)
+
+
 @pytest.mark.parametrize('state,setup', [
     ('no_psn', dict(is_linked=False)),
     ('syncing', dict(is_linked=True, sync_status='syncing')),
@@ -112,7 +125,7 @@ def test_the_premium_beats_are_reduced_motion_gated():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
-    js = (root / 'static' / 'js' / 'home-motion.js').read_text(encoding='utf-8')
+    js = _code(( root / 'static' / 'js' / 'home-motion.js').read_text(encoding='utf-8'))
     css = (root / 'static' / 'css' / 'components' / 'home.css').read_text(encoding='utf-8')
 
     assert 'prefers-reduced-motion: reduce' in js, 'count-ups run regardless of the setting'
@@ -141,26 +154,32 @@ def test_the_horizon_fill_reads_the_root_and_resets_without_animating():
     assert 'void fill.offsetWidth' in prime, 'the reset is not flushed, so suppressing the transition is a no-op'
 
 
-def test_the_career_cta_hover_does_not_touch_the_rings_animation():
-    """It flipped. Changing `animation-duration` mid-flight re-maps elapsed time onto the new duration,
-    so labDnaSpin (0 -> 360 -> 720deg) snaps to a different angle -- the ring appeared to flip on hover.
+def test_the_ring_speeds_up_by_RATE_not_by_duration():
+    """The ring picks up pace while the CTA is hovered -- but CSS cannot express that without a jump.
+    Changing `animation-duration` re-maps elapsed time onto the new duration, so labDnaSpin
+    (0 -> 360 -> 720deg with a creep and a whoosh) snaps to a different angle the moment you hover; that
+    was the flip. updatePlaybackRate() changes SPEED while preserving current time.
 
-    The deeper reason not to: the primitive already OWNS a hover behaviour -- `.lab-dna:hover
-    .lab-dna__arcs` pauses the spin so you can read it -- so a second rule on the same element is
-    fighting the component rather than extending it. The response belongs on the wrapper's transform.
+    The primitive's own pause-on-hover is deliberately untouched: play state and playback rate are
+    independent, so "faster over the card, stopped over the ring" composes instead of conflicting.
     """
+    import re
     from pathlib import Path
 
-    import re
-
-    css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components' / 'home.css').read_text(encoding='utf-8')
+    root = Path(__file__).resolve().parents[2]
+    js = _code((root / 'static' / 'js' / 'home-motion.js').read_text(encoding='utf-8'))
+    css = (root / 'static' / 'css' / 'components' / 'home.css').read_text(encoding='utf-8')
     hover = css[css.index('/* ---- D. The moats respond'):css.index('@media (prefers-reduced-motion: reduce)')]
-    # Strip comments first: the rule's own explanation NAMES the property it avoids, so a bare substring
-    # check is satisfied by the prose that documents the fix.
-    rules = re.sub(r'/\*.*?\*/', '', hover, flags=re.S)
+    # Strip comments: the rule's own explanation NAMES the property it avoids, so a bare substring check
+    # is satisfied by the prose documenting the fix.
+    rules = _code(hover)
 
     assert 'animation-duration' not in rules, 'the CTA is re-timing the ring again, which makes it flip'
-    assert '.home-moat--career:hover .lab-dna { transform: scale' in rules, 'the ring no longer responds at all'
+    assert 'updatePlaybackRate' in js, 'the ring no longer speeds up at all'
+    # The pause belongs to the primitive; this file must not start driving play state as well.
+    assert 'animationPlayState' not in js and 'play-state' not in js, (
+        "the lobby is overriding the ring's own pause-on-hover instead of composing with it"
+    )
 
 
 def test_only_the_hovered_medallion_moves():
@@ -170,7 +189,7 @@ def test_only_the_hovered_medallion_moves():
     from pathlib import Path
 
     css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components' / 'home.css').read_text(encoding='utf-8')
-    rules = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+    rules = _code(css)
 
     assert '.home-moat__med:hover' in rules, 'the medallions no longer respond at all'
     assert '.home-moat--collection:hover .home-moat__med' not in rules, 'the card-level fan is back'
