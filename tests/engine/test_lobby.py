@@ -102,7 +102,7 @@ def test_numbers_land_without_ever_rendering_a_wrong_value():
     from pathlib import Path
 
     js = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'home-motion.js').read_text(encoding='utf-8')
-    tick = js[js.index('function tickUp'):js.index('function fillHorizons')]
+    tick = js[js.index('function tickUp'):js.index('// --- 2. Horizon fill')]
 
     assert 'scale(1.08)' in tick, 'the landing pop is gone'
     assert '1 - Math.pow(1 - p, 3)' in tick, 'the value easing is no longer monotonic ease-out'
@@ -119,3 +119,23 @@ def test_the_premium_beats_are_reduced_motion_gated():
     # The hover responses and the breathing dot are motion, so both sit behind no-preference.
     assert 'hover: hover) and (prefers-reduced-motion: no-preference)' in css
     assert css.count('prefers-reduced-motion: no-preference') >= 2
+
+
+def test_the_horizon_fill_reads_the_root_and_resets_without_animating():
+    """Two bugs this pins, both of which shipped in the first cut of the premium pass and neither of
+    which a check of the END state would catch -- the bar was correct at rest either way.
+
+    1. `--horizon-progress` lives on the `.pp-horizon` ROOT. Reading it off `.pp-horizon__fill` returns
+       '', so the animation silently never ran at all.
+    2. The reset has to suppress the fill's `width` transition. Without that the bar SLIDES BACKWARDS
+       from its server-rendered width down to zero before filling, which reads as a bug rather than a
+       beat -- worse than no animation.
+    """
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'home-motion.js').read_text(encoding='utf-8')
+    prime = js[js.index('function primeHorizons'):js.index('function releaseHorizons')]
+
+    assert "querySelectorAll('main .pp-horizon')" in prime, 'the fill is being read instead of the root'
+    assert "fill.style.transition = 'none'" in prime, 'the reset will animate backwards'
+    assert 'void fill.offsetWidth' in prime, 'the reset is not flushed, so suppressing the transition is a no-op'

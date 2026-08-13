@@ -59,16 +59,38 @@
     }
 
     // --- 2. Horizon fill --------------------------------------------------------------------------
-    function fillHorizons(delay) {
-        document.querySelectorAll('.home-hi ~ * .pp-horizon__fill, main .pp-horizon__fill').forEach(function (fill) {
-            var target = fill.style.getPropertyValue('--horizon-progress');
-            if (!target) { return; }
-            fill.style.setProperty('--horizon-progress', '0%');
-            setTimeout(function () {
-                // The primitive already transitions `width`; restoring the value plays it.
-                fill.style.setProperty('--horizon-progress', target);
-            }, delay);
+    // Two halves, and the split matters. The RESET runs immediately; only the RESTORE waits for the
+    // count-ups. Doing both late meant the bar sat at its full server-rendered width through the whole
+    // cascade and then snapped to zero before filling -- a visible glitch, and worse than not animating.
+    //
+    // `--horizon-progress` lives on the .pp-horizon ROOT (that is where components/horizon.html sets it
+    // and what Horizon.update() writes); the fill reads it through the cascade. Reading it off the FILL
+    // returns '', which is how the first cut of this did nothing at all while the bar still ended up
+    // correct -- the server value was simply never disturbed.
+    function primeHorizons() {
+        var primed = [];
+        document.querySelectorAll('main .pp-horizon').forEach(function (root) {
+            var target = root.style.getPropertyValue('--horizon-progress');
+            if (!target || target.trim() === '0%') { return; }
+            // Kill the transition for the reset, or the bar SLIDES BACKWARDS from its server-rendered
+            // width to zero before filling -- which looks like a bug, not a beat. Reset, force a reflow
+            // to flush it, then hand the transition back so only the restore animates.
+            var fill = root.querySelector('.pp-horizon__fill');
+            if (fill) { fill.style.transition = 'none'; }
+            root.style.setProperty('--horizon-progress', '0%');
+            if (fill) { void fill.offsetWidth; fill.style.transition = ''; }
+            primed.push([root, target]);
         });
+        return primed;
+    }
+
+    function releaseHorizons(primed, delay) {
+        setTimeout(function () {
+            primed.forEach(function (pair) {
+                // The primitive already transitions the fill's width, so restoring the value plays it.
+                pair[0].style.setProperty('--horizon-progress', pair[1]);
+            });
+        }, delay);
     }
 
     function run() {
@@ -77,9 +99,10 @@
 
         // Left-to-right, top-to-bottom: DOM order IS reading order here, so a flat per-index step reads
         // as a cascade without measuring anything. Capped so a long stat row never trickles.
+        var primed = primeHorizons();          // zero them NOW, before anything paints full
         var nums = document.querySelectorAll('[data-countup]');
         for (var i = 0; i < nums.length; i++) { tickUp(nums[i], 900, Math.min(i * 55, 500)); }
-        fillHorizons(Math.min(nums.length * 55, 500) + 120);
+        releaseHorizons(primed, Math.min(nums.length * 55, 500) + 120);
     }
 
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', run); }
