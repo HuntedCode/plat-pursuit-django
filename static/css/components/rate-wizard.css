@@ -30,6 +30,19 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
 }
 
+/* ---- Opening beat. Every rebuilt page enters the same way, and this one was hard-cutting in below the
+ * header: the switcher row, the meter and the whole card just appeared.
+ *
+ * It reuses the shared `ppHeadIn` keyframe (components/motion.css) rather than inventing a second rise, so
+ * the page opens on the same curve and distance as every other one. The card itself takes `.pp-head-cascade`
+ * directly (added by JS the moment it first appears, since it arrives after a fetch rather than with the
+ * document) and cascades hero -> columns -> actions. Both are reduced-motion gated by the shared rules. ---- */
+@media (prefers-reduced-motion: no-preference) {
+    /* The chrome between the header and the card, picking up where the header's cascade leaves off. */
+    .rmg__enter-row { animation: ppHeadIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.18s backwards; }
+    .rmg__rise { animation: ppHeadIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+}
+
 /* ---- Queue swap settle. The stage used to tear down to a spinner on every queue switch, which reads as
  * a page reload even though nothing navigates (playbook §7/§8: dim, never blank). The spinner is only for
  * the FIRST load, when there is nothing on screen to dim. The dim is a STATE, so reduced-motion viewers

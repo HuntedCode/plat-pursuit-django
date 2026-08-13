@@ -381,6 +381,12 @@ class WizardQueueView(APIView):
                 'count': total_count,
                 'has_more': has_more,
                 'next_offset': offset + limit,
+                # The wizard's progress meter measures the hunter's LIBRARY, not this queue. The queue is
+                # unrated-only, so a meter denominated in it shrinks by one every time you rate something
+                # and can never fill. `ratable_total` is every game they could rate and `rated_total` is
+                # how many they already have -- both already computed above, so this costs nothing.
+                'ratable_total': len(ratable_concept_ids),
+                'rated_total': len(rated_concept_ids),
             })
 
         except Exception as e:
@@ -524,6 +530,10 @@ class WizardQueueView(APIView):
             'total_items': total_items,
             'has_more': has_more,
             'next_offset': offset + limit,
+            # Same as the base queue: the meter is denominated in every ratable DLC group, not in the
+            # unrated remainder. `dlc_groups` is already the completed (= ratable) set.
+            'ratable_total': len(dlc_groups),
+            'rated_total': sum(1 for g in dlc_groups if g.id in dlc_rated),
         })
 
 

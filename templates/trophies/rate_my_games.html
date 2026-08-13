@@ -27,8 +27,11 @@ it never tears down to a spinner, which read as a full-page reload.
 
     {# -- Header: what this is, and how much of it is left. -- #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
-            <div class="flex items-start justify-between gap-4 flex-wrap">
+        {% comment %}The cascade sits on the flex row, not the card-body: it staggers DIRECT children, and
+        the card-body has exactly one, so up there it was a single block rise. Here it plays as two beats,
+        title then counts, which is the layered entrance the class exists for.{% endcomment %}
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            <div class="pp-head-cascade flex items-start justify-between gap-4 flex-wrap">
                 <div class="min-w-0">
                     <div class="flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -39,17 +42,19 @@ it never tears down to a spinner, which read as a full-page reload.
                     </p>
                 </div>
 
-                {# The queue, at a glance. Unfiltered by the toolbar: this is how much is waiting, full stop. #}
+                {% comment %}How much is waiting, full stop -- unfiltered by the toolbar. These tick DOWN
+                live as you rate, because a counter that only moves on refresh reads as broken on a page
+                whose entire purpose is emptying it.{% endcomment %}
                 <div class="grid grid-cols-2 gap-2 md:gap-3 shrink-0 w-full md:w-auto">
                     <div class="scard">
                         <div class="scard__label">Games waiting</div>
-                        <div class="scard__value pp-tally text-primary" data-countup="{{ unrated_count }}">{{ unrated_count|intcomma }}</div>
+                        <div class="scard__value pp-tally text-primary" id="rmg-waiting-base" data-countup="{{ unrated_count }}">{{ unrated_count|intcomma }}</div>
                     </div>
                     {% comment %}Neutral on purpose: one accent per surface, and it is spent on the count
                     that leads.{% endcomment %}
                     <div class="scard">
                         <div class="scard__label">DLC waiting</div>
-                        <div class="scard__value pp-tally" data-countup="{{ unrated_dlc_count }}">{{ unrated_dlc_count|intcomma }}</div>
+                        <div class="scard__value pp-tally" id="rmg-waiting-dlc" data-countup="{{ unrated_dlc_count }}">{{ unrated_dlc_count|intcomma }}</div>
                     </div>
                 </div>
             </div>
@@ -63,7 +68,7 @@ it never tears down to a spinner, which read as a full-page reload.
     search/sort/filter bar (§5); wrapping the switcher in one both put it on the wrong side and gave it a
     container it does not have anywhere else on the site. The one opt-in rides the same row opposite it,
     which is all the "toolbar" a single checkbox earns.{% endcomment %}
-    <div class="flex flex-col-reverse items-center gap-2.5 mt-5 mb-3 md:flex-row md:justify-between md:gap-3">
+    <div class="rmg__enter-row flex flex-col-reverse items-center gap-2.5 mt-5 mb-3 md:flex-row md:justify-between md:gap-3">
         <label class="pp-bgal__chip pp-bgal__chip--warn" title="Asset-flip platinums are left out of the queue by default. They're still yours to rate if you want them.">
             <input type="checkbox" id="rmg-shovelware" />
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>

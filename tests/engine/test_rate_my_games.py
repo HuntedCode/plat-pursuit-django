@@ -216,6 +216,57 @@ def test_the_queue_sends_art_for_the_game_header(client, queue_type, key):
     assert 'landscape_url' in data[key][0], f'the {queue_type} queue sends no art for the header'
 
 
+@pytest.mark.parametrize('queue_type', ['base', 'dlc'])
+def test_the_queue_reports_the_library_not_just_the_backlog(client, queue_type):
+    """The progress meter is denominated in the whole ratable library, so it needs both halves.
+
+    Denominating it in the QUEUE was the bug: the queue holds only what is still unrated, so rating a game
+    shrank the denominator instead of advancing the numerator -- "Game 1 of 70" became "Game 1 of 69" on
+    the next visit -- and the bar could never fill, because you are always at the start of what is left."""
+    profile = _hunter()
+    for i in range(3):
+        _dlc_ready(profile, name=f'Game {i}')
+    client.force_login(profile.user)
+
+    before = client.get(QUEUE, {'queue_type': queue_type}).json()
+    assert before['ratable_total'] == 3, before
+    assert before['rated_total'] == 0, before
+
+    # Rate one of them the way the wizard does.
+    item = (before['queue'][0] if queue_type == 'base'
+            else dict(before['groups'][0], **before['groups'][0]['items'][0]))
+    resp = client.post(
+        f"/api/v1/ratings/{item['concept_id']}/group/{item['trophy_group_id']}/rate/",
+        {'difficulty': 5, 'grindiness': 5, 'hours_to_platinum': 10,
+         'fun_ranking': 5, 'overall_rating': 3, 'blurb': ''},
+        content_type='application/json',
+    )
+    assert resp.status_code == 200, resp.content
+
+    after = client.get(QUEUE, {'queue_type': queue_type}).json()
+    assert after['ratable_total'] == 3, 'the denominator shrank -- it must describe the library'
+    assert after['rated_total'] == 1, 'the numerator did not move'
+
+
+def test_the_meter_counts_the_library_and_the_counters_tick_live():
+    """Two halves of the same complaint: the bar never filled, and the waiting counts only moved on a
+    refresh -- on a page whose entire purpose is emptying them."""
+    js = (ROOT / 'static' / 'js' / 'rate-my-games.js').read_text(encoding='utf-8')
+
+    prog = js[js.index('renderProgress() {'):js.index('showDone() {')]
+    assert 'this.ratableTotal' in prog and 'this.ratedTotal' in prog, (
+        'the meter is denominated in something other than the library'
+    )
+    assert 'this.total' not in prog, 'the meter still reads the unrated-queue length'
+
+    assert 'tickWaiting()' in js, 'the header counters never move'
+    # Rating ticks them; skipping must not -- nothing was rated.
+    saved = js[js.index('onSaved: function () {'):js.index('onError: function (msg)')]
+    assert 'self.tickWaiting();' in saved
+    skip = js[js.index('if (skip) {'):js.index('if (submit) {')]
+    assert 'tickWaiting' not in skip, 'skipping decrements a count of things you have rated'
+
+
 # ── The rebuild itself ────────────────────────────────────────────────────────────────────────────
 
 def test_the_page_is_off_daisyui():
@@ -365,6 +416,25 @@ def test_the_game_art_never_costs_readability():
     assert '.rmg__hero-art::after' in css, 'the art has no veil over it'
     assert 'var(--pp-bg-1)' in css[css.index('.rmg__hero-art::after'):css.index('.rmg__hero-art::after') + 200]
     assert "if (!url) { art.classList.remove('is-lit')" in js, 'a game with no art is not handled'
+
+
+def test_the_page_opens_with_the_shared_beat():
+    """Every rebuilt page enters the same way (playbook §6). This one hard-cut in below the header: the
+    switcher row, the meter and the whole card just appeared.
+
+    The card's entrance has to be applied from JS rather than sitting in the markup -- it arrives from a
+    fetch, so a CSS animation declared on it would have run and finished while it was still `hidden`."""
+    html = _markup()
+    js = (ROOT / 'static' / 'js' / 'rate-my-games.js').read_text(encoding='utf-8')
+    css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
+
+    assert 'pp-head-cascade' in html, 'the header lost its opening beat'
+    assert 'rmg__enter-row' in html, 'the switcher row still hard-cuts in'
+    assert "node.classList.add('pp-head-cascade')" in js, 'the card never gets an entrance'
+    # Reuses the shared keyframe rather than inventing a second rise on a different curve.
+    assert 'animation: ppHeadIn' in css, 'the page opens on its own bespoke motion'
+    # One-shot: from here on, arrivals belong to the deal motion.
+    assert 'if (this.entered || !node) { return; }' in js, 'the opening beat replays for every game'
 
 
 def test_the_deal_motion_is_reduced_motion_gated():

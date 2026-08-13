@@ -26,13 +26,16 @@ window.PlatPursuit = window.PlatPursuit || {};
     PP.RateMyGames = {
         queue: [],
         index: 0,
-        done: 0,                // how many the hunter has got through this session
-        total: 0,
+        done: 0,                // ratings SUBMITTED this session (a skip is not progress)
+        total: 0,               // length of the unrated queue -- pagination, not the meter
+        ratableTotal: 0,        // every game in the library that could be rated
+        ratedTotal: 0,          // how many of them already were, before this session
         queueType: 'base',
         includeShovelware: false,
         offset: 0,
         hasMore: false,
         loading: false,
+        entered: false,         // the opening beat is one-shot, not per game
         fields: null,           // the RatingFields handle
 
         /**
@@ -161,6 +164,12 @@ window.PlatPursuit = window.PlatPursuit || {};
         },
 
         take(data) {
+            // Library totals ride on every page of the response, but only the first page of a fresh queue
+            // may set them: a later page must not clobber the baseline the meter is counting up from.
+            if (this.offset === 0) {
+                this.ratableTotal = data.ratable_total || 0;
+                this.ratedTotal = data.rated_total || 0;
+            }
             if (this.queueType === 'dlc') {
                 this.hasMore = !!data.has_more;
                 var flat = this.flatten(data.groups);
@@ -239,6 +248,25 @@ window.PlatPursuit = window.PlatPursuit || {};
 
         current() { return this.queue[this.index] || null; },
 
+        /**
+         * The opening beat, played once when the first thing the hunter can actually look at arrives.
+         *
+         * It can't live in the markup: the card comes from a fetch, so a CSS animation on it would have
+         * run and finished while it was still `hidden`. Hence adding the shared `.pp-head-cascade` at the
+         * moment of first paint -- same primitive every rebuilt page's header uses, so the page opens on
+         * one curve from the header down through the meter to the card.
+         *
+         * One-shot on purpose: from here on, arrivals are the deal motion's job, and re-running this per
+         * game would be motion for its own sake.
+         */
+        playEntrance(node) {
+            if (this.entered || !node) { return; }
+            this.entered = true;
+            var prog = el('rmg-progress');
+            if (prog && !prog.classList.contains('hidden')) { prog.classList.add('rmg__rise'); }
+            node.classList.add('pp-head-cascade');
+        },
+
         render() {
             var game = this.current();
             if (!game) { this.showDone(); return; }
@@ -286,6 +314,8 @@ window.PlatPursuit = window.PlatPursuit || {};
                 var hours = document.querySelector('#rmg-form [name="hours_to_platinum"]');
                 if (hours) { hours.focus({ preventScroll: true }); }
             }
+
+            this.playEntrance(el('rmg-card'));
         },
 
         /**
@@ -350,13 +380,26 @@ window.PlatPursuit = window.PlatPursuit || {};
             img.src = url;
         },
 
+        /**
+         * The meter describes the LIBRARY, not the session.
+         *
+         * It used to be denominated in the queue, which holds only what is still unrated -- so rating a
+         * game shrank the denominator instead of advancing the numerator ("Game 1 of 70" -> "Game 1 of
+         * 69" on the next visit), and the bar could never fill by definition: you are always at the start
+         * of what is left. Denominated in every ratable game, the numerator is everything rated so far
+         * plus the one on screen, and the bar reflects real progress through the library across sessions.
+         */
         renderProgress() {
-            var current = Math.min(this.done + 1, this.total || this.done + 1);
+            var total = this.ratableTotal;
+            var reviewed = this.ratedTotal + this.done;
+            // "+ 1" for the game in front of you -- but only while there IS one, or a finished queue reads
+            // as one past the end.
+            var current = Math.min(reviewed + (this.current() ? 1 : 0), total);
             var noun = this.queueType === 'dlc' ? 'DLC' : 'Game';
             var text = el('rmg-progress-text');
-            if (text) { text.textContent = noun + ' ' + current + ' of ' + this.total; }
+            if (text) { text.textContent = noun + ' ' + current + ' of ' + total; }
 
-            var pct = this.total > 0 ? Math.round((this.done / this.total) * 100) : 0;
+            var pct = total > 0 ? Math.round((reviewed / total) * 100) : 0;
             var pctEl = el('rmg-progress-pct');
             if (pctEl) { pctEl.textContent = pct + '%'; }
             // Horizon's own client API: sets the fill AND recomputes the cool->warm band, so the meter
@@ -380,6 +423,8 @@ window.PlatPursuit = window.PlatPursuit || {};
                     ? 'There are no unrated ' + noun + ' in your library right now. Finish something and come back.'
                     : "That's every " + noun + ' you had left to rate. Nice work, hunter.';
             }
+            // A hunter with nothing waiting never sees a card, so this is their opening beat instead.
+            this.playEntrance(el('rmg-done'));
         },
 
         // ---------------------------------------------------------------- //
@@ -404,10 +449,29 @@ window.PlatPursuit = window.PlatPursuit || {};
                 onSaved: function () {
                     var game = self.current();
                     PP.ToastManager.success((game && game.unified_title ? game.unified_title : 'Rating') + ' rated!');
+                    self.tickWaiting();
                     self.advance();
                 },
                 onError: function (msg) { PP.ToastManager.error(msg); },
             });
+        },
+
+        /**
+         * Tick the header's waiting-count for the queue just rated in. The counters are the page's whole
+         * subject -- how much is left -- and one that only moves on refresh reads as broken on a surface
+         * whose entire purpose is emptying it.
+         *
+         * Ticks old -> new through the shared countUp rather than snapping, so the number reads as
+         * something that changed rather than something that was replaced.
+         */
+        tickWaiting() {
+            var node = el(this.queueType === 'dlc' ? 'rmg-waiting-dlc' : 'rmg-waiting-base');
+            if (!node) { return; }
+            var from = parseInt(node.dataset.countup, 10);
+            if (isNaN(from) || from <= 0) { return; }
+            var to = from - 1;
+            node.dataset.countup = String(to);
+            if (PP.countUp) { PP.countUp(node, 450, { from: from }); } else { node.textContent = String(to); }
         },
 
         /** Re-point the one attached form at the game now on screen, and clear the last one's answers. */
