@@ -16,8 +16,8 @@
  * SHOVELWARE pill, because hiding them did nothing. Restate the utility for every one of them.
  * Elements with no display of their own (#rmg-card, .rmg__pbody, .pp-gbrowse__loading) are unaffected. */
 .rmg__prog.hidden,
-.rmg__stats.hidden,
-.rmg__stat.hidden,
+.rmg__facts.hidden,
+.rmg__fact.hidden,
 .rmg__group.hidden,
 .rmg__flag.hidden,
 .rmg__done-acts .gd-btn.hidden { display: none; }
@@ -43,32 +43,55 @@
 .rmg__prog-text { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; }
 .rmg__prog-pct { font-size: 12px; font-weight: 700; color: var(--pp-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-/* ---- The game being rated. One row at desktop -- cover, identity, and the facts pushed to the far
- * right -- because with the facts stacked underneath, the card was mostly empty space beside a short
- * title. They wrap under the identity when there isn't room. ---- */
-.rmg__game { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px; }
-.rmg__cover {
-    width: 72px; flex: 0 0 auto; aspect-ratio: 3 / 4; overflow: hidden;
-    border-radius: var(--pp-radius-lg); border: 1px solid var(--pp-border); background: var(--pp-bg-2);
+/* ---- The game being rated. This card exists for RECALL: you finished the thing, possibly years ago,
+ * and you are about to score it from memory. So the cover is big enough to recognise, the title leads,
+ * and your own record with it reads as a ledger. ---- */
+.rmg__hero { position: relative; overflow: hidden; }
+/* The game's own landscape art, held FAR back. It is atmosphere -- enough that the card feels like it
+ * belongs to this game, nowhere near enough to fight the text on top of it. The veil is a flat wash of the
+ * card's own surface rather than a gradient, so contrast is uniform wherever the content happens to sit.
+ * No art (a stub concept with no IGDB match) just leaves the flat card, which is why nothing here depends
+ * on it. */
+.rmg__hero-art {
+    position: absolute; inset: 0; background-size: cover; background-position: center;
+    /* Blurred, and scaled up just enough to keep the blur's soft edges outside the card. This is what
+     * makes the art safe to put under 9.5px muted labels: it kills the high-frequency detail and the
+     * sharp bright spots that would locally lift the background under small text, while the colour and
+     * the mood survive. Static -- only the opacity transitions, so nothing repaints a filter per frame. */
+    filter: blur(4px) saturate(1.15);
+    transform: scale(1.08);
+    opacity: 0; transition: opacity 0.45s var(--pp-ease, ease);
 }
+.rmg__hero-art.is-lit { opacity: 0.5; }
+.rmg__hero-art::after { content: ''; position: absolute; inset: 0; background: color-mix(in oklab, var(--pp-bg-1) 84%, transparent); }
+@media (prefers-reduced-motion: reduce) { .rmg__hero-art { transition: none; } }
+.rmg__game { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 16px; }
+
+.rmg__cover {
+    width: 88px; flex: 0 0 auto; aspect-ratio: 3 / 4; overflow: hidden;
+    border-radius: var(--pp-radius-lg); border: 1px solid var(--pp-border); background: var(--pp-bg-2);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+@media (min-width: 1024px) { .rmg__cover { width: 104px; } }
 .rmg__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
 /* No cover art at all (a stub concept with no IGDB match, where Concept.cover_url resolves to nothing):
    a quiet glyph rather than the broken-image icon the old page showed for an empty src. */
 .rmg__cover--none { display: grid; place-items: center; color: var(--pp-text-mute); }
 .rmg__cover--none img { display: none; }
 .rmg__cover:not(.rmg__cover--none) .rmg__cover-ph { display: none; }
-.rmg__cover-ph { width: 26px; height: 26px; }
+.rmg__cover-ph { width: 30px; height: 30px; }
+
 /* `flex: 1 1 240px` (not `auto`): it takes the slack on a wide card, but is allowed to drop to its own
-   line and push the facts under it once the row gets tight. */
+   line and push the ledger under it once the row gets tight. */
 .rmg__ident { min-width: 0; flex: 1 1 240px; }
-.rmg__title { font-family: var(--pp-font-display); font-size: 1.05rem; font-weight: 800; line-height: 1.2; color: var(--pp-text); overflow-wrap: anywhere; }
+.rmg__title { font-family: var(--pp-font-display); font-size: clamp(1.15rem, 2.2vw, 1.4rem); font-weight: 800; line-height: 1.15; color: var(--pp-text); overflow-wrap: anywhere; }
 /* Neutral: the DLC pill below already carries that signal in violet, and colouring the name too was a
    second hue spent on the same fact (colour restraint). */
-.rmg__group { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 12px; font-weight: 600; color: var(--pp-text-dim); }
+.rmg__group { display: flex; align-items: center; gap: 5px; margin-top: 4px; font-size: 12.5px; font-weight: 600; color: var(--pp-text-dim); }
 .rmg__group svg { width: 12px; height: 12px; flex: none; }
-.rmg__flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-/* Most games carry no flags at all, and an empty row still spends its margin -- a 6px gap under the
-   title that only some cards have, which reads as the card shifting between games. */
+.rmg__flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+/* Most games carry no flags at all, and an empty row still spends its margin -- a gap under the title that
+   only some cards have, which reads as the card shifting between games. */
 .rmg__flags:not(:has(.rmg__flag:not(.hidden))) { display: none; }
 .rmg__flag {
     display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
@@ -78,13 +101,14 @@
 .rmg__flag--dlc { color: var(--pp-secondary); border-color: color-mix(in oklab, var(--pp-secondary) 45%, var(--pp-border)); }
 .rmg__flag--shovel { color: var(--pp-warning); border-color: color-mix(in oklab, var(--pp-warning) 45%, var(--pp-border)); }
 
-/* Gameplay facts, kept quiet: they are reference for the rating, not the subject of the card. Column at
-   desktop so they read as a small ledger on the right; a wrapped row when they fall under the identity. */
-.rmg__stats { display: flex; flex-wrap: wrap; gap: 6px 16px; }
-@media (min-width: 768px) { .rmg__stats { flex-direction: column; gap: 5px; margin-left: auto; align-items: flex-start; } }
-.rmg__stat { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--pp-text-dim); }
-.rmg__stat svg { width: 14px; height: 14px; flex: none; color: var(--pp-text-mute); }
-.rmg__stat b { color: var(--pp-text); font-weight: 700; font-variant-numeric: tabular-nums; }
+/* The ledger. Label over value, in cells -- "10 / 10 trophies - 100% complete - 5h played" as one grey
+   line is a sentence you have to READ, and this is meant to be taken in at a glance. */
+.rmg__facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; width: 100%; }
+@media (min-width: 768px) { .rmg__facts { display: flex; flex-wrap: wrap; gap: 22px; width: auto; margin-left: auto; } }
+.rmg__fact { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rmg__fact-label { font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-text-mute); }
+.rmg__fact-value { font-size: 14px; font-weight: 700; color: var(--pp-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rmg__fact-sub { font-size: 10.5px; color: var(--pp-text-mute); white-space: nowrap; }
 
 /* ---- Two columns at desktop. The TROPHY LIST takes the width: it is the panel with something to read
  * (icon + name + description per row, times fifty), and it was the one being squeezed. The form is five
@@ -129,6 +153,17 @@
 
 .rmg__actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
 .rmg__actions .rmg__spacer { flex: 1 1 auto; }
+
+/* Shortcut hint. Only where there is a keyboard to use -- a touch device gets no value from being told
+   about Enter, and the row is pure noise there. */
+.rmg__keys { display: none; margin-top: 10px; text-align: right; font-size: 11px; color: var(--pp-text-mute); }
+@media (hover: hover) and (pointer: fine) { .rmg__keys { display: block; } }
+.rmg__keys kbd {
+    display: inline-block; padding: 1px 6px; border-radius: 4px; font-family: inherit; font-size: 10.5px;
+    font-weight: 700; color: var(--pp-text-dim); background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border); border-bottom-width: 2px;
+}
+.rmg__keys-sep { margin: 0 6px; opacity: 0.5; }
 
 /* ---- Deal motion: the finished card leaves to the left, the next one arrives from the right.
  * The stage keeps the OUTGOING card's height while the swap happens, so the page doesn't jump a

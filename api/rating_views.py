@@ -359,6 +359,10 @@ class WizardQueueView(APIView):
                     'concept_id': cid,
                     'unified_title': c.unified_title,
                     'concept_icon_url': c.cover_url or '',
+                    # Landscape art for the wizard's game header, which has to remind a hunter WHICH game
+                    # this is. Reads only the igdb_*_image_ids columns (never raw_response), and the
+                    # select_related above means it costs no extra query.
+                    'landscape_url': c.landscape_url or '',
                     'slug': c.slug,
                     'has_rating': cid in rated_concept_ids,
                     'trophy_group_id': 'default',
@@ -393,12 +397,17 @@ class WizardQueueView(APIView):
         from django.db.models import Count
         from trophies.models import Trophy, EarnedTrophy, UserConceptRating, Game
 
+        # `raw_response` is the ~30 KB IGDB API blob and nothing here reads it. Without the defer it rides
+        # along on every row of a list() that spans EVERY ratable concept's DLC groups before any
+        # pagination -- for a hunter with a four-figure completed library that is tens of MB of JSON
+        # loaded to answer a 20-item page. (The base-game path above already defers it.)
         all_dlc_groups = list(
             ConceptTrophyGroup.objects.filter(
                 concept_id__in=ratable_concept_ids,
             ).exclude(
                 trophy_group_id='default',
             ).select_related('concept', 'concept__igdb_match')
+            .defer('concept__igdb_match__raw_response')
             .order_by(Lower('concept__unified_title'), 'sort_order')
         )
 
@@ -475,6 +484,7 @@ class WizardQueueView(APIView):
                     'concept_id': cid,
                     'unified_title': g.concept.unified_title,
                     'concept_icon_url': g.concept.cover_url or '',
+                    'landscape_url': g.concept.landscape_url or '',
                     'slug': g.concept.slug,
                     'is_shovelware': cid in shovelware_concept_ids,
                     'items': [],

@@ -82,10 +82,14 @@ it never tears down to a spinner, which read as a full-page reload.
         </div>
     </div>
 
-    {# -- Progress: how far through this queue you are. Hidden until there's a queue to be through. -- #}
+    {% comment %}How far through this queue you are. Hidden until there's a queue to be through.
+
+    Horizon in its BAND tone: the meter runs cool while the queue is long and warms toward hot as you
+    close it out, which is the primitive's own "how close am I" semantic rather than a decoration. Driven
+    by the shared PlatPursuit.Horizon.update().{% endcomment %}
     <div class="rmg__prog hidden" id="rmg-progress">
         <span class="rmg__prog-text" id="rmg-progress-text">Game 0 of 0</span>
-        <span class="pp-horizon"><span class="pp-horizon__track"><span class="pp-horizon__fill" id="rmg-progress-fill"></span></span></span>
+        <span class="pp-horizon" id="rmg-horizon" data-horizon-band="cool"><span class="pp-horizon__track"><span class="pp-horizon__fill"></span></span></span>
         <span class="rmg__prog-pct" id="rmg-progress-pct">0%</span>
     </div>
 
@@ -94,8 +98,13 @@ it never tears down to a spinner, which read as a full-page reload.
         <div class="pp-gbrowse__loading" id="rmg-loading"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
 
         <div id="rmg-card" class="hidden">
-            {# The game being rated. #}
-            <section class="rmg__card">
+            {% comment %}The game being rated. Its whole job is recall -- you finished this thing possibly
+            years ago, and you are about to score it from memory. So: the cover at a size you can actually
+            recognise, the game's own landscape art as atmosphere behind it (held far back, because the
+            point is legibility), and your own record with it as a labelled ledger rather than a run-on
+            line of grey text.{% endcomment %}
+            <section class="rmg__card rmg__hero">
+                <div class="rmg__hero-art" id="rmg-art" aria-hidden="true"></div>
                 <div class="rmg__game">
                     <div class="rmg__cover rmg__cover--none" id="rmg-cover">
                         <img id="rmg-cover-img" src="" alt="" />
@@ -112,27 +121,28 @@ it never tears down to a spinner, which read as a full-page reload.
                             <span class="rmg__flag rmg__flag--shovel hidden" id="rmg-flag-shovel">Shovelware</span>
                         </div>
                     </div>
-                {% comment %}Your own record with this game, as reference for the scores you're about to
-                give it. INSIDE the identity row so it can sit at the right of it on a wide card and wrap
-                underneath on a narrow one.{% endcomment %}
-                <div class="rmg__stats hidden" id="rmg-stats">
-                    <span class="rmg__stat hidden" id="rmg-stat-plat">
-                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3h14a2 2 0 012 2v2a5 5 0 01-3.07 4.62A5 5 0 0113 16.92V19h2a1 1 0 010 2H9a1 1 0 010-2h2v-2.08A5 5 0 016.07 11.62 5 5 0 013 7V5a2 2 0 012-2z"/></svg>
-                        <span id="rmg-stat-plat-text"></span>
-                    </span>
-                    <span class="rmg__stat hidden" id="rmg-stat-trophies">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                        <span id="rmg-stat-trophies-text"></span>
-                    </span>
-                    <span class="rmg__stat hidden" id="rmg-stat-progress">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
-                        <span id="rmg-stat-progress-text"></span>
-                    </span>
-                    <span class="rmg__stat hidden" id="rmg-stat-playtime">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        <span id="rmg-stat-playtime-text"></span>
-                    </span>
-                </div>
+                    {% comment %}Your record with this game. Labelled cells, because "10 / 10 trophies ·
+                    100% complete · 5h played" as one grey line is a sentence you have to read, and this is
+                    a thing you should be able to take in at a glance.{% endcomment %}
+                    <div class="rmg__facts hidden" id="rmg-facts">
+                        <div class="rmg__fact hidden" id="rmg-fact-finished">
+                            <span class="rmg__fact-label">Finished</span>
+                            <span class="rmg__fact-value" id="rmg-fact-finished-value"></span>
+                            <span class="rmg__fact-sub" id="rmg-fact-finished-sub"></span>
+                        </div>
+                        <div class="rmg__fact hidden" id="rmg-fact-trophies">
+                            <span class="rmg__fact-label">Trophies</span>
+                            <span class="rmg__fact-value" id="rmg-fact-trophies-value"></span>
+                        </div>
+                        <div class="rmg__fact hidden" id="rmg-fact-progress">
+                            <span class="rmg__fact-label">Complete</span>
+                            <span class="rmg__fact-value" id="rmg-fact-progress-value"></span>
+                        </div>
+                        <div class="rmg__fact hidden" id="rmg-fact-playtime">
+                            <span class="rmg__fact-label">Playtime</span>
+                            <span class="rmg__fact-value" id="rmg-fact-playtime-value"></span>
+                        </div>
+                    </div>
                 </div>{# /rmg__game #}
             </section>
 
@@ -183,6 +193,13 @@ it never tears down to a spinner, which read as a full-page reload.
                 button INSIDE the form).{% endcomment %}
                 <button type="button" class="gd-btn gd-btn--primary" id="rmg-submit" disabled>Submit rating</button>
             </div>
+
+            {% comment %}Shortcuts. This is a bulk flow -- a hunter with 70 games waiting is doing the same
+            four movements seventy times -- so it earns the keyboard. Shown only where there IS a keyboard;
+            the hint is the discoverability, since a shortcut nobody knows about helps nobody.{% endcomment %}
+            <p class="rmg__keys" aria-hidden="true">
+                <kbd>Enter</kbd> submit <span class="rmg__keys-sep">·</span> <kbd>S</kbd> skip
+            </p>
         </div>
 
         {# The queue request failed. A toast alone would leave an empty stage with nothing to press. #}
@@ -219,8 +236,12 @@ rules never costs an in-progress take.{% endcomment %}
 {% comment %}RatingFields (in quick-rate.js) owns the form; it must load before the page controller that
 attaches it.{% endcomment %}
 <script src="{% static 'js/quick-rate.js' %}"></script>
+{% comment %}Horizon's client API -- sets the meter's progress AND recomputes its cool->warm band.{% endcomment %}
+<script src="{% static 'js/horizon.js' %}"></script>
 <script src="{% static 'js/rate-my-games.js' %}"></script>
 <script>
-    PlatPursuit.onPageReady(function () { PlatPursuit.RateMyGames.init(); });
+    {% comment %}`first` is true on load and false on each HTMX history restore -- the controller re-wires
+    its elements every time and its document-level keydown exactly once.{% endcomment %}
+    PlatPursuit.onPageReady(function (first) { PlatPursuit.RateMyGames.init(first); });
 </script>
 {% endblock %}

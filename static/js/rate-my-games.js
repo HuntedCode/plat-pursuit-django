@@ -35,7 +35,11 @@ window.PlatPursuit = window.PlatPursuit || {};
         loading: false,
         fields: null,           // the RatingFields handle
 
-        init() {
+        /**
+         * @param {boolean} first  true on the initial load, false on each HTMX history restore. Element
+         *   wiring re-runs every time (those nodes are new); document-level listeners must not.
+         */
+        init(first) {
             // `?view=` is the site-wide view param (PlatPursuit.syncViewParam writes it); `?queue_type=`
             // is the older spelling this page shipped with and is still read so existing links land right.
             var params = new URLSearchParams(window.location.search);
@@ -46,6 +50,8 @@ window.PlatPursuit = window.PlatPursuit || {};
             this.wireTabs();
             this.wireShovelware();
             this.wireActions();
+            // Document-level, so exactly once per page load -- see wireKeys().
+            if (first !== false) { this.wireKeys(); }
             this.wireTrophyPanel();
             this.wireForm();
 
@@ -267,38 +273,81 @@ window.PlatPursuit = window.PlatPursuit || {};
             var formTitle = el('rmg-form-title');
             if (formTitle) { formTitle.textContent = isDlc ? 'Rate this DLC' : 'Rate this game'; }
 
-            this.renderStats(game);
+            this.renderArt(game);
+            this.renderFacts(game);
             this.pointFormAt(game);
             this.loadTrophies();
             this.renderProgress();
+
+            // Straight into the one field we need, so a hunter working through a long queue types rather
+            // than clicks. Pointer-based only: on a touch device this would throw the keyboard up over the
+            // card they are meant to be looking at.
+            if (window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+                var hours = document.querySelector('#rmg-form [name="hours_to_platinum"]');
+                if (hours) { hours.focus({ preventScroll: true }); }
+            }
         },
 
-        renderStats(game) {
-            var bar = el('rmg-stats');
-            if (!bar) { return; }
+        /**
+         * How long ago, in the units a memory actually works in. TimeFormatter.relative() drops to a plain
+         * date past 30 days, and "3 years ago" is the phrase that jogs a memory where "12/04/2023" doesn't.
+         */
+        since(date) {
+            var days = Math.floor((Date.now() - date.getTime()) / 86400000);
+            if (days < 1) { return 'today'; }
+            if (days < 30) { return days + (days === 1 ? ' day ago' : ' days ago'); }
+            var months = Math.round(days / 30.44);
+            if (months < 18) { return months + (months === 1 ? ' month ago' : ' months ago'); }
+            var years = Math.round(days / 365.25);
+            return years + (years === 1 ? ' year ago' : ' years ago');
+        },
+
+        renderFacts(game) {
+            var ledger = el('rmg-facts');
+            if (!ledger) { return; }
             var stats = game.stats;
             var any = Boolean(stats || game.platinum_date);
-            bar.classList.toggle('hidden', !any);
+            ledger.classList.toggle('hidden', !any);
             if (!any) { return; }
 
-            var set = function (id, on, text) {
-                var node = el(id);
-                var slot = el(id + '-text');
-                if (!node || !slot) { return; }
-                node.classList.toggle('hidden', !on);
-                if (on) { slot.innerHTML = text; }
+            var set = function (id, on, value, sub) {
+                var cell = el('rmg-fact-' + id);
+                var slot = el('rmg-fact-' + id + '-value');
+                if (!cell || !slot) { return; }
+                cell.classList.toggle('hidden', !on);
+                if (!on) { return; }
+                slot.textContent = value;
+                var subEl = el('rmg-fact-' + id + '-sub');
+                if (subEl) { subEl.textContent = sub || ''; }
             };
 
-            var platted = '';
+            // When you finished it leads the ledger: of everything here it is the strongest memory anchor.
+            var when = '', ago = '';
             if (game.platinum_date) {
                 var d = new Date(game.platinum_date);
-                platted = 'Platted ' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                when = d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+                ago = this.since(d);
             }
-            // Values are numbers we computed or a formatted date -- no user content reaches innerHTML here.
-            set('rmg-stat-plat', Boolean(platted), platted);
-            set('rmg-stat-trophies', Boolean(stats), stats ? '<b>' + stats.earned_trophies + '</b> / ' + stats.total_trophies + ' trophies' : '');
-            set('rmg-stat-progress', Boolean(stats), stats ? '<b>' + stats.progress + '%</b> complete' : '');
-            set('rmg-stat-playtime', Boolean(stats && stats.play_hours), stats ? '<b>' + stats.play_hours + 'h</b> played' : '');
+            set('finished', Boolean(when), when, ago);
+            set('trophies', Boolean(stats), stats ? stats.earned_trophies + ' / ' + stats.total_trophies : '');
+            set('progress', Boolean(stats), stats ? stats.progress + '%' : '');
+            set('playtime', Boolean(stats && stats.play_hours), stats ? stats.play_hours + 'h' : '');
+        },
+
+        /** The game's own landscape art behind the header, cross-faded so a swap doesn't hard-cut. */
+        renderArt(game) {
+            var art = el('rmg-art');
+            if (!art) { return; }
+            var url = game.landscape_url || '';
+            if (!url) { art.classList.remove('is-lit'); art.style.backgroundImage = ''; return; }
+            art.classList.remove('is-lit');
+            // Paint only once the image is in cache, or the fade-in races the download and pops.
+            var img = new Image();
+            img.onload = function () {
+                art.style.backgroundImage = 'url("' + url.replace(/"/g, '%22') + '")';
+                art.classList.add('is-lit');
+            };
+            img.src = url;
         },
 
         renderProgress() {
@@ -310,8 +359,9 @@ window.PlatPursuit = window.PlatPursuit || {};
             var pct = this.total > 0 ? Math.round((this.done / this.total) * 100) : 0;
             var pctEl = el('rmg-progress-pct');
             if (pctEl) { pctEl.textContent = pct + '%'; }
-            var fill = el('rmg-progress-fill');
-            if (fill) { fill.style.setProperty('--horizon-progress', pct + '%'); }
+            // Horizon's own client API: sets the fill AND recomputes the cool->warm band, so the meter
+            // warms as the queue empties instead of being one flat colour the whole way down.
+            if (PP.Horizon) { PP.Horizon.update(el('rmg-horizon'), pct); }
         },
 
         showDone() {
@@ -458,6 +508,40 @@ window.PlatPursuit = window.PlatPursuit || {};
             if (dlc) { dlc.addEventListener('click', function () { self.setQueue('dlc'); }); }
             // Retries at the SAME offset -- a mid-queue page that failed is the page we still want.
             if (retry) { retry.addEventListener('click', function () { self.load(); }); }
+        },
+
+        /**
+         * Keyboard shortcuts. This is a bulk flow -- the same four movements, seventy times -- so it earns
+         * them: Enter submits, S skips.
+         *
+         * Bound to the document, so `boot(first)` guards it: onPageReady re-runs the element wiring on an
+         * HTMX history restore, and a document listener would stack up one per restore.
+         */
+        wireKeys() {
+            var self = this;
+            document.addEventListener('keydown', function (e) {
+                var card = el('rmg-card');
+                if (!card || card.classList.contains('hidden')) { return; }
+                if (e.ctrlKey || e.metaKey || e.altKey) { return; }
+
+                var target = e.target;
+                var tag = (target && target.tagName) || '';
+                var typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (target && target.isContentEditable);
+
+                if (e.key === 'Enter') {
+                    // Enter is a submit from anywhere EXCEPT the quick take, where it is a newline the
+                    // hunter is deliberately typing. It never fires while the hours gate is unmet.
+                    if (tag === 'TEXTAREA') { return; }
+                    var submit = el('rmg-submit');
+                    if (submit && !submit.disabled) { e.preventDefault(); submit.click(); }
+                    return;
+                }
+                // A bare S -- never while they are typing, or skipping would eat a letter of their take.
+                if ((e.key === 's' || e.key === 'S') && !typing) {
+                    e.preventDefault();
+                    self.advance(false);
+                }
+            });
         },
 
         advance(counts) {

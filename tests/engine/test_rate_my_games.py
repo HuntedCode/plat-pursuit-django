@@ -171,6 +171,51 @@ def test_the_queue_query_count_does_not_grow_with_the_page(client):
     assert small == full, f'query count grew with the queue: {small} -> {full}'
 
 
+def _dlc_ready(profile, name=None):
+    """A finished game that ALSO has a fully-earned DLC group -- what the DLC queue serves."""
+    from tests.factories import EarnedTrophyFactory, TrophyFactory, TrophyGroupFactory
+
+    game = _ratable(profile, name=name)
+    TrophyGroupFactory(game=game, trophy_group_id='001')
+    ConceptTrophyGroupFactory(concept=game.concept, trophy_group_id='001', display_name='The Old Hunters')
+    trophy = TrophyFactory(game=game, trophy_type='gold', trophy_group_id='001')
+    EarnedTrophyFactory(profile=profile, trophy=trophy, earned=True)
+    return game
+
+
+@pytest.mark.parametrize('queue_type', ['base', 'dlc'])
+def test_the_queue_never_drags_the_igdb_blob_along(client, queue_type):
+    """`raw_response` is the ~30 KB IGDB API payload and nothing on this page reads it.
+
+    The DLC path shipped without the defer, and it is the worse of the two: it `list()`s EVERY ratable
+    concept's DLC groups BEFORE paginating, so for a hunter with a four-figure completed library that is
+    tens of MB of JSON loaded to answer a 20-item page -- the exact shape of the whale OOM class."""
+    profile = _hunter()
+    _dlc_ready(profile)
+    client.force_login(profile.user)
+    client.get(QUEUE)                                      # warm session/auth
+
+    with CaptureQueriesContext(connection) as ctx:
+        assert client.get(QUEUE, {'queue_type': queue_type}).status_code == 200
+
+    offenders = [q['sql'] for q in ctx.captured_queries if 'raw_response' in q['sql']]
+    assert not offenders, f'{queue_type} queue selects raw_response:\n' + '\n'.join(o[:300] for o in offenders)
+
+
+@pytest.mark.parametrize('queue_type,key', [('base', 'queue'), ('dlc', 'groups')])
+def test_the_queue_sends_art_for_the_game_header(client, queue_type, key):
+    """The header's job is reminding you WHICH game this is, so it gets the game's own landscape art.
+    Served off the igdb_*_image_ids columns via Concept.landscape_url -- never raw_response."""
+    profile = _hunter()
+    _dlc_ready(profile)
+    client.force_login(profile.user)
+
+    data = client.get(QUEUE, {'queue_type': queue_type}).json()
+
+    assert data[key], f'nothing in the {queue_type} queue to check'
+    assert 'landscape_url' in data[key][0], f'the {queue_type} queue sends no art for the header'
+
+
 # ── The rebuild itself ────────────────────────────────────────────────────────────────────────────
 
 def test_the_page_is_off_daisyui():
@@ -279,8 +324,47 @@ def test_everything_the_wizard_hides_can_actually_be_hidden():
 
     # The elements the controller toggles that carry a display of their own. Add to this list whenever the
     # wizard learns to hide something new.
-    for cls in ('rmg__prog', 'rmg__stats', 'rmg__stat', 'rmg__group', 'rmg__flag', 'gd-btn'):
+    for cls in ('rmg__prog', 'rmg__facts', 'rmg__fact', 'rmg__group', 'rmg__flag', 'gd-btn'):
         assert cls in restated, f'.{cls} is toggled hidden but keeps its own display'
+
+
+def test_the_bulk_flow_has_a_keyboard():
+    """Seventy games is the same four movements seventy times, so it earns shortcuts. Two things have to
+    be true or they do damage: Enter must not fire inside the quick take (where it is a newline the hunter
+    is typing), and the document-level listener must bind ONCE -- onPageReady re-runs element wiring on
+    every HTMX history restore, so an unguarded document listener stacks one per restore."""
+    js = (ROOT / 'static' / 'js' / 'rate-my-games.js').read_text(encoding='utf-8')
+    html = _markup()
+
+    keys = js[js.index('wireKeys() {'):js.index('advance(counts) {')]
+    assert "tag === 'TEXTAREA'" in keys, 'Enter would submit from inside the quick take'
+    assert 'if (first !== false) { this.wireKeys(); }' in js, 'the document listener is not first-load guarded'
+    assert 'init(first)' in html or 'RateMyGames.init(first)' in html, 'the page never passes `first` through'
+    assert 'rmg__keys' in html, 'the shortcuts are undiscoverable -- no hint is rendered'
+
+
+def test_the_progress_meter_warms_as_the_queue_empties():
+    """Horizon's BAND tone is its "how close am I" semantic, not decoration -- and it is the primitive's
+    own client API that keeps the band in sync with the fill, so this must not hand-roll the CSS var."""
+    js = (ROOT / 'static' / 'js' / 'rate-my-games.js').read_text(encoding='utf-8')
+    html = _markup()
+
+    assert 'data-horizon-band' in html, 'the meter is in the flat themed tone, so it never warms'
+    assert 'PP.Horizon.update' in js, 'progress is set without the shared Horizon API'
+    assert '--horizon-progress' not in js, 'the fill is being written directly again, bypassing the band'
+    assert 'js/horizon.js' in html, 'the Horizon client API is never loaded, so the meter would not move'
+
+
+def test_the_game_art_never_costs_readability():
+    """The header carries the game's own landscape art for recall. It is atmosphere: a flat veil of the
+    card's own surface sits over it so contrast is the same wherever the text lands, and the whole thing
+    is optional -- a stub concept with no art just gets the flat card."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
+    js = (ROOT / 'static' / 'js' / 'rate-my-games.js').read_text(encoding='utf-8')
+
+    assert '.rmg__hero-art::after' in css, 'the art has no veil over it'
+    assert 'var(--pp-bg-1)' in css[css.index('.rmg__hero-art::after'):css.index('.rmg__hero-art::after') + 200]
+    assert "if (!url) { art.classList.remove('is-lit')" in js, 'a game with no art is not handled'
 
 
 def test_the_deal_motion_is_reduced_motion_gated():
