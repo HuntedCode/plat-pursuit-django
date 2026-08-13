@@ -31,7 +31,7 @@
                 <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">My Pursuit</h2>
                 <ul class="space-y-1.5 text-sm">
                     {% if user.is_authenticated and user.profile %}
-                    <li><a href="{% url 'home' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Overview</a></li>
+                    <li><a href="{% url 'home' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Home</a></li>
                     <li><a href="{% url 'badge_collection' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Collection</a></li>
                     <li><a href="{% url 'career' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Career</a></li>
                     <li><a href="{% url 'career' %}?view=contracts" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Contracts</a></li>

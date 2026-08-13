@@ -107,6 +107,14 @@
 
 /* ---- Career hero: disciplines composition ring (Career Level framed by discipline shares) ---- */
 .lab-dna { position: relative; width: 116px; height: 116px; flex: none; }
+/* Compact variant for the Home lobby's Career CTA: the same precomputed arcs at a smaller radius, so the
+   lobby teases exactly what Career pays off. Stroke widths are viewBox units, so they scale with it. */
+.lab-dna--sm { width: 76px; height: 76px; }
+.lab-dna--sm .lab-dna__level { font-size: 18px; }
+.lab-dna--sm .lab-dna__level--d3 { font-size: 16px; }
+.lab-dna--sm .lab-dna__level--d4 { font-size: 14px; }
+.lab-dna--sm .lab-dna__level--d5, .lab-dna--sm .lab-dna__level--d6 { font-size: 11px; }
+.lab-dna--sm .lab-dna__cap { font-size: 7px; letter-spacing: 0.16em; margin-top: 1px; }
 @media (min-width: 1024px) { .lab-dna { width: 132px; height: 132px; } }
 .lab-dna__ring { display: block; width: 100%; height: 100%; overflow: visible; transform-origin: center; animation: labDnaIn 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .lab-dna__track { fill: none; stroke: var(--pp-bg-3); stroke-width: 12; }

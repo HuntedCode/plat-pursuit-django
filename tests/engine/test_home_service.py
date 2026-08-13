@@ -21,10 +21,12 @@ def test_fresh_profile_builds_every_zone():
     # Hero is the Lab identity -- a fresh account floors to the Newbie rank.
     assert ctx['hero'] is not None
     assert ctx['hero']['pursuer_rank']['key'] == 'newbie'
-    # The Pursuer Card identity signature (built from the same hero, no second Lab build).
-    assert ctx['pursuer_card'] is not None
-    assert ctx['pursuer_card']['rank']['key'] == 'newbie'
-    assert ctx['pursuer_card']['showcase'] == {'rarest': [], 'recent': []}
+    # The hero carries everything the lobby's Career CTA states: name, Level, rank title and the
+    # discipline-ring arcs. The full Pursuer Card is gone -- identity is Career's own hero now, and the
+    # card was the most expensive thing on this page for a second rendering of the same facts.
+    assert 'pursuer_card' not in ctx
+    for key in ('pursuer_name', 'pursuer_level', 'pursuer_rank', 'ring'):
+        assert key in ctx['hero'], f'the Career CTA reads hero[{key!r}]'
     # Glances: nothing pending, no in-progress badges, but the (zero-query) snapshot is present.
     assert ctx['glances']['claimable']['count'] == 0
     assert ctx['glances']['claimable']['total_xp'] == 0
@@ -88,21 +90,6 @@ def test_sync_zone_reports_last_and_next():
     assert sync['ready'] or sync['next_sync_time'] is not None
 
 
-def test_launchers_resolve_and_carry_in_hand_stats():
-    profile = ProfileFactory()
-
-    launchers = home_service.build_home_context(profile)['launchers']
-
-    by_label = {l['label']: l for l in launchers}
-    # All five functional-page launchers resolve (validates the url names).
-    assert set(by_label) == {'Career', 'Collection', 'Contracts', 'Milestones', 'Titles'}
-    assert all(l['url'] and l['icon'] and l['desc'] for l in launchers)
-    # Quick-stats reuse data already in hand -- Career shows your strongest job (name + level)...
-    assert 'Lv' in by_label['Career']['stat']
-    # ...and with nothing claimable, Contracts carries no stat.
-    assert by_label['Contracts']['stat'] is None
-
-
 def test_unique_series_keeps_closest_per_series():
     """Almost There shows one entry per badge series -- the nearest tier (the list arrives
     sorted by completion, so the first occurrence of a series wins)."""
@@ -136,34 +123,5 @@ def test_broken_hero_zone_degrades_without_500(monkeypatch):
     ctx = home_service.build_home_context(profile)
 
     assert ctx['hero'] is None
-    assert ctx['pursuer_card'] is None                # the card builds off the (broken) Lab hero
     assert ctx['glances']['snapshot'] is not None     # other zones still build
-    assert [l['label'] for l in ctx['launchers']]      # launchers still resolve
-    assert ctx['launchers'][0]['stat'] != 'Level None'  # missing level -> no bogus stat
-
-
-def test_career_launcher_stat_shows_strongest_job():
-    """The Career navigator tile surfaces your strongest job (the build is flattened and
-    sorted by level desc), so a boosted job leads the tile's live stat."""
-    from trophies.models import Job, ProfileJobXP
-    from trophies.util_modules.leveling import xp_for_level
-    profile = ProfileFactory()
-    ProfileJobXP.objects.create(
-        profile=profile, job=Job.objects.get(slug='mage'), total_xp=xp_for_level(20), level=20)
-
-    launchers = home_service.build_home_context(profile)['launchers']
-    career = next(l for l in launchers if l['label'] == 'Career')
-
-    assert career['stat'] == 'Mage · Lv 20'
-
-
-def test_milestones_launcher_present_without_stat():
-    """The Milestones tile still routes to the (new-app) milestones page, but carries no glance
-    stat -- the legacy engine that fed 'earned/total' is retired."""
-    profile = ProfileFactory()
-
-    launchers = home_service.build_home_context(profile)['launchers']
-    milestones = next(l for l in launchers if l['label'] == 'Milestones')
-
-    assert milestones['url'] == '/milestones/'
-    assert milestones['stat'] is None
+    assert ctx['sync'] is not None                    # including the freshness line the lobby leads on

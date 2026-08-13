@@ -29,7 +29,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
         {% if user.is_authenticated %}
         <!-- My Pursuit (the logged-in Home / Overview lives at /). Anon-hidden: the personal hub is -->
         <!-- login-gated, so for logged-out visitors it's just the hero the logo already reaches. -->
-        <a href="{% url 'home' %}" class="mobile-tabbar-item {% if hub_section == 'my_pursuit' %}active{% endif %}" {% if hub_section == 'my_pursuit' %}aria-current="page"{% endif %} aria-label="My Pursuit">
+        <a href="{% url 'career' %}" class="mobile-tabbar-item {% if hub_section == 'my_pursuit' %}active{% endif %}" {% if hub_section == 'my_pursuit' %}aria-current="page"{% endif %} aria-label="My Pursuit">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
             </svg>

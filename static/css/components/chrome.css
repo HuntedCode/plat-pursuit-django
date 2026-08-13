@@ -24,7 +24,15 @@
 /* Modern app-nav layout: brand + hub nav clustered on the LEFT, the action cluster on the right. The
    content sits in a centred container (not the viewport edge) so it aligns with the page. */
 .pp-nav__inner { display: flex; align-items: center; gap: 16px; height: 58px; padding: 0 16px; }
-.pp-nav__brand { display: flex; align-items: center; gap: 9px; flex-shrink: 0; text-decoration: none; }
+.pp-nav__brand { position: relative; display: flex; align-items: center; gap: 9px; flex-shrink: 0; text-decoration: none; }
+/* The wordmark is the ONLY nav route to the lobby at /, so on the lobby it takes the same active state a
+   hub button does -- the same underline + glow, so it reads as "you are here" rather than as a logo that
+   happens to be lit. The logo IMAGE stays untinted; only the word carries the state. */
+.pp-nav__brand.is-active .pp-nav__word { color: var(--pp-primary); }
+.pp-nav__brand.is-active::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px;
+    background: var(--pp-primary); box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 55%, transparent);
+}
 .pp-nav__logo { width: 30px; height: 30px; border-radius: var(--pp-radius-md); object-fit: cover; }
 .pp-nav__word { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.02rem; color: var(--pp-text); letter-spacing: -0.01em; white-space: nowrap; }
 

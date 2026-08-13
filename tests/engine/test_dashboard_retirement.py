@@ -11,10 +11,11 @@ class _Req:
         self.resolver_match = type('M', (), {'url_name': url_name}) if url_name else None
 
 
-def test_root_resolves_to_my_pursuit_overview():
-    """`/` is the personal hub's Overview now (it was the item-less Home before the unify)."""
-    match = resolve_hub_subnav(_Req('/'))
-    assert match['hub'].key == 'my_pursuit' and match['active_slug'] == 'overview'
+def test_root_belongs_to_no_hub():
+    """`/` is the LOBBY as of 2026-08: it sits above the four hubs rather than inside one, so it resolves
+    to no hub and renders no sub-nav strip. My Pursuit's landing is Career."""
+    assert resolve_hub_subnav(_Req('/')) is None
+    assert resolve_hub_subnav(_Req('/career/', 'career'))['hub'].key == 'my_pursuit'
 
 
 def test_root_personal_pages_resolve_under_my_pursuit():
@@ -36,7 +37,7 @@ def test_other_hubs_not_shadowed_and_fundraiser_in_support():
 
 def test_my_pursuit_carries_the_expected_items():
     slugs = {i.slug for i in MY_PURSUIT_HUB.items}
-    assert {'overview', 'collection', 'career', 'milestones', 'titles',
+    assert {'collection', 'career', 'milestones', 'titles',
             'shareables', 'recap'} <= slugs
     m = resolve_hub_subnav(_Req('/career/', 'career'))
     assert m['hub'].key == 'my_pursuit' and m['active_slug'] == 'career'

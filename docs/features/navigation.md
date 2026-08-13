@@ -4,6 +4,10 @@
 > to Browse (`/profiles/`), Rate My Games to My Pursuit > Tools (`/rate-my-games/`), and the Profile
 > sub-nav tab + ownership-aware profile chrome were removed (the avatar menu is the single route to
 > your own profile). See [ia-and-subnav.md](../architecture/ia-and-subnav.md).
+>
+> **Also 2026-08:** `/` became the **lobby** — hub-less, strip-less, reached by the navbar wordmark (which
+> takes a hub-style active state there) and by landing there after login. Overview was narrowed into it,
+> and **Career is now My Pursuit's landing**, so the My Pursuit button and mobile tab point at `/career/`.
 
 PlatPursuit's navigation uses a **hub-of-hubs IA**: direct-link hub destinations in the global navbar (My Pursuit, Browse, Leaderboards, Support), with a persistent sub-navigation strip below the main navbar that surfaces hub sub-pages on every URL in a hub's family. On mobile, the desktop hub buttons hide and a sticky bottom tab bar takes over. This doc covers the navigation chrome (navbar, mobile tab bar, footer, sub-nav, profile tabs) and the cross-linking inventory between feature pages.
 

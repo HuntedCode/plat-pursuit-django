@@ -25,7 +25,6 @@ def _req(path, user=None):
 
 
 @pytest.mark.parametrize('path,slug', [
-    ('/', 'overview'),
     ('/collection/', 'collection'),
     ('/career/', 'career'),
     ('/milestones/', 'milestones'),
@@ -71,8 +70,11 @@ def test_browse_items_grouped_catalog_curation():
 
 def test_my_pursuit_items_grouped_progress_tools():
     profile = ProfileFactory(is_linked=True)
-    groups = _grouped(hub_subnav(_req('/', user=profile.user)))
-    assert groups['Progress'] == ['overview', 'collection', 'career', 'milestones', 'titles']
+    # Read from a personal PAGE, not from `/`: the lobby has no hub and therefore no items.
+    groups = _grouped(hub_subnav(_req('/career/', user=profile.user)))
+    # Career leads Progress: it is My Pursuit's landing as of 2026-08 (Overview retired -- `/` became
+    # the hub-less lobby).
+    assert groups['Progress'] == ['career', 'collection', 'milestones', 'titles']
     # My Stats is hidden for 1.0 (staff-gated, off the rail). Profile is the dynamic extra.
     assert groups['Tools'] == ['shareables', 'recap', 'rate_my_games']
     assert resolve_hub_subnav(_req('/games/'))['hub'].key == 'browse'
@@ -137,7 +139,7 @@ def test_your_own_profile_is_chromed_like_anyone_elses():
 
 def test_no_profile_tab_in_the_personal_strip():
     profile = ProfileFactory(is_linked=True)
-    slugs = [i.slug for i in hub_subnav(_req('/', user=profile.user))['hub_subnav_items']]
+    slugs = [i.slug for i in hub_subnav(_req('/career/', user=profile.user))['hub_subnav_items']]
     assert 'profile' not in slugs
 
 
@@ -154,13 +156,20 @@ def test_anon_on_profile_shows_the_same_chrome():
     assert ctx['hub_section'] == 'browse'
 
 
-def test_strip_shown_for_authed_home_with_overview_and_divider():
+def test_the_lobby_carries_no_strip_at_all():
+    """`/` sits ABOVE the four hubs, so it belongs to none of them and renders no rail. On a lobby the
+    CTAs are the navigation; a hub rail underneath them would be a second, competing set of directions."""
     profile = ProfileFactory(is_linked=True)
-    ctx = hub_subnav(_req('/', user=profile.user))
+    assert hub_subnav(_req('/', user=profile.user))['hub_section'] is None
+
+
+def test_strip_shown_for_authed_personal_page_with_career_first_and_divider():
+    profile = ProfileFactory(is_linked=True)
+    ctx = hub_subnav(_req('/career/', user=profile.user))
     assert ctx['hub_section'] == 'my_pursuit'
-    assert ctx['hub_subnav_active_slug'] == 'overview'
+    assert ctx['hub_subnav_active_slug'] == 'career'
     slugs = [i.slug for i in ctx['hub_subnav_items']]
-    assert slugs[0] == 'overview'
+    assert slugs[0] == 'career'                                 # the hub's landing leads its rail
     shareables = next(i for i in ctx['hub_subnav_items'] if i.slug == 'shareables')
     assert shareables.group == 'Tools'                          # the Progress|Tools group boundary
 

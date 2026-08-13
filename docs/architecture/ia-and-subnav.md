@@ -12,10 +12,20 @@ URL-matched.
 
 | Hub | Landing | Owns | Mental mode |
 |-----|---------|------|-------------|
-| **My Pursuit** (personal) | `/` (logged-in Home = Overview) | the personal, login-gated surfaces (at root URLs) | "my identity + progression" |
+| **My Pursuit** (personal) | `/career/` | the personal, login-gated surfaces (at root URLs) | "my identity + progression" |
 | **Browse** | `/games/` | public discovery / list pages | "find content" |
 | **Leaderboards** | `/leaderboards/` | how everyone ranks | "where do I stand" |
 | **Support** | `/support/` | the fundraiser + (coming) membership store | "ways to support us" |
+
+**Above the hubs: the lobby (`/`).** Where every login lands (`LOGIN_REDIRECT_URL`), and the one page
+that belongs to NO hub — so it renders no sub-nav strip, because on a lobby the CTAs *are* the navigation
+and a hub rail underneath them would be a second, competing set of directions. Its only nav affordance is
+the navbar wordmark, which takes the same active treatment a hub button does when you are standing on it.
+Its job is narrow and should stay that way: confirm the data is fresh, show the trophy floor (first, since
+it is what everyone arrives for and the one thing that is full on day one), and put the two moats — Career
+and Collection — one click away. **The rule it lives by, and the reason the old dashboard was retired: a
+curated GLANCE that teases and links into a page, never the page's content embedded.** Overview, which
+used to be the personal hub's first tab, was narrowed into this in 2026-08.
 
 **Organizing principle — "login-gated + mine."** A surface belongs to My Pursuit if it's personal
 AND login-gated. Browse = find; Leaderboards = standings; Support = ways to support. Four mental
@@ -32,7 +42,8 @@ modes, four hubs — resist a 5th. Gamification expands My Pursuit's strip; it d
 
 ## The personal hub (My Pursuit)
 
-The logged-in Home (`/`) IS the personal hub's **Overview** and carries the 8-item strip, grouped
+My Pursuit's landing is **Career** (the nav button and mobile tab point there). The logged-in Home (`/`)
+is the lobby above the hubs, not this hub's root. The strip is grouped
 **5 progress + 3 tools** with a divider between:
 
 `Overview · Collection · Career · Milestones · Titles` **|** `Plat Cards · Recap · Profile`

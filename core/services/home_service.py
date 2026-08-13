@@ -1,17 +1,28 @@
 """The synced Home page context builder.
 
-The synced Home (`/`) is the Pursuer's landing: a glanceable identity + status surface
-that ROUTES into the functional My Pursuit pages, not a re-implementation of them. It
-follows the `community_hub_service` / `career_service` pattern: a single
-`build_home_context(profile)` entry point delegating to one helper per zone, each wrapped
-so a broken zone degrades to a missing section rather than a 500.
+The synced Home (`/`) is the LOBBY: where every login lands, and the one page above the four
+hubs rather than inside one. Its job is narrow on purpose -- tell you your data is fresh, show
+you what you came for (trophies), and put the two things that make this site worth using one
+click away. It ROUTES; it never re-implements the pages it points at.
 
-Zones:
-- **hero** -- the Pursuer identity, reused verbatim from Career (`career_service`).
-- **glances** -- the thin status row: pending rewards (count), badges closest to their next
-  tier, and the headline trophy numbers.
-- **recent** -- a small recent-earnings strip.
-- **launchers** -- cards into the functional pages (Career, Collection, Contracts, ...).
+It follows the `career_service` pattern: a single `build_home_context(profile)` entry point
+delegating to one helper per zone, each wrapped so a broken zone degrades to a missing section
+rather than a 500.
+
+Zones, in the order the page reads them:
+- **sync** -- when the library last updated and when the next update is due. The freshness
+  answer, which is the first thing a returning Pursuer wants.
+- **glances.snapshot** + **recent** -- the trophy floor: headline numbers and a recent-platinum
+  strip. First on the page deliberately -- it is what everyone arrives for, and it is the one
+  block that is already full on the day someone finishes their first sync.
+- **hero** -- Pursuer name, Level, rank title and the discipline-ring arcs, reused verbatim from
+  Career (`career_service`) so the lobby's CTA teases exactly what Career pays off.
+- **glances.almost_badges** -- the closest badge, which is the Collection CTA's tease.
+- **community** -- the cached site heartbeat.
+
+Deliberately NOT here: the full Pursuer Card (identity is Career's hero now, and the card was the
+single most expensive thing on this page), and the five-tile navigator (the sub-nav rail covers
+wayfinding; the lobby points at the two moats and nothing else).
 
 Every read is cheap by construction: the hero is bounded by the ~25-job catalog, the
 providers are the same ones the dashboard used, and the glances are counts / single rows /
@@ -25,7 +36,7 @@ from django.utils import timezone
 
 from core.services.site_heartbeat import get_cached_heartbeat
 from trophies.services import (
-    career_service, contract_service, dashboard_service, pursuer_card_service,
+    career_service, contract_service, dashboard_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,16 +90,6 @@ def _build_glances(profile):
     }
 
 
-# (url_name, label, icon, description) for the launcher cards -- the page's real job: getting
-# the Pursuer to where the functionality lives. Icons mirror the My Pursuit sub-nav.
-_LAUNCHERS = [
-    ('career',          'Career',      'briefcase', 'Your jobs and disciplines'),
-    ('badge_collection', 'Collection', 'award',     'Your badge binder'),
-    ('research_panel',  'Contracts',   'clipboard', 'Games to pursue and rewards to claim'),
-    ('milestones_list', 'Milestones',  'flag',      'Career milestones'),
-    ('my_titles',       'Titles',      'crown',     'Earned and equipped titles'),
-]
-
 
 def _compact_num(n):
     """Compact a large community total for a small cell: 1.2K / 2.1M."""
@@ -135,69 +136,20 @@ def _build_sync(profile):
     return info
 
 
-def _build_launchers(profile, hero, glances, top_jobs):
-    """Navigator tiles into the functional pages, each carrying a live glance-stat drawn from the
-    already-built glances (no extra queries here): Career shows your strongest job, Contracts the XP
-    waiting to claim, Collection your closest badge, Titles the equipped title. A route that doesn't
-    resolve is dropped."""
-    level = (hero or {}).get('pursuer_level')
-    top_job = (top_jobs or [None])[0]
-    claim = (glances or {}).get('claimable') or {}
-    almost = ((glances or {}).get('almost_badges') or [None])[0]
-    stats = {
-        'career': (f"{top_job['name']} · Lv {top_job['level']}"
-                   if top_job and top_job.get('name') and top_job.get('level')
-                   else (f"Level {level}" if level else None)),
-        'research_panel': f"{claim.get('total_xp'):,} XP to claim" if claim.get('total_xp') else None,
-        'badge_collection': (f"{almost['completed']}/{almost['required']} · {almost['tier_name']}"
-                             if almost else None),
-        'my_titles': (hero or {}).get('active_title'),
-    }
-    launchers = []
-    for url_name, label, icon, desc in _LAUNCHERS:
-        try:
-            url = reverse(url_name)
-        except NoReverseMatch:
-            continue
-        # Contracts merged into Career: land its tile on Career's Contracts tab (skip the redirect).
-        if url_name == 'research_panel':
-            try:
-                url = reverse('career') + '?view=contracts'
-            except NoReverseMatch:
-                continue
-        launchers.append({
-            'url': url, 'label': label, 'icon': icon,
-            'desc': desc, 'stat': stats.get(url_name),
-        })
-    return launchers
-
-
-def _build_top_jobs(career):
-    """A compact, strongest-first strip of the Pursuer's jobs (name + level + discipline),
-    flattened from the Career build the hero already computed -- no extra query."""
-    if not career:
-        return []
-    tiles = [t for d in career.get('disciplines', []) for t in d.get('jobs', [])]
-    tiles.sort(key=lambda t: (-t.get('level', 0), t.get('name', '')))
-    return [
-        {'level': t.get('level'), 'disc_slug': t.get('disc_slug'), 'name': t.get('name')}
-        for t in tiles
-    ]
-
-
 def build_home_context(profile):
     """Assemble the synced Home context for `profile`. Each zone is isolated so a single
     failure degrades to a missing section rather than a 500."""
-    # One Career build feeds both the identity hero and the navigator's Career stat (no double work).
+    # The Career build is what makes the lobby personal: name, Pursuer Level, rank title and the
+    # discipline-ring arcs all come off its hero, and it is cheap (6 queries / ~3ms on a real profile).
     career_ctx = _safe('career', profile, lambda: career_service.build_career_context(profile), {})
     hero = (career_ctx or {}).get('hero')
-    top_jobs = _build_top_jobs((career_ctx or {}).get('career'))
     glances = _build_glances(profile)
     return {
+        # The identity data (name, Pursuer Level, rank title, discipline ring) for the Career CTA. The
+        # full Pursuer Card that used to lead this page is gone: identity is Career's hero now, and the
+        # card was the single most expensive thing here (8 queries / ~10ms on a real profile) for a
+        # second rendering of what the CTA below already says.
         'hero': hero,
-        # The identity signature; reuses the already-built Career context (no second build).
-        'pursuer_card': _safe('pursuer_card', profile,
-                              lambda: pursuer_card_service.build_pursuer_card(profile, career_ctx=career_ctx), None),
         'glances': glances,
         'sync': _safe('sync', profile, lambda: _build_sync(profile), None),
         'community': _safe('community', profile, lambda: _build_community(get_cached_heartbeat()), None),
@@ -205,7 +157,6 @@ def build_home_context(profile):
             'recent', profile,
             lambda: dashboard_service.provide_recent_platinums(profile, {'limit': RECENT_LIMIT})
             .get('platinums', []), []),
-        'launchers': _build_launchers(profile, hero, glances, top_jobs),
         # The trophy-snapshot card bridges gamification-first home -> trophy-data profile.
         'profile_url': _safe(
             'profile_url', profile,

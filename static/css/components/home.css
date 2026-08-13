@@ -21,6 +21,44 @@
 }
 .home-launch:hover .home-launch__icon { filter: drop-shadow(0 0 7px color-mix(in oklab, var(--pp-primary) 55%, transparent)); }
 
+/* ---- The two moats. The lobby's whole outbound job: two destinations at band weight, each carrying a
+ * live tease. Career takes the accent (it is the identity), Collection sits one step back -- one accent
+ * per surface, and the trophy block above already spends the primary on its numbers. ---- */
+.home-moats { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 768px) { .home-moats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.home-moat {
+    position: relative; display: flex; align-items: center; gap: 14px; overflow: hidden;
+    padding: 16px 18px; border-radius: var(--pp-radius-lg); text-decoration: none;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+/* Career's ambient tint is its dominant discipline -- the same signal Career's own hero glows with, so
+   the two surfaces agree at a glance. Falls back to the brand accent for a Pursuer with no dominant. */
+.home-moat--career::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 90% at 100% 0%, color-mix(in oklab, var(--dominant, var(--pp-primary)) 20%, transparent), transparent 62%);
+}
+.home-moat--career { border-left: 3px solid color-mix(in oklab, var(--dominant, var(--pp-primary)) 55%, var(--pp-border)); }
+@media (hover: hover) {
+    .home-moat:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 10px 26px rgba(0, 0, 0, 0.36); }
+}
+.home-moat:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+.home-moat__body { position: relative; z-index: 1; display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.home-moat__eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pp-text-mute); }
+.home-moat__name { font-family: var(--pp-font-display); font-size: clamp(1.05rem, 2vw, 1.3rem); font-weight: 800; line-height: 1.15; color: var(--pp-text); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-moat__rank { font-size: 12.5px; color: var(--pp-text-dim); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-moat__go { display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; font-size: 12.5px; font-weight: 700; color: var(--pp-primary); }
+.home-moat__arrow { transition: transform 0.18s ease; }
+@media (hover: hover) { .home-moat:hover .home-moat__arrow { transform: translateX(3px); } }
+
+.home-moat__ring { position: relative; z-index: 1; flex: none; }
+.home-moat__ring--glyph { width: 76px; height: 76px; display: grid; place-items: center; color: var(--pp-text-mute); opacity: 0.55; }
+.home-moat__ring--glyph svg { width: 42px; height: 42px; }
+
 @media (prefers-reduced-motion: reduce) {
     .home-reveal { animation: none; }
+    .home-moat, .home-moat__arrow { transition: none; }
 }

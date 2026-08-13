@@ -3,53 +3,28 @@
 {% block title %}Home{% endblock %}
 
 {% comment %}
-The synced Home / Overview: a glanceable Pursuer identity that ROUTES into the functional
-pages (it does not re-implement them). Four blocks, gamification-lens first:
-  1. Pursuer Card   -- the identity signature (also carries the 5-discipline family band)
-  2. Your Pursuit   -- the navigator into the gamification pages, each tile a live glance
-  3. Trophy         -- the trophy-collection snapshot + recent platinums -> the full profile
-  4. Community      -- the cached site heartbeat -> the Community hub
-Context from core/services/home_service.py: hero, pursuer_card, glances{claimable, almost_badges,
-snapshot}, sync, community, recent, launchers, profile_url.
+The synced Home -- the LOBBY. Where every login lands, and the one page that sits ABOVE the four hubs
+rather than inside one (so it carries no sub-nav rail; its CTAs are the navigation).
+
+Its job is deliberately narrow: confirm the data is fresh, show what people actually came for, and put
+the two things that make this site worth using one click away.
+
+  1. Trophy collection -- FIRST, on purpose. It is what everyone arrives for, and it is the one block
+     that is already full on the day someone finishes their first sync. Carries the sync freshness line,
+     the headline counts, and a link out to the full profile.
+  2. The two moats -- Career (identity: name, Pursuer Level, rank title, discipline ring) and Collection
+     (closest badge). Not a five-tile navigator: the sub-nav rail does wayfinding, this points at two
+     things and means it.
+  3. Community highlights -- the cached site heartbeat.
+
+The rule this page lives by (and the reason the old dashboard was retired): a curated GLANCE that teases
+and links into a page, NEVER the page's content embedded here.
+
+Context from core/services/home_service.py: hero, glances{claimable, almost_badges, snapshot}, sync,
+community, recent, profile_url.
 {% endcomment %}
 
 {% block content %}
-
-{# ── Pursuer Card: the identity signature (real accomplishments) ── #}
-{% if pursuer_card %}
-<section class="mb-3">
-    {% include 'partials/components/_pursuer_card.html' with card=pursuer_card %}
-</section>
-{% endif %}
-
-{# ── Your Pursuit: the navigator into the gamification pages, each tile a live glance ── #}
-{% if launchers %}
-<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 home-reveal" style="--rev: 1">
-    <div class="card-body p-4 md:p-5">
-        <h2 class="text-xs uppercase tracking-[0.15em] text-base-content/50 font-semibold mb-3">Your Pursuit</h2>
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {% for l in launchers %}
-            <a href="{{ l.url }}" class="group home-launch rounded-xl border-2 border-base-300 bg-base-100/40 p-3 md:p-4 hover:border-primary/50 hover:bg-base-100/70 hover:shadow-lg hover:shadow-primary/10 transition-all flex flex-col gap-1.5">
-                <div class="flex items-center gap-2">
-                    <span class="text-primary home-launch__icon shrink-0">
-                        {% if l.icon == 'briefcase' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
-                        {% elif l.icon == 'award' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
-                        {% elif l.icon == 'clipboard' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>
-                        {% elif l.icon == 'flag' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>
-                        {% elif l.icon == 'crown' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7z"/><path d="M5 20h14"/></svg>
-                        {% endif %}
-                    </span>
-                    <span class="font-bold text-sm md:text-base flex-1 min-w-0 truncate">{{ l.label }}</span>
-                    <span class="text-primary shrink-0 group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span>
-                </div>
-                {% if l.stat %}<div class="text-sm font-semibold text-primary truncate">{{ l.stat }}</div>{% endif %}
-                <span class="text-xs text-base-content/55 leading-snug">{{ l.desc }}</span>
-            </a>
-            {% endfor %}
-        </div>
-    </div>
-</section>
-{% endif %}
 
 {# ── Trophy collection: at-a-glance stats + sync + recent platinums -> the full profile ── #}
 {% if glances.snapshot %}
@@ -106,6 +81,50 @@ snapshot}, sync, community, recent, launchers, profile_url.
     </div>
 </section>
 {% endif %}
+
+{% comment %}The two moats. Not a navigator -- two destinations you cannot miss, each carrying a live
+tease of what is inside. Career's is the identity itself (name, Pursuer Level, rank title and the
+discipline ring), rendered from the SAME hero and the SAME precomputed ring arcs Career's own header
+uses, so the lobby promises exactly what the page delivers.{% endcomment %}
+<section class="home-moats mb-3 home-reveal" style="--rev: 2">
+    {% if hero %}
+    <a href="{% url 'career' %}" class="home-moat home-moat--career group"{% if hero.dominant_disc %} style="--dominant: var(--disc-{{ hero.dominant_disc }});"{% endif %}>
+        <div class="home-moat__body">
+            <span class="home-moat__eyebrow">Your Career</span>
+            <span class="home-moat__name">{{ hero.pursuer_name }}</span>
+            {% if hero.pursuer_rank %}<span class="home-moat__rank">{{ hero.pursuer_rank.name }}</span>{% endif %}
+            {% if hero.dominant %}
+            <span class="hero-disc-chip mt-2" style="--disc: var(--disc-{{ hero.dominant.slug }});"><span class="hero-disc-chip__dot" aria-hidden="true"></span>Leads with {{ hero.dominant.label }}</span>
+            {% endif %}
+            <span class="home-moat__go">Open Career <span class="home-moat__arrow" aria-hidden="true">&rarr;</span></span>
+        </div>
+        {% if hero.ring %}
+        <div class="home-moat__ring">
+            {% include 'partials/components/_disciplines_ring.html' with ring=hero.ring level=hero.pursuer_level compact=True %}
+        </div>
+        {% endif %}
+    </a>
+    {% endif %}
+
+    <a href="{% url 'badge_collection' %}" class="home-moat home-moat--collection group">
+        <div class="home-moat__body">
+            <span class="home-moat__eyebrow">Your Collection</span>
+            {% with next=glances.almost_badges.0 %}
+            {% if next %}
+                <span class="home-moat__name">{{ next.tier_name }}</span>
+                <span class="home-moat__rank">{{ next.completed }} of {{ next.required }} &middot; closest badge</span>
+            {% else %}
+                <span class="home-moat__name">Your badge binder</span>
+                <span class="home-moat__rank">Earn badges by finishing games</span>
+            {% endif %}
+            {% endwith %}
+            <span class="home-moat__go">Open Collection <span class="home-moat__arrow" aria-hidden="true">&rarr;</span></span>
+        </div>
+        <div class="home-moat__ring home-moat__ring--glyph" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+        </div>
+    </a>
+</section>
 
 {# ── Community highlights: the cached site heartbeat, with a live pulse -> the Leaderboards hub ── #}
 {% if community %}

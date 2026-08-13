@@ -37,7 +37,7 @@ def test_footer_pursuit_column_merged_for_authed(client):
     client.force_login(profile.user)
     resp = client.get('/support/')
     # Personal-hub pages that used to live in the Dashboard column now sit under My Pursuit.
-    assert b'>Overview</a>' in resp.content
+    assert b'>Home</a>' in resp.content        # the lobby; 'Overview' was renamed with the hub change
     assert b'>Career</a>' in resp.content
     assert b'>Plat Cards</a>' in resp.content
 

@@ -17,9 +17,9 @@ This module defines:
 
 Matching strategy: longest-prefix-wins. The matcher iterates the configured
 prefixes in order of length descending and returns the first match. The bare
-``/`` root is special-cased to the items-less Home hub: it only matches when
-``request.path == '/'`` exactly, so paths like ``/community/...`` correctly
-match their own hub instead of falling through to a root catchall.
+``/`` root is special-cased to NO hub -- it is the lobby, which sits above the
+four hubs and carries no strip. It only matches when ``request.path == '/'``
+exactly, so deeper paths still fall through to their own hub.
 
 Pages that don't match any hub (settings, auth flows, error pages, staff
 admin pages) get ``None`` and the sub-nav strip is hidden via the template
@@ -90,9 +90,9 @@ class HubSubnavConfig:
 # they continue to resolve correctly across any future rename without
 # touching this file.
 
-# The Home hub was merged into MY_PURSUIT_HUB in the personal-hub unify: the logged-in Home (/)
-# is now the personal hub's Overview tab (see MY_PURSUIT_HUB + the exact-'/' branch in
-# resolve_hub_subnav). No standalone HOME_HUB remains.
+# There is no Home hub. The logged-in Home (/) is the LOBBY: hub-less by design (see the exact-'/'
+# branch in resolve_hub_subnav), reached by the navbar wordmark and by landing there after login.
+# My Pursuit's landing is Career.
 
 
 BROWSE_HUB = HubSubnavConfig(
@@ -141,9 +141,8 @@ MY_PURSUIT_HUB = HubSubnavConfig(
     # Grouped rail: Progress = the gamification progression surfaces (Career merges the old Lab +
     # Research Panel); Tools = personal outputs. Profile is appended to Tools as a dynamic extra.
     items=(
-        HubSubnavItem('overview', 'Overview', 'home', 'home', group='Progress'),
-        HubSubnavItem('collection', 'Collection', 'badge_collection', 'award', auth_required=True, group='Progress'),
         HubSubnavItem('career', 'Career', 'career', 'briefcase', auth_required=True, group='Progress'),
+        HubSubnavItem('collection', 'Collection', 'badge_collection', 'award', auth_required=True, group='Progress'),
         HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag', group='Progress'),
         HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True, group='Progress'),
         HubSubnavItem('shareables', 'Plat Cards', 'my_shareables', 'image', auth_required=True, group='Tools'),
@@ -265,11 +264,13 @@ def resolve_hub_subnav(request) -> dict | None:
             if hub is not None:
                 return {'hub': hub, 'active_slug': slug}
 
-    # 2. Bare-root match: the logged-in Home (/) is the personal hub's Overview. Only the exact
-    #    '/' path triggers this — '/community/...' etc. fall through. Anon gets a hero with no
-    #    strip; the context processor gates the personal strip to authenticated viewers.
+    # 2. Bare root: the LOBBY. It belongs to no hub -- it sits ABOVE the four of them, which is why it
+    #    carries no sub-nav strip: on a lobby the CTAs are the navigation, and a hub rail underneath them
+    #    would be a second, competing set of directions. Returning None here (rather than a hub) is what
+    #    makes the strip disappear, via the template's `{% if hub_section %}` guard. The navbar wordmark
+    #    is its only chrome affordance, and it highlights off `hub_section is None` + the '/' path.
     if path == '/':
-        return {'hub': MY_PURSUIT_HUB, 'active_slug': 'overview'}
+        return None
 
     # 3. Longest-prefix-wins across all configured prefixes.
     best_match: tuple[HubSubnavConfig, str] | None = None
