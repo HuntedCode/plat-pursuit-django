@@ -55,15 +55,17 @@ def _grouped(ctx):
 def test_browse_items_grouped_catalog_curation():
     # Grouped rail, kept consistent with the other hubs' group labels.
     groups = _grouped(hub_subnav(_req('/games/')))
-    assert groups['Catalog'] == ['games', 'badges', 'recently-added']
+    # Profiles joined Catalog in 2026-08: hunters are another thing you browse.
+    assert groups['Catalog'] == ['games', 'badges', 'recently-added', 'profiles']
     assert groups['Curation'] == ['franchises', 'companies', 'genres']
 
 
 def test_community_items_grouped_explore_create():
     groups = _grouped(hub_subnav(_req('/community/')))
     # What Community has been reduced to: Challenges retired, Lists hidden pending a revamp, Rate My
-    # Games rehoused to My Pursuit > Tools, and Leaderboards promoted to its own hub (all 2026-08).
-    assert groups['Explore'] == ['hub', 'profiles']
+    # Games rehoused to My Pursuit > Tools, Leaderboards promoted to its own hub, and Profiles moved to
+    # Browse (all 2026-08). Only the hub landing is left -- which is why it is next to go.
+    assert groups['Explore'] == ['hub']
     assert 'Create' not in groups
 
 
@@ -123,6 +125,15 @@ def test_support_landing_renders(client):
 
 # --- Profile chrome ---
 
+def test_profiles_are_chromed_as_a_browse_surface():
+    """They moved out from under /community/ with the hub teardown -- hunters are another thing you
+    browse, alongside games and badges."""
+    them = ProfileFactory(is_linked=True)
+    ctx = hub_subnav(_req(f'/profiles/{them.psn_username}/'))
+    assert ctx['hub_section'] == 'browse'
+    assert ctx['hub_subnav_active_slug'] == 'profiles'
+
+
 def test_your_own_profile_is_chromed_like_anyone_elses():
     """The Profile strip-item and the ownership-aware chrome swap were removed together (2026-08).
     They only ever made sense as a pair: the swap put your own profile under the personal strip so the
@@ -130,8 +141,8 @@ def test_your_own_profile_is_chromed_like_anyone_elses():
     nothing and naming nothing in the mobile collapse bar. Your profile is reached from the avatar menu
     now, and the page looks the same whoever is viewing it."""
     me = ProfileFactory(is_linked=True)
-    ctx = hub_subnav(_req(f'/community/profiles/{me.psn_username}/', user=me.user))
-    assert ctx['hub_section'] == 'community'
+    ctx = hub_subnav(_req(f'/profiles/{me.psn_username}/', user=me.user))
+    assert ctx['hub_section'] == 'browse'
 
 
 def test_no_profile_tab_in_the_personal_strip():
@@ -140,17 +151,17 @@ def test_no_profile_tab_in_the_personal_strip():
     assert 'profile' not in slugs
 
 
-def test_other_profile_shows_community_chrome():
+def test_other_profile_shows_the_same_chrome():
     me = ProfileFactory(is_linked=True)
     them = ProfileFactory(is_linked=True)
-    ctx = hub_subnav(_req(f'/community/profiles/{them.psn_username}/', user=me.user))
-    assert ctx['hub_section'] == 'community'
+    ctx = hub_subnav(_req(f'/profiles/{them.psn_username}/', user=me.user))
+    assert ctx['hub_section'] == 'browse'
 
 
-def test_anon_on_profile_shows_community_chrome():
+def test_anon_on_profile_shows_the_same_chrome():
     them = ProfileFactory(is_linked=True)
-    ctx = hub_subnav(_req(f'/community/profiles/{them.psn_username}/'))   # anonymous viewer
-    assert ctx['hub_section'] == 'community'
+    ctx = hub_subnav(_req(f'/profiles/{them.psn_username}/'))   # anonymous viewer
+    assert ctx['hub_section'] == 'browse'
 
 
 def test_strip_shown_for_authed_home_with_overview_and_divider():

@@ -130,9 +130,19 @@ urlpatterns = [
     path('trophies/', RedirectView.as_view(pattern_name='games_list', permanent=True), name='trophies_list'),
 
     # Profiles (canonical paths under /community/, legacy redirects below)
-    path('community/profiles/', ProfilesListView.as_view(), name='profiles_list'),
-    path('community/profiles/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),
-    path('community/profiles/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
+    # Profiles moved out from under /community/ (2026-08) when that hub was retired; they belong with
+    # the other things you BROWSE. Every internal reference reverses by name, so the move is these three
+    # lines plus the redirects below -- but these ARE indexed pages with their own sitemap, so the old
+    # paths redirect permanently rather than being dropped.
+    path('profiles/', ProfilesListView.as_view(), name='profiles_list'),
+    path('profiles/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),
+    path('profiles/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
+    path('community/profiles/', RedirectView.as_view(
+        pattern_name='profiles_list', permanent=True, query_string=True)),
+    path('community/profiles/<str:psn_username>/', RedirectView.as_view(
+        pattern_name='profile_detail', permanent=True, query_string=True)),
+    path('community/profiles/<str:psn_username>/trophy-case/', RedirectView.as_view(
+        pattern_name='trophy_case', permanent=True, query_string=True)),
 
     # My Pursuit hub: the personal Pursuer surfaces (canonical paths under /my-pursuit/).
     # The badge CATALOG (list + detail) was re-homed to the Browse hub at /badges/ -- it is a
@@ -292,8 +302,6 @@ urlpatterns = [
     # and /dashboard/*, so the previously-canonical paths now also need
     # redirect entries here alongside the original legacy paths.
 
-    # Profiles → /community/profiles/
-    path('profiles/', RedirectView.as_view(pattern_name='profiles_list', permanent=True, query_string=True)),
     path('profiles/<str:psn_username>/', RedirectView.as_view(pattern_name='profile_detail', permanent=True, query_string=True)),
     path('profiles/<str:psn_username>/trophy-case/', RedirectView.as_view(pattern_name='trophy_case', permanent=True, query_string=True)),
 

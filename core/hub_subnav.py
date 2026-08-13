@@ -108,6 +108,7 @@ BROWSE_HUB = HubSubnavConfig(
         '/genres/',
         '/themes/',
         '/engines/',
+        '/profiles/',
     ),
     # Grouped rail (kept consistent with the other hubs' grouped rails -- Community's Explore/Create,
     # My Pursuit's Progress/Tools): Catalog = the core browse surfaces; Curation = the cross-cutting
@@ -116,6 +117,7 @@ BROWSE_HUB = HubSubnavConfig(
         HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2', group='Catalog'),
         HubSubnavItem('badges', 'Badges', 'badges_list', 'award', group='Catalog'),
         HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock', group='Catalog'),
+        HubSubnavItem('profiles', 'Profiles', 'profiles_list', 'user', group='Catalog'),
         HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers', group='Curation'),
         HubSubnavItem('companies', 'Companies', 'companies_list', 'building', group='Curation'),
         HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag', group='Curation'),
@@ -131,9 +133,8 @@ COMMUNITY_HUB = HubSubnavConfig(
     # Grouped rail: Explore = the social/discovery surfaces; Create = the participatory ones.
     items=(
         HubSubnavItem('hub', 'Hub', 'community_hub', 'home', group='Explore'),
-        HubSubnavItem('profiles', 'Profiles', 'profiles_list', 'user', group='Explore'),
-        # Leaderboards became its own hub and Rate My Games moved to My Pursuit > Tools (both 2026-08);
-        # Lists is hidden pending a revamp.
+        # Profiles moved to Browse, Leaderboards became its own hub, and Rate My Games moved to
+        # My Pursuit > Tools (all 2026-08); Lists is hidden pending a revamp.
     ),
 )
 
@@ -225,8 +226,8 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'theme_detail': ('browse', 'genres'),
     'roadmap_edit': ('browse', 'games'),
     # Community
-    'profile_detail': ('community', 'profiles'),
-    'trophy_case': ('community', 'profiles'),
+    'profile_detail': ('browse', 'profiles'),
+    'trophy_case': ('browse', 'profiles'),
     # Reviews archived 2026-05; the notice page highlights the Community hub root.
     'reviews_landing': ('community', 'hub'),
     'review_hub': ('community', 'hub'),
