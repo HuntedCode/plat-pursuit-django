@@ -71,13 +71,21 @@ Disallow: /games/*/*
 Disallow: /badges/*/*
 
 # Filtered / paginated / tabbed variants of a profile. The canonical
-# /community/profiles/<username>/ page stays crawlable -- profiles are the free
-# floor of the product and should keep their search and share value -- but the
+# /profiles/<username>/ page stays crawlable -- profiles are the free floor of
+# the product and should keep their search and share value -- but the
 # ?tab= / ?page= / ?sort= permutations are duplicates of it on axes that multiply
 # out into an unbounded crawl space, and each one costs a real query.
 #
 # The `/` before `?` is load-bearing: `*` matches the empty string, so the simpler
-# /community/profiles/*?* would also match /community/profiles/?page=2 and block the
-# profile INDEX's pagination -- the very thing a crawler should walk to discover
-# profiles. Requiring a path segment first confines this to profile detail URLs.
+# /profiles/*?* would also match /profiles/?page=2 and block the profile INDEX's
+# pagination -- the very thing a crawler should walk to discover profiles.
+# Requiring a path segment first confines this to profile detail URLs.
+#
+# BOTH spellings: profiles moved from /community/profiles/ to /profiles/ in 2026-08.
+# Like the Cloudflare origin guard, this file holds hardcoded paths that do NOT follow
+# a rename the way {% url %} does -- leaving only the old line would have silently
+# un-throttled crawling of the exact pages whose crawl cost started the 2026-08 outage.
+# The old line stays while the 301s do, since a crawler re-walking them still passes
+# through the old path first.
+Disallow: /profiles/*/?*
 Disallow: /community/profiles/*/?*

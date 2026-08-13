@@ -101,8 +101,15 @@ def test_nothing_advertises_lists_or_pays_to_build_a_spotlight():
 
 
 def test_the_sitemap_stops_inviting_crawlers_in():
+    """Both halves. Dropping the per-list ListSitemap was the obvious one; the browse page also sat in
+    the STATIC sitemap, still advertising `/community/lists/` -- which redirects to the homepage. A
+    sitemap entry that resolves to a redirect spends crawl budget to arrive somewhere it did not ask
+    for, and keeps signalling that a hidden system is live."""
+    from core.sitemaps import StaticViewSitemap
     from plat_pursuit.urls import sitemaps
+
     assert 'lists' not in sitemaps
+    assert 'lists_browse' not in StaticViewSitemap().items()
 
 
 def test_no_game_card_offers_to_add_to_a_list():

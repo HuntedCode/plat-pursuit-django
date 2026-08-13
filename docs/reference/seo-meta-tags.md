@@ -142,7 +142,7 @@ Query strings (e.g. `?tier=3` on badge detail) are preserved through the redirec
 - **Only bot UAs are matched.** Real users hitting profile-scoped URLs get the full page as normal. The UA list lives in `_BOT_UA_RE` in `plat_pursuit/middleware.py` and may need occasional updates as new aggressive crawlers appear.
 - **UA regex failure mode is graceful.** If a new bot slips through the list, it just hits the full page (same as pre-middleware behavior). No false throttling.
 - **Not cloaking.** Google explicitly endorses canonical redirects for duplicate content. This is the textbook solution.
-- **Do not extend to pages without a canonical non-profile variant.** `/community/profiles/<user>/*` has no canonical strip-to; the profile IS the page. The current regex correctly ignores those paths.
+- **Do not extend to pages without a canonical non-profile variant.** `/profiles/<user>/*` has no canonical strip-to; the profile IS the page. The current regex correctly ignores those paths.
 - **That exclusion is exactly how the 2026-08-09 outage started.** Having no redirect target is a reason this middleware cannot help the profile page, NOT a reason the page is safe. It fell through every guard and was the first URL to time out. Profiles are now covered by the origin guard below, plus a render-cost gate in the view (see [Anonymous Render Cost](#anonymous-render-cost)). When adding a new expensive page, ask which of the three layers covers it; "none, but it has no canonical variant" is not an answer.
 - **Tests live in `tests/engine/test_cloudflare_guard_paths.py`.** Add cases here when extending either regex.
 
@@ -164,10 +164,10 @@ Deliberately narrow — only the profile-scoped patterns covered by `_CLOUDFLARE
 | `/my-pursuit/badges/<slug>/<username>/` | 302 → `https://platpursuit.com/<path>` |
 | `/badges/<slug>/<username>/` (legacy) | 302 → `https://platpursuit.com/<path>` |
 | `/achievements/badges/<slug>/<username>/` (legacy) | 302 → `https://platpursuit.com/<path>` |
-| `/community/profiles/<username>/` (+ sub-pages such as `/trophy-case/`) | 302 → `https://platpursuit.com/<path>` |
-| Everything else (`/`, static, browse, `/community/profiles/`, etc.) | Unaffected — passes through |
+| `/profiles/<username>/` (+ sub-pages such as `/trophy-case/`) | 302 → `https://platpursuit.com/<path>` |
+| Everything else (`/`, static, browse, `/profiles/`, etc.) | Unaffected — passes through |
 
-The narrow scope is intentional: Render's internal health checks hit `/` without a `CF-Ray` header, and a broader guard would trip them and cause false restarts. The profile LIST page (`/community/profiles/`, no trailing username) is deliberately outside the guard: it is cheap and paginated, and it is the page a legitimate crawler should be walking.
+The narrow scope is intentional: Render's internal health checks hit `/` without a `CF-Ray` header, and a broader guard would trip them and cause false restarts. The profile LIST page (`/profiles/`, no trailing username) is deliberately outside the guard: it is cheap and paginated, and it is the page a legitimate crawler should be walking.
 
 Profiles joined this list after 2026-08-09. Because the profile page has no canonical variant to redirect to, the origin guard is the ONLY request-entry protection it can have — everything else has to come from making the render itself cheap.
 
@@ -192,7 +192,11 @@ The timeline is still gated because it is cached per profile, which means a craw
 - **Gate before the work, not around its output.** This is the same rule as the premium-preview pattern in CLAUDE.md. A version that computes the data and hides it in the template looks correct and still takes the site down. `tests/engine/test_anon_profile_render.py` asserts on the CALL, not the context value, for exactly this reason.
 - **Prefer deleting an unbounded feature to gating it.** Gating only moves the cost to signed-in traffic. If a feature's cost scales with the account rather than with what it displays, that is a design problem, not an access-control problem.
 - **The four Platinum Highlight cards are deliberately NOT gated.** They render a "None" empty state when absent, so skipping them for anonymous visitors would *misreport* the profile rather than hide a section. They are also cheap (two denormed FKs plus two lookups bounded by the profile's `ProfileGame` rows).
-- **Profiles stay indexable.** `robots.txt` disallows only the query-string permutations (`/community/profiles/*/?*` — the `?tab=` / `?page=` / `?sort=` axes that multiply into an unbounded crawl space). The canonical profile page keeps its search and share value; profiles are the free floor of the product. Note the `/` before `?`: `*` matches the empty string, so the shorter `/community/profiles/*?*` would also block the profile *index's* pagination.
+- **Both the guard and `robots.txt` hold HARDCODED paths.** Profiles moved from `/community/profiles/`
+  to `/profiles/` in 2026-08, and neither of these follows a rename the way `{% url %}` does -- each
+  carries both spellings while the 301s live. Moving a guarded surface means editing both in the same
+  change, or the protection silently stops matching anything.
+- **Profiles stay indexable.** `robots.txt` disallows only the query-string permutations (`/profiles/*/?*` — the `?tab=` / `?page=` / `?sort=` axes that multiply into an unbounded crawl space). The canonical profile page keeps its search and share value; profiles are the free floor of the product. Note the `/` before `?`: `*` matches the empty string, so the shorter `/profiles/*?*` would also block the profile *index's* pagination.
 - **`?tab=badges` is still unpaginated.** `_build_badges_tab_context` takes no page argument: it builds an OR-chain `Q()` over every earned series plus a full `UserBadgeProgress` scan for the profile, then groups in Python. It is bounded by the *badge catalogue* (hundreds of series), not by the profile's trophy count, so it is nowhere near the 250K-row class this gate was built for — but it is the largest remaining anonymous cost on this page and the obvious next thing to paginate.
 
 ### Diagnostics

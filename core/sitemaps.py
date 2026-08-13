@@ -11,7 +11,6 @@ class StaticViewSitemap(Sitemap):
         return [
             'home', 'privacy', 'terms', 'about', 'contact',
             'games_list', 'profiles_list', 'badges_list',
-            'lists_browse',
             'overall_badge_leaderboards',
         ]
 

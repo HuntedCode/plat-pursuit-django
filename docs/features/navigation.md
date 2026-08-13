@@ -1,12 +1,17 @@
 # Navigation & Site Organization
 
-PlatPursuit's navigation uses a **hub-of-hubs IA**: direct-link hub destinations in the global navbar (My Pursuit, Browse, Community, Support), with a persistent sub-navigation strip below the main navbar that surfaces hub sub-pages on every URL in a hub's family. On mobile, the desktop hub buttons hide and a sticky bottom tab bar takes over. This doc covers the navigation chrome (navbar, mobile tab bar, footer, sub-nav, profile tabs) and the cross-linking inventory between feature pages.
+> **2026-08 IA change.** Community was retired and **Leaderboards** took its hub slot. Profiles moved
+> to Browse (`/profiles/`), Rate My Games to My Pursuit > Tools (`/rate-my-games/`), and the Profile
+> sub-nav tab + ownership-aware profile chrome were removed (the avatar menu is the single route to
+> your own profile). See [ia-and-subnav.md](../architecture/ia-and-subnav.md).
+
+PlatPursuit's navigation uses a **hub-of-hubs IA**: direct-link hub destinations in the global navbar (My Pursuit, Browse, Leaderboards, Support), with a persistent sub-navigation strip below the main navbar that surfaces hub sub-pages on every URL in a hub's family. On mobile, the desktop hub buttons hide and a sticky bottom tab bar takes over. This doc covers the navigation chrome (navbar, mobile tab bar, footer, sub-nav, profile tabs) and the cross-linking inventory between feature pages.
 
 > **Update (gamification Home, 2026-06):** the **Dashboard hub was dissolved** when the legacy dashboard retired and the gamification **Home** (`/`) replaced it. The navbar/tabbar button is now **Home** (`hub_section == 'home'`), backed by an items-less hub, so `/` highlights the button but renders **no sub-nav strip** (the Home page's own launcher cards route). Its former sub-nav items (**My Stats / My Shareables / Recap** + the dynamic **Fundraiser**) moved into **My Pursuit**; the orphaned `/dashboard/*` URLs resolve there via an inherited prefix. Sections below that describe a "Dashboard" hub or its `hub_section == 'dashboard'` active state are historical — this note governs. See [../architecture/ia-and-subnav.md](../architecture/ia-and-subnav.md).
 
 ## Architecture Overview
 
-Navigation is rendered globally via `base.html` includes. The main navbar is sticky at the top of the viewport on every page. A persistent **sub-navigation strip** is sticky just below it on every page that belongs to one of the four hub families (My Pursuit, Browse, Community, Support), URL-prefix matched (the personal My Pursuit strip is auth-gated; Support is landing-only with no strip). On `<lg:` viewports the desktop hub buttons hide and a sticky bottom tab bar takes over for hub navigation. The footer is a sitemap grid that mirrors the hub structure.
+Navigation is rendered globally via `base.html` includes. The main navbar is sticky at the top of the viewport on every page. A persistent **sub-navigation strip** is sticky just below it on every page that belongs to one of the four hub families (My Pursuit, Browse, Leaderboards, Support), URL-prefix matched (the personal My Pursuit strip is auth-gated; Support is landing-only with no strip). On `<lg:` viewports the desktop hub buttons hide and a sticky bottom tab bar takes over for hub navigation. The footer is a sitemap grid that mirrors the hub structure.
 
 Design philosophy: **menus expose the few, hubs expose the many**. The global nav has 4 buttons. Each is a direct link to a hub. The hub does the heavy lifting of "introduce the user to what's in this section." The sub-nav handles "I know what I want, take me to the page." This eliminates the redundancy of having 25 dropdown items spread across menus that duplicate the hubs' job.
 
@@ -18,10 +23,10 @@ The four hubs:
 |-----|-----|-------------|---------------|
 | **My Pursuit** (personal) | `/` (logged-in Home = Overview) | "my identity + progression" | Overview, Collection, Career, Milestones, Titles \| My Shareables, Recap, Profile (auth-gated strip). *My Stats was pulled for 1.0 — `/stats/` redirects to Home pending rebuild.* |
 | **Browse** | `/games/` | "find content" | Games, Trophies, Badges, Recently Added, Flagged Games, Franchises, Genres & Themes, Companies, Engines |
-| **Community** | `/community/` | "what's everyone doing" | Hub, Profiles, Rate My Games, Challenges, Lists, Leaderboards |
+| **Leaderboards** | `/leaderboards/` | "where do I stand" | (no strip -- badge leaderboards are the only kind so far) |
 | **Support** | `/support/` | "ways to support us" | (landing-focused — no strip; houses the fundraiser + the coming store) |
 
-The personal hub is rooted at the logged-in Home (`/` = its Overview) and its pages live at root URLs; Browse IS the games list; Community + Support have dedicated landings. See [ia-and-subnav.md](../architecture/ia-and-subnav.md) for the full model.
+The personal hub is rooted at the logged-in Home (`/` = its Overview) and its pages live at root URLs; Browse IS the games list; Leaderboards + Support have dedicated landings. See [ia-and-subnav.md](../architecture/ia-and-subnav.md) for the full model.
 
 See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the detailed design, the URL prefix matching rules, and the sub-nav infrastructure.
 
@@ -52,12 +57,12 @@ The navbar is sticky at `top-0 z-50` so users can hub-jump at any scroll depth. 
 | **Logo** | Always visible. Direct link to `/` (the personal hub's Overview). |
 | **My Pursuit** | `hidden lg:flex`, **login-gated** (`{% if user.is_authenticated %}`). Direct link to `/`. Active when `hub_section == 'my_pursuit'`. |
 | **Browse** | `hidden lg:flex`. Direct link to `/games/`. Active when `hub_section == 'browse'`. |
-| **Community** | `hidden lg:flex`. Direct link to `/community/`. Active when `hub_section == 'community'`. |
+| **Leaderboards** | `hidden lg:flex`. Direct link to `/leaderboards/`. Active when `hub_section == 'leaderboards'`. |
 | **Support** | `hidden lg:flex`. Direct link to `/support/`. Active when `hub_section == 'support'`. |
 | **Notification bell** | Existing dropdown, unchanged. Visible at all breakpoints. |
 | **Avatar dropdown** | Theme · Profile · My Premium · Settings · Staff items · Logout |
 
-That's it — up to 5 direct-link buttons (logo + 4 hubs), zero dropdowns at the global nav level. The logo and the My Pursuit button both point at `/`, but the **My Pursuit button is hidden for logged-out visitors**: the logo already reaches `/` for them, and anon has no pursuit to show (the entry would be redundant and mislabeled, and wouldn't highlight anyway since the anon strip is gated off). So anon sees 4 buttons (logo + Browse/Community/Support). On `<lg:` viewports the hub buttons hide and the bottom tab bar takes over hub navigation.
+That's it — up to 5 direct-link buttons (logo + 4 hubs), zero dropdowns at the global nav level. The logo and the My Pursuit button both point at `/`, but the **My Pursuit button is hidden for logged-out visitors**: the logo already reaches `/` for them, and anon has no pursuit to show (the entry would be redundant and mislabeled, and wouldn't highlight anyway since the anon strip is gated off). So anon sees 4 buttons (logo + Browse/Leaderboards/Support). On `<lg:` viewports the hub buttons hide and the bottom tab bar takes over hub navigation.
 
 The "Customization" item that lived in the legacy My Pursuit dropdown is killed entirely — it pointed to `settings`, which the avatar dropdown's Settings link already covers, AND the dashboard already has in-page "Edit Layout" controls for module customization. The site-wide search bar was also dropped during this consolidation: the IA wayfinding (hubs + sub-nav + browse pages with HTMX filters) handles content discovery, so a global search box was redundant chrome.
 
@@ -85,10 +90,10 @@ See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the prefix matching a
 
 ## Mobile Bottom Tab Bar
 
-`templates/partials/mobile_tabbar.html` is the `<lg:` counterpart of the desktop navbar's hub buttons. It is sticky at `bottom-0` so users can hub-jump from any scroll position the same way desktop users can. The tabs (My Pursuit / Browse / Community / Support) mirror the desktop hub buttons exactly, with the same active-state logic driven by `hub_section` from the `hub_subnav` context processor. Like the desktop button, the **My Pursuit tab is login-gated**, so logged-out visitors see 3 tabs; the inner's flex `justify-around` distributes 3 or 4 evenly with no CSS change.
+`templates/partials/mobile_tabbar.html` is the `<lg:` counterpart of the desktop navbar's hub buttons. It is sticky at `bottom-0` so users can hub-jump from any scroll position the same way desktop users can. The tabs (My Pursuit / Browse / Leaderboards / Support) mirror the desktop hub buttons exactly, with the same active-state logic driven by `hub_section` from the `hub_subnav` context processor. Like the desktop button, the **My Pursuit tab is login-gated**, so logged-out visitors see 3 tabs; the inner's flex `justify-around` distributes 3 or 4 evenly with no CSS change.
 
 Active state details:
-- Each tab compares `hub_section` against its target value (`my_pursuit`, `browse`, `community`, `support`)
+- Each tab compares `hub_section` against its target value (`my_pursuit`, `browse`, `leaderboards`, `support`)
 - On non-hub pages (settings, notifications, errors) `hub_section` is None, so no tab is highlighted
 - Active styling uses `text-primary` to match the desktop navbar's `btn-primary` active state
 
@@ -98,9 +103,9 @@ There is no More drawer, no mobile search overlay, and no mobile-specific notifi
 
 Six-column grid (`grid-cols-2 md:grid-cols-3 lg:grid-cols-6`), one column per structural area. Post-IA-unify the columns mirror the 4 hubs (My Pursuit merges the pre-unify My Pursuit + Dashboard columns) plus Legal and Connect:
 
-| Browse | Community | My Pursuit | Support | Legal | Connect |
+| Browse | Leaderboards | My Pursuit | Support | Legal | Connect |
 |--------|-----------|------------|---------|-------|---------|
-| Games | Community Hub | Overview* | Support Hub | Privacy | Social icons |
+| Games | Badge Leaderboards | Overview* | Support Hub | Privacy | Social icons |
 | Trophies | Profiles | Collection* | Fundraiser† | Terms | (X, YouTube, Discord) |
 | Recently Added | Challenges | The Lab* | Membership (soon) | About | |
 | Flagged Games | Game Lists | Research Panel* | | Contact | |
@@ -129,7 +134,7 @@ These are the cross-links embedded in feature pages. The "mesh" of cross-links r
 | Game detail (header) | Company detail (developer, publisher) | Links in `game_detail_header.html` |
 | Company detail | Game detail (per-role game cards) | Cards in `company_detail/game_section.html` |
 | Genre/Theme detail | Game detail (game cards) | Reuses `game_list/game_cards.html` |
-| Community Hub | Reviews, Challenges, Lists, Leaderboards, Discord | Feature cards on `community/hub.html` (Feature Spotlight design) |
+| ~~Community Hub~~ | RETIRED 2026-08 | The page, its view, service and templates are deleted; `/community/` 301s to `/leaderboards/`. |
 | My Pursuit Hub | Badges, Milestones, Titles | Feature cards on `my_pursuit/hub.html` |
 
 ## Profile Page Tabs
@@ -152,7 +157,7 @@ Tab handlers in `ProfileDetailView`:
 - Counts for tab badges: `profile_challenge_count`, `profile_review_count`, `profile_lists_count`
 - AJAX partial templates returned for paginated tabs via `get_template_names()`
 
-Profile pages live under `/community/profiles/<u>/`, so they show the Community sub-nav strip with "Profiles" highlighted as active.
+Profile pages live under `/profiles/<u>/`, so they show the Browse sub-nav strip with "Profiles" highlighted as active. (They moved from `/community/profiles/` in 2026-08; the old paths 301.)
 
 ## Key Flows
 
@@ -175,7 +180,7 @@ Profile pages live under `/community/profiles/<u>/`, so they show the Community 
 
 ### Sub-Nav Active State
 
-1. Request comes in to e.g. `/community/profiles/<u>/`
+1. Request comes in to e.g. `/profiles/<u>/`
 2. `hub_subnav_context()` context processor inspects `request.path`
 3. Longest-prefix match against `HUB_SUBNAV_CONFIG` finds `community` hub
 4. Active item determined by matching `request.resolver_match.url_name` against the hub's items

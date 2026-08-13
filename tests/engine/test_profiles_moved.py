@@ -93,3 +93,23 @@ def test_the_moved_profile_pages_are_still_behind_the_cloudflare_guard():
     assert guard.match('/profiles/someone/trophy-case/'), 'profile sub-pages are not guarded'
     assert guard.match('/community/profiles/someone/'), 'the old path lost its guard while it redirects'
     assert not guard.match('/profiles/'), 'the browse list should not be guarded'
+
+
+def test_robots_still_throttles_crawling_of_the_moved_profiles():
+    """The SECOND hardcoded-path file, and the one the audit caught rather than the move.
+
+    `robots.txt` blocks the `?tab=` / `?page=` / `?sort=` permutations of a profile -- axes that
+    multiply into an unbounded crawl space, one real query each -- while leaving the canonical profile
+    crawlable. Keyed on the old path it matched nothing at all, quietly un-throttling exactly the pages
+    whose crawl cost started the 2026-08 outage.
+
+    The `/` before the `?` is load-bearing in both lines: `*` matches the empty string, so `/profiles/*?*`
+    would also block the profile INDEX's pagination -- the one thing a crawler should walk.
+    """
+    from pathlib import Path
+
+    robots = (Path(__file__).resolve().parents[2] / 'static' / 'robots.txt').read_text(encoding='utf-8')
+
+    assert 'Disallow: /profiles/*/?*' in robots, 'the moved profiles are no longer crawl-throttled'
+    assert 'Disallow: /community/profiles/*/?*' in robots, 'the old path lost its rule while it redirects'
+    assert 'Disallow: /profiles/*?*\n' not in robots, 'this form also blocks the index pagination'
