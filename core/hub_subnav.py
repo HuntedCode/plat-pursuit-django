@@ -125,20 +125,6 @@ BROWSE_HUB = HubSubnavConfig(
 )
 
 
-COMMUNITY_HUB = HubSubnavConfig(
-    key='community',
-    label='Community',
-    icon='users',
-    prefixes=('/community/',),
-    # Grouped rail: Explore = the social/discovery surfaces; Create = the participatory ones.
-    items=(
-        HubSubnavItem('hub', 'Hub', 'community_hub', 'home', group='Explore'),
-        # Profiles moved to Browse, Leaderboards became its own hub, and Rate My Games moved to
-        # My Pursuit > Tools (all 2026-08); Lists is hidden pending a revamp.
-    ),
-)
-
-
 # The personal hub is rooted at the logged-in Home (/): the Overview tab IS the Home, and the
 # other personal surfaces now live at ROOT paths (moved from /my-pursuit/* and /dashboard/* in
 # the unify). Profile is appended dynamically by the context processor (its URL needs the viewer's
@@ -196,7 +182,6 @@ SUPPORT_HUB = HubSubnavConfig(
 # hub, prefixes are tried longest-first. Bare '/' is handled separately as
 # an exact-equality check below.
 HUB_SUBNAV_CONFIG: tuple[HubSubnavConfig, ...] = (
-    COMMUNITY_HUB,
     MY_PURSUIT_HUB,
     BROWSE_HUB,
     LEADERBOARDS_HUB,
@@ -228,9 +213,8 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # Community
     'profile_detail': ('browse', 'profiles'),
     'trophy_case': ('browse', 'profiles'),
-    # Reviews archived 2026-05; the notice page highlights the Community hub root.
-    'reviews_landing': ('community', 'hub'),
-    'review_hub': ('community', 'hub'),
+    # Reviews archived 2026-05 and the Community hub retired 2026-08, so the notice page has no hub
+    # to sit in -- it renders without a sub-nav strip, which is right for a tombstone.
     # (badge_detail now highlights the Browse > Badges tab -- see the Browse block above.)
     # My Pursuit: nested sub-pages of the moved items. Shareables is plat-cards-only as of 2026-08,
     # so its one nested child is the cards browse; profile_card + platinum_grid are retired and their

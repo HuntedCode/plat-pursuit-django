@@ -12,16 +12,16 @@
                     <li><a href="{% url 'franchises_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Franchises</a></li>
                     <li><a href="{% url 'genres_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Genres &amp; Themes</a></li>
                     <li><a href="{% url 'companies_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Companies</a></li>
+                    <li><a href="{% url 'profiles_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Profiles</a></li>
                 </ul>
             </nav>
 
-            {# Community hub — people/social discovery. Profiles relocated here from Browse. #}
-            <nav aria-label="Community pages">
-                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Community</h2>
+            {% comment %}Leaderboards -- their own hub since 2026-08, when Community was retired.
+            Profiles moved to the Browse column above with the rest of the catalogue.{% endcomment %}
+            <nav aria-label="Leaderboard pages">
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Leaderboards</h2>
                 <ul class="space-y-1.5 text-sm">
-                    <li><a href="{% url 'community_hub' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Community Hub</a></li>
-                    <li><a href="{% url 'profiles_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Profiles</a></li>
-                    <li><a href="{% url 'overall_badge_leaderboards' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Leaderboards</a></li>
+                    <li><a href="{% url 'overall_badge_leaderboards' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badge Leaderboards</a></li>
                 </ul>
             </nav>
 

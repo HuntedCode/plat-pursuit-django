@@ -14,12 +14,21 @@ URL-matched.
 |-----|---------|------|-------------|
 | **My Pursuit** (personal) | `/` (logged-in Home = Overview) | the personal, login-gated surfaces (at root URLs) | "my identity + progression" |
 | **Browse** | `/games/` | public discovery / list pages | "find content" |
-| **Community** | `/community/` | everyone-facing surfaces | "what's everyone doing" |
+| **Leaderboards** | `/leaderboards/` | how everyone ranks | "where do I stand" |
 | **Support** | `/support/` | the fundraiser + (coming) membership store | "ways to support us" |
 
 **Organizing principle — "login-gated + mine."** A surface belongs to My Pursuit if it's personal
-AND login-gated. Browse = find; Community = everyone; Support = ways to support. Four mental modes,
-four hubs — resist a 5th. Gamification expands My Pursuit's strip; it does not earn its own hub.
+AND login-gated. Browse = find; Leaderboards = standings; Support = ways to support. Four mental
+modes, four hubs — resist a 5th. Gamification expands My Pursuit's strip; it does not earn its own hub.
+
+> **Community was retired (2026-08)** and Leaderboards took its place in the nav. Not because
+> community failed, but because everything in the hub had gone somewhere else: Challenges retired,
+> Reviews archived, Lists hidden pending a revamp, Profiles moved to Browse (hunters are another thing
+> you browse), Rate My Games to My Pursuit → Tools (it makes community DATA, but the act is personal
+> and login-only), and Leaderboards promoted to a hub of their own. What remained was a landing page
+> with nothing of its own to land on. `/community/` 301s to `/leaderboards/`; the reviews tombstone and
+> the hidden-lists redirects still live under the prefix. **If Lists, Reviews or the Pursuit Feed come
+> back, they need a home — that is the decision to revisit, not this one.**
 
 ## The personal hub (My Pursuit)
 
@@ -42,14 +51,14 @@ redirects to Home pending its rebuild; see [stats-page.md](../design/stats-page.
 - **Anon-hidden nav entry.** The My Pursuit navbar button and its mobile tab are wrapped in
   `{% if user.is_authenticated %}` — a logged-out visitor has no pursuit to show and the logo already
   reaches `/`, so the entry would be redundant *and* mislabeled (and it wouldn't even highlight,
-  since the anon strip is gated off). Anon therefore sees 3 mobile tabs (Browse / Community /
+  since the anon strip is gated off). Anon therefore sees 3 mobile tabs (Browse / Leaderboards /
   Support); the tab bar's `justify-around` inner distributes 3 or 4 evenly, no CSS change needed.
-- **Profile is a dynamic item.** Its URL needs the viewer's own username, so it can't be a static
-  config item — the context processor appends it for linked viewers (the tools group's 4th).
-- **Ownership-aware Profile chrome.** The profile page keeps its shared
-  `/community/profiles/<username>/` URL, but viewing YOUR OWN *linked* profile renders the My
-  Pursuit strip (Profile tab active); anyone else's renders Community chrome. A context-processor
-  chrome swap (`_is_own_profile_page`), not a redesign or re-home.
+- **No Profile item, and no ownership-aware chrome (both removed 2026-08).** They only ever worked as
+  a pair: the dynamic Profile tab needed the viewer's own username, and the chrome swap existed to put
+  your own profile under the personal strip *so that tab could be highlighted*. Removing the tab alone
+  would have rendered a strip highlighting nothing and naming nothing in the mobile collapse bar. Every
+  profile page now carries the same Browse chrome whoever is viewing, and the avatar menu is the single
+  route to your own.
 
 ## Support hub
 
@@ -74,11 +83,11 @@ name.
 
 - **Config.** `HubSubnavConfig(key, label, icon, prefixes, items)` + `HubSubnavItem(slug, label,
   url_name, icon, auth_required, divider_before)` (frozen dataclasses). `HUB_SUBNAV_CONFIG` holds
-  Community / My Pursuit / Browse / Support.
+  My Pursuit / Browse / Leaderboards / Support.
 - **Resolution.** `resolve_hub_subnav(request)`: (1) `_URL_NAME_TO_SLUG_OVERRIDES` — sub-pages whose
   url_name differs from their tab (e.g. `game_detail` → Browse/games) short-circuit here; (2) the
   **exact `/`** case → My Pursuit + `overview`; (3) **longest-prefix-wins** across every hub's
-  prefixes. The bare-root case is an equality check, so `/community/...` never falls into it.
+  prefixes. The bare-root case is an equality check, so `/profiles/...` never falls into it.
 - **Context processor.** `hub_subnav()` returns `hub_section`, `hub_subnav_label`/`icon`,
   `hub_subnav_items`, `hub_subnav_active_slug`, and `hub_subnav_active_label` (the current page, for
   the mobile bar). It also applies the My Pursuit anon auth-gate, the ownership-aware profile swap,
@@ -114,15 +123,18 @@ push the navbar 1-2px off 64px and cause a visible shift). The hotbar template b
 
 ## Gotchas and Pitfalls
 
-- **Longest-prefix-wins + the exact-`/` case are load-bearing.** `/community/profiles/<u>/` must
-  match Community, not the personal hub's `/`. The bare-root match is an equality check, separate
-  from prefix `startswith`.
+- **Longest-prefix-wins + the exact-`/` case are load-bearing.** `/profiles/<u>/` must match Browse,
+  not the personal hub's `/`. The bare-root match is an equality check, separate from prefix
+  `startswith`.
+- **`CloudflareOriginGuardMiddleware` does NOT follow a re-home.** It guards profile pages with a
+  hardcoded PATH REGEX, so unlike every `{% url %}`/`reverse()` reference it stays pointed at the old
+  path when one moves — silently un-guarding the most scraped page type on the site. Moving any
+  guarded surface means editing that regex in the same change (`test_profiles_moved.py` pins it).
+  Related: profile paths are unreachable from the Django test client without a `CF-Ray` header,
+  because the guard runs before the URL conf.
 - **The personal strip is authed-only.** Anon on `/` (or on a public member) gets no strip. The
   gate lives in the context processor (`hub.key == 'my_pursuit' and not is_auth → hub_section None`),
   before any item work.
-- **Ownership swap is gated on `is_linked`.** `_is_own_profile_page` requires a linked profile, so
-  it agrees with the Profile strip-item gate; an authed-but-unlinked owner degrades to Community
-  chrome rather than a strip with no Profile tab.
 - **Sub-nav is hidden on non-hub pages** (settings, auth, notifications, `/staff/*`, errors,
   webhook URLs): `hub_section=None` short-circuits the template. Test these.
 - **Mobile collapse a11y.** The collapsed panel must be `visibility:hidden` (not just
@@ -140,6 +152,6 @@ push the navbar 1-2px off 64px and cause a visible shift). The hotbar template b
 ## Related Docs
 
 - [Navigation](../features/navigation.md): navbar, footer, mobile tab bar, profile tabs
-- [Community Hub](../features/community-hub.md) · [My Pursuit Hub](../features/my-pursuit-hub.md)
+- [My Pursuit Hub](../features/my-pursuit-hub.md) (the Community Hub doc describes a retired page)
 - [Fundraiser](../features/fundraiser.md): the badge-art campaign the Support hub houses
 - [Template Architecture](../reference/template-architecture.md): base.html, context processors, the hotbar

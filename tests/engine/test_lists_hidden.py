@@ -72,31 +72,32 @@ def test_the_api_no_longer_accepts_writes_into_a_system_with_no_door(client):
 
 
 def test_nothing_in_the_chrome_points_at_lists():
-    """The footer and the community sub-nav are the two places a link survives a teardown, because
-    neither is exercised by the page you were actually working on."""
-    from django.contrib.auth.models import AnonymousUser
-    from django.test import RequestFactory
+    """The footer and the sub-nav rails are the two places a link survives a teardown, because neither
+    is exercised by the page you were actually working on. (The Community rail this used to check was
+    itself retired in 2026-08, so the check now sweeps every configured hub.)"""
+    from core.hub_subnav import HUB_SUBNAV_CONFIG
 
-    from plat_pursuit.context_processors import hub_subnav
-
-    req = RequestFactory().get('/community/')
-    req.user = AnonymousUser()
-    slugs = [i.slug for i in hub_subnav(req)['hub_subnav_items']]
-    assert 'lists' not in slugs, 'the Lists tab is back in the community sub-nav'
+    for hub in HUB_SUBNAV_CONFIG:
+        slugs = [i.slug for i in hub.items]
+        assert 'lists' not in slugs, f'the Lists tab is back in the {hub.key} sub-nav'
 
     footer = (ROOT / 'templates' / 'partials' / 'footer.html').read_text(encoding='utf-8')
     assert 'lists_browse' not in footer and 'my_lists' not in footer, 'a footer link survived'
 
 
-def test_the_community_hub_does_not_advertise_lists_or_pay_to_build_them():
-    """The hub card is gone, and so is the query behind it -- a spotlight nobody renders is a query per
-    page load on the busiest community page."""
-    hub = (ROOT / 'templates' / 'community' / 'hub.html').read_text(encoding='utf-8')
-    assert 'recent_lists' not in hub, 'the hub still renders the lists spotlight'
+def test_nothing_advertises_lists_or_pays_to_build_a_spotlight():
+    """The hub that carried the lists spotlight (and the query behind it) was retired wholesale in
+    2026-08, so the surface this used to guard no longer exists. What still needs guarding is that the
+    spotlight does not reappear somewhere else -- a query per page load for a system with no door."""
+    assert not (ROOT / 'core' / 'services' / 'community_hub_service.py').exists()
 
-    service = (ROOT / 'core' / 'services' / 'community_hub_service.py').read_text(encoding='utf-8')
-    body = service[service.index('def build_community_hub_context'):]
-    assert '_get_recent_lists_spotlight()' not in body, 'the hub still computes the lists spotlight'
+    offenders = [
+        path.relative_to(ROOT)
+        for path in list((ROOT / 'core').rglob('*.py')) + list((ROOT / 'templates').rglob('*.html'))
+        if '_get_recent_lists_spotlight' in path.read_text(encoding='utf-8')
+        or 'recent_lists' in path.read_text(encoding='utf-8')
+    ]
+    assert not offenders, f'the lists spotlight came back in {offenders}'
 
 
 def test_the_sitemap_stops_inviting_crawlers_in():
@@ -144,28 +145,6 @@ def test_no_url_conf_imports_a_view_it_no_longer_routes():
         used = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
         dead = sorted(i for i in imported - used if 'GameList' in i or i in {'BrowseListsView', 'MyListsView'})
         assert not dead, f'{rel} imports {dead} but routes none of them'
-
-
-def test_the_community_hub_grid_fits_what_is_left_in_it():
-    """The Game Lists card was the third of three in a `lg:grid-cols-3` row. Removing it without the
-    column count left two cards and a hole on a main navigation surface."""
-    hub = (ROOT / 'templates' / 'community' / 'hub.html').read_text(encoding='utf-8')
-    i = hub.index('mt-3 grid grid-cols-1')
-    grid_open = hub[i:hub.index('>', i)]
-
-    depth, k, children = 1, hub.index('>', i) + 1, 0
-    while depth > 0:
-        m = re.compile(r'</?(?:div|section)\b').search(hub, k)
-        if m.group(0).startswith('</'):
-            depth -= 1
-        else:
-            if depth == 1:
-                children += 1
-            depth += 1
-        k = m.end()
-
-    cols = int(re.search(r'lg:grid-cols-(\d)', grid_open).group(1))
-    assert cols == children, f'{children} cards in a {cols}-column row leaves {cols - children} empty'
 
 
 def test_the_data_is_untouched():

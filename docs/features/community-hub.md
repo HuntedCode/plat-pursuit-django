@@ -1,5 +1,12 @@
 # Community Hub
 
+> **RETIRED 2026-08.** This page no longer exists: `/community/` 301s to `/leaderboards/`, and the
+> view, service (`community_hub_service.py`) and templates are deleted. Everything it hosted moved --
+> Profiles to Browse, Rate My Games to My Pursuit > Tools, Leaderboards to their own hub; Challenges,
+> Reviews and Lists were already retired/archived/hidden. Kept as the record of what the hub was and
+> why, for whoever rebuilds a community surface. See
+> [ia-and-subnav.md](../architecture/ia-and-subnav.md) for the IA that replaced it.
+
 The Community Hub is PlatPursuit's site-wide community destination at `/community/`. Where the dashboard at `/` is "your personal cockpit", the Community Hub is "the front door to everything PlatPursuit's community has to offer". It is a wayfinder + marketing surface that introduces each community feature (Rate My Games, Challenges, Game Lists, Leaderboards, Discord) with a tagline, a small slice of real signal, and a CTA to its dedicated page.
 
 > **2026-05 update**: the **Reviews** feature card was replaced by a **Rate My Games** card when the text-review system was archived (see [Review Hub](review-hub.md)). The Rate My Games card's top half is the `most_rated_games` spotlight (top concepts by community rating count, avg overall rating as the score, rows linking to game detail); the bottom half is `personal_rating_stats` (Rated / Waiting counts). Service helpers: `_get_most_rated_games_spotlight` + `_get_personal_rating_stats` in `core/services/community_hub_service.py`. The old `_get_recently_reviewed_titles_spotlight` / `_get_personal_review_stats` were replaced. Rate My Games is also a Community sub-nav item now.

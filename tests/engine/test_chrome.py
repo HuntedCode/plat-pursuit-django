@@ -337,17 +337,16 @@ def test_navbar_search_wired_to_site_suggest(client):
 # --- Sub-nav: grouped rail rebuild (--pp-* house style, workshop direction) ---
 
 def test_subnav_renders_grouped_pp_rail(client):
-    # /community/ renders 200 with the rail (/games/ 302s to add default filters).
-    resp = client.get('/community/')
+    # /badges/ renders 200 with the Browse rail (/games/ 302s to add default filters, and /community/
+    # stopped being a hub when it was retired in 2026-08).
+    resp = client.get('/badges/')
     assert resp.status_code == 200
     c = resp.content
     assert b'class="pp-sub"' in c                    # house-style rail, not the old DaisyUI strip
     assert b'data-subnav-rail' in c
     assert b'data-subnav-pill' in c
-    # Community is down to one group: Challenges retired, Lists hidden, and Rate My Games rehoused to
-    # My Pursuit > Tools (2026-08), which emptied 'Create'.
-    assert b'Explore' in c
-    assert b'data-group="Explore"' in c
+    assert b'Catalog' in c
+    assert b'data-group="Catalog"' in c
 
 
 def test_subnav_renders_every_group_of_a_multi_group_rail(client):
@@ -363,14 +362,14 @@ def test_subnav_renders_every_group_of_a_multi_group_rail(client):
 
 
 def test_subnav_marks_active_pill(client):
-    # Hub is the active Community item -> tinted-active + aria-current.
-    resp = client.get('/community/')
+    # Badges is the active Browse item -> tinted-active + aria-current.
+    resp = client.get('/badges/')
     assert b'pp-subpill is-active' in resp.content
     assert b'aria-current="page"' in resp.content
 
 
 def test_subnav_mobile_sheet_present(client):
-    c = client.get('/community/').content
+    c = client.get('/badges/').content
     assert b'data-subnav-sheet' in c                 # the grouped mobile sheet
     assert b'pp-sub__sheetgrid' in c
     assert b'data-subnav-toggle' in c

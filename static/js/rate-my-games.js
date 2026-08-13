@@ -1,5 +1,5 @@
 /**
- * Rate My Games -- the rating wizard at /community/rate-my-games/.
+ * Rate My Games -- the rating wizard at /rate-my-games/.
  *
  * Owns the QUEUE: fetch a page of unrated games, show one, skip or submit, advance, prefetch before
  * running out. It does NOT own the rating form -- that is `PlatPursuit.RatingFields` (quick-rate.js),

@@ -25,11 +25,11 @@ def test_root_personal_pages_resolve_under_my_pursuit():
     assert m['hub'].key == 'my_pursuit' and m['active_slug'] == 'shareables'
 
 
-def test_community_not_shadowed_and_fundraiser_in_support():
+def test_other_hubs_not_shadowed_and_fundraiser_in_support():
     """Other hubs aren't stolen by the personal hub, and the Fundraiser page now resolves under
     the Support hub (via its /fundraiser/ prefix)."""
-    m = resolve_hub_subnav(_Req('/community/lists/', 'lists_browse'))
-    assert m['hub'].key == 'community'
+    m = resolve_hub_subnav(_Req('/leaderboards/', 'overall_badge_leaderboards'))
+    assert m['hub'].key == 'leaderboards'
     m = resolve_hub_subnav(_Req('/fundraiser/spring/', 'fundraiser'))
     assert m['hub'].key == 'support'
 

@@ -89,3 +89,22 @@ Expected: nothing outside `Patron of the Arts`, `Fastest Plat in the West`, `Cas
 ## Completed
 
 _(Move rows here as they're done, with the deploy date, so the runbook keeps its history.)_
+
+## IA: Community retired -> Leaderboards hub (2026-08)
+
+Every item here is deploy-side; the code change is complete and tested.
+
+- [ ] **Resubmit the sitemap.** Every profile URL changed (`/community/profiles/<u>/` -> `/profiles/<u>/`),
+      and profiles are the largest indexed set on the site. The sitemap already emits the new locations
+      (it reverses by name), but Search Console should be re-pinged so the 301s are crawled promptly
+      rather than at the crawler's leisure.
+- [ ] **Watch 404s for a week**, specifically anything under `/community/`. Every known path redirects
+      (hub, profiles x3, leaderboards x2, rate-my-games), but hand-built links in the wild -- Discord
+      posts, PlatBot messages, old emails -- are the ones that surface here.
+- [ ] **Check PlatBot** for hardcoded web URLs. It consumes `/api/v1/*` (unaffected), but any message
+      template that links a hunter to their profile or to Rate My Games needs the new path. Redirects
+      cover it either way; this is about avoiding a needless hop in a bot people use constantly.
+- [ ] **Cloudflare cache purge** for `/community/*` so cached 200s aren't served over the new 301s.
+- [ ] **Confirm the origin guard covers the new profile paths in prod.** The guard is skipped when
+      `DEBUG`/`IS_BETA`, so its behaviour is only real on prod: a direct-origin GET of
+      `/profiles/<user>/` without a `CF-Ray` header must bounce to the public host.

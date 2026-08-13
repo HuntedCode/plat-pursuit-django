@@ -107,11 +107,11 @@ snapshot}, sync, community, recent, launchers, profile_url.
 </section>
 {% endif %}
 
-{# ── Community highlights: the cached site heartbeat, with a live pulse -> the Community hub ── #}
+{# ── Community highlights: the cached site heartbeat, with a live pulse -> the Leaderboards hub ── #}
 {% if community %}
 <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 home-reveal" style="--rev: 3">
     <div class="card-body p-4 md:p-5">
-        <a href="{% url 'community_hub' %}" class="flex items-center justify-between gap-2 mb-3 group">
+        <a href="{% url 'overall_badge_leaderboards' %}" class="flex items-center justify-between gap-2 mb-3 group">
             <span class="inline-flex items-center gap-2 min-w-0">
                 <h2 class="text-xs uppercase tracking-[0.15em] text-base-content/50 font-semibold">Community highlights</h2>
                 {# Live pulse: the site heartbeat is beating right now #}
@@ -120,7 +120,7 @@ snapshot}, sync, community, recent, launchers, profile_url.
                     <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                 </span>
             </span>
-            <span class="text-xs text-primary font-semibold inline-flex items-center gap-1 shrink-0">Community <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span></span>
+            <span class="text-xs text-primary font-semibold inline-flex items-center gap-1 shrink-0">Leaderboards <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span></span>
         </a>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
             {% for c in community %}

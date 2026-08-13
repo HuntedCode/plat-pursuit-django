@@ -39,9 +39,10 @@ class ReviewsArchivedView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # No Community crumb: that hub was retired 2026-08 and this notice is a tombstone with no
+        # section to sit under.
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse('home')},
-            {'text': 'Community', 'url': reverse('community_hub')},
             {'text': 'Reviews'},
         ]
         context['seo_description'] = (

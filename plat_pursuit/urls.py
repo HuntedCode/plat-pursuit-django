@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, SupportHubView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, BadgePresentationView, RequirementsChecklistWorkshopView, StageCardsWorkshopView, GameCardWorkshopView, BadgeJourneyWorkshopView, ChromeWorkshopView, RecapStageWorkshopView, PursuerCardPreviewView, PursuerCardRanksPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView as DesignResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, SupportHubView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, BadgePresentationView, RequirementsChecklistWorkshopView, StageCardsWorkshopView, GameCardWorkshopView, BadgeJourneyWorkshopView, ChromeWorkshopView, RecapStageWorkshopView, PursuerCardPreviewView, PursuerCardRanksPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView as DesignResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, RoadmapSitemap,
@@ -71,7 +71,12 @@ urlpatterns = [
     # `name=` parameter stays bound to the NEW canonical path so existing
     # `{% url %}` and `reverse()` calls in templates and Python code
     # continue to resolve to the right place without changes.
-    path('community/', CommunityHubView.as_view(), name='community_hub'),
+    # The Community hub was retired 2026-08: Challenges retired, Reviews archived, Lists hidden,
+    # Profiles moved to Browse, Rate My Games to My Pursuit, and Leaderboards promoted to their own
+    # hub -- which left a landing page with nothing of its own to land on. Deliberately UNNAMED, so
+    # a `{% url 'community_hub' %}` cannot quietly reappear; this exists for inbound links only.
+    path('community/', RedirectView.as_view(
+        pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),
     path('support/', SupportHubView.as_view(), name='support_hub'),
 
     path('games/', GamesListView.as_view(), name='games_list'),

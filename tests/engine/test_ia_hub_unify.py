@@ -42,7 +42,16 @@ def test_personal_pages_resolve_to_my_pursuit(path, slug):
 
 
 def test_other_hubs_unchanged():
-    assert resolve_hub_subnav(_req('/community/lists/'))['hub'].key == 'community'
+    # Community was retired 2026-08; Leaderboards is the hub that replaced it in the nav.
+    assert resolve_hub_subnav(_req('/badges/'))['hub'].key == 'browse'
+    assert resolve_hub_subnav(_req('/leaderboards/'))['hub'].key == 'leaderboards'
+
+
+def test_the_retired_community_paths_belong_to_no_hub():
+    """What is left under /community/ is redirects and the reviews tombstone. None of it should sprout
+    a sub-nav strip: a strip implies a section you are inside, and there is no longer one."""
+    assert resolve_hub_subnav(_req('/community/reviews/')) is None
+    assert hub_subnav(_req('/community/reviews/'))['hub_section'] is None
 
 
 def _grouped(ctx):
@@ -58,25 +67,6 @@ def test_browse_items_grouped_catalog_curation():
     # Profiles joined Catalog in 2026-08: hunters are another thing you browse.
     assert groups['Catalog'] == ['games', 'badges', 'recently-added', 'profiles']
     assert groups['Curation'] == ['franchises', 'companies', 'genres']
-
-
-def test_community_items_grouped_explore_create():
-    groups = _grouped(hub_subnav(_req('/community/')))
-    # What Community has been reduced to: Challenges retired, Lists hidden pending a revamp, Rate My
-    # Games rehoused to My Pursuit > Tools, Leaderboards promoted to its own hub, and Profiles moved to
-    # Browse (all 2026-08). Only the hub landing is left -- which is why it is next to go.
-    assert groups['Explore'] == ['hub']
-    assert 'Create' not in groups
-
-
-def test_leaderboards_is_its_own_hub():
-    match = resolve_hub_subnav(_req('/leaderboards/'))
-    assert match['hub'].key == 'leaderboards'
-    assert match['hub'].label == 'Leaderboards'
-    # No rail on purpose: badge leaderboards are the only kind, so a strip would be one pill naming the
-    # page you are already on. It starts rendering by itself the moment a second kind is added.
-    assert match['hub'].items == ()
-    assert hub_subnav(_req('/leaderboards/'))['hub_section'] == 'leaderboards'
 
 
 def test_my_pursuit_items_grouped_progress_tools():
@@ -98,9 +88,9 @@ def test_strip_hidden_for_anon_on_public_member():
 
 
 def test_public_hubs_still_render_for_anon():
-    # The anon gate is My-Pursuit-specific -- Browse/Community strips must still show.
+    # The anon gate is My-Pursuit-specific -- the public hubs' strips must still show.
     assert hub_subnav(_req('/games/'))['hub_section'] == 'browse'
-    assert hub_subnav(_req('/community/lists/'))['hub_section'] == 'community'
+    assert hub_subnav(_req('/profiles/'))['hub_section'] == 'browse'
 
 
 # --- Support hub (phase 2) ---
