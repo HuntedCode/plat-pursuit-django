@@ -441,6 +441,14 @@ def test_the_bulk_flow_has_a_keyboard():
 
     keys = js[js.index('wireKeys() {'):js.index('advance(counts) {')]
     assert "tag === 'TEXTAREA'" in keys, 'Enter would submit from inside the quick take'
+    # The shortcut and the autofocus shipped together and cancelled each other out: the card focuses the
+    # hours field on arrival, so the hunter is ALWAYS inside an <input> when it lands, and a guard that
+    # treats every <input> as typing means S never fires -- while the hint promises it does. Only fields
+    # where a letter is content may suppress it.
+    assert 'TEXT_ENTRY' in keys, 'every <input> counts as typing again, which kills the S shortcut'
+    assert "'number'" not in js[js.index('var TEXT_ENTRY'):js.index('var TEXT_ENTRY') + 200], (
+        'the hours field counts as text entry, so S does nothing on a freshly-arrived card'
+    )
     assert 'if (first !== false) { this.wireKeys(); }' in js, 'the document listener is not first-load guarded'
     assert 'init(first)' in html or 'RateMyGames.init(first)' in html, 'the page never passes `first` through'
     assert 'rmg__keys' in html, 'the shortcuts are undiscoverable -- no hint is rendered'

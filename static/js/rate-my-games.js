@@ -20,6 +20,9 @@ window.PlatPursuit = window.PlatPursuit || {};
     var PAGE = 20;              // queue page size
     var PREFETCH_AT = 5;        // fetch the next page once this many games are left
     var ORDER = ['base', 'dlc'];   // tab order -- drives the direction the incoming queue slides from
+    // Input types where a keystroke is CONTENT rather than a shortcut. `number` and `range` are absent on
+    // purpose: they discard a letter silently, so a bare S there is a skip, not a typo.
+    var TEXT_ENTRY = ['text', 'search', 'email', 'url', 'tel', 'password'];
 
     function el(id) { return document.getElementById(id); }
 
@@ -27,7 +30,6 @@ window.PlatPursuit = window.PlatPursuit || {};
         queue: [],
         index: 0,
         done: 0,                // ratings SUBMITTED this session (a skip is not progress)
-        total: 0,               // length of the unrated queue -- pagination, not the meter
         ratableTotal: 0,        // every game in the library that could be rated
         ratedTotal: 0,          // how many of them already were, before this session
         queueType: 'base',
@@ -125,7 +127,6 @@ window.PlatPursuit = window.PlatPursuit || {};
             this.queue = [];
             this.index = 0;
             this.done = 0;
-            this.total = 0;
             this.offset = 0;
             this.hasMore = false;
             this.load(opts);
@@ -174,11 +175,9 @@ window.PlatPursuit = window.PlatPursuit || {};
                 this.hasMore = !!data.has_more;
                 var flat = this.flatten(data.groups);
                 this.queue = this.offset === 0 ? flat : this.queue.concat(flat);
-                if (this.offset === 0) { this.total = data.total_items || 0; }
             } else {
                 var page = data.queue || [];
                 this.queue = this.offset === 0 ? page : this.queue.concat(page);
-                if (this.offset === 0) { this.total = data.count || 0; }
                 this.hasMore = !!data.has_more;
             }
         },
@@ -590,7 +589,13 @@ window.PlatPursuit = window.PlatPursuit || {};
 
                 var target = e.target;
                 var tag = (target && target.tagName) || '';
-                var typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (target && target.isContentEditable);
+                // "Typing" means a field where a letter is CONTENT. Treating every <input> as typing broke
+                // the S shortcut outright: this page focuses the hours field on each game's arrival, so the
+                // hunter is always inside an <input> when the card lands, and S did nothing at all while
+                // the hint sat there promising it would. A number field and a slider swallow the letter
+                // without showing it; a <select> genuinely type-aheads on it, so it counts.
+                var typing = tag === 'TEXTAREA' || tag === 'SELECT' || (target && target.isContentEditable)
+                    || (tag === 'INPUT' && TEXT_ENTRY.indexOf(String(target.type || '').toLowerCase()) !== -1);
 
                 if (e.key === 'Enter') {
                     // Enter is a submit from anywhere EXCEPT the quick take, where it is a newline the

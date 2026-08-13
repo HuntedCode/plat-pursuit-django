@@ -132,7 +132,10 @@ it never tears down to a spinner, which read as a full-page reload.
                         <svg class="rmg__cover-ph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 15l5-5 4 4 3-3 8 7"/></svg>
                     </div>
                     <div class="rmg__ident">
-                        <h2 class="rmg__title" id="rmg-title"></h2>
+                        {% comment %}Announced: the card is replaced under you on every skip and save, and
+                        focus lands in the hours field rather than on the new title -- so without this a
+                        screen-reader user is typing an estimate for a game they were never told about.{% endcomment %}
+                        <h2 class="rmg__title" id="rmg-title" aria-live="polite"></h2>
                         <p class="rmg__group hidden" id="rmg-group">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
                             <span id="rmg-group-name"></span>
@@ -218,8 +221,10 @@ it never tears down to a spinner, which read as a full-page reload.
             {% comment %}Shortcuts. This is a bulk flow -- a hunter with 70 games waiting is doing the same
             four movements seventy times -- so it earns the keyboard. Shown only where there IS a keyboard;
             the hint is the discoverability, since a shortcut nobody knows about helps nobody.{% endcomment %}
-            <p class="rmg__keys" aria-hidden="true">
-                <kbd>Enter</kbd> submit <span class="rmg__keys-sep">·</span> <kbd>S</kbd> skip
+            {% comment %}Not aria-hidden: a keyboard shortcut is of most use to someone working the page by
+            keyboard, which includes screen-reader users. Only the decorative separator is hidden.{% endcomment %}
+            <p class="rmg__keys">
+                <kbd>Enter</kbd> submit <span class="rmg__keys-sep" aria-hidden="true">·</span> <kbd>S</kbd> skip
             </p>
         </div>
 
