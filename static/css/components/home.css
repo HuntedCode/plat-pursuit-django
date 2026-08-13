@@ -51,11 +51,25 @@
 .home-moat__name { font-family: var(--pp-font-display); font-size: clamp(1.05rem, 2vw, 1.3rem); font-weight: 800; line-height: 1.15; color: var(--pp-text); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-moat__rank { font-size: 12.5px; color: var(--pp-text-dim); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-moat__go { display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; font-size: 12.5px; font-weight: 700; color: var(--pp-primary); }
+/* The body is a stretch column so the name/rank can ellipsis against its width -- but the chip and the
+   go-link are content-width things, and stretching them drew a full-width pill and a full-width hit area
+   for a short label. align-self, not a container change, so the truncation above keeps working. */
+.home-moat__body .hero-disc-chip, .home-moat__go { align-self: flex-start; }
 .home-moat__arrow { transition: transform 0.18s ease; }
 @media (hover: hover) { .home-moat:hover .home-moat__arrow { transform: translateX(3px); } }
 
 .home-moat__ring { position: relative; z-index: 1; flex: none; }
 .home-moat__ring--glyph { width: 76px; height: 76px; display: grid; place-items: center; color: var(--pp-text-mute); opacity: 0.55; }
+
+/* Recently-earned medallions on the Collection CTA. Three at most: a GLANCE that teases the wall, never
+   the wall embedded. They shrink hard on mobile so the CTA stays one comfortable row beside its text. */
+.home-moat__meds { position: relative; z-index: 1; display: flex; align-items: flex-start; gap: 8px; flex: none; }
+.home-moat__med { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.home-moat__med .pp-med { --sz: 54px; }
+@media (min-width: 1024px) { .home-moat__med .pp-med { --sz: 64px; } }
+.home-moat__med-when { font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--pp-text-mute); white-space: nowrap; }
+/* Past two, the row competes with the text for a narrow card -- so the oldest drops out below md. */
+@media (max-width: 767px) { .home-moat__med:nth-child(n+3) { display: none; } }
 .home-moat__ring--glyph svg { width: 42px; height: 42px; }
 
 @media (prefers-reduced-motion: reduce) {

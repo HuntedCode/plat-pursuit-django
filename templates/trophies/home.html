@@ -120,9 +120,27 @@ uses, so the lobby promises exactly what the page delivers.{% endcomment %}
             {% endwith %}
             <span class="home-moat__go">Open Collection <span class="home-moat__arrow" aria-hidden="true">&rarr;</span></span>
         </div>
+        {% comment %}Proof: the medallions you actually earned, newest first, on the shared
+        badge_medallion primitive. Backward-looking proof beside the forward-looking closest-badge line --
+        the pair reads stronger than either alone. Falls back to the glyph for a Pursuer with none yet, which
+        is every Pursuer on day one.{% endcomment %}
+        {% if recent_badges %}
+        <div class="home-moat__meds">
+            {% for m in recent_badges %}
+            <span class="home-moat__med">
+                {% include 'components/badge_medallion.html' with frame=m.frame no_id=True %}
+                {% comment %}Month + year, not `timesince`: under a 54px medallion the label is nowrap, and
+                "2 months, 3 weeks" either overflows or truncates to a meaningless "2 ...". For a badge you
+                earned, when-in-the-year is the granularity that actually means something.{% endcomment %}
+                <span class="home-moat__med-when">{{ m.earned_at|date:"M Y" }}</span>
+            </span>
+            {% endfor %}
+        </div>
+        {% else %}
         <div class="home-moat__ring home-moat__ring--glyph" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
         </div>
+        {% endif %}
     </a>
 </section>
 

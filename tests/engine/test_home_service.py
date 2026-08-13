@@ -125,3 +125,49 @@ def test_broken_hero_zone_degrades_without_500(monkeypatch):
     assert ctx['hero'] is None
     assert ctx['glances']['snapshot'] is not None     # other zones still build
     assert ctx['sync'] is not None                    # including the freshness line the lobby leads on
+
+
+# --- Collection CTA: recently-earned medallions (the REBUILT badge system) ---
+
+def test_recent_medallions_come_from_the_rebuilt_badge_tables():
+    """The obvious reuse -- `dashboard_service.provide_recent_badges` -- reads the LEGACY `UserBadge`
+    table, which still holds rows. So a wrong source here would not fail loudly; it would quietly render
+    badges from the retired system. This pins the source, not just the output."""
+    import ast
+    import inspect
+
+    from core.services import home_service
+
+    # The DOCSTRING names what this function deliberately avoids, so a bare substring check over the
+    # source passes on the prose. Match the code only.
+    fn = ast.parse(inspect.getsource(home_service._recent_medallions).lstrip()).body[0]
+    if ast.get_docstring(fn):
+        fn.body = fn.body[1:]
+    code = ast.unparse(fn)
+
+    assert 'UserGroupBadge' in code, 'the CTA is not reading the rebuilt badge system'
+    assert 'UserBadge.objects' not in code, 'the CTA fell back to the legacy badge table'
+    assert 'build_collection_context' not in code, (
+        'a bounded slice, never a collection build -- that is O(engaged series) and needs the progress '
+        'read-model, which is the whale shape the Collection page was redesigned around'
+    )
+
+
+def test_recent_medallions_are_bounded_and_newest_first():
+    from core.services import home_service
+
+    profile = ProfileFactory()
+    assert home_service._recent_medallions(profile) == []          # day one: nothing earned yet
+
+    sig = home_service._recent_medallions.__defaults__
+    assert sig and sig[0] == 3, 'the slice is unbounded or no longer defaults to three'
+
+
+def test_a_pursuer_with_no_badges_still_gets_a_context():
+    """Cold start: the lobby must assemble for someone who finished their first sync minutes ago."""
+    from core.services import home_service
+
+    ctx = home_service.build_home_context(ProfileFactory())
+
+    assert ctx['recent_badges'] == []
+    assert ctx['glances']['snapshot'] is not None

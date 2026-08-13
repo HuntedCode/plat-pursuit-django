@@ -17,7 +17,9 @@ Zones, in the order the page reads them:
   block that is already full on the day someone finishes their first sync.
 - **hero** -- Pursuer name, Level, rank title and the discipline-ring arcs, reused verbatim from
   Career (`career_service`) so the lobby's CTA teases exactly what Career pays off.
-- **glances.almost_badges** -- the closest badge, which is the Collection CTA's tease.
+- **glances.almost_badges** -- the closest badge: the Collection CTA's forward-looking reason to click.
+- **recent_badges** -- the last few medallions earned (REBUILT `UserGroupBadge`, bounded slice): the
+  Collection CTA's backward-looking proof. Proof + next goal reads stronger than either alone.
 - **community** -- the cached site heartbeat.
 
 Deliberately NOT here: the full Pursuer Card (identity is Career's hero now, and the card was the
@@ -136,6 +138,47 @@ def _build_sync(profile):
     return info
 
 
+def _recent_medallions(profile, limit=3):
+    """The badges this Pursuer earned most recently, as medallion frames for the Collection CTA.
+
+    Reads the REBUILT badge system (`UserGroupBadge`) -- NOT the legacy `UserBadge` table that
+    `dashboard_service.provide_recent_badges` still queries. That table has not been retired, so a reuse of
+    that helper would not fail loudly; it would quietly render badges from the retired system.
+
+    Deliberately a bounded `[:limit]` slice rather than a collection build: `build_collection_context` is
+    O(engaged series) and needs the materialized progress read-model, which is the whale-timeout shape the
+    Collection page itself had to be redesigned around. A recently EARNED badge is always in the `earned`
+    state, so none of that progress derivation is needed here -- just the art, the tier and the date.
+    """
+    from trophies.models import UserGroupBadge
+    from trophies.services.badge_detail_service import group_medallion_layers
+
+    rows = (
+        UserGroupBadge.objects
+        .filter(profile=profile, earned_at__isnull=False)
+        .select_related('group_badge', 'group_badge__series', 'group_badge__platform_group')
+        .order_by('-earned_at')[:limit]
+    )
+    out = []
+    for row in rows:
+        gb = row.group_badge
+        tier, layers, is_avatar = group_medallion_layers(gb)
+        out.append({
+            'earned_at': row.earned_at,
+            'series_slug': gb.series.series_slug,
+            'frame': {
+                'tier': tier,
+                'state': 'earned',
+                'is_holographic': bool(getattr(row, 'is_holo', False)),
+                'is_avatar': is_avatar,
+                'art_layers': layers,
+                'series_name': gb.series.name,
+                'badge_name': gb.series.name,
+            },
+        })
+    return out
+
+
 def build_home_context(profile):
     """Assemble the synced Home context for `profile`. Each zone is isolated so a single
     failure degrades to a missing section rather than a 500."""
@@ -151,6 +194,9 @@ def build_home_context(profile):
         # second rendering of what the CTA below already says.
         'hero': hero,
         'glances': glances,
+        # Proof for the Collection CTA: the medallions you most recently earned. Bounded, and off the
+        # REBUILT badge tables.
+        'recent_badges': _safe('recent_badges', profile, lambda: _recent_medallions(profile), []),
         'sync': _safe('sync', profile, lambda: _build_sync(profile), None),
         'community': _safe('community', profile, lambda: _build_community(get_cached_heartbeat()), None),
         'recent': _safe(
