@@ -394,15 +394,32 @@
 
 /* Badges as Medallions. The component owns its own rendering; these rules only place and caption it.
    `--sz` on the nested .pp-med is the Medallion's width knob (default 160px), set the same way the
-   badge-detail and collection surfaces do it. */
-/* Four badges in a 2x2 on mobile is the densest thing in the deck, and it is the slide that sits closest
+   badge-detail and collection surfaces do it.
+
+   Four badges in a 2x2 on mobile is the densest thing in the deck, and it is the slide that sits closest
    to the 375px deck ceiling. The medallions are sized to leave real headroom there, not to fit exactly --
    a longer series name or a different font should not be able to push it into an internal scroll. */
-.rcp-meds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
-@media (min-width: 768px) { .rcp-meds { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; } }
-.rcp-med { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
+/* WRAPPING ROW, not a fixed grid. The slide caps at four badges but most months bring one, and fixed
+   `1fr` tracks have no way to centre a row they do not fill: a lone medallion sat in column 1 -- hard left,
+   under the stage's back arrow -- while the kicker, figure and caption above it were all centred. It read
+   as a layout fault rather than as one badge. Percentage bases keep the same 2-up/4-up shape when the row
+   IS full, and `justify-content: center` handles every count that is not a multiple of it.
+
+   The bases subtract a FULL gap rather than each item's share of one (2-up would be `50% - 0.2rem`). The
+   slack is deliberate: at exactly four items the precise figure sums to exactly 100%, where a sub-pixel
+   rounding error is enough to wrap the last medallion onto its own line. Rounding down costs a few pixels
+   of caption width and cannot wrap. */
+.rcp-meds { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; width: 100%; }
+@media (min-width: 768px) { .rcp-meds { gap: 1rem; } }
+.rcp-med {
+    display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
+    flex: 0 1 calc(50% - 0.4rem); min-width: 0;
+}
 .rcp-med .pp-med { --sz: 46px; }
-@media (min-width: 768px) { .rcp-med .pp-med { --sz: 104px; } .rcp-med { gap: 0.4rem; } }
+@media (min-width: 768px) {
+    .rcp-med { flex-basis: calc(25% - 1rem); gap: 0.4rem; }
+    .rcp-med .pp-med { --sz: 104px; }
+}
 /* Clamp count lives IN the base rule, not a later override -- source order decides at equal specificity
    and a 2x2 of two-line captions puts this slide past the mobile deck. */
 .rcp-med__series {

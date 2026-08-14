@@ -1681,10 +1681,19 @@ DECK = [
               when=lambda r: bool(r.community_comparison_data)),
     RecapBeat('quiz_closest_badge', lambda r, c: dict(r.badge_progress_quiz_data),
               when=lambda r: bool(r.badge_progress_quiz_data), is_quiz=True),
+    # `badges_data` is a snapshot in whatever shape the generator used at the time, and a finalized recap is
+    # never rewritten -- so months generated before the badge rework still hold the legacy payload
+    # (name/tier_name/image_url) rather than the Medallion frame dict. Those are dropped rather than drawn:
+    # the slide feeds each entry to components/badge_medallion.html, which reads `art_layers`, so a legacy
+    # row renders an EMPTY medallion shell with blank captions -- broken furniture on the slide.
+    #
+    # The COUNT and the XP deliberately survive the filter. Both are stored integers and historically true,
+    # so the slide still reports "2 badges this month" with the stamp beneath it; recomputing the count to
+    # match what we can draw would make the recap understate a real month to tidy its own layout.
     RecapBeat('badges', lambda r, c: {
         'xp_earned': r.badge_xp_earned,
         'badges_count': r.badges_earned_count,
-        'badges': r.badges_data or [],
+        'badges': [b for b in (r.badges_data or []) if b.get('art_layers')],
     }, when=lambda r: r.badges_earned_count > 0),
     RecapBeat('comparison', lambda r, c: {
         'vs_prev_month': (r.comparison_data or {}).get('vs_prev_month_pct', '0%'),

@@ -39,7 +39,10 @@ def _full_recap():
         golds_earned=14, platinums_earned=3,
         games_started=6, games_completed=3,
         badges_earned_count=2, badge_xp_earned=4100,
-        badges_data=[{'series_name': 'Soulsborne'}],
+        # A post-rework row: `art_layers` is what the Medallion draws, and its absence is how the beat
+        # recognises a pre-rework snapshot and drops it.
+        badges_data=[{'series_name': 'Soulsborne', 'badge_name': 'Ultra HD',
+                      'art_layers': ['/static/bg.png', '/media/main.png'], 'state': 'earned'}],
         platinums_data=[{'game_name': 'Bloodborne'}],
         rarest_trophy_data={'name': 'Chalice', 'earn_rate': 1.4},
         most_active_day={'date': 'March 18, 2026', 'day_name': 'Wednesday', 'trophy_count': 31},
@@ -108,6 +111,37 @@ def test_a_quiet_month_drops_the_beats_it_did_not_earn():
     # The spine always survives.
     assert types[0] == 'intro' and types[-1] == 'summary'
     assert 'total_trophies' in types and 'comparison' in types
+
+
+def test_a_pre_rework_badge_snapshot_is_dropped_rather_than_drawn_empty():
+    """`badges_data` is sealed at generation and a finalized recap is never rewritten, so months from
+    before the badge rework still hold the legacy payload (name/tier_name/image_url) instead of the
+    Medallion frame dict. The slide feeds every entry to `badge_medallion.html`, which draws from
+    `art_layers` -- so a legacy row rendered an empty medallion shell with blank captions.
+
+    The COUNT and the XP survive on purpose: both are stored integers and historically true, so the slide
+    still reports what the month was worth. Recomputing the count to match what can be drawn would make
+    the recap understate a real month to tidy its own layout.
+    """
+    recap = _full_recap()
+    recap.badges_data = [
+        {'name': 'Crash Bandicoot', 'tier_name': 'Platinum', 'image_url': '/media/legacy.png',
+         'has_image': True, 'series_slug': 'crash', 'tier': 4},
+    ]
+
+    badges = {s['type']: s for s in MonthlyRecapService.build_slides_response(recap)}['badges']
+
+    assert badges['badges'] == [], 'a legacy row reached the Medallion and will render an empty shell'
+    assert badges['badges_count'] == 2, 'the stored count was rewritten to match what could be drawn'
+    assert badges['xp_earned'] == 4100, 'the XP the month actually earned was dropped with the art'
+
+
+def test_a_post_rework_badge_snapshot_still_reaches_the_medallion():
+    """Positive control for the filter above -- it must drop legacy rows WITHOUT eating modern ones."""
+    badges = {s['type']: s for s in
+              MonthlyRecapService.build_slides_response(_full_recap())}['badges']
+
+    assert len(badges['badges']) == 1 and badges['badges'][0]['series_name'] == 'Soulsborne'
 
 
 def test_the_payoff_is_dropped_when_there_was_nothing_to_guess():

@@ -378,6 +378,23 @@
     padding: 0; max-width: 34rem;
 }
 .rcx .rcp .pp-tally--hero { font-size: clamp(3.25rem, 13vw, 5.5rem); }
+/* The hero scale is built for a NUMBER -- one to three glyphs, monumental. Three slides borrow it for a
+   PHRASE (the month, the top genre, "That's a wrap"), and a phrase at number size runs the width of a
+   phone: "That's a wrap" measured 300px of a 375px stage, passing under BOTH nav arrows, and a genre like
+   "Hack and slash/Beat 'em up" spanned the viewport edge to edge.
+ *
+ * The arrows are permanent furniture pinned 1rem in at 3rem wide, so the band a title can occupy without
+ * colliding is the stage less 8rem. Capping the WIDTH there makes the guard structural: any title too long
+ * for the band wraps inside it rather than growing into the arrows.
+ *
+ * Deliberately not a smaller font. "February" already fitted the band at full size, so stepping the scale
+ * down would have cost the deck's opening beat its impact to fix a different slide's overflow. Capped,
+ * "That's a wrap" becomes two balanced lines and keeps the monumental size. */
+@media (max-width: 767px) {
+    .rcx .rcp__title.pp-tally--hero {
+        max-width: calc(100vw - 8.5rem); margin-inline: auto; text-wrap: balance;
+    }
+}
 .rcx .rcp__kicker {
     font-size: 0.95rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-dim);
 }
@@ -550,6 +567,12 @@
     overflow: hidden;
 }
 .rcx__card-frame > * {
+    /* The card is a FIXED 1200x630 render and the frame is a flex container, so the default `flex-shrink: 1`
+       let a narrow stage squeeze the card's WIDTH while its inline height held -- 1200x630 became 343x630 on
+       a phone. That is not a smaller card, it is a different one: the internals re-laid out at a third of
+       their design width and landed on top of each other, and `fitCard` then scaled from the wrong natural
+       size. Scaling is the only thing allowed to resize this card; layout must not touch it. */
+    flex: none;
     transform: scale(var(--rcx-card-scale, 1));
     transform-origin: center;
     border-radius: var(--pp-radius-md);
