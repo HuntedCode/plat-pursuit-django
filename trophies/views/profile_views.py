@@ -918,6 +918,14 @@ class ProfileDetailView(DetailView):
             {'text': f"{profile.display_psn_username}"}
         ]
         context['current_tab'] = tab
+        # The tabs the switcher renders, in order. Lists is deliberately NOT here: Game Lists is parked
+        # and every route into it redirects home, so the tab offered cards whose links bounced the reader
+        # to the homepage. Its builder and template stay (hidden, not deleted); only the door is closed.
+        context['profile_tabs'] = (
+            ('games', 'Games'),
+            ('trophies', 'Trophies'),
+            ('badges', 'Badges'),
+        )
 
         # Tab template mapping for {% include %} and HTMX partial returns
         tab_templates = {

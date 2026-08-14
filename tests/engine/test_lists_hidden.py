@@ -163,3 +163,22 @@ def test_the_data_is_untouched():
     assert reverse('list_detail', args=[gl.id]) == f'/community/lists/{gl.id}/', (
         'the URL names still resolve -- unreachable templates reference them, and the revamp needs them'
     )
+
+
+def test_no_profile_tab_leads_into_lists(client):
+    """The door this guard did not cover. A profile carried a Lists tab whose cards linked to
+    /lists/<id>/ -- routes that redirect home -- so following one from a profile bounced the reader to
+    the homepage. Chrome, ads, the sitemap and game cards were all checked; a per-profile tab was not.
+
+    Hidden, not deleted: `_build_lists_tab_context` and `lists_tab.html` are intact for the revamp. What
+    must not come back before the system does is the way IN.
+    """
+    from trophies.views.profile_views import ProfileDetailView
+
+    owner = ProfileFactory(is_linked=True)
+    GameList.objects.create(profile=owner, name='Public list', is_public=True, game_count=2)
+
+    body = client.get(f'/hunters/{owner.psn_username}/', HTTP_CF_RAY='8f0000000000abcd-LHR').content.decode()
+
+    assert 'data-tab="lists"' not in body, 'the profile still offers a Lists tab'
+    assert '?tab=lists' not in body, 'something on the profile still links into lists'
