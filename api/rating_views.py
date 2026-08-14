@@ -358,11 +358,10 @@ class WizardQueueView(APIView):
                 item = {
                     'concept_id': cid,
                     'unified_title': c.unified_title,
+                    # The COVER is the wizard header's only artwork -- it carried the concept's landscape
+                    # image too, as a wash behind the text, and that was dropped for reading as noise
+                    # behind the question being asked. Nothing consumed the field once the wash went.
                     'concept_icon_url': c.cover_url or '',
-                    # Landscape art for the wizard's game header, which has to remind a hunter WHICH game
-                    # this is. Reads only the igdb_*_image_ids columns (never raw_response), and the
-                    # select_related above means it costs no extra query.
-                    'landscape_url': c.landscape_url or '',
                     'slug': c.slug,
                     'has_rating': cid in rated_concept_ids,
                     'trophy_group_id': 'default',
@@ -490,7 +489,6 @@ class WizardQueueView(APIView):
                     'concept_id': cid,
                     'unified_title': g.concept.unified_title,
                     'concept_icon_url': g.concept.cover_url or '',
-                    'landscape_url': g.concept.landscape_url or '',
                     'slug': g.concept.slug,
                     'is_shovelware': cid in shovelware_concept_ids,
                     'items': [],

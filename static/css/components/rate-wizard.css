@@ -68,26 +68,17 @@
 /* ---- The game being rated. This card exists for RECALL: you finished the thing, possibly years ago,
  * and you are about to score it from memory. So the cover is big enough to recognise, the title leads,
  * and your own record with it reads as a ledger. ---- */
-.rmg__hero { position: relative; overflow: hidden; }
-/* The game's own landscape art, held FAR back. It is atmosphere -- enough that the card feels like it
- * belongs to this game, nowhere near enough to fight the text on top of it. The veil is a flat wash of the
- * card's own surface rather than a gradient, so contrast is uniform wherever the content happens to sit.
- * No art (a stub concept with no IGDB match) just leaves the flat card, which is why nothing here depends
- * on it. */
-.rmg__hero-art {
-    position: absolute; inset: 0; background-size: cover; background-position: center;
-    /* Blurred, and scaled up just enough to keep the blur's soft edges outside the card. This is what
-     * makes the art safe to put under 9.5px muted labels: it kills the high-frequency detail and the
-     * sharp bright spots that would locally lift the background under small text, while the colour and
-     * the mood survive. Static -- only the opacity transitions, so nothing repaints a filter per frame. */
-    filter: blur(4px) saturate(1.15);
-    transform: scale(1.08);
-    opacity: 0; transition: opacity 0.45s var(--pp-ease, ease);
-}
-.rmg__hero-art.is-lit { opacity: 0.5; }
-.rmg__hero-art::after { content: ''; position: absolute; inset: 0; background: color-mix(in oklab, var(--pp-bg-1) 84%, transparent); }
-@media (prefers-reduced-motion: reduce) { .rmg__hero-art { transition: none; } }
-.rmg__game { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 16px; }
+/* No background artwork. The card used to hold the game's landscape art as a blurred wash behind the
+ * text; it read as noise behind the one thing being asked of you, and every rule it needed (a blur to
+ * make small labels safe, a flat veil for uniform contrast, a cross-fade so a swap did not hard-cut)
+ * existed only to stop the decoration from damaging the content. The cover does the recognising on its
+ * own. What replaces it is structure: an eyebrow naming the job, identity, then the ledger under a rule.
+ *
+ * `overflow: hidden` OUTLIVED the art and is not a leftover: the cover carries a 18px-blur drop shadow and
+ * sits 16px from the card's edge, so without the clip it bleeds past the card's rounded corner. Verified by
+ * removing it and diffing the render, after nearly deleting it as dead. */
+.rmg__hero { overflow: hidden; }
+.rmg__game { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 16px 16px 14px; }
 
 .rmg__cover {
     width: 88px; flex: 0 0 auto; aspect-ratio: 3 / 4; overflow: hidden;
@@ -104,8 +95,15 @@
 .rmg__cover-ph { width: 30px; height: 30px; }
 
 /* `flex: 1 1 240px` (not `auto`): it takes the slack on a wide card, but is allowed to drop to its own
-   line and push the ledger under it once the row gets tight. */
+   line once the row gets tight. */
 .rmg__ident { min-width: 0; flex: 1 1 240px; }
+/* Names the job, and it is the card's only accent -- one hue, on the smallest thing, which is what lets
+   the title stay neutral and still lead. Matches the ledger's label treatment so the two read as the same
+   voice at the two ends of the card. */
+.rmg__eyebrow {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--pp-primary); margin-bottom: 3px;
+}
 .rmg__title { font-family: var(--pp-font-display); font-size: clamp(1.15rem, 2.2vw, 1.4rem); font-weight: 800; line-height: 1.15; color: var(--pp-text); overflow-wrap: anywhere; }
 /* Neutral: the DLC pill below already carries that signal in violet, and colouring the name too was a
    second hue spent on the same fact (colour restraint). */
@@ -124,9 +122,36 @@
 .rmg__flag--shovel { color: var(--pp-warning); border-color: color-mix(in oklab, var(--pp-warning) 45%, var(--pp-border)); }
 
 /* The ledger. Label over value, in cells -- "10 / 10 trophies - 100% complete - 5h played" as one grey
-   line is a sentence you have to READ, and this is meant to be taken in at a glance. */
-.rmg__facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; width: 100%; }
-@media (min-width: 768px) { .rmg__facts { display: flex; flex-wrap: wrap; gap: 22px; width: auto; margin-left: auto; } }
+   line is a sentence you have to READ, and this is meant to be taken in at a glance.
+ *
+ * Its own register at the foot of the card, under a hairline. The rule is what makes the ledger legible as
+ * a separate KIND of information from the name above it -- the job the art wash was failing to do by mood
+ * alone. Two columns on a phone, one row from tablet up; `auto` tracks rather than `1fr` so the cells sit
+ * together under the rule instead of being stretched apart across the full width. */
+.rmg__facts {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px;
+    width: 100%; padding-top: 13px; border-top: 1px solid var(--pp-border);
+}
+/* One row of four rather than a 2x2, but still full width under its rule -- a tablet has the width for the
+   row and not the width for the row PLUS the title. */
+@media (min-width: 768px) { .rmg__facts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* Only now does the ledger move up beside the title, and the rule turns with it.
+ *
+ * This is made to FIT rather than aimed at the width where it happens to: the row wants cover + title +
+ * ledger, and at `lg` the card offers ~700px against the ~716px that wanted -- so the ledger wrapped while
+ * still holding the vertical rule and the `margin-left: auto` meant for the un-wrapped case, and floated
+ * against an empty half-row. Chasing it with a wider breakpoint does not hold either, because the card's
+ * inner width is not monotonic in the viewport (the two-column split below takes width back at `xl`). So
+ * the title's basis and the ledger's own gaps come in enough to clear the tightest case with room spare.
+ * The rule's direction and the wrap are then decided by the same number, which is the actual invariant. */
+@media (min-width: 1024px) {
+    .rmg__ident { flex-basis: 200px; }
+    .rmg__facts {
+        grid-template-columns: repeat(4, auto); width: auto; margin-left: auto;
+        gap: 22px; padding-top: 0; padding-left: 22px;
+        border-top: 0; border-left: 1px solid var(--pp-border);
+    }
+}
 .rmg__fact { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rmg__fact-label { font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-text-mute); }
 .rmg__fact-value { font-size: 14px; font-weight: 700; color: var(--pp-text); font-variant-numeric: tabular-nums; white-space: nowrap; }

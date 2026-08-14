@@ -173,6 +173,14 @@
         form.addEventListener('input', onInput);
         form.addEventListener('submit', onSubmitEvent);
 
+        // The guidelines sheet is wired HERE, by the component that owns the link. `_rating_fields.html`
+        // carries the only [data-gd-guidelines-open] trigger on the site, so every host of these fields
+        // inherits the affordance -- and a host cannot ship the notice without the sheet behind it, which
+        // is exactly what the wizard did: it included the dialog and rendered the link, but never called
+        // the wiring, so the link was dead on the one surface built entirely around rating games.
+        // Idempotent and a no-op when the sheet is absent, so hosts that also call it are unaffected.
+        if (PP.wireGuidelinesSheet) { PP.wireGuidelinesSheet(); }
+
         // Labels and the playtime hint vary per host -- and in the wizard, per GAME, which is why they
         // are re-settable rather than read once at attach.
         function label(next) {

@@ -10,6 +10,11 @@ shared controller was created to stop.
 The host supplies the <form> element (and its `data-guidelines-agreed`) plus its own actions, because a
 modal ends in Cancel/Submit and a wizard ends in Skip/Submit sitting outside the form entirely.
 
+The host must ALSO include `trophies/partials/game_detail/guidelines_sheet.html`. The notice below carries
+the only [data-gd-guidelines-open] trigger on the site, and a <dialog> cannot live in here: this renders
+inside the host's <form>, and two hosts on one page would duplicate the element id. `RatingFields.attach`
+wires whatever sheet it finds, so the include is the host's whole obligation.
+
 The input NAMES are the API contract (difficulty, grindiness, hours_to_platinum, fun_ranking,
 overall_rating, blurb) -- do not rename. Value/label hooks are data-gd-qr-*.
 

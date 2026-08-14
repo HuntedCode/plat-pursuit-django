@@ -235,9 +235,13 @@ def test_the_queue_never_drags_the_igdb_blob_along(client, queue_type):
 
 
 @pytest.mark.parametrize('queue_type,key', [('base', 'queue'), ('dlc', 'groups')])
-def test_the_queue_sends_art_for_the_game_header(client, queue_type, key):
-    """The header's job is reminding you WHICH game this is, so it gets the game's own landscape art.
-    Served off the igdb_*_image_ids columns via Concept.landscape_url -- never raw_response."""
+def test_the_queue_sends_the_cover_and_no_longer_the_landscape_wash(client, queue_type, key):
+    """The header's job is reminding you WHICH game this is, and the COVER is what does it.
+
+    It also carried `landscape_url`, painted behind the text as a blurred wash. That was dropped -- it read
+    as noise behind the one question the page asks -- and the field went with it rather than being left in
+    the payload for nobody: every consumer of a queue row is the wizard's own header.
+    """
     profile = _hunter()
     _dlc_ready(profile)
     client.force_login(profile.user)
@@ -245,7 +249,10 @@ def test_the_queue_sends_art_for_the_game_header(client, queue_type, key):
     data = client.get(QUEUE, {'queue_type': queue_type}).json()
 
     assert data[key], f'nothing in the {queue_type} queue to check'
-    assert 'landscape_url' in data[key][0], f'the {queue_type} queue sends no art for the header'
+    assert 'concept_icon_url' in data[key][0], f'the {queue_type} queue sends no cover for the header'
+    assert 'landscape_url' not in data[key][0], (
+        f'the {queue_type} queue still pays for landscape art the header no longer draws'
+    )
 
 
 @pytest.mark.parametrize('queue_type', ['base', 'dlc'])
@@ -498,16 +505,28 @@ def test_the_progress_meter_warms_as_the_queue_empties():
     assert 'js/horizon.js' in html, 'the Horizon client API is never loaded, so the meter would not move'
 
 
-def test_the_game_art_never_costs_readability():
-    """The header carries the game's own landscape art for recall. It is atmosphere: a flat veil of the
-    card's own surface sits over it so contrast is the same wherever the text lands, and the whole thing
-    is optional -- a stub concept with no art just gets the flat card."""
+def test_nothing_is_painted_behind_the_header_text():
+    """The header carried the game's landscape art as a blurred wash for recall. It went: it read as noise
+    behind the one question the page asks, and the cover alone does the recognising.
+
+    Pinned because the wash was not a single rule. It needed a blur to make 9.5px labels safe over it, a
+    flat veil for uniform contrast, a cross-fade so a swap did not hard-cut, and a payload field to feed
+    it -- so reintroducing it means reintroducing all of that, and the leftovers are what would rot.
+    """
     css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
     js = (ROOT / 'static' / 'js' / 'rate-my-games.js').read_text(encoding='utf-8')
+    api = (ROOT / 'api' / 'rating_views.py').read_text(encoding='utf-8')
+    rules = re.sub(r'/\*.*?\*/', '', css, flags=re.S)      # the comment explains the removal by name
 
-    assert '.rmg__hero-art::after' in css, 'the art has no veil over it'
-    assert 'var(--pp-bg-1)' in css[css.index('.rmg__hero-art::after'):css.index('.rmg__hero-art::after') + 200]
-    assert "if (!url) { art.classList.remove('is-lit')" in js, 'a game with no art is not handled'
+    assert '.rmg__hero-art' not in rules, 'the backdrop wash is back'
+    # ...but the card must still CLIP. `overflow: hidden` reads like a leftover of the art once the art is
+    # gone, and it is not: the cover's 18px drop shadow bleeds past the card's rounded corner without it.
+    assert re.search(r'\.rmg__hero \{[^}]*overflow:\s*hidden', rules), (
+        "the card no longer clips, so the cover's shadow spills past its corner"
+    )
+    assert 'blur(' not in rules, 'something is blurred behind the header again'
+    assert 'renderArt' not in js, 'the backdrop renderer survived its markup'
+    assert "'landscape_url'" not in api, 'the queue still pays for art nothing draws'
 
 
 def test_the_page_opens_with_the_shared_beat():
@@ -561,3 +580,44 @@ def test_the_field_partial_renders_standalone():
         assert f'name="{name}"' in bare
     assert "don't have your playtime" in bare
     assert '<b>42</b>' in hinted
+
+
+def test_the_guidelines_link_is_wired_by_the_component_that_renders_it():
+    """The notice's "Community Guidelines" button is the ONLY `[data-gd-guidelines-open]` trigger on the
+    site, and it lives in the shared field partial -- so every host of those fields renders the link.
+
+    The wiring therefore belongs to the shared controller, not to each host. It used to sit in the page
+    controllers (game-detail.js, plat-cards.js), and the wizard -- the one surface built entirely around
+    rating games -- included the dialog, rendered the link, and never called the wiring. The link was dead.
+    """
+    js = (ROOT / 'static' / 'js' / 'quick-rate.js').read_text(encoding='utf-8')
+    attach = js[js.index('function attach('):js.index('PP.RatingFields =')]
+
+    assert 'wireGuidelinesSheet' in attach, (
+        'the shared fields no longer wire their own guidelines link, so each host must remember to'
+    )
+
+
+def test_the_ledger_rule_turns_with_the_wrap_not_with_a_label():
+    """The header's ledger sits beside the title on a wide card and beneath it otherwise, and the rule
+    separating it turns with that: vertical when beside, horizontal when beneath.
+
+    The bug this pins is the two coming apart. The beside treatment was first applied at `md`, where the
+    row does not actually fit -- so the ledger wrapped while keeping the vertical rule and the
+    `margin-left: auto` meant for the un-wrapped case, and floated against an empty half-row. Moving the
+    breakpoint alone does not fix it either: the card's inner width is not monotonic in the viewport, since
+    the two-column split takes width back. The fix is that the SAME block which turns the rule also brings
+    the title's basis in far enough to guarantee the row fits, so one number decides both.
+    """
+    css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
+    css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+
+    blocks = re.findall(r'@media \(min-width: (\d+)px\) \{(.*?)\n\}', css, flags=re.S)
+    beside = [(int(w), body) for w, body in blocks if 'border-left' in body and '.rmg__facts' in body]
+    assert beside, 'the ledger never moves up beside the title'
+
+    for width, body in beside:
+        assert 'flex-basis' in body and '.rmg__ident' in body, (
+            f'the {width}px block turns the rule vertical without constraining the title, so the row can '
+            f'wrap while still styled as though it had not'
+        )

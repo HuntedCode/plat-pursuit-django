@@ -637,8 +637,8 @@
         wireMinibar();
         initReveal();
         wireModal(first);
-        // The quick-rate modal's notice links to the guidelines sheet, so the sheet has to be wired
-        // wherever that modal is composed. Idempotent + no-op when the sheet isn't on the page.
+        // Redundant now -- `RatingFields.attach` wires the sheet, and the only link to it lives inside the
+        // fields that attach composes. Kept as page-load belt-and-braces; both calls are idempotent.
         if (PP.wireGuidelinesSheet) { PP.wireGuidelinesSheet(); }
         if (first) { autoOpen(); }      // strips ?c= / ?et= BEFORE the scroller snapshots the query
         initScroller();

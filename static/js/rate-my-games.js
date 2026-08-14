@@ -300,7 +300,6 @@ window.PlatPursuit = window.PlatPursuit || {};
             var formTitle = el('rmg-form-title');
             if (formTitle) { formTitle.textContent = isDlc ? 'Rate this DLC' : 'Rate this game'; }
 
-            this.renderArt(game);
             this.renderFacts(game);
             this.pointFormAt(game);
             this.loadTrophies();
@@ -361,22 +360,6 @@ window.PlatPursuit = window.PlatPursuit || {};
             set('trophies', Boolean(stats), stats ? stats.earned_trophies + ' / ' + stats.total_trophies : '');
             set('progress', Boolean(stats), stats ? stats.progress + '%' : '');
             set('playtime', Boolean(stats && stats.play_hours), stats ? stats.play_hours + 'h' : '');
-        },
-
-        /** The game's own landscape art behind the header, cross-faded so a swap doesn't hard-cut. */
-        renderArt(game) {
-            var art = el('rmg-art');
-            if (!art) { return; }
-            var url = game.landscape_url || '';
-            if (!url) { art.classList.remove('is-lit'); art.style.backgroundImage = ''; return; }
-            art.classList.remove('is-lit');
-            // Paint only once the image is in cache, or the fade-in races the download and pops.
-            var img = new Image();
-            img.onload = function () {
-                art.style.backgroundImage = 'url("' + url.replace(/"/g, '%22') + '")';
-                art.classList.add('is-lit');
-            };
-            img.src = url;
         },
 
         /**

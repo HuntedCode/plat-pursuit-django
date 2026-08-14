@@ -1,6 +1,7 @@
-{% comment %} Community Guidelines, rebuilt to the gd-modal standard. game-detail.js opens it OVER the
-quick-rate modal from the compose notice's [data-gd-guidelines-open] link, so reading the rules never loses
-the in-progress quick take. Read-only reference; agreement is recorded implicitly on submit (see
+{% comment %} Community Guidelines, rebuilt to the gd-modal standard. Opened OVER whatever compose surface
+is showing, from the notice's [data-gd-guidelines-open] link, so reading the rules never loses the
+in-progress quick take. The wiring belongs to `RatingFields.attach` (quick-rate.js) -- the link ships in
+the shared field partial, so every page that includes those fields must also include THIS sheet. Read-only reference; agreement is recorded implicitly on submit (see
 quick_rate_modal.html + the agree-on-submit flow in game-detail.js). Content mirrors the site-wide
 guidelines (partials/guidelines_info_modal.html), condensed. {% endcomment %}
 <dialog id="gd-guidelines-modal" class="gd-modal gd-modal--guidelines pp-dismissable" aria-labelledby="gd-guidelines-title">

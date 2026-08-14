@@ -121,17 +121,24 @@ it never tears down to a spinner, which read as a full-page reload.
         <div id="rmg-card" class="hidden">
             {% comment %}The game being rated. Its whole job is recall -- you finished this thing possibly
             years ago, and you are about to score it from memory. So: the cover at a size you can actually
-            recognise, the game's own landscape art as atmosphere behind it (held far back, because the
-            point is legibility), and your own record with it as a labelled ledger rather than a run-on
-            line of grey text.{% endcomment %}
+            recognise, the title leading, and your own record with it as a labelled ledger rather than a
+            run-on line of grey text.
+
+            No background artwork. The card carried the game's landscape art as a blurred wash and it read
+            as noise behind the one thing being asked of you; the cover alone does the recognising, and the
+            card earns its presence through structure instead -- an eyebrow naming the job, then identity,
+            then the ledger held apart by a rule.{% endcomment %}
             <section class="rmg__card rmg__hero">
-                <div class="rmg__hero-art" id="rmg-art" aria-hidden="true"></div>
                 <div class="rmg__game">
                     <div class="rmg__cover rmg__cover--none" id="rmg-cover">
                         <img id="rmg-cover-img" src="" alt="" />
                         <svg class="rmg__cover-ph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 15l5-5 4 4 3-3 8 7"/></svg>
                     </div>
                     <div class="rmg__ident">
+                        {% comment %}Names the job the card is doing. With the artwork gone this is what
+                        gives the card a voice, and it stays put while the title under it changes on every
+                        advance -- a fixed label over moving content.{% endcomment %}
+                        <p class="rmg__eyebrow">Now rating</p>
                         {% comment %}Announced: the card is replaced under you on every skip and save, and
                         focus lands in the hours field rather than on the new title -- so without this a
                         screen-reader user is typing an estimate for a game they were never told about.{% endcomment %}
@@ -147,7 +154,12 @@ it never tears down to a spinner, which read as a full-page reload.
                     </div>
                     {% comment %}Your record with this game. Labelled cells, because "10 / 10 trophies ·
                     100% complete · 5h played" as one grey line is a sentence you have to read, and this is
-                    a thing you should be able to take in at a glance.{% endcomment %}
+                    a thing you should be able to take in at a glance.
+
+                    Stays IN the identity row. It was briefly moved out to sit under a full-width rule, and
+                    on a wide card that left the right two-thirds of the row empty -- the ledger is what
+                    balances the title. It keeps its own register through a rule instead: a vertical one
+                    where it sits beside the title, a horizontal one where it wraps beneath it.{% endcomment %}
                     <div class="rmg__facts hidden" id="rmg-facts">
                         <div class="rmg__fact hidden" id="rmg-fact-finished">
                             <span class="rmg__fact-label">Finished</span>

@@ -1701,8 +1701,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // ── Community Guidelines sheet. Opens OVER the compose modal from its notice's [data-gd-guidelines-open]
         //    link, so reading the rules never loses the in-progress take. Read-only; agreement is recorded on
         //    submit. Stacking a second <dialog>.showModal() puts it on top; closing returns focus to the modal. ──
-        //    Moved to utils (PlatPursuit.wireGuidelinesSheet) once the quick-rate modal gained a second
-        //    host -- the plat-card share modal -- since its notice links here from both.
+        //    Redundant now -- `RatingFields.attach` wires the sheet, and the only link to it lives inside
+        //    the fields that attach composes. Kept as page-load belt-and-braces; both calls are idempotent.
         if (PlatPursuit.wireGuidelinesSheet) PlatPursuit.wireGuidelinesSheet();
     })();
 });

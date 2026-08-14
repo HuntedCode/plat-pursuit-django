@@ -1924,9 +1924,11 @@ window.PlatPursuit.onPageReady = onPageReady;
  * compose surface is showing from that surface's `[data-gd-guidelines-open]` link, so reading the rules
  * never loses an in-progress quick take. Read-only; agreement is recorded on submit, not here.
  *
- * Shared because the quick-rate modal is now composed on more than one page (Game Detail's Ratings tab
- * and the plat-card share modal), and its notice links here from both. Stacking a second
- * <dialog>.showModal() puts it on top; closing returns focus to the modal underneath.
+ * Called by `RatingFields.attach` (quick-rate.js), because the link lives in the shared field partial and
+ * so appears on every surface that composes those fields -- Game Detail's Ratings tab, the plat-card share
+ * modal, and the Rate My Games wizard. The page controllers used to call this themselves, and the wizard
+ * was the host that forgot. Stacking a second <dialog>.showModal() puts it on top; closing returns focus
+ * to the modal underneath.
  *
  * Idempotent: safe to call from several page controllers, and a no-op when the sheet isn't on the page.
  */
