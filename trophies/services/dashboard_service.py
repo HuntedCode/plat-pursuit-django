@@ -1788,49 +1788,6 @@ def provide_advanced_stats(profile, settings=None):
     }
 
 
-def provide_premium_settings(profile):
-    """Premium dashboard theme picker.
-
-    Surfaces the current site theme + a quick-pick row of curated themes
-    drawn one-per-category for variety. The full 105-theme grid is one
-    click away via the existing color grid modal.
-    """
-    from trophies.themes import (
-        GRADIENT_THEMES, get_theme_style, get_available_themes_for_grid,
-    )
-
-    theme_key = profile.selected_theme or ''
-    theme_data = GRADIENT_THEMES.get(theme_key) if theme_key else None
-    theme_name = theme_data['name'] if theme_data else 'Default'
-    theme_style = get_theme_style(theme_key) if theme_key else ''
-
-    # Quick-pick: one representative theme from each category for variety
-    grouped = get_available_themes_for_grid(grouped=True)
-    quick_picks = []
-    for cat_key, cat_label, cat_themes in grouped:
-        if not cat_themes:
-            continue
-        first_key, first_data = cat_themes[0]
-        # Skip the user's currently equipped theme - it's already shown above
-        if first_key == theme_key:
-            continue
-        quick_picks.append({
-            'key': first_key,
-            'name': first_data['name'],
-            'category': cat_label,
-            'background_css': first_data['background_css'],
-        })
-        if len(quick_picks) >= 8:
-            break
-
-    return {
-        'theme_key': theme_key,
-        'theme_name': theme_name,
-        'theme_style': theme_style,
-        'quick_picks': quick_picks,
-    }
-
-
 def _build_heatmap_data(profile, year):
     """GitHub-style contribution grid for all trophy earns over a year."""
     from trophies.models import EarnedTrophy
@@ -4555,22 +4512,6 @@ DASHBOARD_MODULES = [
         ],
         'cache_ttl': 1800,
         'default_size': 'large',
-        'allowed_sizes': ['medium', 'large'],
-    },
-    {
-        'slug': 'premium_settings',
-        'name': 'Theme Picker',
-        'description': 'Switch your site theme without leaving the dashboard. Quick-pick row plus full 105-theme browser.',
-        'category': 'premium',
-        'template': 'trophies/partials/dashboard/premium_settings.html',
-        'provider': provide_premium_settings,
-        'requires_premium': True,
-        'load_strategy': 'lazy',
-        'default_order': 8,  # premium #8
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 0,
-        'default_size': 'medium',
         'allowed_sizes': ['medium', 'large'],
     },
     {

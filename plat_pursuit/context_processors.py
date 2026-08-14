@@ -49,34 +49,6 @@ def moderation(request):
     }
 
 
-def premium_theme_background(request):
-    """
-    Inject premium user's gradient theme as a site-wide <body> background
-    (the user_theme_style variable).
-
-    DISABLED: premium themes are turned off site-wide -- every user gets the base
-    substrate background. Flip PREMIUM_THEMES_ENABLED / remove the guard to restore
-    (the settings picker is disabled too; the settings-page rebuild will bring both
-    back).
-    """
-    PREMIUM_THEMES_ENABLED = False
-    if not PREMIUM_THEMES_ENABLED:
-        return {}
-
-    if not request.user.is_authenticated:
-        return {}
-
-    profile = getattr(request.user, 'profile', None)
-    if not profile or not profile.user_is_premium:
-        return {}
-
-    if profile.selected_theme:
-        from trophies.themes import get_theme_style
-        return {'user_theme_style': get_theme_style(profile.selected_theme)}
-
-    return {}
-
-
 def active_fundraiser(request):
     """
     Inject the currently active fundraiser for the site-wide banner.

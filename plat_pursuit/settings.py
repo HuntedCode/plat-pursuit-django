@@ -340,7 +340,6 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "plat_pursuit.context_processors.ads",
                 "plat_pursuit.context_processors.moderation",
-                "plat_pursuit.context_processors.premium_theme_background",
                 "plat_pursuit.context_processors.high_sync_volume",
                 "plat_pursuit.context_processors.psn_outage",
                 "plat_pursuit.context_processors.active_fundraiser",

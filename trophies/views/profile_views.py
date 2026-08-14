@@ -30,13 +30,11 @@ from ..models import (
     Profile,
     EarnedTrophy,
     ProfileGame,
-    UserTrophySelection,
     Badge,
     UserBadge,
     UserBadgeProgress,
     GameList,
     Trophy,
-    UserConceptRating,
     UserTitle,
 )
 from trophies.mixins import HtmxListMixin
@@ -929,16 +927,6 @@ class ProfileDetailView(DetailView):
             'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
         }
         context['tab_template'] = tab_templates.get(tab, tab_templates['games'])
-
-        # Premium profile personalization
-        if profile.user_is_premium:
-            # Theme accent colors
-            if profile.selected_theme:
-                from trophies.themes import get_theme, get_theme_css
-                theme = get_theme(profile.selected_theme)
-                if theme:
-                    context['profile_theme_accent'] = theme['accent_color']
-                    context['profile_theme_gradient'] = get_theme_css(profile.selected_theme)
 
         # Own profile check (for edit controls)
         context['is_own_profile'] = (

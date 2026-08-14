@@ -144,31 +144,6 @@ class UpdateQuickSettingsAPIView(APIView):
             request.user.browse_defaults = defaults
             request.user.save(update_fields=['browse_defaults'])
 
-        # Premium theme setting
-        elif setting == 'selected_theme':
-            profile = getattr(request.user, 'profile', None)
-            if not profile:
-                return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
-            if not profile.user_is_premium:
-                return Response({'error': 'Premium required.'}, status=http_status.HTTP_403_FORBIDDEN)
-            if not isinstance(value, str):
-                return Response({'error': 'Value must be a string.'}, status=http_status.HTTP_400_BAD_REQUEST)
-            value = value.strip()
-            if value:
-                from trophies.themes import GRADIENT_THEMES
-                theme = GRADIENT_THEMES.get(value)
-                if not theme:
-                    return Response({'error': 'Invalid theme.'}, status=http_status.HTTP_400_BAD_REQUEST)
-                if theme.get('requires_game_image'):
-                    return Response({'error': 'Game art themes cannot be used as site theme.'}, status=http_status.HTTP_400_BAD_REQUEST)
-            profile.selected_theme = value or None
-            profile.save(update_fields=['selected_theme'])
-            try:
-                from trophies.services.dashboard_service import invalidate_dashboard_cache
-                invalidate_dashboard_cache(profile.pk)
-            except Exception:
-                pass
-
         else:
             return Response({'error': f'Unknown setting: {setting}'}, status=http_status.HTTP_400_BAD_REQUEST)
 

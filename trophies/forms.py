@@ -600,36 +600,6 @@ class GameDetailForm(forms.Form):
         label='DLC Filter',
     )
 
-class PremiumSettingsForm(forms.ModelForm):
-    """Premium-only settings: background and site theme."""
-    selected_theme = forms.ChoiceField(
-        choices=[],  # Populated in __init__
-        label='Site Theme',
-        required=False,
-        widget=forms.Select(attrs={'class': 'select w-full', 'id': 'selected-theme-select'})
-    )
-
-    class Meta:
-        model = Profile
-        fields = ['selected_theme']
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        from trophies.themes import THEME_CHOICES
-        self.fields['selected_theme'].choices = THEME_CHOICES
-
-        if self.instance and not self.instance.user_is_premium:
-            for field in self.fields:
-                self.fields[field].widget.attrs['disabled'] = 'disabled'
-                self.fields[field].help_text = 'Premium feature.'
-
-    def clean(self):
-        cleaned_data = super().clean()
-        if not self.instance.user_is_premium:
-            for field in self.fields:
-                cleaned_data[field] = self.initial.get(field)
-        return cleaned_data
 
 class ProfileSettingsForm(forms.ModelForm):
     hide_hiddens = forms.BooleanField(

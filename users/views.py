@@ -10,7 +10,6 @@ from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
@@ -18,7 +17,7 @@ from django.views import View
 from django.views.generic import TemplateView
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from djstripe.models import Price, Customer, Subscription
+from djstripe.models import Price, Subscription
 from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
@@ -26,8 +25,7 @@ from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPrefere
 from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
 from users.models import CustomUser
-from trophies.forms import PremiumSettingsForm, ProfileSettingsForm
-from trophies.models import Concept, ProfileGame
+from trophies.forms import ProfileSettingsForm
 from trophies.utils import update_profile_trophy_counts
 
 logger = logging.getLogger('users.views')
@@ -53,32 +51,13 @@ class SettingsView(LoginRequiredMixin, View):
         user_form = UserSettingsForm(instance=request.user)
         password_form = CustomPasswordChangeForm(user=request.user)
         profile = request.user.profile if hasattr(request.user, 'profile') else None
-        premium_form = PremiumSettingsForm(instance=profile) if profile else None
         profile_form = ProfileSettingsForm(instance=profile) if profile else None
-
-        # Build available themes for the template
-        # Exclude game art themes since settings page has no game context
-        from trophies.themes import get_available_themes_for_grid, get_theme, get_theme_css
-        available_themes = get_available_themes_for_grid(include_game_art=False, grouped=True)
-
-        # Resolve selected theme info directly so template doesn't need to search
-        selected_theme_name = ''
-        selected_theme_css = ''
-        if profile and profile.selected_theme:
-            selected_theme_data = get_theme(profile.selected_theme)
-            if selected_theme_data:
-                selected_theme_name = selected_theme_data['name']
-                selected_theme_css = get_theme_css(profile.selected_theme)
 
         context = {
             'user_form': user_form,
             'password_form': password_form,
-            'premium_form': premium_form,
             'profile_form': profile_form,
             'profile': profile,
-            'available_themes': available_themes,
-            'selected_theme_name': selected_theme_name,
-            'selected_theme_css': selected_theme_css,
             'breadcrumb': [
                 {'text': 'Home', 'url': '/'},
                 {'text': 'Settings'},
@@ -115,29 +94,6 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.success(request, 'PSN profile unlinked successfully!')
             else:
                 messages.error(request, 'No profile to unlink.')
-            return redirect('settings')
-        
-        elif action == 'update_premium':
-            # Theme/background customization is paused until the settings page is rebuilt (the picker + its
-            # default preview are stale vs the new substrate). The UI is hidden in settings.html; this guard
-            # also blocks any stray/crafted POST. To re-enable: drop this flag block and un-hide the picker.
-            THEME_CUSTOMIZATION_ENABLED = False
-            if not THEME_CUSTOMIZATION_ENABLED:
-                messages.info(request, 'Theme customization is temporarily unavailable while we rework this page.')
-                return redirect('settings')
-
-            if not hasattr(request.user, 'profile') or not request.user.profile.user_is_premium:
-                messages.error(request, 'This feature is for premium users only!')
-                return redirect('settings')
-            profile = request.user.profile
-            premium_form = PremiumSettingsForm(request.POST, instance=profile)
-            if premium_form.is_valid():
-                premium_form.save()
-
-
-                messages.success(request, 'Premium settings updated successfully!')
-            else:
-                messages.error(request, 'Error updating premium settings.')
             return redirect('settings')
         
         elif action == 'update_profile':
