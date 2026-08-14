@@ -97,7 +97,12 @@
 .pp-gcard__tro-d { color: var(--pp-text-mute); margin: 0 1.5px; font-weight: 400; }
 .pp-gcard__plat { font-weight: 700; color: var(--pp-text-dim); }
 .pp-gcard__plat.is-earned { color: var(--color-trophy-platinum); }
-.pp-gcard__plat--no { font-weight: 500; color: var(--pp-text-mute); }
+/* Sized EXPLICITLY, matching the `Plat` chip it stands in for. It carried no font-size and simply
+   inherited, which made it render at whatever its container happened to set -- 11px inside the browse
+   card's `__facts`, but 16px (body size) in the profile card's `__foot`. A chip that resizes by
+   location is a chip that will be wrong somewhere; this also makes the two states finally agree on
+   browse, where `Plat` was already 0.58rem and `No Plat` was not. */
+.pp-gcard__plat--no { font-size: 0.58rem; font-weight: 500; color: var(--pp-text-mute); }
 /* Center cell = trophy counts + an optional DLC tag (only when the game has DLC trophy groups; the total
    counts already include DLC, so this is a neutral "there's extra DLC" scope flag, not an added number). */
 .pp-gcard__mid { display: inline-flex; align-items: center; gap: 5px; }
