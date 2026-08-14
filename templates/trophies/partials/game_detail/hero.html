@@ -3,11 +3,12 @@
     <div class="card-body gd-hero__body p-3 md:p-5 lg:p-6">
 
         {% if viewing_other_profile %}
-            {# Ownership-aware banner (badge-detail pattern): this is someone else's progress. #}
-            <div class="gd-viewing">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            {% comment %}Ownership banner: this is someone else's progress. The shared chrome class -- it was
+            a game-detail copy of the badge header's banner, and the two had already drifted apart.{% endcomment %}
+            <div class="pp-viewing">
+                <svg class="pp-viewing__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 <span>Viewing <strong>{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}</strong>'s progress</span>
-                <a href="{% url 'game_detail' np_communication_id=game.np_communication_id %}" class="gd-viewing__mine">View mine &rsaquo;</a>
+                <a href="{% url 'game_detail' np_communication_id=game.np_communication_id %}" class="pp-viewing__mine" aria-label="View your own progress for {{ game.title_name }}">View mine &rsaquo;</a>
             </div>
         {% endif %}
 

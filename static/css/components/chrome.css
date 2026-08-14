@@ -513,3 +513,28 @@
     width: 26px; height: 2px; border-radius: 0 0 2px 2px; background: var(--pp-primary);
     box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 55%, transparent);
 }
+
+/* ==========================================================================
+ * OWNERSHIP BANNER -- "you are looking at someone else's progress".
+ *
+ * Chrome, not page content: it says nothing about the game or badge below it, only about WHOSE view this
+ * is, which is the same statement on every profile-scoped page. It lived twice as `.gd-viewing` (game
+ * detail) and `.bdh-viewing` (the badge header), drifting apart in radius, weight and tint; badge detail's
+ * bd2 rebuild then shipped without one at all, so the page it was modelled on was the page missing it.
+ *
+ * Declared here because chrome.css is imported before every page file, so a page can still special-case
+ * it -- as game detail does, where the hero pins a stat over this corner.
+ * ========================================================================== */
+.pp-viewing {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
+    margin-bottom: 12px; padding: 8px 12px; border-radius: var(--pp-radius-md);
+    font-size: 0.82rem; color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-secondary) 13%, var(--pp-bg-2));
+    border: 1px solid color-mix(in oklab, var(--pp-secondary) 42%, var(--pp-border));
+}
+/* The secondary carries "someone else's" across the site, so the glyph holds it rather than going mute. */
+.pp-viewing__ico { width: 16px; height: 16px; flex: 0 0 auto; color: var(--pp-secondary); }
+.pp-viewing strong { color: var(--pp-text); font-weight: 800; }
+.pp-viewing__mine { margin-left: auto; color: var(--pp-primary); font-weight: 700; text-decoration: none; white-space: nowrap; }
+@media (hover: hover) { .pp-viewing__mine:hover { text-decoration: underline; } }
+.pp-viewing__mine:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: var(--pp-radius-sm); }

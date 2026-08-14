@@ -18,6 +18,19 @@ Collection. No extra wrapper container: a nested one would double the horizontal
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-3 md:p-5 lg:p-7 pp-head-cascade">
 
+            {% comment %}Ownership banner. Outside the panels on purpose: whose progress this is does not
+            change when you switch edition tabs, so it states itself once rather than once per panel. The
+            bd2 rebuild shipped without it -- the old header had one, and the only surviving signal was a
+            meta item reading "&middot; X's progress", which is easy to miss on a page whose whole content
+            silently changes meaning.{% endcomment %}
+            {% if viewing_other_profile %}
+            <div class="pp-viewing">
+                <svg class="pp-viewing__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span>Viewing <strong>{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}</strong>'s progress</span>
+                <a href="{% url 'badge_detail' series.series_slug %}" class="pp-viewing__mine" aria-label="View your own progress for the {{ series.name }} badge">View mine &rsaquo;</a>
+            </div>
+            {% endif %}
+
             <div data-bd2-panels>
                 {% for g in detail.groups %}
                 <div id="bd2-panel-{{ g.platform_group.key }}" class="bd2-panel{% if g.platform_group.key != active_group_key %} is-hidden{% endif %}"
@@ -39,7 +52,6 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                                 <span class="font-semibold text-base-content/60">{{ g.platform_group.name }}</span>
                                 <span>&middot; {{ g.platform_group.platforms|join:" &middot; " }}</span>
                                 {% if g.earners_rank %}<span>&middot; Earn <span class="text-primary font-bold">#{{ g.earners_rank }}</span></span>{% endif %}
-                                {% if viewing_other_profile %}<span class="normal-case tracking-normal">&middot; {{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s progress</span>{% endif %}
                             </div>
                         </div>
 

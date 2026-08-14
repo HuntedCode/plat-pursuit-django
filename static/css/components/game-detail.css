@@ -79,12 +79,6 @@
     .gd-hero__extras { grid-area: extras; align-self: start; }
 }
 
-/* Ownership banner — "viewing X's progress" (badge-detail pattern). */
-.gd-viewing { display: flex; align-items: center; gap: 8px; padding: 7px 12px; margin-bottom: 2px; border-radius: var(--pp-radius-sm); font-size: 0.8rem; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-secondary) 12%, transparent); border: 1px solid color-mix(in oklab, var(--pp-secondary) 30%, var(--pp-border)); }
-.gd-viewing > svg { width: 15px; height: 15px; flex: none; color: var(--pp-text-mute); }
-.gd-viewing strong { color: var(--pp-text); }
-.gd-viewing__mine { margin-left: auto; color: var(--pp-primary); text-decoration: none; font-weight: 600; white-space: nowrap; }
-.gd-viewing__mine:hover { text-decoration: underline; }
 
 /* Cover + screenshots */
 .gd-hero__extras { display: flex; flex-direction: column; gap: 10px; }
@@ -113,6 +107,21 @@
         flex-direction: column; align-items: flex-end; text-align: right; gap: 0;
     }
     .gd-hero__players-lbl { margin-top: 3px; }
+}
+/* The corner is pinned against the CARD (the .card sets position: relative), so it measures from the card's
+   top edge -- above the ownership banner entirely, landing inside the banner's tinted box on top of its
+   "View mine" link.
+
+   Fixed by re-anchoring rather than by offsetting: when the banner is present the corner measures from the
+   content ROW instead, which begins below the banner. So the banner stays full-width -- reading as a
+   statement about the whole page, the way badge detail's does -- and the stat sits under it at whatever
+   height it ends up, with no magic number to drift if a long username wraps it to two lines.
+
+   Reserving horizontal space instead was the wrong shape: it left the stat BESIDE the banner, which reads
+   as though the two belong together. */
+@media (min-width: 768px) {
+    .gd-hero__body:has(.pp-viewing) .gd-hero__grid { position: relative; }
+    .gd-hero__body:has(.pp-viewing) .gd-hero__players { top: 0; right: 0; }
 }
 @media (min-width: 1024px) {
     .gd-hero__players { top: 22px; right: 24px; }

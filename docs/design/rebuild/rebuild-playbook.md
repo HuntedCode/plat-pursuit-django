@@ -49,6 +49,7 @@ authoritative doc for the full spec. The four docs by role: **this playbook** (p
 | `.pp-gtile__mosaic` (+ `.is-1`..`.is-4`) | Cover mosaic for a tile representing a COLLECTION of games; composes around the covers available | `components/grouping-tile.css` + `partials/lists/list_tile.html` | playbook (Shared components) |
 | `.pp-trolist` (+ `__sum` / `__row` / `__name`) | Condensed trophy list ("the trophies, briefly"); earned rows take a tier-tinted rail off `data-tier` | `components/rate-wizard.css` + `PlatPursuit.TrophyListRenderer` | playbook (Shared components) |
 | Rating form fields | The five scores + optional quick take; behaviour is `PlatPursuit.RatingFields` | `partials/_rating_fields.html` + `components/game-detail.css` (`.gd-qr__*`) | playbook (Shared components) |
+| `.pp-viewing` (+ `__ico` / `__mine`) | Ownership banner — "you are looking at X's progress", with the way back to your own. Any page with a `/<thing>/<username>/` variant. It is CHROME (says whose view this is, not what the page is about), so it lives in `chrome.css` and goes above everything, full width | `components/chrome.css` | playbook (Shared components) |
 | `.pp-dl` (+ `__icons` / `__i--idle|busy|done`) | Three-state download button for a server-rendered share card; `--pp-dl-accent` tints the busy state | `components/download-button.css` + `partials/download_button_icons.html` | [js-utilities](../../reference/js-utilities.md) (CardDownload) |
 | Accented header card | The page-header card shell | (Tailwind classes) | playbook §2 |
 | `.pp-toolbar-card` | Filter/search toolbar | — | design-system (Toolbar) |
@@ -386,5 +387,17 @@ surfaces. **If a surface lights up 4+ hues, that's the old "colour-code everythi
 - **Rebuild `npm run build` after any CSS/template change**, and check the value in `output.css`
   (lightningcss reformats, e.g. `oklch(0.13 …)` → `oklch(13% …)`, and emits `color-mix` fallbacks).
 - **Don't card-ify chrome.** Nav/tabbar/subnav/hotbar/footer are the FRAME, styled as chrome, not modules.
+- **A corner-pinned stat measures from the `.card`, not from your content.** DaisyUI's `.card` sets
+  `position: relative`, so an `absolute; top: 18px` corner element anchors to the card's edge — *above*
+  anything you later add at the top of the card body. Game detail's "X Players" landed inside the
+  ownership banner's tinted box because of this. Fix by re-anchoring to the content row
+  (`position: relative` on the row + `top: 0`), never by offsetting `top` past a hand-measured height:
+  the banner wraps to two lines for a long username and the offset drifts. And reserving horizontal
+  space instead puts the stat *beside* the banner, which reads as though the two belong together.
+- **A service's `sort` argument may only seed a client-side sorter.** `build_collection_context(profile,
+  sort)` does not order anything — the Collection gallery re-sorts in JS, and the argument just picks the
+  dropdown's initial value. Reusing that service on a surface with no such JS (the profile's badges tab)
+  means sorting the materialized list yourself. Passing `sort` through *looks* right and silently does
+  nothing. Check whether a "sort" parameter reaches the ORM before trusting it.
 - **VS Code's built-in CSS linter flags Tailwind v4 at-rules** (`@plugin`/`@theme`/`@apply`) as errors —
   false positives. `npm run build` is the real validator.
