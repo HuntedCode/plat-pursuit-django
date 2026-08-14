@@ -12,7 +12,10 @@ two queries per profile, which on a 30-card page is ~60 queries to print a word 
 Every field read here must appear in the view's `.only(...)`, or Django re-fetches the row per card and the
 grid N+1s on a deferred load. {% endcomment %}
 {% for profile in object_list %}
-<article class="pp-hcard">
+{% comment %} Supporters get a warmer card, not a louder one: the same amber their mark already carries,
+spent on the EDGE rather than on a shimmer. The old wall shimmered the whole border, which at this density
+read as "featured" rather than "supporter" -- an emphasis the card cannot back up. {% endcomment %}
+<article class="pp-hcard{% if profile.user_is_premium %} pp-hcard--supporter{% endif %}">
     <div class="pp-hcard__id">
         <div class="pp-hcard__avatar{% if not profile.avatar_url %} pp-hcard__avatar--none{% endif %}">
             <img src="{{ profile.avatar_url|default:'' }}" alt="" loading="lazy" decoding="async">
@@ -23,7 +26,10 @@ grid N+1s on a deferred load. {% endcomment %}
             <div class="pp-hcard__namerow">
                 {% comment %} The name is the real link (so it reads as one to assistive tech and shows the
                 URL on hover); ::after stretches it over the whole card for the pointer target. {% endcomment %}
-                <a class="pp-hcard__link pp-hcard__name" href="{% url 'profile_detail' profile.psn_username %}">{{ profile.display_psn_username|default:profile.psn_username }}</a>
+                {% comment %} Under Alphabetical the NAME is the sort axis, so it takes the accent the
+                stat cells take under every other ordering -- the one sort that previously highlighted
+                nothing, because no stat explains it. {% endcomment %}
+                <a class="pp-hcard__link pp-hcard__name{% if active_sort == 'alpha' %} pp-hcard__name--sorted{% endif %}" href="{% url 'profile_detail' profile.psn_username %}">{{ profile.display_psn_username|default:profile.psn_username }}</a>
                 {% comment %} Supporters kept a mark. The old wall gave them a shimmering border, which at
                 this density would be the loudest thing on the page and would read as "featured" rather
                 than "supporter" -- so it is one small glyph instead, carrying the site's one other

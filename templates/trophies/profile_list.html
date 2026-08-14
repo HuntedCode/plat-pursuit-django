@@ -108,7 +108,9 @@ scroll and an outer border would grow with it forever.
                     <span class="sr-only">Sort hunters</span>
                     <select name="sort" class="pp-gallery__select">
                         {% for value, display in form.fields.sort.choices %}
-                        <option value="{{ value }}"{% if request.GET.sort == value or not request.GET.sort and value == 'recently_active' %} selected{% endif %}>{{ display }}</option>
+                        {% comment %}Falls back to the view's DEFAULT_SORT; keep the two in step or the
+                        control shows one ordering while the wall is built with another.{% endcomment %}
+                        <option value="{{ value }}"{% if request.GET.sort == value or not request.GET.sort and value == 'alpha' %} selected{% endif %}>{{ display }}</option>
                         {% endfor %}
                     </select>
                 </label>

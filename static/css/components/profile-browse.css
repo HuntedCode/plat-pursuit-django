@@ -39,6 +39,22 @@
     border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
 }
+/* ---- Supporter ---------------------------------------------------------------------------------- */
+/* A supporter's card is made of warmer MATERIAL, not given a badge of importance. The signal is carried by
+   the edge and a faint bloom off the top -- the same amber their mark already uses, so this spends no new
+   hue -- over a ground lifted a hair toward the accent. Nothing here moves or shimmers: the old wall
+   animated the whole border, which at thirty cards reads as "featured", an emphasis a directory cannot
+   back up and which would put a running animation on every supporter row of an infinite scroll.
+   Declared BEFORE the hover rule so hovering a supporter still resolves to the hover treatment. */
+.pp-hcard--supporter {
+    background:
+        linear-gradient(180deg, color-mix(in oklab, var(--pp-accent) 7%, transparent) 0%, transparent 42%),
+        var(--pp-bg-1);
+    border-color: color-mix(in oklab, var(--pp-accent) 34%, var(--pp-border));
+    box-shadow: inset 0 1px 0 color-mix(in oklab, var(--pp-accent) 22%, rgba(255, 255, 255, 0.07)),
+                0 6px 20px rgba(0, 0, 0, 0.30);
+}
+
 /* Hover GLOW, never scale (a wall of 30 cards each nudging its neighbours reads as instability, and a
    transform on a paginated grid is the cheapest way to make a page feel busy). The whole card is a
    stretched link, so the focus ring has to be drawn here rather than on the anchor. */
@@ -84,6 +100,10 @@
     font-weight: 700; font-size: 0.95rem; line-height: 1.2; color: var(--pp-text);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
 }
+/* Alphabetical sorts by the NAME, so the name takes the accent -- the same "this is why this hunter is
+   here" the stat cells carry under every other ordering. It is the sort that used to highlight nothing,
+   because no stat on the card explains it; the axis was always here, just not marked. */
+.pp-hcard__name--sorted { color: var(--pp-primary); }
 /* `Profile.flag` holds a country CODE ("US"), not an emoji, so this is set as a micro-label rather than at
    text size -- two capitals sitting at body size beside the name read as part of it. */
 .pp-hcard__flag {
@@ -96,14 +116,21 @@
    border, which at 30 cards read as "featured". */
 .pp-hcard__supp { flex: none; display: inline-grid; place-items: center; color: var(--pp-accent); }
 .pp-hcard__supp svg { width: 12px; height: 12px; }
-/* The title the hunter chose to wear. Muted and clamped to one line: it is flavour, and a two-line title
-   on some cards and not others makes the row heights disagree across the wall. */
+/* The title the hunter chose to wear -- something EARNED, so it carries the secondary rather than sitting
+   in the mute grey it started in. Held a step back from the raw token (`--pp-secondary` is bright at 0.74L
+   and titles appear on a great many cards at once): mixed toward the text colour it reads as a tint on the
+   wall and stays under the cyan accent in the hierarchy, which is the one hue that has to win.
+   Clamped to one line -- a two-line title on some cards and not others makes the wall's rows disagree. */
 .pp-hcard__title {
-    margin-top: 2px; font-size: 0.72rem; line-height: 1.25; color: var(--pp-text-mute);
+    margin-top: 2px; font-size: 0.72rem; line-height: 1.25;
+    color: color-mix(in oklab, var(--pp-secondary) 72%, var(--pp-text));
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     padding-right: 1px;   /* italic glyphs slant past their box */
     font-style: italic;
 }
+/* The placeholder that holds the row's height for a hunter with no title must NOT take the colour -- it is
+   hidden, but `visibility: hidden` still inherits into any future child. Kept mute for that reason. */
+.pp-hcard__title--empty { color: var(--pp-text-mute); }
 /* Held for hunters with no title, so a card without one is the same height as the card beside it. */
 .pp-hcard__title--empty { visibility: hidden; }
 

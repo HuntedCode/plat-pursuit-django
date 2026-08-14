@@ -77,13 +77,13 @@ class ProfilesListView(HtmxListMixin, ListView):
     #: Ordering per sort value. Every one is index-backed; `Lower('psn_username')` is the stable
     #: tie-breaker so equal stats never shuffle between pages of the same result set.
     SORTS = {
-        'recently_active': [F('last_synced').desc(nulls_last=True), Lower('psn_username')],
         'alpha': [Lower('psn_username')],
+        'recently_active': [F('last_synced').desc(nulls_last=True), Lower('psn_username')],
         'recently_joined': ['-created_at', Lower('psn_username')],
         'trophies': ['-total_trophies', Lower('psn_username')],
         'plats': ['-total_plats', Lower('psn_username')],
     }
-    DEFAULT_SORT = 'recently_active'
+    DEFAULT_SORT = 'alpha'
 
     def dispatch(self, request, *args, **kwargs):
         if not request.GET and request.user.is_authenticated:

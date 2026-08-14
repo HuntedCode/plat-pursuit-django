@@ -307,14 +307,59 @@ def test_the_accent_marks_the_sorted_stat(client, sort, expected):
     assert expected in body[max(0, at - 400):at + 400], f'sorting by {sort} does not accent {expected}'
 
 
-def test_alphabetical_accents_nothing(client):
-    """It is the one ordering no stat on the card explains, so colouring a cell would claim a relationship
-    that is not there -- and Level, which an earlier cut highlighted here, has nothing to do with it."""
+def test_alphabetical_accents_the_name_and_no_stat(client):
+    """Alphabetical sorts by the NAME, so the name carries the accent -- the same "this is why this hunter
+    is here" the stat cells carry under every other ordering. It briefly highlighted Level, which has
+    nothing to do with it, and then nothing at all; the axis was always on the card, just unmarked.
+
+    No STAT may take it here, or the card would claim a relationship that is not there.
+    """
     _hunters(1)
 
     body = client.get(URL, {'sort': 'alpha'}).content.decode()
 
-    assert 'pp-hcard__val--sorted' not in body
+    assert 'pp-hcard__name--sorted' in body, 'the name is the sort axis and is not marked'
+    assert 'pp-hcard__val--sorted' not in body, 'a stat is accented under an ordering it does not explain'
+
+
+@pytest.mark.parametrize('sort', ['recently_active', 'recently_joined', 'trophies', 'plats'])
+def test_only_alphabetical_accents_the_name(client, sort):
+    """Positive control for the pair above: under a stat ordering the name is neutral, so exactly one
+    thing on the card is ever coloured for the sort."""
+    _hunters(1)
+
+    body = client.get(URL, {'sort': sort}).content.decode()
+
+    assert 'pp-hcard__name--sorted' not in body, f'{sort} accents the name as well as its stat'
+
+
+def test_the_default_sort_is_alphabetical(client):
+    """The form's `selected` fallback hardcodes the default separately from the view's DEFAULT_SORT, so
+    the two can drift into showing one ordering while building the wall with another."""
+    _hunters(2)
+
+    resp = client.get(URL)
+    body = resp.content.decode()
+
+    assert ProfilesListView.DEFAULT_SORT == 'alpha'
+    assert 'value="alpha" selected' in body, 'the sort control does not show the default it is using'
+    assert 'pp-hcard__name--sorted' in body, 'the default wall does not mark its own axis'
+
+
+def test_a_supporter_card_is_marked(client):
+    """Supporters get warmer material rather than a badge of importance -- the styling is on the CARD, so
+    the modifier has to reach it."""
+    ProfileFactory(is_linked=True, user_is_premium=True)
+
+    body = client.get(URL).content.decode()
+
+    assert 'pp-hcard--supporter' in body
+
+
+def test_a_plain_card_is_not_marked_as_a_supporter(client):
+    ProfileFactory(is_linked=True, user_is_premium=False)
+
+    assert 'pp-hcard--supporter' not in client.get(URL).content.decode()
 
 
 def test_the_dates_band_costs_no_extra_queries(client):

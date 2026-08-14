@@ -253,8 +253,8 @@ class ProfileSearchForm(forms.Form):
     # page stopped being a second scoreboard; see the view's docstring for which and why.
     sort = forms.ChoiceField(
         choices=[
-            ('recently_active', 'Recently Active'),
             ('alpha', 'Alphabetical'),
+            ('recently_active', 'Recently Active'),
             ('recently_joined', 'Recently Joined'),
             ('trophies', 'Total Trophies'),
             ('plats', 'Total Plats'),
