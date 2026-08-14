@@ -70,16 +70,6 @@ class SettingsView(LoginRequiredMixin, View):
                 selected_theme_name = selected_theme_data['name']
                 selected_theme_css = get_theme_css(profile.selected_theme)
 
-        # Serialize current background for the JS picker
-        initial_bg_data = 'null'
-        if profile and profile.selected_background:
-            bg = profile.selected_background
-            initial_bg_data = json.dumps({
-                'concept_id': bg.id,
-                'title_name': bg.unified_title or '',
-                'icon_url': bg.cover_url or '',
-            })
-
         context = {
             'user_form': user_form,
             'password_form': password_form,
@@ -89,7 +79,6 @@ class SettingsView(LoginRequiredMixin, View):
             'available_themes': available_themes,
             'selected_theme_name': selected_theme_name,
             'selected_theme_css': selected_theme_css,
-            'initial_background_json': initial_bg_data,
             'breadcrumb': [
                 {'text': 'Home', 'url': '/'},
                 {'text': 'Settings'},
@@ -145,27 +134,6 @@ class SettingsView(LoginRequiredMixin, View):
             if premium_form.is_valid():
                 premium_form.save()
 
-                # Handle selected_background from the JS picker (hidden input)
-                bg_id = request.POST.get('selected_background', '').strip()
-                if bg_id:
-                    try:
-                        concept = Concept.objects.get(id=int(bg_id), bg_url__isnull=False)
-                        # Validate the user has earned this background
-                        has_access = ProfileGame.objects.filter(
-                            profile=profile, game__concept=concept,
-                        ).filter(Q(has_plat=True) | Q(progress=100)).exists()
-                        if has_access:
-                            profile.selected_background = concept
-                        else:
-                            profile.selected_background = None
-                    except (ValueError, Concept.DoesNotExist):
-                        profile.selected_background = None
-                else:
-                    profile.selected_background = None
-                # Changing the game here invalidates any exact image picked on
-                # the profile banner, which would otherwise still override it.
-                profile.banner_image_url = None
-                profile.save(update_fields=['selected_background', 'banner_image_url'])
 
                 messages.success(request, 'Premium settings updated successfully!')
             else:

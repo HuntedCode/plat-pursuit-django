@@ -172,7 +172,6 @@
             <form method="post" id="premium-settings-form">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="update_premium">
-                <input type="hidden" name="selected_background" id="settings-bg-input" value="{{ profile.selected_background_id|default:'' }}">
 
                 {# Collapsible theme grid #}
                 <div class="collapse collapse-arrow bg-white/[0.03] rounded-lg border border-base-content/5">
@@ -254,8 +253,6 @@
 {% endblock %}
 
 {% block js_scripts %}
-<script src="{% static 'js/game-background-picker.js' %}"></script>
-<script>const initialBgData = {{ initial_background_json|safe }};</script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const isPremium = {% if profile and profile.user_is_premium %}true{% else %}false{% endif %};

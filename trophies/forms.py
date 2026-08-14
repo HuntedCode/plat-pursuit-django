@@ -602,7 +602,6 @@ class GameDetailForm(forms.Form):
 
 class PremiumSettingsForm(forms.ModelForm):
     """Premium-only settings: background and site theme."""
-    # selected_background is handled by GameBackgroundPicker JS widget + hidden input
     selected_theme = forms.ChoiceField(
         choices=[],  # Populated in __init__
         label='Site Theme',

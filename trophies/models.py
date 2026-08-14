@@ -125,14 +125,6 @@ class Profile(models.Model):
     avg_progress = models.FloatField(default=0.0)
     recent_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='recent_for_profiles', help_text='Most recent earned platinum.')
     rarest_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='rarest_for_profiles', help_text='Rarest earned platinum by earn_rate.')
-    selected_background = models.ForeignKey('Concept', on_delete=models.SET_NULL, null=True, blank=True, related_name='selected_by_profiles', help_text='Selected background concept for premium profiles.')
-    banner_image_url = models.URLField(
-        max_length=500, blank=True, null=True,
-        help_text='Exact banner image the user picked from the selected '
-                  "concept's landscape images (IGDB artwork/screenshot/cover). "
-                  'When set, takes precedence over selected_background.bg_url.',
-    )
-    banner_position = models.PositiveSmallIntegerField(default=50, help_text='Banner vertical position (0=top, 50=center, 100=bottom).')
     selected_theme = models.CharField(max_length=50, blank=True, null=True, help_text='Selected gradient theme key for premium site-wide background.')
     hide_hiddens = models.BooleanField(default=False, help_text="If true, hide hidden/deleted games from list and totals.")
     hide_zeros = models.BooleanField(default=False, help_text="If true, hide games with no trophies earned.")
@@ -182,7 +174,6 @@ class Profile(models.Model):
             models.Index(fields=['country_code'], name='profile_country_code_idx'),
             models.Index(fields=['is_linked', 'sync_tier'], name='profile_linked_tier_idx'),
             models.Index(fields=['is_discord_verified', 'discord_linked_at'], name='profile_discord_idx'),
-            models.Index(fields=['user_is_premium', 'selected_background']),
         ]
 
     def __str__(self):
@@ -1258,9 +1249,6 @@ class Concept(models.Model):
 
         # Featured guides
         other.featured_entries.update(concept=self)
-
-        # Profiles using old concept as background
-        other.selected_by_profiles.update(selected_background=self)
 
         # Badge most_recent_concept
         other.most_recent_for_badges.update(most_recent_concept=self)
@@ -2416,7 +2404,9 @@ class ProfileShowcase(models.Model):
     # join + top-N sort over 250K rows for a heavy account, and the single most expensive
     # thing an anonymous visitor could trigger. Existing 'rarest_trophies' rows are
     # deleted by migration 0275.
-    SHOWCASE_CHALLENGE = 'challenge_showcase'
+    # SHOWCASE_CHALLENGE removed 2026-08 with the Challenges system's retirement. It was already
+    # unrenderable: the type was offered as a valid choice but never registered in SHOWCASE_REGISTRY,
+    # so a row of it could be stored and then displayed nothing. Rows are deleted by migration 0292.
     SHOWCASE_TITLE = 'title_showcase'
 
     SHOWCASE_TYPES = [
@@ -2424,7 +2414,6 @@ class ProfileShowcase(models.Model):
         (SHOWCASE_FAVORITE_GAMES, 'Favorite Games'),
         (SHOWCASE_BADGE, 'Badge Showcase'),
         (SHOWCASE_RECENT_PLATS, 'Recent Platinums'),
-        (SHOWCASE_CHALLENGE, 'Challenge Showcase'),
         (SHOWCASE_TITLE, 'Title Showcase'),
     ]
 

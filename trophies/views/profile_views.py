@@ -948,24 +948,6 @@ class ProfileDetailView(DetailView):
                     context['profile_theme_accent'] = theme['accent_color']
                     context['profile_theme_gradient'] = get_theme_css(profile.selected_theme)
 
-            # Profile banner image: prefer the exact user-picked image, fall
-            # back to the selected background concept's landscape image (IGDB
-            # screenshots -> artworks -> PSN bg_url fallback).
-            bg = profile.selected_background
-            bg_landscape = bg.get_landscape_url() if bg else None
-            banner_url = profile.banner_image_url or bg_landscape
-            if banner_url:
-                context['profile_banner_url'] = banner_url
-                context['profile_banner_position'] = profile.banner_position
-                import json
-                context['profile_banner_data_json'] = json.dumps({
-                    'concept_id': bg.id if bg else None,
-                    'title_name': (bg.unified_title or '') if bg else '',
-                    'icon_url': (bg.cover_url or '') if bg else '',
-                    'bg_url': bg_landscape or '',
-                    'image_url': profile.banner_image_url or '',
-                })
-
         # Own profile check (for edit controls)
         context['is_own_profile'] = (
             self.request.user.is_authenticated and
