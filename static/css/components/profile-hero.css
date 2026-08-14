@@ -83,3 +83,24 @@
 /* Pushed to the far end so the tier dots stay a group and this reads as a separate fact about them. */
 .pp-phero__avg { margin-left: auto; font-size: 0.75rem; color: var(--pp-text-mute); }
 @media (max-width: 520px) { .pp-phero__avg { margin-left: 0; flex-basis: 100%; } }
+
+/* ==========================================================================
+ * PROFILE GAME CARD -- the few parts `.pp-gcard` does not already carry.
+ *
+ * The card itself is the site's game card (game-card.css, unscoped). What a profile adds is the OWNER's
+ * record with the game, which the browse card has no slot for: a completion percentage and their share
+ * of its trophies. Everything else -- cover, bar, title, platform chips -- is the shared card.
+ * ========================================================================== */
+.pp-pgcard__stats {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    font-variant-numeric: tabular-nums;
+}
+/* The percentage leads because the bar above it is the card's headline fact; this is that bar's value in
+   words, so it sits at the size of a figure rather than of a label. */
+.pp-pgcard__pct { font-size: 0.8rem; font-weight: 700; color: var(--pp-text); }
+.pp-pgcard__count { font-size: 0.68rem; font-weight: 600; color: var(--pp-text-mute); }
+
+/* The platinum mark. Sits in the footer opposite the platform chips, in the trophy family's own colour --
+   this is the one fact on the card that is about a trophy rather than about a game. */
+.pp-pgcard__plat { display: inline-grid; place-items: center; flex: none; color: var(--color-trophy-platinum); }
+.pp-pgcard__plat svg { width: 14px; height: 14px; }

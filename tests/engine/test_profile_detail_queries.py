@@ -114,3 +114,32 @@ def test_every_mapped_tab_template_can_actually_be_built():
 
     for mapped in ProfileDetailView._TAB_TEMPLATES:
         assert mapped in buildable, f"'{mapped}' has a template but no way to build its context"
+
+
+def test_the_games_tab_uses_the_site_game_card(client):
+    """The profile's games are the site's game card, not a profile-only row. The old card tinted its
+    border, ring, title and shadow by PLATFORM, so a wall of games lit up in five hues -- decoration
+    rather than information. Platform is a footer chip now, exactly as on Browse Games."""
+    profile = _profile_with_games(2)
+
+    body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
+
+    assert 'pp-gcard' in body, 'the games tab no longer uses the shared game card'
+    assert 'hover:border-' not in body, 'per-platform hover tinting is back on the game cards'
+
+
+def test_the_completion_bar_means_the_same_thing_it_does_on_browse(client):
+    """The bar's five states encode the relationship with a game, and the profile fills it from the
+    OWNER's progress rather than the viewer's. Sharing the classes is what keeps a colour meaning one
+    thing across the site."""
+    from trophies.models import ProfileGame
+
+    profile = _profile_with_games(1)
+    # Progress is set explicitly: the shared fixture builds the trophies but leaves ProfileGame.progress
+    # at 0, and the bar only renders above 0 -- so without this the test would assert on a card state the
+    # fixture never produces and pass or fail for reasons unrelated to the card.
+    ProfileGame.objects.filter(profile=profile).update(progress=100, has_plat=True)
+
+    body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
+
+    assert 'pp-gcard__barfill--plat' in body, 'a finished game does not get the platinum bar state'

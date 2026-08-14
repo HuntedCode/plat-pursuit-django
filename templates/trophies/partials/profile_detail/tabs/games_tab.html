@@ -2,7 +2,9 @@
 {% include 'trophies/partials/profile_detail/game_filters.html' %}
 <div class="border-t border-base-content/10 mt-2 pt-2"></div>
 <div id="tab-results">
-    <div id="games-grid" class="flex flex-col gap-1.5 md:gap-2">
+    {% comment %}The site game grid, not a vertical list: `.pp-gcard` is a cover-forward portrait card,
+    and `.pp-gbrowse__grid` is the unscoped grid Browse Games lays them out in.{% endcomment %}
+    <div id="games-grid" class="pp-gbrowse__grid">
         {% include 'trophies/partials/profile_detail/game_list_items.html' %}
     </div>
     <div id="games-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">

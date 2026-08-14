@@ -1,78 +1,64 @@
-{% load custom_filters %}
+{% load custom_filters humanize %}{% comment %} A game on someone's profile -- rebuilt 2026-08.
+
+Built on `.pp-gcard`, the site's game card, rather than a profile-only shape: the CSS is unscoped and the
+card already models everything this needs, including the completion bar whose five states encode the
+relationship with a game (platinum + 100%, plat-but-DLC-left, 100% without a plat, a plat still to chase,
+in progress). The only difference here is WHOSE progress fills it -- the profile owner's, not the viewer's.
+
+What the old card did and this does not: tint its border, ring, title and shadow by platform, which made a
+wall of games light up in five hues and read as decoration. Platform is a chip in the footer, exactly as on
+Browse Games, so it reads on any cover art without recolouring the card around it.
+
+Every field is denormalized on Game or ProfileGame -- no queries per card. The cover chain is joined and
+`raw_response` deferred in the view; adding a field here that is not on that join re-opens the N+1.
+{% endcomment %}
 {% for pgame in profile_games %}
-{% with pgame.game as game %}
-    <a href="{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}"
-       class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral cursor-pointer
-              transition-all duration-300 hover:shadow-lg hover:shadow-{{ game|platform_color }}/30
-              hover:border-{{ game|platform_color }} hover:z-10 group
-              {% if pgame.progress == 100 %}border-l-4 border-l-success{% elif pgame.earned_trophies.platinum == 1 %}border-l-4 border-l-warning{% endif %}">
-        <div class="card-body m-0 p-2 md:p-3">
-            <div class="flex items-center gap-2 md:gap-3">
-                {# Game icon #}
-                <div class="w-12 md:w-14 aspect-[3/4] rounded-lg overflow-hidden shrink-0
-                            ring-1 ring-base-300 group-hover:ring-{{ game|platform_color }}/50 transition-all">
-                    <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover {% if game.has_cover_art %}object-top{% endif %}" loading="lazy" />
-                </div>
+{% with game=pgame.game %}
+<a href="{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}"
+   class="pp-gcard" title="{{ game.title_name }}">
+    <div class="pp-gcard__cover">
+        <img class="pp-gcard__art{% if not game.has_cover_art %} pp-gcard__art--placeholder{% endif %}"
+             src="{{ game.display_image_url }}" alt="" loading="lazy" decoding="async">
+        {% comment %}The bar is the card's headline fact on a profile: it says at a glance whether this
+        person finished the thing. Same five states as Browse Games so the colour means the same here.
+        {% endcomment %}
+        {% if pgame.progress > 0 %}
+        <span class="pp-gcard__bar">
+            <span class="pp-gcard__barfill pp-gcard__barfill--{% if pgame.has_plat and pgame.progress == 100 %}plat{% elif pgame.has_plat %}platdlc{% elif pgame.progress == 100 %}full{% elif game.defined_trophies.platinum %}chase{% else %}prog{% endif %}"
+                  style="width: {{ pgame.progress }}%"></span>
+        </span>
+        {% endif %}
+    </div>
 
-                {# Game info #}
-                <div class="flex-1 min-w-0">
-                    <div class="font-semibold text-sm md:text-base line-clamp-1 pr-1
-                                group-hover:text-{{ game|platform_color }} transition-colors">{{ game.title_name }}</div>
-                    <div class="flex flex-wrap items-center gap-1 mt-0.5">
-                        {% for platform in game.title_platform reversed %}
-                            <div class="badge badge-xs badge-ghost font-bold border border-{{ platform|platform_color_str }} rounded-box">{{ platform }}</div>
-                        {% endfor %}
-                        {% include 'partials/region_badges.html' with game=game badge_size='badge-xs' %}
-                        {% include 'trophies/partials/_game_flags.html' with game=game %}
-                    </div>
-                    {% if not profile.sync_status == 'syncing' and pgame.most_recent_trophy_date %}
-                        <div class="text-xs text-base-content/40 mt-0.5">Latest: {{ pgame.most_recent_trophy_date|date:"M j, Y" }}</div>
-                    {% endif %}
-                </div>
+    <div class="pp-gcard__body">
+        <span class="pp-gcard__title">{{ game.title_name }}</span>
 
-                {# Trophy counts + progress (md:+ only, inline right) #}
-                <div class="hidden md:flex flex-col items-end gap-1 shrink-0">
-                    <div class="grid grid-cols-4 gap-0.5 text-center">
-                        <div class="px-1">
-                            <div class="text-xs font-black"><span class="text-primary">{{ pgame.earned_trophies.bronze }}</span><span class="text-base-content/30">/</span><span style="color: var(--color-trophy-bronze)">{{ game.defined_trophies.bronze }}</span></div>
-                            <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">BRZ</div>
-                        </div>
-                        <div class="px-1">
-                            <div class="text-xs font-black"><span class="text-primary">{{ pgame.earned_trophies.silver }}</span><span class="text-base-content/30">/</span><span style="color: var(--color-trophy-silver)">{{ game.defined_trophies.silver }}</span></div>
-                            <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">SLV</div>
-                        </div>
-                        <div class="px-1">
-                            <div class="text-xs font-black"><span class="text-primary">{{ pgame.earned_trophies.gold }}</span><span class="text-base-content/30">/</span><span style="color: var(--color-trophy-gold)">{{ game.defined_trophies.gold }}</span></div>
-                            <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">GLD</div>
-                        </div>
-                        <div class="px-1">
-                            <div class="text-xs font-black"><span class="text-primary">{{ pgame.earned_trophies.platinum }}</span><span class="text-base-content/30">/</span><span style="color: var(--color-trophy-platinum)">{{ game.defined_trophies.platinum }}</span></div>
-                            <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">PLT</div>
-                        </div>
-                    </div>
-                    <div class="w-32">
-                        <div class="bg-base-300/50 rounded-full h-1.5">
-                            <div class="h-full rounded-full transition-all {% if pgame.progress >= 100 %}bg-primary{% elif pgame.progress >= 66 %}bg-success{% elif pgame.progress >= 33 %}bg-warning{% else %}bg-error{% endif %}" style="width: {{ pgame.progress }}%"></div>
-                        </div>
-                        <div class="text-[0.6rem] text-base-content/50 text-center font-bold mt-0.5">{{ pgame.progress }}%</div>
-                    </div>
-                </div>
-            </div>
+        {% comment %}Their record with it: how far, and how many of the trophies they hold. Two figures,
+        not a four-tier breakdown -- the tier split belongs to the hero, where it describes a career; on a
+        card in a wall of many it is noise.{% endcomment %}
+        <span class="pp-pgcard__stats">
+            <span class="pp-pgcard__pct">{{ pgame.progress|default:0 }}%</span>
+            <span class="pp-pgcard__count">{{ pgame.earned_trophies_count|default:0 }} / {{ pgame.earned_trophies_count|add:pgame.unearned_trophies_count }}</span>
+        </span>
 
-            {# Mobile progress bar (below the icon+info row) #}
-            <div class="md:hidden mt-1">
-                <div class="flex items-center gap-2">
-                    <div class="flex-1 bg-base-300/50 rounded-full h-1.5">
-                        <div class="h-full rounded-full transition-all {% if pgame.progress >= 100 %}bg-primary{% elif pgame.progress >= 66 %}bg-success{% elif pgame.progress >= 33 %}bg-warning{% else %}bg-error{% endif %}" style="width: {{ pgame.progress }}%"></div>
-                    </div>
-                    <span class="text-[0.6rem] text-base-content/50 font-bold shrink-0">{{ pgame.progress }}%</span>
-                </div>
-            </div>
-        </div>
-    </a>
+        <span class="pp-gcard__foot">
+            <span class="pp-gcard__plats">
+                {% for platform in game.title_platform reversed %}
+                <span class="pp-gcard__plat">{{ platform }}</span>
+                {% endfor %}
+            </span>
+            {% if pgame.has_plat %}
+            <span class="pp-pgcard__plat" title="Platinum earned" aria-label="Platinum earned">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3a3 3 0 0 1-3 3"/><path d="M7 5H4a3 3 0 0 0 3 3"/></svg>
+            </span>
+            {% endif %}
+        </span>
+    </div>
+</a>
 {% endwith %}
 {% empty %}
-    <div class="text-center py-8">
-        <p class="text-base-content/50 italic text-sm">No games found. Try expanding your search!</p>
-    </div>
+<div class="pp-gcard-empty">
+    <p class="pp-gcard-empty__title">No games here</p>
+    <p class="pp-gcard-empty__hint">Nothing matches these filters.</p>
+</div>
 {% endfor %}
