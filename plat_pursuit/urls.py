@@ -134,14 +134,26 @@ urlpatterns = [
     # Retired trophies-list page -> Browse games (301).
     path('trophies/', RedirectView.as_view(pattern_name='games_list', permanent=True), name='trophies_list'),
 
-    # Profiles (canonical paths under /community/, legacy redirects below)
-    # Profiles moved out from under /community/ (2026-08) when that hub was retired; they belong with
-    # the other things you BROWSE. Every internal reference reverses by name, so the move is these three
-    # lines plus the redirects below -- but these ARE indexed pages with their own sitemap, so the old
-    # paths redirect permanently rather than being dropped.
-    path('profiles/', ProfilesListView.as_view(), name='profiles_list'),
-    path('profiles/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),
-    path('profiles/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
+    # Hunters -- the people section (browse + detail + trophy case).
+    #
+    # Two moves in 2026-08. First out from under /community/ when that hub was retired (they belong with
+    # the other things you BROWSE); then /profiles/ -> /hunters/, when the section was renamed to match
+    # what the site actually calls these people everywhere else. These are indexed pages with their own
+    # sitemap -- the largest indexed set on the site -- so every old path redirects permanently.
+    #
+    # The URL NAMES deliberately keep their `profile*` spelling. They are internal handles reversed from
+    # templates, services, the sitemap, the sub-nav map and the tests; renaming them would touch all of
+    # that to change a string nobody outside the codebase sees, and every one of those call sites is a
+    # chance to typo a `{% url %}` into a 500. The PATH is the thing users and Google see.
+    #
+    # Every redirect below points at a `pattern_name`, which resolves at REQUEST time -- so the
+    # /community/ wave re-aimed itself at /hunters/ the moment the canonical moved. That is what keeps
+    # this a single hop from any old URL instead of a 301 chain through /profiles/.
+    path('hunters/', ProfilesListView.as_view(), name='profiles_list'),
+    path('hunters/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),
+    path('hunters/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
+    path('profiles/', RedirectView.as_view(
+        pattern_name='profiles_list', permanent=True, query_string=True)),
     path('community/profiles/', RedirectView.as_view(
         pattern_name='profiles_list', permanent=True, query_string=True)),
     path('community/profiles/<str:psn_username>/', RedirectView.as_view(
@@ -307,6 +319,11 @@ urlpatterns = [
     # and /dashboard/*, so the previously-canonical paths now also need
     # redirect entries here alongside the original legacy paths.
 
+    # These two were DEAD until the /profiles/ -> /hunters/ rename (2026-08): the canonical
+    # `profiles/<psn_username>/` pattern sat higher in this list and matched first, so they could never be
+    # reached -- and had they been reached they would have redirected /profiles/<u>/ to itself. Moving the
+    # canonical to /hunters/ is what made them both reachable AND correct. Do not "tidy" them away; they
+    # are now the only thing catching the old profile-detail URLs, which are the site's largest indexed set.
     path('profiles/<str:psn_username>/', RedirectView.as_view(pattern_name='profile_detail', permanent=True, query_string=True)),
     path('profiles/<str:psn_username>/trophy-case/', RedirectView.as_view(pattern_name='trophy_case', permanent=True, query_string=True)),
 

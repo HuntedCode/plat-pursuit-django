@@ -1,0 +1,236 @@
+/* ==========================================================================
+ * BROWSE HUNTERS (/profiles/) -- the people directory.
+ *
+ * A DISCOVERY surface, not a ranking one: /leaderboards/ owns boards, so nothing here draws a position, a
+ * medal or a "top N" treatment. What a card has to answer is "who is this, and are they worth a look" --
+ * a face, a name, the title they chose to wear, where they are, and just enough proof to be interesting.
+ *
+ * Deliberately THIN. This wall paints 30 cards a page and grows by 30 on every scroll, so the card is
+ * built to scan and to cost nothing: no artwork, no per-card imagery beyond the avatar, no progress
+ * meters, no stat table. Depth comes from the shared ladder; colour is spent once, on the level.
+ * ========================================================================== */
+
+/* `auto-fill` + a min track, so column count follows the CONTAINER rather than a breakpoint ladder -- this
+   grid sits at full page width on every layout and has no reason to know about `md:`/`lg:`.
+ *
+ * The min is set by the NAME, not by density. A PSN id is up to 16 characters and the card's whole job is
+ * telling you who someone is, so a column narrow enough to ellipsis the name defeats it: at a 13.5rem track
+ * the desktop wall took a fourth column and left the name 106px, which truncated a 16-character id. One
+ * column wider gives it 188px and they fit. `min(100%, …)` keeps the track from exceeding a narrow phone. */
+.pp-hbrowse__grid {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+}
+/* Tailwind's `.hidden` lives in @layer utilities and these component files are @imported UNLAYERED, so
+   `display: grid` above silently beats it whatever the specificity says -- and the skeleton container
+   wears both classes. Without this restatement the loading skeletons render permanently under the wall.
+   The class name reads as hidden while the page shows it, which is why this must be checked by RENDER. */
+.pp-hbrowse__grid.hidden { display: none; }
+@media (min-width: 768px) { .pp-hbrowse__grid { gap: 12px; } }
+@media (min-width: 1024px) { .pp-hbrowse__grid { gap: 14px; } }
+
+/* ---- The card ---------------------------------------------------------------------------------- */
+/* Content card on the depth ladder: catches light along the top edge and casts below, separating from the
+   substrate by the GAP rather than by being lighter than it. */
+.pp-hcard {
+    position: relative; display: flex; flex-direction: column; gap: 10px;
+    padding: 14px;
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
+}
+/* Hover GLOW, never scale (a wall of 30 cards each nudging its neighbours reads as instability, and a
+   transform on a paginated grid is the cheapest way to make a page feel busy). The whole card is a
+   stretched link, so the focus ring has to be drawn here rather than on the anchor. */
+.pp-hcard:focus-within,
+.pp-hcard:hover {
+    border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09),
+                0 8px 26px rgba(0, 0, 0, 0.36),
+                0 0 0 1px color-mix(in oklab, var(--pp-primary) 22%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+    .pp-hcard { transition: border-color var(--pp-dur, 240ms) var(--pp-ease, ease),
+                            box-shadow var(--pp-dur, 240ms) var(--pp-ease, ease); }
+}
+/* Stretched link: the anchor covers the card so the whole surface is the target, while the name stays a
+   real link for assistive tech and for the URL preview on hover. */
+.pp-hcard__link::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
+.pp-hcard__link { text-decoration: none; color: inherit; outline: none; }
+
+/* ---- Identity ---------------------------------------------------------------------------------- */
+.pp-hcard__id { display: flex; align-items: center; gap: 11px; min-width: 0; }
+/* ONE size for the avatar and its skeleton. The skeleton's entire job is to occupy the space the real
+   card will, so the two must not be able to drift -- these were separate declarations of the same two
+   numbers, which is exactly the pair that quietly stops matching. */
+.pp-hcard__avatar, .pp-hskel__avatar { flex: none; width: 46px; height: 46px; border-radius: 50%; }
+@media (min-width: 768px) {
+    .pp-hcard__avatar, .pp-hskel__avatar { width: 52px; height: 52px; }
+}
+.pp-hcard__avatar {
+    position: relative; overflow: hidden; background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border);
+}
+.pp-hcard__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* No avatar on file: a quiet glyph rather than a broken-image icon or an empty well. */
+.pp-hcard__avatar--none { display: grid; place-items: center; color: var(--pp-text-mute); }
+.pp-hcard__avatar--none img { display: none; }
+.pp-hcard__avatar:not(.pp-hcard__avatar--none) .pp-hcard__ph { display: none; }
+.pp-hcard__ph { width: 22px; height: 22px; }
+
+.pp-hcard__who { min-width: 0; flex: 1 1 auto; }
+.pp-hcard__namerow { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pp-hcard__name {
+    font-weight: 700; font-size: 0.95rem; line-height: 1.2; color: var(--pp-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+/* `Profile.flag` holds a country CODE ("US"), not an emoji, so this is set as a micro-label rather than at
+   text size -- two capitals sitting at body size beside the name read as part of it. */
+.pp-hcard__flag {
+    flex: none; line-height: 1;
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em;
+    color: var(--pp-text-mute);
+}
+/* The supporter mark -- the surface's ONE other hue, and semantic rather than decorative (it says what
+   someone IS, not how big their numbers are). Small on purpose: the old wall gave supporters a shimmering
+   border, which at 30 cards read as "featured". */
+.pp-hcard__supp { flex: none; display: inline-grid; place-items: center; color: var(--pp-accent); }
+.pp-hcard__supp svg { width: 12px; height: 12px; }
+/* The title the hunter chose to wear. Muted and clamped to one line: it is flavour, and a two-line title
+   on some cards and not others makes the row heights disagree across the wall. */
+.pp-hcard__title {
+    margin-top: 2px; font-size: 0.72rem; line-height: 1.25; color: var(--pp-text-mute);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding-right: 1px;   /* italic glyphs slant past their box */
+    font-style: italic;
+}
+/* Held for hunters with no title, so a card without one is the same height as the card beside it. */
+.pp-hcard__title--empty { visibility: hidden; }
+
+/* ---- Proof ------------------------------------------------------------------------------------- */
+/* Three cells under a hairline. The rule is what separates "who" from "what they've done" -- the same job
+   the ledger rule does on the rating wizard's header. */
+.pp-hcard__stats {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+    padding-top: 10px; border-top: 1px solid var(--pp-divider, var(--pp-border));
+}
+.pp-hcard__stat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pp-hcard__val {
+    font-size: 0.9rem; font-weight: 700; color: var(--pp-text);
+    font-variant-numeric: tabular-nums; line-height: 1.1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* The ONE accent on this surface (colour restraint), and it MOVES: whichever value the wall is ordered by
+   takes it, so the accent answers "this is why this hunter is in this position" rather than decorating a
+   number that happens to be first. Exactly one per card, always. */
+.pp-hcard__val--sorted { color: var(--pp-primary); }
+/* ---- The dates band ---------------------------------------------------------------------------- */
+/* A second, QUIETER register under the stats. These answer "when", not "how much", and at the numeric
+   treatment five big figures would compete for the same card. Label FIRST here (the stats band puts the
+   value first): the value is a short phrase rather than a figure, so leading with the label is what makes
+   the pair read as a sentence instead of a second scoreboard row.
+ *
+ * No rule above it. The stats band already carries one, and a third hairline turns a small card into a
+ * stack of bands -- the size and colour step is enough to separate the two registers. */
+/* THREE columns for two cells, matching the stats band above. The band held two equal columns at first,
+   which put its second cell at 50% while the stats columns sat at 0/33/66 -- landing it in a GUTTER of the
+   row above. A near-miss reads worse than either extreme, and the fix is not to centre it (that gives the
+   card a third alignment axis and empties the bottom-left corner) but to make the miss an exact hit. The
+   third column is deliberately empty; the row simply ends early. */
+.pp-hcard__meta {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+    margin-top: -2px;
+}
+.pp-hcard__mcell { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pp-hcard__mlbl {
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--pp-text-mute); white-space: nowrap;
+}
+.pp-hcard__mval {
+    font-size: 0.74rem; font-weight: 600; color: var(--pp-text-dim); line-height: 1.2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Tabular figures for the ONE numeric cell in this band, so the Games column stays in a straight line down
+   the wall. Deliberately not on the whole band: the date cells are prose, and tabular-nums there spaces the
+   letterforms oddly for no benefit. */
+.pp-hcard__mval--num { font-variant-numeric: tabular-nums; }
+/* TWO classes deliberately. `.pp-hcard__val--sorted` and `.pp-hcard__mval` are both single-class rules, so
+   whichever is declared last wins -- and this band is declared after the accent, which silently swallowed
+   it: sorting by Last seen or Joined highlighted nothing at all while the stats band highlighted fine. */
+.pp-hcard__mval.pp-hcard__val--sorted { color: var(--pp-primary); }
+.pp-hcard__lbl {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--pp-text-mute); white-space: nowrap;
+}
+
+/* ---- Reveal ------------------------------------------------------------------------------------ */
+/* Paired with PlatPursuit.staggerReveal (WAAPI). BOTH halves are required and the second is easy to miss:
+   the helper adds `.pp-reveal` to the grid to hide the cards, then flips each card to `.is-revealed` as its
+   visible RESTING state one frame after starting the animation. With only the hide rule the wall renders
+   permanently invisible -- the animation plays over an element whose base style is still opacity 0, and its
+   `fill: backwards` reverts to exactly that when it ends.
+
+   Motion-gated so a reduced-motion visitor (whom staggerReveal returns early for, leaving no `.pp-reveal`
+   at all) or a JS failure never meets a blank wall. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-hcard { opacity: 0; }
+    .pp-reveal .pp-hcard.is-revealed { opacity: 1; }
+}
+
+/* ---- Skeletons (infinite-scroll load) ----------------------------------------------------------- */
+/* The shape of the answer, not a spinner: the next 30 cards land at the bottom of a wall you are already
+   scrolling, so the page holds its geometry while they arrive. Sized off the real card's parts, and the
+   whole block is `aria-hidden` -- it is a loading picture, and a screen reader gets the count instead. */
+.pp-hskel {
+    display: flex; flex-direction: column; gap: 10px; padding: 14px;
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
+}
+.pp-hskel__id { display: flex; align-items: center; gap: 11px; }
+.pp-hskel__who { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.pp-hskel__bar { height: 10px; border-radius: 4px; }
+.pp-hskel__bar--name { width: 62%; }
+.pp-hskel__bar--sub { width: 40%; height: 8px; }
+.pp-hskel__stats {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+    padding-top: 10px; border-top: 1px solid var(--pp-divider, var(--pp-border));
+}
+.pp-hskel__cell { height: 22px; border-radius: 4px; }
+/* One shared fill so every piece shimmers as ONE surface rather than as N independent stripes. Colour
+   only -- no transform, no filter -- because this sits at the bottom of a long scrolling page and a
+   per-frame filter over that many nodes is exactly the mobile GPU cost the motion doc warns about. */
+.pp-hskel__avatar, .pp-hskel__bar, .pp-hskel__cell { background: var(--pp-bg-2); }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-hskel__avatar, .pp-hskel__bar, .pp-hskel__cell { animation: ppHskelPulse 1.4s ease-in-out infinite; }
+    /* Staggered a beat apart so the card reads as one object waking up, not three metronomes. */
+    .pp-hskel__bar--sub { animation-delay: 0.12s; }
+    .pp-hskel__stats .pp-hskel__cell:nth-child(2) { animation-delay: 0.08s; }
+    .pp-hskel__stats .pp-hskel__cell:nth-child(3) { animation-delay: 0.16s; }
+}
+@keyframes ppHskelPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+/* ---- Empty state ------------------------------------------------------------------------------- */
+.pp-hbrowse__empty {
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    padding: 44px 20px; color: var(--pp-text-mute);
+}
+.pp-hbrowse__empty-ico {
+    display: grid; place-items: center; width: 3rem; height: 3rem; margin-bottom: 0.9rem;
+    border-radius: 50%; background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+}
+.pp-hbrowse__empty-ico svg { width: 1.4rem; height: 1.4rem; }
+.pp-hbrowse__empty-t { font-size: 1rem; font-weight: 700; color: var(--pp-text); }
+.pp-hbrowse__empty-s { font-size: 0.85rem; margin-top: 4px; }
+
+/* ---- Toolbar ----------------------------------------------------------------------------------- */
+/* Quiet chrome (playbook §5): softened shadow so the toolbar sits BACK and the cards below own the pop.
+   Two-class selector so it beats the shared `.pp-toolbar-card` without recolouring it. */
+.pp-hbrowse .pp-hbrowse__toolbar { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22); }
+/* `.pp-toolbar-card` is SURFACE ONLY -- background, radius, border, shadow. It carries no padding and no
+   margin, so every page that uses it supplies its own box metrics; omitting them left the controls flush
+   against the toolbar's border and the card wall butted straight up under it. Same numbers as Browse
+   Games (`.pp-gbrowse__toolbar`), because two browse bars on the same site should not sit differently. */
+.pp-hbrowse__toolbar { padding: 12px 14px; margin-bottom: 14px; }
+.pp-hbrowse__bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pp-hbrowse__bar > .pp-bgal__search { flex: 1 1 12rem; min-width: 0; }
+.pp-hbrowse__sel { display: inline-flex; align-items: center; }

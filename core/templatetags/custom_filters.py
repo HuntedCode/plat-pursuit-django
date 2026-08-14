@@ -603,3 +603,42 @@ def youtube_embed_url(url):
     if match:
         return f'https://www.youtube-nocookie.com/embed/{match.group(1)}'
     return ''
+
+
+@register.filter
+def compact_since(value):
+    """Relative time in ONE unit, for a narrow cell: "3h ago", "2d ago", "5mo ago".
+
+    `naturaltime` is the right filter for prose and the wrong one for a stat slot -- it happily returns
+    "2 days, 19 hours ago", which is three times the width of the number the cell was built around and
+    wraps or ellipsises in it. This keeps the largest unit only.
+
+    Returns '' for a missing value so a caller can decide what an empty slot says, and treats a future
+    timestamp as "Now" rather than printing a negative age (clock skew between app and database is real).
+    """
+    if not value:
+        return ''
+    try:
+        delta = timezone.now() - value
+    except TypeError:
+        return ''
+
+    seconds = delta.total_seconds()
+    if seconds < 60:
+        return 'Now'
+    # Ordered largest-first; the first threshold the age clears wins, so exactly one unit is ever shown.
+    #
+    # A year here is TWELVE OF THESE MONTHS (360d), not 365. With a 30-day month and a 365-day year the
+    # units disagree with each other, and ages of 360-364 days fall in the gap and print "12mo ago" -- a
+    # month count nobody writes when they could say a year.
+    for cutoff, unit, label in (
+        (31_104_000, 31_104_000, 'y'),      # 12 x 30d
+        (2_592_000, 2_592_000, 'mo'),       # 30d
+        (604_800, 604_800, 'w'),
+        (86_400, 86_400, 'd'),
+        (3_600, 3_600, 'h'),
+        (60, 60, 'm'),
+    ):
+        if seconds >= cutoff:
+            return f'{int(seconds // unit)}{label} ago'
+    return 'Now'

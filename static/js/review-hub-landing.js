@@ -262,7 +262,7 @@ PlatPursuit.ReviewHubLanding = {
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 mb-1">
                             <span class="${thumbColor}">${thumbIcon}</span>
-                            <a href="/profiles/${esc(author.psn_username || '')}/" class="text-sm font-bold ${author.is_premium ? 'legendary-title' : 'text-primary'} hover:underline">${esc(author.display_psn_username || author.psn_username || '')}</a>
+                            <a href="/hunters/${esc(author.psn_username || '')}/" class="text-sm font-bold ${author.is_premium ? 'legendary-title' : 'text-primary'} hover:underline">${esc(author.display_psn_username || author.psn_username || '')}</a>
                             ${author.displayed_title ? `<span class="text-xs ${author.is_premium ? 'legendary-title' : 'text-secondary'} italic pr-1 hidden lg:inline">${esc(author.displayed_title)}</span>` : ''}
                             <span class="text-xs text-base-content/40 ml-auto">${esc(timeAgo)}</span>
                         </div>

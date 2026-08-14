@@ -108,3 +108,29 @@ Every item here is deploy-side; the code change is complete and tested.
 - [ ] **Confirm the origin guard covers the new profile paths in prod.** The guard is skipped when
       `DEBUG`/`IS_BETA`, so its behaviour is only real on prod: a direct-origin GET of
       `/profiles/<user>/` without a `CF-Ray` header must bounce to the public host.
+
+## IA: Profiles renamed to Hunters, `/profiles/` -> `/hunters/` (2026-08)
+
+The section's SECOND move this month (it came out from under `/community/` a few weeks earlier), and it
+covers the largest indexed set on the site: browse + every profile detail + every trophy case. The code
+change is complete and tested; everything here is deploy-side.
+
+Redirect shape, so nobody re-derives it: every legacy route targets a `pattern_name`, which resolves at
+REQUEST time. That is what re-aimed the `/community/profiles/*` wave at `/hunters/*` automatically, so
+**both** old spellings reach the canonical in a single hop rather than chaining. Pinned by
+`test_the_oldest_paths_reach_the_canonical_in_ONE_hop`.
+
+- [ ] **Resubmit the sitemap.** Every profile URL changed again. The sitemap emits the new locations (it
+      reverses by name), but Search Console should be re-pinged so the 301s are crawled promptly. This is
+      the second resubmit in a month for the same URLs — expect the recrawl to take a while.
+- [ ] **Watch 404s for a week**, specifically `/profiles/*`. Every known path redirects; hand-built links
+      in the wild (Discord, PlatBot, old emails) are what surface here.
+- [ ] **Check PlatBot** for hardcoded profile URLs. It consumes `/api/v1/*` (unaffected — the mobile API's
+      own `/api/v1/mobile/profiles/...` routes are a separate namespace and did NOT move), but any message
+      template linking a hunter to their profile wants the new path. Redirects cover it either way.
+- [ ] **Cloudflare cache purge** for `/profiles/*` so cached 200s aren't served over the new 301s.
+- [ ] **Confirm the origin guard covers `/hunters/<user>/` in prod.** The guard is skipped when
+      `DEBUG`/`IS_BETA`, so its behaviour is only real on prod: a direct-origin GET of `/hunters/<user>/`
+      without a `CF-Ray` header must bounce to the public host. The regex now carries all three spellings;
+      losing the new one silently un-guards the most scraped page type on the site.
+- [ ] **`collectstatic`** — `robots.txt` is a static file and now carries all three `Disallow` lines.

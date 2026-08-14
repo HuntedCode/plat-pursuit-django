@@ -4,6 +4,7 @@ EmailService - Reusable service for sending HTML emails via SendGrid.
 Provides a consistent interface for sending transactional emails across the application.
 """
 import logging
+from django.urls import reverse
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
@@ -270,7 +271,9 @@ def send_welcome_email(profile):
 
         context = {
             'username': profile.display_psn_username or profile.psn_username,
-            'profile_url': f"{settings.SITE_URL}/profiles/{profile.psn_username}/",
+            # reverse(), not a hardcoded path: this link goes out in EMAIL and outlives any redirect we
+            # keep. The section moved twice in 2026-08 and a literal here followed neither.
+            'profile_url': f"{settings.SITE_URL}{reverse('profile_detail', args=[profile.psn_username])}",
             'discord_url': getattr(settings, 'DISCORD_INVITE_URL', ''),
             'site_url': settings.SITE_URL,
             'preference_url': preference_url,

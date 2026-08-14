@@ -89,12 +89,18 @@ All defined in `plat_pursuit/context_processors.py`:
 
 | Category | Filters |
 |----------|---------|
-| Date/Time | `iso_naturaltime`, `iso_datetime`, `timedelta_hours` |
+| Date/Time | `iso_naturaltime`, `iso_datetime`, `timedelta_hours`, `compact_since` |
 | Colors | `platform_color`, `platform_color_str`, `platform_color_hex`, `region_color_hex`, `trophy_color`, `trophy_css_color`, `badge_color`, `rarity_color_hex` |
 | Trophy/Badge | `trophy_rarity_label`, `badge_tier`, `badge_tier_xp`, `psn_rarity` |
 | Data access | `dict_get`, `get_item` |
 | Formatting | `multiply`, `format_date`, `sync_status_display`, `moderator_display_name`, `tojson` |
 | Markup | `parse_spoilers` (Discord-style `||text||`), `gradient_themes_json` |
+
+**`compact_since`** reports an age in ONE unit (`3h ago`, `2d ago`, `5mo ago`) for narrow cells such as a
+stat slot, where `naturaltime`'s "2 days, 19 hours ago" is several times the width of the figure the cell
+was sized for. A year is twelve of its own 30-day months, so nothing ever prints "12mo ago"; a missing
+value returns `''` so the caller decides what an empty slot says, and a future timestamp reads `Now`
+rather than a negative age (app/database clock skew is real).
 
 **Safety**: `parse_spoilers` escapes input first, `tojson` escapes HTML-critical chars, `format_date` respects user's 24h clock preference.
 

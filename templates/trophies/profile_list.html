@@ -1,150 +1,408 @@
 {% extends 'base.html' %}
 {% load static %}
-{% load query_tags %}
 {% load humanize %}
-{% load custom_filters %}
-{% block title %}Browse Profiles{% endblock %}
+{% block title %}Browse Hunters{% endblock %}
+
+{% comment %} BROWSE HUNTERS (/profiles/) -- rebuilt 2026-08, from scratch.
+
+A DISCOVERY surface. /leaderboards/ owns ranking, so this page is a directory of PEOPLE: who is here, who
+is active, who just arrived. Nothing on it draws a position or a medal, and the sorts that made it a second
+scoreboard were removed rather than restyled (see ProfilesListView's docstring for which and why).
+
+Structure follows the site-wide rule: STACKED chrome (header card, then toolbar card), then the content
+flowing FREE -- the grid is never wrapped in an outer card, because this page grows by 30 cards on every
+scroll and an outer border would grow with it forever.
+{% endcomment %}
 
 {% block content %}
+<div class="pp-hbrowse">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ── Header Card ── #}
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4 lg:p-5">
-            <div class="flex items-center justify-between gap-3">
+    {# ── Page header: accented card + --pp-* substance, opening-beat cascade (rebuild standard §2). ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
                 <div class="min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
                             <circle cx="9" cy="7" r="4"></circle>
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
                         <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Browse Hunters</h1>
-                        {% with sort_val=request.GET.sort %}
-                            {% if sort_val %}
-                                {% for value, display in form.sort.field.choices %}
-                                    {% if value == sort_val %}
-                                        <span class="badge badge-sm badge-ghost">{{ display }}</span>
-                                    {% endif %}
-                                {% endfor %}
-                            {% else %}
-                                <span class="badge badge-sm badge-ghost">Alphabetical</span>
-                            {% endif %}
-                        {% endwith %}
                     </div>
                     <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                         {% if request.GET.query %}
-                            Searching for "{{ request.GET.query }}"
-                            {% if is_paginated %}across {{ paginator.count|intcomma }} hunter{{ paginator.count|pluralize }}...{% endif %}
-                        {% elif selected_country %}
-                            {% for value, display in form.country.field.choices %}
-                                {% if value == selected_country %}
-                                    {{ paginator.count|intcomma|default:"No" }} trophy hunter{{ paginator.count|pluralize }} from {{ display }}.
-                                {% endif %}
-                            {% endfor %}
+                            Looking for &ldquo;{{ request.GET.query }}&rdquo; among {{ paginator.count|intcomma|default:"no" }} hunter{{ paginator.count|pluralize }}.
+                        {% elif request.GET.country %}
+                            {{ paginator.count|intcomma|default:"No" }} hunter{{ paginator.count|pluralize }} chasing platinums from here.
                         {% else %}
-                            {% if is_paginated %}
-                                {{ paginator.count|intcomma }} trophy hunters from around the world. Find your next rival.
-                            {% else %}
-                                {{ object_list|length|intcomma }} trophy hunters from around the world. Find your next rival.
-                            {% endif %}
+                            Everyone chasing the same thing you are. Go and see who's about.
                         {% endif %}
                     </p>
                 </div>
+
+                {% comment %} The filtered count as the headline Tally (mirrors Browse Games / Collection).
+                It comes off the paginator, so it costs nothing beyond the count this page already runs.
+                Mobile rides the title row on one compact line; md+ takes the stacked form. {% endcomment %}
+                <div class="shrink-0 text-right flex items-baseline gap-1 whitespace-nowrap md:block">
+                    <span id="hbrowse-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
+                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">hunter{{ paginator.count|pluralize }} shown</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% include 'partials/ad_unit.html' with ad_slot="5270350613" %}
+
+    {% comment %} Condensed controls, pinned once the real toolbar scrolls under the chrome. This wall is
+    infinite, so without it your search and sort are gone forever the moment you start scrolling. The shared
+    StickyReveal owns the pin (`.pp-minibar` lives in chrome.css); the sentinel below the toolbar is where
+    pinning begins.
+
+    The search and sort here are PROXIES, not real fields: they sit outside the <form>, and a second
+    name="query" / name="sort" would double-submit. JS mirrors them onto the real controls and re-dispatches
+    the native event, so browse-filters.js's own debounce still drives the fetch. {% endcomment %}
+    <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#hbrowse-minibar-sentinel">
+        <div class="pp-minibar__inner container mx-auto">
+            <span class="pp-minibar__id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span class="pp-minibar__title">Hunters</span>
+                <span class="pp-minibar__count" data-minibar-count title="hunters shown">{{ paginator.count|intcomma }}</span>
+            </span>
+            <div class="pp-minibar__controls">
+                <span class="pp-minibar__search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" data-minibar-search value="{{ request.GET.query }}" placeholder="Search&hellip;" aria-label="Search hunters by name" />
+                </span>
+                <select data-minibar-sort class="pp-gallery__select pp-minibar__sort" aria-label="Sort hunters"></select>
             </div>
         </div>
     </div>
 
-    {# ── Search + Sort Toolbar Card ── #}
-    <form data-browse-form
+    {% comment %} Toolbar: quiet chrome (§5). One row -- search, sort, country. No Filters drawer: there is
+    exactly one filter besides search, and a collapsible panel to hold a single select would be chrome built
+    for its own sake. Filters auto-apply through browse-filters.js (HTMX swap); there is no Apply button.
+    {% endcomment %}
+    <form data-browse-form data-live-search id="hbrowse-form"
           hx-get="{% url 'profiles_list' %}"
           hx-target="#browse-results"
           hx-push-url="true"
           hx-swap="innerHTML"
-          hx-trigger="submit">
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-            <div class="card-body p-3 md:p-4">
-                <div class="flex flex-col md:flex-row gap-2 md:gap-3">
-                    {# Search input with icon #}
-                    <div class="relative flex-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/60 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <input type="text" name="query" id="id_query" value="{{ request.GET.query }}"
-                               class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
-                               placeholder="Search for a hunter..." />
-                    </div>
+          hx-trigger="submit"
+          hx-indicator="#browse-results">
+        <div class="pp-toolbar-card pp-hbrowse__toolbar">
+            <div class="pp-hbrowse__bar">
+                <span class="pp-bgal__search" data-search-wrap>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" name="query" value="{{ request.GET.query }}" placeholder="Search hunters&hellip;" aria-label="Search hunters by name" data-page-search />
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+                </span>
 
-                    {# Sort dropdown #}
-                    <select name="sort" id="id_sort"
-                            class="select select-bordered select-sm md:select-md w-full md:w-44 lg:w-52">
-                        {% for value, display in form.sort.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
+                <label class="pp-hbrowse__sel">
+                    <span class="sr-only">Sort hunters</span>
+                    <select name="sort" class="pp-gallery__select">
+                        {% for value, display in form.fields.sort.choices %}
+                        <option value="{{ value }}"{% if request.GET.sort == value or not request.GET.sort and value == 'recently_active' %} selected{% endif %}>{{ display }}</option>
                         {% endfor %}
                     </select>
+                </label>
 
-                    {# Country dropdown #}
-                    <select name="country" id="id_country"
-                            class="select select-bordered select-sm md:select-md w-full md:w-44 lg:w-52">
-                        {% for value, display in form.country.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.country == value %}selected{% endif %}>{{ display }}</option>
+                <label class="pp-hbrowse__sel">
+                    <span class="sr-only">Filter by country</span>
+                    <select name="country" class="pp-gallery__select">
+                        {% for value, display in form.fields.country.choices %}
+                        <option value="{{ value }}"{% if selected_country == value %} selected{% endif %}>{{ display }}</option>
                         {% endfor %}
                     </select>
-
-                    {# Submit button #}
-                    <button type="button" data-submit-btn
-                            class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <span class="hidden md:inline">Feel The Power</span>
-                    </button>
-                </div>
-
-                {# Filter actions: Reset / Save / Clear defaults #}
-                <div class="flex items-center gap-2 mt-2 flex-wrap">
-                    <a href="{% url 'profiles_list' %}"
-                       class="btn btn-xs btn-ghost border border-base-300 gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="1 4 1 10 7 10"></polyline>
-                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-                        </svg>
-                        Reset Filters
-                    </a>
-                    {% if user.is_authenticated %}
-                    <button type="button" data-save-defaults="profiles"
-                            class="btn btn-xs btn-accent btn-outline gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                            <polyline points="7 3 7 8 15 8"></polyline>
-                        </svg>
-                        Save as Defaults
-                    </button>
-                    <button type="button" data-clear-defaults="profiles"
-                            class="btn btn-xs btn-ghost border border-base-300 gap-1 text-base-content/40 hover:text-error hover:border-error">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                        Clear Defaults
-                    </button>
-                    {% endif %}
-                </div>
+                </label>
             </div>
         </div>
         <input type="hidden" name="page" value="{{ page_obj.number|default:'1' }}" />
     </form>
 
+    {# Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar above. #}
+    <span id="hbrowse-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
+    {# ── Browse results (HTMX filter-swap target = just the grid) ── #}
     <div id="browse-results">
         {% include 'trophies/partials/profile_list/browse_results.html' %}
     </div>
 
+    {% comment %} Infinite scroll: the observed sentinel + the loading state sit OUTSIDE #browse-results so
+    they persist across filter swaps; InfiniteScroller re-binds to the fresh #items-grid in htmx:afterSwap.
+
+    SKELETONS rather than a spinner. The next 30 cards land at the bottom of a wall you are already
+    scrolling, and a lone centred spinner tells you nothing about where they will go -- the page holds its
+    shape while they arrive instead, and the scroll stops feeling loose. They mirror the card's geometry
+    (avatar disc, two text bars, a three-cell stat row) so the placeholder is the shape of the answer.
+    {% endcomment %}
+    <div id="hbrowse-sentinel" class="h-4" aria-hidden="true"></div>
+    <div id="hbrowse-loading" class="pp-hbrowse__grid hidden" aria-hidden="true">
+        {% for _ in "xxx" %}
+        <div class="pp-hskel">
+            <div class="pp-hskel__id">
+                <span class="pp-hskel__avatar"></span>
+                <span class="pp-hskel__who"><span class="pp-hskel__bar pp-hskel__bar--name"></span><span class="pp-hskel__bar pp-hskel__bar--sub"></span></span>
+            </div>
+            <div class="pp-hskel__stats"><span class="pp-hskel__cell"></span><span class="pp-hskel__cell"></span><span class="pp-hskel__cell"></span></div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
 {% endblock %}
 
 {% block js_scripts %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
+    <script>
+    // Page chrome + motion: the header count-up, the staggered grid reveal, infinite scroll, and the
+    // no-blank-flash settle on a filter swap.
+    //
+    // Wired through PlatPursuit.onPageReady so it survives Back/Forward: htmx restores a pushed-URL page by
+    // replacing the history element's innerHTML from a snapshot and does NOT re-fire DOMContentLoaded or
+    // afterSwap, so the restored DOM is fresh, unwired nodes. Element wiring goes in boot() (re-runs against
+    // the new nodes; the old bindings died with the old ones); body/document listeners are guarded on
+    // `first` so they bind exactly once and keep firing across restores.
+    (function () {
+        var revealHandle = null, scroller = null, countLast = null;
+        var FADE = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+        var SPRING = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
+
+        function grid() { return document.getElementById('items-grid'); }
+
+        function initReveal() {
+            if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
+            var g = grid();
+            if (!g || !window.PlatPursuit || !PlatPursuit.staggerReveal) { return; }
+            // Opacity and transform are SEPARATE animations on purpose: the spring's >1 control point,
+            // applied to opacity, spikes it to 1 almost immediately and reads as a hard flash rather than
+            // a fade. The fade gets a decel curve; only the movement overshoots.
+            revealHandle = PlatPursuit.staggerReveal({
+                grid: g, cardSelector: '.pp-hcard', step: 20,
+                reveal: function (el, delayMs) {
+                    if (!el.animate) { return; }
+                    el.animate([{ opacity: 0 }, { opacity: 1 }],
+                               { duration: 400, delay: delayMs, easing: FADE, fill: 'backwards' });
+                    el.animate([{ transform: 'translateY(12px) scale(0.97)' }, { transform: 'none' }],
+                               { duration: 480, delay: delayMs, easing: SPRING, fill: 'backwards' });
+                },
+            });
+        }
+
+        function initScroller() {
+            if (scroller && scroller.destroy) { scroller.destroy(); scroller = null; }
+            if (!(window.PlatPursuit && PlatPursuit.InfiniteScroller)) { return; }
+            scroller = PlatPursuit.InfiniteScroller.create({
+                gridId: 'items-grid', sentinelId: 'hbrowse-sentinel', loadingId: 'hbrowse-loading',
+                paginateBy: 30, cardSelector: '.pp-hcard',   // matches ProfilesListView.paginate_by
+                onAppend: function (nodes) { if (revealHandle) { revealHandle.observe(nodes); } },
+            });
+        }
+
+        // Header Tally tick (old -> new). The new total is read off the freshly-swapped grid, which IS the
+        // main swap target -- an OOB text swap on the header raced the animation and read a stale count.
+        function tickCount() {
+            var g = grid(), el = document.getElementById('hbrowse-count');
+            if (!g || !el || !(window.PlatPursuit && PlatPursuit.countUp)) { return; }
+            var next = parseFloat(g.getAttribute('data-result-count'));
+            if (isNaN(next)) { return; }
+            if (countLast === null) { countLast = parseFloat(el.dataset.countup); }
+            el.dataset.countup = next;                 // countUp reads its target from the dataset
+            if (!isNaN(countLast) && countLast !== next) { PlatPursuit.countUp(el, 700, { from: countLast }); }
+            else { el.textContent = next.toLocaleString(); }
+            countLast = next;
+            // The mini-bar may be pinned and on screen mid-scroll, so its copy has to agree.
+            var mb = document.querySelector('[data-minibar-count]');
+            if (mb) { mb.textContent = next.toLocaleString(); }
+        }
+
+        // ── FLIP: the wall REARRANGES on a filter or sort, it does not blink ───────────────────────
+        // Filtering is the primary act on a directory, so it gets the page's one signature moment. Cards
+        // that survive a change travel to their new slots; the ones that leave fade out where they stood
+        // and the new ones fade in. First (measure) -> Last (let the swap happen) -> Invert -> Play.
+        //
+        // Keyed on the hunter's URL, which is the only stable identity across a server-rendered swap.
+        var flipFrom = null;
+        function measureCards() {
+            var g = grid();
+            if (!g) { return null; }
+            var map = new Map();
+            g.querySelectorAll('.pp-hcard').forEach(function (card) {
+                var a = card.querySelector('.pp-hcard__link');
+                if (a) { map.set(a.getAttribute('href'), card.getBoundingClientRect()); }
+            });
+            return map;
+        }
+        function playFlip(before) {
+            var g = grid();
+            if (!before || !g || !g.animate) { return false; }
+            var moved = false;
+            g.querySelectorAll('.pp-hcard').forEach(function (card) {
+                var a = card.querySelector('.pp-hcard__link');
+                var prev = a && before.get(a.getAttribute('href'));
+                if (!prev) { return; }                       // new arrival -- the stagger reveal owns it
+                var now = card.getBoundingClientRect();
+                var dx = prev.left - now.left, dy = prev.top - now.top;
+                if (!dx && !dy) {
+                    // Stayed put: mark it revealed so the reveal pass leaves it alone. A card that did not
+                    // move must not fade in again, or the "unchanged" part of the wall flickers.
+                    card.classList.add('is-revealed', 'pp-revealing');
+                    return;
+                }
+                moved = true;
+                card.classList.add('is-revealed', 'pp-revealing');
+                card.animate(
+                    [{ transform: 'translate(' + dx + 'px, ' + dy + 'px)' }, { transform: 'none' }],
+                    { duration: 460, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
+                );
+            });
+            return moved;
+        }
+
+        // ── Mini-bar proxies ──────────────────────────────────────────────────────────────────────
+        // The pinned controls sit OUTSIDE the form, so they cannot be real fields: a second name="query"
+        // or name="sort" would double-submit. They mirror onto the real controls and re-dispatch the
+        // native event, leaving browse-filters.js's debounce and auto-submit in charge of the fetch.
+        function wireMinibar() {
+            var form = document.getElementById('hbrowse-form');
+            if (!form || form.dataset.minibarWired === '1') { return; }
+            var realSearch = form.querySelector('input[name="query"]');
+            var realSort = form.querySelector('select[name="sort"]');
+            var mbSearch = document.querySelector('[data-minibar-search]');
+            var mbSort = document.querySelector('[data-minibar-sort]');
+            if (!mbSearch && !mbSort) { return; }
+            form.dataset.minibarWired = '1';
+
+            if (mbSearch && realSearch) {
+                mbSearch.addEventListener('input', function () {
+                    realSearch.value = mbSearch.value;
+                    realSearch.dispatchEvent(new Event('input', { bubbles: true }));
+                });
+                mbSearch.addEventListener('keydown', function (e) {
+                    if (e.key !== 'Enter') { return; }
+                    e.preventDefault();
+                    realSearch.value = mbSearch.value;
+                    realSearch.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+                });
+                // Keep the pinned copy honest when the toolbar search is the one being typed in.
+                realSearch.addEventListener('input', function () {
+                    if (document.activeElement !== mbSearch) { mbSearch.value = realSearch.value; }
+                });
+            }
+            if (mbSort && realSort) {
+                mbSort.innerHTML = realSort.innerHTML;   // one source of truth for the options
+                mbSort.value = realSort.value;
+                mbSort.addEventListener('change', function () {
+                    realSort.value = mbSort.value;
+                    realSort.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+                realSort.addEventListener('change', function () { mbSort.value = realSort.value; });
+            }
+        }
+
+        // ── Scroll restoration ────────────────────────────────────────────────────────────────────
+        // Open hunter #47 on an infinite wall, come back, and the browser can only restore a scroll
+        // position the page no longer has -- the wall rebuilds at 30 cards, so the offset it remembers
+        // points into empty space. We remember the CARD instead and scroll to it once it exists.
+        var SCROLL_KEY = 'pp-hunters-return';
+        function rememberCard(e) {
+            var card = e.target.closest && e.target.closest('.pp-hcard');
+            var link = card && card.querySelector('.pp-hcard__link');
+            if (!link) { return; }
+            try {
+                sessionStorage.setItem(SCROLL_KEY, JSON.stringify({
+                    href: link.getAttribute('href'), url: location.href,
+                }));
+            } catch (err) { /* private mode: the wall simply opens at the top */ }
+        }
+        function restoreScroll() {
+            var raw;
+            try { raw = sessionStorage.getItem(SCROLL_KEY); } catch (err) { return; }
+            if (!raw) { return; }
+            try { sessionStorage.removeItem(SCROLL_KEY); } catch (err) { /* no-op */ }
+            var saved;
+            try { saved = JSON.parse(raw); } catch (err) { return; }
+            // Only restore onto the SAME filtered wall. Coming back to a different query is a new list,
+            // and dropping the reader into the middle of it would be disorienting rather than helpful.
+            if (!saved || saved.url !== location.href) { return; }
+            var card = document.querySelector('.pp-hcard__link[href="' + saved.href + '"]');
+            if (!card) { return; }
+            var host = card.closest('.pp-hcard') || card;
+            // `auto`, never smooth: this is a RETURN, not a journey. Animating a restore scrolls the
+            // reader through content they already walked.
+            host.scrollIntoView({ block: 'center', behavior: 'auto' });
+        }
+
+        function boot(first) {
+            initReveal();
+            initScroller();
+            if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }
+
+            // The headline Tally rolls up on arrival, on the same beat as the header cascade. First load
+            // only: a Back-restored page should present its number as already-known rather than replay the
+            // arrival. `countLast` is seeded here so the first filter swap animates from the real value
+            // instead of from zero.
+            if (first && window.PlatPursuit && PlatPursuit.countUp) {
+                var countEl = document.getElementById('hbrowse-count');
+                if (countEl) {
+                    PlatPursuit.countUp(countEl, 900);
+                    countLast = parseFloat(countEl.dataset.countup);
+                }
+            }
+
+            // Mini-bar proxies. Re-wired per boot because a history restore hands us fresh nodes; the real
+            // controls are resolved here too rather than captured once.
+            wireMinibar();
+            restoreScroll();
+
+            if (first) {
+                // Dim on `change` so it spans browse-filters.js's debounce as well as the request; a dim
+                // added on the request alone leaves the grid stale-and-live through the debounce.
+                //
+                // TEXT INPUTS ARE SKIPPED. Their `change` fires on blur WITHOUT submitting anything (only
+                // the debounced live-search or Enter submits), so dimming there strands the grid faded with
+                // no request coming to clear it. Live search does its own dim.
+                document.addEventListener('change', function (e) {
+                    var t = e.target;
+                    if (!t.closest || !t.closest('#hbrowse-form')) { return; }
+                    if (t.tagName === 'INPUT' && (t.type === 'text' || t.type === 'search')) { return; }
+                    var r = document.getElementById('browse-results');
+                    if (r) { r.classList.add('is-swapping'); }
+                });
+                // Measure BEFORE the swap replaces the grid -- once htmx has written the new HTML the old
+                // positions are gone, so a FLIP that reads them afterwards has nothing to invert from.
+                document.body.addEventListener('htmx:beforeSwap', function (e) {
+                    var t = e.detail && e.detail.target;
+                    if (t && t.id === 'browse-results') { flipFrom = measureCards(); }
+                });
+                document.body.addEventListener('htmx:afterSwap', function (e) {
+                    var t = e.detail && e.detail.target;
+                    if (!t || t.id !== 'browse-results') { return; }
+                    t.classList.remove('is-swapping');
+                    // FLIP first: it marks the survivors revealed, so the reveal pass that follows only
+                    // animates genuinely new cards instead of re-fading the whole wall.
+                    playFlip(flipFrom);
+                    flipFrom = null;
+                    initReveal();
+                    initScroller();
+                    tickCount();
+                });
+                document.body.addEventListener('htmx:responseError', function () {
+                    var r = document.getElementById('browse-results');
+                    if (r) { r.classList.remove('is-swapping'); }
+                });
+                // Delegated, so it keeps working for infinite-scroll-appended cards and across swaps.
+                document.addEventListener('click', rememberCard);
+            }
+        }
+
+        if (window.PlatPursuit && PlatPursuit.onPageReady) { PlatPursuit.onPageReady(boot); }
+        else { document.addEventListener('DOMContentLoaded', function () { boot(true); }); }
+    })();
+    </script>
 {% endblock %}

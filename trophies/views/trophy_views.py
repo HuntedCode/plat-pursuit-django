@@ -133,7 +133,7 @@ class TrophyCaseView(ListView):
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Profiles', 'url': reverse_lazy('profiles_list')},
+            {'text': 'Hunters', 'url': reverse_lazy('profiles_list')},
             {'text': f"{profile.display_psn_username}", 'url': reverse_lazy('profile_detail', kwargs={'psn_username': profile.psn_username})},
             {'text': 'Trophy Case'}
         ]

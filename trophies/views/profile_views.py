@@ -5,8 +5,8 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db.models import (
-    Q, F, Prefetch, Max, Case, When, Value, IntegerField, FloatField,
-    Subquery, OuterRef, Avg, OrderBy,
+    Q, F, Max, Case, When, Value, IntegerField, FloatField,
+    Subquery, OuterRef, OrderBy,
 )
 from django.db.models.functions import Lower, Coalesce, Cast
 from django.http import HttpResponseRedirect, JsonResponse
@@ -38,6 +38,7 @@ from ..models import (
     Review,
     Trophy,
     UserConceptRating,
+    UserTitle,
 )
 from trophies.mixins import HtmxListMixin
 from .browse_helpers import annotate_community_ratings
@@ -47,20 +48,42 @@ logger = logging.getLogger("psn_api")
 
 
 class ProfilesListView(HtmxListMixin, ListView):
-    """
-    Display paginated list of user profiles with filtering and sorting.
+    """Browse hunters at `/hunters/` -- a DISCOVERY surface, not a ranking one.
 
-    Provides profile browsing functionality with filters for:
-    - Username search
-    - Country
-    - Sort options (trophies, platinums, games, completions, average progress)
+    Rebuilt 2026-08. The framing is the load-bearing decision: `/leaderboards/` owns ranking (it already
+    boards hunters by badges), so this page is a directory of PEOPLE -- who is here, who is active, who
+    just arrived -- and everything that made it a second scoreboard was removed rather than restyled.
 
-    Useful for discovering other trophy hunters and viewing leaderboards.
+    What that cost the sort list, and why each one went:
+
+    - `badges_earned` / `badge_xp` -> Leaderboards. Duplicating that hub's job here is what made the two
+      surfaces read as the same page twice.
+    - `rarest_avg_plat` -> dropped. A connoisseur ranking, and the only sort with no index behind it: a
+      correlated AVG over every EarnedTrophy row per profile, sitewide.
+    - `games` / `completes` / `avg_progress` -> dropped. Three more "who is biggest" orderings on a page
+      that is no longer about biggest.
+
+    The five that remain (alphabetical, recently active, recently joined, trophies, platinums) are each
+    served by an index on Profile, so ordering never costs a scan.
+
+    Card data is deliberately thin -- identity plus two proof stats. `recent_platinum` used to be
+    prefetched for every row and is gone: the card is meant to scan, not to brief.
     """
     model = Profile
     template_name = 'trophies/profile_list.html'
     partial_template_name = 'trophies/partials/profile_list/browse_results.html'
     paginate_by = 30
+
+    #: Ordering per sort value. Every one is index-backed; `Lower('psn_username')` is the stable
+    #: tie-breaker so equal stats never shuffle between pages of the same result set.
+    SORTS = {
+        'recently_active': [F('last_synced').desc(nulls_last=True), Lower('psn_username')],
+        'alpha': [Lower('psn_username')],
+        'recently_joined': ['-created_at', Lower('psn_username')],
+        'trophies': ['-total_trophies', Lower('psn_username')],
+        'plats': ['-total_plats', Lower('psn_username')],
+    }
+    DEFAULT_SORT = 'recently_active'
 
     def dispatch(self, request, *args, **kwargs):
         if not request.GET and request.user.is_authenticated:
@@ -79,67 +102,52 @@ class ProfilesListView(HtmxListMixin, ListView):
     def get_queryset(self):
         qs = super().get_queryset()
         form = self.get_filter_form()
-        order = [Lower('psn_username')]
 
-        # Always prefetch recent platinum (needed by template regardless of form state)
-        recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match').defer('trophy__game__concept__igdb_match__raw_response').order_by(F('earned_date_time').desc(nulls_last=True))[:1]
-        qs = qs.prefetch_related(Prefetch('earned_trophy_entries', queryset=recent_plat_qs, to_attr='recent_platinum'))
+        # The displayed title, folded into the ROW rather than fetched per card. `Profile.displayed_title`
+        # is a method that runs `user_titles.filter(...).first()` and then hops the `title` FK -- two
+        # queries per profile, so ~60 on a 30-card page purely to print a word under each name. The
+        # subquery is served by `usertitle_display_idx` (profile, is_displayed) and costs no extra round
+        # trip. Templates read `display_title`; the method stays for callers rendering ONE profile.
+        qs = qs.annotate(
+            display_title=Subquery(
+                UserTitle.objects
+                .filter(profile_id=OuterRef('pk'), is_displayed=True)
+                .values('title__name')[:1]
+            ),
+        )
+        # Only what a card draws. Profile is a wide row (sync bookkeeping, JSON summaries, PSN payloads)
+        # and none of it is on this page; without this the page pays to haul all of it 30 times.
+        qs = qs.only(
+            # `country_code` is deliberately absent: the card shows `flag` (which holds the code) and the
+            # only other reader was a `title` attribute dropped when the code stopped being aria-hidden.
+            # Anything added here must be READ by the card, and anything the card reads must be here --
+            # a miss is a per-row deferred fetch, i.e. an N+1 wearing a different hat.
+            'psn_username', 'display_psn_username', 'avatar_url', 'flag',
+            'trophy_level', 'total_trophies', 'total_plats', 'total_games', 'user_is_premium',
+            'last_synced', 'created_at',
+        )
 
+        # ONE bad field must not take the others down with it. `is_valid()` is all-or-nothing, and both
+        # things a stale `browse_defaults` can carry -- a retired sort, or a country that no longer has any
+        # hunters in the choice list -- invalidate the whole form. Gating the filters on it meant a hunter
+        # whose saved default named a since-removed sort also silently lost their SEARCH, which is a much
+        # stranger failure than landing on the default order. So the filters fall back to the raw params;
+        # both are parameterised by the ORM, and an unknown country simply matches nothing.
         if form.is_valid():
-            query = form.cleaned_data.get('query')
-            country = form.cleaned_data.get('country')
-            sort_val = form.cleaned_data.get('sort')
+            query = form.cleaned_data.get('query') or ''
+            country = form.cleaned_data.get('country') or ''
+        else:
+            query = self.request.GET.get('query', '').strip()
+            country = self.request.GET.get('country', '').strip()
 
-            if query:
-                qs = qs.filter(Q(psn_username__icontains=query))
-            if country:
-                qs = qs.filter(country_code=country)
+        if query:
+            qs = qs.filter(Q(psn_username__icontains=query))
+        if country:
+            qs = qs.filter(country_code=country)
 
-            if sort_val == 'trophies':
-                order = ['-total_trophies', Lower('psn_username')]
-            elif sort_val == 'plats':
-                order = ['-total_plats', Lower('psn_username')]
-            elif sort_val == 'games':
-                order = ['-total_games', Lower('psn_username')]
-            elif sort_val == 'completes':
-                order = ['-total_completes', Lower('psn_username')]
-            elif sort_val == 'avg_progress':
-                order = ['-avg_progress', Lower('psn_username')]
-            elif sort_val == 'recently_active':
-                order = [F('last_synced').desc(nulls_last=True), Lower('psn_username')]
-            elif sort_val == 'badges_earned':
-                qs = qs.annotate(
-                    _badges_earned=Coalesce(
-                        F('gamification__total_badges_earned'), Value(0),
-                        output_field=IntegerField(),
-                    ),
-                )
-                order = ['-_badges_earned', Lower('psn_username')]
-            elif sort_val == 'badge_xp':
-                qs = qs.annotate(
-                    _badge_xp=Coalesce(
-                        F('gamification__total_badge_xp'), Value(0),
-                        output_field=IntegerField(),
-                    ),
-                )
-                order = ['-_badge_xp', Lower('psn_username')]
-            elif sort_val == 'rarest_avg_plat':
-                plat_avg = Subquery(
-                    EarnedTrophy.objects.filter(
-                        profile_id=OuterRef('pk'),
-                        earned=True,
-                        trophy__trophy_type='platinum',
-                    ).values('profile_id').annotate(
-                        val=Avg('trophy__earn_rate'),
-                    ).values('val')[:1],
-                    output_field=FloatField(),
-                )
-                qs = qs.annotate(_avg_plat_rate=plat_avg)
-                qs = qs.filter(_avg_plat_rate__isnull=False)
-                order = ['_avg_plat_rate', Lower('psn_username')]
-            elif sort_val == 'recently_joined':
-                order = ['-created_at', Lower('psn_username')]
-
+        # Read from the raw param against our own map rather than from `cleaned_data`, for the same
+        # reason: an unrecognised sort resolves to the default instead of invalidating anything.
+        order = self.SORTS.get(self.request.GET.get('sort'), self.SORTS[self.DEFAULT_SORT])
         return qs.order_by(*order)
 
     def get_context_data(self, **kwargs):
@@ -147,14 +155,25 @@ class ProfilesListView(HtmxListMixin, ListView):
         # Breadcrumb
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Profiles'},
+            {'text': 'Hunters'},
         ]
 
         context['form'] = self.get_filter_form()
         context['selected_country'] = self.request.GET.get('country', '')
 
+        # The active sort, resolved the SAME way the queryset resolves it (raw param against the map, with
+        # an unknown value falling back rather than invalidating). The card's third stat follows this, so
+        # the wall always shows the axis it is ordered by -- the page defaults to Recently Active, and
+        # without this it sorts by something no card displays. Set in `get_context_data` so the HTMX
+        # partial gets it too; the grid is what re-renders on a sort change.
+        sort = self.request.GET.get('sort')
+        context['active_sort'] = sort if sort in self.SORTS else self.DEFAULT_SORT
+
+        # No longer mentions leaderboards: ranking moved to /leaderboards/, and describing this page as a
+        # board would set the wrong expectation in a result snippet for what is now a directory.
         context['seo_description'] = (
-            "Browse PlayStation trophy hunter profiles and leaderboards on Platinum Pursuit."
+            "Browse PlayStation trophy hunters on Platinum Pursuit. Find hunters by name or country, "
+            "and see who is active."
         )
 
         return context
@@ -905,7 +924,7 @@ class ProfileDetailView(DetailView):
         # Add shared metadata
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Profiles', 'url': reverse_lazy('profiles_list')},
+            {'text': 'Hunters', 'url': reverse_lazy('profiles_list')},
             {'text': f"{profile.display_psn_username}"}
         ]
         context['current_tab'] = tab

@@ -155,12 +155,14 @@ _CLOUDFLARE_GUARDED_PATH_RE = re.compile(
     r'^/(?:'
     # Profile-scoped variants: /games/<np>/<user>/, /badges/<slug>/<user>/, ...
     r'(?:games/[^/]+|(?:my-pursuit/badges|badges|achievements/badges)/[^/]+)/[^/]+'
-    # Profile pages themselves, plus sub-pages such as /trophy-case/. Both spellings: profiles moved
-    # from /community/profiles/ to /profiles/ in 2026-08, and this guard is a PATH REGEX rather than a
-    # reverse(), so it does not follow a rename the way every internal link does -- dropping the old
-    # branch (or forgetting the new one) silently un-guards the single most scraped page type on the
-    # site. The list pages have no trailing segment and so stay unguarded, by the note above.
-    r'|(?:community/)?profiles/[^/]+(?:/[^/]+)*'
+    # Profile pages themselves, plus sub-pages such as /trophy-case/. THREE spellings, because the
+    # section moved twice in 2026-08: /community/profiles/ -> /profiles/ -> /hunters/. This guard is a
+    # PATH REGEX rather than a reverse(), so it does not follow a rename the way every internal link
+    # does -- dropping an old branch (or forgetting the new one) silently un-guards the single most
+    # scraped page type on the site. Every old path still 301s, and a scraper walking one arrives on the
+    # OLD path first, so the superseded branches stay for as long as their redirects do. The list pages
+    # have no trailing segment and so stay unguarded, by the note above.
+    r'|(?:hunters|(?:community/)?profiles)/[^/]+(?:/[^/]+)*'
     r')/?$'
 )
 

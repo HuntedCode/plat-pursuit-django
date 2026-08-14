@@ -92,7 +92,7 @@ def test_strip_hidden_for_anon_on_public_member():
 def test_public_hubs_still_render_for_anon():
     # The anon gate is My-Pursuit-specific -- the public hubs' strips must still show.
     assert hub_subnav(_req('/games/'))['hub_section'] == 'browse'
-    assert hub_subnav(_req('/profiles/'))['hub_section'] == 'browse'
+    assert hub_subnav(_req('/hunters/'))['hub_section'] == 'browse'
 
 
 # --- Support hub (phase 2) ---
@@ -119,9 +119,9 @@ def test_support_landing_renders(client):
 
 def test_profiles_are_chromed_as_a_browse_surface():
     """They moved out from under /community/ with the hub teardown -- hunters are another thing you
-    browse, alongside games and badges."""
+    browse, alongside games and badges -- and were renamed Profiles -> Hunters (/hunters/) after."""
     them = ProfileFactory(is_linked=True)
-    ctx = hub_subnav(_req(f'/profiles/{them.psn_username}/'))
+    ctx = hub_subnav(_req(f'/hunters/{them.psn_username}/'))
     assert ctx['hub_section'] == 'browse'
     assert ctx['hub_subnav_active_slug'] == 'profiles'
 
@@ -133,7 +133,7 @@ def test_your_own_profile_is_chromed_like_anyone_elses():
     nothing and naming nothing in the mobile collapse bar. Your profile is reached from the avatar menu
     now, and the page looks the same whoever is viewing it."""
     me = ProfileFactory(is_linked=True)
-    ctx = hub_subnav(_req(f'/profiles/{me.psn_username}/', user=me.user))
+    ctx = hub_subnav(_req(f'/hunters/{me.psn_username}/', user=me.user))
     assert ctx['hub_section'] == 'browse'
 
 
@@ -146,13 +146,13 @@ def test_no_profile_tab_in_the_personal_strip():
 def test_other_profile_shows_the_same_chrome():
     me = ProfileFactory(is_linked=True)
     them = ProfileFactory(is_linked=True)
-    ctx = hub_subnav(_req(f'/profiles/{them.psn_username}/', user=me.user))
+    ctx = hub_subnav(_req(f'/hunters/{them.psn_username}/', user=me.user))
     assert ctx['hub_section'] == 'browse'
 
 
 def test_anon_on_profile_shows_the_same_chrome():
     them = ProfileFactory(is_linked=True)
-    ctx = hub_subnav(_req(f'/profiles/{them.psn_username}/'))   # anonymous viewer
+    ctx = hub_subnav(_req(f'/hunters/{them.psn_username}/'))   # anonymous viewer
     assert ctx['hub_section'] == 'browse'
 
 

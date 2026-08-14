@@ -247,19 +247,17 @@ class TrophySearchForm(forms.Form):
 class ProfileSearchForm(forms.Form):
     query = forms.CharField(required=False, label='Search by name')
     country = forms.ChoiceField(choices=[('', 'All Countries')], required=False, label='Country')
+    # Discovery sorts only -- the order matches `ProfilesListView.SORTS`, and the keys MUST stay in step
+    # with it (the view resolves the raw param against that map, so a choice with no entry there silently
+    # falls back to the default order). Ranking sorts moved to /leaderboards/ or were dropped when this
+    # page stopped being a second scoreboard; see the view's docstring for which and why.
     sort = forms.ChoiceField(
         choices=[
+            ('recently_active', 'Recently Active'),
             ('alpha', 'Alphabetical'),
+            ('recently_joined', 'Recently Joined'),
             ('trophies', 'Total Trophies'),
             ('plats', 'Total Plats'),
-            ('games', 'Most Games Played'),
-            ('completes', 'Most 100% Completions'),
-            ('avg_progress', 'Highest Avg. Progress'),
-            ('recently_active', 'Recently Active'),
-            ('badges_earned', 'Most Badges Earned'),
-            ('badge_xp', 'Highest Badge XP'),
-            ('rarest_avg_plat', 'Rarest Avg Platinum'),
-            ('recently_joined', 'Recently Joined'),
         ],
         required=False,
         label='Sort By',

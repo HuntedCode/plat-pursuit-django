@@ -108,6 +108,9 @@ BROWSE_HUB = HubSubnavConfig(
         '/genres/',
         '/themes/',
         '/engines/',
+        # Both spellings while the /profiles/ -> /hunters/ 301s stand: this is a PATH PREFIX match, so a
+        # visitor landing on an old profile URL would otherwise lose the Browse rail on the way through.
+        '/hunters/',
         '/profiles/',
     ),
     # Grouped rail (kept consistent with the other hubs' grouped rails -- Community's Explore/Create,
@@ -117,7 +120,10 @@ BROWSE_HUB = HubSubnavConfig(
         HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2', group='Catalog'),
         HubSubnavItem('badges', 'Badges', 'badges_list', 'award', group='Catalog'),
         HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock', group='Catalog'),
-        HubSubnavItem('profiles', 'Profiles', 'profiles_list', 'user', group='Catalog'),
+        # Label is "Hunters" (2026-08); the SLUG stays `profiles`, matching the url names it maps to
+        # below -- it is an internal key, and churning it would touch the overrides map and its tests to
+        # no visible end.
+        HubSubnavItem('profiles', 'Hunters', 'profiles_list', 'user', group='Catalog'),
         HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers', group='Curation'),
         HubSubnavItem('companies', 'Companies', 'companies_list', 'building', group='Curation'),
         HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag', group='Curation'),
