@@ -35,7 +35,6 @@ from ..models import (
     UserBadge,
     UserBadgeProgress,
     GameList,
-    Review,
     Trophy,
     UserConceptRating,
     UserTitle,
@@ -331,7 +330,17 @@ class ProfileDetailView(DetailView):
         sort_val = form.cleaned_data.get('sort')
 
         # Build queryset
-        games_qs = profile.played_games.all().select_related('game').annotate(
+        # `game.display_image_url` resolves a trusted IGDB cover FIRST, so rendering a grid of games walks
+        # Game -> Concept -> IGDBMatch for every row. With only `game` selected that was two extra queries
+        # per card -- measured at 52 Concept + 52 IGDBMatch fetches on a 26-game page, ~104 of the tab's
+        # ~115 queries.
+        #
+        # The `defer` is not optional (project CLAUDE.md): `raw_response` is the ~30 KB IGDB API blob that
+        # no cover-art template reads, and hauling it per row is what triggered the May 2026 web-server
+        # OOM. Widening the join without deferring it trades a query storm for a memory one.
+        games_qs = profile.played_games.all().select_related(
+            'game', 'game__concept', 'game__concept__igdb_match',
+        ).defer('game__concept__igdb_match__raw_response').annotate(
             annotated_total_trophies=F('earned_trophies_count') + F('unearned_trophies_count')
         )
 
@@ -832,23 +841,6 @@ class ProfileDetailView(DetailView):
         """Build context for lists tab — public game lists for this profile."""
         return {'profile_lists': public_lists_qs.order_by('-like_count', '-created_at')}
 
-    def _build_reviews_tab_context(self, profile, per_page, page_number):
-        """Build context for reviews tab — reviews written by this profile."""
-        reviews_qs = Review.objects.filter(
-            profile=profile, is_deleted=False
-        ).select_related(
-            'concept_trophy_group__concept',
-            'concept_trophy_group__concept__igdb_match',
-        ).order_by('-created_at')
-
-        paginator = Paginator(reviews_qs, per_page)
-        if int(page_number) > paginator.num_pages:
-            page_obj = []
-        else:
-            page_obj = paginator.get_page(page_number)
-
-        return {'profile_reviews': page_obj}
-
     def get_context_data(self, **kwargs):
         """Build context for profile detail page with tab-specific content.
 
@@ -970,7 +962,6 @@ class ProfileDetailView(DetailView):
         'trophies': 'trophies/partials/profile_detail/tabs/trophies_tab.html',
         'badges': 'trophies/partials/profile_detail/tabs/badges_tab.html',
         'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
-        'reviews': 'trophies/partials/profile_detail/tabs/reviews_tab.html',
     }
     _RESULTS_TEMPLATES = {
         'games': 'trophies/partials/profile_detail/tabs/games_results.html',
@@ -980,7 +971,6 @@ class ProfileDetailView(DetailView):
     _INFINITE_SCROLL_TEMPLATES = {
         'games': 'trophies/partials/profile_detail/game_list_items.html',
         'trophies': 'trophies/partials/profile_detail/trophy_list_items.html',
-        'reviews': 'trophies/partials/profile_detail/review_list_items.html',
     }
 
     def get_template_names(self):
