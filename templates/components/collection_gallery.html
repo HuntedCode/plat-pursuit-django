@@ -46,7 +46,13 @@ collection-gallery.css, wired by collection.js (initGallery).
                 <button type="button" class="pp-gallery__chip" data-filter-edition="ultra-hd">Ultra HD</button>
             </div>
             {% comment %} State: Earned (held) / In Progress (the series has standing progress, not yet held) /
-            Not earned (a waiting edition). "In Progress" is the answer to "what am I close on". {% endcomment %}
+            Not earned. "In Progress" is the answer to "what am I close on".
+
+            "Not earned" is RARE now but not gone: untouched editions are dropped only from a series that has
+            another edition in play, so a series with no progress anywhere still shows all of its editions as
+            waiting mounts. A first cut removed this chip on the claim that the state could no longer occur --
+            it can, and without the chip those cards could be neither filtered for nor filtered out, and the
+            empty-state's "relax this filter" suggestion could not offer them. {% endcomment %}
             <div class="pp-gallery__fgroup">
                 <span>State</span>
                 <button type="button" class="pp-gallery__chip is-active" data-filter-state="all">All</button>
@@ -96,6 +102,7 @@ collection-gallery.css, wired by collection.js (initGallery).
            data-rarity="{{ badge.rarity_class }}"
            data-progress="{{ badge.progress_pct|default:0 }}"
            data-stages="{% if badge.chase_total %}{{ badge.chase_done }} / {{ badge.chase_total }}{% endif %}"
+           data-stage-total="{{ badge.stages_total|default:0 }}"
            data-earned="{{ badge.earned_ts|default:0 }}"
            data-earned-label="{{ badge.earned_date|default:'' }}"
            {% if badge.series_slug %}href="{% url 'badge_detail' badge.series_slug %}"{% endif %}
@@ -107,10 +114,34 @@ collection-gallery.css, wired by collection.js (initGallery).
                 <span class="sr-only">{% if badge.is_new %}Earned this week{% else %}Earned{% endif %}</span>
             </span>
             {% endif %}
-            {% include 'components/badge_medallion.html' with frame=badge no_id=True no_count=True %}
+            {% include 'components/badge_medallion.html' with frame=badge no_id=True no_count=True always_meter=True %}
             <span class="pp-gallery__caption">
                 <span class="pp-gallery__name">{{ badge.series_name }}</span>
-                <span class="pp-gallery__stat" data-gallery-stat></span>
+                {% comment %}The edition on its own line, in its tier colour. Both editions of a series can
+                sit side by side here, identical but for this word.{% endcomment %}
+                <span class="pp-gallery__edition">{{ badge.group_name }}</span>
+                {% comment %}Fixed, not sort-adaptive. Every card states the same five things -- bar, name,
+                edition, stages/date, rarity -- on both walls, so a badge reads identically wherever you meet
+                it. The Collection's stat used to follow the sort key, which changed a card's wording
+                underneath you when you re-sorted and made the same badge read differently on the two
+                surfaces.{% endcomment %}
+                <span class="pp-gallery__stat">
+                    {% if badge.state == 'earned' %}{% if badge.stages_total %}{{ badge.stages_total }} stage{{ badge.stages_total|pluralize }}{% if badge.earned_date %} &middot; {% endif %}{% endif %}{{ badge.earned_date }}
+                    {% elif badge.chase_total %}{{ badge.chase_done|default:0 }} / {{ badge.chase_total }} stages
+                    {% else %}{{ badge.progress_pct|default:0|floatformat:0 }}%{% endif %}
+                </span>
+                {% comment %}The GRADE, not "Top X%": rarity_pct is the share of hunters who HAVE the badge,
+                so 40% rendered as "Top 40%" reads as the reverse of what it means. Colour comes from the
+                card's `data-rarity` -- rarity.css declares --rar-c there and custom properties inherit, so
+                this span needs no hook of its own.
+
+                RARITY IS A PROPERTY OF THE BADGE, NOT OF THE VIEWER: an in-progress badge that 40% of the
+                community owns still grades Common. A card shows no grade only when the badge has ZERO
+                earners site-wide, where `rarity_for` deliberately withholds one -- 0% is under every
+                threshold, so the arithmetic would call it Mythic, and unearned is not an achievement. That
+                is what the site's "Be the first" nudge is for, and it keeps every card the same shape.
+                {% endcomment %}
+                <span class="pp-gallery__rarity{% if not badge.rarity_class %} pp-gallery__rarity--nudge{% endif %}">{% if badge.rarity_class %}{{ badge.rarity_class|title }}{% else %}Be the first{% endif %}</span>
             </span>
         </a>
         {% endfor %}

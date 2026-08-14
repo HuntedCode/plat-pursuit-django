@@ -190,3 +190,52 @@ def test_a_private_profile_builds_no_tab_context_at_all(client):
 
     assert response.status_code == 200
     assert 'list_badges' not in response.context
+
+
+def test_an_earned_badge_caption_says_what_it_took_and_when(client):
+    """"5 stages - Mar 02, 2026", not the date alone.
+
+    The meter is full on every earned card, so the stage count is what separates a five-stage badge from a
+    fifteen-stage one -- the date says nothing about the badge itself. Worded to match the Collection
+    gallery so the same badge reads the same on both walls.
+    """
+    from tests.engine.test_collection_service import _hold, _series, _standing
+
+    profile = ProfileFactory(is_linked=True)
+    _, groups = _series('rs-cap')
+    _hold(profile, groups['ultra-hd'])
+    _standing(profile, 'rs-cap', group_progress={'ultra-hd': [5, 5]})
+
+    body = client.get(f'/hunters/{profile.psn_username}/?tab=badges', **CF).content.decode()
+
+    assert '5 stages' in body, 'an earned caption does not say how many stages the badge took'
+    # The edition has its own line ABOVE the stat, in its tier colour -- the two facts stopped competing
+    # for one line. Asserted by ORDER, not by a substring at a fixed offset: the first cut pinned exact
+    # template indentation, so re-indenting the file would have passed while the regression was live.
+    assert 'pp-gallery__edition' in body and 'Ultra HD' in body
+    caption = body[body.index('pp-gallery__edition'):]
+    assert caption.index('Ultra HD') < caption.index('pp-gallery__stat'), (
+        'the edition is not on its own line above the stat'
+    )
+
+
+def test_the_badges_tab_gets_the_same_card_treatment_as_the_collection(client):
+    """The medallion half of the change reached this surface too.
+
+    All of this was only ever asserted through the collection gallery template, so the tab could have
+    drifted silently -- which is how it ended up on the legacy badge tables in the first place.
+    """
+    from tests.engine.test_collection_service import _hold, _series, _standing
+
+    profile = ProfileFactory(is_linked=True)
+    _, groups = _series('rs-tab')
+    _hold(profile, groups['ultra-hd'])
+    _standing(profile, 'rs-tab', group_progress={'ultra-hd': [5, 5], 'legacy-hd': [0, 4]})
+
+    body = client.get(f'/hunters/{profile.psn_username}/?tab=badges', **CF).content.decode()
+
+    assert 'pp-med__meter' in body, 'the permanent bar did not reach the profile tab'
+    assert body.count('is-full') == 1, 'the full marking is missing or not specific to the completed bar'
+    assert 'pp-med__count' not in body, 'the count under the bar repeats the caption here'
+    assert 'pp-gallery__edition' in body
+    assert 'Legacy HD' not in body, 'the untouched edition was not filtered on this surface'

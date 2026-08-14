@@ -362,47 +362,14 @@
         // It's a fallback, deliberately not a second override: making every unearned cell show stages
         // would have pushed the grade off the wall entirely under "Rarest first", since most of a
         // collection is unearned.
-        function chase(cell) {
-            var stages = cell.getAttribute('data-stages');   // only set when the total is genuinely known
-            return stages ? stages + ' stages' : '';
-        }
-        function grade(cell) {
-            // The GRADE, not "Top X%". rarity_pct is the share of hunters who HAVE the badge, so a badge
-            // 40% of the community owns rendered as "Top 40%" -- which sounds exclusive and means the
-            // reverse. The named grade is the site's rarity vocabulary and cannot be read backwards; the
-            // exact percentage lives on the badge's own page.
-            var cls = cell.getAttribute('data-rarity');
-            return cls ? cls.charAt(0).toUpperCase() + cls.slice(1) : '';
-        }
-        function statText(cell, key) {
-            var st = cell.getAttribute('data-state');
-            if (st === 'in_progress') {
-                var c = chase(cell);
-                if (c) { return [c, false]; }
-            }
-            var text = '';
-            if (key === 'earned') { text = cell.getAttribute('data-earned-label') || ''; }
-            else if (key === 'progress') {
-                if (st === 'earned') { text = 'Complete'; }
-                else {
-                    var p = parseFloat(cell.getAttribute('data-progress')) || 0;
-                    text = p ? p + '%' : '';
-                }
-            } else { return [grade(cell), true]; }
-            if (text) { return [text, false]; }
-            return chase(cell) ? [chase(cell), false] : [grade(cell), true];
-        }
         function applySort(animate) {
             var spec = ((sortSel && sortSel.value) || DEFAULT_SORT).split(':');
             var reorder = function () { cells.slice().sort(compareBy(spec[0], spec[1] || 'asc')).forEach(function (c) { grid.appendChild(c); }); };
             if (animate) flip(reorder); else reorder();
-            cells.forEach(function (c) {
-                var el = c.querySelector('[data-gallery-stat]');
-                if (!el) { return; }
-                var stat = statText(c, spec[0]);
-                el.textContent = stat[0];
-                el.classList.toggle('is-rarity', stat[1]);
-            });
+            // The caption is server-rendered and FIXED -- sorting reorders cards, it no longer rewrites
+            // what they say. The stat used to follow the sort key, which meant the same earned badge read
+            // "Complete" here and "5 stages - date" on the profile wall, and changed wording underneath
+            // you when you re-sorted.
             syncURL();
         }
 

@@ -1,7 +1,8 @@
 {% load humanize %}{% comment %} A hunter's badges, publicly -- rebuilt 2026-08.
 
 Borrowed from the Collection gallery, not copied from it. What is shared is the vocabulary: the Medallion
-itself, the earned tick, and the caption pairing a series name with one adaptive stat. What is deliberately
+itself, the earned tick, and the caption (series name, edition in its tier colour, then one stat).
+What is deliberately
 NOT shared:
 
   * the gallery's TOOLBAR (search + edition/state/set filters + pills). This is a tab inside a page that
@@ -17,9 +18,9 @@ what they hold, and the medallion's state treatment already tells the two apart 
 <div id="tab-results">
     {% if list_badges %}
     <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
-        {% comment %}Counted from the SUMMARY, not from the wall's length. `list_badges` is every live
-        edition of every engaged series, including waiting mounts never started -- so its length called a
-        hunter with 3 badges across 6 two-edition series "12 badges" on a public page.{% endcomment %}
+        {% comment %}Counted from the SUMMARY, not from the wall's length: the two answer different
+        questions. `summary` counts what the hunter HAS, while the wall's length counts CARDS, and one
+        series can contribute several (one per edition).{% endcomment %}
         <p class="text-xs text-base-content/50">
             {{ summary.earned|intcomma }} earned{% if summary.in_progress %} &middot; {{ summary.in_progress|intcomma }} in progress{% endif %}
         </p>
@@ -52,6 +53,7 @@ what they hold, and the medallion's state treatment already tells the two apart 
         a redirect that lost half its meaning. Same branch Game Detail's badge grid already uses.
         {% endcomment %}
         <a class="pp-gallery__card" data-tier="{{ badge.tier }}" data-state="{{ badge.state }}"
+           data-rarity="{{ badge.rarity_class }}"
            href="{% if request.user.is_authenticated %}{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}{% else %}{% url 'badge_detail' badge.series_slug %}{% endif %}?group={{ badge.group_key }}"
            title="{{ badge.series_name }} &middot; {{ badge.group_name }}">
             {% if badge.state == 'earned' %}
@@ -60,17 +62,36 @@ what they hold, and the medallion's state treatment already tells the two apart 
                 <span class="sr-only">Earned</span>
             </span>
             {% endif %}
-            {% include 'components/badge_medallion.html' with frame=badge no_id=True no_count=True %}
+            {% include 'components/badge_medallion.html' with frame=badge no_id=True no_count=True always_meter=True %}
             <span class="pp-gallery__caption">
                 <span class="pp-gallery__name">{{ badge.series_name }}</span>
-                {% comment %}The caption's one stat says what the card is FOR: an earned badge names its
-                edition, an unfinished one names how far along it is -- the fact you actually want in each
-                case.{% endcomment %}
+                {% comment %}The edition on its own line, in its tier colour -- same as the Collection wall.
+                It had been sharing the stat's single line, where it displaced the badge's actual figures.
+                {% endcomment %}
+                <span class="pp-gallery__edition">{{ badge.group_name }}</span>
+                {% comment %}The caption's one stat, matching the Collection gallery's wording so the same
+                badge reads the same on both walls: an earned badge says what it TOOK and when
+                ("5 stages - Mar 02, 2026"), an unfinished one says how far along it is.
+
+                The edition is NOT here -- it has its own line above, in its tier colour.{% endcomment %}
                 <span class="pp-gallery__stat">
-                    {% if badge.state == 'earned' %}{{ badge.group_name }}
+                    {% if badge.state == 'earned' %}
+                        {% if badge.stages_total %}{{ badge.stages_total }} stage{{ badge.stages_total|pluralize }}{% if badge.earned_date %} &middot; {% endif %}{% endif %}{{ badge.earned_date }}
                     {% elif badge.chase_total %}{{ badge.chase_done|default:0 }} / {{ badge.chase_total }} stages
                     {% else %}{{ badge.progress_pct|default:0|floatformat:0 }}%{% endif %}
                 </span>
+                {% comment %}The GRADE, not "Top X%": rarity_pct is the share of hunters who HAVE the badge,
+                so 40% rendered as "Top 40%" reads as the reverse of what it means. Colour comes from the
+                card's `data-rarity` -- rarity.css declares --rar-c there and custom properties inherit, so
+                this span needs no hook of its own.
+
+                RARITY IS A PROPERTY OF THE BADGE, NOT OF THE VIEWER: an in-progress badge that 40% of the
+                community owns still grades Common. A card shows no grade only when the badge has ZERO
+                earners site-wide, where `rarity_for` deliberately withholds one -- 0% is under every
+                threshold, so the arithmetic would call it Mythic, and unearned is not an achievement. That
+                is what the site's "Be the first" nudge is for, and it keeps every card the same shape.
+                {% endcomment %}
+                <span class="pp-gallery__rarity{% if not badge.rarity_class %} pp-gallery__rarity--nudge{% endif %}">{% if badge.rarity_class %}{{ badge.rarity_class|title }}{% else %}Be the first{% endif %}</span>
             </span>
         </a>
         {% endfor %}

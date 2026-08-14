@@ -3,12 +3,14 @@
 The Collection (`/collection/`) is the Pursuer's single filter / sort / search wall of the badges they've
 ENGAGED with: the live per-platform-group editions (Legacy HD / Ultra HD) of every series they either HOLD an
 edition of (a UserGroupBadge) or have STARTED (a SeriesBadgeStanding with progress). Earned editions gleam,
-in-progress ones carry THAT edition's own progress, the rest are waiting mounts. These pin the contract:
+in-progress ones carry THAT edition's own progress. These pin the contract:
 
 - SCOPE: engaged series only (held OR started); untouched live series stay out (discovery lives on Browse).
 - STATE per edition: held -> earned (holo when mastered); not-held + THIS edition has partial progress ->
-  in_progress; else unearned (incl. an edition the viewer has 0% on -- the series furthest-along would
-  wrongly paint it).
+  in_progress; else unearned (an edition the viewer has 0% on -- the series furthest-along would wrongly
+  paint it).
+- WALL: unearned editions are DROPPED, scoped per series and only where another edition of that series
+  survives, so a series can never vanish entirely.
 - SUMMARY: held/in-progress counts + a per-EDITION composition (Legacy HD / Ultra HD held counts).
 - Live rarity (earned_count vs series pursuers), the "+N this week" recency window, sort options, and a fixed
   query count regardless of badge count (no live eval on the wall).
@@ -92,7 +94,9 @@ def test_scope_includes_held_and_started_series():
     ctx = build_collection_context(profile)
 
     assert {f['series_slug'] for f in ctx['list_badges']} == {'rs-held', 'rs-started'}
-    assert len(ctx['list_badges']) == 4   # both editions of both engaged series
+    # rs-held shows only the edition actually held (its other one is untouched inside a series in play);
+    # rs-started has no per-edition entries at all, so it keeps both rather than vanishing.
+    assert len(ctx['list_badges']) == 3
 
 
 def test_untouched_live_series_excluded():
@@ -147,8 +151,8 @@ def test_held_edition_is_earned():
 
 def test_edition_progress_is_per_edition_not_series_level():
     """THE fix: a started series shows each edition's OWN progress (from the read-model), not the series
-    furthest-along. Progress on Ultra HD but 0% on Legacy HD -> Ultra in_progress, Legacy UNEARNED (the old
-    series-level paint wrongly showed both) -- matching what the inspect modal shows."""
+    furthest-along. Progress on Ultra HD but 0% on Legacy HD -> Ultra in_progress, and Legacy is off the
+    wall entirely rather than being painted with Ultra's progress. Matches what the inspect modal shows."""
     profile = ProfileFactory()
     _series('rs-wip')
     _standing(profile, 'rs-wip', group_progress={'ultra-hd': [3, 5]})   # only Ultra HD has progress
@@ -157,12 +161,12 @@ def test_edition_progress_is_per_edition_not_series_level():
 
     assert frames['ultra-hd']['state'] == 'in_progress'
     assert frames['ultra-hd']['progress_pct'] == 60                     # 3 / 5
-    assert frames['legacy-hd']['state'] == 'unearned'                   # not in group_progress -> waiting mount
+    assert 'legacy-hd' not in frames                                    # untouched -> dropped, never painted
 
 
 def test_in_progress_frame_carries_stage_count():
-    """An in-progress edition surfaces its stage count (done / total) from the read-model so the medallion can
-    render "X / Y stages". Earned + unearned frames carry 0 (no count)."""
+    """An in-progress edition surfaces its stage count (done / total) from the read-model so the medallion
+    can render "X / Y stages"."""
     profile = ProfileFactory()
     _series('rs-stages')
     _standing(profile, 'rs-stages', group_progress={'ultra-hd': [3, 5]})
@@ -172,12 +176,14 @@ def test_in_progress_frame_carries_stage_count():
     assert frames['ultra-hd']['state'] == 'in_progress'
     assert frames['ultra-hd']['stages_done'] == 3
     assert frames['ultra-hd']['stages_total'] == 5
-    assert frames['legacy-hd']['stages_total'] == 0                     # unearned -> no count
+    assert 'legacy-hd' not in frames        # untouched edition of a series in play -- off the wall entirely
 
 
 def test_held_edition_does_not_lend_completion_to_the_other():
-    """A held edition reads earned; the OTHER edition, absent from the read-model, reads unearned rather than
-    borrowing the held edition's completion (the series-furthest-along bug)."""
+    """A held edition reads earned, and the OTHER edition does not borrow its completion (the
+    series-furthest-along bug). That edition is absent from the read-model, so it is untouched -- and an
+    untouched edition of a series already in play is dropped from the wall. Absence is now how this
+    invariant is expressed, and it is the stronger form: the edition cannot be painted at all."""
     profile = ProfileFactory()
     _, groups = _series('rs-cross')
     _hold(profile, groups['ultra-hd'])
@@ -186,8 +192,7 @@ def test_held_edition_does_not_lend_completion_to_the_other():
     frames = _frames_by_edition(build_collection_context(profile))
 
     assert frames['ultra-hd']['state'] == 'earned'
-    assert frames['legacy-hd']['state'] == 'unearned'
-    assert frames['legacy-hd']['progress_pct'] == 0
+    assert 'legacy-hd' not in frames, 'the untouched edition is on the wall borrowing the held one'
 
 
 def test_holo_hold_is_holographic():
@@ -198,7 +203,7 @@ def test_holo_hold_is_holographic():
     frames = _frames_by_edition(build_collection_context(profile))
 
     assert frames['ultra-hd']['is_holographic'] is True
-    assert frames['legacy-hd']['is_holographic'] is False   # unheld edition never shimmers
+    assert 'legacy-hd' not in frames        # the unheld, untouched edition is not on the wall to shimmer
 
 
 # --- summary -------------------------------------------------------------------
@@ -217,7 +222,9 @@ def test_summary_counts_and_pct_use_the_full_catalog():
 
     summary = build_collection_context(profile)['summary']
 
-    assert summary['total'] == 4          # engaged editions (a + b), NOT the untouched series
+    # The WALL: a's held edition + both of b's. a's legacy edition is untouched inside a series in play,
+    # so it is dropped -- `total` counts what is shown, never more.
+    assert summary['total'] == 3
     assert summary['catalog_total'] == 6  # all 3 series x 2 editions live
     assert summary['earned'] == 1
     assert summary['in_progress'] == 2    # both of b's editions
@@ -382,8 +389,11 @@ def test_gallery_template_renders_edition_and_state_chips():
     html = render_to_string('components/collection_gallery.html', build_collection_context(profile))
 
     assert 'pp-gallery__grid' in html and 'pp-gallery__card' in html
-    assert html.count('data-gallery-cell') == 2               # both editions render as cells
+    assert html.count('data-gallery-cell') == 1               # only the held edition; legacy is untouched
     # Edition filter chips (replacing the retired tier chips) + the full State set incl "Not earned".
+    # That chip was briefly removed on the claim that untouched editions are never built. They still are,
+    # for a series with no progress anywhere (see the per-series scoping test), and without the chip those
+    # cards could be neither filtered for nor filtered out.
     assert 'data-filter-edition="legacy-hd"' in html and 'data-filter-edition="ultra-hd"' in html
     assert 'data-filter-tier' not in html                     # tier chips are gone
     assert 'data-filter-state="unearned"' in html
@@ -394,7 +404,8 @@ def test_gallery_template_renders_edition_and_state_chips():
 
 def test_gallery_in_progress_cell_carries_stage_count_in_the_caption():
     """An in-progress cell carries its "X / Y" stage count as data-stages (the caption slot fills it in as
-    "3 / 5 stages" via collection.js). The count is kept OUT of the medallion (no_count) so cards don't grow."""
+    "3 / 5 stages" via collection.js). The medallion's own count stays suppressed (`no_count`): the caption
+    is already the stage figure's home, and a second copy under the bar repeats it a few pixels away."""
     from django.template.loader import render_to_string
 
     profile = ProfileFactory()
@@ -404,27 +415,65 @@ def test_gallery_in_progress_cell_carries_stage_count_in_the_caption():
     html = render_to_string('components/collection_gallery.html', build_collection_context(profile))
 
     assert 'data-stages="3 / 5"' in html   # the caption source
-    assert 'pp-med__count' not in html     # no under-the-bar count (no_count) -> card height unchanged
+    assert 'pp-med__count' not in html     # the caption states it; a second copy under the bar is a repeat
 
 
-def test_an_unstarted_edition_carries_its_own_gating_count():
-    """0 cleared is 'unearned', not 'in_progress', so the stage count used to vanish for exactly the
-    edition where "0 / 5" is most motivating -- inside a series the hunter IS pursuing."""
+def test_an_unstarted_edition_of_a_series_in_play_is_dropped():
+    """The reversal. An untouched edition used to be kept as a "waiting mount" carrying "0 / 4 stages", on
+    the theory that was the most motivating place for the figure. It read as clutter instead: engagement is
+    per SERIES, so starting one edition mounts every other edition of that series, and each new
+    compatibility grouping multiplies what the hunter never asked to see.
+    """
     from django.template.loader import render_to_string
 
     profile = ProfileFactory()
     _series('rs-unstarted')
-    # What recompute_standing now writes: an entry per EARNABLE edition, started or not.
+    # What recompute_standing writes: an entry per EARNABLE edition, started or not.
     _standing(profile, 'rs-unstarted', group_progress={'ultra-hd': [2, 5], 'legacy-hd': [0, 4]})
 
     ctx = build_collection_context(profile)
     frames = _frames_by_edition(ctx)
-    assert frames['legacy-hd']['state'] == 'unearned'
-    assert frames['legacy-hd']['stages_total'] == 0, 'the medallion count stays off for unearned'
-    assert (frames['legacy-hd']['chase_done'], frames['legacy-hd']['chase_total']) == (0, 4)
+
+    assert frames['ultra-hd']['state'] == 'in_progress'
+    assert 'legacy-hd' not in frames, 'the untouched edition is still on the wall'
 
     html = render_to_string('components/collection_gallery.html', ctx)
-    assert 'data-stages="0 / 4"' in html
+    assert 'data-stages="0 / 4"' not in html
+
+
+def test_a_series_with_no_progress_anywhere_keeps_all_its_editions():
+    """The filter is scoped PER SERIES, and only where something in that series survives.
+
+    Dropping every untouched edition unconditionally also deleted whole series: a standing whose
+    `group_progress` is empty -- stale, or written before that read-model materialized every earnable
+    edition -- reads as untouched on every edition, so a series the hunter genuinely has progress in would
+    silently vanish from their collection. Losing a series is a worse failure than showing a spare edition.
+    """
+    profile = ProfileFactory()
+    _series('rs-nomap')
+    _standing(profile, 'rs-nomap', bp=4000)      # engaged, but no per-edition entries
+
+    frames = _frames_by_edition(build_collection_context(profile))
+
+    assert set(frames) == {'legacy-hd', 'ultra-hd'}, 'an engaged series vanished from the wall'
+
+
+def test_an_earned_edition_carries_a_full_stage_count():
+    """The permanent meter needs a figure in every state, so an earned badge reads N / N behind a full bar.
+
+    Taken from `gating`, never from the read-model's `cleared`: edition_display_state short-circuits on
+    `held` and returns 100 without reading either number, so nothing has ever depended on what `cleared`
+    holds for a held row. A row that stopped tracking at hold would render a full bar over "0 / 5".
+    """
+    profile = ProfileFactory()
+    _, groups = _series('rs-earned')
+    _hold(profile, groups['ultra-hd'])
+    _standing(profile, 'rs-earned', group_progress={'ultra-hd': [0, 5]})   # deliberately stale numerator
+
+    frame = _frames_by_edition(build_collection_context(profile))['ultra-hd']
+
+    assert frame['state'] == 'earned'
+    assert (frame['stages_done'], frame['stages_total']) == (5, 5)
 
 
 def test_the_chase_count_is_per_edition_never_the_series_stage_count():
@@ -459,8 +508,10 @@ def test_an_edition_that_cannot_be_earned_advertises_no_chase():
 
     frames = _frames_by_edition(build_collection_context(profile))
 
-    assert frames['legacy-hd']['chase_total'] == 0
-    assert frames['legacy-hd']['state'] == 'unearned'
+    # Absence is the strongest form of "advertises no chase": the unoffered edition is untouched inside a
+    # series in play, so it never reaches the wall to invite anyone into a chase with no finish line.
+    assert 'legacy-hd' not in frames
+    assert frames['ultra-hd']['state'] == 'in_progress'
 
 
 def test_a_malformed_read_model_row_stays_blank():
@@ -535,3 +586,207 @@ def test_collection_badge_modal_404_for_unknown(client):
     resp = client.get(reverse('collection_badge_modal', args=[999999]))
 
     assert resp.status_code == 404
+
+
+def test_the_wall_shows_a_permanent_meter_with_a_full_one_marked():
+    """The bar is on every card now, not just in-progress ones, so it reads as a column down the wall.
+
+    A full bar is marked `is-full` rather than just sitting at 100%: a gauge pinned at max and a finished
+    thing look identical otherwise, and on a wall that is mostly earned badges the distinction IS the
+    information.
+    """
+    from django.template.loader import render_to_string
+
+    profile = ProfileFactory()
+    _, groups = _series('rs-meter')
+    _hold(profile, groups['ultra-hd'])
+    _standing(profile, 'rs-meter', group_progress={'ultra-hd': [5, 5]})
+
+    html = render_to_string('components/collection_gallery.html', build_collection_context(profile))
+
+    assert 'pp-med__meter' in html, 'an earned badge has no meter -- the bar is not permanent'
+    # Counted, not just present: a bug that stamped `is-full` on EVERY meter would satisfy a bare
+    # substring check while destroying the only distinction the marking exists to make.
+    assert html.count('is-full') == 1, 'the full marking is missing or not specific to the completed bar'
+    assert 'pp-med__count' not in html, 'the stage count belongs to the caption, not a second line under the bar'
+    # The earned cell carries the stage total so the caption can say what the badge TOOK, not just when.
+    assert 'data-stage-total="5"' in html
+
+
+def test_other_medallion_surfaces_keep_the_in_progress_only_meter():
+    """`always_meter` is opt-in, so this stays a property of the two collection walls. Badge detail, the
+    showcases and the Case mix medallions with other content, where a full bar under every earned badge is
+    noise rather than a column to read."""
+    from django.template.loader import render_to_string
+
+    frame = {'tier': 'gold', 'state': 'earned', 'art_layers': [], 'stages_done': 5, 'stages_total': 5}
+
+    plain = render_to_string('components/badge_medallion.html', {'frame': frame})
+    opted = render_to_string('components/badge_medallion.html', {'frame': frame, 'always_meter': True})
+
+    assert 'pp-med__meter' not in plain, 'the permanent meter leaked onto every medallion on the site'
+    assert 'pp-med__meter' in opted
+
+
+def test_every_meter_state_has_a_colour_to_draw_with():
+    """A completed badge rendered an EMPTY bar, and no render test could have caught it.
+
+    `--meter-c` was declared only on `.pp-med--in_progress` / `--maintenance`, the two states that could
+    draw a meter before `always_meter` let an earned badge draw one. An undefined custom property does not
+    fall back to a previous declaration -- it makes the whole value invalid -- so every `color-mix()`
+    referencing it dropped the fill's `background` entirely. Full markup, correct width, no colour.
+
+    Pinned on the BASE selector: any future state that draws a meter inherits a colour rather than
+    silently rendering nothing.
+    """
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2]
+           / 'static' / 'css' / 'components' / 'badge-medallion.css').read_text(encoding='utf-8')
+    css = re.sub(r'/\*[\s\S]*?\*/', '', css)     # the comment above the rule explains the bug
+
+    # ALL base rules, not the first: `.pp-med` is declared several times (layout, sizing, tokens), and
+    # `re.search` would have tested whichever came first.
+    bases = re.findall(r'(?m)^\.pp-med\s*\{([^}]*)\}', css)
+    assert any('--meter-c' in b for b in bases), (
+        '--meter-c is not defined on the base medallion, so a state without its own declaration draws an '
+        'invisible meter'
+    )
+
+
+def test_the_full_meter_glow_is_not_declared_inside_the_clipped_track():
+    """The glow was invisible even though it rendered.
+
+    `.pp-med__meter--smooth` sets `overflow: hidden` to clip the fill to the rounded track -- which clips
+    the fill's `box-shadow` with it. A glow declared on the fill is therefore cut off exactly at the bar's
+    edge. It belongs on the TRACK, which nothing clips and which at 100% is the same shape as the fill.
+    """
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2]
+           / 'static' / 'css' / 'components' / 'badge-medallion.css').read_text(encoding='utf-8')
+    css = re.sub(r'/\*[\s\S]*?\*/', '', css)
+
+    track = re.search(r'\.pp-med__meter--smooth\.is-full\s*\{([^}]*)\}', css)
+    assert track and 'box-shadow' in track.group(1), (
+        'the full-meter glow is not on the track, so the smooth bar clips it away'
+    )
+
+    # And it must not be (re)declared on the fill, where it would be clipped.
+    for rule in re.findall(r'([^{}]*)\{([^}]*)\}', css):
+        sel, body = rule
+        if 'is-full' in sel and 'meter-fill' in sel:
+            assert 'box-shadow' not in body, (
+                'the full glow is back on the clipped fill -- it will render and be cut off'
+            )
+
+
+def test_the_card_gives_the_edition_its_own_line_in_its_tier_colour():
+    """Card reads: bar, name, edition, stat. The edition earns a line because both editions of a series can
+    sit side by side on this wall, identical but for that word -- and it takes the card's `--tier-c`, so the
+    colour separates them before the word is read."""
+    from django.template.loader import render_to_string
+
+    profile = ProfileFactory()
+    _, groups = _series('rs-ed')
+    _hold(profile, groups['ultra-hd'])
+    _hold(profile, groups['legacy-hd'])
+    _standing(profile, 'rs-ed', group_progress={'ultra-hd': [5, 5], 'legacy-hd': [4, 4]})
+
+    html = render_to_string('components/collection_gallery.html', build_collection_context(profile))
+
+    assert html.count('pp-gallery__edition') == 2, 'the edition does not have its own caption line'
+    assert 'Ultra HD' in html and 'Legacy HD' in html
+    # The colour comes from the CARD's data-tier via --tier-c, which is why the line needs no per-edition
+    # class. Pinned on the two rules that actually supply it: `data-tier` alone is true of every card and
+    # always has been, so asserting its presence proved nothing about the colour this test is named for.
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2]
+           / 'static' / 'css' / 'components' / 'collection-gallery.css').read_text(encoding='utf-8')
+    assert '.pp-gallery__card[data-tier=' in css, 'nothing defines --tier-c on the card'
+    edition = re.search(r'\.pp-gallery__edition\s*\{([^}]*)\}', css)
+    assert edition and 'var(--tier-c' in edition.group(1), (
+        'the edition line does not take the card tier colour'
+    )
+
+
+def test_the_caption_is_fixed_not_sort_adaptive():
+    """Five things on every card, the same regardless of sort: bar, name, edition, stages/date, rarity.
+
+    The stat used to be written by `collection.js` from the active sort key, so the same earned badge read
+    "Complete" under the default sort, a rarity grade under most others, and "5 stages - date" only under
+    "Recently earned" -- while the profile wall always said the last of those. A card that rewords itself
+    when you re-sort is telling you about the control, not about the badge.
+    """
+    from django.template.loader import render_to_string
+
+    profile = ProfileFactory(is_linked=True)
+    _, groups = _series('rs-fixed')
+    _hold(profile, groups['ultra-hd'])
+    _standing(profile, 'rs-fixed', bp=10000, group_progress={'ultra-hd': [5, 5]})
+    # A community to grade against: with none, `rarity_class` is empty and the line correctly renders
+    # nothing -- which would have made the rarity assertion below pass or fail on the fixture, not the card.
+    GroupBadge.objects.filter(id=groups['ultra-hd'].id).update(earned_count=1)
+    _pursuers('rs-fixed', 3)
+
+    html = render_to_string('components/collection_gallery.html', build_collection_context(profile))
+
+    assert '5 stages' in html, 'the stat is not server-rendered'
+    assert 'pp-gallery__rarity' in html, 'rarity has no permanent line'
+    assert 'Common' in html, 'the rarity line shows no grade'
+    # The empty slot the JS used to fill is gone; nothing should be waiting on a script to say what a card is.
+    assert 'data-gallery-stat' not in html
+
+
+def test_the_sort_no_longer_rewrites_what_a_card_says():
+    """Pinned in the JS as well: the helpers that composed the adaptive stat are gone, not just unused."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'collection.js').read_text(encoding='utf-8')
+
+    assert 'statText' not in js
+    assert 'data-gallery-stat' not in js, 'applySort still writes the caption'
+    # Sorting itself must survive -- only the caption rewriting went.
+    assert 'compareBy' in js and 'function applySort' in js
+
+
+def test_a_badge_nobody_has_earned_shows_the_nudge_not_a_blank():
+    """Every card keeps the same shape. A badge with zero earners site-wide gets no GRADE -- `rarity_for`
+    withholds one deliberately, since 0% is under every threshold and the arithmetic would call it Mythic --
+    so the slot took the site's existing "Be the first" nudge rather than rendering nothing.
+
+    Note rarity grades the BADGE, not the viewer: an in-progress badge others own still shows its real
+    grade. Only zero earners produces the nudge.
+    """
+    from django.template.loader import render_to_string
+
+    profile = ProfileFactory(is_linked=True)
+    _series('rs-nobody')
+    _standing(profile, 'rs-nobody', bp=4000, group_progress={'ultra-hd': [1, 5]})
+    _pursuers('rs-nobody', 3)          # a community exists, but earned_count stays 0
+
+    html = render_to_string('components/collection_gallery.html', build_collection_context(profile))
+
+    assert 'Be the first' in html, 'an ungraded badge leaves the rarity slot empty'
+    assert 'pp-gallery__rarity--nudge' in html, 'the nudge is styled as though it were a grade'
+
+
+def test_an_unearned_badge_others_own_still_shows_its_real_grade():
+    """The distinction the nudge must not swallow: not-earned-BY-YOU is not the same as not-earned-by-anyone,
+    and a card in progress on a badge 25% of the community holds should say Common, not "Be the first"."""
+    from django.template.loader import render_to_string
+
+    profile = ProfileFactory(is_linked=True)
+    _, groups = _series('rs-theirs')
+    _standing(profile, 'rs-theirs', bp=4000, group_progress={'ultra-hd': [1, 5]})
+    GroupBadge.objects.filter(id=groups['ultra-hd'].id).update(earned_count=1)
+    _pursuers('rs-theirs', 3)          # 1 of 4 -> 25% -> common
+
+    html = render_to_string('components/collection_gallery.html', build_collection_context(profile))
+
+    assert 'Common' in html
+    assert 'Be the first' not in html, 'a graded badge the viewer has not earned shows the nudge'

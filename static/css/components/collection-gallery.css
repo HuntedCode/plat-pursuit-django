@@ -287,6 +287,16 @@
     font-size: 12px; font-weight: 600; color: var(--pp-text); text-align: center;
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* The EDITION, wearing its own tier colour. Legacy HD and Ultra HD are different metals, so the colour
+   tells them apart before the word is read -- which matters most on the one wall where both editions of a
+   series can sit side by side, identical but for this line. Reads as a qualifier, not as identity: smaller
+   and uppercase under the name, because it says which version of the badge, not which badge. */
+.pp-gallery__edition {
+    font-size: 9.5px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
+    color: var(--tier-c, var(--pp-text-mute));
+    text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* Sort-adaptive stat: collection.js fills it with the value you're sorting by (rarity / date / progress,
    default rarity). min-height reserves the row so the grid doesn't reflow when a cell has no value. */
 .pp-gallery__stat {
@@ -294,10 +304,25 @@
     font-variant-numeric: tabular-nums; letter-spacing: 0.02em; min-height: 1.1em;
     text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* Only when the slot is showing a GRADE does it take the rarity colour -- the same slot also carries earn
-   dates and progress, which must stay neutral. `--rar-c` inherits from the cell's data-rarity, so this is
-   one declaration rather than a colour per grade. Common resolves to the muted default on purpose. */
-.pp-gallery__stat.is-rarity { color: var(--rar-c); font-weight: 700; }
+/* The rarity GRADE, on its own permanent line. Takes --rar-c, which rarity.css declares on the card's
+   `data-rarity`; custom properties inherit, so this needs no hook of its own. Bottom of the caption and
+   the smallest thing on the card: it grades the badge rather than identifying it, and on a wall where
+   every card carries one, a louder treatment would read as the wall's dominant axis.
+   (It used to share the stat line, shown only when you happened to be sorting by rarity.) */
+.pp-gallery__rarity {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--rar-c, var(--pp-text-mute));
+    text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* "Be the first" -- a badge with zero earners site-wide, which `rarity_for` deliberately leaves ungraded.
+   Held back from the grade treatment because it is a NUDGE, not an achievement: an ungraded card should
+   not read as though it out-ranks the Commons beside it. Italic and unspaced, so it reads as a sentence
+   where the grades read as labels. (`data-rarity=""` still matches rarity.css's `[data-rarity]`, so
+   --rar-c resolves to the muted default rather than being undefined.) */
+.pp-gallery__rarity--nudge {
+    font-weight: 600; font-style: italic; letter-spacing: 0.02em; text-transform: none;
+    color: var(--pp-text-mute); padding-right: 1px;   /* italic glyphs slant past their box */
+}
 
 /* Staggered arrival -- fires whenever the Gallery view is shown (collection.js restarts `.is-revealing`
    on every view-switch, matching the Case). Filter/sort motion is the JS FLIP, not this. Motion-gated. */

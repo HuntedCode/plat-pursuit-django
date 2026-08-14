@@ -302,8 +302,22 @@
 .pp-med--unearned .pp-med__glint,
 .pp-med--in_progress .pp-med__glint { display: none; }
 
-/* the in-progress meter takes the COOL tier colour; maintenance takes a WARM repair amber */
-.pp-med--in_progress { --meter-c: var(--med-c); --meter-dim: rgba(255, 255, 255, 0.09); }
+/* The meter colour, defaulted on the BASE so every state that draws a meter has one.
+   It used to be declared only on the two states that could draw one, which was fine until `always_meter`
+   let an earned badge draw one too: with `--meter-c` undefined, every color-mix() referencing it is
+   invalid, the fill's `background` drops entirely, and a COMPLETED badge renders an empty bar. An
+   undefined custom property does not fall back to the previous declaration -- it invalidates the whole
+   value -- so the failure is silent and total rather than degraded.
+
+   The literal fallback is load-bearing, not belt-and-braces: `--med-c` itself only exists for the four
+   known tiers, and the tier comes from `PlatformGroup.backing_key` -- a free-text admin field with no
+   choices. One typo there leaves `--med-c` undefined, which makes `--meter-c` invalid, which empties the
+   bar all over again. Gold is the same default the tier resolver falls back to. */
+.pp-med { --meter-c: var(--med-c, #e7c25c); --meter-dim: rgba(255, 255, 255, 0.09); }
+
+/* In-progress takes the COOL tier colour, which is now just the base default -- it used to redeclare it
+   identically, which re-introduced the no-fallback trap one state over. Maintenance takes a WARM repair
+   amber, and is the only state that genuinely differs. */
 
 /* MAINTENANCE = tarnished base layers + WARM meter + the pulsing red "broken" halo (a held-but-lapsed
    badge). The tarnish is on the base layers (not the whole art), so the rising-colour fill reads as RESTORED. */
@@ -332,6 +346,30 @@
     background: linear-gradient(90deg, color-mix(in oklab, var(--meter-c) 55%, transparent), var(--meter-c));
     box-shadow: 0 0 6px color-mix(in oklab, var(--meter-c) 45%, transparent);
 }
+/* A FULL meter -- an earned badge on a surface that opted into the permanent bar (`always_meter`).
+   Distinguished from a partial one on purpose: a bar sitting at 100% otherwise reads as a gauge pinned at
+   max rather than as a finished thing. The fill takes the tier colour at full strength and blooms wider,
+   so scanning down a wall the completed rows read as a shape before you read a single number.
+   Glow only -- no animation. A wall is mostly earned badges, and a moving highlight on every one of them
+   is the "motion everywhere" the standard warns against. */
+.pp-med__meter.is-full .pp-med__meter-fill,
+.pp-med__meter.is-full .pp-med__seg.is-on {
+    background: linear-gradient(90deg, color-mix(in oklab, var(--meter-c) 88%, transparent), var(--meter-c));
+}
+/* The glow goes on the TRACK, not on the fill it belongs to. `--smooth` sets `overflow: hidden` to clip
+   the fill to the rounded track, which clips its box-shadow with it -- so a glow declared on the fill
+   renders and is then cut off exactly at the bar's edge, i.e. invisible. The track is not clipped by
+   anything, and at 100% it is the same shape as the fill, so glowing it glows the bar. */
+.pp-med__meter--smooth.is-full {
+    box-shadow: 0 0 14px color-mix(in oklab, var(--meter-c) 62%, transparent),
+                0 0 5px color-mix(in oklab, var(--meter-c) 78%, transparent);
+}
+/* The segmented variant has no overflow clip, so its cells can carry their own. */
+.pp-med__meter.is-full .pp-med__seg.is-on {
+    box-shadow: 0 0 10px color-mix(in oklab, var(--meter-c) 65%, transparent),
+                0 0 3px color-mix(in oklab, var(--meter-c) 85%, transparent);
+}
+
 /* progress count (platinums earned / required) -- shown for EVERY state. Earned/unearned reserve the
    meter's vertical space (margin) so their count aligns with the metered states'; when a meter precedes
    the count (in_progress/maintenance) the meter has already supplied that space. */

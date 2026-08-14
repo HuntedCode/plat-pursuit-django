@@ -31,12 +31,13 @@ double-framing a round object. The decision was validated at `/design/badge-pres
 |-------|-----------|
 | `earned` | Full colour + tier aura; hover light-catch (glint sweeps the whole medallion) + lift |
 | `in_progress` | **Dark waiting mount — identical to `unearned`** + **rising-colour subject** + a **cool** multi-bar meter below |
-| `unearned` | Dark grayscale mount + ghosted subject silhouette (a named, waiting slot), **no meter, no fill** |
+| `unearned` | Dark grayscale mount + ghosted subject silhouette (a named, waiting slot), **no fill** (and no meter unless the surface passes `always_meter`) |
 | `maintenance` | Tarnished base + **rising-colour (restored) subject** + **warm** multi-bar meter + "Lapsed" chip |
 
 **Earned is the only fully-bright state.** In-progress deliberately wears the *same* dark mount as
 unearned so "done vs not done" reads instantly across a shelf; the two are told apart by the **meter and
-the rising-colour fill** (in-progress has both, unearned has neither), not by brighter base art.
+the rising-colour fill**, not by brighter base art. On a surface passing **`always_meter`** both draw a
+meter, so there the **fill** alone separates them.
 
 ### Edition + earn marks (`show_ids`)
 Pass **`show_ids=True`** and the medallion prints a small line under the count: the badge's **set number**
@@ -61,7 +62,16 @@ ladder, `.pgl`): **one rounded cell per platinum/100%** toward the badge, filled
 The cells come from `frame['segments']` (a bool list built in `build_badge_frame`, only when countable:
 `0 < stages_total <= SEGMENT_CAP`, cap = **12**). Above the cap `segments` is omitted and the template
 renders **one smooth bar** off `progress_pct` (`pp-med__meter--smooth`); the "X / Y" count carries the
-detail. Cool tier colour for in-progress (`--meter-c: var(--med-c)`), warm amber for maintenance. A
+detail. Cool tier colour for in-progress, warm amber for maintenance.
+
+**`always_meter`** opts a surface into a PERMANENT bar, drawn in every state including `earned` — used by
+the two collection walls, where a wall of nothing but badges makes the bar a column you read down. A full
+one takes `.is-full` (a brighter fill + a wider glow) so a finished bar is distinguishable from a gauge
+pinned at max. Two traps, both of which have bitten: the glow must sit on the **track**, since `--smooth`
+sets `overflow: hidden` and clips a shadow declared on the fill; and `--meter-c` is defaulted on the
+**base** `.pp-med` with a literal fallback, because an undefined custom property invalidates every
+`color-mix()` referencing it and renders the bar EMPTY rather than uncoloured. Collection frames never set
+`segments`, so those walls always take the smooth branch. A
 per-badge requirement is **Platinum** for bronze/gold tiers, **100%** for silver/platinum (migration
 `0046` tier choices) — the detail modal labels this correctly. (This replaced an earlier segmented
 *ring* that wrapped the badge; the ring detracted from the object, so it was moved to a bar below.)
@@ -82,17 +92,21 @@ the Gallery's sort/filter absorbed both "browse what you have" and the dense dat
   `badge_xp.edition_display_state`. The **badge-detail modal** derives state through the *same* helper but
   from a *live* eval (it needs the full stage journey), and both reflect the last sync — so a card and its
   modal can't disagree. State: held -> earned (holo when mastered); this edition has partial progress ->
-  in_progress + its own progress; else unearned (incl. an edition the viewer has 0% on — the series
-  furthest-along would wrongly paint it). See [badge-backend-rebuild.md](../design/rebuild/badge-backend-rebuild.md)
+  in_progress + its own progress; else unearned (an edition the viewer has 0% on — the series
+  furthest-along would wrongly paint it). Unearned editions are then DROPPED from the wall, unless the
+  whole series is untouched (so a series can never vanish entirely). See [badge-backend-rebuild.md](../design/rebuild/badge-backend-rebuild.md)
   for why per-edition progress is a materialized read-model (factual, recompute-from-scratch), not a live eval
   on the wall (it'd be O(engaged series) per load — a whale-scale timeout) nor a request cache.
 - **Filter/sort** (`collection.js`, module scope: `stateMatches` / `elMatches` / `sortValue` / `compareBy` /
   `wireFilterChips`): **edition** (Legacy HD / Ultra HD) + **state** (earned / in-progress / not earned)
   chips + a Set `<select>`, plus a `key:dir` sort `<select>` (default `progress:desc`). All operate on the
   cells' `data-*` attributes.
-- **In-progress cells** show their "X / Y stages" count in the **caption line** (via `data-stages` +
-  `statText`), where earned cells show "Top X%" — NOT under the medallion. The gallery passes
-  `no_count=True` to the medallion so the count doesn't grow the card.
+- **The caption is three lines**: series name, then the **edition** in its own tier colour
+  (`.pp-gallery__edition`, reading the card's `--tier-c`), then one stat. In-progress cells show their
+  "X / Y stages" there (via `data-stages` + `statText`); earned cells show **"N stages · date"** under the
+  *Recently earned* sort (composed in `statText` from `data-stage-total` + `data-earned-label`) and the
+  rarity grade under the others. The count is NOT repeated under the medallion — both walls pass
+  `no_count=True`, since the caption is already the stage figure's home.
 
 ## The detail ("pick it up")
 

@@ -3,8 +3,9 @@
 The Collection (`/my-pursuit/collection/`) is the Pursuer's badge Gallery -- a single filter / sort / search
 wall of the badges they've ENGAGED with: the live group badges (editions -- Legacy HD / Ultra HD) of every
 series they either HOLD an edition of (a UserGroupBadge) or have STARTED (a SeriesBadgeStanding with progress).
-Earned editions gleam; in-progress ones show that EDITION's own progress; the rest are waiting mounts. Full-catalog
-discovery lives on the Browse badge Gallery, not here.
+Earned editions gleam and in-progress ones show that EDITION's own progress. An edition you have NO progress on
+is dropped -- unless the whole series is untouched, so a series can never vanish from the wall entirely.
+Full-catalog discovery lives on the Browse badge Gallery, not here.
 
 Grouping-badge model: no tiers. The medallion frames reuse group_medallion_layers (so metals / avatars / holo
 match the rest of the site) + group_rarity, with per-viewer state layered on: earned = held; in_progress = THIS
@@ -76,8 +77,9 @@ def _badge_frame(gb, holds, standings, participants):
     SAME derivation the live badge-detail view uses, so the wall and the modal can't disagree:
       - held                                    -> 'earned' (holo when mastered),
       - not held, THIS edition has partial progress -> 'in_progress' + its own progress,
-      - else                                    -> 'unearned' (a waiting mount -- incl. an edition the viewer has
-                                                   0% on, which the series furthest-along would wrongly paint).
+      - else                                    -> 'unearned' (an edition the viewer has 0% on, which the series
+                                                   furthest-along would wrongly paint). build_collection_context
+                                                   then drops these unless the whole series is untouched.
     Reuses group_medallion_layers (art) + group_rarity (live rarity), so it matches the browse pages exactly."""
     series, pg = gb.series, gb.platform_group
     tier, layers, is_avatar = group_medallion_layers(gb)
@@ -90,8 +92,15 @@ def _badge_frame(gb, holds, standings, participants):
 
     state, progress_pct = edition_display_state(held, cleared, gating)
     is_holo = bool(holds.get(gb.id)) if held else False
-    # Only an in-progress edition carries the "X / Y stages" count (earned/unearned show none).
-    stages_done, stages_total = (cleared, gating) if state == 'in_progress' else (0, 0)
+    # EVERY state carries the "X / Y stages" count now -- the collection surfaces render a permanent meter,
+    # so a held badge reads N / N behind a full bar rather than dropping the figure that gives the bar its
+    # meaning. (It used to be in-progress only, when earned badges showed no meter at all.)
+    #
+    # An earned badge takes its count from `gating`, NOT from `cleared`: edition_display_state short-circuits
+    # on `held` and returns 100 without reading either, so nothing has ever depended on what the read-model
+    # stores in `cleared` for a held row. Deriving the numerator from it would newly depend on that, and a
+    # row that stopped tracking at hold would render a full bar over "0 / 5".
+    stages_done, stages_total = (gating, gating) if state == 'earned' else (cleared, gating)
     # How many stages this edition takes. Straight from `gating` -- the read-model now materializes every
     # EARNABLE edition, not just started ones (badge_xp.recompute_standing), so an untouched edition
     # carries its real [0, gating] and needs no fallback.
@@ -124,10 +133,11 @@ def _badge_frame(gb, holds, standings, participants):
         'progress_pct': progress_pct,
         'stages_done': stages_done,
         'stages_total': stages_total,   # medallion renders "stages_done / stages_total" below the meter when > 0
-        # The CAPTION's chase count, deliberately separate from stages_* above. `edition_display_state`
-        # calls zero cleared stages 'unearned', not 'in_progress', so stages_* zeroes out and an edition
-        # you have not started read as blank -- exactly where "0 / 5 stages" is the most motivating thing
-        # on the card. Empty only for an earned badge: nothing left to chase.
+        # The CAPTION's chase count, deliberately separate from stages_* above: it is what is LEFT, so it
+        # empties for an earned badge (nothing left to chase) where stages_* reports what the badge took.
+        # It used to exist mainly to give an unstarted edition a "0 / 5 stages" caption, on the argument
+        # that this was the most motivating number on the card; those editions are no longer built for a
+        # series already in play, so its remaining job is the in-progress caption.
         'chase_done': cleared if not held else 0,
         'chase_total': chase_total if not held else 0,
         'rarity_pct': pct or 0,
@@ -210,13 +220,39 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
             elif fr['state'] == 'in_progress':
                 in_progress += 1
 
+        # Drop the untouched EDITIONS of a series the hunter is already on. Engagement is per SERIES, so
+        # clearing a stage on Ultra HD also mounts the Legacy HD edition of the same series -- and a wall
+        # could be mostly badges nobody had touched. Every new compatibility grouping multiplies that.
+        #
+        # Scoped per series, and only where something in that series survives: a series with no progress on
+        # ANY edition keeps all of them. Blanket-dropping every unearned frame also deleted those series
+        # outright -- a standing whose `group_progress` is empty (stale, or written before that read-model
+        # materialized every earnable edition) reads as unearned on every edition, so a series the hunter
+        # genuinely holds progress in would silently vanish. Losing a series is a worse failure than
+        # showing a spare edition of one.
+        #
+        # Filtered AFTER the summary loop: `earned` / `in_progress` / `holo` / `recent` count what the
+        # hunter HAS and the filter cannot change them, while `editions` is deliberately built from every
+        # engaged edition so the header's stat grid stays stable rather than flickering as editions come
+        # and go.
+        #
+        # This reverses an earlier call -- the untouched edition was kept as a "waiting mount" on the theory
+        # that "0 / 5 stages" was motivating there. In practice it read as clutter and crowded out the
+        # editions actually being chased.
+        touched = {fr['series_slug'] for fr in list_badges if fr['state'] != 'unearned'}
+        list_badges = [
+            fr for fr in list_badges
+            if fr['state'] != 'unearned' or fr['series_slug'] not in touched
+        ]
+
+        # Counted from the filtered wall so the header cannot claim more badges than are shown.
         total = len(list_badges)
         themes = [{'name': _SECTION_LABELS.get(t, t.title()), 'palette': palette_of[t]} for t in ordered_types]
         context.update({
             'list_badges': list_badges,
             'themes': themes,
             'summary': {
-                'total': total,                     # engaged editions (gates the header's stat grid + tally)
+                'total': total,                     # CARDS SHOWN, not engaged editions (gates the header + tally)
                 'catalog_total': catalog_total,     # ALL live group badges -- the "N of M collected" denominator
                 'earned': earned,
                 'in_progress': in_progress,

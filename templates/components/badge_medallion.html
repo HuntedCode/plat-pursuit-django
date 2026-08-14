@@ -56,13 +56,19 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
         </div>
         <span class="pp-med__glint" aria-hidden="true"></span>
     </div>
-    {% if state == 'in_progress' or state == 'maintenance' %}
+    {% comment %}The meter is normally the IN-PROGRESS treatment -- an earned badge has nothing left to show,
+    and a bar at 100% on every card is noise on surfaces that mix medallions with other content.
+
+    `always_meter` opts a surface into a PERMANENT bar: on a wall of nothing but badges the bar becomes a
+    column you read down, and a row of full bars among partial ones is the shape of the wall. A full one
+    gets a glow (`is-full`) so it reads as an achieved state rather than a maxed-out gauge.{% endcomment %}
+    {% if state == 'in_progress' or state == 'maintenance' or always_meter %}
         {% if frame.segments %}
-        <div class="pp-med__meter" aria-hidden="true">
+        <div class="pp-med__meter{% if state == 'earned' %} is-full{% endif %}" aria-hidden="true">
             {% for on in frame.segments %}<span class="pp-med__seg{% if on %} is-on{% endif %}"></span>{% endfor %}
         </div>
         {% else %}
-        <div class="pp-med__meter pp-med__meter--smooth" aria-hidden="true"><span class="pp-med__meter-fill" style="width: {{ frame.progress_pct|default:0 }}%;"></span></div>
+        <div class="pp-med__meter pp-med__meter--smooth{% if state == 'earned' %} is-full{% endif %}" aria-hidden="true"><span class="pp-med__meter-fill" style="width: {{ frame.progress_pct|default:0 }}%;"></span></div>
         {% endif %}
     {% endif %}
     {% if total and not no_count %}<span class="pp-med__count">{% if show_repair and state == 'maintenance' %}<svg class="pp-med__wrench" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg><span class="sr-only">needs re-earning, </span>{% endif %}{{ frame.stages_done|default:0 }} / {{ total }}</span>{% endif %}
