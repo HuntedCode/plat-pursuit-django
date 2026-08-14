@@ -383,43 +383,6 @@ class ProfileTrophiesForm(forms.Form):
     rarity_min = forms.FloatField(required=False, min_value=0, max_value=100)
     rarity_max = forms.FloatField(required=False, min_value=0, max_value=100)
 
-class ProfileBadgesForm(forms.Form):
-    sort = forms.ChoiceField(
-        choices=[
-            ('series', 'Series'),
-            ('name', 'Alphabetical'),
-            ('tier', 'Tier Ascending'),
-            ('tier_desc', 'Tier Descending'),
-            ('stages', 'Most Stages'),
-            ('stages_inv', 'Fewest Stages'),
-            ('xp', 'Most XP'),
-            ('xp_inv', 'Least XP'),
-            ('recent', 'Recently Earned'),
-        ],
-        required=False,
-        label='Sort By',
-    )
-    badge_type = forms.MultipleChoiceField(
-        required=False,
-        label='Badge Type',  # choices sourced from the model in __init__
-    )
-    tier = forms.MultipleChoiceField(
-        choices=[
-            ('1', 'Bronze'),
-            ('2', 'Silver'),
-            ('3', 'Gold'),
-            ('4', 'Platinum'),
-        ],
-        required=False,
-        label='Tier',
-    )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        from trophies.models import Badge
-        self.fields['badge_type'].choices = Badge.BADGE_TYPES
-
-
 class TrophyCaseForm(forms.Form):
     query = forms.CharField(required=False, label='Search by game name')
     sort = forms.ChoiceField(

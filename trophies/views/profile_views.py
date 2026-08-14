@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db.models import (
-    Q, F, Max, Case, When, Value, IntegerField, FloatField, Count,
+    Q, F, Case, When, Value, IntegerField, FloatField, Count,
     Subquery, OuterRef, OrderBy,
 )
 from django.db.models.functions import Lower, Coalesce, Cast
@@ -23,16 +23,12 @@ from ..forms import (
     ProfileSearchForm,
     ProfileGamesForm,
     ProfileTrophiesForm,
-    ProfileBadgesForm,
     LinkPSNForm,
 )
 from ..models import (
     Profile,
     EarnedTrophy,
     ProfileGame,
-    Badge,
-    UserBadge,
-    UserBadgeProgress,
     GameList,
     Trophy,
     TrophyGroup,
@@ -666,186 +662,71 @@ class ProfileDetailView(DetailView):
         context['form'] = form
         return context
 
-    @staticmethod
-    def _compute_badge_xp(badge_group):
-        """Compute total XP value for a badge group's highest earned tier."""
-        from trophies.services.xp_service import get_tier_xp
-        from trophies.util_modules.constants import BADGE_TIER_XP
-        badge = badge_group['highest_badge']
-        return badge.required_stages * get_tier_xp(badge.tier) + BADGE_TIER_XP
+    # How a visitor can reorder someone's badges. Deliberately SHORTER than the Collection gallery's six:
+    # `edition` and `set_number` are organisational sorts that help an owner audit their own wall, and this
+    # is a stranger's read-only view. These four are the four questions a visitor actually asks.
+    _BADGE_SORTS = [
+        ('earned', 'Recently earned'),
+        ('progress', 'Closest to earning'),
+        ('rarity', 'Rarest first'),
+        ('series', 'Series (A-Z)'),
+    ]
 
-    def _sort_badge_groups(self, badge_list, sort_val):
-        """Apply consistent sorting to a list of badge group dicts."""
-        _title = lambda d: (d['highest_badge'].effective_display_title or '').lower()
-        if sort_val == 'name':
-            badge_list.sort(key=lambda d: _title(d))
-        elif sort_val == 'tier':
-            badge_list.sort(key=lambda d: (d['max_tier'], _title(d)))
-        elif sort_val == 'tier_desc':
-            badge_list.sort(key=lambda d: (-d['max_tier'], _title(d)))
-        elif sort_val == 'stages':
-            badge_list.sort(key=lambda d: (-d['highest_badge'].required_stages, _title(d)))
-        elif sort_val == 'stages_inv':
-            badge_list.sort(key=lambda d: (d['highest_badge'].required_stages, _title(d)))
-        elif sort_val == 'xp':
-            badge_list.sort(key=lambda d: (-self._compute_badge_xp(d), _title(d)))
-        elif sort_val == 'xp_inv':
-            badge_list.sort(key=lambda d: (self._compute_badge_xp(d), _title(d)))
-        elif sort_val == 'recent':
-            from datetime import datetime
-            badge_list.sort(
-                key=lambda d: d.get('earned_at') or datetime.min,
-                reverse=True,
-            )
-        else:  # 'series' (default)
-            badge_list.sort(key=lambda d: (d['highest_badge'].effective_display_series or '').lower())
+    @staticmethod
+    def _sort_badges(frames, sort):
+        """Order the badge wall.
+
+        Sorted HERE rather than by passing `sort` down to the service: `build_collection_context` does not
+        sort at all. Its `sort` argument only picks the gallery dropdown's initial value, because the gallery
+        reorders itself client-side in JS -- so handing it a sort would have reordered nothing, and this tab
+        has no such JS (importing the gallery's would drag in its whole toolbar).
+
+        Sorting the materialized list is free: it is already built and bounded by engaged series, not by
+        library size, so there is no query and nothing here scales with a big account.
+        """
+        keys = {
+            # Unearned badges carry earned_ts 0, so they land together at the end rather than interleaving.
+            'earned': lambda f: (-f.get('earned_ts', 0), f.get('series_name', '').lower()),
+            # In-progress first, nearest completion at the top -- an earned badge has nothing left to chase
+            # and an untouched one has no progress to rank by, so neither belongs in the middle of this.
+            'progress': lambda f: (f.get('state') != 'in_progress', -f.get('progress_pct', 0),
+                                   f.get('series_name', '').lower()),
+            # Rarity is "% of the community holding it", so low is rare. 0 is NOT the rarest -- it is the
+            # no-data value (an edition nobody holds yet), so it sorts last instead of leading the wall.
+            'rarity': lambda f: (not f.get('rarity_pct'), f.get('rarity_pct', 0),
+                                 f.get('series_name', '').lower()),
+            'series': lambda f: (f.get('series_name', '').lower(), f.get('set_number') or 0),
+        }
+        return sorted(frames, key=keys[sort])
 
     def _build_badges_tab_context(self, profile):
+        """Badges this hunter holds and is chasing -- the PUBLIC view of their collection.
+
+        Reads the same service the owner's Collection gallery does. That matters for more than tidiness:
+        `build_collection_context` resolves per-edition progress from the standings' materialized
+        `group_progress` read-model, so it is a handful of bulk reads with no live evaluation and no
+        per-badge queries. Live-evaluating badge state is O(engaged) and times out for a heavy account,
+        which is why the Collection was built that way in the first place.
+
+        It replaces a reader of the LEGACY badge tables (UserBadge / Badge / UserBadgeProgress), which
+        nothing writes any more -- so this tab had been showing a frozen set to everybody.
+
+        In-progress badges are kept rather than filtered out: what someone is chasing is as interesting to a
+        visitor as what they already hold, and the medallion's own state treatment already tells the two
+        apart without needing a filter to separate them.
         """
-        Build context for badges tab with earned badges, in-progress badges, and progress.
+        from trophies.services.collection_service import build_collection_context
 
-        Args:
-            profile: Profile instance
+        context = build_collection_context(profile)
 
-        Returns:
-            dict: Context with grouped_earned_badges, in_progress_badges, and form
-        """
-        form = ProfileBadgesForm(self.request.GET)
-        context = {}
-
-        if not form.is_valid():
-            context['grouped_earned_badges'] = []
-            context['in_progress_badges'] = []
-            context['form'] = form
-            return context
-
-        sort_val = form.cleaned_data.get('sort')
-        badge_type_filter = form.cleaned_data.get('badge_type')
-        tier_filter_val = form.cleaned_data.get('tier')
-
-        # Get earned badge series with max tier per series
-        earned_badges_qs = UserBadge.objects.filter(profile=profile).values(
-            'badge__series_slug'
-        ).annotate(max_tier=Max('badge__tier')).distinct()
-
-        # Collect all series slugs and needed tiers for bulk fetch
-        series_tier_pairs = []
-        earned_series_slugs = set()
-        for entry in earned_badges_qs:
-            slug = entry['badge__series_slug']
-            max_tier = entry['max_tier']
-            earned_series_slugs.add(slug)
-            series_tier_pairs.append((slug, max_tier))
-            series_tier_pairs.append((slug, max_tier + 1))  # next tier
-
-        # Bulk fetch all needed Badge objects in one query
-        if series_tier_pairs:
-            tier_filter = Q()
-            for slug, tier in series_tier_pairs:
-                tier_filter |= Q(series_slug=slug, tier=tier)
-            all_badges = Badge.objects.live().filter(tier_filter).select_related(
-                'base_badge', 'title', 'base_badge__title'
-            )
-            badge_lookup = {(b.series_slug, b.tier): b for b in all_badges}
-        else:
-            badge_lookup = {}
-
-        # Bulk fetch all UserBadgeProgress for this profile
-        progress_lookup = {
-            p.badge_id: p
-            for p in UserBadgeProgress.objects.filter(profile=profile).select_related('badge')
-        }
-
-        # Bulk fetch earned_at per series (for "Recently Earned" sort)
-        earned_at_lookup = {}
-        if sort_val == 'recent':
-            for ub in UserBadge.objects.filter(profile=profile).values(
-                'badge__series_slug',
-            ).annotate(latest_earned=Max('earned_at')):
-                earned_at_lookup[ub['badge__series_slug']] = ub['latest_earned']
-
-        # Build earned badges list using lookups instead of per-item queries
-        grouped_earned = []
-        for entry in earned_badges_qs:
-            series_slug = entry['badge__series_slug']
-            max_tier = entry['max_tier']
-            highest_badge = badge_lookup.get((series_slug, max_tier))
-            if not highest_badge:
-                continue
-
-            next_badge = badge_lookup.get((series_slug, max_tier + 1))
-            is_maxed = next_badge is None
-            if is_maxed:
-                next_badge = highest_badge
-
-            progress_entry = progress_lookup.get(next_badge.id)
-            if progress_entry and next_badge.required_stages > 0:
-                progress_percentage = (progress_entry.completed_concepts / next_badge.required_stages) * 100
-            else:
-                progress_percentage = 0
-            if is_maxed:
-                progress_percentage = 100
-
-            grouped_earned.append({
-                'highest_badge': highest_badge,
-                'next_badge': next_badge,
-                'progress': progress_entry,
-                'percentage': progress_percentage,
-                'max_tier': max_tier,
-                'earned_at': earned_at_lookup.get(series_slug),
-            })
-
-        # In-memory filters
-        if badge_type_filter:
-            grouped_earned = [
-                g for g in grouped_earned
-                if g['highest_badge'].badge_type in badge_type_filter
-            ]
-        if tier_filter_val:
-            tier_ints = [int(t) for t in tier_filter_val]
-            grouped_earned = [
-                g for g in grouped_earned
-                if g['max_tier'] in tier_ints
-            ]
-
-        self._sort_badge_groups(grouped_earned, sort_val)
-        context['grouped_earned_badges'] = grouped_earned
-
-        # Build in-progress badges (tier 1, some progress, not yet earned)
-        in_progress_qs = UserBadgeProgress.objects.filter(
-            profile=profile,
-            badge__tier=1,
-            completed_concepts__gt=0,
-        ).exclude(
-            badge__series_slug__in=earned_series_slugs,
-        ).select_related('badge', 'badge__base_badge', 'badge__title', 'badge__base_badge__title')
-
-        earned_badge_ids = {b.id for b in badge_lookup.values()}
-
-        in_progress_badges = []
-        for progress in in_progress_qs:
-            badge = progress.badge
-            if badge.id in earned_badge_ids:
-                continue
-
-            if badge.required_stages > 0:
-                percentage = (progress.completed_concepts / badge.required_stages) * 100
-            else:
-                percentage = 0
-
-            in_progress_badges.append({
-                'highest_badge': badge,
-                'next_badge': badge,
-                'progress': progress,
-                'percentage': percentage,
-                'max_tier': 0,
-            })
-
-        in_progress_badges.sort(key=lambda d: (-d['percentage'], (d['highest_badge'].effective_display_title or '').lower()))
-        context['in_progress_badges'] = in_progress_badges
-        context['form'] = form
-        context['selected_badge_types'] = self.request.GET.getlist('badge_type')
-        context['selected_tiers'] = self.request.GET.getlist('tier')
+        sort = self.request.GET.get('sort', '')
+        if sort not in dict(self._BADGE_SORTS):
+            sort = self._BADGE_SORTS[0][0]
+        context.update({
+            'list_badges': self._sort_badges(context['list_badges'], sort),
+            'sort': sort,
+            'sort_options': self._BADGE_SORTS,
+        })
         return context
 
     def _build_lists_tab_context(self, public_lists_qs):
@@ -909,8 +790,20 @@ class ProfileDetailView(DetailView):
         public_lists_qs = GameList.objects.filter(profile=profile, is_public=True, is_deleted=False)
         context['profile_lists_count'] = public_lists_qs.count()
 
+        # Gaming history is opt-out, and until now the ONLY thing enforcing that was
+        # `{% if profile.psn_history_public %}` in profile_detail.html. An HTMX request is answered with
+        # the tab template DIRECTLY (get_template_names), which never renders that parent -- so
+        # `?tab=games` + `HX-Request: true` returned a private hunter's library to anyone who asked.
+        #
+        # The hole was dormant for badges, whose tab read legacy tables nothing writes, and live for the
+        # rest. Enforced here instead, where both render paths pass: no tab context is built at all, so a
+        # private profile costs nothing to render rather than building a wall that gets thrown away.
+        self._history_visible = profile.psn_history_public
+
         # Delegate to tab-specific handler methods
-        if tab == 'games':
+        if not self._history_visible:
+            tab_context = {}
+        elif tab == 'games':
             tab_context = self._build_games_tab_context(profile, per_page, page_number)
         elif tab == 'trophies':
             tab_context = self._build_trophies_tab_context(profile, per_page, page_number)
@@ -975,7 +868,6 @@ class ProfileDetailView(DetailView):
     _RESULTS_TEMPLATES = {
         'games': 'trophies/partials/profile_detail/tabs/games_results.html',
         'trophies': 'trophies/partials/profile_detail/tabs/trophies_results.html',
-        'badges': 'trophies/partials/profile_detail/tabs/badges_results.html',
     }
     _INFINITE_SCROLL_TEMPLATES = {
         'games': 'trophies/partials/profile_detail/game_list_items.html',
@@ -984,6 +876,14 @@ class ProfileDetailView(DetailView):
 
     def get_template_names(self):
         tab = self.request.GET.get('tab', 'games')
+
+        # A private profile never answers with a tab body, on ANY path. Returning the full page instead
+        # means the request renders profile_detail.html, whose `{% if profile.psn_history_public %}` drops
+        # the tabs -- so the two render paths agree instead of one having its own back door. Defaults to
+        # hidden if the flag was never set: this runs after get_context_data on every real request, and an
+        # unset attribute should fail closed.
+        if not getattr(self, '_history_visible', False):
+            return super().get_template_names()
 
         # HTMX partial swap (tab switch or filter change)
         if getattr(self.request, 'htmx', False):
