@@ -100,7 +100,22 @@
 .pp-pgcard__pct { font-size: 0.8rem; font-weight: 700; color: var(--pp-text); }
 .pp-pgcard__count { font-size: 0.68rem; font-weight: 600; color: var(--pp-text-mute); }
 
-/* The platinum mark. Sits in the footer opposite the platform chips, in the trophy family's own colour --
-   this is the one fact on the card that is about a trophy rather than about a game. */
-.pp-pgcard__plat { display: inline-grid; place-items: center; flex: none; color: var(--color-trophy-platinum); }
-.pp-pgcard__plat svg { width: 14px; height: 14px; }
+
+/* Per-tier record on a game card: which trophies are actually left, not just how many. Same dot-and-figure
+   vocabulary as the hero's tier strip so a colour means the same thing in both places, and this is the
+   scoped trophy family's own surface -- these ARE trophies. No visible tier labels: four of them at this
+   size, on a card in a wall of fifty, is more text than the numbers; the names live on `title` instead so
+   the information is never colour-only. */
+.pp-pgcard__tiers {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px;
+    font-variant-numeric: tabular-nums;
+}
+.pp-pgcard__tier {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 0.62rem; font-weight: 700; color: var(--pp-text-dim); white-space: nowrap;
+}
+.pp-pgcard__tier i { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--tier-c); }
+.pp-pgcard__tier[data-tier="platinum"] { --tier-c: var(--color-trophy-platinum); }
+.pp-pgcard__tier[data-tier="gold"]     { --tier-c: var(--color-trophy-gold); }
+.pp-pgcard__tier[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
+.pp-pgcard__tier[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }

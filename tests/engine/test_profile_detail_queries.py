@@ -143,3 +143,31 @@ def test_the_completion_bar_means_the_same_thing_it_does_on_browse(client):
     body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
 
     assert 'pp-gcard__barfill--plat' in body, 'a finished game does not get the platinum bar state'
+
+
+def test_the_dlc_count_is_one_grouped_query_not_one_per_card(client):
+    """The DLC chip carries a COUNT, which is the kind of per-card fact that quietly becomes an N+1.
+    It is built per PAGE in the view, bounded to the games actually shown, exactly as Browse Games does."""
+    small = _profile_with_games(2)
+    with CaptureQueriesContext(connection) as few:
+        client.get(f'/hunters/{small.psn_username}/?tab=games', **CF)
+
+    big = _profile_with_games(8)
+    with CaptureQueriesContext(connection) as many:
+        client.get(f'/hunters/{big.psn_username}/?tab=games', **CF)
+
+    assert len(many) <= len(few) + 2, (
+        f'{len(few)} queries for 2 games, {len(many)} for 8 -- something is counting per card'
+    )
+
+
+def test_the_card_shows_the_per_tier_record(client):
+    """Which trophies are actually LEFT, not just how many. Both dicts are denormalized JSON, so four
+    tiers cost nothing; the names live on `title` so the tier is never conveyed by colour alone."""
+    profile = _profile_with_games(1)
+
+    body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
+
+    assert 'pp-pgcard__tier' in body
+    for tier in ('Bronze:', 'Silver:', 'Gold:'):
+        assert tier in body, f'{tier} has no accessible name, leaving the tier colour-only'

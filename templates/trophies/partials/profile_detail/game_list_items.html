@@ -33,12 +33,26 @@ Every field is denormalized on Game or ProfileGame -- no queries per card. The c
     <div class="pp-gcard__body">
         <span class="pp-gcard__title">{{ game.title_name }}</span>
 
-        {% comment %}Their record with it: how far, and how many of the trophies they hold. Two figures,
-        not a four-tier breakdown -- the tier split belongs to the hero, where it describes a career; on a
-        card in a wall of many it is noise.{% endcomment %}
+        {% comment %}Their record with it: how far overall, then which trophies are actually left.
+
+        The tier row uses the same dot-and-figure vocabulary as the hero's tier strip, so the colours mean
+        the same thing in both places -- and it is the scoped trophy family's own surface, since these ARE
+        trophies. No visible tier labels: four of them at this size on a card in a wall of fifty is more
+        text than the numbers themselves, and the colour already names the tier. The names live on `title`
+        so the information is not colour-only.
+
+        Both dicts are denormalized JSON on ProfileGame / Game -- four tiers cost no queries.{% endcomment %}
         <span class="pp-pgcard__stats">
             <span class="pp-pgcard__pct">{{ pgame.progress|default:0 }}%</span>
             <span class="pp-pgcard__count">{{ pgame.earned_trophies_count|default:0 }} / {{ pgame.earned_trophies_count|add:pgame.unearned_trophies_count }}</span>
+        </span>
+        <span class="pp-pgcard__tiers">
+            {% if game.defined_trophies.platinum %}
+            <span class="pp-pgcard__tier" data-tier="platinum" title="Platinum: {{ pgame.earned_trophies.platinum|default:0 }} of {{ game.defined_trophies.platinum }}"><i></i>{{ pgame.earned_trophies.platinum|default:0 }}/{{ game.defined_trophies.platinum }}</span>
+            {% endif %}
+            <span class="pp-pgcard__tier" data-tier="gold" title="Gold: {{ pgame.earned_trophies.gold|default:0 }} of {{ game.defined_trophies.gold|default:0 }}"><i></i>{{ pgame.earned_trophies.gold|default:0 }}/{{ game.defined_trophies.gold|default:0 }}</span>
+            <span class="pp-pgcard__tier" data-tier="silver" title="Silver: {{ pgame.earned_trophies.silver|default:0 }} of {{ game.defined_trophies.silver|default:0 }}"><i></i>{{ pgame.earned_trophies.silver|default:0 }}/{{ game.defined_trophies.silver|default:0 }}</span>
+            <span class="pp-pgcard__tier" data-tier="bronze" title="Bronze: {{ pgame.earned_trophies.bronze|default:0 }} of {{ game.defined_trophies.bronze|default:0 }}"><i></i>{{ pgame.earned_trophies.bronze|default:0 }}/{{ game.defined_trophies.bronze|default:0 }}</span>
         </span>
 
         <span class="pp-gcard__foot">
@@ -46,11 +60,22 @@ Every field is denormalized on Game or ProfileGame -- no queries per card. The c
                 {% for platform in game.title_platform reversed %}
                 <span class="pp-gcard__plat">{{ platform }}</span>
                 {% endfor %}
+                {% comment %}The browse card's DLC chip, counted the same way -- trophy groups beyond the
+                base one. Its map is built per PAGE in the view (one grouped query), so the count costs
+                nothing per card.{% endcomment %}
+                {% if game.has_trophy_groups %}{% with dlc_n=dlc_map|dict_get:game.id %}
+                <span class="pp-gcard__dlc" title="{% if dlc_n %}{{ dlc_n }} DLC trophy pack{{ dlc_n|pluralize }}{% else %}Has DLC trophies{% endif %}">DLC{% if dlc_n %}<span class="pp-gcard__dlc-n">&times;{{ dlc_n }}</span>{% endif %}</span>
+                {% endwith %}{% endif %}
             </span>
-            {% if pgame.has_plat %}
-            <span class="pp-pgcard__plat" title="Platinum earned" aria-label="Platinum earned">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3a3 3 0 0 1-3 3"/><path d="M7 5H4a3 3 0 0 0 3 3"/></svg>
-            </span>
+            {% comment %}The browse card's PLAT chip verbatim, including its three states: lit when this
+            hunter has the platinum, unlit when the game has one they have not taken, and "No Plat" when
+            the game has none at all. A word carries the third state; an icon could only be present or
+            absent, which is why the icon this replaced could not say "there is nothing to chase here".
+            {% endcomment %}
+            {% if game.defined_trophies.platinum %}
+            <span class="pp-gcard__plat{% if pgame.has_plat %} is-earned{% endif %}" title="{% if pgame.has_plat %}Platinum earned{% else %}Has a platinum{% endif %}">Plat</span>
+            {% else %}
+            <span class="pp-gcard__plat--no" title="No platinum">No Plat</span>
             {% endif %}
         </span>
     </div>

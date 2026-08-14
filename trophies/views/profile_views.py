@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db.models import (
-    Q, F, Max, Case, When, Value, IntegerField, FloatField,
+    Q, F, Max, Case, When, Value, IntegerField, FloatField, Count,
     Subquery, OuterRef, OrderBy,
 )
 from django.db.models.functions import Lower, Coalesce, Cast
@@ -35,6 +35,7 @@ from ..models import (
     UserBadgeProgress,
     GameList,
     Trophy,
+    TrophyGroup,
     UserTitle,
 )
 from trophies.mixins import HtmxListMixin
@@ -536,6 +537,18 @@ class ProfileDetailView(DetailView):
             game_page_obj = games_paginator.get_page(page_number)
 
         context['profile_games'] = game_page_obj
+        # DLC pack count per game -- ONE grouped query, bounded to the games actually on this page (not
+        # the whole library), mirroring how Browse Games builds the same chip. Trophy groups beyond the
+        # base 'default' group are the DLC packs.
+        page_game_ids = [pg.game_id for pg in game_page_obj]
+        context['dlc_map'] = {
+            d['game_id']: d['n']
+            for d in (
+                TrophyGroup.objects.filter(game_id__in=page_game_ids)
+                .exclude(trophy_group_id='default')
+                .values('game_id').annotate(n=Count('id'))
+            )
+        } if page_game_ids else {}
         context['form'] = form
         context['selected_genres'] = self.request.GET.getlist('genres')
         context['selected_themes'] = self.request.GET.getlist('themes')
