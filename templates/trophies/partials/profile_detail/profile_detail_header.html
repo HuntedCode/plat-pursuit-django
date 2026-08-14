@@ -1,294 +1,105 @@
-{% load static humanize custom_filters %}
+{% load humanize custom_filters %}{% comment %} PROFILE HERO -- rebuilt 2026-08, from scratch.
 
-<div class="flex flex-col gap-3 md:gap-4">
+Its job is IDENTITY and STANDING, and nothing else. What it deliberately no longer carries:
 
-    {# ━━━ Card 1: Profile Identity ━━━ #}
-    <div class="card border-2 border-base-300 border-l-4 shadow-md shadow-neutral relative overflow-hidden"
-         {% if profile_theme_accent %}style="border-left-color: {{ profile_theme_accent }};"{% endif %}>
-        {% if profile_theme_gradient %}
-            <div class="absolute inset-0" style="background: {{ profile_theme_gradient }}; opacity: 0.4;"></div>
-            <div class="absolute inset-0 bg-base-200/40"></div>
-        {% else %}
-            <div class="absolute inset-0 bg-base-200/70"></div>
-        {% endif %}
-        <div class="card-body p-3 md:p-4 relative z-10">
-            <div class="flex flex-col md:flex-row items-center md:items-start gap-3 md:gap-4">
-                {# Avatar #}
-                <div class="relative shrink-0">
+  * the game-art banner (retired -- there was no good version of it, and it fought the content)
+  * the four notable-platinum tiles (recent / rarest / fastest / milestone). Two of those four are
+    already events on the milestone timeline, so the page rendered the same facts twice; all four are
+    "highlights of the journey", which is what the About tab is for. They also each resolved a game
+    cover, which is where the page's remaining bounded IGDB fetches came from.
+
+Composition follows the Career header: accented card, `.pp-head-cascade` opening beat, a `.scard` grid
+for the headline figures. The trophy tier row is the one place the scoped trophy colour family is used,
+which is exactly what that family is for.
+{% endcomment %}
+<section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+
+        {# ── Identity ── #}
+        <div class="flex items-start gap-3 md:gap-4 min-w-0">
+            <div class="pp-phero__avatar{% if not profile.avatar_url %} pp-phero__avatar--none{% endif %}">
+                <img src="{{ profile.avatar_url|default:'' }}" alt="" loading="eager" decoding="async">
+                <svg class="pp-phero__ph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+            </div>
+
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold leading-tight min-w-0 break-words">{{ profile.display_psn_username|default:profile.psn_username }}</h1>
                     {% if profile.user_is_premium %}
-                        <div class="absolute -top-1 -left-1 z-10" title="Premium Account">
-                            <img src="{% static 'images/badges/default.png' %}" class="w-5 h-5" alt="Premium" />
-                        </div>
+                    <span class="pp-phero__supp" title="Platinum Pursuit supporter" aria-label="Supporter">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>
+                    </span>
                     {% endif %}
-                    {% if profile.is_plus %}
-                        <div class="absolute -top-1 -right-1 z-10" title="PS+">
-                            <img src="{% static 'images/plus.png' %}" class="w-5 h-5" alt="PS+" />
-                        </div>
-                    {% endif %}
-                    <div class="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden ring-2 {% if profile.user_is_premium %}shimmer{% else %}ring-secondary{% endif %}"
-                         {% if profile_theme_accent %}style="--tw-ring-color: {{ profile_theme_accent }};"{% elif profile.user_is_premium %}style="--tw-ring-color: var(--color-primary);"{% endif %}>
-                        <img src="{{ profile.avatar_url }}" alt="{{ profile.psn_username }}'s avatar" class="w-full h-full object-cover" />
-                    </div>
+                    {% if profile.is_plus %}<span class="pp-phero__tag">PS Plus</span>{% endif %}
+                    {% if profile.flag %}<span class="pp-phero__tag pp-phero__tag--quiet">{{ profile.flag }}</span>{% endif %}
                 </div>
 
-                {# Identity info #}
-                <div class="flex flex-col items-center md:items-start flex-1 min-w-0">
-                    <div class="flex items-center gap-2">
-                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold line-clamp-1">{{ profile.display_psn_username }}</h1>
-                        <span class="text-lg">{{ profile.flag }}</span>
-                    </div>
-                    <p class="text-xs md:text-sm text-base-content/50 text-center md:text-left line-clamp-2 pr-1 italic mt-0.5">{{ profile.about_me }}</p>
-                    {% if profile.displayed_title %}
-                        {% if user.is_authenticated and user.profile == profile %}
-                            <a href="{% url 'my_titles' %}" class="text-sm {% if profile.user_is_premium %}legendary-title{% else %}text-base-content/60{% endif %} italic line-clamp-1 pr-1 hover:underline mt-0.5">{{ profile.displayed_title }}</a>
-                        {% else %}
-                            <span class="text-sm {% if profile.user_is_premium %}legendary-title{% else %}text-base-content/60{% endif %} italic line-clamp-1 pr-1 mt-0.5">{{ profile.displayed_title }}</span>
-                        {% endif %}
-                    {% endif %}
-
-                    {# Trophy level + progress #}
-                    <div class="flex items-center gap-2 mt-2 w-full max-w-xs">
-                        <span class="text-xs text-base-content/60">Lv.</span>
-                        <span class="text-sm font-bold text-primary">{{ profile.trophy_level }}</span>
-                        <div class="flex-1 bg-base-300/50 rounded-full h-1.5">
-                            <div class="h-full rounded-full {% if profile.progress < 33 %}bg-error{% elif profile.progress < 66 %}bg-warning{% else %}bg-success{% endif %} transition-all" style="width: {{ profile.progress }}%"></div>
-                        </div>
-                        <span class="text-[0.6rem] text-base-content/40">{{ profile.progress }}%</span>
-                    </div>
-                </div>
-
-                {# Quick links + Trophy Case button #}
-                <div class="flex flex-wrap md:flex-col items-center md:items-end gap-1.5 shrink-0">
-                    <a href="{% url 'trophy_case' profile.psn_username %}" class="btn btn-xs md:btn-sm btn-primary gap-1">
-                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-3.5 h-3.5' %}
-                        Trophy Case
-                    </a>
-                    <a href="{% url 'overall_badge_leaderboards' %}" class="btn btn-xs btn-ghost border border-base-300 gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>
-                        Leaderboards
-                    </a>
-                    <a href="{% url 'milestones_list' %}" class="btn btn-xs btn-ghost border border-base-300 gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                        Milestones
-                    </a>
-                </div>
-            </div>
-
-            {# Stats section (inside identity card) #}
-            <div class="border-t border-base-content/10 mt-2 pt-2">
-                <div class="grid grid-cols-5 md:grid-cols-9 gap-1">
-                    {# Overview stats #}
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 text-center">
-                        {% if profile.psn_history_public %}
-                            <div class="text-sm md:text-base font-bold text-accent">{{ header_stats.total_games|intcomma }}</div>
-                        {% else %}
-                            <div class="text-sm font-bold text-base-content/20">&mdash;</div>
-                        {% endif %}
-                        <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Games</div>
-                    </div>
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 text-center">
-                        {% if profile.psn_history_public %}
-                            <div class="text-sm md:text-base font-bold text-secondary">{{ header_stats.total_completions|intcomma }}</div>
-                        {% else %}
-                            <div class="text-sm font-bold text-base-content/20">&mdash;</div>
-                        {% endif %}
-                        <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">100%</div>
-                    </div>
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 text-center">
-                        {% if profile.psn_history_public and profile.sync_status != 'syncing' %}
-                            <div class="text-sm md:text-base font-bold text-success">{{ header_stats.average_completion|floatformat:1 }}%</div>
-                        {% elif profile.sync_status == 'syncing' %}
-                            <span class="loading loading-infinity loading-xs"></span>
-                        {% else %}
-                            <div class="text-sm font-bold text-base-content/20">&mdash;</div>
-                        {% endif %}
-                        <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Avg</div>
-                    </div>
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 text-center">
-                        {% if profile.psn_history_public and profile.sync_status != 'syncing' %}
-                            <div class="text-sm md:text-base font-bold text-primary">{{ header_stats.total_earned_trophies|intcomma }}</div>
-                        {% elif profile.sync_status == 'syncing' %}
-                            <span class="loading loading-infinity loading-xs"></span>
-                        {% else %}
-                            <div class="text-sm font-bold text-base-content/20">&mdash;</div>
-                        {% endif %}
-                        <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Earned</div>
-                    </div>
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 text-center">
-                        {% if profile.psn_history_public and profile.sync_status != 'syncing' %}
-                            <div class="text-sm md:text-base font-bold text-error">{{ header_stats.total_unearned_trophies|intcomma }}</div>
-                        {% elif profile.sync_status == 'syncing' %}
-                            <span class="loading loading-infinity loading-xs"></span>
-                        {% else %}
-                            <div class="text-sm font-bold text-base-content/20">&mdash;</div>
-                        {% endif %}
-                        <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Unearned</div>
-                    </div>
-                    {# Trophy type breakdown (md:+ inline, extends the row) #}
-                    {% if profile.psn_history_public %}
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 text-center hidden md:block">
-                        <div class="text-sm md:text-base font-black" style="color: var(--color-trophy-bronze)">{{ profile.total_bronzes|intcomma }}</div>
-                        <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">BRZ</div>
-                    </div>
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 text-center hidden md:block">
-                        <div class="text-sm md:text-base font-black" style="color: var(--color-trophy-silver)">{{ profile.total_silvers|intcomma }}</div>
-                        <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">SLV</div>
-                    </div>
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 text-center hidden md:block">
-                        <div class="text-sm md:text-base font-black" style="color: var(--color-trophy-gold)">{{ profile.total_golds|intcomma }}</div>
-                        <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">GLD</div>
-                    </div>
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 text-center hidden md:block">
-                        <div class="text-sm md:text-base font-black" style="color: var(--color-trophy-platinum)">{{ profile.total_plats|intcomma }}</div>
-                        <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">PLT</div>
-                    </div>
-                    {% endif %}
-                </div>
-                {# Mobile trophy breakdown (separate row under the 5-col grid) #}
-                {% if profile.psn_history_public %}
-                <div class="grid grid-cols-4 gap-1 mt-1 md:hidden">
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1 text-center">
-                        <div class="text-xs font-black" style="color: var(--color-trophy-bronze)">{{ profile.total_bronzes|intcomma }}</div>
-                        <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">BRZ</div>
-                    </div>
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1 text-center">
-                        <div class="text-xs font-black" style="color: var(--color-trophy-silver)">{{ profile.total_silvers|intcomma }}</div>
-                        <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">SLV</div>
-                    </div>
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1 text-center">
-                        <div class="text-xs font-black" style="color: var(--color-trophy-gold)">{{ profile.total_golds|intcomma }}</div>
-                        <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">GLD</div>
-                    </div>
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1 text-center">
-                        <div class="text-xs font-black" style="color: var(--color-trophy-platinum)">{{ profile.total_plats|intcomma }}</div>
-                        <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">PLT</div>
-                    </div>
-                </div>
+                {% comment %}The worn title takes the secondary, the same hue it carries on the hunter
+                wall -- one vocabulary for "something earned" across both surfaces.{% endcomment %}
+                {% if profile.displayed_title %}
+                <p class="pp-phero__title">{{ profile.displayed_title }}</p>
                 {% endif %}
+
+                {% comment %}Freshness, in the compact form the hunter cards use. It is the one thing on
+                this page that changes hour to hour, and a profile whose data is stale reads very
+                differently from one synced this morning.{% endcomment %}
+                <p class="pp-phero__sync">
+                    {% if profile.sync_status == 'syncing' %}
+                        <span class="pp-phero__dot pp-phero__dot--live" aria-hidden="true"></span>Syncing now
+                    {% elif profile.last_synced %}
+                        <span class="pp-phero__dot" aria-hidden="true"></span>Synced {{ profile.last_synced|compact_since }}
+                    {% else %}
+                        <span class="pp-phero__dot" aria-hidden="true"></span>Never synced
+                    {% endif %}
+                </p>
             </div>
 
-            {# Platinum highlights (4 in a row on desktop, 2x2 on mobile) #}
-            {% if profile.psn_history_public %}
-            <div class="border-t border-base-content/10 mt-2 pt-2">
-                <h4 class="text-[0.55rem] font-semibold text-base-content/50 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3' %}
-                    Platinum Highlights
-                </h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-1.5">
-                    {# Latest Platinum #}
-                    {% with header_stats.recent_platinum as plat %}
-                    {% if profile.sync_status != 'syncing' and plat and plat.game %}
-                        <a href="{% url 'game_detail' plat.game.np_communication_id %}"
-                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/8 hover:bg-white/[0.06] transition-colors group">
-                            <div class="w-9 aspect-[3/4] rounded-md overflow-hidden ring-1 ring-primary shrink-0">
-                                <img src="{{ plat.game.display_image_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="text-[0.55rem] text-base-content/50 uppercase font-medium">Latest</div>
-                                <div class="font-semibold text-xs line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ plat.game.title_name }}</div>
-                                <div class="text-[0.5rem] text-base-content/50">{{ plat.earned_date|date:"M j, Y" }}</div>
-                            </div>
-                        </a>
-                    {% else %}
-                        <div class="flex items-center gap-2 p-1.5 rounded-lg bg-base-300/20">
-                            <div class="w-9 h-9 rounded-md bg-base-300/30 flex items-center justify-center shrink-0">
-                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-base-content)' size='w-4 h-4 opacity-20' %}
-                            </div>
-                            <div>
-                                <div class="text-[0.55rem] text-base-content/40 uppercase font-medium">Latest</div>
-                                <div class="text-xs text-base-content/30 italic">{% if profile.sync_status == 'syncing' %}...{% else %}None{% endif %}</div>
-                            </div>
-                        </div>
-                    {% endif %}
-                    {% endwith %}
-
-                    {# Rarest Platinum #}
-                    {% with header_stats.rarest_platinum as plat %}
-                    {% if profile.sync_status != 'syncing' and plat and plat.game %}
-                        <a href="{% url 'game_detail' plat.game.np_communication_id %}"
-                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/8 hover:bg-white/[0.06] transition-colors group">
-                            <div class="w-9 aspect-[3/4] rounded-md overflow-hidden ring-1 ring-accent shrink-0">
-                                <img src="{{ plat.game.display_image_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="text-[0.55rem] text-base-content/50 uppercase font-medium">Rarest &middot; {{ plat.trophy.trophy_earn_rate }}%</div>
-                                <div class="font-semibold text-xs line-clamp-1 pr-1 group-hover:text-accent transition-colors">{{ plat.game.title_name }}</div>
-                                <div class="text-[0.5rem] text-base-content/50">{{ plat.earned_date|date:"M j, Y" }}</div>
-                            </div>
-                        </a>
-                    {% else %}
-                        <div class="flex items-center gap-2 p-1.5 rounded-lg bg-base-300/20">
-                            <div class="w-9 h-9 rounded-md bg-base-300/30 flex items-center justify-center shrink-0">
-                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-base-content)' size='w-4 h-4 opacity-20' %}
-                            </div>
-                            <div>
-                                <div class="text-[0.55rem] text-base-content/40 uppercase font-medium">Rarest</div>
-                                <div class="text-xs text-base-content/30 italic">{% if profile.sync_status == 'syncing' %}...{% else %}None{% endif %}</div>
-                            </div>
-                        </div>
-                    {% endif %}
-                    {% endwith %}
-
-                    {# Fastest Platinum #}
-                    {% with header_stats.fastest_platinum as plat %}
-                    {% if plat and plat.game %}
-                        <a href="{% url 'game_detail' plat.game.np_communication_id %}"
-                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/8 hover:bg-white/[0.06] transition-colors group">
-                            <div class="w-9 aspect-[3/4] rounded-md overflow-hidden ring-1 ring-success shrink-0">
-                                <img src="{{ plat.game.display_image_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="text-[0.55rem] text-base-content/50 uppercase font-medium">Fastest &middot; {{ plat.play_duration|timedelta_hours }}</div>
-                                <div class="font-semibold text-xs line-clamp-1 pr-1 group-hover:text-success transition-colors">{{ plat.game.title_name }}</div>
-                                <div class="text-[0.5rem] text-base-content/50">{{ plat.earned_date|date:"M j, Y" }}</div>
-                            </div>
-                        </a>
-                    {% else %}
-                        <div class="flex items-center gap-2 p-1.5 rounded-lg bg-base-300/20">
-                            <div class="w-9 h-9 rounded-md bg-base-300/30 flex items-center justify-center shrink-0">
-                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-base-content)' size='w-4 h-4 opacity-20' %}
-                            </div>
-                            <div>
-                                <div class="text-[0.55rem] text-base-content/40 uppercase font-medium">Fastest</div>
-                                <div class="text-xs text-base-content/30 italic">{% if profile.sync_status == 'syncing' %}...{% else %}None{% endif %}</div>
-                            </div>
-                        </div>
-                    {% endif %}
-                    {% endwith %}
-
-                    {# Milestone Platinum #}
-                    {% with header_stats.milestone_platinum as plat %}
-                    {% if plat and plat.game %}
-                        <a href="{% url 'game_detail' plat.game.np_communication_id %}"
-                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/8 hover:bg-white/[0.06] transition-colors group">
-                            <div class="w-9 aspect-[3/4] rounded-md overflow-hidden ring-1 ring-warning shrink-0">
-                                <img src="{{ plat.game.display_image_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="text-[0.55rem] text-base-content/50 uppercase font-medium">Plat #{{ plat.milestone_number }}</div>
-                                <div class="font-semibold text-xs line-clamp-1 pr-1 group-hover:text-warning transition-colors">{{ plat.game.title_name }}</div>
-                                <div class="text-[0.5rem] text-base-content/50">{{ plat.earned_date|date:"M j, Y" }}</div>
-                            </div>
-                        </a>
-                    {% else %}
-                        <div class="flex items-center gap-2 p-1.5 rounded-lg bg-base-300/20">
-                            <div class="w-9 h-9 rounded-md bg-base-300/30 flex items-center justify-center shrink-0">
-                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-base-content)' size='w-4 h-4 opacity-20' %}
-                            </div>
-                            <div>
-                                <div class="text-[0.55rem] text-base-content/40 uppercase font-medium">Milestone</div>
-                                <div class="text-xs text-base-content/30 italic">{% if profile.total_plats < 10 %}< 10 plats{% elif profile.sync_status == 'syncing' %}...{% else %}None{% endif %}</div>
-                            </div>
-                        </div>
-                    {% endif %}
-                    {% endwith %}
-                </div>
+            {# Level: the single accent figure, mirroring how the hunter cards mark it. #}
+            <div class="shrink-0 text-right">
+                <span class="pp-tally text-primary leading-none font-bold text-2xl md:text-4xl" data-countup="{{ profile.trophy_level }}">{{ profile.trophy_level|intcomma }}</span>
+                <span class="block text-[0.6rem] md:text-xs text-base-content/50 uppercase tracking-wider mt-0.5 md:mt-1">Level</span>
             </div>
-            {% endif %}
+        </div>
+
+        {% comment %}Level progress. `profile.progress` is the percentage into the CURRENT level, which is
+        a different question from average completion below -- so it rides the identity block it belongs to
+        rather than joining the stat grid.{% endcomment %}
+        {% if profile.progress %}
+        <div class="mt-3 md:mt-4">
+            {% include 'components/horizon.html' with progress=profile.progress height='6px' %}
+            <p class="pp-phero__prog">{{ profile.progress|floatformat:0 }}% to level {{ profile.trophy_level|add:1 }}</p>
+        </div>
+        {% endif %}
+
+        {# ── Standing ── #}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+            <div class="scard">
+                <div class="scard__label">Trophies</div>
+                <div class="scard__value pp-tally" data-countup="{{ header_stats.total_earned_trophies }}">{{ header_stats.total_earned_trophies|intcomma }}</div>
+            </div>
+            <div class="scard">
+                <div class="scard__label">Platinums</div>
+                <div class="scard__value pp-tally" data-countup="{{ profile.total_plats }}">{{ profile.total_plats|intcomma }}</div>
+            </div>
+            <div class="scard">
+                <div class="scard__label">Games</div>
+                <div class="scard__value pp-tally" data-countup="{{ header_stats.total_games }}">{{ header_stats.total_games|intcomma }}</div>
+            </div>
+            <div class="scard">
+                <div class="scard__label">Completed</div>
+                <div class="scard__value pp-tally" data-countup="{{ header_stats.total_completions }}">{{ header_stats.total_completions|intcomma }}</div>
+            </div>
+        </div>
+
+        {% comment %}The tier split. This is the one surface the scoped trophy colour family belongs on --
+        it IS trophies -- and it is read as a shape (a wide bronze base narrowing to a few platinums) more
+        than as four numbers, which is why they sit in one row rather than four cards.{% endcomment %}
+        <div class="pp-phero__tiers mt-3 md:mt-4">
+            <span class="pp-phero__tier" data-tier="platinum"><i></i>{{ profile.total_plats|intcomma }}</span>
+            <span class="pp-phero__tier" data-tier="gold"><i></i>{{ profile.total_golds|intcomma }}</span>
+            <span class="pp-phero__tier" data-tier="silver"><i></i>{{ profile.total_silvers|intcomma }}</span>
+            <span class="pp-phero__tier" data-tier="bronze"><i></i>{{ profile.total_bronzes|intcomma }}</span>
+            <span class="pp-phero__avg">{{ header_stats.average_completion|floatformat:0 }}% average completion</span>
         </div>
     </div>
-
-    {# Badge Showcase and Platinum Trophy Case cards removed: both are now #}
-    {# user-configurable showcase types managed through the Profile Editor. #}
-
-</div>
+</section>
