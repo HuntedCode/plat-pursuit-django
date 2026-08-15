@@ -752,6 +752,30 @@ def test_the_quick_rate_modal_caps_the_dialog_not_the_body():
     assert '.gd-modal--qr { max-height:' in css or 'max-height: 92vh' in css, 'the dialog itself is uncapped'
 
 
+def test_the_submit_button_cannot_end_up_below_the_fold():
+    """Capping the dialog stopped the button being CLIPPED; it did not stop it being below the scroll. Eight
+    stacked fields is about 130px more than a 360x740 phone has, so on a real Galaxy S8+ you still had to
+    scroll to reach it -- and shrinking controls to fit is the wrong trade on the surface where they are
+    hardest to hit.
+
+    Two independent fixes, because neither alone is enough at every height. The four scored axes pair into
+    two columns at EVERY width (a 1fr column in this modal is ~149px, which a slider and its scale sit in
+    comfortably), which buys back more than the overflow. And the actions stick to the bottom of the scroll
+    area, so a shorter phone, a landscape keyboard or large text cannot put the button out of reach either.
+    """
+    css = (ROOT / 'static' / 'css' / 'components' / 'game-detail.css').read_text(encoding='utf-8')
+
+    grid = css.index('.gd-modal--qr .gd-qr {')
+    breakpoint_640 = css.index('@media (min-width: 640px)', grid)
+    assert 'grid-template-columns: 1fr 1fr' in css[grid:breakpoint_640], (
+        'the two-column pairing is back behind a breakpoint -- it is the mobile layout that needs it most'
+    )
+
+    actions = css[css.index('.gd-modal--qr .gd-qr__actions {'):]
+    actions = actions[:actions.index('\n}')]
+    assert 'position: sticky' in actions, 'the actions row can scroll out of reach again'
+
+
 def test_an_unanswered_card_falls_back_rather_than_going_edgeless(client):
     """`--rec-c` is declared on the base, not only on the states that set it: an undefined custom property
     invalidates the whole declaration it appears in rather than falling back, so a rating from before the

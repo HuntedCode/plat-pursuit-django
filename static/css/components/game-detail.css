@@ -1498,11 +1498,39 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-qr__notice,
 .gd-qr__actions { grid-column: 1 / -1; }
 
-@media (min-width: 640px) {
-    .gd-modal--qr .gd-qr {
-        display: grid; grid-template-columns: 1fr 1fr; gap: 11px 16px; align-content: start;
-    }
-    .gd-modal--qr .gd-qr__actions { margin-top: 0; }
+/* TWO COLUMNS AT EVERY WIDTH the modal is shown at, not from 640px up.
+ *
+ * Eight stacked fields is roughly 130px more than a 360x740 phone has, so the submit button started below
+ * the fold -- and the fix is not smaller controls. The four scored axes are the only fields that pair, and
+ * a 1fr column here is ~149px, which a range input, its "Easy/Brutal" scale and a "Grindiness" label all
+ * sit in comfortably. Pairing them turns four rows into two and buys back more than the overflow.
+ *
+ * The three conclusion rows (Overall, the recommendation, the quick take) still span, so the reading order
+ * is unchanged from the one the source order sets -- which is the point of that rule sitting outside this
+ * block. The wizard's rail is untouched: this is scoped to the modal, and the rail is a different width
+ * with a trophy list beside it.
+ */
+.gd-modal--qr .gd-qr {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 11px 12px; align-content: start;
+}
+.gd-modal--qr .gd-qr__actions { margin-top: 0; }
+@media (min-width: 640px) { .gd-modal--qr .gd-qr { gap: 11px 16px; } }
+
+/* And the actions STICK to the bottom of the scroll area, so "scroll to reach submit" stops being possible
+ * at any height. The two-column pass above is what makes the form nearly fit on a 360x740 phone; this is
+ * what makes it not matter on the ones it still does not fit -- a shorter phone, a landscape keyboard, or
+ * a hunter running large text. The button is the one control that must never be the part off screen.
+ *
+ * Full-bleed via negative margins against the body's own padding, so content scrolls behind it rather than
+ * down its sides, and it sits flush to the bottom edge instead of floating 12px above it. When the form
+ * DOES fit, nothing is stuck and the rule above the buttons simply reads as the separator it looks like.
+ */
+.gd-modal--qr .gd-qr__actions {
+    position: sticky; bottom: -12px; z-index: 1;
+    margin-inline: -14px; margin-bottom: -12px;
+    padding: 10px 14px 12px;
+    background: var(--pp-bg-1);
+    border-top: 1px solid var(--pp-divider, var(--pp-border));
 }
 .gd-qr__field { display: flex; flex-direction: column; gap: 6px; }
 .gd-qr__lbl { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 600; color: var(--pp-text); }
