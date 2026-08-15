@@ -560,8 +560,13 @@ def test_every_grid_gets_the_selector_its_own_cards_use():
     root = Path(__file__).resolve().parents[2]
     js = (root / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')
 
-    assert "if (tab === 'games') { cardSel = '.pp-gcard'; }" in js, 'the games grid is back on .card'
-    assert "isActivity ? '.pp-act__cell' : '.pp-actt__card'" in js
+    assert "cardSel = revealSel = '.pp-gcard';" in js, 'the games grid is back on .card'
+    assert "cardSel = isActivity ? '.pp-act__cell' : '.pp-actt__card'" in js
+
+    # The APPEND unit and the REVEAL target are separate on the activity wall: `.pp-act__cell` is
+    # `display: contents` (it carries a month header along with its tile as one appendable thing) and so
+    # has no box to animate. See test_profile_detail_queries for the failure that distinction prevents.
+    assert "revealSel = isActivity ? '.pp-gtile'" in js
 
     # And the selectors must match what those partials actually render.
     games = (root / 'templates/trophies/partials/profile_detail/game_list_items.html').read_text(encoding='utf-8')

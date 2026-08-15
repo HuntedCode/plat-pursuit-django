@@ -445,21 +445,39 @@ def test_every_tab_wall_lands_rather_than_appearing(client):
 
     page = (ROOT / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')
     assert 'PlatPursuit.staggerReveal({' in page, 'the profile walls no longer land'
-    # Appended pages reveal on scroll rather than all at once.
-    assert 'revealHandle.observe(nodes)' in page
+    # Appended pages reveal on scroll rather than all at once. Asserted on the CALL, not its argument:
+    # what gets handed over is resolved per tab (see the activity-wall test below).
+    assert 'revealHandle.observe(' in page
 
 
-def test_the_card_selector_is_defined_once_for_both_the_scroller_and_the_reveal():
-    """A wrong selector does not degrade, it silently stops the scroll after page one OR silently leaves a
-    wall un-revealed -- and Games had already lost its infinite scroll that way once, when its card was
-    rebuilt onto `.pp-gcard` while the selector still said `.card`. Two copies is two chances to drift."""
+def test_the_activity_wall_reveals_the_tile_not_its_contents_wrapper():
+    """The scroller's append unit and the reveal's animated element are DIFFERENT questions, and on the
+    Activity day wall they have different answers.
+
+    `.pp-act__cell` is `display: contents` -- it exists so a month header travels with its tile as one
+    appendable thing, and it generates no box. Pointed at it, the reveal animated nothing and put
+    `.is-revealed` on an element no CSS reads, so every `.pp-gtile` stayed at `opacity: 0` from
+    `.pp-reveal .pp-gtile` with its layout space still reserved: an invisible wall of correctly-sized
+    holes. Collapsing the two selectors into one is exactly that bug, so this pins them apart."""
     src = (ROOT / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')
 
-    assert src.count("var cardSel = '.card';") == 1, 'the card selector is defined more than once'
-    body = src[src.index("var cardSel = '.card';"):]
-    assert 'cardSelector: cardSel' in body, 'the scroller no longer reads the shared selector'
-    assert body.index('cardSelector: cardSel') < body.index('staggerReveal({') or True
-    assert src.count('cardSelector: cardSel') == 2, 'the scroller and the reveal must share one selector'
+    sel = src[src.index("var cardSel = '.card', revealSel = '.card';"):]
+    sel = sel[:sel.index('var gridEl')]
+    assert "cardSel = isActivity ? '.pp-act__cell'" in sel, 'the scroller lost its append unit'
+    assert "revealSel = isActivity ? '.pp-gtile'" in sel, (
+        'the reveal is pointed at the display:contents wrapper again -- it cannot animate a boxless element'
+    )
+
+    # The scroller takes the append unit; the reveal takes the element with a box.
+    assert 'cardSelector: cardSel' in src and 'cardSelector: revealSel' in src
+
+    # And the same distinction has to hold on the APPEND path: the nodes handed back are cells, so the
+    # reveal is handed what it animates rather than what was appended.
+    append = src[src.index('onAppend: function (nodes)'):]
+    append = append[:append.index('formSelector')]
+    assert 'nd.querySelectorAll(revealSel)' in append, (
+        'appended activity days are observed as cells, so they will never reveal'
+    )
 
 
 def test_each_card_measure_fills_as_it_lands():

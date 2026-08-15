@@ -207,16 +207,30 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             var params = new URLSearchParams(window.location.search);
             var isActivity = !(tab === 'trophies' && ((params.get('q') || '').trim() || params.get('tier')));
 
-            // Every grid has its OWN card class, and BOTH the scroller and the reveal are driven by it --
-            // the scroller appends only what matches, the reveal animates only what matches. Hoisted above
-            // both so there is one definition rather than two that can disagree: a wrong selector does not
-            // degrade, it silently stops the scroll after page one (which is exactly what had happened to
-            // Games since its card was rebuilt onto `.pp-gcard`) or silently leaves a wall un-revealed.
-            var cardSel = '.card';
-            if (tab === 'games') { cardSel = '.pp-gcard'; }
-            else if (tab === 'ratings') { cardSel = '.pp-rcard'; }
-            else if (tab === 'badges') { cardSel = '.pp-gallery__card'; }
-            else if (tab === 'trophies') { cardSel = isActivity ? '.pp-act__cell' : '.pp-actt__card'; }
+            // TWO selectors, because the scroller and the reveal are asking different questions, and on
+            // one view the answers differ.
+            //
+            //   cardSel   -- the scroller's APPEND UNIT. What gets moved out of a fetched page and into
+            //                the grid. A wrong value here does not degrade, it silently stops the scroll
+            //                after page one (which is what had happened to Games when its card was
+            //                rebuilt onto `.pp-gcard` while this still said `.card`).
+            //   revealSel -- the element the reveal ANIMATES, which must have a box and must be what the
+            //                `.pp-reveal` CSS hides.
+            //
+            // They are the same element everywhere except the Activity day wall, where the append unit is
+            // `.pp-act__cell` -- a `display: contents` wrapper that exists so a month header travels with
+            // its tile as one appendable thing. Having no box, it cannot be animated and cannot carry
+            // `.is-revealed`; pointed at it, the reveal left every `.pp-gtile` hidden by
+            // `.pp-reveal .pp-gtile { opacity: 0 }` with its space still reserved. Collapsing these two
+            // into one selector is exactly the bug.
+            var cardSel = '.card', revealSel = '.card';
+            if (tab === 'games') { cardSel = revealSel = '.pp-gcard'; }
+            else if (tab === 'ratings') { cardSel = revealSel = '.pp-rcard'; }
+            else if (tab === 'badges') { cardSel = revealSel = '.pp-gallery__card'; }
+            else if (tab === 'trophies') {
+                cardSel = isActivity ? '.pp-act__cell' : '.pp-actt__card';
+                revealSel = isActivity ? '.pp-gtile' : '.pp-actt__card';
+            }
 
             var gridEl = document.getElementById(tab + '-grid');
             var sentinelEl = document.getElementById(tab + '-sentinel');
@@ -238,9 +252,22 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
                     30 and its resume arithmetic was wrong by that gap.{% endcomment %}
                     paginateBy: {{ scroll_per_page|default:30 }},
                     cardSelector: cardSel,
-                    // Appended pages reveal as they SCROLL into view rather than all at once, which
-                    // is the observer half of staggerReveal.
-                    onAppend: function (nodes) { if (revealHandle) { revealHandle.observe(nodes); } },
+                    // Appended pages reveal as they SCROLL into view rather than all at once, which is the
+                    // observer half of staggerReveal. The appended NODE is not always the animated
+                    // element -- Activity appends `display: contents` cells wrapping the tiles -- so hand
+                    // the reveal what it actually animates, or appended days stay hidden by the same
+                    // `.pp-reveal .pp-gtile` rule with nothing ever un-hiding them.
+                    onAppend: function (nodes) {
+                        if (!revealHandle) { return; }
+                        var targets = [];
+                        Array.prototype.forEach.call(nodes, function (nd) {
+                            if (nd.matches && nd.matches(revealSel)) { targets.push(nd); }
+                            else if (nd.querySelectorAll) {
+                                Array.prototype.push.apply(targets, nd.querySelectorAll(revealSel));
+                            }
+                        });
+                        revealHandle.observe(targets);
+                    },
                     formSelector: '#' + tab + '-form'
                     {% comment %}NO `scrollKey`, and it is a bug fix rather than an omission.
 
@@ -294,7 +321,7 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
                 var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
                 var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
                 revealHandle = PlatPursuit.staggerReveal({
-                    grid: revealGrid, cardSelector: cardSel, step: 22,
+                    grid: revealGrid, cardSelector: revealSel, step: 22,
                     reveal: function (el, delayMs) {
                         if (!el.animate) { return; }
                         el.animate([{ opacity: 0 }, { opacity: 1 }],
