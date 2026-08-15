@@ -64,15 +64,82 @@
         function initTabContent() {
             var tab = getTabFromUrl();
 
+            // Activity: a day tile opens its day in the shared detail modal. HTMX fetches `profile_day`
+            // into the mount; this reveals the dialog it brings and remembers the tile, so focus can return
+            // where it came from. The tile stays a real <a> to that URL -- without JS it is simply a page.
+            //
+            // There is no expand/collapse here any more, and no morph with it: every game in a day renders
+            // already open. The collapsed poster grid and the animation between the two states were built
+            // and removed -- inside a dialog the posters were small, the extra click bought nothing, and the
+            // motion was there for its own sake.
+            var panel = document.getElementById('tab-content');
+            if (panel && !panel.dataset.actWired) {
+                panel.dataset.actWired = '1';
+
+                function closeDay() {
+                    var modal = panel.querySelector('[data-act-modal]');
+                    if (!modal || modal.hidden) { return; }
+                    modal.hidden = true;
+                    var opener = panel.querySelector('[data-act-day][data-act-opened]');
+                    if (opener) { opener.removeAttribute('data-act-opened'); opener.focus(); }
+                }
+
+                panel.addEventListener('htmx:afterSwap', function (e) {
+                    if (e.target.id !== 'act-day-modal') { return; }
+                    var modal = e.target.querySelector('[data-act-modal]');
+                    if (!modal) { return; }
+                    modal.hidden = false;
+                    var dialog = modal.querySelector('.pp-detail-modal__dialog');
+                    if (dialog) { dialog.focus(); }
+                });
+
+                panel.addEventListener('click', function (e) {
+                    var tile = e.target.closest('[data-act-day]');
+                    if (tile) { tile.setAttribute('data-act-opened', '1'); }
+                    if (e.target.closest('[data-act-close]')) { e.preventDefault(); closeDay(); }
+                });
+
+                document.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape') { closeDay(); }
+                });
+            }
+
+
             // InfiniteScroller for paginated tabs
             var gridEl = document.getElementById(tab + '-grid');
             var sentinelEl = document.getElementById(tab + '-sentinel');
             if (gridEl && sentinelEl) {
+                // Activity appends day TILES, every other grid appends cards -- so both the page size and
+                // the card selector differ. Getting either wrong fails silently rather than loudly: the
+                // scroller gates its first fetch on `grid.children.length >= paginateBy` and counts
+                // existing cards with `cardSelector` to resume, so a 28-tile grid told it had 50 per page
+                // simply never observes its sentinel, and a selector that matches nothing re-fetches page
+                // 2 after an HTMX history restore. The selector is the CELL, not the tile: the scroller
+                // appends only what matches it and discards the rest, so selecting the tile alone dropped
+                // every month header from every appended page.
+                // Which SHAPE the trophies tab is in, derived the same way the view derives it: from the
+                // search params. It used to read `?view=`, the removed Activity/Log switcher's param --
+                // which nothing sets any more, so this was unconditionally true and the search results
+                // were handed the day wall's page size AND the day wall's card selector. The scroller
+                // appends only what its selector matches, so search simply stopped after one page.
+                var params = new URLSearchParams(window.location.search);
+                var isActivity = !(tab === 'trophies' && ((params.get('q') || '').trim() || params.get('tier')));
+
+                // Every grid has its OWN card class, and the scroller appends only what its selector
+                // matches -- so a wrong selector here does not degrade, it silently stops the scroll after
+                // page one. That is exactly what had happened to Games since its card was rebuilt onto
+                // `.pp-gcard`: `.card` matched nothing in the appended HTML, so it looked like there was
+                // simply no more history.
+                var cardSel = '.card';
+                if (tab === 'games') { cardSel = '.pp-gcard'; }
+                else if (tab === 'trophies') { cardSel = isActivity ? '.pp-act__cell' : '.pp-actt__card'; }
+
                 PlatPursuit.InfiniteScroller.create({
                     gridId: tab + '-grid',
                     sentinelId: tab + '-sentinel',
                     loadingId: tab + '-loading',
-                    paginateBy: 50,
+                    paginateBy: {{ trophies_per_page|default:30 }},
+                    cardSelector: cardSel,
                     formSelector: '#' + tab + '-form',
                     scrollKey: 'profileScrollPos'
                 });

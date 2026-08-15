@@ -119,3 +119,411 @@
 .pp-pgcard__tier[data-tier="gold"]     { --tier-c: var(--color-trophy-gold); }
 .pp-pgcard__tier[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
 .pp-pgcard__tier[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }
+
+/* ==========================================================================
+ * PROFILE ACTIVITY -- trophy hunting as SESSIONS (one game, one day).
+ *
+ * A column you scan down by DATE: the day heading is the axis, the cards under it are what happened. That
+ * is why the date is stated once per group rather than repeated on every card, and why the cards are wide
+ * rows rather than a grid -- a grid has no reading order, and this has exactly one.
+ * ========================================================================== */
+/* ---- The day: a full-width CARD holding a wall of session posters ------------------------------- */
+/* The combined shape the Franchise/Company pages use (.fgroup): one card per grouping, its members
+   inside. The day stays FULL WIDTH rather than sharing a row -- the posters are what use a wide screen
+   here, and a two-column day grid took the width the art needs. */
+/* ---- Tier 1: the day wall ----------------------------------------------------------------------- */
+/* Days ARE the shared grouping tile (.pp-gtile) -- a tile representing a collection of games is exactly
+   what a day is, mosaic and all -- so this file only adds what that tile does not already carry. The grid
+   is .pp-gtile-grid, unchanged: 2 / 3 / 4 / 5 across by width. */
+/* A platinum day. The seal is the franchise cards' corner-star treatment; the edge is so the day reads
+   as special before you get to any text on it. Both, because on a wall of thirty tiles a 9px word in the
+   count line is not a signal. */
+.pp-act__tile--plat {
+    border-color: color-mix(in oklab, var(--color-trophy-platinum) 45%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                0 6px 20px rgba(0, 0, 0, 0.30),
+                0 0 0 1px color-mix(in oklab, var(--color-trophy-platinum) 18%, transparent);
+}
+.pp-act__seal {
+    position: absolute; top: 6px; right: 6px; z-index: 3;
+    display: inline-flex; align-items: center; gap: 3px;
+    min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+    background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-trophy-platinum) 55%, transparent);
+    color: var(--color-trophy-platinum);
+    backdrop-filter: blur(3px);
+}
+.pp-act__seal svg { width: 11px; height: 11px; }
+/* The count only when there is more than one -- a bare star already says "a platinum happened here". */
+.pp-act__seal b { font-size: 0.6rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* One day: its month header (when it opens one) and its tile, as a single appendable unit.
+   `display: contents` so both children remain direct grid items -- the wrapper is a handle for the
+   infinite scroller, not a box. Without it the scroller, which appends only what matches its card
+   selector, dropped every month header on every page after the first. */
+.pp-act__cell { display: contents; }
+
+/* A month break across the whole wall. `1 / -1` regardless of how many columns the tile grid is running,
+   so it stays a full-width rule at every breakpoint without knowing the count.
+
+   The SPACE is what makes it read as a break -- more than the type does. Scrolling a wall of evenly
+   spaced tiles, a divider with a tile's own gap above it is just another row; the gap is the signal that
+   one stretch of time ended and another began. */
+.pp-act__month {
+    grid-column: 1 / -1;
+    display: flex; align-items: baseline; gap: 12px;
+    margin: 22px 0 2px;
+    font-size: 0.95rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--pp-text);
+}
+@media (min-width: 768px) { .pp-act__month { margin-top: 30px; font-size: 1.05rem; gap: 14px; } }
+
+/* The YEAR held back from the month. You scan for "August", not for "2026" -- and on a wall that is mostly
+   one year, the year repeated at full strength on every header is the least useful thing on it. */
+.pp-act__month-yr { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; color: var(--pp-text-mute); }
+
+/* The rule is the divider; the label sits at its head. A centred label would put a break in the middle of
+   a wall you are scanning down the left edge of. */
+.pp-act__month::after {
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(90deg,
+        color-mix(in oklab, var(--pp-primary) 34%, transparent),
+        var(--pp-divider, var(--pp-border)) 42%,
+        transparent);
+}
+
+/* Only the wall's FIRST header sits flush -- it opens the wall rather than breaking it.
+   Scoped through the CELL, not `:first-child` on the header: every header is the first child of its own
+   wrapper, so the naive form matched all of them and quietly zeroed the spacing this whole rule is for. */
+.pp-act__cell:first-child .pp-act__month { margin-top: 0; }
+
+/* ---- Tier 2: the day modal ---------------------------------------------------------------------- */
+/* The shared .pp-detail-modal supplies the scrim, dialog and close; this sizes it for a wall of game
+   posters, which is the room the tiered structure exists to give them. */
+.pp-actday .pp-detail-modal__dialog { width: min(1040px, 100%); max-height: 88vh; overflow-y: auto; }
+.pp-actday__head { padding: 4px 4px 12px; border-bottom: 1px solid var(--pp-divider, var(--pp-border)); margin-bottom: 12px; }
+.pp-actday__date { margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--pp-text); }
+@media (min-width: 768px) { .pp-actday__date { font-size: 1.25rem; } }
+.pp-actday__stats { margin: 4px 0 0; font-size: 0.76rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.pp-actday__stats b { color: var(--pp-text-dim); font-weight: 800; }
+.pp-actday__plat { color: var(--color-trophy-platinum); }
+
+/* The poster wall, finally at full dialog width. `auto-fill` with a min track: it answers to the DIALOG,
+   which is not a breakpoint. */
+.pp-actday__games { display: grid; grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: 8px; align-items: start; }
+@media (min-width: 768px) { .pp-actday__games { grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 10px; } }
+/* An expanded game takes the whole wall, whatever the grid is doing around it. */
+.pp-actday__games 
+.pp-actday__link {
+    display: block; margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid var(--pp-divider, var(--pp-border));
+    text-align: center; font-size: 0.74rem; font-weight: 700;
+    color: var(--pp-text-mute); text-decoration: none;
+}
+.pp-actday__link:hover { color: var(--pp-primary); }
+
+/* ---- A session: poster by default, row when open ------------------------------------------------ */
+/* ONE element in two layouts, not two elements swapped. That is what lets the cover travel between them
+   instead of one card disappearing and another appearing. */
+.pp-act__session {
+    border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    overflow: hidden; min-width: 0;
+}
+.pp-act__session--plat { border-color: color-mix(in oklab, var(--color-trophy-platinum) 38%, var(--pp-border)); }
+/* Open: takes the day's full width, whatever the poster grid is doing around it. */
+
+.pp-act__row {
+    width: 100%; display: flex; flex-direction: column; gap: 0;
+    padding: 0; background: none; border: 0; color: inherit; font: inherit;
+    text-align: left; cursor: pointer;
+    transition: background var(--pp-dur-fast, 0.15s) var(--pp-ease);
+}
+@media (hover: hover) { .pp-act__row:hover { background: color-mix(in oklab, var(--pp-text) 5%, transparent); } }
+.pp-act__row:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+/* Open: the poster becomes a row -- art left, facts right, at the compact size the trophy list sits under. */
+.is-open .pp-act__row { flex-direction: row; align-items: center; gap: 10px; padding: 8px 10px; }
+@media (min-width: 768px) { .is-open .pp-act__row { gap: 13px; padding: 9px 12px; } }
+
+/* The cover is the element that TRAVELS: a full-bleed poster collapsed, a thumbnail open. Sized in CSS
+   both ways; the JS only animates between the two boxes it is given. */
+/* position: relative so the poster's PLAT seal has something to anchor to; it is the cover it sits on,
+   not the card, so the seal travels with the art rather than with the box. */
+.pp-act__cover { position: relative; width: 100%; aspect-ratio: 3 / 4; overflow: hidden; background: var(--pp-bg-1, var(--pp-bg-2)); flex: none; }
+.is-open .pp-act__cover { width: 38px; border-radius: var(--pp-radius-sm); }
+@media (min-width: 768px) { .is-open .pp-act__cover { width: 44px; } }
+/* Absolutely filling the cover, NOT sized at 100%.
+   The cover's box is animated (poster <-> thumbnail) while it also carries `aspect-ratio`, and a
+   percentage-sized child can resolve against the ratio-derived height instead of the animated one -- so
+   the art sat still through the whole close and corrected itself on release. `inset: 0` pins it to the
+   cover's real box at every frame, whatever is driving that box.
+   object-top: PSN fallback art is wider than the 3/4 container, and the logo lives at the top. */
+.pp-act__art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.pp-act__art--placeholder { object-fit: contain; padding: 8px; }
+
+.pp-act__body { min-width: 0; width: 100%; display: flex; flex-direction: column; gap: 2px; padding: 7px 8px 8px; }
+.is-open .pp-act__body { width: auto; flex: 1; padding: 0; gap: 3px; }
+.pp-act__title {
+    font-size: 0.74rem; font-weight: 700; color: var(--pp-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (min-width: 768px) { .pp-act__title { font-size: 0.8rem; } }
+.is-open .pp-act__title { font-size: 0.82rem; }
+@media (min-width: 768px) { .is-open .pp-act__title { font-size: 0.88rem; } }
+
+.pp-act__stats { display: flex; align-items: baseline; gap: 5px; font-variant-numeric: tabular-nums; }
+.pp-act__n { font-size: 0.82rem; font-weight: 800; color: var(--pp-primary); line-height: 1; }
+.pp-act__n-lbl { font-size: 0.62rem; font-weight: 600; color: var(--pp-text-mute); }
+/* Context, not a headline -- and only once the row has the width to carry it. */
+.pp-act__span { margin-left: 6px; font-size: 0.64rem; color: var(--pp-text-mute); display: none; }
+.is-open .pp-act__span { display: inline; }
+
+/* Same dot-and-figure vocabulary as the hero's tier strip and the game card's, so a colour means one
+   thing everywhere on this profile. A poster is too narrow for four figures -- they arrive with the row. */
+.pp-act__tiers { display: none; align-items: center; flex-wrap: wrap; gap: 2px 8px; font-variant-numeric: tabular-nums; }
+.is-open .pp-act__tiers { display: flex; }
+.pp-act__tier { display: inline-flex; align-items: center; gap: 3px;
+                font-size: 0.62rem; font-weight: 700; color: var(--pp-text-dim); white-space: nowrap; }
+.pp-act__tier i { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--tier-c); }
+.pp-act__tier[data-tier="platinum"] { --tier-c: var(--color-trophy-platinum); }
+.pp-act__tier[data-tier="gold"]     { --tier-c: var(--color-trophy-gold); }
+.pp-act__tier[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
+.pp-act__tier[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }
+
+/* On a poster the PLAT chip rides the ART, where it reads as a seal on the cover rather than another
+   line of text under it. Open, it rejoins the row. */
+.pp-act__plat {
+    position: absolute; top: 5px; right: 5px; z-index: 2;
+    padding: 2px 6px; border-radius: 4px;
+    font-size: 0.55rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--color-trophy-platinum);
+    background: color-mix(in oklab, var(--pp-bg-0, #000) 72%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-trophy-platinum) 45%, transparent);
+    backdrop-filter: blur(3px);
+}
+/* Gone in the row: the seal lives INSIDE the cover so it travels with the art, and the cover is
+   `overflow: hidden` at 38px there -- a static chip would simply be clipped away. Nothing is lost, because
+   the open row states the platinum outright in its tier figures, and the card keeps its platinum border. */
+.is-open .pp-act__plat { display: none; }
+
+
+/* ---- The expansion ------------------------------------------------------------------------------ */
+.pp-act__trophies { border-top: 1px solid var(--pp-divider, var(--pp-border)); }
+/* The expanded session's trophies: a wall of small CARDS, not a list.
+   `auto-fill` with a min track, because these sit inside the day CARD -- the container's width is what
+   they answer to, and it is not the viewport's. */
+.pp-actt {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 6px; padding: 8px; align-items: start;
+}
+@media (min-width: 768px) { .pp-actt { grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 8px; padding: 10px; } }
+
+/* The search results' wall. A track FLOOR rather than a fixed column count: `auto-fill` alone packed a
+   fifth column of truncated text, but pinning it to two made a 2-across wall inside a tab whose day view
+   runs to five. Its cards are PORTRAIT -- art on top, facts below -- so the track is narrower than the
+   old horizontal card's and the card is bigger for it. */
+.pp-actt--log { padding: 0; grid-template-columns: repeat(auto-fill, minmax(182px, 1fr)); gap: 10px; }
+@media (min-width: 768px) { .pp-actt--log { grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: 14px; } }
+
+.pp-actt__card {
+    display: flex; align-items: center; gap: 9px; min-width: 0;
+    padding: 7px 9px; border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-1, var(--pp-bg-2));
+    border: 1px solid var(--pp-border);
+    /* The tier reads as an edge rather than a fill: a wall of these, each flooded with its tier colour,
+       would out-shout the session card holding them. */
+    border-left: 3px solid var(--tier-c, var(--pp-border));
+}
+.pp-actt__card[data-tier="platinum"] { --tier-c: var(--color-trophy-platinum); }
+.pp-actt__card[data-tier="gold"]     { --tier-c: var(--color-trophy-gold); }
+.pp-actt__card[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
+.pp-actt__card[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }
+
+/* In the search wall the card is FREE content on the substrate, not a well inside a raised session card,
+   so it takes the content-card lift -- catch light above, cast below. */
+.pp-actt--log .pp-actt__card {
+    position: relative;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 14px rgba(0, 0, 0, 0.26);
+    transition: border-color var(--pp-dur-fast, 0.15s) var(--pp-ease),
+                box-shadow var(--pp-dur-fast, 0.15s) var(--pp-ease);
+}
+/* Hover glow, not scale -- the wall is dense and a scaling card shoves its neighbours. */
+@media (hover: hover) {
+    .pp-actt--log .pp-actt__card:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                    0 6px 20px -4px color-mix(in oklab, var(--pp-primary) 34%, transparent);
+    }
+}
+/* The whole card is the link (a stretched anchor), so the ring belongs to the card, not the 11px text. */
+.pp-actt--log .pp-actt__card:focus-within { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* PORTRAIT: the composed art on top, everything else beneath it. The same shape the badge gallery card
+   uses -- object above, caption below, centred -- so a wall of these reads like the site's other walls
+   rather than like a table that lost its columns. The tier keeps its edge, now along the top. */
+.pp-actt__card--game {
+    flex-direction: column; align-items: center; text-align: center;
+    /* Generous, and deliberately so. The horizontal card could sit on 9px because its text ran along one
+       axis with the art beside it; centred two-line text fills the card's whole width, so at 10px it read
+       as touching the edges. A poster card's padding has to clear its widest line, not its tallest. */
+    gap: 10px; padding: 16px 18px 14px;
+    border-left: 1px solid var(--pp-border);
+    border-top: 3px solid var(--tier-c, var(--pp-border));
+}
+@media (min-width: 768px) { .pp-actt__card--game { gap: 12px; padding: 18px 20px 15px; } }
+
+/* Cover + the trophy icon set into it. One object, not two images competing side by side.
+   `align-self: center` rather than stretch: a stretched flex item takes its cross size from the STRETCH,
+   not from `aspect-ratio`, which grew the cover by a different amount per card and let
+   `object-position: top` crop the bottom off by that varying amount. */
+.pp-actt__art { position: relative; flex: none; align-self: center; width: 88px; aspect-ratio: 3 / 4; }
+@media (min-width: 768px) { .pp-actt__art { width: 104px; } }
+.pp-actt__cover {
+    width: 100%; height: 100%; object-fit: cover; object-position: top; display: block;
+    border-radius: 6px; background: var(--pp-bg-1, var(--pp-bg-2));
+}
+/* object-contain for a PS placeholder icon, which is a logo rather than cover art. */
+.pp-actt__cover--placeholder { object-fit: contain; padding: 6px; }
+.pp-actt__ico--inset {
+    position: absolute; right: -7px; bottom: -7px; width: 36px; height: 36px; border-radius: 7px;
+    /* Ringed in the CARD's own surface so it reads as sitting on top of the cover rather than punched out
+       of it, with the tier hue kept as a hairline outside that -- the session's icon carries the tier ring,
+       and the variant with more room should not lose it. */
+    border: 2px solid var(--pp-bg-1, var(--pp-bg-2));
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--tier-c) 45%, transparent),
+                0 2px 6px rgba(0, 0, 0, 0.5);
+}
+@media (min-width: 768px) { .pp-actt__ico--inset { width: 40px; height: 40px; } }
+
+.pp-actt__ico {
+    flex: none; width: 34px; height: 34px; border-radius: 6px; object-fit: cover;
+    border: 1px solid color-mix(in oklab, var(--tier-c) 45%, transparent);
+}
+.pp-actt__body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.pp-actt__card--game .pp-actt__body { width: 100%; flex: none; align-items: center; gap: 3px; }
+
+/* Type. The session's sizes were set for a 200px track inside a day card; the Log puts the same card in a
+   340px+ one, so it steps up rather than inheriting a scale built for a narrower box. Nothing readable
+   sits under 12px here -- the design system's floor -- and the meta row collapses to two sizes instead of
+   three near-identical ones. */
+.pp-actt__name {
+    font-size: 0.74rem; font-weight: 700; color: var(--pp-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pp-actt__card--game .pp-actt__name {
+    font-size: 0.8rem; line-height: 1.3;
+    white-space: normal; overflow: hidden; width: 100%;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    /* Two lines RESERVED, not just capped: a one-line name beside a two-line one made every row of the
+       wall a different height. The space is held whether or not the text needs it. */
+    min-height: calc(2 * 1.3em);
+}
+@media (min-width: 768px) { .pp-actt__card--game .pp-actt__name { font-size: 0.85rem; } }
+
+/* The game, in the search results only -- there it is what you are searching by, so it takes the
+   secondary the profile uses for "earned" elsewhere rather than the muted grey of a description. */
+.pp-actt__game {
+    font-size: 0.72rem; font-weight: 700; text-decoration: none;
+    color: color-mix(in oklab, var(--pp-secondary) 72%, var(--pp-text));
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* On a poster card it WRAPS rather than running as one nowrap line. A single centred line stretches to
+   whatever measure it is given, so it reads as touching the edges however much padding sits outside it --
+   which is why adding padding alone never looked like it did anything. Two lines, reserved like the
+   others so the card height stays uniform. */
+.pp-actt__card--game .pp-actt__game {
+    white-space: normal; line-height: 1.3; width: 100%;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    min-height: calc(2 * 1.3em);
+}
+.pp-actt--log .pp-actt__card:hover .pp-actt__game { color: var(--pp-secondary); }
+
+.pp-actt__desc {
+    font-size: 0.65rem; color: var(--pp-text-mute);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Two lines in the Log: the description is the half worth reading, and one nowrap line at this width is a
+   fragment. Same treatment the shared trophy list uses. */
+.pp-actt__card--game .pp-actt__desc {
+    font-size: 0.68rem; line-height: 1.35; width: 100%;
+    white-space: normal; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    /* Reserved for the same reason as the name, and rendered even when EMPTY -- a trophy with no
+       description must not make its card shorter than the one beside it. */
+    min-height: calc(2 * 1.35em);
+}
+
+.pp-actt__meta { display: flex; align-items: baseline; gap: 8px; margin-top: 3px; font-variant-numeric: tabular-nums; }
+/* Centred, and the time no longer pushed to an edge there is none of -- the row is the card's footer now,
+   not a right-aligned tail. */
+.pp-actt__card--game .pp-actt__meta { justify-content: center; flex-wrap: wrap; gap: 4px 9px; width: 100%; }
+.pp-actt__card--game .pp-actt__time { margin-left: 0; }
+/* The tier is NAMED, not just tinted -- colour alone is not a label -- but it does not outrank the number:
+   the left stripe already carries the tier, while rarity is a sort axis of this wall and half of what the
+   card is for. */
+.pp-actt__tier {
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--tier-c, var(--pp-text-mute)) 70%, var(--pp-text-mute));
+}
+/* PSN's mark on the number: the site publishes BOTH a PlatPursuit rate and a PSN one, and a bare "4.2%"
+   on a trophy card could as easily read as completion.
+
+   `align-items: baseline` INSIDE, with the logo opted out of it, is load-bearing. The meta row aligns its
+   items on their baselines, and an inline-flex box takes its baseline from its first flex item -- which
+   here is the logo, whose baseline is its bottom EDGE, not a text baseline. That lifted the whole rate a
+   few pixels above the tier and the date beside it. Opting the logo out of baseline alignment leaves the
+   NUMBER as the baseline the row aligns on, which is the one that should have been all along. */
+.pp-actt__rate {
+    font-size: 0.68rem; font-weight: 700; color: var(--pp-text);
+    display: inline-flex; align-items: baseline; gap: 3px;
+}
+.pp-actt__rate svg, .pp-actt__rate img { width: 11px; height: 11px; opacity: 0.75; align-self: center; }
+.pp-actt__time { font-size: 0.68rem; color: var(--pp-text-mute); margin-left: auto; }
+/* Short date on a phone: "Aug 13, 2026" takes ~62px of a meta row that has ~275px to share with the tier
+   and the rate. The full form returns as soon as there is room for it. */
+.pp-actt__date-lg { display: none; }
+@media (min-width: 768px) { .pp-actt__date-sm { display: none; } .pp-actt__date-lg { display: inline; } }
+
+/* Stretched link: the anchor is the game name, its ::after is the whole card. */
+.pp-actt__link::after { content: ''; position: absolute; inset: 0; z-index: 1; }
+.pp-actt--log .pp-actt__card { position: relative; }
+
+.pp-actt__empty { padding: 14px; font-size: 0.75rem; color: var(--pp-text-mute); text-align: center; }
+
+/* ---- Paging + empty ----------------------------------------------------------------------------- */
+.pp-act__empty { padding: 46px 24px; text-align: center; color: var(--pp-text-mute); }
+.pp-act__empty svg { width: 30px; height: 30px; margin: 0 auto 10px; opacity: 0.5; display: block; }
+.pp-act__empty-title { font-size: 0.86rem; font-weight: 700; color: var(--pp-text-dim); margin: 0 0 4px; }
+.pp-act__empty-hint { font-size: 0.72rem; margin: 0; }
+
+
+/* ==========================================================================
+ * TROPHY SEARCH -- the Trophies tab's one control.
+ *
+ * Layout only. The SURFACE is `.pp-toolbar-card`, the field is `.pp-bgal__search` and the chips are
+ * `.pp-bgal__chip` -- all shared, so this page gets the clear button, the in-flight spinner, the `/` hint
+ * and Escape-to-clear from `browse-filters.js` rather than re-rolling a field that only looks similar.
+ *
+ * `.pp-toolbar-card` is SURFACE ONLY: no padding, no margin. Every page supplies its own box metrics, and
+ * these are Browse Games' and the hunter wall's numbers so the three toolbars sit at the same height.
+ * ========================================================================== */
+.pp-tsearch { padding: 12px 14px; margin-bottom: 14px; }
+.pp-tsearch__bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pp-tsearch__bar > .pp-bgal__search { flex: 1 1 14rem; min-width: 0; }
+
+.pp-tsearch__chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* The tier dot, same vocabulary as every other tier figure on the profile -- so a chip and the cards it
+   filters for speak the same language. The shared chip supplies everything else. */
+.pp-tsearch__chip i { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-right: 6px; background: var(--tier-c); }
+.pp-tsearch__chip[data-tier="platinum"] { --tier-c: var(--color-trophy-platinum); }
+.pp-tsearch__chip[data-tier="gold"]     { --tier-c: var(--color-trophy-gold); }
+.pp-tsearch__chip[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
+.pp-tsearch__chip[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }
+/* Active takes the TIER's own tint rather than the shared chip's primary: the chip IS the tier, and two
+   colours claiming one control is one too many. Specificity beats `.pp-bgal__chip:has(input:checked)`. */
+.pp-tsearch__chip:has(input:checked) {
+    border-color: color-mix(in oklab, var(--tier-c) 55%, transparent);
+    background: color-mix(in oklab, var(--tier-c) 15%, transparent);
+    color: color-mix(in oklab, var(--tier-c) 60%, var(--pp-text));
+}
+.pp-tsearch__chip:focus-within { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-tsearch__clear { color: var(--pp-text-mute); font: inherit; font-size: 12px; font-weight: 600; }

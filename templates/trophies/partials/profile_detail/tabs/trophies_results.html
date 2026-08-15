@@ -1,9 +1,25 @@
-{% load custom_filters humanize %}
-<div id="trophies-grid" class="flex flex-col gap-1.5 md:gap-2">
-    {% include 'trophies/partials/profile_detail/trophy_list_items.html' %}
-</div>
-<div id="trophies-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">
-    <span class="loading loading-spinner loading-lg"></span>
-    <span class="sr-only">Loading more trophies...</span>
-</div>
-<div id="trophies-sentinel" class="h-1"></div>
+{% comment %} What the Trophies tab shows: the day wall, or search results.
+
+One partial for both, because it is one swap target -- the search form replaces this, and the shape it
+comes back with is decided by whether anything was asked for.
+{% endcomment %}
+{% if is_searching %}
+    {% if trophy_log %}
+    <div id="trophies-grid" class="pp-actt pp-actt--log">
+        {% include 'trophies/partials/profile_detail/trophy_list_items.html' %}
+    </div>
+    <div id="trophies-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">
+        <span class="loading loading-spinner loading-lg"></span>
+        <span class="sr-only">Loading more trophies...</span>
+    </div>
+    <div id="trophies-sentinel" class="h-1"></div>
+    {% else %}
+    <div class="pp-act__empty">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <p class="pp-act__empty-title">Nothing matches</p>
+        <p class="pp-act__empty-hint">No trophy here answers to that. Clear the search to go back to the wall.</p>
+    </div>
+    {% endif %}
+{% else %}
+    {% include 'trophies/partials/profile_detail/activity_sessions.html' %}
+{% endif %}

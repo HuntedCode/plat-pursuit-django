@@ -9,7 +9,7 @@ from django.db.models import (
     Subquery, OuterRef, OrderBy,
 )
 from django.db.models.functions import Lower, Coalesce, Cast
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -22,23 +22,27 @@ from trophies.util_modules.cache import redis_client
 from ..forms import (
     ProfileSearchForm,
     ProfileGamesForm,
-    ProfileTrophiesForm,
     LinkPSNForm,
 )
 from ..models import (
     Profile,
     EarnedTrophy,
     ProfileGame,
+    Game,
     GameList,
     Trophy,
     TrophyGroup,
     UserTitle,
 )
+from trophies.services.activity_service import DAYS_PER_PAGE
 from trophies.mixins import HtmxListMixin
 from .browse_helpers import annotate_community_ratings
 from trophies.psn_manager import PSNManager
 
 logger = logging.getLogger("psn_api")
+
+#: A search box on a public page: bounded so one visitor cannot hand the database an enormous ILIKE.
+_TROPHY_QUERY_MAX = 80
 
 
 class ProfilesListView(HtmxListMixin, ListView):
@@ -551,116 +555,100 @@ class ProfileDetailView(DetailView):
         return context
 
     def _build_trophies_tab_context(self, profile, per_page, page_number):
+        """The Trophies tab: ONE surface whose shape follows intent.
+
+        No Activity/Log switcher. A search field sits above the day wall; with nothing in it you get the
+        wall, and searching swaps it for the matching trophies. That replaced two views because they were
+        never two ways of browsing -- Activity is how you browse a history, and the Log was an INDEX
+        dressed as a wall. A single trophy has no natural shape (an icon, a name, a percentage), which is
+        why no layout for it read well; as search results it does not need one.
+
+        What went with the Log: its sorts (Activity answers recency far better) and its platform and
+        rarity-range filters (a power-user cross-section of someone ELSE's history). What stayed is the
+        one thing Activity genuinely cannot do -- answer "did they ever get this".
         """
-        Build context for trophies tab with filtering and pagination.
+        query, tier = self._trophy_search_params()
 
-        Args:
-            profile: Profile instance
-            per_page: Items per page
-            page_number: Current page number
+        context = {'trophy_query': query, 'trophy_tier': tier, 'trophy_tiers': self._TROPHY_TIERS,
+                   'is_searching': bool(query or tier),
+                   # The scroller gates its first fetch on the grid being a FULL page, so it needs the size
+                   # for whichever shape is rendered -- set on only one branch, the other never scrolls.
+                   'trophies_per_page': per_page if (query or tier) else DAYS_PER_PAGE}
+        if context['is_searching']:
+            context.update(self._build_trophy_search_context(profile, per_page, page_number, query, tier))
+        else:
+            context.update(self._build_activity_context(profile))
+        return context
 
-        Returns:
-            dict: Context with trophy_log and form
+    def _trophy_search_params(self):
+        """The validated (query, tier) pair -- the ONE definition of "is this a search".
+
+        `get_template_names` and the context builder used to decide that separately, and the template
+        chooser read `?tier=` RAW: a bogus tier built the day wall and then rendered it with the search
+        template, which reads a `trophy_log` that does not exist.
         """
-        form = ProfileTrophiesForm(self.request.GET)
-        context = {'profile_games': []}
+        query = (self.request.GET.get('q') or '').strip()[:_TROPHY_QUERY_MAX]
+        tier = self.request.GET.get('tier') or ''
+        return query, (tier if tier in dict(self._TROPHY_TIERS) else '')
 
-        if not form.is_valid():
-            context['trophy_log'] = []
-            context['form'] = form
-            return context
+    #: Quick cross-sections worth keeping beside the search box. Tier is the one axis of a trophy that is
+    #: both obvious to ask for and free to filter -- it is a column on Trophy, not a computed grade.
+    _TROPHY_TIERS = [
+        ('platinum', 'Platinums'),
+        ('gold', 'Gold'),
+        ('silver', 'Silver'),
+        ('bronze', 'Bronze'),
+    ]
 
-        # Get form data
-        query = form.cleaned_data.get('query')
-        platforms = form.cleaned_data.get('platform')
-        trophy_type = form.cleaned_data.get('type')
-        sort_val = form.cleaned_data.get('sort', 'recent')
+    def _build_activity_context(self, profile):
+        """The day wall. See `activity_service` for why each tier is fetched only when it is asked for."""
+        from trophies.services.activity_service import DAYS_PER_PAGE, build_activity_page
 
-        # Build queryset
-        trophies_qs = profile.earned_trophy_entries.filter(earned=True).select_related(
-            'trophy', 'trophy__game',
+        try:
+            page = max(int(self.request.GET.get('page', 1)), 1)
+        except (TypeError, ValueError):
+            page = 1        # public, crawled URL: a hand-edited ?page= must not 500
+
+        context = build_activity_page(profile, page=page)
+        # Handed to the scroller: it gates its first fetch on the grid being a FULL page, so a mismatch
+        # here does not cause a wrong-sized page -- it silently disables infinite scroll altogether.
+        context['activity_per_page'] = DAYS_PER_PAGE
+        return context
+
+    def _build_trophy_search_context(self, profile, per_page, page_number, query, tier):
+        """Matching trophies, newest first.
+
+        Sliced rather than paginated: `Paginator` runs `COUNT(*)` over the whole match set on every page,
+        and a whale's history is 250,000 rows. The scroller stops when a page comes back short, so the
+        count buys nothing. Ordered by recency because that is the only ordering a search result wants --
+        "when did they get it" is the follow-up question to "did they".
+        """
+        try:
+            page = max(int(page_number or 1), 1)
+        except (TypeError, ValueError):
+            page = 1
+        offset = (page - 1) * per_page
+
+        # The cards show COVER ART, and `display_image_url` resolves a trusted IGDB cover first -- so the
+        # chain is joined and its ~30 KB `raw_response` blob deferred, which must always travel together.
+        qs = (
+            # Dated only, so the ordering below can come straight off the index. The partial index is
+            # ASC NULLS LAST; a reverse scan gives DESC NULLS FIRST, so `nulls_last` matches neither
+            # direction and Postgres sorts the entire match set before the LIMIT. Undated trophies have no
+            # place in a recency ordering anyway.
+            profile.earned_trophy_entries.filter(earned=True, earned_date_time__isnull=False)
+            .select_related('trophy', 'trophy__game', 'trophy__game__concept',
+                            'trophy__game__concept__igdb_match')
+            .defer('trophy__game__concept__igdb_match__raw_response')
         )
-
-        # Apply filters
         if query:
-            trophies_qs = trophies_qs.filter(
+            qs = qs.filter(
                 Q(trophy__trophy_name__icontains=query) | Q(trophy__game__title_name__icontains=query)
             )
-        if platforms:
-            platform_filter = Q()
-            for plat in platforms:
-                platform_filter |= Q(trophy__game__title_platform__contains=plat)
-            trophies_qs = trophies_qs.filter(platform_filter)
-            context['selected_platforms'] = platforms
-        if trophy_type:
-            trophies_qs = trophies_qs.filter(trophy__trophy_type=trophy_type)
+        if tier:
+            qs = qs.filter(trophy__trophy_type=tier)
 
-        # Rarity range filter (PSN earn rate, 0-100%)
-        rarity_min = form.cleaned_data.get('rarity_min') or 0
-        rarity_max = form.cleaned_data.get('rarity_max') or 100
-        if rarity_min > 0:
-            trophies_qs = trophies_qs.filter(trophy__trophy_earn_rate__gte=float(rarity_min))
-        if rarity_max < 100:
-            trophies_qs = trophies_qs.filter(trophy__trophy_earn_rate__lte=float(rarity_max))
-
-        # Sort
-        if sort_val == 'oldest':
-            trophies_qs = trophies_qs.order_by(
-                F('earned_date_time').asc(nulls_last=True),
-            )
-        elif sort_val == 'alpha':
-            trophies_qs = trophies_qs.order_by(
-                Lower('trophy__trophy_name'),
-            )
-        elif sort_val == 'rarest_psn':
-            trophies_qs = trophies_qs.order_by(
-                'trophy__trophy_earn_rate',
-                F('earned_date_time').desc(nulls_last=True),
-            )
-        elif sort_val == 'common_psn':
-            trophies_qs = trophies_qs.order_by(
-                '-trophy__trophy_earn_rate',
-                F('earned_date_time').desc(nulls_last=True),
-            )
-        elif sort_val == 'rarest_pp':
-            trophies_qs = trophies_qs.order_by(
-                'trophy__earn_rate',
-                F('earned_date_time').desc(nulls_last=True),
-            )
-        elif sort_val == 'common_pp':
-            trophies_qs = trophies_qs.order_by(
-                '-trophy__earn_rate',
-                F('earned_date_time').desc(nulls_last=True),
-            )
-        elif sort_val == 'type':
-            trophies_qs = trophies_qs.annotate(
-                _type_order=Case(
-                    When(trophy__trophy_type='platinum', then=Value(0)),
-                    When(trophy__trophy_type='gold', then=Value(1)),
-                    When(trophy__trophy_type='silver', then=Value(2)),
-                    When(trophy__trophy_type='bronze', then=Value(3)),
-                    default=Value(4),
-                    output_field=IntegerField(),
-                ),
-            ).order_by(
-                '_type_order',
-                Lower('trophy__trophy_name'),
-            )
-        else:  # 'recent' (default)
-            trophies_qs = trophies_qs.order_by(
-                F('earned_date_time').desc(nulls_last=True),
-            )
-
-        # Paginate
-        trophy_paginator = Paginator(trophies_qs, per_page)
-        if int(page_number) > trophy_paginator.num_pages:
-            trophy_page_obj = []
-        else:
-            trophy_page_obj = trophy_paginator.get_page(page_number)
-
-        context['trophy_log'] = trophy_page_obj
-        context['form'] = form
-        return context
+        return {'trophy_log': list(qs.order_by('-earned_date_time')[offset:offset + per_page])}
 
     # How a visitor can reorder someone's badges. Deliberately SHORTER than the Collection gallery's six:
     # `edition` and `set_number` are organisational sorts that help an owner audit their own wall, and this
@@ -873,6 +861,12 @@ class ProfileDetailView(DetailView):
         'games': 'trophies/partials/profile_detail/game_list_items.html',
         'trophies': 'trophies/partials/profile_detail/trophy_list_items.html',
     }
+    #: The trophies tab has two views, and only one of them scrolls tiles -- Activity appends day tiles,
+    #: while the Log appends trophy rows. Keyed by view so the scroller cannot be handed the wrong half.
+    _INFINITE_SCROLL_VIEWS = {
+        ('trophies', 'activity'): 'trophies/partials/profile_detail/activity_tiles.html',
+        ('trophies', 'search'): 'trophies/partials/profile_detail/trophy_list_items.html',
+    }
 
     def get_template_names(self):
         tab = self.request.GET.get('tab', 'games')
@@ -895,10 +889,74 @@ class ProfileDetailView(DetailView):
 
         # Infinite scroll (XMLHttpRequest from InfiniteScroller)
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            # The trophies tab appends day TILES while browsing and trophy CARDS while searching, so the
+            # scroller's template follows the same intent the page does.
+            searching = tab == 'trophies' and any(self._trophy_search_params())
+            keyed = self._INFINITE_SCROLL_VIEWS.get((tab, 'search' if searching else 'activity'))
+            if keyed:
+                return [keyed]
             if tab in self._INFINITE_SCROLL_TEMPLATES:
                 return [self._INFINITE_SCROLL_TEMPLATES[tab]]
 
         return super().get_template_names()
+
+
+class ProfileDayView(View):
+    """One day of a hunter's activity: the sessions inside it.
+
+    A REAL URL, not just a modal payload. The profile is public and crawled, and content reachable only by
+    clicking is invisible to a crawler and impossible to link to -- so a day is addressable, the browser's
+    back button works on it, and someone without JS gets a page instead of a dead tile. HTMX asks for the
+    same URL and drops the partial into the modal; the only difference is which template answers.
+
+    Gated on `psn_history_public` in its own right. The tab's guard lives in the profile view, and an
+    endpoint on its own URL would otherwise be a side door around it -- the exact shape of the HTMX bypass
+    that made the tabs leak.
+    """
+
+    def get(self, request, psn_username, day):
+        from datetime import date
+        from trophies.services.activity_service import day_sessions
+
+        # `.lower()` + exact, as ProfileDetailView does: `iexact` compiles to UPPER(col) = UPPER(%s),
+        # which cannot use the unique index and seq-scans every Profile on each modal open.
+        profile = get_object_or_404(Profile, psn_username=psn_username.lower())
+        if not profile.psn_history_public:
+            raise Http404
+
+        try:
+            when = date.fromisoformat(day)
+        except ValueError:
+            raise Http404       # client-supplied; a malformed date is not a 500
+
+        sessions = day_sessions(profile, when)
+        if not sessions:
+            raise Http404       # a day with nothing in it is not a page
+
+        # Both templates render every game OPEN, so both need the trophies in the HTML. One grouped query
+        # for the whole day rather than one per session -- a day has few games, but "few" is not a reason
+        # to write an N+1 into the page crawlers read.
+        from trophies.services.activity_service import attach_day_trophies
+        attach_day_trophies(profile, when, sessions)
+        htmx = getattr(request, 'htmx', False)
+
+        context = {
+            'profile': profile,
+            'day': when,
+            'sessions': sessions,
+            'day_trophies': sum(s['trophies'] for s in sessions),
+            'day_platinums': sum(1 for s in sessions if s['has_platinum']),
+            'breadcrumb': [
+                {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'Hunters', 'url': reverse_lazy('profiles_list')},
+                {'text': profile.display_psn_username or profile.psn_username,
+                 'url': reverse('profile_detail', args=[profile.psn_username])},
+                {'text': when.strftime('%b %d, %Y')},
+            ],
+        }
+        template = ('trophies/partials/profile_detail/activity_day_modal.html'
+                    if htmx else 'trophies/activity_day.html')
+        return render(request, template, context)
 
 
 class ProfileEditorView(LoginRequiredMixin, TemplateView):

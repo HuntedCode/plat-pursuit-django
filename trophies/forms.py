@@ -362,27 +362,6 @@ class ProfileGamesForm(forms.Form):
         except Exception:
             pass
 
-class ProfileTrophiesForm(forms.Form):
-    query = forms.CharField(required=False, label='Search by name')
-    platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')], required=False, label='Platforms')
-    type = forms.ChoiceField(choices=[('', 'All'), ('bronze', 'Bronze'), ('silver', 'Silver'), ('gold', 'Gold'), ('platinum', 'Platinum')], required=False, label='Type')
-    sort = forms.ChoiceField(
-        choices=[
-            ('recent', 'Recently Earned'),
-            ('oldest', 'Oldest Earned'),
-            ('alpha', 'Alphabetical'),
-            ('rarest_psn', 'Rarest (PSN)'),
-            ('common_psn', 'Most Common (PSN)'),
-            ('rarest_pp', 'Rarest (PP)'),
-            ('common_pp', 'Most Common (PP)'),
-            ('type', 'Trophy Type'),
-        ],
-        required=False,
-        label='Sort By',
-    )
-    rarity_min = forms.FloatField(required=False, min_value=0, max_value=100)
-    rarity_max = forms.FloatField(required=False, min_value=0, max_value=100)
-
 class TrophyCaseForm(forms.Form):
     query = forms.CharField(required=False, label='Search by game name')
     sort = forms.ChoiceField(
