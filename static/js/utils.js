@@ -611,9 +611,9 @@ function countUp(el, dur = 750, opts = {}) {
 }
 
 /**
- * Animate a collapsible panel open/closed (height + opacity), toggling its `hidden` attribute. Used by
- * the career / collection / badge filter panels (the games browse panel runs its own copy because it also
- * drives chip-hide + scroll-fades off the same toggle). The panel MUST have `overflow: hidden` and a
+ * Animate a collapsible panel open/closed (height + opacity), toggling its `hidden` attribute. The
+ * animation primitive under `filterPanel` below; call it directly only for a panel that is not a browse
+ * filter drawer (the career / collection ones). The panel MUST have `overflow: hidden` and a
  * `height`/`opacity` CSS transition, and it MUST be able to collapse to a true 0 -- put any
  * padding/border/gap on an INNER wrapper, since with box-sizing:border-box padding+border would clamp
  * the collapsed height and snap away when `hidden` lands. Callers own the toggle's aria/is-open state.
@@ -657,6 +657,170 @@ function animatePanel(panel, open, animate) {
         };
     }
     panel.addEventListener('transitionend', panel._panelAnim);
+}
+
+/**
+ * filterPanel -- the browse toolbar's advanced-filter drawer, in one place.
+ *
+ * Every browse surface had grown its own copy of the same ~80 lines: toggle the panel, keep the toggle's
+ * aria/is-open in step, count the active filters onto a badge, pop that badge when it changes, dim the
+ * results while the swap is in flight, open the drawer on load if something is already filtering, and
+ * keep the edge-fades on the scrolling chip lists honest. Six copies (game list, badge list, company
+ * list, recently added, tag detail, and the profile's Games tab) is five too many -- and they had already
+ * drifted, each with a different SKIP set and only some of them wiring the fades at all.
+ *
+ * `animatePanel` above stays the animation primitive; this owns everything around it.
+ *
+ *   PlatPursuit.filterPanel({
+ *       form, toggle, panel,      // required -- element or selector
+ *       countEl,                  // optional badge for the active-filter count
+ *       skip: {sort: 1, ...},     // params that do NOT count as a filter (display/sort/search state)
+ *       count,                    // optional () => number, replacing the FormData counter entirely
+ *       chipsHost,                // optional selector: gets `is-filters-open` while the drawer is open
+ *       dimTarget,                // defaults to '#browse-results'; gets `is-swapping` on a filter change
+ *       openOnLoad,               // defaults to "a filter is already active"
+ *   })  ->  { refresh, setOpen, destroy }
+ *
+ * Returns a handle so a page that re-inits after an HTMX swap can tear the old one down first.
+ */
+function filterPanel(opts) {
+    var o = opts || {};
+    function pick(v) { return typeof v === 'string' ? document.querySelector(v) : v; }
+
+    var form = pick(o.form);
+    var toggle = pick(o.toggle);
+    var panel = pick(o.panel);
+    if (!form || !toggle || !panel) { return null; }
+
+    var countEl = pick(o.countEl) || null;
+    var skip = o.skip || {};
+    var chipsHost = o.chipsHost ? (panel.closest(o.chipsHost) || document.querySelector(o.chipsHost)) : null;
+    var dimSel = o.dimTarget === undefined ? '#browse-results' : o.dimTarget;
+    var prevN = null;
+    var listeners = [];
+
+    function on(target, type, fn, listenOpts) {
+        target.addEventListener(type, fn, listenOpts);
+        listeners.push([target, type, fn]);
+    }
+
+    // Counts SET values, minus the ones that are display state rather than filtering (sort, view, the
+    // search box, pagination) and minus any scope selector the page pre-fills -- Browse Games always
+    // carries a platform default from its saved-defaults redirect, and counting that would show a
+    // permanent "2" and auto-open the drawer on every landing. A range parked at its own min/max is not
+    // a filter either.
+    function defaultCount() {
+        var n = 0;
+        new FormData(form).forEach(function (value, key) {
+            if (skip[key] || !value) { return; }
+            if (key === 'letter' && value === '') { return; }
+            var input = form.querySelector('[name="' + key + '"]');
+            if (input && input.type === 'range') {
+                if (input.dataset.dualRangeLo !== undefined && input.value === input.min) { return; }
+                if (input.dataset.dualRangeHi !== undefined && input.value === input.max) { return; }
+            }
+            n += 1;
+        });
+        return n;
+    }
+    var activeCount = typeof o.count === 'function' ? o.count : defaultCount;
+
+    function refresh() {
+        if (!countEl) { return; }
+        var n = activeCount();
+        countEl.textContent = n;
+        countEl.hidden = (n === 0);
+        // Pop on CHANGE, never on the first paint -- otherwise every landing with a saved filter opens
+        // with an animation acknowledging something the visitor did not just do.
+        if (n > 0 && prevN !== null && n !== prevN) {
+            countEl.classList.remove('is-pop'); void countEl.offsetWidth; countEl.classList.add('is-pop');
+        }
+        prevN = n;
+    }
+
+    // Scroll-aware edge fades on the long chip lists. A fade only appears on an edge with content hidden
+    // past it, so a list that fits is never clipped. Measured lazily: these containers are 0-size while
+    // the panel is collapsed, which is why the open path re-runs it.
+    function setFade(node, axis) {
+        if (axis === 'y') {
+            node.style.setProperty('--fade-t', node.scrollTop > 1 ? '16px' : '0px');
+            node.style.setProperty('--fade-b', (node.scrollTop + node.clientHeight < node.scrollHeight - 1) ? '16px' : '0px');
+        } else {
+            node.style.setProperty('--fade-l', node.scrollLeft > 1 ? '20px' : '0px');
+            node.style.setProperty('--fade-r', (node.scrollLeft + node.clientWidth < node.scrollWidth - 1) ? '20px' : '0px');
+        }
+    }
+    function fadeGroups() {
+        return [
+            [panel.querySelectorAll('.pp-gbrowse__fchips--scroll'), 'y'],
+            [panel.querySelectorAll('.pp-gbrowse__fchips--letters'), 'x'],
+        ];
+    }
+    function refreshFades() {
+        fadeGroups().forEach(function (pair) {
+            pair[0].forEach(function (node) { setFade(node, pair[1]); });
+        });
+    }
+    fadeGroups().forEach(function (pair) {
+        pair[0].forEach(function (node) {
+            if (node._fadeWired) { return; }
+            node._fadeWired = true;
+            node.addEventListener('scroll', function () { setFade(node, pair[1]); }, { passive: true });
+        });
+    });
+
+    function setOpen(open, animate) {
+        toggle.classList.toggle('is-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        // Active-filter chips belong OUTSIDE the open drawer: adding one while the box is open shoves the
+        // whole toolbar down. Hide them the moment it opens, and bring them back only once it has
+        // finished animating CLOSED. The class goes on a stable host so the chips' own OOB swaps keep it.
+        if (open && chipsHost) { chipsHost.classList.add('is-filters-open'); }
+        if (window.PlatPursuit && PlatPursuit.animatePanel) {
+            PlatPursuit.animatePanel(panel, open, animate);
+        } else if (open) {
+            panel.removeAttribute('hidden');
+        } else {
+            panel.setAttribute('hidden', '');
+        }
+        if (open) {
+            refreshFades();   // the containers only have real dimensions once revealed
+        } else if (chipsHost) {
+            var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (animate === false || reduce) { chipsHost.classList.remove('is-filters-open'); }
+            else { window.setTimeout(function () { chipsHost.classList.remove('is-filters-open'); }, 260); }
+        }
+    }
+
+    on(toggle, 'click', function () { setOpen(toggle.getAttribute('aria-expanded') !== 'true', true); });
+    on(form, 'change', refresh);
+    on(form, 'input', refresh);
+    if (dimSel) {
+        // Settle the results the INSTANT a filter changes: this spans the hx-trigger debounce, which is
+        // most of the felt wait on a fast server, so the dim is perceptible rather than a few-ms flash.
+        // Text inputs are excluded -- they submit on their own debounce, not on `change`.
+        on(form, 'change', function (e) {
+            var t = e.target;
+            if (t && (t.type === 'text' || t.type === 'search')) { return; }
+            var results = document.querySelector(dimSel);
+            if (results) { results.classList.add('is-swapping'); }
+        });
+    }
+    on(window, 'resize', function () {
+        if (toggle.getAttribute('aria-expanded') === 'true') { refreshFades(); }
+    });
+
+    refresh();
+    setOpen(o.openOnLoad === undefined ? activeCount() > 0 : !!o.openOnLoad, false);
+
+    return {
+        refresh: refresh,
+        setOpen: setOpen,
+        destroy: function () {
+            listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2]); });
+            listeners = [];
+        },
+    };
 }
 
 /**
@@ -1950,6 +2114,7 @@ window.PlatPursuit.debounce = debounce;
 window.PlatPursuit.countUp = countUp;
 window.PlatPursuit.takeover = takeover;
 window.PlatPursuit.animatePanel = animatePanel;
+window.PlatPursuit.filterPanel = filterPanel;
 window.PlatPursuit.InfiniteScroller = InfiniteScroller;
 window.PlatPursuit.DragReorderManager = DragReorderManager;
 window.PlatPursuit.ZoomAwareObserver = ZoomAwareObserver;

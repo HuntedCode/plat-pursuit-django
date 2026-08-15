@@ -12,90 +12,23 @@
     var PP = window.PlatPursuit || {};
 
     var mbSearch = null, mbSort = null, scroller = null, revealHandle = null, handledGrid = null, countLast = null;
-    var form = null, toggle = null, panel = null, badge = null, panelAnimEnd = null, prevBadgeN = null;
+    var form = null, panelHandle = null;
     // Fields that DON'T count toward the Filters (panel) badge: paging/sort/search + the Role quick-filter row
     // (it's visible outside the panel, so it doesn't need a badge indicator or to auto-open the panel).
-    var SKIP = { page: 1, sort: 1, query: 1, role: 1 };
 
-    // ── Toolbar chrome (collapsible filter panel + active-count badge). ──
-    function clearPanelAnim() {
-        if (panelAnimEnd && panel) { panel.removeEventListener('transitionend', panelAnimEnd); }
-        panelAnimEnd = null;
-    }
-    function setPanel(open, animate) {
-        if (!toggle || !panel) { return; }
-        toggle.classList.toggle('is-open', open);
-        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-        clearPanelAnim();
-        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if (!animate || reduce) {
-            panel.style.height = ''; panel.style.opacity = '';
-            if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
-            return;
-        }
-        var p = panel;
-        if (open) {
-            p.style.height = '0px'; p.style.opacity = '0';
-            p.removeAttribute('hidden');
-            var target = p.scrollHeight;
-            void p.offsetHeight;
-            p.style.height = target + 'px'; p.style.opacity = '1';
-            panelAnimEnd = function (ev) {
-                if (ev.target !== p || ev.propertyName !== 'height') { return; }
-                p.removeEventListener('transitionend', panelAnimEnd); panelAnimEnd = null;
-                p.style.height = ''; p.style.opacity = '';
-            };
-        } else {
-            p.style.height = p.scrollHeight + 'px'; p.style.opacity = '1';
-            void p.offsetHeight;
-            p.style.height = '0px'; p.style.opacity = '0';
-            panelAnimEnd = function (ev) {
-                if (ev.target !== p || ev.propertyName !== 'height') { return; }
-                p.removeEventListener('transitionend', panelAnimEnd); panelAnimEnd = null;
-                p.setAttribute('hidden', ''); p.style.height = ''; p.style.opacity = '';
-            };
-        }
-        p.addEventListener('transitionend', panelAnimEnd);
-    }
-    function activeCount() {
-        if (!form) { return 0; }
-        var n = 0;
-        new FormData(form).forEach(function (value, key) {
-            if (SKIP[key] || !value) { return; }
-            n += 1;
-        });
-        return n;
-    }
-    function refreshBadge() {
-        if (!badge) { return; }
-        var n = activeCount();
-        badge.textContent = n;
-        badge.hidden = (n === 0);
-        if (n > 0 && prevBadgeN !== null && n !== prevBadgeN) {
-            badge.classList.remove('is-pop'); void badge.offsetWidth; badge.classList.add('is-pop');
-        }
-        prevBadgeN = n;
-    }
-    function onFormChange() { refreshBadge(); }
-    function onFormChangeDim(e) {
-        var t = e.target;
-        if (t && (t.type === 'text' || t.type === 'search')) { return; }   // text submits via debounce, not change
-        var r = document.getElementById('browse-results');
-        if (r) { r.classList.add('is-swapping'); }
-    }
+    // -- Toolbar chrome. `PlatPursuit.filterPanel` owns the drawer, the badge, the dim and the fades;
+    // this page only says which elements and which params are display state rather than filters. --
     function initToolbar() {
+        if (panelHandle && panelHandle.destroy) { panelHandle.destroy(); }
         form = document.getElementById('co-form');
-        toggle = document.getElementById('co-filters-toggle');
-        panel = document.getElementById('co-advanced');
-        badge = document.getElementById('co-filter-count');
-        prevBadgeN = null;
-        if (!form || !toggle || !panel) { return; }
-        toggle.addEventListener('click', function () { setPanel(toggle.getAttribute('aria-expanded') !== 'true', true); });
-        form.addEventListener('change', onFormChange);
-        form.addEventListener('input', onFormChange);
-        form.addEventListener('change', onFormChangeDim);
-        refreshBadge();
-        setPanel(activeCount() > 0, false);   // open on load only if a PANEL filter is already active
+        panelHandle = PP.filterPanel && PP.filterPanel({
+            form: form,
+            toggle: '#co-filters-toggle',
+            panel: '#co-advanced',
+            countEl: '#co-filter-count',
+    // `role` is this page's SCOPE selector rather than a filter, so it is display state here.
+            skip: { page: 1, sort: 1, query: 1, role: 1 },
+        });
     }
 
     // ── Grid: staggered tile reveal + infinite scroll (`.pp-gtile`). ──
@@ -160,7 +93,7 @@
         if (real) { real.value = mbSort.value; real.dispatchEvent(new Event('change', { bubbles: true })); }
     }
     function onMbFiltersClick() {
-        if (toggle && toggle.getAttribute('aria-expanded') !== 'true') { setPanel(true, true); }
+        if (panelHandle) { panelHandle.setOpen(true, true); }
         if (form) { form.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     }
     function wireMinibar() {
@@ -189,7 +122,7 @@
         if (grid && grid === handledGrid) { return; }
         handledGrid = grid;
         t.classList.remove('is-swapping');
-        refreshBadge();
+        if (panelHandle) { panelHandle.refresh(); }
         tickCount(grid);
         initReveal();
         initScroller();

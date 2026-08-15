@@ -17,8 +17,7 @@
     // Element state -- reassigned by boot()/initToolbar() on each fresh DOM (load + history restore + tab swap).
     var tablist = null, mbSort = null, scroller = null, revealHandle = null, handledGrid = null, countLast = null;
     var lastCat = 'base_games';
-    var form = null, toggle = null, panel = null, badge = null, panelAnimEnd = null, prevBadgeN = null;
-    var SKIP = { page: 1, sort: 1, category: 1 };
+    var form = null, panelHandle = null;
 
     function activeChip() { return document.querySelector('.pp-switch__chip.is-active[data-category]'); }
     function igniteActive() { var chip = activeChip(); if (chip && PP.igniteTab) { PP.igniteTab(chip); } }
@@ -36,83 +35,19 @@
         if (sub) { sub.textContent = cat === 'dlc' ? 'packs shown' : 'games shown'; }
     }
 
-    // ── Toolbar chrome (filter panel + active-count badge). Re-resolved by initToolbar on each fresh toolbar
-    //    (load, history restore, and category swap -- the toolbar rides the #ra-view island). ──
-    function clearPanelAnim() {
-        if (panelAnimEnd && panel) { panel.removeEventListener('transitionend', panelAnimEnd); }
-        panelAnimEnd = null;
-    }
-    function setPanel(open, animate) {
-        if (!toggle || !panel) { return; }
-        toggle.classList.toggle('is-open', open);
-        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-        clearPanelAnim();
-        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if (!animate || reduce) {
-            panel.style.height = ''; panel.style.opacity = '';
-            if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
-            return;
-        }
-        var p = panel;
-        if (open) {
-            p.style.height = '0px'; p.style.opacity = '0';
-            p.removeAttribute('hidden');
-            var target = p.scrollHeight;
-            void p.offsetHeight;
-            p.style.height = target + 'px'; p.style.opacity = '1';
-            panelAnimEnd = function (ev) {
-                if (ev.target !== p || ev.propertyName !== 'height') { return; }
-                p.removeEventListener('transitionend', panelAnimEnd); panelAnimEnd = null;
-                p.style.height = ''; p.style.opacity = '';
-            };
-        } else {
-            p.style.height = p.scrollHeight + 'px'; p.style.opacity = '1';
-            void p.offsetHeight;
-            p.style.height = '0px'; p.style.opacity = '0';
-            panelAnimEnd = function (ev) {
-                if (ev.target !== p || ev.propertyName !== 'height') { return; }
-                p.removeEventListener('transitionend', panelAnimEnd); panelAnimEnd = null;
-                p.setAttribute('hidden', ''); p.style.height = ''; p.style.opacity = '';
-            };
-        }
-        p.addEventListener('transitionend', panelAnimEnd);
-    }
-    function activeCount() {
-        if (!form) { return 0; }
-        var n = 0;
-        new FormData(form).forEach(function (value, key) {
-            if (SKIP[key] || !value) { return; }
-            n += 1;
-        });
-        return n;
-    }
-    function refreshBadge() {
-        if (!badge) { return; }
-        var n = activeCount();
-        badge.textContent = n;
-        badge.hidden = (n === 0);
-        if (n > 0 && prevBadgeN !== null && n !== prevBadgeN) {
-            badge.classList.remove('is-pop'); void badge.offsetWidth; badge.classList.add('is-pop');
-        }
-        prevBadgeN = n;
-    }
-    function onFormChange() { refreshBadge(); }
-    function onFormChangeDim() {
-        var r = document.getElementById('browse-results');
-        if (r) { r.classList.add('is-swapping'); }
-    }
+    // -- Toolbar chrome. `PlatPursuit.filterPanel` owns the drawer, the badge, the dim and the fades;
+    // this page only says which elements and which params are display state rather than filters. --
     function initToolbar() {
+        if (panelHandle && panelHandle.destroy) { panelHandle.destroy(); }
         form = document.getElementById('radded-form');
-        toggle = document.getElementById('radded-filters-toggle');
-        panel = document.getElementById('radded-advanced');
-        badge = document.getElementById('radded-filter-count');
-        prevBadgeN = null;
-        if (!form || !toggle || !panel) { return; }
-        toggle.addEventListener('click', function () { setPanel(toggle.getAttribute('aria-expanded') !== 'true', true); });
-        form.addEventListener('change', onFormChange);
-        form.addEventListener('change', onFormChangeDim);   // settle the results the instant a filter changes
-        refreshBadge();
-        setPanel(activeCount() > 0, false);   // collapsed on load; open if a filter is already applied
+        panelHandle = PP.filterPanel && PP.filterPanel({
+            form: form,
+            toggle: '#radded-filters-toggle',
+            panel: '#radded-advanced',
+            countEl: '#radded-filter-count',
+    // `category` is the New Games / New DLC switcher -- a view, not a filter.
+            skip: { page: 1, sort: 1, category: 1 },
+        });
     }
 
     // ── Grid: infinite scroll + staggered card reveal. `.pp-gcard` matches base + DLC (`--dlc`) cards. ──
@@ -177,7 +112,7 @@
     }
     function onMbFiltersClick() {
         var tg = document.getElementById('radded-filters-toggle');
-        if (tg && tg.getAttribute('aria-expanded') !== 'true') { setPanel(true, true); }
+        if (panelHandle) { panelHandle.setOpen(true, true); }
         var f = document.getElementById('radded-form');
         if (f) { f.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     }
@@ -198,7 +133,7 @@
             if (grid && grid === handledGrid) { return; }
             handledGrid = grid;
             t.classList.remove('is-swapping');
-            refreshBadge();
+            if (panelHandle) { panelHandle.refresh(); }
             tickCount(grid);
             initReveal();   // before initScroller so revealHandle exists for its onAppend hook
             initScroller();

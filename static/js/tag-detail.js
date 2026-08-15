@@ -12,113 +12,21 @@
 
     // Element state -- reassigned by boot()/initToolbar() on each fresh DOM (load + history restore).
     var mbSearch = null, mbSort = null, scroller = null, revealHandle = null, handledGrid = null, countLast = null;
-    var form = null, toggle = null, panel = null, badge = null, panelAnimEnd = null, prevBadgeN = null;
-    // Active content-filter count: platform/regions have NO default here (unlike Browse), so they ARE filters.
-    var SKIP = { page: 1, view: 1, sort: 1, query: 1 };
+    var form = null, panelHandle = null;
 
-    // ── Toolbar chrome (filter panel + active-count badge). ──
-    function clearPanelAnim() {
-        if (panelAnimEnd && panel) { panel.removeEventListener('transitionend', panelAnimEnd); }
-        panelAnimEnd = null;
-    }
-    function setFade(el, axis) {
-        if (axis === 'y') {
-            el.style.setProperty('--fade-t', el.scrollTop > 1 ? '16px' : '0px');
-            el.style.setProperty('--fade-b', (el.scrollTop + el.clientHeight < el.scrollHeight - 1) ? '16px' : '0px');
-        } else {
-            el.style.setProperty('--fade-l', el.scrollLeft > 1 ? '20px' : '0px');
-            el.style.setProperty('--fade-r', (el.scrollLeft + el.clientWidth < el.scrollWidth - 1) ? '20px' : '0px');
-        }
-    }
-    function refreshScrollFades() {
-        if (!panel) { return; }
-        panel.querySelectorAll('.pp-gbrowse__fchips--scroll').forEach(function (el) { setFade(el, 'y'); });
-        panel.querySelectorAll('.pp-gbrowse__fchips--letters').forEach(function (el) { setFade(el, 'x'); });
-    }
-    function setPanel(open, animate) {
-        if (!toggle || !panel) { return; }
-        toggle.classList.toggle('is-open', open);
-        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-        clearPanelAnim();
-        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if (!animate || reduce) {
-            panel.style.height = ''; panel.style.opacity = '';
-            if (open) { panel.removeAttribute('hidden'); refreshScrollFades(); } else { panel.setAttribute('hidden', ''); }
-            return;
-        }
-        var p = panel;
-        if (open) {
-            p.style.height = '0px'; p.style.opacity = '0';
-            p.removeAttribute('hidden');
-            var target = p.scrollHeight;
-            void p.offsetHeight;
-            p.style.height = target + 'px'; p.style.opacity = '1';
-            refreshScrollFades();
-            panelAnimEnd = function (ev) {
-                if (ev.target !== p || ev.propertyName !== 'height') { return; }
-                p.removeEventListener('transitionend', panelAnimEnd); panelAnimEnd = null;
-                p.style.height = ''; p.style.opacity = '';
-            };
-        } else {
-            p.style.height = p.scrollHeight + 'px'; p.style.opacity = '1';
-            void p.offsetHeight;
-            p.style.height = '0px'; p.style.opacity = '0';
-            panelAnimEnd = function (ev) {
-                if (ev.target !== p || ev.propertyName !== 'height') { return; }
-                p.removeEventListener('transitionend', panelAnimEnd); panelAnimEnd = null;
-                p.setAttribute('hidden', ''); p.style.height = ''; p.style.opacity = '';
-            };
-        }
-        p.addEventListener('transitionend', panelAnimEnd);
-    }
-    function activeCount() {
-        if (!form) { return 0; }
-        var n = 0;
-        new FormData(form).forEach(function (value, key) {
-            if (SKIP[key] || !value) { return; }
-            if (key === 'letter' && value === '') { return; }
-            var el = form.querySelector('[name="' + key + '"]');
-            if (el && el.type === 'range') {
-                if (el.dataset.dualRangeLo !== undefined && el.value === el.min) { return; }
-                if (el.dataset.dualRangeHi !== undefined && el.value === el.max) { return; }
-            }
-            n += 1;
-        });
-        return n;
-    }
-    function refreshBadge() {
-        if (!badge) { return; }
-        var n = activeCount();
-        badge.textContent = n;
-        badge.hidden = (n === 0);
-        if (n > 0 && prevBadgeN !== null && n !== prevBadgeN) {
-            badge.classList.remove('is-pop'); void badge.offsetWidth; badge.classList.add('is-pop');
-        }
-        prevBadgeN = n;
-    }
-    function onFormChange() { refreshBadge(); }
-    function onFormChangeDim(e) {
-        var t = e.target;
-        if (t && (t.type === 'text' || t.type === 'search')) { return; }   // text submits via debounce, not change
-        var r = document.getElementById('browse-results');
-        if (r) { r.classList.add('is-swapping'); }
-    }
+    // -- Toolbar chrome. `PlatPursuit.filterPanel` owns the drawer, the badge, the dim and the fades; this
+    // page only says which elements and which params are display state rather than filters. --
     function initToolbar() {
+        if (panelHandle && panelHandle.destroy) { panelHandle.destroy(); }
         form = document.getElementById('tagd-form');
-        toggle = document.getElementById('tagd-filters-toggle');
-        panel = document.getElementById('tagd-advanced');
-        badge = document.getElementById('tagd-filter-count');
-        prevBadgeN = null;
-        if (!form || !toggle || !panel) { return; }
-        toggle.addEventListener('click', function () { setPanel(toggle.getAttribute('aria-expanded') !== 'true', true); });
-        form.addEventListener('change', onFormChange);
-        form.addEventListener('input', onFormChange);
-        form.addEventListener('change', onFormChangeDim);
-        panel.querySelectorAll('.pp-gbrowse__fchips--scroll, .pp-gbrowse__fchips--letters').forEach(function (el) {
-            el.addEventListener('scroll', function () { setFade(el, el.classList.contains('pp-gbrowse__fchips--letters') ? 'x' : 'y'); }, { passive: true });
+        panelHandle = PP.filterPanel && PP.filterPanel({
+            form: form,
+            toggle: '#tagd-filters-toggle',
+            panel: '#tagd-advanced',
+            countEl: '#tagd-filter-count',
+            // Platform/regions have NO default here (unlike Browse Games), so they ARE filters.
+            skip: { page: 1, view: 1, sort: 1, query: 1 },
         });
-        refreshBadge();
-        setPanel(activeCount() > 0, false);
     }
 
     // ── Grid: infinite scroll + staggered card reveal (`.pp-gcard`). ──
@@ -184,7 +92,7 @@
     }
     function onMbFiltersClick() {
         var tg = document.getElementById('tagd-filters-toggle');
-        if (tg && tg.getAttribute('aria-expanded') !== 'true') { setPanel(true, true); }
+        if (tg && tg.getAttribute('aria-expanded') !== 'true' && panelHandle) { panelHandle.setOpen(true, true); }
         if (form) { form.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     }
     function wireMinibar() {
@@ -213,7 +121,7 @@
         if (grid && grid === handledGrid) { return; }
         handledGrid = grid;
         t.classList.remove('is-swapping');
-        refreshBadge();
+        if (panelHandle) { panelHandle.refresh(); }
         tickCount(grid);
         initReveal();
         initScroller();
