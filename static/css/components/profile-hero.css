@@ -131,27 +131,41 @@
    bronze base narrowing to a few platinums) rather than as four separate figures, which is why they sit
    in one row instead of four cards.
 
-   It sits INSIDE the identity block now, under the sync line, rather than in a bordered row at the foot
-   of the card. Folding the level into the ring left the space beside the dial empty, and the trophy
-   shape is what belongs there -- it is the most immediate thing about a hunter after their name. The
-   divider went with the move: it was separating a bottom section that no longer exists, and inside the
-   identity block it would cut the block in half.
+   It is the identity row's THIRD COLUMN now, across from the name, filling the corner the level figure
+   left when it folded into the ring. It used to be a bordered row at the foot of the card; the divider
+   went with the move, since it was separating a bottom section that no longer exists.
 
-   Big enough to read as a shape at a glance, which the old 0.85rem was not: at that size four figures
-   under a name read as fine print. It wraps to 2x2 on a narrow phone rather than shrinking, because the
-   figures are the content here. */
+   Big enough to read as a shape at a glance, which the old 0.85rem was not -- at that size four figures
+   beside a name are fine print. */
 .pp-phero__tiers {
     display: flex; align-items: center; flex-wrap: wrap;
     gap: 6px 14px; margin-top: 9px;
+    /* Phone: a full-width row UNDER both columns. A third column at 375px would squeeze the username to
+       nothing, and the username is the one thing on this card that cannot be compromised. `flex-wrap` on
+       the identity row is what lets it drop; `flex-basis: 100%` is what makes it take the whole line
+       rather than sharing one with whatever fits. */
+    flex-basis: 100%;
 }
-@media (min-width: 768px) { .pp-phero__tiers { gap: 8px 20px; margin-top: 11px; } }
+@media (min-width: 768px) {
+    /* A COLUMN from here up, and that is the better read rather than merely the one that fits: right-
+       aligned tabular figures stack their digits into a literal widening shape -- 12 over 140 over 380
+       over 1,400 -- which is the wide-base-narrowing-to-platinums shape this block exists to show.
+       `space-between` inside a fixed-width row puts every dot on one edge and every figure on the other,
+       so both align down the column without needing a grid. */
+    .pp-phero__tiers {
+        flex: none; flex-basis: auto; flex-direction: column; align-items: stretch;
+        gap: 5px; margin-top: 0; margin-left: auto;
+        min-width: 104px;
+    }
+    .pp-phero__tier { justify-content: space-between; width: 100%; }
+}
 .pp-phero__tier {
     display: inline-flex; align-items: center; gap: 6px;
     font-size: 1.05rem; font-weight: 800; color: var(--pp-text);
     font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
     line-height: 1.15;
 }
-@media (min-width: 768px) { .pp-phero__tier { font-size: 1.3rem; gap: 7px; } }
+@media (min-width: 768px) { .pp-phero__tier { font-size: 1.3rem; gap: 10px; } }
 .pp-phero__tier i {
     width: 10px; height: 10px; border-radius: 50%; flex: none;
     background: var(--tier-c); box-shadow: 0 0 9px -1px var(--tier-c);

@@ -31,7 +31,7 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
     <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
 
         {# ── Identity ── #}
-        <div class="flex items-start gap-3 md:gap-4 min-w-0">
+        <div class="flex items-start flex-wrap gap-3 md:gap-4 min-w-0">
             {% comment %}The identity dial: avatar, level and level-progress as ONE object. They used to be
             three separate things -- avatar here, level figure across the card top-right, progress a
             full-width bar under the whole row -- which split a value from its own progress. See the CSS
@@ -99,26 +99,26 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
                         <span class="pp-phero__dot" aria-hidden="true"></span>Never synced
                     {% endif %}
                 </p>
-
-                {% comment %}The tier split, and it lives HERE rather than in a row of its own at the foot
-                of the card. The dial is ~121px tall and the name block above is ~66px, so folding the
-                level into the ring opened a void beside the ring that nothing filled. This is the block
-                that belongs in it: identity is who you are, and the shape of your trophy collection is
-                the most immediate thing about a hunter after their name.
-
-                Read as a SHAPE -- a wide bronze base narrowing to a few platinums -- more than as four
-                numbers, which is why they stay one row rather than becoming four cards, and why they are
-                the one surface the scoped trophy colour family belongs on. Now at a size that lets the
-                shape actually register, and counting up on arrival like every other figure here.
-                {% endcomment %}
-                <div class="pp-phero__tiers">
-                    <span class="pp-phero__tier" data-tier="platinum" title="Platinum trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_plats }}">{{ profile.total_plats|intcomma }}</b></span>
-                    <span class="pp-phero__tier" data-tier="gold" title="Gold trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_golds }}">{{ profile.total_golds|intcomma }}</b></span>
-                    <span class="pp-phero__tier" data-tier="silver" title="Silver trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_silvers }}">{{ profile.total_silvers|intcomma }}</b></span>
-                    <span class="pp-phero__tier" data-tier="bronze" title="Bronze trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_bronzes }}">{{ profile.total_bronzes|intcomma }}</b></span>
-                </div>
             </div>
 
+            {% comment %}The tier split, sitting ACROSS from the identity rather than under it: the third
+            column of the row, filling the corner the level figure left when it folded into the ring.
+
+            A COLUMN from `md:` up, not a row -- and that is the version that reads best, not just the one
+            that fits. Right-aligned tabular figures stack their digits into a literal widening shape
+            (12 over 140 over 380 over 1,400), which is exactly what this block is for: a wide bronze base
+            narrowing to a few platinums, read at a glance rather than parsed as four numbers. It is also
+            the one surface the scoped trophy colour family belongs on.
+
+            On a phone it stays a wrapping row below both columns, because a third column there would
+            squeeze the username to nothing.
+            {% endcomment %}
+            <div class="pp-phero__tiers">
+                <span class="pp-phero__tier" data-tier="platinum" title="Platinum trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_plats }}">{{ profile.total_plats|intcomma }}</b></span>
+                <span class="pp-phero__tier" data-tier="gold" title="Gold trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_golds }}">{{ profile.total_golds|intcomma }}</b></span>
+                <span class="pp-phero__tier" data-tier="silver" title="Silver trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_silvers }}">{{ profile.total_silvers|intcomma }}</b></span>
+                <span class="pp-phero__tier" data-tier="bronze" title="Bronze trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_bronzes }}">{{ profile.total_bronzes|intcomma }}</b></span>
+            </div>
         </div>
 
         {# ── Standing ── #}

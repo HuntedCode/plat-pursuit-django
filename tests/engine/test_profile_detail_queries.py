@@ -291,22 +291,46 @@ def test_every_figure_in_the_hero_actually_counts_up(client):
     assert "setAttribute('data-counted', '1')" in src
 
 
-def test_the_trophy_shape_sits_in_the_identity_block(client):
-    """Folding the level into the ring made the dial ~121px tall against a ~66px name block, which left a
-    void beside the ring that nothing filled. The tier split moved up into it, out of a bordered row at
-    the foot of the card.
+def test_the_trophy_shape_sits_across_from_the_identity(client):
+    """Folding the level into the ring emptied the identity row's right-hand corner. The tier split moved
+    into it -- the row's THIRD COLUMN, across from the name -- out of a bordered row at the foot of the
+    card.
 
-    Asserted by nesting, because placement IS the change: it has to be inside the name block, above the
-    stat grid, not merely somewhere on the page."""
+    Placement IS the change here, so this asserts the structure rather than mere presence: the tiers must
+    be a SIBLING of the name block inside the identity row, not a child of it. Both arrangements put the
+    same markup between the sync line and the stat grid, so 'appears somewhere in between' would pass on
+    either and prove nothing."""
     profile = ProfileFactory(is_linked=True, total_plats=12, total_golds=140,
                              total_silvers=380, total_bronzes=1400)
 
     html = client.get(f'/hunters/{profile.psn_username}/', **CF).content.decode()
 
-    name_block = html[html.index('min-w-0 flex-1'):html.index('scard__label')]
-    assert 'pp-phero__tiers' in name_block, 'the trophy shape left the identity block'
+    between = html[html.index('pp-phero__sync'):html.index('pp-phero__tiers')]
+    assert '</div>' in between, (
+        'the trophy shape is back INSIDE the name block -- it should be the column beside it'
+    )
+
+    row = html[html.index('pp-phero__dial'):html.index('scard__label')]
     for tier in ('platinum', 'gold', 'silver', 'bronze'):
-        assert f'data-tier="{tier}"' in name_block, f'{tier} is missing from the shape'
+        assert f'data-tier="{tier}"' in row, f'{tier} is missing from the shape'
+
+
+def test_the_trophy_shape_drops_below_on_a_phone(client):
+    """A third column at 375px would squeeze the username to nothing, and the username is the one thing on
+    this card that cannot be compromised. The identity row wraps and the block takes a full line of its
+    own; it only becomes the right-hand column from `md:` up."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+    src = (ROOT / 'templates' / 'trophies' / 'partials' / 'profile_detail'
+           / 'profile_detail_header.html').read_text(encoding='utf-8')
+
+    assert 'flex items-start flex-wrap' in src, 'the identity row cannot wrap, so the tiers cannot drop'
+
+    base = css[css.index('.pp-phero__tiers {'):]
+    base = base[:base.index('\n}')]
+    assert 'flex-basis: 100%' in base, 'the tiers share a line with the name block on a phone'
+
+    md = css[css.index('@media (min-width: 768px) {', css.index('.pp-phero__tiers {')):]
+    assert 'flex-direction: column' in md[:600], 'the tiers are not a column at md:'
 
 
 def test_the_trophy_counts_count_up_like_every_other_figure(client):
