@@ -779,7 +779,13 @@
    loses the bottom, and the top is where the title sits. A screenshot takes centre, which is the default. */
 .pp-rcard__shot--cover { object-position: top; }
 /* Only the generic PSN title icon: contain it rather than blowing a small square up to fill the panel. */
-.pp-rcard__shot--placeholder { object-fit: contain; padding: 16%; opacity: 0.7; }
+/* A FIXED inset on the band, a percentage only on the column.
+   Percentage padding resolves against the containing block's WIDTH on all four sides -- so 16% of a
+   343px-wide band is ~55px top AND bottom inside an 80px box, collapsing the content to zero and
+   rendering the icon invisible. It was safe while the panel was 92px wide and ~140px tall; it stopped
+   being safe the moment the panel turned into a wide short band. */
+.pp-rcard__shot--placeholder { object-fit: contain; padding: 14px; opacity: 0.7; }
+@media (min-width: 768px) { .pp-rcard__shot--placeholder { padding: 16%; } }
 
 /* Two jobs, one overlay. It fades the image into the card's surface on the right so the panel does not
    end in a hard vertical seam, and it holds the whole image back a little -- a wall of 20 screenshots at

@@ -981,3 +981,20 @@ def test_the_bands_overlay_and_stamp_follow_the_layout():
 
     stamp = css[css.index('.pp-rcard__stamp {'):]
     assert 'right: 12px' in stamp[:stamp.index('\n}')], 'the stamp sits over the middle of the band'
+
+
+def test_the_placeholder_icon_survives_the_band():
+    """Percentage padding resolves against the containing block's WIDTH on ALL FOUR sides. `padding: 16%`
+    was safe while the art panel was 92px wide and ~140px tall (15px inset); on the stacked band it is 16%
+    of ~343px = ~55px top AND bottom inside an 80px box, which collapses the content to zero and renders
+    the generic-PSN-icon fallback invisible.
+
+    A fixed inset on the band, the percentage kept only for the column where it still means what it said."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+
+    base = css[css.index('.pp-rcard__shot--placeholder {'):]
+    base = base[:base.index('\n')]
+    assert 'padding: 14px' in base, 'the placeholder is back on a percentage inset in a fixed-height band'
+
+    md = css[css.index('@media (min-width: 768px) { .pp-rcard__shot--placeholder'):]
+    assert 'padding: 16%' in md[:md.index('\n')], 'the column panel lost its proportional inset'
