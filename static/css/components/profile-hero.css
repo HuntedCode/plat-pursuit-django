@@ -208,12 +208,14 @@
 .pp-actday__stats b { color: var(--pp-text-dim); font-weight: 800; }
 .pp-actday__plat { color: var(--color-trophy-platinum); }
 
-/* The poster wall, finally at full dialog width. `auto-fill` with a min track: it answers to the DIALOG,
-   which is not a breakpoint. */
-.pp-actday__games { display: grid; grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: 8px; align-items: start; }
-@media (min-width: 768px) { .pp-actday__games { grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 10px; } }
-/* An expanded game takes the whole wall, whatever the grid is doing around it. */
-.pp-actday__games 
+/* A STACK, not a grid. It was an `auto-fill` grid from when a session could be a collapsed poster, but
+   every session renders open now and each one spanned `1 / -1` -- a grid that could never produce more
+   than one column. Saying so directly is what it always meant, and it cannot be broken by removing the
+   span rule, which is exactly how this regressed: the sessions fell back into narrow columns and clipped
+   their own trophy cards. */
+.pp-actday__games { display: flex; flex-direction: column; gap: 8px; }
+@media (min-width: 768px) { .pp-actday__games { gap: 10px; } }
+
 .pp-actday__link {
     display: block; margin-top: 14px; padding-top: 12px;
     border-top: 1px solid var(--pp-divider, var(--pp-border));
@@ -223,64 +225,61 @@
 .pp-actday__link:hover { color: var(--pp-primary); }
 
 /* ---- A session: poster by default, row when open ------------------------------------------------ */
-/* ONE element in two layouts, not two elements swapped. That is what lets the cover travel between them
-   instead of one card disappearing and another appearing. */
+/* ---- A session: one game of one day ------------------------------------------------------------- */
+/* A ROW, unconditionally. `.is-open` used to mean "row rather than poster" back when a session could be a
+   collapsed cover; it means "trophies showing" now, and nothing else. Leaving the row's LAYOUT scoped
+   under it was a live bug: collapsing a game dropped every layout rule at once and the cover fell back to
+   its old poster size, blowing the art up to full width. A class that changed meaning has to be re-read
+   everywhere it is used, not just where it is set. */
 .pp-act__session {
     border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
     overflow: hidden; min-width: 0;
 }
 .pp-act__session--plat { border-color: color-mix(in oklab, var(--color-trophy-platinum) 38%, var(--pp-border)); }
-/* Open: takes the day's full width, whatever the poster grid is doing around it. */
 
-.pp-act__row {
-    width: 100%; display: flex; flex-direction: column; gap: 0;
-    padding: 0; background: none; border: 0; color: inherit; font: inherit;
-    text-align: left; cursor: pointer;
-    transition: background var(--pp-dur-fast, 0.15s) var(--pp-ease);
+/* The header. NOT a button: the title is a link to the game and the chevron is the toggle, two controls
+   each named for what it does. Making the whole row a button forced the link out (an `<a>` inside a
+   `<button>` is invalid) and left the day with no route to a game at all. */
+.pp-act__row { display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 8px 10px; }
+@media (min-width: 768px) { .pp-act__row { gap: 13px; padding: 9px 12px; } }
+
+/* The collapse control: a small target of its own, so the row's other content is not swept into its
+   accessible name. */
+.pp-act__toggle {
+    flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px;
+    border-radius: 50%; background: none; border: 0; color: var(--pp-text-mute); cursor: pointer;
+    transition: background var(--pp-dur-fast, 0.15s) var(--pp-ease), color var(--pp-dur-fast, 0.15s) var(--pp-ease);
 }
-@media (hover: hover) { .pp-act__row:hover { background: color-mix(in oklab, var(--pp-text) 5%, transparent); } }
-.pp-act__row:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
-/* Open: the poster becomes a row -- art left, facts right, at the compact size the trophy list sits under. */
-.is-open .pp-act__row { flex-direction: row; align-items: center; gap: 10px; padding: 8px 10px; }
-@media (min-width: 768px) { .is-open .pp-act__row { gap: 13px; padding: 9px 12px; } }
+@media (hover: hover) { .pp-act__toggle:hover { background: color-mix(in oklab, var(--pp-text) 8%, transparent); color: var(--pp-text); } }
+.pp-act__toggle:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
-/* The cover is the element that TRAVELS: a full-bleed poster collapsed, a thumbnail open. Sized in CSS
-   both ways; the JS only animates between the two boxes it is given. */
-/* position: relative so the poster's PLAT seal has something to anchor to; it is the cover it sits on,
-   not the card, so the seal travels with the art rather than with the box. */
-.pp-act__cover { position: relative; width: 100%; aspect-ratio: 3 / 4; overflow: hidden; background: var(--pp-bg-1, var(--pp-bg-2)); flex: none; }
-.is-open .pp-act__cover { width: 38px; border-radius: var(--pp-radius-sm); }
-@media (min-width: 768px) { .is-open .pp-act__cover { width: 44px; } }
-/* Absolutely filling the cover, NOT sized at 100%.
-   The cover's box is animated (poster <-> thumbnail) while it also carries `aspect-ratio`, and a
-   percentage-sized child can resolve against the ratio-derived height instead of the animated one -- so
-   the art sat still through the whole close and corrected itself on release. `inset: 0` pins it to the
-   cover's real box at every frame, whatever is driving that box.
-   object-top: PSN fallback art is wider than the 3/4 container, and the logo lives at the top. */
-.pp-act__art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
-.pp-act__art--placeholder { object-fit: contain; padding: 8px; }
+.pp-act__cover {
+    flex: none; width: 38px; aspect-ratio: 3 / 4;
+    border-radius: var(--pp-radius-sm); overflow: hidden; background: var(--pp-bg-1, var(--pp-bg-2));
+}
+@media (min-width: 768px) { .pp-act__cover { width: 44px; } }
+/* object-top: PSN fallback art is wider than the 3/4 container, and the logo lives at the top. */
+.pp-act__art { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.pp-act__art--placeholder { object-fit: contain; padding: 5px; }
 
-.pp-act__body { min-width: 0; width: 100%; display: flex; flex-direction: column; gap: 2px; padding: 7px 8px 8px; }
-.is-open .pp-act__body { width: auto; flex: 1; padding: 0; gap: 3px; }
+.pp-act__body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
 .pp-act__title {
-    font-size: 0.74rem; font-weight: 700; color: var(--pp-text);
+    font-size: 0.82rem; font-weight: 700; color: var(--pp-text); text-decoration: none;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-@media (min-width: 768px) { .pp-act__title { font-size: 0.8rem; } }
-.is-open .pp-act__title { font-size: 0.82rem; }
-@media (min-width: 768px) { .is-open .pp-act__title { font-size: 0.88rem; } }
+@media (hover: hover) { .pp-act__title:hover { color: var(--pp-primary); } }
+.pp-act__title:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 3px; }
+@media (min-width: 768px) { .pp-act__title { font-size: 0.88rem; } }
 
 .pp-act__stats { display: flex; align-items: baseline; gap: 5px; font-variant-numeric: tabular-nums; }
-.pp-act__n { font-size: 0.82rem; font-weight: 800; color: var(--pp-primary); line-height: 1; }
-.pp-act__n-lbl { font-size: 0.62rem; font-weight: 600; color: var(--pp-text-mute); }
-/* Context, not a headline -- and only once the row has the width to carry it. */
-.pp-act__span { margin-left: 6px; font-size: 0.64rem; color: var(--pp-text-mute); display: none; }
-.is-open .pp-act__span { display: inline; }
+.pp-act__n { font-size: 0.88rem; font-weight: 800; color: var(--pp-primary); line-height: 1; }
+.pp-act__n-lbl { font-size: 0.66rem; font-weight: 600; color: var(--pp-text-mute); }
+/* Context, not a headline -- pushed off the count so it reads as an aside. */
+.pp-act__span { margin-left: 6px; font-size: 0.64rem; color: var(--pp-text-mute); }
 
 /* Same dot-and-figure vocabulary as the hero's tier strip and the game card's, so a colour means one
-   thing everywhere on this profile. A poster is too narrow for four figures -- they arrive with the row. */
-.pp-act__tiers { display: none; align-items: center; flex-wrap: wrap; gap: 2px 8px; font-variant-numeric: tabular-nums; }
-.is-open .pp-act__tiers { display: flex; }
+   thing everywhere on this profile. */
+.pp-act__tiers { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px; font-variant-numeric: tabular-nums; }
 .pp-act__tier { display: inline-flex; align-items: center; gap: 3px;
                 font-size: 0.62rem; font-weight: 700; color: var(--pp-text-dim); white-space: nowrap; }
 .pp-act__tier i { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--tier-c); }
@@ -288,26 +287,31 @@
 .pp-act__tier[data-tier="gold"]     { --tier-c: var(--color-trophy-gold); }
 .pp-act__tier[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
 .pp-act__tier[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }
+/* Below 380px the title is what matters, and four tier figures push it to an ellipsis. */
+@media (max-width: 379px) { .pp-act__tiers { display: none; } }
 
-/* On a poster the PLAT chip rides the ART, where it reads as a seal on the cover rather than another
-   line of text under it. Open, it rejoins the row. */
-.pp-act__plat {
-    position: absolute; top: 5px; right: 5px; z-index: 2;
-    padding: 2px 6px; border-radius: 4px;
-    font-size: 0.55rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
-    color: var(--color-trophy-platinum);
-    background: color-mix(in oklab, var(--pp-bg-0, #000) 72%, transparent);
-    border: 1px solid color-mix(in oklab, var(--color-trophy-platinum) 45%, transparent);
-    backdrop-filter: blur(3px);
+/* The one moving part: the chevron turns to say the game is collapsed. */
+.pp-act__chev { width: 15px; height: 15px; transition: transform 0.2s var(--pp-ease); }
+.pp-act__toggle[aria-expanded="false"] .pp-act__chev { transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) { .pp-act__chev { transition: none; } }
+
+/* ---- The trophies, which are what `.is-open` actually governs ----------------------------------- */
+/* The collapsible panel, driven by the shared `PlatPursuit.animatePanel`. Its contract: `overflow: hidden`
+   plus a height/opacity transition, and it MUST be able to collapse to a true 0 -- so NO border or padding
+   here. Under border-box those would clamp the collapsed height and snap away the moment `hidden` lands.
+   The divider lives on the inner wall instead.
+
+   `hidden` is also what takes a collapsed panel out of the accessibility tree: `height: 0` hides it from
+   the eye only, so a screen reader would read every trophy while the control said `aria-expanded="false"`. */
+.pp-act__trophies {
+    overflow: hidden;
+    transition: height 0.26s var(--pp-ease), opacity 0.26s var(--pp-ease);
 }
-/* Gone in the row: the seal lives INSIDE the cover so it travels with the art, and the cover is
-   `overflow: hidden` at 38px there -- a static chip would simply be clipped away. Nothing is lost, because
-   the open row states the platinum outright in its tier figures, and the card keeps its platinum border. */
-.is-open .pp-act__plat { display: none; }
+.pp-act__trophies[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .pp-act__trophies { transition: none; } }
+/* The divider, on the inner wall so the panel itself stays borderless. */
+.pp-act__trophies > .pp-actt, .pp-act__trophies > .pp-actt__empty { border-top: 1px solid var(--pp-divider, var(--pp-border)); }
 
-
-/* ---- The expansion ------------------------------------------------------------------------------ */
-.pp-act__trophies { border-top: 1px solid var(--pp-divider, var(--pp-border)); }
 /* The expanded session's trophies: a wall of small CARDS, not a list.
    `auto-fill` with a min track, because these sit inside the day CARD -- the container's width is what
    they answer to, and it is not the viewport's. */
@@ -375,10 +379,16 @@
    `align-self: center` rather than stretch: a stretched flex item takes its cross size from the STRETCH,
    not from `aspect-ratio`, which grew the cover by a different amount per card and let
    `object-position: top` crop the bottom off by that varying amount. */
-.pp-actt__art { position: relative; flex: none; align-self: center; width: 88px; aspect-ratio: 3 / 4; }
+.pp-actt__art { position: relative; flex: none; align-self: center; width: 88px; aspect-ratio: 3 / 4; overflow: visible; }
 @media (min-width: 768px) { .pp-actt__art { width: 104px; } }
+/* Pinned to the art box, NOT sized at 100% of it.
+   The box takes its height from `width` + `aspect-ratio`, and a percentage-sized child resolving against
+   a derived height is indeterminate -- the image falls back to its INTRINSIC size, which differs between
+   an IGDB cover and a PSN fallback. That is why only some cards came out taller than their neighbours.
+   `inset: 0` makes the image exactly the box, whatever the source's own dimensions are. */
 .pp-actt__cover {
-    width: 100%; height: 100%; object-fit: cover; object-position: top; display: block;
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; object-position: top; display: block;
     border-radius: 6px; background: var(--pp-bg-1, var(--pp-bg-2));
 }
 /* object-contain for a PS placeholder icon, which is a logo rather than cover art. */
