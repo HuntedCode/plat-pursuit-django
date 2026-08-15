@@ -161,7 +161,9 @@ def test_the_games_tab_uses_the_site_game_card(client):
 
     body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
 
-    assert 'pp-gcard' in body, 'the games tab no longer uses the shared game card'
+    # The ATTRIBUTE: `.pp-gcard` is the Games tab's card selector in the page's inline JS, so the bare
+    # string is present whatever the grid actually renders.
+    assert 'class="pp-gcard"' in body, 'the games tab no longer uses the shared game card'
     assert 'hover:border-' not in body, 'per-platform hover tinting is back on the game cards'
 
 
@@ -329,8 +331,13 @@ def test_the_trophy_shape_drops_below_on_a_phone(client):
     base = base[:base.index('\n}')]
     assert 'flex-basis: 100%' in base, 'the tiers share a line with the name block on a phone'
 
+    # Sliced to the tiers' OWN md: rule rather than to a byte window after the first 768px block:
+    # a fixed window is measured in characters, so adding a line of comment to that block would fail
+    # this while the CSS stayed correct -- and a sibling rule in the same block could satisfy it.
     md = css[css.index('@media (min-width: 768px) {', css.index('.pp-phero__tiers {')):]
-    assert 'flex-direction: column' in md[:600], 'the tiers are not a column at md:'
+    rule = md[md.index('.pp-phero__tiers {'):]
+    rule = rule[:rule.index('}')]
+    assert 'flex-direction: column' in rule, 'the tiers are not a column at md:'
 
 
 def test_the_trophy_counts_count_up_like_every_other_figure(client):
@@ -429,18 +436,17 @@ def test_every_tab_wall_lands_rather_than_appearing(client):
     afterSwap is wiped -- which un-hides the cards for a frame and flashes."""
     from pathlib import Path
 
-    grids = [
-        'tabs/games_tab.html',
-        'tabs/ratings_results.html',
-        'tabs/trophies_results.html',
-        'tabs/badges_tab.html',
-        'activity_sessions.html',
-    ]
+    # DISCOVERED, not enumerated. The hand-written list of five missed `games_results.html` -- the swap
+    # partial behind every Games filter, sort and search, i.e. the most-exercised path on the page -- and
+    # a list is exactly the thing that goes stale when a sixth grid is added.
     base = ROOT / 'templates' / 'trophies' / 'partials' / 'profile_detail'
-    for rel in grids:
-        src = (base / rel).read_text(encoding='utf-8')
+    grids = [p for p in base.rglob('*.html')
+             if re.search(r'id="(games|ratings|trophies)-grid"|data-badge-wall', p.read_text(encoding='utf-8'))]
+    assert len(grids) >= 6, f'expected every tab grid to be found, got {[p.name for p in grids]}'
+    for path in grids:
+        src = path.read_text(encoding='utf-8')
         assert '{% if request.htmx %} pp-reveal{% endif %}' in src, (
-            f'{rel} does not bake in the reveal class, so its wall will flash on a swap'
+            f'{path.name} does not bake in the reveal class, so its wall will flash on a swap'
         )
 
     page = (ROOT / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')

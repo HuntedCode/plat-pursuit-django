@@ -154,7 +154,10 @@ def test_the_wall_renders_the_shared_medallion(client):
 
     body = client.get(f'/hunters/{profile.psn_username}/?tab=badges', **CF).content.decode()
 
-    assert 'pp-gallery__card' in body or 'pp-gallery__empty' in body
+    # The rendered ATTRIBUTE, not the bare class: `.pp-gallery__card` is named in the page's inline JS as
+    # the Badges tab's card selector, so the bare string is present on every full-page render and the
+    # assertion would be a tautology. Same collision as the private-profile guard below.
+    assert 'class="pp-gallery__card"' in body or 'pp-gallery__empty' in body
     assert 'pp-gallery__chip' not in body, "the gallery's filter toolbar was dragged in with the cards"
 
 

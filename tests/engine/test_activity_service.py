@@ -954,11 +954,25 @@ def test_search_results_actually_append_a_second_page(client):
     assert 'pp-gtile' not in body, 'the search was handed day tiles'
     assert 'pp-actt--log' not in body, 'the scroller was handed a grid to nest inside its own'
 
-    # And the client must ASK for that shape. It derived it from `?view=`, the removed switcher's param,
-    # which nothing sets -- so it always believed it was browsing.
+    # And the client must ASK for that shape -- read off what the SERVER RENDERED, not re-derived from the
+    # URL. Deriving it here has been wrong twice: first against `?view=`, the removed switcher's param that
+    # nothing sets (so it always believed it was browsing), then against `?q`/`?tier` raw, which is a second
+    # definition of "is this a search" and disagrees with the view's. The view DROPS unknown tier values, so
+    # `?tier=diamond` renders the day wall while a raw truthiness check calls it a search -- handing a wall
+    # of `.pp-gtile`s the search card's selector, which skips the reveal and kills the scroll after page one.
     page = client.get(f'/hunters/{profile.psn_username}/?tab=trophies&q=Repeated', **CF).content.decode()
     assert "get('view')" not in page, 'the scroller still keys off a param nothing sets'
-    assert "params.get('q')" in page and "params.get('tier')" in page
+    assert "params.get('q')" not in page, 'the shape is re-derived from the URL again'
+    assert "trophyGrid.classList.contains('pp-actt')" in page, (
+        'the shape is no longer read off the grid the server actually rendered'
+    )
+
+    # The concrete case the DOM check fixes: a tier the view does not recognise.
+    stale = client.get(
+        f'/hunters/{profile.psn_username}/?tab=trophies&tier=diamond', **CF
+    ).content.decode()
+    assert 'pp-gtile-grid' in stale, 'fixture drift: an unknown tier should still render the day wall'
+    assert 'pp-actt--log' not in stale
 
 
 def test_both_shapes_tell_the_scroller_their_own_page_size(client):

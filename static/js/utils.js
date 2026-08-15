@@ -698,6 +698,10 @@ function filterPanel(opts) {
     var dimSel = o.dimTarget === undefined ? '#browse-results' : o.dimTarget;
     var prevN = null;
     var listeners = [];
+    // The pending chips-reveal. Held so it can be CANCELLED: the old inline copy hung this on a
+    // `transitionend` that every setPanel() call cleared, so re-opening within the tween cancelled it.
+    // An uncancelled timer fires while the drawer is open again and strips the class from under it.
+    var chipsTimer = null;
 
     function on(target, type, fn, listenOpts) {
         target.addEventListener(type, fn, listenOpts);
@@ -770,6 +774,13 @@ function filterPanel(opts) {
     });
 
     function setOpen(open, animate) {
+        // An ANIMATED call that asks for the state it is already in is a no-op. Without this, a "reach the
+        // filters" affordance (the sticky mini-bar's Filters button) fired on an already-open drawer
+        // collapses it to 0 and re-expands over the full transition -- the panel visibly slams shut and
+        // reopens while the page is still scrolling to it. The instant form is NOT guarded: the initial
+        // `setOpen(false, false)` has to run to put `hidden` on a panel that renders open for no-JS.
+        if (animate && open === (toggle.getAttribute('aria-expanded') === 'true')) { return; }
+        if (chipsTimer) { window.clearTimeout(chipsTimer); chipsTimer = null; }
         toggle.classList.toggle('is-open', open);
         toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
         // Active-filter chips belong OUTSIDE the open drawer: adding one while the box is open shoves the
@@ -788,7 +799,10 @@ function filterPanel(opts) {
         } else if (chipsHost) {
             var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             if (animate === false || reduce) { chipsHost.classList.remove('is-filters-open'); }
-            else { window.setTimeout(function () { chipsHost.classList.remove('is-filters-open'); }, 260); }
+            // 340ms clears `.pp-bgal__advanced`'s own `0.32s` height transition. A shorter timer brings the
+            // chips back mid-collapse and shoves the still-open drawer down -- exactly the layout jump the
+            // class exists to prevent.
+            else { chipsTimer = window.setTimeout(function () { chipsHost.classList.remove('is-filters-open'); }, 340); }
         }
     }
 
@@ -817,6 +831,7 @@ function filterPanel(opts) {
         refresh: refresh,
         setOpen: setOpen,
         destroy: function () {
+            if (chipsTimer) { window.clearTimeout(chipsTimer); chipsTimer = null; }
             listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2]); });
             listeners = [];
         },

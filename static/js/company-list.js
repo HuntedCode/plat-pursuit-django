@@ -13,8 +13,6 @@
 
     var mbSearch = null, mbSort = null, scroller = null, revealHandle = null, handledGrid = null, countLast = null;
     var form = null, panelHandle = null;
-    // Fields that DON'T count toward the Filters (panel) badge: paging/sort/search + the Role quick-filter row
-    // (it's visible outside the panel, so it doesn't need a badge indicator or to auto-open the panel).
 
     // -- Toolbar chrome. `PlatPursuit.filterPanel` owns the drawer, the badge, the dim and the fades;
     // this page only says which elements and which params are display state rather than filters. --
@@ -26,7 +24,8 @@
             toggle: '#co-filters-toggle',
             panel: '#co-advanced',
             countEl: '#co-filter-count',
-    // `role` is this page's SCOPE selector rather than a filter, so it is display state here.
+            // `role` is this page's SCOPE selector rather than a filter -- the row is visible OUTSIDE the
+            // panel, so it needs neither a badge indicator nor to auto-open the drawer.
             skip: { page: 1, sort: 1, query: 1, role: 1 },
         });
     }

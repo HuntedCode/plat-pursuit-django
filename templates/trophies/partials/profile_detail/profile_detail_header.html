@@ -55,15 +55,24 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
                         <svg class="pp-phero__ph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
                     </div>
 
-                    {% comment %}The ring is decorative (aria-hidden) and the plate is not: this is where a
-                    screen reader gets the level AND how far through it, in one phrase, because the ring it
-                    describes says nothing on its own.{% endcomment %}
-                    <span class="pp-phero__lvl"
-                          aria-label="Level {{ profile.trophy_level|intcomma }}{% if profile.progress %}, {{ profile.progress|floatformat:0 }} percent to level {{ profile.trophy_level|add:1 }}{% endif %}">
-                        <b class="pp-phero__lvl-n pp-tally" data-countup="{{ profile.trophy_level }}">{{ profile.trophy_level|intcomma }}</b>
-                        <span class="pp-phero__lvl-k" aria-hidden="true">Lv</span>
-                    </span>
                 </div>
+
+                {% comment %}The ring is decorative (aria-hidden) and the plate is not: this is where a
+                screen reader gets the level AND how far through it, in one phrase, because the ring it
+                describes says nothing on its own.
+
+                `role="img"` is load-bearing, not decoration. A bare <span> maps to `role="generic"`, for
+                which naming is PROHIBITED -- browsers drop the aria-label entirely and read the contents
+                instead, which here is the single word "412". The same pattern is used correctly by
+                `.pp-stars` on the rating cards.
+
+                It sits UNDER the ring rather than on it: at six o'clock an opaque plate covers the arc's
+                leading edge for any hunter between roughly 36% and 64%. See the CSS.{% endcomment %}
+                <span class="pp-phero__lvl" role="img"
+                      aria-label="Level {{ profile.trophy_level|intcomma }}{% if profile.progress %}, {{ profile.progress|floatformat:0 }} percent to level {{ profile.trophy_level|add:1 }}{% endif %}">
+                    <b class="pp-phero__lvl-n pp-tally" data-countup="{{ profile.trophy_level }}">{{ profile.trophy_level|intcomma }}</b>
+                    <span class="pp-phero__lvl-k" aria-hidden="true">Lv</span>
+                </span>
                 {% if profile.progress %}
                 <p class="pp-phero__tonext" aria-hidden="true">{{ profile.progress|floatformat:0 }}% to {{ profile.trophy_level|add:1 }}</p>
                 {% endif %}
@@ -114,10 +123,10 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
             squeeze the username to nothing.
             {% endcomment %}
             <div class="pp-phero__tiers">
-                <span class="pp-phero__tier" data-tier="platinum" title="Platinum trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_plats }}">{{ profile.total_plats|intcomma }}</b></span>
-                <span class="pp-phero__tier" data-tier="gold" title="Gold trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_golds }}">{{ profile.total_golds|intcomma }}</b></span>
-                <span class="pp-phero__tier" data-tier="silver" title="Silver trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_silvers }}">{{ profile.total_silvers|intcomma }}</b></span>
-                <span class="pp-phero__tier" data-tier="bronze" title="Bronze trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_bronzes }}">{{ profile.total_bronzes|intcomma }}</b></span>
+                <span class="pp-phero__tier" data-tier="platinum" role="img" aria-label="Platinum trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_plats }}">{{ profile.total_plats|intcomma }}</b></span>
+                <span class="pp-phero__tier" data-tier="gold" role="img" aria-label="Gold trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_golds }}">{{ profile.total_golds|intcomma }}</b></span>
+                <span class="pp-phero__tier" data-tier="silver" role="img" aria-label="Silver trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_silvers }}">{{ profile.total_silvers|intcomma }}</b></span>
+                <span class="pp-phero__tier" data-tier="bronze" role="img" aria-label="Bronze trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_bronzes }}">{{ profile.total_bronzes|intcomma }}</b></span>
             </div>
         </div>
 

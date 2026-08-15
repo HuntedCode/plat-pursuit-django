@@ -51,10 +51,15 @@
     .pp-phero__ring-fill { animation: ppLevelRing 1.05s cubic-bezier(0.16, 0.84, 0.34, 1) backwards; }
 }
 
-/* The level, worn ON the ring rather than stated across the card from it. Overlaps the avatar's bottom
-   edge the way a rank pip does, so it reads as part of the same object. */
+/* The level, directly UNDER the ring rather than welded onto it.
+   It was absolutely positioned at the ring's bottom centre, which reads well and is wrong: the ring is
+   rotated -90deg, so 0% starts at twelve o'clock and 50% lands at six o'clock -- exactly where the plate
+   sat. Being opaque, it hid the arc's leading edge across roughly 36-64% progress, which is a quarter of
+   all hunters, and hid MORE of it the higher the level (a wider plate covers more arc). The one thing the
+   dial exists to show, obscured precisely where it is least guessable -- and for the same reason the draw
+   uses a decelerating curve rather than a spring: the figure has to be true.
+   In flow, it clears the arc completely and still belongs to the dial, which stacks ring, level, caption. */
 .pp-phero__lvl {
-    position: absolute; left: 50%; bottom: -3px; transform: translateX(-50%);
     display: inline-flex; align-items: baseline; gap: 2px;
     padding: 1px 7px; border-radius: 999px;
     background: var(--pp-bg-0, #0b0d12);

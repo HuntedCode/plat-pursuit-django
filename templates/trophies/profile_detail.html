@@ -145,6 +145,9 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
         // down. Both are rebuilt per tab swap; see their call sites below.
         var scroller = null;
         var panelHandle = null;
+        // The toggle node the drawer was wired to, so a re-init can tell a REPLACED toolbar from a
+        // surviving one. See the rebuild guard below.
+        var panelToggle = null;
         var revealHandle = null;
 
         function initTabContent() {
@@ -200,12 +203,21 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             // submit listener on that same form, each closing over a detached grid.
             if (scroller) { scroller.destroy(); scroller = null; }
 
-            // Which SHAPE the trophies tab is in, derived the same way the view derives it: from the
-            // search params. It used to read `?view=`, the removed Activity/Log switcher's param -- which
-            // nothing sets any more, so this was unconditionally true and the search results were handed
-            // the day wall's page size AND the day wall's card selector.
-            var params = new URLSearchParams(window.location.search);
-            var isActivity = !(tab === 'trophies' && ((params.get('q') || '').trim() || params.get('tier')));
+            // Which SHAPE the trophies tab is in, read off what the SERVER actually rendered rather than
+            // re-derived from the URL.
+            //
+            // Deriving it here has been wrong twice. First against `?view=`, the removed Activity/Log
+            // switcher's param, which nothing sets any more -- so the check was unconditionally true and
+            // search results got the day wall's page size and selector. Then against `?q`/`?tier` raw,
+            // which looks right but is a SECOND definition of "is this a search": the view drops unknown
+            // tier values (`?tier=diamond` from a stale link renders the day wall), so the two disagreed
+            // and the JS handed a wall of `.pp-gtile`s the search card's selector -- silently skipping the
+            // reveal and killing infinite scroll after page one.
+            //
+            // The grid's own class is the server's answer, and it cannot drift from what is on screen.
+            var trophyGrid = document.getElementById('trophies-grid');
+            var isActivity = !(tab === 'trophies' && trophyGrid
+                               && trophyGrid.classList.contains('pp-actt'));
 
             // TWO selectors, because the scroller and the reveal are asking different questions, and on
             // one view the answers differ.
@@ -359,8 +371,20 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             // the badge gallery, companies, recently-added and tag detail all run. Destroyed and rebuilt
             // per init because the toolbar is re-rendered on every tab swap, so a fresh one would otherwise
             // stack a second set of listeners on each visit.
-            if (panelHandle && panelHandle.destroy) { panelHandle.destroy(); panelHandle = null; }
-            if (tab === 'games' && form && PlatPursuit.filterPanel) {
+            // Rebuild the drawer only when its TOOLBAR is a new node.
+            //
+            // This tab is the one surface where the toolbar OUTLIVES the swap: `#games-form` sits outside
+            // `#tab-results`, so a filter or sort change replaces the results and leaves the bar standing.
+            // Rebuilding over it re-ran `setOpen(activeCount() > 0, false)` and threw away the state the
+            // user had actually set -- open the drawer, change the sort, and it slammed shut under you;
+            // with live search it did that on every debounce. Every other surface re-inits only when its
+            // toolbar is genuinely replaced, where deriving the state fresh is right.
+            var toggleEl = document.getElementById('pgames-filters-toggle');
+            if (panelHandle && toggleEl && toggleEl === panelToggle) {
+                panelHandle.refresh();          // same bar, same drawer -- just re-count the badge
+            } else if (tab === 'games' && form && PlatPursuit.filterPanel) {
+                if (panelHandle && panelHandle.destroy) { panelHandle.destroy(); }
+                panelToggle = toggleEl;
                 panelHandle = PlatPursuit.filterPanel({
                     form: form,
                     toggle: '#pgames-filters-toggle',
@@ -374,6 +398,9 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
                     // that browse-filters.js dims by default.
                     dimTarget: '#tab-results',
                 });
+            } else if (panelHandle && panelHandle.destroy) {
+                // Left the Games tab entirely -- the bar is gone, so the handle must go with it.
+                panelHandle.destroy(); panelHandle = null; panelToggle = null;
             }
         }
 
@@ -409,6 +436,12 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             } else if (e.detail.target.id === 'tab-results') {
                 initTabContent();
             }
+            // Clear the in-flight settle. `filterPanel` adds `is-swapping` the instant a filter changes so
+            // the dim spans the debounce, and browse-filters.js only ever clears it off `#browse-results`
+            // -- so on this page nothing did, and the class accumulated permanently once a rule existed to
+            // make it visible.
+            var results = document.getElementById('tab-results');
+            if (results) { results.classList.remove('is-swapping'); }
         });
     })();
     </script>

@@ -4,6 +4,8 @@ All shared JavaScript utilities live in `static/js/utils.js` (~1100 lines) and a
 
 The browse pages (Games, Profiles, Trophies, Companies, Genres, Themes, Flagged Games) share an HTMX-driven filter controller in `static/js/browse-filters.js` (~290 lines). It is a separate file rather than a `PlatPursuit.*` utility because it self-initializes against `[data-browse-filters]` containers and is only loaded on browse templates.
 
+That file owns the FILTERING (auto-submit, live search, dual-range sliders). The advanced-filter **drawer** around it is `PlatPursuit.filterPanel` in `utils.js` -- see its row below. The two are separate because a page can want one without the other, and because the drawer has to be created and destroyed per HTMX swap while `browse-filters.js` self-initializes once.
+
 ## Utilities
 
 ### PlatPursuit.ToastManager
@@ -228,6 +230,7 @@ for rebuilt browse grids** (Badges; the pending Challenges/Franchise/Company/Gam
 
 | Method | Parameters | Purpose |
 |--------|-----------|---------|
+| `filterPanel(opts)` | `{form, toggle, panel, countEl?, skip?, count?, chipsHost?, dimTarget?, openOnLoad?}` | The browse toolbar's advanced-filter drawer: open/close with the height tween, the active-filter count badge, the results dim, and the chip-list edge fades |
 | `dismissableSheet(dialog, opts)` | HTMLElement, `{onClose, scrim?, threshold?, handle?}` | iOS-style "swipe down to close" for a modal on touch |
 
 **The common practice for every mobile modal.** Wire it on the modal's dialog: on a downward flick past

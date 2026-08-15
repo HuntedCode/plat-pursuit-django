@@ -83,8 +83,11 @@ def test_neither_retired_provider_runs_for_any_viewer(monkeypatch, anonymous):
     context, calls = _build_context(profile, viewer, monkeypatch)
 
     assert calls == [], f'a retired provider still runs: {calls}'
+    # Only the showcase key is worth asserting: it is monkeypatched above, so an empty value means the
+    # provider was skipped. `timeline_events` is never SET by the view any more, so a `.get()` on it
+    # returns None whatever the code does -- coverage-shaped, but unable to fail. What actually pins
+    # the timeline's removal is `test_the_timeline_is_gone_not_merely_unrendered` below.
     assert not context.get('rendered_showcases')
-    assert not context.get('timeline_events')
 
 
 def test_the_timeline_is_gone_not_merely_unrendered():

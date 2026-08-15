@@ -36,7 +36,7 @@ Premium gating happens at the slot-add layer (not at view time). Users can confi
 | `templates/trophies/profile_editor.html` | Two-column editor with drag-reorder and per-type pickers |
 | `templates/trophies/partials/profile_detail/profile_showcases_section.html` | Container rendered on the profile page |
 | `templates/trophies/partials/profile_showcases/*.html` | Per-type display templates (5 live + an orphan `showcase_reviews.html`) |
-| `static/js/profile-editor.js` | Editor JS: add/remove/reorder + 4 batched pickers |
+| `static/js/profile-editor.js` | Editor JS: add/remove/reorder + 3 batched pickers |
 | `users/services/subscription_service.py` | Calls `handle_premium_downgrade()` on cancel |
 
 ## Data Model
@@ -82,7 +82,7 @@ Premium gating happens at the slot-add layer (not at view time). Users can confi
 4. Sort order reassigned 1..N inside `select_for_update` transaction
 
 ### Updating Config (batched picker)
-1. User opens a picker modal (Favorite Games, Reviews, Titles)
+1. User opens a picker modal (Favorite Games, Titles)
 2. Local `selectedIds` tracks checkbox state
 3. On "Save", JS POSTs `{config: {game_ids: [...]}}` to `/api/v1/profile/showcases/<slug>/config/`
 4. Service runs the type's validator (ownership check, cap enforcement)
@@ -102,6 +102,11 @@ There is no auto-restore on re-subscribe — users re-activate via the editor. T
 
 ## API Endpoints
 
+> **All four of these routes are WITHDRAWN** (2026-08) along with the rest of the surface -- they 404
+> today. The views are parked in `api/profile_showcase_views.py`; restoring them is putting the four
+> `path()` lines and the import back in `api/urls.py`. Documented as they were, because that is what a
+> restore has to recreate.
+
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | POST | `/api/v1/profile/showcases/` | User | Add showcase (body: `{showcase_type}`) |
@@ -114,7 +119,7 @@ All endpoints resolve premium status via `profile.user_is_premium`.
 ## Integration Points
 
 - **Profile page** rendered showcases via `profile_showcases_section.html`, included in `profile_detail.html` after the header partial. That include is currently commented out (see the banner at the top); the partial itself is unchanged.
-- **Trophy Case page** (`/profile/<user>/trophy-case/`) is still the picker UX for `platinum_case` — linked from the editor
+- **Trophy Case page** (`/hunters/<psn_username>/trophy-case/`) is still the picker UX for `platinum_case` — linked from the editor
 - **Subscription lifecycle** calls `handle_premium_downgrade()` on every cancel path
 
 ## Gotchas and Pitfalls

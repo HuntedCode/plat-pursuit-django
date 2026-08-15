@@ -275,10 +275,15 @@
 /* The in-flight dim is a STATE, not motion -- keep it for reduced-motion users too (they lost it when the
    dim moved off the ungated opacity-50 utility onto .is-swapping). Only the fade transition + empty-state
    entrance animation are motion, so those stay gated. */
+/* `#tab-results` is the profile page's own results container -- the same settle, on a surface whose
+   results live in a TAB rather than at the page's top level. Named explicitly rather than folded into a
+   bare `.is-swapping` rule, so the class stays inert anywhere it has not been opted in deliberately. */
 #browse-results.htmx-request,
-#browse-results.is-swapping { opacity: 0.4; }
+#browse-results.is-swapping,
+#tab-results.htmx-request,
+#tab-results.is-swapping { opacity: 0.4; }
 @media (prefers-reduced-motion: no-preference) {
-    #browse-results { transition: opacity 0.18s ease; }
+    #browse-results, #tab-results { transition: opacity 0.18s ease; }
     .pp-bgal__empty, .pp-slist__empty { animation: ppResultsEmptyIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 }
 @keyframes ppResultsEmptyIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }

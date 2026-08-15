@@ -180,8 +180,6 @@ Guards keep crawlers off a page; they do not make the page affordable when a cra
 | Header stats (incl. all four Platinum Highlight cards) | ✅ runs | ✅ runs |
 | Games / trophies tab (paginated, 50/page) | ✅ runs | ✅ runs |
 | Badges tab (**not** paginated — see gotcha) | ✅ runs | ✅ runs |
-| Showcase providers (`get_rendered_showcases`) | ✅ runs | ✅ runs |
-| Timeline (`_build_timeline`) | ❌ skipped | ✅ runs (if `psn_history_public`) |
 
 Showcases are deliberately **not** gated: a shared profile link is mostly opened logged-out, which is the audience the customization exists for, and every remaining provider is bounded by config or by a small owned table (≤20 selected platinums, ≤6 game ids, ≤5 badges, ≤6 titles, 6 date-indexed platinums). The one provider that was *not* bounded — Rarest Trophies, which ranked the profile's entire earned set on a joined column — was **removed outright** (migration `0275`) rather than gated, because its cost came from "rank everything I own" and would have remained a liability for signed-in views of large profiles.
 

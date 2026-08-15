@@ -205,7 +205,7 @@ The refactor preserves every existing integration point in `sync_complete`. What
 | Deferred notifications | Platinum during `sync_trophies`, badge consolidation in `sync_complete` | Unchanged. |
 | IGDB enrichment | `_drain_deferred_igdb_enrich()` at top of `sync_complete` | Unchanged. New concepts created during the walk still defer their enrichment to the same Redis queue. |
 | Scout `games_discovered` | Increment during the walk when a new ProfileGame is created | Unchanged. |
-| Cache invalidation | `invalidate_dashboard_cache`, `invalidate_stats_cache`, `invalidate_timeline_cache` | Unchanged. |
+| Cache invalidation | `invalidate_dashboard_cache`, `invalidate_stats_cache` | Unchanged. (`invalidate_timeline_cache` was here until 2026-08; the profile timeline it served was deleted outright.) |
 | Site Heartbeat, Community Trophy Tracker | Read sync-derived state on their own crons | Unaffected by the refactor; they read from `EarnedTrophy` and `Profile`. |
 | Discord-verified 12h cadence | Configured in `refresh_profiles` cron | Unchanged. |
 | `bulk_gamification_update()` context | Wraps badge eval | Unchanged. |

@@ -96,13 +96,15 @@ def test_the_dashboards_badge_showcase_endpoints_are_untouched(client):
     """Deliberately NOT withdrawn despite the name. `/api/v1/badges/showcase/` belongs to the
     dashboard's own badge module (dashboard.js:352), not to profile customization -- retiring it is
     the dashboard sunset's job, and taking it out here would have broken an unrelated surface."""
-    staff = ProfileFactory(is_linked=True)
-    client.force_login(staff.user)
+    # Asserted on ROUTING, not on a status code: `!= 404` also passes on a 500 from a broken view, and
+    # what this guards is that the route still exists at all.
+    from django.urls import Resolver404, resolve
 
     for url in ('/api/v1/badges/showcase/', '/api/v1/badges/showcase/reorder/'):
-        assert client.post(url, {}, content_type='application/json').status_code != 404, (
-            f'{url} was withdrawn with the profile showcases -- it is the dashboard\'s'
-        )
+        try:
+            resolve(url)
+        except Resolver404:
+            raise AssertionError(f'{url} was withdrawn with the profile showcases -- it is the dashboard\'s')
 
 
 def test_the_profile_does_not_run_the_showcase_provider_for_anyone(monkeypatch):
@@ -140,7 +142,10 @@ def test_the_profile_does_not_run_the_showcase_provider_for_anyone(monkeypatch):
 def test_the_profile_page_no_longer_includes_the_band():
     src = (ROOT / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')
 
-    assert "{% include 'trophies/partials/profile_detail/profile_showcases_section.html' %}" not in src
+    # The FILENAME, not an exact include line: quoting, whitespace or `{% include var %}` would all slip
+    # past a byte-exact match. The surviving comment block above does not name the file, so this cannot
+    # collide with the explanation of its own removal.
+    assert 'profile_showcases_section.html' not in src
 
 
 def test_no_url_conf_imports_a_view_it_no_longer_routes():
@@ -164,18 +169,28 @@ def test_every_row_a_hunter_authored_is_still_there():
     from trophies.models import ProfileShowcase
     from trophies.services.showcase_service import ProfileShowcaseService, SHOWCASE_REGISTRY
 
+    from tests.factories import GameFactory, ProfileGameFactory
+
     profile = ProfileFactory(is_linked=True)
+    # REAL games, so the provider has something to resolve. Pointed at ids that do not exist, it returns
+    # empty slots and the only thing left to assert is `is not None` -- which a provider gutted to
+    # `return []` would also satisfy, i.e. a test that cannot fail for the reason it claims.
+    games = [GameFactory() for _ in range(2)]
+    for game in games:
+        ProfileGameFactory(profile=profile, game=game)
     ProfileShowcase.objects.create(profile=profile, showcase_type='favorite_games',
-                                   config={'game_ids': [1, 2, 3]})
+                                   config={'game_ids': [g.id for g in games]})
 
     stored = ProfileShowcase.objects.get(profile=profile, showcase_type='favorite_games')
-    assert stored.config == {'game_ids': [1, 2, 3]}, 'a hunter\'s selections did not survive'
+    assert stored.config == {'game_ids': [g.id for g in games]}, 'a hunter\'s selections did not survive'
 
-    # And the service still reads them, so the restore is reopening a door rather than rebuilding a
-    # reader. (The row is real; its games are not, so the provider returns empty slots -- what matters
-    # here is that it resolves the descriptor and runs at all.)
+    # And the service still READS them: the descriptor resolves AND the provider returns the rows behind
+    # the config. That is what makes the restore a matter of reopening a door rather than rebuilding a
+    # reader, which is the entire claim of hiding rather than deleting.
     assert 'favorite_games' in SHOWCASE_REGISTRY
-    assert ProfileShowcaseService.get_rendered_showcases(profile) is not None
+    rendered = ProfileShowcaseService.get_rendered_showcases(profile)
+    assert [e['showcase'].showcase_type for e in rendered] == ['favorite_games']
+    assert rendered[0]['data']['has_items'], 'the provider no longer reads the hunter\'s selections'
 
 
 def test_the_registry_and_the_model_still_agree():
