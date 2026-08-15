@@ -792,6 +792,41 @@ def test_the_modal_fits_without_scrolling():
     assert 'repeat(3, 1fr)' in recs[:200], 'the recommendation options are stacked again'
 
 
+def test_the_wizard_lays_the_form_out_two_up_beside_the_list():
+    """The rail was 360px, which can only stack -- and a stacked form towers over the list beside it. It is
+    520px so the form gets the modal's two-column layout, which makes it SHORTER: wider buying shorter is
+    the opposite of the usual trade, and the reason the list could give the width up.
+
+    Which fields span both columns is declared ONCE, in game-detail.css, and is inert until a host turns
+    the form into a grid -- so the two hosts cannot end up spanning different things."""
+    wizard = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
+    shared = (ROOT / 'static' / 'css' / 'components' / 'game-detail.css').read_text(encoding='utf-8')
+
+    assert '520px' in wizard, 'the form rail is back to a width that can only stack'
+    assert 'grid-template-columns: 1fr 1fr' in wizard, 'the wizard form is single-column again'
+
+    spans = shared[shared.index('.gd-qr__field--rec,\n.gd-qr__field--blurb'):]
+    assert 'grid-column: 1 / -1;' in spans[:400], 'the shared span list is gone or host-scoped again'
+
+
+def test_the_two_wizard_panels_end_level():
+    """`align-items: start` left the pair ragged, but stretching alone is not the fix: a grid row is as
+    tall as its tallest item, so a sixty-trophy list would make the row several screens deep with the form
+    floating at the top of it.
+
+    `height: 0` on the scroll area is the load-bearing half -- it zeroes the flex base size, so the list
+    contributes only its header to the row and the FORM decides the height. The list then grows into
+    exactly that. Without it, `flex: 1` alone lets a long list push the row."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
+    # Comments stripped first: the note explaining the change naturally quotes the property it removed.
+    rules = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+
+    assert 'align-items: start' not in rules, 'the two panels are back to their own natural heights'
+    scroll = css[css.index('@media (min-width: 1024px) { .rmg__troscroll'):]
+    assert 'height: 0' in scroll[:200], 'the trophy list can push the row taller than the form again'
+    assert 'max-height: none' in scroll[:200], 'the desktop list is back on a viewport cap'
+
+
 def test_the_bulk_flow_has_a_keyboard():
     """Seventy games is the same four movements seventy times, so it earns shortcuts. Two things have to
     be true or they do damage: Enter must not fire inside the quick take (where it is a newline the hunter

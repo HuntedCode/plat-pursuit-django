@@ -1440,27 +1440,33 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-modal--qr .gd-modal__body { max-height: 88vh; }
 .gd-qr { display: flex; flex-direction: column; gap: 15px; }
 
+/* Which fields span both columns, for ANY host that lays the form out two-up. Unconditional because
+ * `grid-column` is inert on a child that is not a grid item -- so this can be stated once here rather
+ * than repeated inside each host's media query. The hosts (the modal below, the wizard's rail in
+ * rate-wizard.css) only own the `display: grid` half.
+ *
+ * The reading order the two columns produce:
+ *
+ *     Difficulty | Grindiness
+ *     Hours      | Fun
+ *     Overall            (full)
+ *     Recommendation     (full)
+ *     Quick take         (full)
+ *
+ * The four axes pair up as two rows of related questions, then the three full-width rows are the
+ * conclusion: the score, what it adds up to, and anything you want to say about it. SOURCE order in the
+ * partial matches, because a host that is too narrow for two columns renders the identical fields in one
+ * and has to read the same way -- grid `order` would have made the hosts disagree. */
+.gd-qr__field--rec,
+.gd-qr__field--blurb,
+.gd-qr__field:has([name="overall_rating"]),
+.gd-qr__notice,
+.gd-qr__actions { grid-column: 1 / -1; }
+
 @media (min-width: 640px) {
     .gd-modal--qr .gd-qr {
         display: grid; grid-template-columns: 1fr 1fr; gap: 11px 16px; align-content: start;
     }
-    /* The reading order the two columns produce:
-     *
-     *     Difficulty | Grindiness
-     *     Hours      | Fun
-     *     Overall            (full)
-     *     Recommendation     (full)
-     *     Quick take         (full)
-     *
-     * The four axes pair up as two rows of related questions, then the three full-width rows are the
-     * conclusion: the score, what it adds up to, and anything you want to say about it. Source order in
-     * the partial matches, because the wizard renders the same fields in ONE column and has to read the
-     * same way -- grid `order` would have made the two hosts disagree. */
-    .gd-modal--qr .gd-qr__field--rec,
-    .gd-modal--qr .gd-qr__field--blurb,
-    .gd-modal--qr .gd-qr__field:has([name="overall_rating"]),
-    .gd-modal--qr .gd-qr__notice,
-    .gd-modal--qr .gd-qr__actions { grid-column: 1 / -1; }
     .gd-modal--qr .gd-qr__actions { margin-top: 0; }
 }
 .gd-qr__field { display: flex; flex-direction: column; gap: 6px; }

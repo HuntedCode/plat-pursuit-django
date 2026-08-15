@@ -157,12 +157,36 @@
 .rmg__fact-value { font-size: 14px; font-weight: 700; color: var(--pp-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rmg__fact-sub { font-size: 10.5px; color: var(--pp-text-mute); white-space: nowrap; }
 
-/* ---- Two columns at desktop. The TROPHY LIST takes the width: it is the panel with something to read
- * (icon + name + description per row, times fifty), and it was the one being squeezed. The form is five
- * sliders, a number and a small textarea -- none of which get better with more width, and the quick-rate
- * modal renders the identical fields comfortably at 460px. ---- */
+/* ---- Two columns at desktop, and the FORM gets enough of them to lay out two-up.
+ *
+ * The split has moved twice. It began as a wide form beside a squeezed list; then the list took the width,
+ * on the argument that it is the panel with something to READ and the form is five sliders that gain
+ * nothing from width. That was true of a one-column form. It stopped being true when the form learned the
+ * modal's two-column layout: at 360px it can only stack, and a stacked form is tall enough to tower over
+ * the list beside it. Wider here buys a SHORTER form, which is the opposite of the usual trade.
+ *
+ * The list is still the panel with the most to read, so it keeps the larger share -- it just no longer
+ * takes it at the cost of making the form scroll.
+ * ---- */
 .rmg__cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 12px; }
-@media (min-width: 1024px) { .rmg__cols { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; } }
+@media (min-width: 1024px) { .rmg__cols { grid-template-columns: minmax(0, 1fr) 520px; } }
+@media (min-width: 1280px) { .rmg__cols { grid-template-columns: minmax(0, 1fr) 560px; } }
+
+/* ---- Matched heights, with the FORM as the driver ------------------------------------------------
+ * The two panels used to be `align-items: start`, so each was its own height and the pair looked ragged.
+ * Stretching them is only half the fix: a grid row is as tall as its tallest item, and a sixty-trophy
+ * list would have made that the list -- a row several screens deep with the form floating at the top of
+ * it.
+ *
+ * So the list is built NOT to contribute its own height. `height: 0` + `flex: 1` on the scroll area gives
+ * it a flex base size of zero, so the card's intrinsic height is its header alone; the row is therefore
+ * sized by the form, and the list then grows into exactly that. Long lists scroll, short ones leave the
+ * panel no taller than the form beside it, and the two always end level.
+ */
+@media (min-width: 1024px) {
+    .rmg__cols > .rmg__card { display: flex; flex-direction: column; min-height: 0; }
+    .rmg__cols > .rmg__card > .rmg__pbody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+}
 
 .rmg__phead {
     display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
@@ -179,7 +203,10 @@
 .rmg__pbody { padding: 0 14px 14px; }
 /* The list scrolls inside the panel so the form never gets pushed off the screen by a 60-trophy game. */
 .rmg__troscroll { max-height: 46vh; overflow-y: auto; }
-@media (min-width: 1024px) { .rmg__troscroll { max-height: 62vh; } }
+/* At desktop the cap goes and the list fills the height the FORM set instead -- see the matched-heights
+   note above. `height: 0` is the load-bearing half: it zeroes the flex base size so a long list cannot
+   push the row taller than the form, which is what `flex: 1` alone would let it do. */
+@media (min-width: 1024px) { .rmg__troscroll { max-height: none; height: 0; flex: 1 1 0; } }
 
 .rmg__form { padding: 14px; }
 .rmg__fhead { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; font-weight: 700; color: var(--pp-text); }
@@ -188,6 +215,12 @@
 /* Tighter than the modal's 15px. Five sliders in a column don't need that much air, and every pixel here
    is a pixel the trophy list beside it doesn't get. */
 .rmg__form .gd-qr { gap: 11px; }
+/* Two-up from the width at which the rail can hold it -- the same layout the quick-rate modal uses, and
+   the reason this column is 520px rather than 360px. Only the `display: grid` half lives here; which
+   fields span both columns is stated once in game-detail.css, beside the partial they belong to. */
+@media (min-width: 1024px) {
+    .rmg__form .gd-qr { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; align-content: start; }
+}
 
 /* The one requirement, stated where the eye lands before the button rather than only as a toast on refusal. */
 .rmg__req { display: flex; align-items: center; gap: 7px; margin-top: 12px; font-size: 12px; color: var(--pp-text-mute); }
