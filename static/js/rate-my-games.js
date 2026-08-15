@@ -143,22 +143,26 @@ window.PlatPursuit = window.PlatPursuit || {};
             return u;
         },
 
-        /** DLC comes back grouped by parent concept; flatten it, carrying the parent's identity down. */
+        /** DLC comes back grouped by parent concept; flatten it, carrying the parent's identity down.
+         *
+         * The ITEM is spread and the parent's fields laid over it, rather than the item's fields being
+         * re-listed. Re-listing silently dropped everything added to a queue item afterwards, and it had
+         * already cost two: the prefill payload for a re-served DLC rating (so the form would have opened
+         * on 5/5/5/3.0 and written those over a real rating on save -- the exact hazard the base queue's
+         * prefill exists to prevent), and the per-set recommendation wording.
+         */
         flatten(groups) {
             var flat = [];
             (groups || []).forEach(function (g) {
                 (g.items || []).forEach(function (item) {
-                    flat.push({
+                    flat.push(Object.assign({}, item, {
                         concept_id: g.concept_id,
                         unified_title: g.unified_title,
                         concept_icon_url: g.concept_icon_url,
                         slug: g.slug,
                         is_shovelware: !!g.is_shovelware,
-                        trophy_group_id: item.trophy_group_id,
-                        trophy_group_name: item.trophy_group_name,
-                        hours_label: item.hours_label,
                         is_dlc: true,
-                    });
+                    }));
                 });
             });
             return flat;
@@ -466,6 +470,10 @@ window.PlatPursuit = window.PlatPursuit || {};
             this.fields.setTarget(game.concept_id, game.trophy_group_id);
             this.fields.label({
                 hoursLabel: game.hours_label || 'Hours to Platinum',
+                // Per-game wording for the middle recommendation and its question: a DLC pack, or a game
+                // that never had a platinum, has no platinum to call rough.
+                recLabel: game.rec_label,
+                recLegend: game.rec_legend,
                 // Their tracked playtime for THIS game, where we have it -- the number they're being asked
                 // to estimate is one we can often help with.
                 playtimeHint: game.stats && game.stats.play_hours

@@ -642,3 +642,16 @@ def compact_since(value):
         if seconds >= cutoff:
             return f'{int(seconds // unit)}{label} ago'
     return 'Now'
+
+
+@register.simple_tag
+def recommendation_choices(has_platinum=True):
+    """The three recommendation answers, worded for a set that does or does not end in a platinum.
+
+    A tag rather than a context variable so the shared field partial can render its own options without
+    every host having to remember to supply them -- and so the labels stay in the model, which is the one
+    place all of them are read from.
+    """
+    from trophies.models import UserConceptRating
+
+    return UserConceptRating.recommendation_choices(has_platinum)

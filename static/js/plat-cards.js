@@ -284,6 +284,9 @@
                 current.conceptId = data.concept_id;
                 current.playtime = data.playtime || '';
                 current.rating = data.user_rating || null;
+                // Kept, not just read inline for the download label: the rate form needs it too, because
+                // a 100% card is a set with no platinum for the middle recommendation to call rough.
+                current.variant = data.variant;
                 // Now the link has a destination. Name from the payload too, so the modal agrees with
                 // the card rather than with whatever the tile's data attribute said.
                 var glink = dlg.querySelector('[data-share-game]');
@@ -444,6 +447,12 @@
             // In PROMPT mode the secondary action is "skip, just download"; in EDIT mode a plain cancel.
             cancelLabel: edit ? 'Cancel' : 'Skip, just download',
             playtimeHint: current.playtime ? 'Your tracked playtime: ' + current.playtime : '',
+            // A 100% card is a set with no platinum in it, so the middle recommendation must not call one
+            // rough. `variant` rides the card's own HTML payload, so this needs no extra request.
+            recLabel: current.variant === 'platinum'
+                ? 'Great game, rough platinum' : 'Great game, rough trophies',
+            recLegend: current.variant === 'platinum'
+                ? 'Would you recommend the platinum?' : 'Would you recommend these trophies?',
             onSaved: function (data, payload) {
                 current.hasRating = true;
                 // Take the new scores from the PAYLOAD, not from the refetch. loadPreview() below

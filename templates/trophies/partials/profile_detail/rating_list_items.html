@@ -72,10 +72,12 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
                 predate the field rather than shown as a neutral fourth state -- an unanswered question is
                 not an answer, and the wizard is already asking it.
 
-                The label comes from the model's own choices (`get_recommendation_display`), so the four
-                strings live in exactly one place.{% endcomment %}
+                The label is `recommendation_text`, resolved in the service rather than through
+                `get_recommendation_display`: the middle option names what was rough, and "rough platinum"
+                is wrong on a DLC pack or a game that never had one. The strings still live in the model;
+                only the choice of WHICH wording is made where the game is known.{% endcomment %}
                 {% if r.recommendation %}
-                <span class="pp-rcard__rec" data-rec="{{ r.recommendation }}">{{ r.get_recommendation_display }}</span>
+                <span class="pp-rcard__rec" data-rec="{{ r.recommendation }}">{{ r.recommendation_text }}</span>
                 {% endif %}
             </span>
 

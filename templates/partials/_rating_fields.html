@@ -1,4 +1,4 @@
-{% comment %} The rating form's FIELDS -- the five scores, the optional quick take, and the guidelines
+{% load custom_filters %}{% comment %} The rating form's FIELDS -- the five scores, the optional quick take, and the guidelines
 notice. Everything from the first keystroke to the POST landing is owned by `PlatPursuit.RatingFields`
 (static/js/quick-rate.js); this is just what it binds to.
 
@@ -76,24 +76,24 @@ row's height instead of three. Labels wrap inside their tile, so the middle one 
 
 `<fieldset>` rather than a `<label>` -- one control owns three inputs, so the group needs a legend and each
 radio needs its own label. {% endcomment %}
+{% comment %}Looped over the MODEL's own choices rather than written out three times, so the wording lives
+in one place and a reworded answer reaches every surface at once.
+
+The middle label is the one thing that varies by game: it names what was rough, and on a DLC pack or a
+game with no platinum "rough platinum" is simply wrong. The host swaps it per game through
+`RatingFields.label({recLabel})` -- the same mechanism the hours label already uses, and for the same
+reason (this partial is rendered ONCE and then re-pointed at game after game).{% endcomment %}
 <fieldset class="gd-qr__field gd-qr__field--rec">
-    <legend class="gd-qr__lbl">Would you recommend the platinum?</legend>
+    <legend class="gd-qr__lbl" data-gd-qr-rec-legend>Would you recommend the platinum?</legend>
     <div class="gd-qr__recs">
-        <label class="gd-qr__rec" data-rec="worth_it">
-            <input type="radio" name="recommendation" value="worth_it" data-gd-qr-rec>
-            {% include 'partials/_recommendation_icon.html' with value='worth_it' %}
-            <span class="gd-qr__rec-lbl">Do it</span>
+        {% recommendation_choices as recommendations %}
+        {% for value, label in recommendations %}
+        <label class="gd-qr__rec" data-rec="{{ value }}">
+            <input type="radio" name="recommendation" value="{{ value }}" data-gd-qr-rec>
+            {% include 'partials/_recommendation_icon.html' with value=value %}
+            <span class="gd-qr__rec-lbl" data-gd-qr-rec-lbl="{{ value }}">{{ label }}</span>
         </label>
-        <label class="gd-qr__rec" data-rec="good_game_bad_plat">
-            <input type="radio" name="recommendation" value="good_game_bad_plat" data-gd-qr-rec>
-            {% include 'partials/_recommendation_icon.html' with value='good_game_bad_plat' %}
-            <span class="gd-qr__rec-lbl">Great game, rough plat</span>
-        </label>
-        <label class="gd-qr__rec" data-rec="skip">
-            <input type="radio" name="recommendation" value="skip" data-gd-qr-rec>
-            {% include 'partials/_recommendation_icon.html' with value='skip' %}
-            <span class="gd-qr__rec-lbl">Skip it</span>
-        </label>
+        {% endfor %}
     </div>
 </fieldset>
 {% comment %} Optional public quick take. The counter shows chars remaining. {% endcomment %}

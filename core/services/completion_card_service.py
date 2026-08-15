@@ -445,7 +445,7 @@ def _displayed_title(profile):
     ) or ''
 
 
-def _user_rating(profile, concept):
+def _user_rating(profile, concept, has_platinum=True):
     """The hunter's own base-game rating, or None. `concept_trophy_group=NULL` is the base-game
     convention shared with RatingService."""
     if not concept:
@@ -462,8 +462,10 @@ def _user_rating(profile, concept):
     payload = rating.as_prefill()
     payload.update({
         # The label, because the card renders a DICT and cannot call `get_recommendation_display`. Resolved
-        # here rather than mapped in the template, so the four display strings stay in the model.
-        'recommendation_label': rating.get_recommendation_display(),
+        # here rather than mapped in the template, so the display strings stay in the model -- and worded
+        # for THIS card: a 100% card has no platinum, so "rough platinum" would name a trophy the set
+        # never had.
+        'recommendation_label': rating.recommendation_label(has_platinum),
         # The hunter's own words about the game -- 140 chars, already auto-filtered on submit,
         # reportable, and staff-soft-hideable via `blurb_hidden`, which is why it's safe to render on
         # an image that leaves the site. Optional, so the card must look right without it.
@@ -629,5 +631,5 @@ def get_card_data(profile, standing):
 
         'badge_lines': _badge_lines(profile, concept, game),
         'contract': _contract_line(profile, concept),
-        'user_rating': _user_rating(profile, concept),
+        'user_rating': _user_rating(profile, concept, has_platinum=variant == PLATINUM),
     }

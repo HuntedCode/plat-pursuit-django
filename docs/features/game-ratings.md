@@ -66,11 +66,15 @@ Six sorts (`PROFILE_RATING_SORTS`): recently rated / highest / lowest / hardest 
 
 The one **directive** field. Every score describes what the platinum was *like* (difficulty, grind, hours, fun, overall); none says whether anyone else should do it, which is the question a trophy site exists to answer. The archived `Review` model carried `recommended` (a bool) and archiving reviews took it with it; this restores it.
 
-| Value | Label |
-|---|---|
-| `worth_it` | Do it |
-| `good_game_bad_plat` | Great game, rough platinum |
-| `skip` | Skip it |
+| Value | Label | Label when the set has no platinum |
+|---|---|---|
+| `worth_it` | Do it | Do it |
+| `good_game_bad_plat` | Great game, rough platinum | **Great game, rough trophies** |
+| `skip` | Skip it | Skip it |
+
+**The middle label depends on the game.** It is the only one that NAMES the thing that was rough, and "rough platinum" is wrong on a DLC pack (which never has one) and on a base game that never defined one. `RECOMMENDATIONS_NO_PLAT` is the second wording; `recommendation_choices(has_platinum)`, `recommendation_label(has_platinum)` and `recommendation_copy(has_platinum)` are the three ways to reach it. Use `recommendation_label()` rather than `get_recommendation_display()` anywhere the game is known — the latter cannot know, so it always says "platinum".
+
+The **question moves with it** ("Would you recommend the platinum?" / "…these trophies?"), which is why `recommendation_copy()` returns both: swapping one and not the other is worse than leaving both wrong. In the FORM both are set per game through `RatingFields.label({recLabel, recLegend})`, exactly as the hours label is — the form is rendered once and re-pointed at game after game, so a value baked in at render time would be the first game's answer forever.
 
 **Three, and the middle one is why the field exists**: a platinum can be a bad experience attached to a game worth playing, and no yes/no can say that.
 

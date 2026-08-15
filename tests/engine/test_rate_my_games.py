@@ -616,6 +616,50 @@ def test_everything_the_wizard_hides_can_actually_be_hidden():
         assert cls in restated, f'.{cls} is toggled hidden but keeps its own display'
 
 
+def test_a_set_with_no_platinum_is_not_asked_about_a_platinum(client):
+    """The middle option NAMES the thing that was rough, so it is the one label that depends on the game:
+    a DLC pack has no platinum, and neither do plenty of base games. The question above it moves with the
+    option -- swapping one and not the other is worse than leaving both wrong.
+
+    Carried per game exactly as `hours_label` is, because this form is rendered ONCE and then re-pointed
+    at game after game; a value baked in at render time would be the first game's answer forever."""
+    from trophies.models import UserConceptRating
+
+    plat = UserConceptRating.recommendation_copy(True)
+    no_plat = UserConceptRating.recommendation_copy(False)
+
+    assert plat['rec_label'] == 'Great game, rough platinum'
+    assert no_plat['rec_label'] == 'Great game, rough trophies'
+    assert 'platinum' in plat['rec_legend'] and 'platinum' not in no_plat['rec_legend']
+    # Only the middle option changes -- "Do it" and "Skip it" are about the set either way.
+    assert dict(UserConceptRating.RECOMMENDATIONS)['worth_it'] == \
+        dict(UserConceptRating.RECOMMENDATIONS_NO_PLAT)['worth_it']
+
+    # The queue carries it per item, so the wizard can swap it between games.
+    profile = _hunter()
+    _ratable(profile)
+    client.force_login(profile.user)
+    item = client.get(QUEUE).json()['queue'][0]
+
+    assert item['rec_label'] and item['rec_legend']
+    # And the wizard actually applies it rather than only receiving it.
+    js = (ROOT / 'static' / 'js' / 'rate-my-games.js').read_text(encoding='utf-8')
+    assert 'recLabel: game.rec_label' in js
+
+
+def test_the_dlc_queue_never_offers_the_platinum_wording(client):
+    """A DLC pack has no platinum by definition, so that half of the queue is unconditional."""
+    from trophies.models import UserConceptRating
+
+    src = (ROOT / 'api' / 'rating_views.py').read_text(encoding='utf-8')
+    dlc = src[src.index('def _get_dlc_queue'):]
+
+    assert 'recommendation_copy(has_platinum=False)' in dlc, (
+        'the DLC queue can hand out platinum wording for a set that has none'
+    )
+    assert UserConceptRating.recommendation_copy(False)['rec_label'] == 'Great game, rough trophies'
+
+
 def test_the_recommendation_offers_three_choices_not_four():
     """A fourth ("only for the trophy" -- a bad game with an easy platinum) was built and dropped: the
     STARS rate the game and this rates the PLATINUM, so a shovelware plat is "Do it" at 1.5 stars. The two

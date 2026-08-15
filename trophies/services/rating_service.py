@@ -489,4 +489,11 @@ def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_
         r.community_avg = stats['avg'] if stats and stats['n'] > 1 else None
         r.community_n = stats['n'] if stats else 1
 
+        # The verdict, worded for the set it is about: "rough platinum" is wrong on a DLC pack (which
+        # never has one) and on a game that never defined one. Read off the game already attached above,
+        # so this costs no query -- `defined_trophies` is a column on the row we just fetched.
+        defined = (r.card_game.defined_trophies or {}) if r.card_game else {}
+        has_plat = r.concept_trophy_group_id is None and bool(defined.get('platinum'))
+        r.recommendation_text = r.recommendation_label(has_plat) if r.recommendation else ''
+
     return rows

@@ -406,15 +406,48 @@ def test_the_quick_take_is_rendered_whole(client):
 
 def test_the_card_carries_their_recommendation(client):
     """The card's punchline. Every other figure on it describes what the platinum was LIKE; this one says
-    whether to go and do it -- and the label comes from the model's choices, so the four strings live in
+    whether to go and do it -- and the label comes from the model's choices, so the strings live in
     exactly one place."""
     profile = ProfileFactory(is_linked=True)
-    _rated(profile, title='Rough Platinum', recommendation='good_game_bad_plat')
+    concept = ConceptFactory(unified_title='Rough Platinum')
+    ProfileGameFactory(profile=profile,
+                       game=GameFactory(concept=concept, defined_trophies={'platinum': 1}))
+    UserConceptRatingFactory(profile=profile, concept=concept, recommendation='good_game_bad_plat')
 
     body = client.get(_url(profile), **CF).content.decode()
 
     assert 'Great game, rough platinum' in body
     assert 'data-rec="good_game_bad_plat"' in body
+
+
+def test_a_set_with_no_platinum_does_not_call_one_rough(client):
+    """The middle option NAMES the thing that was rough, so on a DLC pack -- or a game that never defined
+    a platinum -- "rough platinum" names a trophy the set has not got. Read off the game already attached
+    to the row, so the wording costs no query."""
+    profile = ProfileFactory(is_linked=True)
+    # A game with no platinum defined at all.
+    _rated(profile, title='No Plat Here', recommendation='good_game_bad_plat')
+
+    body = client.get(_url(profile), **CF).content.decode()
+
+    assert 'Great game, rough trophies' in body
+    assert 'Great game, rough platinum' not in body
+
+
+def test_a_dlc_rating_never_calls_its_platinum_rough(client):
+    """A DLC pack has no platinum by definition, whatever the base game has."""
+    profile = ProfileFactory(is_linked=True)
+    concept = ConceptFactory(unified_title='Has DLC')
+    ProfileGameFactory(profile=profile,
+                       game=GameFactory(concept=concept, defined_trophies={'platinum': 1}))
+    dlc = ConceptTrophyGroupFactory(concept=concept, trophy_group_id='001', display_name='The Old Hunters')
+    UserConceptRatingFactory(profile=profile, concept=concept, concept_trophy_group=dlc,
+                             recommendation='good_game_bad_plat')
+
+    body = client.get(_url(profile), **CF).content.decode()
+
+    assert 'Great game, rough trophies' in body
+    assert 'Great game, rough platinum' not in body
 
 
 def test_a_rating_that_predates_the_field_shows_no_verdict_rather_than_a_neutral_one(client):

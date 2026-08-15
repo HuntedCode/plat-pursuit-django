@@ -276,6 +276,21 @@
             }
             var hoursLbl = form.querySelector('[data-gd-qr-hours-label]');
             if (hoursLbl && next.hoursLabel) { hoursLbl.textContent = next.hoursLabel; }
+            // The middle recommendation NAMES the thing that was rough, so it is the one label that
+            // depends on the game: "rough platinum" is wrong on a DLC pack, and on a game that never had
+            // one. Swapped per game exactly as the hours label is, and for the same reason -- this form is
+            // rendered once and then re-pointed at game after game.
+            //
+            // The legend moves with it, or the question would still ask about a platinum the set has not
+            // got. Both fall back to the platinum wording, which is what the partial renders.
+            if (next.recLabel) {
+                var mid = form.querySelector('[data-gd-qr-rec-lbl="good_game_bad_plat"]');
+                if (mid) { mid.textContent = next.recLabel; }
+            }
+            if (next.recLegend) {
+                var legend = form.querySelector('[data-gd-qr-rec-legend]');
+                if (legend) { legend.textContent = next.recLegend; }
+            }
             // The hint is SSR'd where playtime is a page-level fact (Game Detail). Where it varies per
             // card or per game, the caller passes it in.
             if (next.playtimeHint !== undefined) {

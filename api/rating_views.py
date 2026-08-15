@@ -398,6 +398,9 @@ class WizardQueueView(APIView):
                     'trophy_group_id': 'default',
                     'trophy_group_name': 'Base Game',
                     'hours_label': 'Hours to Platinum' if has_plat else 'Hours to Complete',
+                    # The recommendation's middle option names what was rough, so it follows the same
+                    # has-platinum fact the hours label does.
+                    **UserConceptRating.recommendation_copy(has_plat),
                     'is_shovelware': cid in shovelware_concept_ids,
                 }
                 # A re-served rating MUST arrive with its own scores. The form's defaults are 5/5/5/3.0,
@@ -548,6 +551,8 @@ class WizardQueueView(APIView):
                 'has_rating': prior is not None,
                 'is_dlc': True,
                 'hours_label': 'Hours to Complete',
+                # A DLC pack never ends in a platinum, so this half of the queue is unconditional.
+                **UserConceptRating.recommendation_copy(has_platinum=False),
             }
             if prior:
                 # Same hazard as the base queue: without these the form loads at 5/5/5/3.0 and submitting

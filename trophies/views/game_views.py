@@ -909,6 +909,11 @@ class GameDetailView(DetailView):
                 'averages': RatingService.get_cached_community_averages_for_group(game.concept, ctg),
                 'hours_label': 'Hours to Plat' if has_plat else 'Hours to Complete',
                 'hours_label_long': 'Hours to Platinum' if has_plat else 'Hours to Complete',
+                # The recommendation's middle option and its question, worded for THIS group -- "rough
+                # platinum" is wrong on a DLC pack and on a game that never had one. Same reason the
+                # hours label above varies, and derived from the same `has_plat`.
+                **UserConceptRating.recommendation_copy(has_plat),
+                'has_platinum': has_plat,
                 'can_rate': False,
                 'can_rate_reason': None,
                 'user_rating': None,

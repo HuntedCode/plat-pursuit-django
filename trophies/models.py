@@ -1530,6 +1530,47 @@ class UserConceptRating(models.Model):
         ('good_game_bad_plat', 'Great game, rough platinum'),
         ('skip', 'Skip it'),
     ]
+    #: The same three for a trophy set with NO platinum in it -- every DLC pack, and the games that never
+    #: had one. Only the middle option changes, because it is the only one that NAMES the thing that was
+    #: rough; "Do it" and "Skip it" are about the set either way.
+    #:
+    #: Two lists rather than a format string, so the wording of an answer is always a literal you can read
+    #: and grep. The VALUES are identical, which is what lets `choices` stay on the platinum list -- the
+    #: field validates the value and never the label, so this needs no migration and no second column.
+    RECOMMENDATIONS_NO_PLAT = [
+        ('worth_it', 'Do it'),
+        ('good_game_bad_plat', 'Great game, rough trophies'),
+        ('skip', 'Skip it'),
+    ]
+
+    @classmethod
+    def recommendation_choices(cls, has_platinum=True):
+        """The three answers, worded for a set that does or does not end in a platinum."""
+        return cls.RECOMMENDATIONS if has_platinum else cls.RECOMMENDATIONS_NO_PLAT
+
+    def recommendation_label(self, has_platinum=True):
+        """This rating's answer, worded for its set.
+
+        Use this rather than `get_recommendation_display` anywhere the caller knows whether a platinum is
+        involved -- which is everywhere that renders a specific game. `get_recommendation_display` cannot
+        know, so it always says "platinum", which is wrong on a DLC pack.
+        """
+        return dict(self.recommendation_choices(has_platinum)).get(self.recommendation, '')
+
+    @classmethod
+    def recommendation_copy(cls, has_platinum=True):
+        """The two strings the rating FORM has to swap per game, as context/data-attribute keys.
+
+        One helper because both halves have to move together: swapping the middle option to "rough
+        trophies" while the question above it still asks about a platinum is worse than leaving both
+        wrong. Hosts spread this into their context (`**UserConceptRating.recommendation_copy(has_plat)`)
+        and the form picks it up through `RatingFields.label()`.
+        """
+        return {
+            'rec_label': dict(cls.recommendation_choices(has_platinum))['good_game_bad_plat'],
+            'rec_legend': ('Would you recommend the platinum?' if has_platinum
+                           else 'Would you recommend these trophies?'),
+        }
     recommendation = models.CharField(
         max_length=20, choices=RECOMMENDATIONS, blank=True, default='',
         help_text="Would you send someone else after this platinum? Blank = predates the field (re-asked by the wizard).",
