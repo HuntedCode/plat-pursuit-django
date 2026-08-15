@@ -200,14 +200,14 @@ def test_the_response_carries_the_label_so_the_client_never_hardcodes_it(client)
 
     resp = client.post(
         f'/api/v1/ratings/{game.concept_id}/group/default/rate/',
-        {'recommendation': 'bad_game_good_plat', 'difficulty': 2, 'grindiness': 2,
+        {'recommendation': 'good_game_bad_plat', 'difficulty': 2, 'grindiness': 2,
          'hours_to_platinum': 3, 'fun_ranking': 2, 'overall_rating': 1.5},
         content_type='application/json',
     )
 
     assert resp.status_code == 200, resp.content
-    assert resp.json()['recommendation'] == 'bad_game_good_plat'
-    assert resp.json()['recommendation_label'] == 'Only for the trophy'
+    assert resp.json()['recommendation'] == 'good_game_bad_plat'
+    assert resp.json()['recommendation_label'] == 'Great game, rough platinum'
 
 
 # ── The queue ─────────────────────────────────────────────────────────────────────────────────────
@@ -614,6 +614,39 @@ def test_everything_the_wizard_hides_can_actually_be_hidden():
     for cls in ('rmg__prog', 'rmg__facts', 'rmg__fact', 'rmg__group', 'rmg__flag', 'gd-btn',
                 'rmg__prior'):
         assert cls in restated, f'.{cls} is toggled hidden but keeps its own display'
+
+
+def test_the_recommendation_offers_three_choices_not_four():
+    """A fourth ("only for the trophy" -- a bad game with an easy platinum) was built and dropped: the
+    STARS rate the game and this rates the PLATINUM, so a shovelware plat is "Do it" at 1.5 stars. The two
+    fields say it together, which is what makes three enough."""
+    from trophies.models import UserConceptRating
+
+    values = [v for v, _ in UserConceptRating.RECOMMENDATIONS]
+
+    assert values == ['worth_it', 'good_game_bad_plat', 'skip']
+    bare = render_to_string('partials/_rating_fields.html', {})
+    assert bare.count('name="recommendation"') == 3
+    assert 'bad_game_good_plat' not in bare
+
+
+def test_the_modal_fits_without_scrolling():
+    """The form is the one people meet in bulk, and a submit button below the fold is a form people abandon
+    halfway. At 460px single-column it ran past `.gd-modal__body`'s 70vh on a laptop; it is wider and
+    two-column now, with the recommendation costing one row rather than three.
+
+    Pinned in the CSS because it is a LAYOUT promise -- nothing about it is visible from a render test, and
+    the natural "tidy-up" (dropping the two-column rule, restacking the options) reintroduces the scroll
+    silently."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'game-detail.css').read_text(encoding='utf-8')
+    qr = css[css.index('.gd-modal--qr {'):css.index('/* ---- The recommendation')]
+
+    assert 'grid-template-columns: 1fr 1fr' in qr, 'the quick-rate form is single-column again'
+    assert '620px' in qr, 'the modal narrowed back to a width the form does not fit in'
+    assert 'max-height: 88vh' in qr, 'the body is back on the shared 70vh cap'
+    # The three options in ONE row is most of the height that was bought back.
+    recs = css[css.index('.gd-qr__recs {'):]
+    assert 'repeat(3, 1fr)' in recs[:200], 'the recommendation options are stacked again'
 
 
 def test_the_bulk_flow_has_a_keyboard():

@@ -96,8 +96,8 @@ def test_the_recommend_rate_is_denominated_in_ANSWERED_ratings():
     clear, which for a prolific rater is a long time."""
     profile = ProfileFactory(is_linked=True)
     _rated(profile, title='Yes', recommendation='worth_it')
-    _rated(profile, title='Also yes', recommendation='bad_game_good_plat')   # counts: recommends the PLAT
-    _rated(profile, title='No', recommendation='skip')
+    _rated(profile, title='Also yes', recommendation='worth_it')
+    _rated(profile, title='Mixed', recommendation='good_game_bad_plat')   # NOT a plat recommendation
     for i in range(6):
         _rated(profile, title=f'Legacy {i}')            # no recommendation at all
 
@@ -409,12 +409,12 @@ def test_the_card_carries_their_recommendation(client):
     whether to go and do it -- and the label comes from the model's choices, so the four strings live in
     exactly one place."""
     profile = ProfileFactory(is_linked=True)
-    _rated(profile, title='Shovelware Special', recommendation='bad_game_good_plat')
+    _rated(profile, title='Rough Platinum', recommendation='good_game_bad_plat')
 
     body = client.get(_url(profile), **CF).content.decode()
 
-    assert 'Only for the trophy' in body
-    assert 'data-rec="bad_game_good_plat"' in body
+    assert 'Great game, rough platinum' in body
+    assert 'data-rec="good_game_bad_plat"' in body
 
 
 def test_a_rating_that_predates_the_field_shows_no_verdict_rather_than_a_neutral_one(client):

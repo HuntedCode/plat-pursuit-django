@@ -1419,9 +1419,38 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
     .gd-blurb__time { font-size: 0.72rem; }
 }
 
-/* ---- Quick-rate modal (gd-modal--qr) ---- */
-.gd-modal--qr { width: min(94vw, 460px); max-width: 460px; }
+/* ---- Quick-rate modal (gd-modal--qr) ----------------------------------------------------------
+ * The form is WIDE and two-column so the whole thing fits without scrolling. At 460px single-column it
+ * ran past `.gd-modal__body`'s 70vh on a laptop, and a form you must scroll to find the submit button on
+ * is a form people abandon halfway -- which on a BULK rating flow is the whole product.
+ *
+ * Two columns is also why the recommendation could be added without cost: it takes one row where the
+ * fields it sits above take half a row each.
+ *
+ * Scoped to the modal on purpose rather than done with a container query. The other host (the Rate My
+ * Games wizard) renders these fields in a fixed 360px rail where a second column is not an option, so
+ * there is no width to adapt to -- two known hosts, two known layouts.
+ */
+.gd-modal--qr { width: min(94vw, 620px); max-width: 620px; }
+/* Taller than the shared 70vh: this body is now short enough that the cap is the only thing that would
+   make it scroll. */
+.gd-modal--qr .gd-modal__body { max-height: 88vh; }
 .gd-qr { display: flex; flex-direction: column; gap: 15px; }
+
+@media (min-width: 640px) {
+    .gd-modal--qr .gd-qr {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 11px 16px; align-content: start;
+    }
+    /* Full width: the recommendation (three tiles across), the overall score (the headline figure, and a
+       0.5-5 track reads better long), the quick take, the fine print and the actions. The four remaining
+       sliders pair up. */
+    .gd-modal--qr .gd-qr__field--rec,
+    .gd-modal--qr .gd-qr__field--blurb,
+    .gd-modal--qr .gd-qr__field:has([name="overall_rating"]),
+    .gd-modal--qr .gd-qr__notice,
+    .gd-modal--qr .gd-qr__actions { grid-column: 1 / -1; }
+    .gd-modal--qr .gd-qr__actions { margin-top: 0; }
+}
 .gd-qr__field { display: flex; flex-direction: column; gap: 6px; }
 .gd-qr__lbl { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 600; color: var(--pp-text); }
 .gd-qr__val { font-weight: 800; color: var(--pp-primary); font-variant-numeric: tabular-nums; }
@@ -1437,19 +1466,22 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-qr__actions .gd-btn { flex: 1; justify-content: center; }
 
 /* ---- The recommendation: the form's one required field, and its first ----------------------------
- * Four choice rows, NOT a segmented 3-point scale. A segment strip implies an ordering, and these are not
- * points on one axis: two of them are compound statements about the game AND the platinum separately.
- * Rows rather than a 2x2 grid because two of the four labels are full phrases -- a grid would either
- * truncate them or size every cell to the longest.
+ * Three tiles ACROSS, not stacked. Across costs one row's height instead of three, which is most of what
+ * keeps the modal whole -- and it works in the wizard's 360px rail too, because the tile stacks its icon
+ * over a wrapping label rather than sitting them side by side.
+ *
+ * Not a segmented strip: a strip implies these are points on one axis, and the middle option is a
+ * statement about the game AND the platinum separately rather than a midpoint between the other two.
  */
 .gd-qr__field--rec { gap: 7px; border: 0; padding: 0; margin: 0; min-inline-size: 0; }
 .gd-qr__field--rec legend { padding: 0; }
-.gd-qr__recs { display: flex; flex-direction: column; gap: 5px; }
+.gd-qr__recs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .gd-qr__rec {
-    display: flex; align-items: center; gap: 9px; cursor: pointer;
-    padding: 8px 11px; border-radius: var(--pp-radius-sm);
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    gap: 5px; cursor: pointer; text-align: center;
+    padding: 9px 7px; border-radius: var(--pp-radius-sm);
     background: var(--pp-bg-2); border: 1px solid var(--pp-border);
-    font-size: 0.8rem; font-weight: 600; color: var(--pp-text-dim);
+    font-size: 0.72rem; font-weight: 600; line-height: 1.25; color: var(--pp-text-dim);
     transition: border-color var(--pp-dur-fast) var(--pp-ease),
                 background var(--pp-dur-fast) var(--pp-ease),
                 color var(--pp-dur-fast) var(--pp-ease);
@@ -1459,12 +1491,11 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    `:has(:checked)` reads. `appearance: none` + zero size rather than `display: none`, which would take it
    out of the tab order and make the group unreachable by keyboard. */
 .gd-qr__rec input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-.gd-qr__rec svg { width: 17px; height: 17px; flex: none; color: var(--rec-c); }
+.gd-qr__rec svg { width: 18px; height: 18px; flex: none; color: var(--rec-c); }
 .gd-qr__rec-lbl { min-width: 0; }
 
 .gd-qr__rec[data-rec="worth_it"]           { --rec-c: var(--pp-success); }
 .gd-qr__rec[data-rec="good_game_bad_plat"] { --rec-c: var(--pp-warning); }
-.gd-qr__rec[data-rec="bad_game_good_plat"] { --rec-c: var(--pp-accent); }
 .gd-qr__rec[data-rec="skip"]               { --rec-c: var(--pp-error); }
 
 @media (hover: hover) {

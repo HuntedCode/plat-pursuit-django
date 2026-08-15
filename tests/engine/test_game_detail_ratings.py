@@ -127,7 +127,7 @@ def test_the_recommendation_split_prints_its_sample_size():
     apart without the N. Printed at every size rather than hidden behind a floor -- the same reason the
     doc parks the cross-game percentile: a figure that looks authoritative on thin data erodes trust."""
     html = _conditions(dict(_AVERAGES, recommendation_split={
-        'counts': {'worth_it': 4, 'good_game_bad_plat': 1, 'bad_game_good_plat': 0, 'skip': 0},
+        'counts': {'worth_it': 4, 'good_game_bad_plat': 1, 'skip': 0},
         'answered': 5, 'recommend_pct': 80,
     }))
 

@@ -28,15 +28,18 @@ default until it does. {% endcomment %}
 thinking -- you either send someone after this platinum or you don't -- so putting it first makes a form
 that got longer feel shorter, and it is the one field that gates the save.
 
-FOUR options, not a three-point scale. A segmented control implies ordinality, and "great game, rough
-platinum" is not the midpoint of anything; its inverse ("only for the trophy") is the shovelware verdict,
-which on a trophy site is a whole category rather than an edge case. Four labelled choices, each with its
-own glyph, say that where a slider cannot.
+THREE, and the middle one is why the field exists: a platinum can be a bad experience attached to a game
+worth playing, and no yes/no can say that. A fourth ("only for the trophy") was built and dropped, because
+the STARS rate the game while this rates the PLATINUM -- so a shovelware plat is "Do it" at 1.5 stars, and
+splitting it across the two controls is what makes three enough.
 
-`<fieldset>` rather than a `<label>` -- one control here owns four inputs, so the group needs a legend and
-each radio needs its own label. {% endcomment %}
+Three across in one row rather than stacked, which is what keeps the modal whole: the options cost one
+row's height instead of four. Labels wrap inside their tile, so the middle one keeps its full phrase.
+
+`<fieldset>` rather than a `<label>` -- one control owns three inputs, so the group needs a legend and each
+radio needs its own label. {% endcomment %}
 <fieldset class="gd-qr__field gd-qr__field--rec">
-    <legend class="gd-qr__lbl">Would you recommend it?</legend>
+    <legend class="gd-qr__lbl">Would you recommend the platinum?</legend>
     <div class="gd-qr__recs">
         <label class="gd-qr__rec" data-rec="worth_it">
             <input type="radio" name="recommendation" value="worth_it" data-gd-qr-rec>
@@ -46,12 +49,7 @@ each radio needs its own label. {% endcomment %}
         <label class="gd-qr__rec" data-rec="good_game_bad_plat">
             <input type="radio" name="recommendation" value="good_game_bad_plat" data-gd-qr-rec>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="m12 13-1-1 2-2-3-3 2-2"/></svg>
-            <span class="gd-qr__rec-lbl">Great game, rough platinum</span>
-        </label>
-        <label class="gd-qr__rec" data-rec="bad_game_good_plat">
-            <input type="radio" name="recommendation" value="bad_game_good_plat" data-gd-qr-rec>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-            <span class="gd-qr__rec-lbl">Only for the trophy</span>
+            <span class="gd-qr__rec-lbl">Great game, rough plat</span>
         </label>
         <label class="gd-qr__rec" data-rec="skip">
             <input type="radio" name="recommendation" value="skip" data-gd-qr-rec>

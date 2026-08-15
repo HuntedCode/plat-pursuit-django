@@ -1510,11 +1510,13 @@ class UserConceptRating(models.Model):
     # whether anyone else should do it, which is the question a trophy site exists to answer. The archived
     # Review model carried `recommended` (a bool) and archiving reviews took it with it; this restores it.
     #
-    # FOUR values, not three. "Good game, bad plat" has an inverse, and on this site it is not an edge
-    # case -- "bad game, good plat" IS the shovelware category, which the codebase already recognises
-    # formally (hide_shovelware filters, the wizard's shovelware opt-in). With three, a hunter rating a
-    # Ratalaika plat has to choose between "recommended" (implying the game is good) and "not recommended"
-    # (implying skip the plat), and both are wrong.
+    # THREE values, and the middle one is the reason the field exists at all: a platinum can be a bad
+    # experience attached to a game worth playing, and no single yes/no can say that.
+    #
+    # A fourth ("only for the trophy" -- a bad game with an easy platinum) was built and then dropped,
+    # because these two fields already say it together: the STARS rate the game and the RECOMMENDATION
+    # rates the platinum, so a shovelware plat is "Do it" at 1.5 stars. Splitting that across two controls
+    # is what makes three enough.
     #
     # Deliberately NOT called `verdict`: `rating_verdict` (and its `verdictOf` JS twin, and
     # `.gd-cond__verdict` / `.pp-rcard__verdict`) already mean the plain-language WORDS for
@@ -1526,7 +1528,6 @@ class UserConceptRating(models.Model):
     RECOMMENDATIONS = [
         ('worth_it', 'Do it'),
         ('good_game_bad_plat', 'Great game, rough platinum'),
-        ('bad_game_good_plat', 'Only for the trophy'),
         ('skip', 'Skip it'),
     ]
     recommendation = models.CharField(

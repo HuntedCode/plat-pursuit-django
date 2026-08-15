@@ -60,16 +60,19 @@ Six sorts (`PROFILE_RATING_SORTS`): recently rated / highest / lowest / hardest 
 
 ## The recommendation
 
-The one **directive** field. Every score describes what the platinum was *like* (difficulty, grind, hours, fun, overall); none says whether anyone else should do it, which is the question a trophy site exists to answer. The archived `Review` model carried `recommended` (a bool) and archiving reviews took it with it; this restores it with four values.
+The one **directive** field. Every score describes what the platinum was *like* (difficulty, grind, hours, fun, overall); none says whether anyone else should do it, which is the question a trophy site exists to answer. The archived `Review` model carried `recommended` (a bool) and archiving reviews took it with it; this restores it.
 
 | Value | Label |
 |---|---|
 | `worth_it` | Do it |
 | `good_game_bad_plat` | Great game, rough platinum |
-| `bad_game_good_plat` | Only for the trophy |
 | `skip` | Skip it |
 
-**Four, not three.** "Good game, bad plat" has an inverse, and here it is not an edge case — *bad game, good plat* is the shovelware category, which the codebase already recognises formally (`hide_shovelware` filters, the wizard's shovelware opt-in). With three options, a hunter rating a Ratalaika plat must choose between "recommended" (implying the game is good) and "not recommended" (implying skip the plat), and both are wrong. It is rendered as four labelled choices, never a 3-point segmented control — a segment strip implies ordinality, and two of the four are compound statements about the game *and* the platinum separately.
+**Three, and the middle one is why the field exists**: a platinum can be a bad experience attached to a game worth playing, and no yes/no can say that.
+
+A fourth (`bad_game_good_plat`, "only for the trophy" — the shovelware verdict) was built and then **dropped**, because the two fields already say it together: the **stars rate the game** and the **recommendation rates the platinum**, so a shovelware plat is "Do it" at 1.5 stars. Splitting it across the two controls is what makes three enough. Migration `0295` maps any surviving row to `worth_it` — narrowing `choices` does not touch the column, so a retired value would otherwise sit there valid-to-Postgres and render its raw slug through `get_recommendation_display`.
+
+Rendered as three labelled tiles **across one row**, never a segmented strip: a strip implies these are points on one axis, and the middle option is a statement about the game *and* the platinum separately rather than a midpoint. One row rather than three stacked is also most of what keeps the modal from scrolling (below).
 
 **Permissive model, strict form.** `blank=True, default=''` keeps every pre-existing row valid and makes `recommendation=''` the "needs one" predicate; the requirement lives in `UserConceptRatingForm`, which every server write path goes through. Note the trap: a `blank=True` field added to `Meta.fields` is **not** required by default, so the form sets `required=True` and reassigns `choices` explicitly (Django would otherwise prepend an empty option, rendering a blank fifth radio).
 
@@ -81,7 +84,7 @@ The one **directive** field. Every score describes what the platinum was *like* 
 
 `recommendation_split` is computed inside `RatingService._compute_averages`, so it rides both existing cache entries with no new key and no new invalidation path, and reaches every consumer — including `GroupRatingView`'s JSON response, which is what the live-update reads.
 
-`recommend_pct` counts `worth_it` + `bad_game_good_plat`: both say *go and do this platinum*, which is what is being asked. The game being poor is what the star score is for. The **denominator is answered ratings**, not all of them — counting the pre-field backlog as "would not recommend" would misreport a beloved game as divisive until it clears. The percentage is always printed **with its N**; there is no display floor.
+`recommend_pct` is `worth_it` alone — the middle option says the *game* is worth playing and the platinum is not, so folding it in would report the opposite of what those raters meant. The **denominator is answered ratings**, not all of them — counting the pre-field backlog as "would not recommend" would misreport a beloved game as divisive until it clears. The percentage is always printed **with its N**; there is no display floor.
 
 ## Data model
 

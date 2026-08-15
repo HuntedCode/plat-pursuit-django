@@ -737,7 +737,6 @@
 }
 .pp-rcard__rec[data-rec="worth_it"]           { --rec-c: var(--pp-success); }
 .pp-rcard__rec[data-rec="good_game_bad_plat"] { --rec-c: var(--pp-warning); }
-.pp-rcard__rec[data-rec="bad_game_good_plat"] { --rec-c: var(--pp-accent); }
 .pp-rcard__rec[data-rec="skip"]               { --rec-c: var(--pp-error); }
 
 /* The overall score: stars over the figure, right-aligned, tabular so a column of cards lines up. */
