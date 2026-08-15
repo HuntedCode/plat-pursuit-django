@@ -214,10 +214,20 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             // and the JS handed a wall of `.pp-gtile`s the search card's selector -- silently skipping the
             // reveal and killing infinite scroll after page one.
             //
-            // The grid's own class is the server's answer, and it cannot drift from what is on screen.
-            var trophyGrid = document.getElementById('trophies-grid');
-            var isActivity = !(tab === 'trophies' && trophyGrid
-                               && trophyGrid.classList.contains('pp-actt'));
+            // Read the CHILDREN, not the grid's own class. Both shapes use `id="trophies-grid"`, and htmx
+            // settle re-applies the OUTGOING node's attributes to the incoming one for the settle window --
+            // which is still open when `afterSwap` fires and this runs. So the grid is briefly wearing the
+            // PREVIOUS shape's class, and reading it inverts the answer on every swap.
+            //
+            // That failed asymmetrically, which is why it looked like a day-wall bug: going days -> log
+            // picked `.pp-gtile` wrongly but the log has no `.pp-reveal` hide rule, so its cards showed
+            // anyway. Coming back, log -> days picked `.pp-actt__card` against a wall of tiles, so
+            // `staggerReveal` bailed with nothing matching and `.pp-reveal .pp-gtile { opacity: 0 }` hid
+            // every day with nothing left to un-hide it.
+            //
+            // The cards are the swapped-in content itself, so no attribute restoration can misreport them.
+            var isActivity = !(tab === 'trophies'
+                               && document.querySelector('#tab-content .pp-actt__card'));
 
             // TWO selectors, because the scroller and the reveal are asking different questions, and on
             // one view the answers differ.

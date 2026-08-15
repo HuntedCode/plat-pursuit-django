@@ -963,8 +963,16 @@ def test_search_results_actually_append_a_second_page(client):
     page = client.get(f'/hunters/{profile.psn_username}/?tab=trophies&q=Repeated', **CF).content.decode()
     assert "get('view')" not in page, 'the scroller still keys off a param nothing sets'
     assert "params.get('q')" not in page, 'the shape is re-derived from the URL again'
-    assert "trophyGrid.classList.contains('pp-actt')" in page, (
-        'the shape is no longer read off the grid the server actually rendered'
+    # And read off the CHILDREN, not the grid's own class. Both shapes use `id="trophies-grid"`, and htmx
+    # settle re-applies the OUTGOING node's attributes to the incoming one for the settle window -- which
+    # is still open when afterSwap fires. Reading the class there reports the shape you just LEFT, which
+    # broke the day wall on the way back from a filter: `.pp-actt__card` matched nothing, staggerReveal
+    # bailed, and `.pp-reveal .pp-gtile` hid every tile with nothing able to un-hide it.
+    assert "classList.contains('pp-actt')" not in page, (
+        'the shape is read off an attribute htmx settle rewrites mid-swap'
+    )
+    assert "querySelector('#tab-content .pp-actt__card')" in page, (
+        'the shape is no longer read off the swapped-in cards themselves'
     )
 
     # The concrete case the DOM check fixes: a tier the view does not recognise.
