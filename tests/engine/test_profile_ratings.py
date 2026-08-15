@@ -5,6 +5,7 @@ query count does not follow the size of the wall, that a DLC rating is compared 
 community and not its base game's, and that the shared summary sentence keeps working when it is pointed
 at a person instead of a game.
 """
+import re
 from pathlib import Path
 
 import pytest
@@ -406,7 +407,7 @@ def test_every_card_reserves_room_for_a_quick_take(client):
     # The block is rendered on BOTH cards -- reserving nothing on the silent one would defeat the point.
     # Matched on the exact class: a bare substring also catches `pp-rcard__take-txt` inside it.
     assert body.count('class="pp-rcard__take"') == 2
-    assert 'min-height: calc(3 * 1.45em)' in take, 'the take no longer reserves its lines'
+    assert 'min-height: calc(4 * 1.45em)' in take, 'the take no longer reserves its lines'
 
 
 def test_the_take_uses_the_plat_cards_quote_mark(client):
@@ -424,21 +425,35 @@ def test_the_take_uses_the_plat_cards_quote_mark(client):
     assert '&ldquo;' in plat, 'the plat card stopped using the mark this one was matched to'
 
 
-def test_the_quick_take_is_rendered_whole(client):
-    """The take is capped at 140 characters at the source, so there is nothing worth truncating -- and
-    clipping the one part of a rating that is not a number, on the tab that exists to show what someone
-    thought, would cut exactly what the reader came for."""
+def test_the_take_reserves_exactly_as_many_lines_as_it_shows(client):
+    """The block is clamped AND height-reserved, and the two counts have to agree: reserve more than you
+    clamp and every card carries dead space, clamp more than you reserve and a long take pushes the card
+    taller -- which is the raggedness the reserve exists to remove.
+
+    The clamp is sized so a MAXED-OUT take fits inside it rather than being cut mid-sentence. Getting
+    there needed the quote INLINE: as a flex item it reserved its width on every line of the block rather
+    than the one it sits on, which at the wall's narrowest track left room for roughly 90 of the 140
+    characters a blurb can hold."""
     take = 'A brutal, beautiful grind that I would absolutely do again tomorrow, and probably will.'
     profile = ProfileFactory(is_linked=True)
     _rated(profile, title='At length', blurb=take)
 
     body = client.get(_url(profile), **CF).content.decode()
     css = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
-    rule = css[css.index('.pp-rcard__take'):]
+    rule = css[css.index('.pp-rcard__take {'):]
     rule = rule[:rule.index('}')]
 
     assert take in body
-    assert 'line-clamp' not in rule, 'the quick take is being truncated again'
+    reserved = re.search(r'min-height: calc\((\d+) \* ([\d.]+)em\)', rule)
+    clamped = re.search(r'-webkit-line-clamp: (\d+)', rule)
+    assert reserved and clamped, 'the take stopped reserving or stopped clamping'
+    assert reserved.group(1) == clamped.group(1), (
+        f'the take reserves {reserved.group(1)} lines but shows {clamped.group(1)}'
+    )
+    # The reserve counts lines at the TEXT's own line-height, so the two have to be the same number.
+    assert f'line-height: {reserved.group(2)}' in rule
+    # And the quote stays inline -- a flex row is what made a full take impossible to fit.
+    assert 'display: flex' not in rule
 
 
 def test_the_card_carries_their_recommendation(client):

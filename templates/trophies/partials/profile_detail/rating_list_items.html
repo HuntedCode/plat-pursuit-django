@@ -153,12 +153,7 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
         `visible_blurbs()`, and a staff-hidden take must not surface on the author's own profile just
         because the filter lives somewhere else.{% endcomment %}
         {% with take=r.blurb %}
-        <p class="pp-rcard__take">
-            {% if take and not r.blurb_hidden %}
-            <span class="pp-rcard__quote" aria-hidden="true">&ldquo;</span>
-            <span class="pp-rcard__take-txt">{{ take }}</span>
-            {% endif %}
-        </p>
+        <p class="pp-rcard__take">{% if take and not r.blurb_hidden %}<span class="pp-rcard__quote" aria-hidden="true">&ldquo;</span>{{ take }}{% endif %}</p>
         {% endwith %}
 
         <div class="pp-rcard__foot">
