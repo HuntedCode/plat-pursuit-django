@@ -27,33 +27,7 @@ rather than existing only behind a click.
 
         <div class="pp-actday__games">
             {% for s in sessions %}
-            <div class="pp-act__session is-open{% if s.has_platinum %} pp-act__session--plat{% endif %}">
-                <div class="pp-act__row" role="group" aria-label="{{ s.game.title_name }}">
-                    <span class="pp-act__cover">
-                        <img class="pp-act__art{% if not s.game.has_cover_art %} pp-act__art--placeholder{% endif %}"
-                             src="{{ s.game.display_image_url }}" alt="" loading="lazy" decoding="async">
-                    </span>
-                    <span class="pp-act__body">
-                        <a class="pp-act__title" href="{% url 'game_detail_with_profile' s.game.np_communication_id profile.psn_username %}">{{ s.game.title_name }}</a>
-                        <span class="pp-act__stats">
-                            <span class="pp-act__n">{{ s.trophies|intcomma }}</span>
-                            <span class="pp-act__n-lbl">troph{{ s.trophies|pluralize:"y,ies" }}</span>
-                            {% if s.span_label %}<span class="pp-act__span" title="First to last trophy that day">over {{ s.span_label }}</span>{% endif %}
-                        </span>
-                        {% comment %}Same dot-and-figure tier vocabulary as the hero strip and the game
-                        card, so a colour means one thing across the whole profile. Zero tiers are omitted
-                        by the service -- a card should not list what did not happen.{% endcomment %}
-                        <span class="pp-act__tiers">
-                            {% for t in s.tiers %}
-                            <span class="pp-act__tier" data-tier="{{ t.tier }}" title="{{ t.tier|title }}: {{ t.count }}"><i></i>{{ t.count }}</span>
-                            {% endfor %}
-                        </span>
-                    </span>
-                </div>
-                <div class="pp-act__trophies">
-                    {% include 'trophies/partials/profile_detail/activity_trophies.html' with session_trophies=s.trophies_list %}
-                </div>
-            </div>
+            {% include 'trophies/partials/profile_detail/_activity_session.html' with s=s %}
             {% endfor %}
         </div>
 

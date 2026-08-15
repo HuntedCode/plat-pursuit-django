@@ -52,6 +52,9 @@
 {% endblock %}
 
 {% block js_scripts %}
+{% comment %}Collapsing a game inside the day modal. Presentational -- its trophies are already in
+the HTML -- and document-delegated, so it also covers the standalone day page.{% endcomment %}
+<script src="{% static 'js/activity-collapse.js' %}"></script>
     <script src="{% static 'js/browse-filters.js' %}"></script>
     <script>
     (function() {
@@ -68,10 +71,10 @@
             // into the mount; this reveals the dialog it brings and remembers the tile, so focus can return
             // where it came from. The tile stays a real <a> to that URL -- without JS it is simply a page.
             //
-            // There is no expand/collapse here any more, and no morph with it: every game in a day renders
-            // already open. The collapsed poster grid and the animation between the two states were built
-            // and removed -- inside a dialog the posters were small, the extra click bought nothing, and the
-            // motion was there for its own sake.
+            // Games in a day ARE collapsible (activity-collapse.js, loaded above) -- but open by default,
+            // so the click tidies rather than gates. What was removed is the collapsed POSTER state and the
+            // morph between it and the row: inside a dialog the posters were small and the extra click
+            // bought nothing.
             var panel = document.getElementById('tab-content');
             if (panel && !panel.dataset.actWired) {
                 panel.dataset.actWired = '1';
