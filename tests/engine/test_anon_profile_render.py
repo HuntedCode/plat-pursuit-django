@@ -131,13 +131,38 @@ def test_rarest_trophies_showcase_type_is_gone():
     assert not hasattr(showcase_service, 'provide_rarest_trophies')
 
 
-def test_anonymous_render_keeps_header_stats(monkeypatch):
-    """The four Platinum Highlight cards are deliberately NOT gated: they render a "None"
-    empty state, so hiding them would misreport the profile to logged-out visitors."""
+def test_the_header_stats_are_free_and_ungated(monkeypatch):
+    """Five denormalized columns off the Profile row. They cost nothing, so there is nothing to gate --
+    and gating them WOULD misreport the profile to logged-out visitors, since a figure that is hidden
+    rather than absent reads as a zero."""
     profile = ProfileFactory(psn_history_public=True)
 
     context, _ = _build_context(profile, AnonymousUser(), monkeypatch)
 
     header = context['header_stats']
-    for key in ('recent_platinum', 'rarest_platinum', 'fastest_platinum', 'milestone_platinum'):
+    for key in ('total_games', 'total_earned_trophies', 'total_unearned_trophies',
+                'total_completions', 'average_completion'):
         assert key in header, f'{key} must stay in the anonymous header'
+
+
+def test_the_notable_platinums_stopped_being_computed_for_nobody():
+    """The hero retired its four Platinum Highlight tiles, and for weeks after that `_build_header_stats`
+    went on building all four anyway -- three queries per profile render, one of them an OFFSET over the
+    profile's entire earned-platinum set (`milestone_earned[milestone_number - 1]`), plus the
+    select_related chain feeding them. Nothing rendered any of it.
+
+    Exactly the timeline's failure mode, found the same way: a provider outliving its surface is
+    invisible precisely BECAUSE nothing renders it, so only a reader going looking will ever notice.
+    This is what stops it growing back."""
+    import inspect
+
+    src = inspect.getsource(ProfileDetailView._build_header_stats)
+
+    for key in ('recent_platinum', 'rarest_platinum', 'fastest_platinum', 'milestone_platinum'):
+        assert key not in src, f'{key} is being computed again with nothing rendering it'
+
+    # And the requery whose only job was prefetching the FKs behind them.
+    ctx_src = inspect.getsource(ProfileDetailView.get_context_data)
+    assert 'rarest_plat__trophy__game' not in ctx_src, (
+        'the profile is being re-fetched to prefetch platinum FKs nothing reads'
+    )

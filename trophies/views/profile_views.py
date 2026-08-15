@@ -1,5 +1,4 @@
 import logging
-from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -196,16 +195,16 @@ class ProfileDetailView(DetailView):
         return get_object_or_404(queryset, **{self.slug_field: psn_username})
 
     def _build_header_stats(self, profile):
-        """
-        Build header statistics for profile.
+        """The hero's figures. Five denormalized columns off the Profile row -- no queries at all.
 
-        Args:
-            profile: Profile instance
-
-        Returns:
-            dict: Header stats with trophy counts, completions, and notable trophies
+        It used to also build four NOTABLE PLATINUMS (recent / rarest / fastest / milestone) for tiles the
+        hero rebuild had already retired. Nothing rendered them for weeks while they went on costing three
+        queries per profile render -- one of them `[milestone_number - 1]` on an ordered queryset, i.e. an
+        OFFSET over the profile's entire earned-platinum set -- plus the select_related chain that fed
+        them. Same shape as the timeline that was deleted beside them: a provider outliving its surface,
+        invisible precisely because nothing renders it.
         """
-        header_stats = {
+        return {
             'total_games': profile.total_games,
             'total_earned_trophies': profile.total_trophies,
             'total_unearned_trophies': profile.total_unearned,
@@ -213,85 +212,6 @@ class ProfileDetailView(DetailView):
             'average_completion': profile.avg_progress,
         }
 
-        # Recent platinum
-        if profile.recent_plat:
-            header_stats['recent_platinum'] = {
-                'trophy': profile.recent_plat.trophy,
-                'game': profile.recent_plat.trophy.game,
-                'earned_date': profile.recent_plat.earned_date_time,
-            }
-        else:
-            header_stats['recent_platinum'] = None
-
-        # Rarest platinum
-        if profile.rarest_plat:
-            header_stats['rarest_platinum'] = {
-                'trophy': profile.rarest_plat.trophy,
-                'game': profile.rarest_plat.trophy.game,
-                'earned_date': profile.rarest_plat.earned_date_time,
-            }
-        else:
-            header_stats['rarest_platinum'] = None
-
-        # Fastest platinum (shortest play_duration on a game where plat was earned)
-        fastest_plat_game = ProfileGame.objects.filter(
-            profile=profile,
-            has_plat=True,
-            play_duration__isnull=False,
-            play_duration__gt=timedelta(0),
-        ).select_related(
-            'game', 'game__concept', 'game__concept__igdb_match',
-        ).defer('game__concept__igdb_match__raw_response').order_by('play_duration').first()
-
-        if fastest_plat_game:
-            fastest_plat_trophy = EarnedTrophy.objects.filter(
-                profile=profile,
-                trophy__game=fastest_plat_game.game,
-                trophy__trophy_type='platinum',
-                earned=True,
-            ).select_related(
-                'trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match',
-            ).defer('trophy__game__concept__igdb_match__raw_response').first()
-            if fastest_plat_trophy:
-                header_stats['fastest_platinum'] = {
-                    'trophy': fastest_plat_trophy.trophy,
-                    'game': fastest_plat_game.game,
-                    'play_duration': fastest_plat_game.play_duration,
-                    'earned_date': fastest_plat_trophy.earned_date_time,
-                }
-            else:
-                header_stats['fastest_platinum'] = None
-        else:
-            header_stats['fastest_platinum'] = None
-
-        # Milestone platinum (most recent round-number plat: 10, 20, 30, etc.)
-        header_stats['milestone_platinum'] = None
-        if profile.total_plats >= 10:
-            # Find the highest milestone reached (10, 20, 30, ...)
-            milestone_number = (profile.total_plats // 10) * 10
-            # Get the Nth platinum earned chronologically
-            milestone_earned = EarnedTrophy.objects.filter(
-                profile=profile,
-                trophy__trophy_type='platinum',
-                earned=True,
-                earned_date_time__isnull=False,
-            ).select_related(
-                'trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match',
-            ).defer('trophy__game__concept__igdb_match__raw_response').order_by('earned_date_time')
-
-            # Use array slicing to get the Nth item (0-indexed)
-            try:
-                milestone_entry = milestone_earned[milestone_number - 1]
-                header_stats['milestone_platinum'] = {
-                    'trophy': milestone_entry.trophy,
-                    'game': milestone_entry.trophy.game,
-                    'milestone_number': milestone_number,
-                    'earned_date': milestone_entry.earned_date_time,
-                }
-            except (IndexError, Exception):
-                header_stats['milestone_platinum'] = None
-
-        return header_stats
 
     def _build_games_tab_context(self, profile, per_page, page_number):
         """
@@ -787,11 +707,6 @@ class ProfileDetailView(DetailView):
         tab = self.request.GET.get('tab', 'games')
         per_page = 50
         page_number = self.request.GET.get('page', 1)
-
-        # Efficiently load profile with denormalized plat FKs
-        profile = Profile.objects.select_related(
-            'recent_plat__trophy__game', 'rarest_plat__trophy__game'
-        ).get(id=profile.id)
 
         # Two providers used to run here and neither does any more (2026-08).
         #

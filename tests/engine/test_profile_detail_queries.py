@@ -115,12 +115,14 @@ def test_every_mapped_tab_template_can_actually_be_built():
         assert mapped in buildable, f"'{mapped}' has a template but no way to build its context"
 
 
-def test_the_platinum_highlights_do_not_haul_the_igdb_blob(client):
-    """The header's four highlight cards each join `concept__igdb_match` for the cover chain, and three of
-    them did it without deferring `raw_response` -- so every profile render, on every tab, dragged three
-    copies of a ~30 KB blob nothing reads. Bounded (one row each) rather than per-card, which is why it
-    survived the games-grid fix, but the standing rule is that the `select_related` and the `defer` travel
-    together.
+def test_the_profile_page_never_hauls_the_igdb_blob(client):
+    """No render of this page, on any tab, may drag `raw_response` -- the ~30 KB IGDB payload no cover
+    chain reads.
+
+    Written for the header's four platinum-highlight cards, three of which joined `concept__igdb_match`
+    without the paired defer. Those cards are gone now (and so is the computation behind them), but the
+    assertion outlives them: every tab still joins that relation for covers, and the standing rule is
+    that the `select_related` and the `defer` travel together.
     """
     profile = ProfileFactory(is_linked=True)
     _completed_game(profile, with_platinum=True)
@@ -206,3 +208,84 @@ def test_the_card_shows_the_per_tier_record(client):
     assert 'pp-pgcard__tier' in body
     for tier in ('Bronze:', 'Silver:', 'Gold:'):
         assert tier in body, f'{tier} has no accessible name, leaving the tier colour-only'
+
+
+# ── The hero's polish pass (2026-08) ──────────────────────────────────────────────────────────────
+
+def test_the_level_and_its_progress_are_one_object(client):
+    """The header's structural fix. The level figure sat top-right and its progress bar was a full-width
+    band under the whole identity row, with the avatar and username between them -- a value separated
+    from its own progress, which nothing that shows both (a battery, a ring, a storage bar) ever does.
+
+    They are now one dial: the ring carries the progress, the level plate sits on the ring, the caption
+    sits under both. Asserted by nesting, because the whole point is WHERE they are, not that they
+    exist."""
+    profile = ProfileFactory(is_linked=True, trophy_level=42, progress=68)
+
+    html = client.get(f'/hunters/{profile.psn_username}/', **CF).content.decode()
+
+    dial = html[html.index('pp-phero__dial'):]
+    dial = dial[:dial.index('min-w-0 flex-1')]      # up to the name block, i.e. the dial alone
+    for part in ('pp-phero__ring-fill', 'pp-phero__avatar', 'pp-phero__lvl', 'pp-phero__tonext'):
+        assert part in dial, f'{part} is no longer part of the identity dial'
+
+    # And the full-width bar it replaced is gone from the header.
+    header = html[:html.index('pp-phero__tiers')]
+    assert 'pp-horizon' not in header, 'the level progress is a full-width band again'
+
+
+def test_the_ring_is_driven_by_the_real_progress_figure(client):
+    """`pathLength="100"` makes the dash units percentages, so the figure goes straight on as `--lvl`
+    with no circumference arithmetic. A wrong or missing value here draws a ring that is confidently
+    incorrect, which is worse than no ring."""
+    profile = ProfileFactory(is_linked=True, trophy_level=42, progress=68)
+
+    html = client.get(f'/hunters/{profile.psn_username}/', **CF).content.decode()
+
+    assert '--lvl: 68;' in html
+    assert html.count('pathLength="100"') >= 2, 'the track and the fill must share the dash scale'
+
+
+def test_a_never_synced_profile_draws_an_empty_ring_rather_than_no_ring(client):
+    """Zero progress must still resolve `--lvl`. An UNDEFINED custom property invalidates the whole
+    declaration it appears in rather than falling back, so a missing value would leave the fill with no
+    `stroke-dashoffset` at all -- i.e. drawn FULL. A brand-new hunter must not be shown a completed
+    level, and "0" and "absent" are the same thing to a template but opposites to the ring."""
+    profile = ProfileFactory(is_linked=True, trophy_level=1, progress=0)
+
+    html = client.get(f'/hunters/{profile.psn_username}/', **CF).content.decode()
+
+    assert '--lvl: 0;' in html
+    assert 'pp-phero__tonext' not in html, 'a "% to next level" caption with no progress to report'
+
+
+def test_no_headline_figure_is_stated_twice(client):
+    """Platinums used to be a `.scard` AND a cell in the tier row -- the same number in two formats on a
+    surface whose whole job is standing. Average completion meanwhile hung off the right end of that tier
+    row, which is otherwise entirely about trophy tiers. The duplicate left; the stray took its slot."""
+    profile = ProfileFactory(is_linked=True)
+
+    html = client.get(f'/hunters/{profile.psn_username}/', **CF).content.decode()
+    header = html[:html.index('id="profile-tab-bar"')]
+
+    assert '>Platinums<' not in header, 'the platinum count is back in the stat grid AND the tier row'
+    assert 'Avg. completion' in header, 'average completion has no home again'
+    # It still has to BE in the tier row -- that row is read as a shape, and dropping its widest-to-
+    # narrowest tip would break the shape rather than tidy it.
+    tiers = header[header.index('pp-phero__tiers'):]
+    assert 'data-tier="platinum"' in tiers
+
+
+def test_every_figure_in_the_hero_actually_counts_up(client):
+    """The hero marked all of them `data-countup` and none of them ever animated: the page's script only
+    drove `#tab-content [data-countup]`, and this header sits outside that panel. So the surface had been
+    missing the opening beat every other rebuilt page has, while carrying the markup that claims it."""
+    src = (ROOT / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')
+
+    assert "'#tab-content [data-countup]" not in src, (
+        'the count-up pass is scoped to the tab panel again, which excludes the hero'
+    )
+    assert "querySelectorAll('[data-countup]:not([data-counted])')" in src
+    # The marker is what makes the wider scope safe -- without it, every filter swap would replay the
+    # animation on figures that did not change.
+    assert "setAttribute('data-counted', '1')" in src

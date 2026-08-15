@@ -2,16 +2,83 @@
  * PROFILE HERO (/hunters/<user>/) -- identity and standing.
  *
  * Composition comes from Tailwind + the shared primitives (accented header card, .pp-head-cascade,
- * .scard, .pp-tally, .pp-horizon); this file is only the profile-specific parts those do not cover:
- * the avatar, the small identity tags, and the trophy tier row.
+ * .scard, .pp-tally); this file is only the profile-specific parts those do not cover: the identity
+ * dial (avatar + level ring), the small identity tags, and the trophy tier row.
+ *
+ * `.pp-horizon` is deliberately no longer among them -- the level progress it used to draw as a
+ * full-width band is now the ring on the avatar, next to the figure it belongs to.
  * ========================================================================== */
+
+/* ---- Identity dial: avatar + level + progress, as ONE object -------------------------------------
+ *
+ * The level and its progress used to be two things at opposite ends of the hero -- the figure top-right,
+ * its bar a full-width band under the whole identity row, with the avatar and username between them. That
+ * is one fact split in half: nothing that shows a value and its progress (a battery, a ring, a storage
+ * bar) puts them in different places. The ring closes it -- the avatar wears its own progress, the level
+ * plate sits on the ring, and the caption sits under both.
+ *
+ * The full-width Horizon band is gone with it, which also buys back ~34px of hero on a phone.
+ */
+.pp-phero__dial { position: relative; flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+
+.pp-phero__ringwrap { position: relative; width: 78px; height: 78px; }
+@media (min-width: 768px) { .pp-phero__ringwrap { width: 100px; height: 100px; } }
+
+/* `rotate(-90deg)` so 0% starts at twelve o'clock rather than three -- the same idiom as the Career
+   page's element-split ring (`.rp-ring`), which is the house pattern for an SVG arc. */
+.pp-phero__ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+.pp-phero__ring circle { fill: none; stroke-width: 5; }
+.pp-phero__ring-track { stroke: var(--pp-border); }
+/* `pathLength="100"` makes the dash units percentages, so the template writes the progress figure
+   straight in with no circumference arithmetic. */
+.pp-phero__ring-fill {
+    stroke: var(--pp-primary); stroke-linecap: round;
+    stroke-dasharray: 100 100;
+    /* `* 1px` is load-bearing, not decoration. The keyframe below compiles to `stroke-dashoffset: 100px`,
+       and interpolating a LENGTH against a bare <number> is not guaranteed -- browsers may fall back to a
+       discrete step, which shows as the ring snapping into place instead of drawing. Both sides are
+       lengths, so the animation is a real interpolation. */
+    stroke-dashoffset: calc((100 - var(--lvl, 0)) * 1px);
+    filter: drop-shadow(0 0 3px color-mix(in oklab, var(--pp-primary) 45%, transparent));
+}
+/* The page's one opening flourish on this surface: the arc draws from empty to its real value while the
+   level counts up beside it. A DECELERATING curve, deliberately not a spring -- an overshoot would draw
+   the ring past the hunter's actual progress and settle back, which is a small lie about a real number.
+   The keyframe declares only `from`, so it interpolates to the element's own computed offset; that keeps
+   `var(--lvl)` out of the keyframe, where a custom property is not reliably interpolated. */
+@keyframes ppLevelRing { from { stroke-dashoffset: 100px; } }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-phero__ring-fill { animation: ppLevelRing 1.05s cubic-bezier(0.16, 0.84, 0.34, 1) backwards; }
+}
+
+/* The level, worn ON the ring rather than stated across the card from it. Overlaps the avatar's bottom
+   edge the way a rank pip does, so it reads as part of the same object. */
+.pp-phero__lvl {
+    position: absolute; left: 50%; bottom: -3px; transform: translateX(-50%);
+    display: inline-flex; align-items: baseline; gap: 2px;
+    padding: 1px 7px; border-radius: 999px;
+    background: var(--pp-bg-0, #0b0d12);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 55%, transparent);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+    line-height: 1.35;
+}
+.pp-phero__lvl-n { font-size: 0.9rem; font-weight: 800; color: var(--pp-primary); font-variant-numeric: tabular-nums; }
+.pp-phero__lvl-k { font-size: 0.52rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+@media (min-width: 768px) {
+    .pp-phero__lvl { padding: 2px 9px; }
+    .pp-phero__lvl-n { font-size: 1.05rem; }
+    .pp-phero__lvl-k { font-size: 0.56rem; }
+}
+
+/* The caption the full-width bar used to carry, now under the thing it describes. */
+.pp-phero__tonext { font-size: 0.6rem; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; }
+@media (min-width: 768px) { .pp-phero__tonext { font-size: 0.66rem; } }
 
 /* ---- Avatar ------------------------------------------------------------------------------------- */
 .pp-phero__avatar {
-    position: relative; flex: none; width: 64px; height: 64px; border-radius: 50%;
+    position: absolute; inset: 7px; border-radius: 50%;
     overflow: hidden; background: var(--pp-bg-2); border: 1px solid var(--pp-border);
 }
-@media (min-width: 768px) { .pp-phero__avatar { width: 84px; height: 84px; } }
 .pp-phero__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 /* No avatar on file: a quiet glyph rather than a broken-image icon. */
 .pp-phero__avatar--none { display: grid; place-items: center; color: var(--pp-text-mute); }
@@ -56,7 +123,8 @@
 }
 @keyframes ppPheroPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-.pp-phero__prog { margin-top: 5px; font-size: 0.7rem; color: var(--pp-text-mute); }
+
+.pp-phero__unit { font-size: 0.62em; font-weight: 700; color: var(--pp-text-mute); margin-left: 1px; }
 
 /* ---- Trophy tiers -------------------------------------------------------------------------------- */
 /* The one surface the scoped trophy colour family belongs on -- it IS trophies. Read as a SHAPE (a wide
@@ -80,9 +148,6 @@
 .pp-phero__tier[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
 .pp-phero__tier[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }
 
-/* Pushed to the far end so the tier dots stay a group and this reads as a separate fact about them. */
-.pp-phero__avg { margin-left: auto; font-size: 0.75rem; color: var(--pp-text-mute); }
-@media (max-width: 520px) { .pp-phero__avg { margin-left: 0; flex-basis: 100%; } }
 
 /* ==========================================================================
  * PROFILE GAME CARD -- the few parts `.pp-gcard` does not already carry.

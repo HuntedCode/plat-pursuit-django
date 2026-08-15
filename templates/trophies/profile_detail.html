@@ -252,12 +252,17 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
                 });
             }
 
-            // Header figures count up (the Ratings tab's taste summary). Guarded by a marker rather than by
-            // which swap called us: this runs again on every filter/sort swap, and the summary sits OUTSIDE
-            // the swapped results, so an unguarded pass would replay its animation each time the wall
-            // re-sorted -- drawing the eye to the one thing that did not change.
+            // Every figure on the page counts up, once. Guarded by a MARKER rather than by which swap
+            // called us: this runs again on every filter/sort swap, and some figures (the Ratings tab's
+            // taste summary) sit outside the swapped results -- so an unguarded pass would replay their
+            // animation each time the wall re-sorted, drawing the eye to the one thing that did not change.
+            //
+            // Deliberately NOT scoped to `#tab-content`, which is where it started. The profile HERO is
+            // outside that panel, so every figure in it -- the level, all four stat cards -- carried a
+            // `data-countup` that nothing ever read, and the page had been quietly missing the opening
+            // beat every other rebuilt surface has. The marker is what makes widening it safe.
             if (window.PlatPursuit && PlatPursuit.countUp) {
-                document.querySelectorAll('#tab-content [data-countup]:not([data-counted])').forEach(function (el) {
+                document.querySelectorAll('[data-countup]:not([data-counted])').forEach(function (el) {
                     el.setAttribute('data-counted', '1');
                     PlatPursuit.countUp(el, 850);
                 });

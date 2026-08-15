@@ -3,23 +3,70 @@
 Its job is IDENTITY and STANDING, and nothing else. What it deliberately no longer carries:
 
   * the game-art banner (retired -- there was no good version of it, and it fought the content)
-  * the four notable-platinum tiles (recent / rarest / fastest / milestone). Two of those four are
-    already events on the milestone timeline, so the page rendered the same facts twice; all four are
-    "highlights of the journey", which is what the About tab is for. They also each resolved a game
-    cover, which is where the page's remaining bounded IGDB fetches came from.
+  * the four notable-platinum tiles (recent / rarest / fastest / milestone). Each resolved a game cover,
+    which is where the page's remaining bounded IGDB fetches came from. NOTE: the tiles went in the
+    rebuild, but `_build_header_stats` went on COMPUTING all four for weeks afterwards -- three queries
+    per render, including an OFFSET over the profile's entire earned-platinum set -- because nothing
+    renders a provider loudly enough to notice it is still running. Removed 2026-08 and pinned by
+    `tests/engine/test_anon_profile_render.py`.
 
 Composition follows the Career header: accented card, `.pp-head-cascade` opening beat, a `.scard` grid
 for the headline figures. The trophy tier row is the one place the scoped trophy colour family is used,
 which is exactly what that family is for.
+
+The POLISH pass (2026-08) changed three things, and the first is structural rather than decorative:
+
+  1. The IDENTITY DIAL. Level and level-progress were split across the card -- the figure top-right, its
+     bar a full-width band beneath the whole identity row. A value and its own progress belong to one
+     object, so they became one: a ring on the avatar, the level worn on the ring, the caption under it.
+     That is also where the surface's one opening flourish comes from (the arc drawing in), rather than
+     from decoration applied afterwards.
+  2. No figure is stated twice. Platinums was in the stat grid AND the tier row; average completion was
+     stranded on the end of that tier row. The duplicate left and the stray took its slot.
+  3. The count-ups actually run. Every figure here was already marked `data-countup`, but the page's
+     script only drove `#tab-content [data-countup]` -- and this header is outside it, so the opening
+     beat every other rebuilt page has had been silently missing here since the rebuild.
 {% endcomment %}
 <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
     <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
 
         {# ── Identity ── #}
         <div class="flex items-start gap-3 md:gap-4 min-w-0">
-            <div class="pp-phero__avatar{% if not profile.avatar_url %} pp-phero__avatar--none{% endif %}">
-                <img src="{{ profile.avatar_url|default:'' }}" alt="" loading="eager" decoding="async">
-                <svg class="pp-phero__ph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+            {% comment %}The identity dial: avatar, level and level-progress as ONE object. They used to be
+            three separate things -- avatar here, level figure across the card top-right, progress a
+            full-width bar under the whole row -- which split a value from its own progress. See the CSS
+            for why that is the thing worth fixing before any decoration.
+
+            `--lvl` is the percentage into the current level, straight onto the ring: the circle carries
+            `pathLength="100"`, so dash units ARE percentages and no circumference maths is needed. Guarded
+            with `|default:0` because `profile.progress` is null on a never-synced account, and an
+            undefined custom property invalidates the whole declaration rather than falling back.
+            {% endcomment %}
+            <div class="pp-phero__dial">
+                <div class="pp-phero__ringwrap">
+                    <svg class="pp-phero__ring" viewBox="0 0 100 100" aria-hidden="true"
+                         style="--lvl: {{ profile.progress|default:0|floatformat:0 }};">
+                        <circle class="pp-phero__ring-track" cx="50" cy="50" r="46" pathLength="100"></circle>
+                        <circle class="pp-phero__ring-fill" cx="50" cy="50" r="46" pathLength="100"></circle>
+                    </svg>
+
+                    <div class="pp-phero__avatar{% if not profile.avatar_url %} pp-phero__avatar--none{% endif %}">
+                        <img src="{{ profile.avatar_url|default:'' }}" alt="" loading="eager" decoding="async">
+                        <svg class="pp-phero__ph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+                    </div>
+
+                    {% comment %}The ring is decorative (aria-hidden) and the plate is not: this is where a
+                    screen reader gets the level AND how far through it, in one phrase, because the ring it
+                    describes says nothing on its own.{% endcomment %}
+                    <span class="pp-phero__lvl"
+                          aria-label="Level {{ profile.trophy_level|intcomma }}{% if profile.progress %}, {{ profile.progress|floatformat:0 }} percent to level {{ profile.trophy_level|add:1 }}{% endif %}">
+                        <b class="pp-phero__lvl-n pp-tally" data-countup="{{ profile.trophy_level }}">{{ profile.trophy_level|intcomma }}</b>
+                        <span class="pp-phero__lvl-k" aria-hidden="true">Lv</span>
+                    </span>
+                </div>
+                {% if profile.progress %}
+                <p class="pp-phero__tonext" aria-hidden="true">{{ profile.progress|floatformat:0 }}% to {{ profile.trophy_level|add:1 }}</p>
+                {% endif %}
             </div>
 
             <div class="min-w-0 flex-1">
@@ -54,32 +101,18 @@ which is exactly what that family is for.
                 </p>
             </div>
 
-            {# Level: the single accent figure, mirroring how the hunter cards mark it. #}
-            <div class="shrink-0 text-right">
-                <span class="pp-tally text-primary leading-none font-bold text-2xl md:text-4xl" data-countup="{{ profile.trophy_level }}">{{ profile.trophy_level|intcomma }}</span>
-                <span class="block text-[0.6rem] md:text-xs text-base-content/50 uppercase tracking-wider mt-0.5 md:mt-1">Level</span>
-            </div>
         </div>
-
-        {% comment %}Level progress. `profile.progress` is the percentage into the CURRENT level, which is
-        a different question from average completion below -- so it rides the identity block it belongs to
-        rather than joining the stat grid.{% endcomment %}
-        {% if profile.progress %}
-        <div class="mt-3 md:mt-4">
-            {% include 'components/horizon.html' with progress=profile.progress height='6px' %}
-            <p class="pp-phero__prog">{{ profile.progress|floatformat:0 }}% to level {{ profile.trophy_level|add:1 }}</p>
-        </div>
-        {% endif %}
 
         {# ── Standing ── #}
+        {% comment %}Four figures, none of them said twice. PLATINUMS used to sit here AND in the tier row
+        below -- the same number in two formats on a surface whose job is standing -- while AVERAGE
+        COMPLETION was stranded at the right end of that tier row, which is otherwise entirely about
+        trophy tiers. The two problems solved each other: the duplicate leaves, the stray moves in.
+        {% endcomment %}
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
             <div class="scard">
                 <div class="scard__label">Trophies</div>
                 <div class="scard__value pp-tally" data-countup="{{ header_stats.total_earned_trophies }}">{{ header_stats.total_earned_trophies|intcomma }}</div>
-            </div>
-            <div class="scard">
-                <div class="scard__label">Platinums</div>
-                <div class="scard__value pp-tally" data-countup="{{ profile.total_plats }}">{{ profile.total_plats|intcomma }}</div>
             </div>
             <div class="scard">
                 <div class="scard__label">Games</div>
@@ -88,6 +121,10 @@ which is exactly what that family is for.
             <div class="scard">
                 <div class="scard__label">Completed</div>
                 <div class="scard__value pp-tally" data-countup="{{ header_stats.total_completions }}">{{ header_stats.total_completions|intcomma }}</div>
+            </div>
+            <div class="scard">
+                <div class="scard__label">Avg. completion</div>
+                <div class="scard__value pp-tally"><span data-countup="{{ header_stats.average_completion|default:0|floatformat:0 }}">{{ header_stats.average_completion|default:0|floatformat:0 }}</span><span class="pp-phero__unit">%</span></div>
             </div>
         </div>
 
@@ -99,7 +136,6 @@ which is exactly what that family is for.
             <span class="pp-phero__tier" data-tier="gold"><i></i>{{ profile.total_golds|intcomma }}</span>
             <span class="pp-phero__tier" data-tier="silver"><i></i>{{ profile.total_silvers|intcomma }}</span>
             <span class="pp-phero__tier" data-tier="bronze"><i></i>{{ profile.total_bronzes|intcomma }}</span>
-            <span class="pp-phero__avg">{{ header_stats.average_completion|floatformat:0 }}% average completion</span>
         </div>
     </div>
 </section>
