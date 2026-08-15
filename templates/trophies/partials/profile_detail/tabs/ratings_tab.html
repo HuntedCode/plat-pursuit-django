@@ -73,15 +73,52 @@ above it, and a full filter bar would compete with the strip it sits under.
     </div>
 </section>
 
+{% comment %}Base games and DLC are two walls, not one. A DLC pack is rated separately from the game it
+belongs to, so a mixed wall shows the same title twice with two different scores and leaves the reader to
+work out why.
+
+The site-standard segmented switcher, LEFT-aligned because it is a second-level control inside a tab that
+already has a right-aligned strip above it. Chips carry their counts, which is also what stops the split
+confusing the summary above: that stays WHOLE (a hunter's taste does not divide at the DLC line), and the
+counts say how the wall beneath it is divided.
+
+Each chip swaps `#tab-content`, not `#tab-results` -- the switcher and the sort control live OUTSIDE the
+results, so swapping only those would leave both still describing the set you just left. Same reason the
+Trophies tab's Clear re-renders its whole tab.
+
+Hidden until there is any DLC to see: a switcher whose second chip is always empty is a control that only
+ever does nothing.{% endcomment %}
+{% if rating_summary_stats.dlc_count %}
+{% with base_url=request.path %}
+<div class="flex items-center justify-start mb-3">
+    <div class="pp-switch" role="tablist" aria-label="Which ratings">
+        {% for slug, label in ratings_sets %}
+        <a href="{{ base_url }}?tab=ratings&set={{ slug }}"
+           hx-get="{{ base_url }}?tab=ratings&set={{ slug }}"
+           hx-target="#tab-content" hx-swap="innerHTML" hx-push-url="true"
+           role="tab" aria-controls="tab-content"
+           aria-selected="{% if rating_set == slug %}true{% else %}false{% endif %}"
+           class="pp-switch__chip {% if rating_set == slug %}is-active{% endif %}">
+            <span class="pp-switch__lbl">{{ label }}</span>
+            <span class="ml-1 text-[0.65rem] font-semibold opacity-60 tabular-nums">{% if slug == 'dlc' %}{{ rating_summary_stats.dlc_count|intcomma }}{% else %}{{ rating_summary_stats.base_count|intcomma }}{% endif %}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endwith %}
+{% endif %}
+
 {% comment %}A FORM rather than a bare select, because the scroller serializes it to keep the sort across
 appended pages -- a wall that reverts to "recently rated" on page 2 is worse than one that cannot scroll.
+The SET rides in it for the same reason: page 2 of the DLC wall must not come back as base games.
 {% endcomment %}
 <form id="ratings-form" method="get" class="flex items-center justify-between gap-3 flex-wrap mb-3"
       hx-get="{% url 'profile_detail' psn_username=profile.psn_username %}"
       hx-target="#tab-results" hx-swap="innerHTML" hx-push-url="true" hx-trigger="change">
     <input type="hidden" name="tab" value="ratings">
+    <input type="hidden" name="set" value="{{ rating_set }}">
     <p class="text-xs text-base-content/50">
-        {{ rating_summary_stats.count|intcomma }} rating{{ rating_summary_stats.count|pluralize }}
+        {% if rating_set == 'dlc' %}{{ rating_summary_stats.dlc_count|intcomma }} DLC rating{{ rating_summary_stats.dlc_count|pluralize }}{% else %}{{ rating_summary_stats.base_count|intcomma }} rating{{ rating_summary_stats.base_count|pluralize }}{% endif %}
     </p>
     <label class="pp-hbrowse__sel">
         <span class="sr-only">Sort ratings</span>

@@ -756,11 +756,23 @@ class ProfileDetailView(DetailView):
         except (TypeError, ValueError):
             page = 1        # public, crawled URL: a hand-edited ?page= must not 500
 
+        # Base games and DLC are separate walls. A DLC pack is rated separately from the game it belongs
+        # to, so a mixed wall shows the same title twice with two different scores and leaves the reader
+        # to work out why. Anything but 'dlc' is games -- a hand-edited `?set=` should land somewhere, not
+        # 404.
+        rating_set = 'dlc' if self.request.GET.get('set') == 'dlc' else 'games'
+
         return {
             # Not computed for a scroll append: that response is cards only, and the summary describes the
             # whole set, so it would be an extra aggregate per appended page that nothing renders.
             'rating_summary_stats': None if self._is_scroll_append() else profile_rating_summary(profile),
-            'profile_ratings': build_profile_ratings_page(profile, sort=sort, page=page),
+            'profile_ratings': build_profile_ratings_page(
+                profile, sort=sort, page=page, dlc=rating_set == 'dlc',
+            ),
+            'rating_set': rating_set,
+            #: The switcher's two chips, in order. A list rather than two hardcoded anchors so the chip
+            #: markup is written once -- the same reason the recommendation options are looped.
+            'ratings_sets': (('games', 'Games'), ('dlc', 'DLC')),
             'sort': sort,
             'sort_options': PROFILE_RATING_SORTS,
             'scroll_per_page': RATINGS_PER_PAGE,

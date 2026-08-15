@@ -810,15 +810,30 @@
  * The size came down only slightly (0.84 -> 0.78rem); the colour and weight are the game page's, which is
  * what makes it readable. Dropping to 3 lines of tiny text would have traded the wrong one away. */
 .pp-rcard__take {
-    margin: 3px 0 0;
-    min-height: calc(4 * 1.45em);
-    font-size: 0.74rem; line-height: 1.45; color: var(--pp-text);
+    display: flex; align-items: flex-start;
+    margin: 3px 0 0; padding: 7px;
+    /* Four TEXT lines plus the box's own padding and border, because `box-sizing: border-box` means
+       min-height measures the border box. Get this wrong and the box reserves four lines but shows three
+       and a bit. */
+    min-height: calc(4 * 1.45em + 16px);
+    border-radius: var(--pp-radius-sm);
+    background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent);
+    border: 1px solid var(--pp-border);
+    font-size: 0.72rem; line-height: 1.45; color: var(--pp-text);
+}
+@media (min-width: 768px) { .pp-rcard__take { font-size: 0.76rem; } }
+/* The box is drawn at the same size whether or not there is a take, so the placeholder centres in it --
+   top-left would read as text that failed to arrive rather than as a stated absence. */
+.pp-rcard__take--empty { align-items: center; justify-content: center; }
+.pp-rcard__none { font-size: 0.72rem; font-style: italic; color: var(--pp-text-mute); }
+
+.pp-rcard__take-txt {
+    min-width: 0;
     overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical;
     /* A take is 140 characters of anything, including a URL or an unspaced run that would otherwise push
        the card's grid track wider than its share. Same guard the game page's blurbs use. */
     overflow-wrap: anywhere;
 }
-@media (min-width: 768px) { .pp-rcard__take { font-size: 0.78rem; } }
 /* The house cyan, NOT the verdict colour. Three things on this card already carry that -- the edge, the
    stamp on the art and the label -- and a fourth turned the quote into another verdict signal when it is
    really punctuation. Cyan keeps it a typographic mark, and matches the same mark on a platinum plat

@@ -58,6 +58,8 @@ The card was first built cover-forward and portrait, and **reversed**: that shap
 
 The art followed the same logic one step further. A wide card wants a **wide image**, so the panel draws `Concept.landscape_url` (trusted IGDB screenshots → artworks → PSN GAMEHUB art) rather than the 3:4 cover, which sat in this shape as a tall sliver against short content. It reads only the `igdb_*_image_ids` columns off a match the page already selects, so it costs no query and never touches `raw_response` (pinned by test). The **cover is the fallback** — many concepts have no landscape art — and takes `object-position: top` there, where a screenshot takes centre, because the top is where a cover keeps its logo.
 
+**Base games and DLC are two walls**, split by a left-aligned `.pp-switch` (`?set=games|dlc`, chips carrying their counts, hidden entirely when the hunter has no DLC ratings). A DLC pack is rated separately from the game it belongs to, so a mixed wall showed the same title twice with two different scores. The **summary stays whole** — a hunter's taste does not divide at the DLC line — and the chip counts are what say how the wall beneath it is divided. The set rides the sort form, because the scroller serializes that form to fetch page 2.
+
 Six sorts (`PROFILE_RATING_SORTS`): recently rated / highest / lowest / hardest / longest / A-Z. Grindiness and fun were deliberately **not** given sorts — hours is what grind feels like in a unit people use, and "most fun" and "highest rated" rank nearly the same shelf.
 
 `build_profile_ratings_page` is **three queries flat** whatever the page size: the ratings, the community scores for the concepts on that page, and the games behind those concepts. Nothing scales with account size.

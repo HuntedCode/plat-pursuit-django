@@ -153,7 +153,14 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
         `visible_blurbs()`, and a staff-hidden take must not surface on the author's own profile just
         because the filter lives somewhere else.{% endcomment %}
         {% with take=r.blurb %}
-        <p class="pp-rcard__take">{% if take and not r.blurb_hidden %}<span class="pp-rcard__quote" aria-hidden="true">&ldquo;</span>{{ take }}{% endif %}</p>
+        {% if take and not r.blurb_hidden %}
+        <p class="pp-rcard__take"><span class="pp-rcard__take-txt"><span class="pp-rcard__quote" aria-hidden="true">&ldquo;</span>{{ take }}</span></p>
+        {% else %}
+        {% comment %}The box is drawn either way, at the same size, so the wall keeps its rhythm -- and an
+        empty one says so rather than sitting blank, which reads as something that failed to load. Wording
+        matches the page's other empty states ("No ratings yet", "No badges yet").{% endcomment %}
+        <p class="pp-rcard__take pp-rcard__take--empty"><span class="pp-rcard__none">No thoughts yet</span></p>
+        {% endif %}
         {% endwith %}
 
         <div class="pp-rcard__foot">

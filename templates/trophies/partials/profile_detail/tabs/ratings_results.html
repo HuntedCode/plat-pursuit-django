@@ -16,7 +16,9 @@ count-up animations on every sort.
 {% else %}
 <div class="pp-act__empty">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.79 21.35a.53.53 0 0 1-.771-.56l.882-5.139a2.12 2.12 0 0 0-.611-1.879L2.554 10.135a.53.53 0 0 1 .294-.904l5.166-.756a2.12 2.12 0 0 0 1.596-1.16z"/></svg>
-    <p class="pp-act__empty-title">No ratings yet</p>
-    <p class="pp-act__empty-hint">This hunter hasn&rsquo;t scored any of their platinums.</p>
+    {% comment %}Named for the SET you are looking at. "No ratings yet" under a DLC chip showing a count
+    would contradict the switcher directly above it.{% endcomment %}
+    <p class="pp-act__empty-title">{% if rating_set == 'dlc' %}No DLC ratings yet{% else %}No ratings yet{% endif %}</p>
+    <p class="pp-act__empty-hint">{% if rating_set == 'dlc' %}This hunter hasn&rsquo;t scored any DLC packs.{% else %}This hunter hasn&rsquo;t scored any of their platinums.{% endif %}</p>
 </div>
 {% endif %}

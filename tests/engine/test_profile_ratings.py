@@ -246,7 +246,7 @@ def test_a_dlc_rating_is_compared_against_that_dlc_not_the_base_game():
     UserConceptRatingFactory(concept=concept, concept_trophy_group=dlc, overall_rating=2.0)
     UserConceptRatingFactory(profile=profile, concept=concept, concept_trophy_group=dlc, overall_rating=2.0)
 
-    row = build_profile_ratings_page(profile)[0]
+    row = build_profile_ratings_page(profile, dlc=True)[0]
 
     assert row.concept_trophy_group_id == dlc.pk
     assert row.community_avg == pytest.approx(2.0)
@@ -404,10 +404,81 @@ def test_every_card_reserves_room_for_a_quick_take(client):
     take = css[css.index('.pp-rcard__take {'):]
     take = take[:take.index('}')]
 
-    # The block is rendered on BOTH cards -- reserving nothing on the silent one would defeat the point.
-    # Matched on the exact class: a bare substring also catches `pp-rcard__take-txt` inside it.
-    assert body.count('class="pp-rcard__take"') == 2
-    assert 'min-height: calc(4 * 1.45em)' in take, 'the take no longer reserves its lines'
+    # The box is drawn on BOTH cards -- reserving nothing on the silent one would defeat the point --
+    # and the silent one SAYS so rather than sitting blank, which reads as content that failed to load.
+    assert 'class="pp-rcard__take"' in body                 # the card with a take
+    assert 'pp-rcard__take--empty' in body                  # the card without one
+    assert 'No thoughts yet' in body
+    assert 'min-height: calc(4 * 1.45em' in take, 'the take no longer reserves its lines'
+
+
+def _with_dlc(profile, title='Has DLC', pack='The Old Hunters'):
+    """One base-game rating and one DLC rating on the same concept."""
+    concept = ConceptFactory(unified_title=title)
+    ProfileGameFactory(profile=profile, game=GameFactory(concept=concept))
+    dlc = ConceptTrophyGroupFactory(concept=concept, trophy_group_id='001', display_name=pack)
+    UserConceptRatingFactory(profile=profile, concept=concept, concept_trophy_group=None)
+    UserConceptRatingFactory(profile=profile, concept=concept, concept_trophy_group=dlc)
+    return concept, dlc
+
+
+def test_dlc_ratings_get_their_own_wall(client):
+    """A DLC pack is rated separately from the game it belongs to, so a mixed wall shows the same title
+    TWICE with two different scores and leaves the reader working out why. `concept_trophy_group` is the
+    distinction -- null is the base game -- and the two sets never share a page."""
+    profile = ProfileFactory(is_linked=True)
+    _with_dlc(profile)
+
+    games = build_profile_ratings_page(profile)
+    dlc = build_profile_ratings_page(profile, dlc=True)
+
+    assert len(games) == 1 and games[0].concept_trophy_group_id is None
+    assert len(dlc) == 1 and dlc[0].concept_trophy_group_id is not None
+
+
+def test_the_switcher_carries_both_counts_and_appears_only_when_there_is_dlc(client):
+    """The counts are what stop the split confusing the summary above it: that stays WHOLE, because a
+    hunter's taste does not divide at the DLC line, and the chips say how the wall beneath is divided.
+
+    Hidden entirely for a hunter with no DLC ratings -- a switcher whose second chip is always empty is a
+    control that only ever does nothing."""
+    plain = ProfileFactory(is_linked=True)
+    _rated(plain, title='Base only')
+    assert 'set=dlc' not in client.get(_url(plain), **CF).content.decode()
+
+    profile = ProfileFactory(is_linked=True)
+    _with_dlc(profile)
+    body = client.get(_url(profile), **CF).content.decode()
+
+    assert 'set=dlc' in body and 'set=games' in body
+    # The summary is unsplit: it counts everything they have rated, both sets.
+    assert profile_rating_summary(profile)['count'] == 2
+    assert profile_rating_summary(profile)['base_count'] == 1
+    assert profile_rating_summary(profile)['dlc_count'] == 1
+
+
+def test_the_set_rides_the_sort_form_so_page_two_stays_on_it(client):
+    """The scroller serializes that form to fetch the next page. Without the set in it, page 2 of the DLC
+    wall comes back as base games -- and appends them to the DLC wall, which is worse than not scrolling."""
+    profile = ProfileFactory(is_linked=True)
+    _with_dlc(profile)
+
+    body = client.get(_url(profile, set='dlc'), **CF).content.decode()
+    form = body[body.index('id="ratings-form"'):]
+    form = form[:form.index('</form>')]
+
+    assert 'name="set" value="dlc"' in form
+
+
+def test_an_empty_dlc_wall_does_not_contradict_the_chip_above_it(client):
+    """"No ratings yet" under a DLC chip showing a count reads as a bug. The empty state is named for the
+    set you are looking at."""
+    profile = ProfileFactory(is_linked=True)
+    _rated(profile, title='Base only')
+
+    body = client.get(_url(profile, set='dlc'), **CF).content.decode()
+
+    assert 'No DLC ratings yet' in body
 
 
 def test_the_title_holds_its_second_line_open(client):
@@ -424,7 +495,7 @@ def test_the_title_holds_its_second_line_open(client):
     rule = rule[:rule.index('}')]
 
     assert 'Nier' in body and 'Trails of Cold Steel' in body
-    reserved = re.search(r'min-height: calc\((\d+) \* ([\d.]+)em\)', rule)
+    reserved = re.search(r'min-height: calc\((\d+) \* ([\d.]+)em', rule)
     clamped = re.search(r'-webkit-line-clamp: (\d+)', rule)
     assert reserved and clamped, 'the title stopped reserving or stopped clamping'
     assert reserved.group(1) == clamped.group(1), (
@@ -463,20 +534,26 @@ def test_the_take_reserves_exactly_as_many_lines_as_it_shows(client):
 
     body = client.get(_url(profile), **CF).content.decode()
     css = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
-    rule = css[css.index('.pp-rcard__take {'):]
-    rule = rule[:rule.index('}')]
+    box = css[css.index('.pp-rcard__take {'):]
+    box = box[:box.index('}')]
+    txt = css[css.index('.pp-rcard__take-txt {'):]
+    txt = txt[:txt.index('}')]
+    rule = box + txt
 
     assert take in body
-    reserved = re.search(r'min-height: calc\((\d+) \* ([\d.]+)em\)', rule)
-    clamped = re.search(r'-webkit-line-clamp: (\d+)', rule)
+    reserved = re.search(r'min-height: calc\((\d+) \* ([\d.]+)em', box)
+    clamped = re.search(r'-webkit-line-clamp: (\d+)', txt)
     assert reserved and clamped, 'the take stopped reserving or stopped clamping'
     assert reserved.group(1) == clamped.group(1), (
         f'the take reserves {reserved.group(1)} lines but shows {clamped.group(1)}'
     )
     # The reserve counts lines at the TEXT's own line-height, so the two have to be the same number.
     assert f'line-height: {reserved.group(2)}' in rule
-    # And the quote stays inline -- a flex row is what made a full take impossible to fit.
-    assert 'display: flex' not in rule
+    # And the QUOTE stays inline. As a flex item it reserved its width on every line of the block rather
+    # than the one it sits on, which is what made a full take impossible to fit. (The box around it is a
+    # flex container, to centre the placeholder -- that is a different thing.)
+    quote = css[css.index('.pp-rcard__quote {'):]
+    assert 'flex' not in quote[:quote.index('}')]
 
 
 def test_the_card_carries_their_recommendation(client):
@@ -519,7 +596,7 @@ def test_a_dlc_rating_never_calls_its_platinum_rough(client):
     UserConceptRatingFactory(profile=profile, concept=concept, concept_trophy_group=dlc,
                              recommendation='good_game_bad_plat')
 
-    body = client.get(_url(profile), **CF).content.decode()
+    body = client.get(_url(profile, set='dlc'), **CF).content.decode()
 
     assert 'Great game, rough trophies' in body
     assert 'Great game, rough platinum' not in body
@@ -595,7 +672,7 @@ def test_the_dlc_a_rating_is_for_is_named_on_the_card(client):
     dlc = ConceptTrophyGroupFactory(concept=concept, trophy_group_id='001', display_name='The Old Hunters')
     UserConceptRatingFactory(profile=profile, concept=concept, concept_trophy_group=dlc)
 
-    body = client.get(_url(profile), **CF).content.decode()
+    body = client.get(_url(profile, set='dlc'), **CF).content.decode()
 
     assert 'The Old Hunters' in body
 

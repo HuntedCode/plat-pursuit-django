@@ -381,6 +381,11 @@ def profile_rating_summary(profile):
         # value the community split counts. Same one aggregate, so it costs nothing.
         answered=Count('id', filter=~Q(recommendation='')),
         recommends=Count('id', filter=Q(recommendation='worth_it')),
+        # The two halves the wall is split into. Counted here rather than by a second query because they
+        # are chip captions on a switcher that renders above the wall -- and because the summary itself
+        # deliberately stays WHOLE: it describes the hunter's taste, which does not divide at the DLC line.
+        base_count=Count('id', filter=Q(concept_trophy_group__isnull=True)),
+        dlc_count=Count('id', filter=Q(concept_trophy_group__isnull=False)),
     )
     # Denominated in ANSWERED ratings: everything they rated before the field existed carries no answer,
     # and counting those against them would read as a hunter who recommends almost nothing.
@@ -451,7 +456,7 @@ def _games_for_concepts(profile, concept_ids):
     return out
 
 
-def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_PER_PAGE):
+def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_PER_PAGE, dlc=False):
     """One page of a hunter's ratings, with everything each card draws already attached.
 
     Three queries flat, whatever the page: the ratings themselves, the community scores for the concepts on
@@ -469,9 +474,12 @@ def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_
     page = max(int(page), 1)
     offset = (page - 1) * per_page
 
+    # Base game or DLC, never both. A DLC pack is rated separately from the game it belongs to, so a mixed
+    # wall shows the same title twice with different scores and leaves the reader working out why -- which
+    # is the confusion the split removes. `concept_trophy_group` IS the distinction: null = base game.
     rows = list(
         UserConceptRating.objects
-        .filter(profile=profile)
+        .filter(profile=profile, concept_trophy_group__isnull=not dlc)
         .select_related('concept', 'concept__igdb_match', 'concept_trophy_group')
         .defer('concept__igdb_match__raw_response')
         .order_by(*_RATING_SORT_ORDERS[sort])
