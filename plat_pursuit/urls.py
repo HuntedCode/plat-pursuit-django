@@ -237,10 +237,14 @@ urlpatterns = [
     # homepage long after the rebuild ships -- specifically the people who used notifications most,
     # because they are the ones holding the bookmarks.
     #
-    # The NAMES are load-bearing and must not be dropped. `admin_notification_center` is reversed by
-    # three unrelated staff pages (users/admin/subscription_dashboard.html, fundraiser/fundraiser_admin
-    # .html, fundraiser/badge_reveal.html), so removing it is a NoReverseMatch -- a hard 500 on three
-    # pages that have nothing to do with notifications.
+    # The NAMES stay resolvable. The parked views in notifications/views.py still `redirect(
+    # 'admin_notification_center')` in eleven places, and the parked templates still `{% url %}` these
+    # names -- none of it is reachable today, but keeping the names resolvable is what makes putting the
+    # curtain back a matter of restoring routes rather than editing the parked code.
+    #
+    # Nothing REACHABLE links in any more. Three staff pages (the subscription dashboard, the fundraiser
+    # admin, the badge reveal) carried a "Notifications" button that would have dead-ended on the
+    # homepage; those were removed with the rest of the chrome.
     path('notifications/', RedirectView.as_view(pattern_name='home', permanent=False), name='notification_inbox'),
 
     # Leaderboards -- their own hub as of 2026-08 (they were the substance left in Community).
@@ -261,9 +265,11 @@ urlpatterns = [
 
     # Guide/checklist URLs - all redirected to home (system removed, replaced by roadmaps)
     path('guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='guides_browse'),
-    path('guides/<int:guide_id>/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_detail'),
-    path('guides/<int:guide_id>/edit/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_edit'),
-    path('guides/create/<int:concept_id>/<str:np_communication_id>/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_create'),
+    # The three that capture arguments use `url='/'` -- see the note on `admin_cancel_scheduled` below.
+    # `pattern_name='home'` 500s here, because the captured id is forwarded into a reverse() that takes none.
+    path('guides/<int:guide_id>/', RedirectView.as_view(url='/', permanent=False), name='guide_detail'),
+    path('guides/<int:guide_id>/edit/', RedirectView.as_view(url='/', permanent=False), name='guide_edit'),
+    path('guides/create/<int:concept_id>/<str:np_communication_id>/', RedirectView.as_view(url='/', permanent=False), name='guide_create'),
     path('my-guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_guides'),
 
     # Game Lists (canonical paths under /community/lists/)
@@ -391,11 +397,14 @@ urlpatterns = [
     path('staff/review-moderation/log/', ReviewModerationLogView.as_view(), name='review_moderation_log'),
     path('staff/game-families/', GameFamilyManagementView.as_view(), name='game_family_management'),
     # Notification staff pages: HIDDEN with the rest of the system (see the note on `notification_inbox`
-    # above). Names kept -- three unrelated staff pages reverse `admin_notification_center`.
+    # above). Names kept so the parked views' own redirects still reverse.
     path('staff/notifications/', RedirectView.as_view(pattern_name='home', permanent=False), name='admin_notification_center'),
     path('staff/notifications/history/', RedirectView.as_view(pattern_name='home', permanent=False), name='admin_notification_history'),
     path('staff/notifications/scheduled/', RedirectView.as_view(pattern_name='home', permanent=False), name='admin_scheduled_notifications'),
-    path('staff/notifications/scheduled/<int:pk>/cancel/', RedirectView.as_view(pattern_name='home', permanent=False), name='admin_cancel_scheduled'),
+    # `url='/'`, NOT `pattern_name='home'`: RedirectView forwards captured kwargs into reverse(), and
+    # `home` takes none -- so the pattern_name form raises NoReverseMatch (a hard 500, ungated) on every
+    # hit. Any redirect on a path that captures something has to use this form.
+    path('staff/notifications/scheduled/<int:pk>/cancel/', RedirectView.as_view(url='/', permanent=False), name='admin_cancel_scheduled'),
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
     # Bookmark-only staff analytics dashboard. Not linked from nav.
     # CSP violation reporting. Ingest endpoint MUST live at the project root
