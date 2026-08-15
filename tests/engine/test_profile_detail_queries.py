@@ -289,3 +289,37 @@ def test_every_figure_in_the_hero_actually_counts_up(client):
     # The marker is what makes the wider scope safe -- without it, every filter swap would replay the
     # animation on figures that did not change.
     assert "setAttribute('data-counted', '1')" in src
+
+
+def test_the_trophy_shape_sits_in_the_identity_block(client):
+    """Folding the level into the ring made the dial ~121px tall against a ~66px name block, which left a
+    void beside the ring that nothing filled. The tier split moved up into it, out of a bordered row at
+    the foot of the card.
+
+    Asserted by nesting, because placement IS the change: it has to be inside the name block, above the
+    stat grid, not merely somewhere on the page."""
+    profile = ProfileFactory(is_linked=True, total_plats=12, total_golds=140,
+                             total_silvers=380, total_bronzes=1400)
+
+    html = client.get(f'/hunters/{profile.psn_username}/', **CF).content.decode()
+
+    name_block = html[html.index('min-w-0 flex-1'):html.index('scard__label')]
+    assert 'pp-phero__tiers' in name_block, 'the trophy shape left the identity block'
+    for tier in ('platinum', 'gold', 'silver', 'bronze'):
+        assert f'data-tier="{tier}"' in name_block, f'{tier} is missing from the shape'
+
+
+def test_the_trophy_counts_count_up_like_every_other_figure(client):
+    """They were the only figures in the hero rendered as static text. Everything else here animates in,
+    so four numbers that simply appeared read as a different kind of thing -- and these are the ones a
+    hunter is proudest of."""
+    profile = ProfileFactory(is_linked=True, total_plats=12, total_golds=140,
+                             total_silvers=380, total_bronzes=1400)
+
+    html = client.get(f'/hunters/{profile.psn_username}/', **CF).content.decode()
+    tiers = html[html.index('pp-phero__tiers'):html.index('scard__label')]
+
+    for value in (12, 140, 380, 1400):
+        assert f'data-countup="{value}"' in tiers, f'{value} does not count up'
+    # The rendered fallback is still the formatted figure, so a no-JS reader sees 1,400 rather than 1400.
+    assert '>1,400<' in tiers

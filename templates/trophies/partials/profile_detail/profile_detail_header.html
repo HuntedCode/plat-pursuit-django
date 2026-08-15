@@ -99,6 +99,24 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
                         <span class="pp-phero__dot" aria-hidden="true"></span>Never synced
                     {% endif %}
                 </p>
+
+                {% comment %}The tier split, and it lives HERE rather than in a row of its own at the foot
+                of the card. The dial is ~121px tall and the name block above is ~66px, so folding the
+                level into the ring opened a void beside the ring that nothing filled. This is the block
+                that belongs in it: identity is who you are, and the shape of your trophy collection is
+                the most immediate thing about a hunter after their name.
+
+                Read as a SHAPE -- a wide bronze base narrowing to a few platinums -- more than as four
+                numbers, which is why they stay one row rather than becoming four cards, and why they are
+                the one surface the scoped trophy colour family belongs on. Now at a size that lets the
+                shape actually register, and counting up on arrival like every other figure here.
+                {% endcomment %}
+                <div class="pp-phero__tiers">
+                    <span class="pp-phero__tier" data-tier="platinum" title="Platinum trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_plats }}">{{ profile.total_plats|intcomma }}</b></span>
+                    <span class="pp-phero__tier" data-tier="gold" title="Gold trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_golds }}">{{ profile.total_golds|intcomma }}</b></span>
+                    <span class="pp-phero__tier" data-tier="silver" title="Silver trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_silvers }}">{{ profile.total_silvers|intcomma }}</b></span>
+                    <span class="pp-phero__tier" data-tier="bronze" title="Bronze trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_bronzes }}">{{ profile.total_bronzes|intcomma }}</b></span>
+                </div>
             </div>
 
         </div>
@@ -126,16 +144,6 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
                 <div class="scard__label">Avg. completion</div>
                 <div class="scard__value pp-tally"><span data-countup="{{ header_stats.average_completion|default:0|floatformat:0 }}">{{ header_stats.average_completion|default:0|floatformat:0 }}</span><span class="pp-phero__unit">%</span></div>
             </div>
-        </div>
-
-        {% comment %}The tier split. This is the one surface the scoped trophy colour family belongs on --
-        it IS trophies -- and it is read as a shape (a wide bronze base narrowing to a few platinums) more
-        than as four numbers, which is why they sit in one row rather than four cards.{% endcomment %}
-        <div class="pp-phero__tiers mt-3 md:mt-4">
-            <span class="pp-phero__tier" data-tier="platinum"><i></i>{{ profile.total_plats|intcomma }}</span>
-            <span class="pp-phero__tier" data-tier="gold"><i></i>{{ profile.total_golds|intcomma }}</span>
-            <span class="pp-phero__tier" data-tier="silver"><i></i>{{ profile.total_silvers|intcomma }}</span>
-            <span class="pp-phero__tier" data-tier="bronze"><i></i>{{ profile.total_bronzes|intcomma }}</span>
         </div>
     </div>
 </section>

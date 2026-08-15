@@ -129,20 +129,34 @@
 /* ---- Trophy tiers -------------------------------------------------------------------------------- */
 /* The one surface the scoped trophy colour family belongs on -- it IS trophies. Read as a SHAPE (a wide
    bronze base narrowing to a few platinums) rather than as four separate figures, which is why they sit
-   in one row instead of four cards. */
+   in one row instead of four cards.
+
+   It sits INSIDE the identity block now, under the sync line, rather than in a bordered row at the foot
+   of the card. Folding the level into the ring left the space beside the dial empty, and the trophy
+   shape is what belongs there -- it is the most immediate thing about a hunter after their name. The
+   divider went with the move: it was separating a bottom section that no longer exists, and inside the
+   identity block it would cut the block in half.
+
+   Big enough to read as a shape at a glance, which the old 0.85rem was not: at that size four figures
+   under a name read as fine print. It wraps to 2x2 on a narrow phone rather than shrinking, because the
+   figures are the content here. */
 .pp-phero__tiers {
-    display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px;
-    padding-top: 12px; border-top: 1px solid var(--pp-divider, var(--pp-border));
+    display: flex; align-items: center; flex-wrap: wrap;
+    gap: 6px 14px; margin-top: 9px;
 }
+@media (min-width: 768px) { .pp-phero__tiers { gap: 8px 20px; margin-top: 11px; } }
 .pp-phero__tier {
     display: inline-flex; align-items: center; gap: 6px;
-    font-size: 0.85rem; font-weight: 700; color: var(--pp-text);
-    font-variant-numeric: tabular-nums;
+    font-size: 1.05rem; font-weight: 800; color: var(--pp-text);
+    font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+    line-height: 1.15;
 }
+@media (min-width: 768px) { .pp-phero__tier { font-size: 1.3rem; gap: 7px; } }
 .pp-phero__tier i {
-    width: 9px; height: 9px; border-radius: 50%; flex: none;
-    background: var(--tier-c); box-shadow: 0 0 8px -1px var(--tier-c);
+    width: 10px; height: 10px; border-radius: 50%; flex: none;
+    background: var(--tier-c); box-shadow: 0 0 9px -1px var(--tier-c);
 }
+@media (min-width: 768px) { .pp-phero__tier i { width: 11px; height: 11px; } }
 .pp-phero__tier[data-tier="platinum"] { --tier-c: var(--color-trophy-platinum); }
 .pp-phero__tier[data-tier="gold"]     { --tier-c: var(--color-trophy-gold); }
 .pp-phero__tier[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
