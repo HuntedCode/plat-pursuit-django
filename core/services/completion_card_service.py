@@ -455,21 +455,22 @@ def _user_rating(profile, concept):
     ).first()
     if not rating:
         return None
-    return {
+    # The scores come from `as_prefill()`, the ONE definition of the shape the rating form prefills from.
+    # This dict used to list them by hand and consequently never gained `recommendation`, so opening
+    # "Edit rating" from the share modal showed no verdict selected -- the same omission that hit the
+    # game-detail modal, from a second hand-built copy.
+    payload = rating.as_prefill()
+    payload.update({
         # The hunter's own words about the game -- 140 chars, already auto-filtered on submit,
         # reportable, and staff-soft-hideable via `blurb_hidden`, which is why it's safe to render on
         # an image that leaves the site. Optional, so the card must look right without it.
         'blurb': '' if rating.blurb_hidden else (rating.blurb or ''),
-        'overall_rating': rating.overall_rating,
         # Percentage fill for the card's star row. `overall_rating` is a 0.5-5.0 FLOAT (unlike
         # difficulty/grindiness/fun, which are 1-10 ints), so half stars are real and the row is drawn
         # as a clipped overlay rather than N whole glyphs.
         'stars_pct': round((rating.overall_rating or 0) / 5 * 100, 1),
-        'difficulty': rating.difficulty,
-        'grindiness': rating.grindiness,
-        'fun_ranking': rating.fun_ranking,
-        'hours_to_platinum': rating.hours_to_platinum,
-    }
+    })
+    return payload
 
 
 # ── The card payload ──────────────────────────────────────────────────────────────────────────────

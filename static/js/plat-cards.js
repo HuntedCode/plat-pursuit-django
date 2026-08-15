@@ -450,14 +450,18 @@
                 // repopulates current.rating, but it is async and can fail -- and until it resolves, a
                 // second "Edit rating" would prefill from the PREVIOUS scores and save them straight back
                 // over the ones just written. That is the exact bug prefilling exists to prevent.
-                current.rating = {
-                    difficulty: payload.difficulty, grindiness: payload.grindiness,
-                    fun_ranking: payload.fun_ranking, overall_rating: payload.overall_rating,
-                    hours_to_platinum: payload.hours_to_platinum,
-                    // Prefer the server-echoed stored blurb (sanitized) over the raw typed text, so a
-                    // re-open shows what everyone else will see.
-                    blurb: (data && data.blurb !== undefined && data.blurb !== null) ? data.blurb : payload.blurb,
-                };
+                // Built by the shared `RatingFields.prefillFrom` rather than by hand: this object had been
+                // a second hand-rolled copy of the prefill shape, and it never gained `recommendation`
+                // when that field was added -- so an "Edit rating" here opened with no verdict selected.
+                current.rating = Object.assign(
+                    PP.RatingFields.prefillFrom(data, payload),
+                    {
+                        // Prefer the server-echoed stored blurb (sanitized) over the raw typed text, so a
+                        // re-open shows what everyone else will see. The blurb is not part of the prefill
+                        // object because it rides its own argument through `attach`.
+                        blurb: (data && data.blurb !== undefined && data.blurb !== null) ? data.blurb : payload.blurb,
+                    }
+                );
                 syncRateButton();       // "Rate this game" -> "Edit rating", without waiting on the fetch
                 // The card RENDERS the rating, so the cached copy is now the wrong card. Without this
                 // loadPreview() is handed the stale entry straight back and the preview never changes.

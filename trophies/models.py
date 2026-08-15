@@ -1557,6 +1557,26 @@ class UserConceptRating(models.Model):
         group_label = f" ({self.concept_trophy_group.display_name})" if self.concept_trophy_group else ""
         return f"{self.profile.display_psn_username}'s rating for {self.concept.unified_title}{group_label}"
 
+    def as_prefill(self):
+        """This rating in the shape the client form prefills from.
+
+        ONE definition, because the alternative is what shipped first: four hand-built copies of this
+        object (the wizard queue, the plat-card service, and two in JS), each of which had to be updated
+        when `recommendation` was added and three of which were not. That failure is invisible in review
+        and near-invisible in use -- the field simply arrives blank, so the hunter re-answers a question
+        they already answered, or worse, an omitted field is written back as its default.
+
+        Keys are the input NAMES, which are the API contract (see partials/_rating_fields.html).
+        """
+        return {
+            'recommendation': self.recommendation,
+            'difficulty': self.difficulty,
+            'grindiness': self.grindiness,
+            'hours_to_platinum': self.hours_to_platinum,
+            'fun_ranking': self.fun_ranking,
+            'overall_rating': self.overall_rating,
+        }
+
     @classmethod
     def visible_blurbs(cls):
         """The ONLY supported read path for public quick-take blurbs: present + not staff-hidden. Matches

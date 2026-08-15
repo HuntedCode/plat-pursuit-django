@@ -43,6 +43,29 @@
         var picked = form.querySelector('[name="recommendation"]:checked');
         return picked ? picked.value : '';
     }
+
+    /**
+     * The just-saved rating, in the shape `prefill` reads -- for hosts that cache it so a re-open does not
+     * wait on a refetch.
+     *
+     * Exported because BOTH hosts were rebuilding this object by hand, and when `recommendation` was added
+     * neither was updated: game detail prefilled it correctly on first open (the server renders the
+     * attribute) and then blank after any save, and the plat-card modal never prefilled it at all. The
+     * server has the same one-definition rule in `UserConceptRating.as_prefill`.
+     *
+     * Prefers the server's stored value over the submitted one, for the same reason the blurb does: what
+     * came back is what everyone else will see.
+     */
+    function prefillFrom(data, payload) {
+        return {
+            recommendation: (data && data.recommendation) || payload.recommendation,
+            difficulty: payload.difficulty,
+            grindiness: payload.grindiness,
+            hours_to_platinum: payload.hours_to_platinum,
+            fun_ranking: payload.fun_ranking,
+            overall_rating: payload.overall_rating,
+        };
+    }
     function setRec(form, value) {
         form.querySelectorAll('[name="recommendation"]').forEach(function (input) {
             input.checked = Boolean(value) && input.value === value;
@@ -382,6 +405,8 @@
         return true;
     }
 
-    PP.RatingFields = { attach: attach, BLURB_MAX: BLURB_MAX, DEFAULTS: DEFAULTS };
+    PP.RatingFields = {
+        attach: attach, prefillFrom: prefillFrom, BLURB_MAX: BLURB_MAX, DEFAULTS: DEFAULTS,
+    };
     PP.QuickRate = { open: open, BLURB_MAX: BLURB_MAX };
 })();

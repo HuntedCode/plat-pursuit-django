@@ -1571,12 +1571,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // what everyone else -- and the author on reload -- will see.
             syncOwnBlurb(panel, data.blurb ?? payload.blurb, payload.overall_rating);
             if (srcBtn) {
-                // Keep data-existing purely numeric (the prefill contract); the blurb rides its own attr.
-                srcBtn.dataset.existing = JSON.stringify({
-                    difficulty: payload.difficulty, grindiness: payload.grindiness,
-                    hours_to_platinum: payload.hours_to_platinum, fun_ranking: payload.fun_ranking,
-                    overall_rating: payload.overall_rating,
-                });
+                // This attribute IS the prefill contract, and it is rebuilt from scratch here -- so
+                // anything left out is silently absent the next time the modal opens. Built by the shared
+                // `RatingFields.prefillFrom` rather than by hand, because the hand-built version was
+                // missing `recommendation` when that field was added: the modal prefilled it fine on
+                // first open (the SERVER renders this attribute) and then blank after any save, until a
+                // reload put the server's version back.
+                srcBtn.dataset.existing = JSON.stringify(
+                    PlatPursuit.RatingFields.prefillFrom(data, payload)
+                );
                 srcBtn.dataset.existingBlurb = payload.blurb;
                 const lbl = srcBtn.querySelector('span');
                 if (lbl) lbl.textContent = 'Update rating';

@@ -630,6 +630,54 @@ def test_the_recommendation_offers_three_choices_not_four():
     assert 'bad_game_good_plat' not in bare
 
 
+def test_the_prefill_shape_has_one_definition_per_side():
+    """The bug this exists to stop: the prefill object was hand-built in FOUR places (the wizard queue,
+    the plat-card service, and two in JS), and when `recommendation` was added only one was updated. Game
+    detail prefilled it on first open -- the server renders that attribute -- and then blank after any
+    save; the share modal never prefilled it at all.
+
+    Both invisible in review and near-invisible in use: the field just arrives empty, so you re-answer a
+    question you already answered.
+
+    One definition per side now -- `UserConceptRating.as_prefill()` on the server,
+    `RatingFields.prefillFrom()` in the client -- so the next field is added once each."""
+    from trophies.models import UserConceptRating
+
+    rating = UserConceptRating(recommendation='skip', difficulty=8, grindiness=9,
+                               hours_to_platinum=62, fun_ranking=2, overall_rating=4.5)
+    assert set(rating.as_prefill()) == set(FIELD_NAMES) - {'blurb'}, (
+        'as_prefill() and the form fields disagree -- one of them gained a field the other did not'
+    )
+
+    # The two client hosts must not rebuild it themselves.
+    for rel in ('static/js/game-detail.js', 'static/js/plat-cards.js'):
+        src = (ROOT / rel).read_text(encoding='utf-8')
+        assert 'prefillFrom(' in src, f'{rel} does not use the shared prefill builder'
+    service = (ROOT / 'core' / 'services' / 'completion_card_service.py').read_text(encoding='utf-8')
+    assert 'as_prefill()' in service, 'the plat-card payload hand-builds the prefill shape again'
+
+
+def test_a_saved_rating_round_trips_its_recommendation(client):
+    """What the user actually hit: save, re-open, verdict gone. The server has to echo it so the client
+    can cache it without waiting on a refetch."""
+    profile = _hunter()
+    game = _ratable(profile)
+    client.force_login(profile.user)
+
+    resp = client.post(
+        f'/api/v1/ratings/{game.concept_id}/group/default/rate/',
+        {'recommendation': 'good_game_bad_plat', 'difficulty': 8, 'grindiness': 9,
+         'hours_to_platinum': 62, 'fun_ranking': 2, 'overall_rating': 4.5},
+        content_type='application/json',
+    )
+
+    assert resp.status_code == 200, resp.content
+    assert resp.json()['recommendation'] == 'good_game_bad_plat'
+
+    stored = UserConceptRating.objects.get(profile=profile, concept=game.concept)
+    assert stored.as_prefill()['recommendation'] == 'good_game_bad_plat'
+
+
 def test_the_fields_read_in_the_order_both_hosts_lay_out():
     """SOURCE order is the contract, not the modal's grid. The two-column modal pairs adjacent fields
     (Difficulty|Grindiness, then Hours|Fun) and spans the rest, while the wizard renders the identical

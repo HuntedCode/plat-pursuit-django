@@ -29,23 +29,6 @@ from api.utils import safe_bool, safe_int
 logger = logging.getLogger('psn_api')
 
 
-def _rating_payload(rating):
-    """A stored rating in the shape the client form prefills from.
-
-    One definition, because two of them is how a re-served card ends up missing a field and silently
-    writing that field's DEFAULT back over a real answer. Keys match the input NAMES, which are the API
-    contract (see templates/partials/_rating_fields.html).
-    """
-    return {
-        'recommendation': rating.recommendation,
-        'difficulty': rating.difficulty,
-        'grindiness': rating.grindiness,
-        'hours_to_platinum': rating.hours_to_platinum,
-        'fun_ranking': rating.fun_ranking,
-        'overall_rating': rating.overall_rating,
-    }
-
-
 def _get_profile_or_error(request):
     """Return (profile, None) or (None, Response)."""
     profile = getattr(request.user, 'profile', None)
@@ -424,7 +407,7 @@ class WizardQueueView(APIView):
                 # when the queue served only fresh games has to come back with it.
                 prior = existing.get(cid)
                 if prior:
-                    item['existing'] = _rating_payload(prior)
+                    item['existing'] = prior.as_prefill()
                     item['existing_blurb'] = prior.blurb
                     item['rated_at'] = prior.updated_at.isoformat()
                 if cid in game_stats:
@@ -569,7 +552,7 @@ class WizardQueueView(APIView):
             if prior:
                 # Same hazard as the base queue: without these the form loads at 5/5/5/3.0 and submitting
                 # for the recommendation overwrites a real rating.
-                item['existing'] = _rating_payload(prior)
+                item['existing'] = prior.as_prefill()
                 item['existing_blurb'] = prior.blurb
                 item['rated_at'] = prior.updated_at.isoformat()
             groups_dict[cid]['items'].append(item)
