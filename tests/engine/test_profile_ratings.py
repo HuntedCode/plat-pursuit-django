@@ -939,3 +939,45 @@ def test_the_cards_never_join_the_igdb_blob(client):
     ]
     assert joined, 'neither the ratings nor the games joined the IGDB match -- the covers would N+1'
     assert not any('raw_response' in sql for sql in joined)
+
+
+def test_the_card_stacks_on_a_phone_so_the_art_can_be_landscape():
+    """The art is a LANDSCAPE screenshot. Below 768px the wall is a single column, so the card is always
+    full width -- and a 92px art panel is a PORTRAIT window: `object-fit: cover` cropped the frame to
+    about a third of its width, a vertical slice out of the middle. The same mistake this card was rebuilt
+    to fix, pointed the other way.
+
+    Stacked, the band is ~4.3:1 against a 343px card, so it shows the full width; and the body goes from
+    ~251px to the whole card, so the title and quick take wrap less. Both halves improve from one change.
+
+    Desktop is deliberately untouched: the split is correct once the card is >= 420px."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+
+    card = css[css.index('.pp-rcard {'):]
+    card = card[:card.index('\n}')]
+    assert 'flex-direction: column' in card, 'the card is side-by-side on a phone again'
+
+    art = css[css.index('.pp-rcard__art {'):]
+    art = art[:art.index('\n')]
+    assert 'width: 100%' in art and 'height: 80px' in art, 'the art is not a full-width band on a phone'
+
+    # ...and the split is restored at md, on the SAME line that restores the panel width, so the two
+    # cannot be changed apart.
+    md = css[css.index('@media (min-width: 768px) { .pp-rcard {'):]
+    md = md[:md.index('\n')]
+    assert 'flex-direction: row' in md and 'width: 150px' in md, 'the desktop split was not restored'
+
+
+def test_the_bands_overlay_and_stamp_follow_the_layout():
+    """Two things that are silently wrong if only the flex direction moves.
+
+    The overlay fades toward the BODY -- down when stacked, across when split. Left as `to right` on a top
+    band it fades the card's right edge and leaves a hard seam along the bottom, the one edge that meets
+    the content. And the stamp, centred, lands on the middle of the screenshot: the part worth seeing."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+
+    overlay = css[css.index('.pp-rcard__art::after {'):]
+    assert 'linear-gradient(to bottom' in overlay[:overlay.index('\n}')], 'the band fades the wrong edge'
+
+    stamp = css[css.index('.pp-rcard__stamp {'):]
+    assert 'right: 12px' in stamp[:stamp.index('\n}')], 'the stamp sits over the middle of the band'

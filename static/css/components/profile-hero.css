@@ -712,7 +712,14 @@
 
 .pp-rcard {
     position: relative;
-    display: flex; min-width: 0;
+    /* STACKED on a phone, split from `md:`. The split is right whenever the card is wide -- but below
+       768px the wall is a single column, so the card is always full width and the art panel was a 92px
+       PORTRAIT window showing a LANDSCAPE screenshot: `object-fit: cover` cropped it to about a third of
+       its width, a vertical slice out of the middle. That is the same mistake this card was rebuilt to
+       fix, pointed the other way (the first cut was portrait-cover art in a wide card).
+       Stacking fixes both halves at once: the band finally shows the whole frame, and the body goes from
+       ~251px to the full width, so the title and the quick take wrap less. */
+    display: flex; flex-direction: column; min-width: 0;
     /* No padding on the CARD: the art panel bleeds to its edges, so the box metrics live on the body.
        `overflow: hidden` is what clips that panel to the card's radius. */
     padding: 0; overflow: hidden;
@@ -755,8 +762,11 @@
    why the image is absolutely positioned rather than sized at 100%: the panel's height comes from the
    flex stretch, and a percentage against a height resolved that way is the indeterminate case where an
    image silently falls back to its intrinsic size. */
-.pp-rcard__art { position: relative; flex: none; width: 92px; background: var(--pp-bg-2); }
-@media (min-width: 768px) { .pp-rcard__art { width: 150px; } }
+/* 80px against a ~343px card is 4.3:1 -- WIDER than the 16:9 source, so it crops the top and bottom a
+   little and shows the full width, which is the whole point. Deliberately a band rather than a picture:
+   this wall is scanned, and every pixel of art height is scroll a reader pays on all twenty cards. */
+.pp-rcard__art { position: relative; flex: none; width: 100%; height: 80px; background: var(--pp-bg-2); }
+@media (min-width: 768px) { .pp-rcard { flex-direction: row; } .pp-rcard__art { width: 150px; height: auto; } }
 .pp-rcard__shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 /* A COVER standing in for missing landscape art keeps its logo: portrait art cropped to a wide-ish panel
    loses the bottom, and the top is where the title sits. A screenshot takes centre, which is the default. */
@@ -769,10 +779,21 @@
    full strength competes with the numbers, which are what the card is for. */
 .pp-rcard__art::after {
     content: ''; position: absolute; inset: 0;
-    background: linear-gradient(to right,
+    /* Fades toward the BODY, so the direction follows the layout: down into it when stacked, across into
+       it when split. Left pointing right on a top band, it would fade out the card's right edge and leave
+       a hard seam along the bottom, which is the one edge that actually meets the content. */
+    background: linear-gradient(to bottom,
                 color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 22%, transparent) 0%,
                 color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 30%, transparent) 55%,
                 var(--pp-bg-1, var(--pp-bg-2)) 100%);
+}
+@media (min-width: 768px) {
+    .pp-rcard__art::after {
+        background: linear-gradient(to right,
+                    color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 22%, transparent) 0%,
+                    color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 30%, transparent) 55%,
+                    var(--pp-bg-1, var(--pp-bg-2)) 100%);
+    }
 }
 
 .pp-rcard__body {
@@ -826,8 +847,11 @@
    point, and only affordable here because the art panel is the one part of the card that is not text.
    Centred rather than cornered: a corner badge reads as a status pip on the artwork, where a centred
    disc reads as a mark laid ON it. */
+/* On the BAND it sits at the right end: centred, it lands on the middle of the screenshot -- the part
+   worth seeing -- and it reads better next to the score below it. Centred again from `md:`, where the
+   panel is a column and the middle is the only place it can go. */
 .pp-rcard__stamp {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1;
+    position: absolute; top: 50%; right: 12px; transform: translateY(-50%); z-index: 1;
     display: grid; place-items: center;
     width: 46px; height: 46px; border-radius: 50%;
     color: var(--rec-c);
@@ -839,7 +863,10 @@
 }
 .pp-rcard__stamp svg { width: 24px; height: 24px; }
 @media (min-width: 768px) {
-    .pp-rcard__stamp { width: 58px; height: 58px; border-width: 2px; }
+    .pp-rcard__stamp {
+        left: 50%; right: auto; transform: translate(-50%, -50%);
+        width: 58px; height: 58px; border-width: 2px;
+    }
     .pp-rcard__stamp svg { width: 30px; height: 30px; }
 }
 
