@@ -655,3 +655,35 @@ def recommendation_choices(has_platinum=True):
     from trophies.models import UserConceptRating
 
     return UserConceptRating.recommendation_choices(has_platinum)
+
+
+@register.simple_tag
+def recommendation_split_cells(averages, has_platinum=True):
+    """The three answers with their share, ALWAYS all three and always in the model's order.
+
+    Two things this exists for, both of which the raw `averages['recommendation_split']` gets wrong at a
+    surface that renders per trophy group:
+
+    Zeros when there is nothing yet. `averages` is None on a never-rated game, so looping it directly drew
+    a block with no cells -- and the live-update, which is written to only ever set values and never build
+    DOM, then un-hid an empty row the moment somebody rated it.
+
+    And the LABELS come from the group being shown, not from the cached dict. `_compute_averages` is
+    concept-wide and bakes in the platinum wording, so a DLC pack's panel read "Great game, rough platinum"
+    about a set that has no platinum -- the same fact the radio the hunter clicked had already worded the
+    other way. Counts ride the cached dict; the words do not.
+    """
+    from trophies.models import UserConceptRating
+
+    split = (averages or {}).get('recommendation_split') or {}
+    counts = {o['value']: o for o in split.get('options') or []}
+
+    return [
+        {
+            'value': value,
+            'label': label,
+            'count': counts.get(value, {}).get('count', 0),
+            'pct': counts.get(value, {}).get('pct', 0),
+        }
+        for value, label in UserConceptRating.recommendation_choices(has_platinum)
+    ]

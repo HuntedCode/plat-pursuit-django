@@ -25,6 +25,7 @@ from tests.factories import (
     IGDBMatchFactory,
     ProfileFactory,
     ProfileGameFactory,
+    TrophyFactory,
     UserConceptRatingFactory,
 )
 
@@ -183,8 +184,9 @@ def test_the_platinumed_version_is_the_one_linked():
 
 
 def test_query_count_does_not_follow_the_size_of_the_wall():
-    """Three queries flat: the ratings, the community scores, the games. The wall is the one place an N+1
-    is invisible in review and obvious in production."""
+    """Four queries flat: the ratings, the community scores, the games, and which of those concepts define
+    a platinum (for the verdict wording). The wall is the one place an N+1 is invisible in review and
+    obvious in production."""
     profile = ProfileFactory(is_linked=True)
     for i in range(20):
         _rated(profile, title=f'Game {i}')
@@ -195,7 +197,10 @@ def test_query_count_does_not_follow_the_size_of_the_wall():
         [(r.card_game.display_image_url, r.concept.unified_title, r.community_avg) for r in rows]
 
     assert len(rows) == 20
-    assert len(ctx.captured_queries) <= 4
+    assert len(ctx.captured_queries) == 4, (
+        'the builder is documented as four queries flat on the base wall -- a fifth is a decision, not '
+        'an accident'
+    )
 
 
 def test_an_unrated_hunter_gets_an_empty_wall_not_an_error():
@@ -384,7 +389,10 @@ def test_the_landscape_art_costs_no_extra_query(client):
         rows = build_profile_ratings_page(profile)
         [r.concept.landscape_url for r in rows]
 
-    assert len(ctx.captured_queries) <= 4
+    assert len(ctx.captured_queries) == 4, (
+        'the builder is documented as four queries flat on the base wall -- a fifth is a decision, not '
+        'an accident'
+    )
     assert not any('raw_response' in q['sql'] for q in ctx.captured_queries)
 
 
@@ -627,8 +635,12 @@ def test_the_card_carries_their_recommendation(client):
     exactly one place."""
     profile = ProfileFactory(is_linked=True)
     concept = ConceptFactory(unified_title='Rough Platinum')
-    ProfileGameFactory(profile=profile,
-                       game=GameFactory(concept=concept, defined_trophies={'platinum': 1}))
+    game = GameFactory(concept=concept, defined_trophies={'platinum': 1})
+    # The platinum TROPHY, not just the count on the game. Whether the wording says "platinum" is a fact
+    # about the concept, so it is asked of the trophies the concept defines -- the same question, asked
+    # the same way, as the form that produced the label in the first place.
+    TrophyFactory(game=game, trophy_type='platinum')
+    ProfileGameFactory(profile=profile, game=game)
     UserConceptRatingFactory(profile=profile, concept=concept, recommendation='good_game_bad_plat')
 
     body = client.get(_url(profile), **CF).content.decode()
@@ -639,8 +651,7 @@ def test_the_card_carries_their_recommendation(client):
 
 def test_a_set_with_no_platinum_does_not_call_one_rough(client):
     """The middle option NAMES the thing that was rough, so on a DLC pack -- or a game that never defined
-    a platinum -- "rough platinum" names a trophy the set has not got. Read off the game already attached
-    to the row, so the wording costs no query."""
+    a platinum -- "rough platinum" names a trophy the set has not got."""
     profile = ProfileFactory(is_linked=True)
     # A game with no platinum defined at all.
     _rated(profile, title='No Plat Here', recommendation='good_game_bad_plat')
@@ -649,6 +660,23 @@ def test_a_set_with_no_platinum_does_not_call_one_rough(client):
 
     assert 'Great game, rough trophies' in body
     assert 'Great game, rough platinum' not in body
+
+
+def test_the_wording_follows_the_concept_not_the_copy_they_happen_to_own(client):
+    """Whether a set ends in a platinum is a fact about the TITLE. Reading it off the hunter's own attached
+    game got it wrong twice over: a concept they own no copy of (possible after a merge re-points a rating
+    onto a survivor) has no game at all and fell through to "rough trophies" on a real platinum, and a
+    hunter whose only copy is a no-platinum port got the same on a concept that plainly defines one."""
+    profile = ProfileFactory(is_linked=True)
+    concept = ConceptFactory(unified_title='Merged Away')
+    # The concept defines a platinum, but this hunter owns no copy of it -- so `card_game` is None.
+    TrophyFactory(game=GameFactory(concept=concept), trophy_type='platinum')
+    UserConceptRatingFactory(profile=profile, concept=concept, recommendation='good_game_bad_plat')
+
+    rows = build_profile_ratings_page(profile)
+
+    assert rows[0].card_game is None, 'fixture no longer reproduces the unowned-concept case'
+    assert rows[0].recommendation_text == 'Great game, rough platinum'
 
 
 def test_a_dlc_rating_never_calls_its_platinum_rough(client):
@@ -684,6 +712,46 @@ def test_the_cards_edge_and_stamp_both_carry_the_verdict(client):
     assert 'data-tone=' not in card[:120]
 
 
+def test_nothing_between_the_card_and_its_stretched_link_establishes_containment():
+    """`container-type` also applies LAYOUT CONTAINMENT, which makes the element a containing block for
+    absolutely-positioned descendants. On `.pp-rcard__body` that captured `.pp-rcard__link::after`, whose
+    `inset: 0` then covered the body instead of the card -- so the art panel, the verdict stamp on it and
+    the card's own padding all stopped being clickable, while `:focus-within` went on drawing the ring
+    around the whole card. Visible affordance and real hit area disagreeing is the kind of bug that reads
+    as a flaky click.
+
+    The stat strip is a block child of the body, so it measures the same width and contains nothing that
+    needs to escape it -- which is why the container belongs there instead."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+
+    body = css[css.index('.pp-rcard__body {'):]
+    body = body[:body.index('\n}')]
+    assert 'container-type' not in body, (
+        'the card body establishes containment again -- it is an ancestor of the stretched link'
+    )
+
+    strip = css[css.index('.pp-rcard__stats {'):]
+    assert 'container-type: inline-size;' in strip[:strip.index('\n}')], (
+        'the stat strip lost its container, so its @container rule has nothing to measure'
+    )
+
+
+def test_the_quick_rate_modal_caps_the_dialog_not_the_body():
+    """A `max-height` in vh on the BODY adds to the header and overruns the dialog, whose own height is
+    bounded by the UA default and whose `overflow: hidden` then clips the difference. At 375x667 that ate
+    the actions row -- the submit button, the one thing that must never be the part off screen, and worst
+    exactly where the form is tallest since the two-column grid only engages at 640px."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'game-detail.css').read_text(encoding='utf-8')
+
+    rule = css[css.index('.gd-modal--qr .gd-modal__body {'):]
+    rule = rule[:rule.index('}')]
+    assert 'vh' not in rule, 'the body carries a viewport cap of its own again'
+    # It has to be able to shrink below its content, or a flex item simply refuses to scroll.
+    assert 'min-height: 0' in rule
+
+    assert '.gd-modal--qr { max-height:' in css or 'max-height: 92vh' in css, 'the dialog itself is uncapped'
+
+
 def test_an_unanswered_card_falls_back_rather_than_going_edgeless(client):
     """`--rec-c` is declared on the base, not only on the states that set it: an undefined custom property
     invalidates the whole declaration it appears in rather than falling back, so a rating from before the
@@ -691,10 +759,18 @@ def test_an_unanswered_card_falls_back_rather_than_going_edgeless(client):
     unanswered card reads neutral rather than as a fourth verdict."""
     css = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
     card = css[css.index('.pp-rcard {'):]
-    card = card[:card.index('\n.pp-rcard[')]
+    card = card[:card.index('\n}') + 2]
 
     assert '--rec-c: var(--pp-primary);' in card, 'the card has no fallback edge colour'
     assert 'border-left: 3px solid var(--rec-c);' in card
+
+    # The three answers themselves live in ONE shared file now (three identical copies of the same map had
+    # accumulated). Doubled attribute so they are 0-2-0 and cannot lose a specificity tie to the
+    # single-class fallback above depending on which file @import happens to reach first.
+    shared = (ROOT / 'static' / 'css' / 'components' / 'recommendation.css').read_text(encoding='utf-8')
+    for value, token in (('worth_it', 'success'), ('good_game_bad_plat', 'warning'), ('skip', 'error')):
+        assert f'[data-rec="{value}"][data-rec]' in shared
+        assert f'--rec-c: var(--pp-{token});' in shared
 
     profile = ProfileFactory(is_linked=True)
     _rated(profile, title='Legacy')

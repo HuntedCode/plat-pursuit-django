@@ -119,6 +119,11 @@ class GroupRatingView(APIView):
             # for backward compat. DLC groups store the FK.
             ctg_fk = None if ctg.trophy_group_id == 'default' else ctg
 
+            # Whether the middle option reads "rough platinum" or "rough trophies", by the same rule the
+            # form's own copy used: a base group whose concept actually defines a platinum.
+            from trophies.services.rating_service import _concepts_defining_a_platinum
+            has_plat = ctg_fk is None and concept.id in _concepts_defining_a_platinum({concept.id})
+
             existing_rating = UserConceptRating.objects.filter(
                 profile=profile,
                 concept=concept,
@@ -182,7 +187,12 @@ class GroupRatingView(APIView):
                 # it mirrors (rating_verdict, rating_summary, rating_tone), but a choices label has no such
                 # function -- mirroring it would mean hardcoding four display strings in JS that drift the
                 # first time anyone rewords one here.
-                'recommendation_label': rating.get_recommendation_display(),
+                # `recommendation_label`, NOT get_recommendation_display: the middle option names what was
+                # rough, and `get_recommendation_display` always says "platinum". This view serves DLC
+                # packs (ctg_fk is set) and 100%-no-platinum games, where the radio the hunter just
+                # clicked said "trophies" -- echoing "platinum" back would contradict the form. Same
+                # `is_base and concept-defines-one` rule the form's own copy was built from.
+                'recommendation_label': rating.recommendation_label(has_platinum=has_plat),
             })
 
         except Exception as e:
@@ -292,15 +302,25 @@ class WizardQueueView(APIView):
             # hunter one opportunity to add a quick take, without the take ever gating anything.
             # The definition lives in ReviewHubService so the queue, the meter and the header cannot
             # drift apart (they were nine separate copies of it).
-            existing = {
-                r.concept_id: r
-                for r in UserConceptRating.objects.filter(
-                    profile=profile,
-                    concept_id__in=ratable_concept_ids,
-                    concept_trophy_group__isnull=True,
-                )
-            }
-            rated_concept_ids = {cid for cid, r in existing.items() if r.recommendation}
+            #
+            # SCALAR ids only. A hunter's whole rating set can run to thousands of rows, and this
+            # runs again on every scroll page -- materializing ORM instances (7 scalars, a 140-char
+            # blurb and two datetimes each) to answer two membership tests is the CLAUDE.md whale
+            # anti-pattern. The full rows are fetched below for the <=50 concepts on THIS page, which
+            # are the only ones whose prefill is ever read.
+            base_scope = dict(
+                profile=profile,
+                concept_id__in=ratable_concept_ids,
+                concept_trophy_group__isnull=True,
+            )
+            any_rated_ids = set(
+                UserConceptRating.objects.filter(**base_scope)
+                .values_list('concept_id', flat=True)
+            )
+            rated_concept_ids = set(
+                ReviewHubService.complete_ratings(**base_scope)
+                .values_list('concept_id', flat=True)
+            )
 
             wanted_ids = [cid for cid in ratable_concept_ids if cid not in rated_concept_ids]
 
@@ -316,13 +336,24 @@ class WizardQueueView(APIView):
             # hundred old ratings must not have the new ones buried behind the backlog -- and the backlog
             # items are the fast ones (everything is prefilled, one tap), so they lose nothing by
             # following. Stable within each half: the title ordering above is preserved.
-            concepts.sort(key=lambda c: c.id in existing)
+            concepts.sort(key=lambda c: c.id in any_rated_ids)
 
             total_count = len(concepts)
             paginated = concepts[offset:offset + limit]
             has_more = (offset + limit) < total_count
 
             paginated_ids = [c.id for c in paginated]
+
+            # The prefill rows, bounded to this page -- see the note on `any_rated_ids` above. Only a
+            # re-served rating has one, so this is empty for a hunter with no backlog.
+            existing = {
+                r.concept_id: r
+                for r in UserConceptRating.objects.filter(
+                    profile=profile,
+                    concept_id__in=[cid for cid in paginated_ids if cid in any_rated_ids],
+                    concept_trophy_group__isnull=True,
+                )
+            }
 
             # Pre-fetch user's gameplay stats for these concepts
             from trophies.models import ProfileGame
@@ -445,6 +476,7 @@ class WizardQueueView(APIView):
         from collections import OrderedDict
         from django.db.models import Count
         from trophies.models import Trophy, EarnedTrophy, UserConceptRating, Game
+        from trophies.services.review_hub_service import ReviewHubService
 
         # `raw_response` is the ~30 KB IGDB API blob and nothing here reads it. Without the defer it rides
         # along on every row of a list() that spans EVERY ratable concept's DLC groups before any
@@ -503,16 +535,22 @@ class WizardQueueView(APIView):
         dlc_ctg_ids = [g.id for g in dlc_groups]
         # Same rule as the base queue: a row only counts as rated once it carries a recommendation, so
         # pre-recommendation DLC ratings come back through here once, prefilled.
-        dlc_existing = {
-            r.concept_trophy_group_id: r
-            for r in UserConceptRating.objects.filter(
+        # Scalar ids only, for the same whale reason as the base queue: a completed-DLC library runs to
+        # thousands of groups and this rebuilds on every scroll page. The rows themselves are fetched
+        # after the slice, for the packs actually on this page.
+        dlc_any_rated = set(
+            UserConceptRating.objects.filter(
                 profile=profile, concept_trophy_group_id__in=dlc_ctg_ids,
-            )
-        }
-        dlc_rated = {ctg_id for ctg_id, r in dlc_existing.items() if r.recommendation}
+            ).values_list('concept_trophy_group_id', flat=True)
+        )
+        dlc_rated = set(
+            ReviewHubService.complete_ratings(
+                profile, concept_trophy_group_id__in=dlc_ctg_ids,
+            ).values_list('concept_trophy_group_id', flat=True)
+        )
 
         # Never-rated packs lead, the recommendation backlog follows -- see the base queue for why.
-        dlc_groups.sort(key=lambda g: g.id in dlc_existing)
+        dlc_groups.sort(key=lambda g: g.id in dlc_any_rated)
 
         # Concepts that surface only because of the shovelware opt-in (no
         # non-shovelware game). Skip the query when the opt-in is off.
@@ -526,6 +564,7 @@ class WizardQueueView(APIView):
             shovelware_concept_ids = set(dlc_concept_ids) - clean_concept_ids
 
         groups_dict = OrderedDict()
+        flat_pairs = []
         total_items = 0
 
         for g in dlc_groups:
@@ -544,37 +583,44 @@ class WizardQueueView(APIView):
                     'items': [],
                 }
 
-            prior = dlc_existing.get(g.id)
             item = {
                 'trophy_group_id': g.trophy_group_id,
                 'trophy_group_name': g.display_name,
-                'has_rating': prior is not None,
+                'has_rating': g.id in dlc_any_rated,
                 'is_dlc': True,
                 'hours_label': 'Hours to Complete',
                 # A DLC pack never ends in a platinum, so this half of the queue is unconditional.
                 **UserConceptRating.recommendation_copy(has_platinum=False),
             }
-            if prior:
-                # Same hazard as the base queue: without these the form loads at 5/5/5/3.0 and submitting
-                # for the recommendation overwrites a real rating.
-                item['existing'] = prior.as_prefill()
-                item['existing_blurb'] = prior.blurb
-                item['rated_at'] = prior.updated_at.isoformat()
             groups_dict[cid]['items'].append(item)
+            # The CTG pk rides alongside so the prefill can be attached after the slice; the item itself
+            # carries only the PSN group id the client sends back.
+            flat_pairs.append((cid, item, g.id))
             total_items += 1
 
-        all_groups = list(groups_dict.values())
-
-        flat_items = []
-        for grp in all_groups:
-            for item in grp['items']:
-                flat_items.append((grp, item))
+        flat_items = [
+            (groups_dict[cid], item, ctg_pk) for cid, item, ctg_pk in flat_pairs
+        ]
 
         page_items = flat_items[offset:offset + limit]
         has_more = (offset + limit) < len(flat_items)
 
+        # Prefill for THIS page only. Same hazard as the base queue: without these the form loads at
+        # 5/5/5/3.0 and submitting for the recommendation overwrites a real rating.
+        page_prior_ids = [ctg_pk for _, _, ctg_pk in page_items if ctg_pk in dlc_any_rated]
+        if page_prior_ids:
+            for prior in UserConceptRating.objects.filter(
+                profile=profile, concept_trophy_group_id__in=page_prior_ids,
+            ):
+                for _, item, ctg_pk in page_items:
+                    if ctg_pk == prior.concept_trophy_group_id:
+                        item['existing'] = prior.as_prefill()
+                        item['existing_blurb'] = prior.blurb
+                        item['rated_at'] = prior.updated_at.isoformat()
+                        break
+
         page_groups_dict = OrderedDict()
-        for grp, item in page_items:
+        for grp, item, _ in page_items:
             cid = grp['concept_id']
             if cid not in page_groups_dict:
                 page_groups_dict[cid] = {

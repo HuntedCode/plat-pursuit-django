@@ -868,11 +868,17 @@ const InfiniteScroller = {
             }
         };
 
-        // Form submit resets pagination
+        // Form submit resets pagination. Both the form and the handler are kept so `destroy()` can take
+        // the listener back off -- on a page that swaps its results through HTMX the FORM often outlives
+        // the grid, so each re-created scroller would otherwise stack another listener on the same node,
+        // each closing over a detached grid and a stale nextPageUrl.
+        let boundForm = null;
+        let onFormSubmit = null;
         if (config.formSelector) {
             const form = document.querySelector(config.formSelector);
             if (form) {
-                form.addEventListener('submit', () => {
+                boundForm = form;
+                onFormSubmit = () => {
                     if (config.scrollKey) {
                         localStorage.setItem(config.scrollKey, window.scrollY);
                     }
@@ -882,7 +888,8 @@ const InfiniteScroller = {
                     if (!config.scrollKey) {
                         grid.innerHTML = '';
                     }
-                });
+                };
+                form.addEventListener('submit', onFormSubmit);
             }
         }
 
@@ -908,6 +915,9 @@ const InfiniteScroller = {
         return {
             destroy() {
                 observer.disconnect();
+                if (boundForm && onFormSubmit) {
+                    boundForm.removeEventListener('submit', onFormSubmit);
+                }
             }
         };
     }

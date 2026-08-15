@@ -48,15 +48,24 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
         misleading without them, and only the count tells the reader which they are looking at.
 
         The block is present but collapsed until someone has answered (every game until the recommendation
-        backlog clears), so the live-update only ever sets values and never builds DOM.{% endcomment %}
+        backlog clears), so the live-update only ever sets values and never builds DOM.
+
+        Which is why the cells come from `recommendation_split_cells` rather than straight off `averages`:
+        it always yields all three, zeroed when there is nothing yet, and words them for THIS group. See
+        the tag for the two bugs that shape it.{% endcomment %}
+        {% recommendation_split_cells averages has_platinum as rec_cells %}
         <div class="gd-cond__recs{% if not averages.recommendation_split.answered %} is-empty{% endif %}" data-cond-rec>
             <div class="gd-cond__recrow">
-                {% for opt in averages.recommendation_split.options %}
+                {% for opt in rec_cells %}
                 {% comment %}The glyph is the SHARED one the rating form uses for the same answer -- thumbs
                 for the two ends, a tilde for the qualified middle -- so a verdict looks the same wherever
                 it appears. Colour rides `--rec-c`, set per option below.{% endcomment %}
+                {% comment %}`data-rec-label` so the live-update can rebuild this tooltip after a save. It
+                was the one thing in the block left stale, contradicting the percentage it sits on.
+                {% endcomment %}
                 <span class="gd-cond__rec{% if not opt.count %} is-none{% endif %}" data-rec="{{ opt.value }}" data-rec-cell="{{ opt.value }}"
-                      title="{{ opt.count|intcomma }} of {{ averages.recommendation_split.answered|intcomma }} said &ldquo;{{ opt.label }}&rdquo;">
+                      data-rec-label="{{ opt.label }}"
+                      title="{{ opt.count|intcomma }} of {{ averages.recommendation_split.answered|default:0|intcomma }} said &ldquo;{{ opt.label }}&rdquo;">
                     <span class="gd-cond__rec-fig">
                         {% include 'partials/_recommendation_icon.html' with value=opt.value %}
                         <b class="gd-cond__rec-pct" data-rec-pct>{{ opt.pct }}%</b>

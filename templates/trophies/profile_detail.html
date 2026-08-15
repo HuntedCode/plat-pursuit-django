@@ -133,6 +133,9 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             PlatPursuit.slideViewIn(document.getElementById('tab-content'), move.from, move.to, move.order);
         }
 
+        // The live scroller, so each re-init can take the previous one down. See the create() call below.
+        var scroller = null;
+
         function initTabContent() {
             var tab = getTabFromUrl();
 
@@ -177,7 +180,15 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             }
 
 
-            // InfiniteScroller for paginated tabs
+            // InfiniteScroller for paginated tabs.
+            //
+            // The previous one comes down FIRST, and unconditionally -- before the grid check, because an
+            // empty results wall renders no grid at all and would otherwise leave the last scroller live.
+            // The toolbars (`#ratings-form` and the rest) sit OUTSIDE `#tab-results`, so a form survives
+            // every sort swap while the grid under it does not; without this each swap stacks another
+            // submit listener on that same form, each closing over a detached grid.
+            if (scroller) { scroller.destroy(); scroller = null; }
+
             var gridEl = document.getElementById(tab + '-grid');
             var sentinelEl = document.getElementById(tab + '-sentinel');
             if (gridEl && sentinelEl) {
@@ -207,7 +218,7 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
                 else if (tab === 'ratings') { cardSel = '.pp-rcard'; }
                 else if (tab === 'trophies') { cardSel = isActivity ? '.pp-act__cell' : '.pp-actt__card'; }
 
-                PlatPursuit.InfiniteScroller.create({
+                scroller = PlatPursuit.InfiniteScroller.create({
                     gridId: tab + '-grid',
                     sentinelId: tab + '-sentinel',
                     loadingId: tab + '-loading',

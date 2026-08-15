@@ -150,6 +150,44 @@ def test_the_split_shows_every_option_including_the_empty_ones():
     assert 'gd-cond__rec is-none' in html
 
 
+def test_a_never_rated_game_draws_the_three_answers_at_zero():
+    """`averages` is None until somebody rates the game, and looping it for the cells produced a block with
+    no cells in it. The live-update is written to only ever set values and never build DOM -- so the first
+    person to rate the game found every `[data-rec-cell]` lookup missing, skipped all three, and still
+    un-hid the block: an empty row with an orphan "from 1 rating that answered" under it.
+
+    Zeros are the honest starting state anyway, and they keep that contract true."""
+    html = _conditions(None)
+
+    for value in ('worth_it', 'good_game_bad_plat', 'skip'):
+        assert f'data-rec-cell="{value}"' in html, f'{value} is missing before anyone has rated'
+    assert 'gd-cond__recs is-empty' in html, 'the block should still be collapsed until someone answers'
+    assert html.count('gd-cond__rec is-none') == 3, 'all three should be drawn held back'
+
+
+def test_the_split_is_worded_for_the_group_being_shown():
+    """`_compute_averages` is concept-wide and bakes the platinum wording into the labels it caches. A DLC
+    pack's own panel therefore read "Great game, rough platinum" about a set that has no platinum -- the
+    same fact the radio the hunter clicked had already worded the other way. Counts ride the cached dict;
+    the words come from the group."""
+    html = _conditions(dict(_AVERAGES, recommendation_split=_SPLIT), has_platinum=False)
+
+    assert 'Great game, rough trophies' in html
+    assert 'Great game, rough platinum' not in html
+    # And the counts still come from the cached split, which is the half that IS concept-wide.
+    assert '80%' in html and '20%' in html
+
+
+def test_the_host_tells_the_partial_whether_the_group_has_a_platinum():
+    """The wording above is only right because the panel passes it down per group. Silent if dropped: an
+    unset template variable resolves to the empty string, which is falsy, so every group would quietly get
+    the no-platinum wording."""
+    src = (ROOT / 'templates' / 'trophies' / 'partials' / 'game_detail' / 'ratings_panel.html').read_text(
+        encoding='utf-8')
+
+    assert 'has_platinum=' in src, 'the panel no longer tells _rating_conditions which kind of group it is'
+
+
 def test_the_total_sits_with_the_action_not_beside_the_answered_count():
     """Two counts touching read as one confused sentence: "from 5 ratings that answered" and "12 ratings"
     are DIFFERENT denominators (every rating, versus only those carrying a recommendation), and the reader
@@ -239,6 +277,8 @@ def _conditions(averages, **kw):
     ctx = {
         'averages': averages, 'concept_id': 1, 'group_id': 'default',
         'hours_label': 'Hours to Plat', 'hours_label_long': 'Hours to Platinum',
+        # The host always supplies this (pinned below) and the split's labels are worded from it.
+        'has_platinum': True,
     }
     ctx.update(kw)
     return render_to_string('trophies/partials/game_detail/_rating_conditions.html', ctx)

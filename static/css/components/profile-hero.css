@@ -639,9 +639,6 @@
        than as a fourth verdict. */
     --rec-c: var(--pp-primary);
 }
-.pp-rcard[data-rec="worth_it"]           { --rec-c: var(--pp-success); }
-.pp-rcard[data-rec="good_game_bad_plat"] { --rec-c: var(--pp-warning); }
-.pp-rcard[data-rec="skip"]               { --rec-c: var(--pp-error); }
 
 /* Hover glow, not scale -- the wall is dense and a scaling card shoves its neighbours. */
 @media (hover: hover) {
@@ -683,11 +680,6 @@
 .pp-rcard__body {
     display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1;
     padding: 11px 13px 12px;
-    /* A CONTAINER, so the stat strip below can lay itself out against the width it actually has. A media
-       query is the wrong tool here: this card's width comes from the wall's `auto-fill` track count minus
-       the art panel, so the same viewport gives it a different body width depending on how many columns
-       fit -- and a viewport breakpoint would put four cells in a 300px body and truncate every label. */
-    container-type: inline-size;
 }
 @media (min-width: 768px) { .pp-rcard__body { gap: 7px; padding: 13px 15px 14px; } }
 
@@ -763,7 +755,21 @@
 /* All FOUR scored axes, in full -- the fifth is the overall above. Every cell is figure-over-word, and the
    word carries the polarity (a 9 difficulty says "Brutal") because a bare number can be read backwards
    and a word cannot. 2x2 at 375px, one row from `md:` where the card has the width for it. */
-.pp-rcard__stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+.pp-rcard__stats {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px;
+    /* The container is the STRIP, not the card body. A media query is the wrong tool for it either way --
+       this card's width comes from the wall's `auto-fill` track count minus the art panel, so the same
+       viewport gives it a different body width depending on how many columns fit, and a viewport
+       breakpoint would put four cells in a 300px body and truncate every label.
+
+       But `container-type` also applies layout containment, which makes the element a containing block
+       for absolutely-positioned descendants. On the BODY that captured `.pp-rcard__link::after`, whose
+       `inset: 0` then covered the body instead of the card -- so the art panel, the verdict stamp on it
+       and the card's own padding all stopped being clickable while `:focus-within` still drew the ring
+       around the whole card. The strip is a block child of the body, so it measures the same width and
+       contains nothing that needs to escape it. */
+    container-type: inline-size;
+}
 /* One row only once a cell can hold the word "Difficulty" -- 360px of body is ~84px per cell, which is
    the point where the key stops needing an ellipsis. Below that it stays 2x2 rather than truncating four
    labels to fit a shape. */

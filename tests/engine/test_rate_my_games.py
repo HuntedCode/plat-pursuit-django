@@ -379,6 +379,48 @@ def test_the_queue_never_drags_the_igdb_blob_along(client, queue_type):
     assert not offenders, f'{queue_type} queue selects raw_response:\n' + '\n'.join(o[:300] for o in offenders)
 
 
+@pytest.mark.parametrize('queue_type', ['base', 'dlc'])
+def test_the_queue_reads_ids_not_rows_when_it_is_only_asking_what_is_rated(client, queue_type):
+    """The membership pass covers the WHOLE library; only the page needs the rows.
+
+    The queue asks two things of a hunter's existing ratings: which are done (so they can be skipped) and
+    which exist at all (so the never-rated sort first). Both are answered by an id. Building full ORM
+    instances for them -- seven scalars, a 140-char blurb and two datetimes each -- put the CLAUDE.md whale
+    anti-pattern on a path that reruns on every scroll page: a hunter with thousands of ratings
+    re-materialized all of them to hand back twenty.
+
+    Pinned by the BLURB, which is the widest column and is only ever read for the items on this page. An
+    unbounded query that selects it is a query fetching rows where it needs ids."""
+    profile = _hunter()
+    # A backlog to sort past, so the membership pass has something to answer about.
+    for i in range(4):
+        game = _dlc_ready(profile, name=f'Done {i}')
+        UserConceptRating.objects.create(
+            profile=profile, concept=game.concept, recommendation='worth_it',
+            difficulty=5, grindiness=5, hours_to_platinum=10, fun_ranking=5, overall_rating=4.0,
+        )
+    _dlc_ready(profile, name='Fresh')
+    client.force_login(profile.user)
+
+    with CaptureQueriesContext(connection) as ctx:
+        assert client.get(QUEUE, {'queue_type': queue_type}).status_code == 200
+
+    ratings_sql = [q['sql'] for q in ctx.captured_queries if 'trophies_userconceptrating' in q['sql']]
+    blurb = '"trophies_userconceptrating"."blurb"'
+
+    # The scalar pass has to EXIST. Before this, every membership question was answered by building the
+    # instances, so there was no id-only query at all -- which is what this catches.
+    assert any(blurb not in sql for sql in ratings_sql), (
+        f'the {queue_type} queue has no id-only pass over the ratings -- it is building rows to answer '
+        f'membership:\n' + '\n'.join(s[:300] for s in ratings_sql)
+    )
+    # And the row-fetching pass happens at most once: the page's prefill, nothing else.
+    assert sum(blurb in sql for sql in ratings_sql) <= 1, (
+        f'the {queue_type} queue fetches whole rating rows more than once:\n'
+        + '\n'.join(s[:300] for s in ratings_sql if blurb in s)
+    )
+
+
 @pytest.mark.parametrize('queue_type,key', [('base', 'queue'), ('dlc', 'groups')])
 def test_the_queue_sends_the_cover_and_no_longer_the_landscape_wash(client, queue_type, key):
     """The header's job is reminding you WHICH game this is, and the COVER is what does it.

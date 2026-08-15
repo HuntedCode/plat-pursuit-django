@@ -1565,6 +1565,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         const n = cell.querySelector('[data-rec-count]');
                         if (pct) pct.textContent = opt.pct + '%';
                         if (n) n.textContent = opt.count.toLocaleString();
+                        // The tooltip states the same fact in words, so it has to move with the figures --
+                        // left alone it contradicted the percentage it sits on until the next reload.
+                        const lbl = cell.getAttribute('data-rec-label');
+                        if (lbl) {
+                            cell.title = opt.count.toLocaleString() + ' of ' +
+                                rec.answered.toLocaleString() + ' said “' + lbl + '”';
+                        }
                         // A share that just went from 0 to 1 stops being held back, and one that is still
                         // 0 stays quiet -- both directions, or the dimming survives its own reason.
                         cell.classList.toggle('is-none', !opt.count);

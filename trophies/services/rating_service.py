@@ -456,11 +456,31 @@ def _games_for_concepts(profile, concept_ids):
     return out
 
 
+def _concepts_defining_a_platinum(concept_ids):
+    """Of these concepts, the ones that define a platinum trophy at all.
+
+    Page-bounded and index-backed. Asked of the CONCEPT rather than of any one game because "does this
+    have a platinum" is a fact about the title, not about which SKU a particular hunter happens to own.
+    """
+    if not concept_ids:
+        return set()
+
+    from trophies.models import Trophy
+
+    return set(
+        Trophy.objects
+        .filter(game__concept_id__in=concept_ids, trophy_type='platinum')
+        .values_list('game__concept_id', flat=True)
+        .distinct()
+    )
+
+
 def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_PER_PAGE, dlc=False):
     """One page of a hunter's ratings, with everything each card draws already attached.
 
-    Three queries flat, whatever the page: the ratings themselves, the community scores for the concepts on
-    it, and the games behind those concepts. Nothing here scales with the size of the account -- only with
+    Four queries flat on the base wall, three on the DLC one: the ratings themselves, the community scores
+    for the concepts on it, the games behind those concepts, and (base only) which of those concepts define
+    a platinum, for the verdict wording. Nothing here scales with the size of the account -- only with
     `per_page`.
 
     Sliced rather than paginated. `Paginator` runs a `COUNT(*)` over the whole set on every page, and the
@@ -488,6 +508,9 @@ def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_
 
     community = _community_scores(rows)
     games = _games_for_concepts(profile, {r.concept_id for r in rows})
+    plat_concepts = _concepts_defining_a_platinum(
+        set() if dlc else {r.concept_id for r in rows}
+    )
 
     for r in rows:
         r.card_game = games.get(r.concept_id)
@@ -498,10 +521,14 @@ def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_
         r.community_n = stats['n'] if stats else 1
 
         # The verdict, worded for the set it is about: "rough platinum" is wrong on a DLC pack (which
-        # never has one) and on a game that never defined one. Read off the game already attached above,
-        # so this costs no query -- `defined_trophies` is a column on the row we just fetched.
-        defined = (r.card_game.defined_trophies or {}) if r.card_game else {}
-        has_plat = r.concept_trophy_group_id is None and bool(defined.get('platinum'))
+        # never has one) and on a game that never defined one.
+        #
+        # Read off the CONCEPT, not off `card_game`. `card_game` is the hunter's own highest-progress SKU
+        # and can be missing entirely (a concept merge re-points a rating onto a survivor whose copies
+        # they do not own) -- which used to fall through to False and stamp the no-platinum wording on a
+        # real platinum. It is also the wrong question: a hunter whose only copy is a no-platinum port
+        # still rated a concept that defines one.
+        has_plat = r.concept_id in plat_concepts
         r.recommendation_text = r.recommendation_label(has_plat) if r.recommendation else ''
 
     return rows

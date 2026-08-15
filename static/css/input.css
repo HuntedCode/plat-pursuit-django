@@ -31,6 +31,7 @@
 @import "./components/claim-ceremony.css";
 /* Before game-detail.css and profile-hero.css: both host `.pp-stars` and size it with `--star`. */
 @import "./components/stars.css";
+@import "./components/recommendation.css";
 @import "./components/game-detail.css";
 @import "./components/download-button.css";
 @import "./components/plat-cards.css";

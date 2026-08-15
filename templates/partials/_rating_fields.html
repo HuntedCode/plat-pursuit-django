@@ -89,7 +89,7 @@ reason (this partial is rendered ONCE and then re-pointed at game after game).{%
         {% recommendation_choices as recommendations %}
         {% for value, label in recommendations %}
         <label class="gd-qr__rec" data-rec="{{ value }}">
-            <input type="radio" name="recommendation" value="{{ value }}" data-gd-qr-rec>
+            <input type="radio" name="recommendation" value="{{ value }}">
             {% include 'partials/_recommendation_icon.html' with value=value %}
             <span class="gd-qr__rec-lbl" data-gd-qr-rec-lbl="{{ value }}">{{ label }}</span>
         </label>

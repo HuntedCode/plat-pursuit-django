@@ -62,7 +62,9 @@ The art followed the same logic one step further. A wide card wants a **wide ima
 
 Six sorts (`PROFILE_RATING_SORTS`): recently rated / highest / lowest / hardest / longest / A-Z. Grindiness and fun were deliberately **not** given sorts — hours is what grind feels like in a unit people use, and "most fun" and "highest rated" rank nearly the same shelf.
 
-`build_profile_ratings_page` is **three queries flat** whatever the page size: the ratings, the community scores for the concepts on that page, and the games behind those concepts. Nothing scales with account size.
+`build_profile_ratings_page` is **four queries flat** on the base wall (three on the DLC one) whatever the page size: the ratings, the community scores for the concepts on that page, the games behind those concepts, and which of those concepts define a platinum. Nothing scales with account size.
+
+That fourth query is what words the verdict. "Great game, rough platinum" is wrong on a set with no platinum, and the fact is asked of the **concept**, not of the hunter's own copy: reading it off the attached `card_game` meant a concept they own no copy of (possible after a merge re-points a rating onto a survivor) fell through to "rough trophies" on a real platinum, and a hunter whose only copy is a no-platinum port got the same. It is skipped entirely on the DLC wall, where the answer is always no.
 
 ## The recommendation
 

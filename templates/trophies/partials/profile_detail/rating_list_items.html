@@ -95,7 +95,7 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
                 is wrong on a DLC pack or a game that never had one. The strings still live in the model;
                 only the choice of WHICH wording is made where the game is known.{% endcomment %}
                 {% if r.recommendation %}
-                <span class="pp-rcard__rec" data-rec="{{ r.recommendation }}">{{ r.recommendation_text }}</span>
+                <span class="pp-rcard__rec">{{ r.recommendation_text }}</span>
                 {% endif %}
             </span>
 

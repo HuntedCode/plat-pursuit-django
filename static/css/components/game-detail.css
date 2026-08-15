@@ -1305,9 +1305,6 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 }
 /* Same three tokens the form's options and the profile card's chip use, so an answer is the same colour
    wherever it appears. */
-.gd-cond__rec[data-rec="worth_it"]           { --rec-c: var(--pp-success); }
-.gd-cond__rec[data-rec="good_game_bad_plat"] { --rec-c: var(--pp-warning); }
-.gd-cond__rec[data-rec="skip"]               { --rec-c: var(--pp-error); }
 /* An option nobody picked is drawn but held back -- present because a zero is information, quiet because
    it is not a finding. Driven by a class rather than by matching the text, which CSS cannot do; the live
    update toggles it alongside the figures. */
@@ -1465,9 +1462,17 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
  * there is no width to adapt to -- two known hosts, two known layouts.
  */
 .gd-modal--qr { width: min(94vw, 620px); max-width: 620px; }
-/* Taller than the shared 70vh: this body is now short enough that the cap is the only thing that would
-   make it scroll. */
-.gd-modal--qr .gd-modal__body { max-height: 88vh; }
+/* The DIALOG is capped and the body takes what is left, rather than the body carrying a vh cap of its own.
+   A `max-height: 88vh` on the body added to the ~46px header and overran the dialog, whose own height is
+   bounded by the UA's `calc(100% - 6px - 2em)` and whose `overflow: hidden` then clipped the difference --
+   on a 375x667 phone that ate the actions row, which is the one thing that must never be the part off
+   screen. Worst exactly where the form is tallest, too, since the two-column grid only engages at 640px. */
+.gd-modal--qr { max-height: 92vh; }
+.gd-modal--qr[open] { display: flex; flex-direction: column; }
+.gd-modal--qr .gd-modal__head { flex: none; }
+/* `min-height: 0` so the body can actually shrink below its content height and scroll -- a flex item
+   defaults to `min-height: auto`, which refuses to. */
+.gd-modal--qr .gd-modal__body { max-height: none; flex: 1 1 auto; min-height: 0; }
 .gd-qr { display: flex; flex-direction: column; gap: 15px; }
 
 /* Which fields span both columns, for ANY host that lays the form out two-up. Unconditional because
@@ -1552,9 +1557,6 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-qr__rec svg { width: 18px; height: 18px; flex: none; color: var(--rec-c); }
 .gd-qr__rec-lbl { min-width: 0; }
 
-.gd-qr__rec[data-rec="worth_it"]           { --rec-c: var(--pp-success); }
-.gd-qr__rec[data-rec="good_game_bad_plat"] { --rec-c: var(--pp-warning); }
-.gd-qr__rec[data-rec="skip"]               { --rec-c: var(--pp-error); }
 
 @media (hover: hover) {
     .gd-qr__rec:hover { border-color: color-mix(in oklab, var(--rec-c) 40%, var(--pp-border)); color: var(--pp-text); }

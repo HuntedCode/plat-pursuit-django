@@ -91,19 +91,25 @@ ever does nothing.{% endcomment %}
 {% if rating_summary_stats.dlc_count %}
 {% with base_url=request.path %}
 <div class="flex items-center justify-start mb-3">
-    <div class="pp-switch" role="tablist" aria-label="Which ratings">
+    {% comment %}Links in a NAV, not a `role="tablist"`. This partial is rendered INTO `#tab-content`, so a
+    tab here would be a descendant of the panel it claims to control -- and the page already has a real
+    tablist above (the profile's own tab bar) pointed at that same element. Two tablists controlling one
+    panel, each nested inside it, is worse for assistive tech than the plain links these actually are: each
+    chip is an href that swaps the region, which `aria-current` describes exactly and without promising the
+    Arrow-key navigation `role="tab"` would.{% endcomment %}
+    <nav class="pp-switch" aria-label="Which ratings">
         {% for slug, label in ratings_sets %}
         <a href="{{ base_url }}?tab=ratings&set={{ slug }}"
            hx-get="{{ base_url }}?tab=ratings&set={{ slug }}"
            hx-target="#tab-content" hx-swap="innerHTML" hx-push-url="true"
-           role="tab" aria-controls="tab-content" data-set="{{ slug }}"
-           aria-selected="{% if rating_set == slug %}true{% else %}false{% endif %}"
+           data-set="{{ slug }}"
+           {% if rating_set == slug %}aria-current="true"{% endif %}
            class="pp-switch__chip {% if rating_set == slug %}is-active{% endif %}">
             <span class="pp-switch__lbl">{{ label }}</span>
             <span class="ml-1 text-[0.65rem] font-semibold opacity-60 tabular-nums">{% if slug == 'dlc' %}{{ rating_summary_stats.dlc_count|intcomma }}{% else %}{{ rating_summary_stats.base_count|intcomma }}{% endif %}</span>
         </a>
         {% endfor %}
-    </div>
+    </nav>
 </div>
 {% endwith %}
 {% endif %}
