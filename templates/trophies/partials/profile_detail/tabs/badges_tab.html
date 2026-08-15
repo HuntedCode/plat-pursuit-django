@@ -42,7 +42,7 @@ what they hold, and the medallion's state treatment already tells the two apart 
         </label>
     </div>
 
-    <div class="pp-gallery__grid">
+    <div class="pp-gallery__grid{% if request.htmx %} pp-reveal{% endif %}" data-badge-wall>
         {% for badge in list_badges %}
         {% comment %}`?group=` is load-bearing, not decoration: one card per EDITION, so a series with
         Legacy HD and Ultra HD renders two cards with different tiers, states and progress. Without the

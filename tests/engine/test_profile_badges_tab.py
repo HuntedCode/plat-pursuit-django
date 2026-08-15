@@ -174,7 +174,10 @@ def test_a_private_profile_does_not_serve_its_badges_over_htmx(client):
     body = response.content.decode()
 
     assert response.status_code == 200
-    assert 'pp-gallery__card' not in body, "a private profile's badge wall is served over HTMX"
+    # The rendered ATTRIBUTE, not the bare class name: the page's inline JS names `.pp-gallery__card` as
+    # the Badges tab's card selector (it drives both the scroller and the staggered reveal), so the bare
+    # string is present either way. Same trap the `tab-results` note below describes, hit a second time.
+    assert 'class="pp-gallery__card"' not in body, "a private profile's badge wall is served over HTMX"
     # The full page is returned instead of the tab body, and profile_detail.html's own guard then drops
     # the whole tab region. Asserted on the CONTAINER the guard wraps -- `tab-results` alone also appears
     # in the page's inline JS, so it matches a string that is present either way.

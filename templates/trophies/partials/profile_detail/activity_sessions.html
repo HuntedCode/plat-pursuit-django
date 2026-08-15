@@ -11,7 +11,7 @@ Each tile is a real LINK to `profile_day`, not a JS-only affordance: the profile
 a day has to be reachable, linkable and readable without JS. HTMX intercepts the same URL into the modal.
 {% endcomment %}
 {% if activity_days %}
-<div id="trophies-grid" class="pp-gtile-grid" data-act-days>
+<div id="trophies-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}" data-act-days>
     {% include 'trophies/partials/profile_detail/activity_tiles.html' %}
 </div>
 {% comment %}Infinite scroll, as everywhere else on the site -- `?page=N` over DISTINCT DAYS, which is

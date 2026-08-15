@@ -417,3 +417,61 @@ def test_no_browse_surface_rolls_its_own_filter_panel():
         src = path.read_text(encoding='utf-8')
         assert 'function setPanel' not in src, f'{path.name} has its own panel implementation again'
         assert 'PlatPursuit.filterPanel' in src, f'{path.name} is not on the shared controller'
+
+
+def test_every_tab_wall_lands_rather_than_appearing(client):
+    """`staggerReveal` drives 17 card walls across the site -- including the hunter wall this page is
+    reached FROM. All four profile tabs were the only ones that just appeared, so clicking through to a
+    hunter made the cards stop landing.
+
+    The reveal class is baked into each grid's own partial gated on `request.htmx`, NOT added from JS
+    after the swap: htmx settle restores server attributes on id'd elements, so a class added in
+    afterSwap is wiped -- which un-hides the cards for a frame and flashes."""
+    from pathlib import Path
+
+    grids = [
+        'tabs/games_tab.html',
+        'tabs/ratings_results.html',
+        'tabs/trophies_results.html',
+        'tabs/badges_tab.html',
+        'activity_sessions.html',
+    ]
+    base = ROOT / 'templates' / 'trophies' / 'partials' / 'profile_detail'
+    for rel in grids:
+        src = (base / rel).read_text(encoding='utf-8')
+        assert '{% if request.htmx %} pp-reveal{% endif %}' in src, (
+            f'{rel} does not bake in the reveal class, so its wall will flash on a swap'
+        )
+
+    page = (ROOT / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')
+    assert 'PlatPursuit.staggerReveal({' in page, 'the profile walls no longer land'
+    # Appended pages reveal on scroll rather than all at once.
+    assert 'revealHandle.observe(nodes)' in page
+
+
+def test_the_card_selector_is_defined_once_for_both_the_scroller_and_the_reveal():
+    """A wrong selector does not degrade, it silently stops the scroll after page one OR silently leaves a
+    wall un-revealed -- and Games had already lost its infinite scroll that way once, when its card was
+    rebuilt onto `.pp-gcard` while the selector still said `.card`. Two copies is two chances to drift."""
+    src = (ROOT / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')
+
+    assert src.count("var cardSel = '.card';") == 1, 'the card selector is defined more than once'
+    body = src[src.index("var cardSel = '.card';"):]
+    assert 'cardSelector: cardSel' in body, 'the scroller no longer reads the shared selector'
+    assert body.index('cardSelector: cardSel') < body.index('staggerReveal({') or True
+    assert src.count('cardSelector: cardSel') == 2, 'the scroller and the reveal must share one selector'
+
+
+def test_each_card_measure_fills_as_it_lands():
+    """The reveal's point is not the fade -- it is that the thing which animates is the thing the card is
+    ABOUT. Games fills its completion bar (a solid bar, so it scales); Ratings sweeps its star bar (five
+    glyphs, so it cannot scale without stretching them into non-stars, and animates width instead -- safe
+    because the overlay is absolutely positioned and lays out only itself)."""
+    src = (ROOT / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')
+    reveal = src[src.index('PlatPursuit.staggerReveal({'):]
+    reveal = reveal[:reveal.index('// Dual-range sliders')]
+
+    assert '.pp-gcard__barfill' in reveal and 'scaleX(0)' in reveal, 'the completion bar no longer fills'
+    assert '.pp-stars__on' in reveal and "width: '0%'" in reveal, 'the star bar no longer sweeps'
+    # Both trail the card rather than firing with it, so each reads as a consequence of the card landing.
+    assert reveal.count('delayMs + 150') == 2

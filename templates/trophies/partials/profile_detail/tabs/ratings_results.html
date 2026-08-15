@@ -5,7 +5,7 @@ describes the whole set and does not move when the ordering does, and re-sending
 count-up animations on every sort.
 {% endcomment %}
 {% if profile_ratings %}
-<div id="ratings-grid" class="pp-rwall">
+<div id="ratings-grid" class="pp-rwall{% if request.htmx %} pp-reveal{% endif %}">
     {% include 'trophies/partials/profile_detail/rating_list_items.html' %}
 </div>
 <div id="ratings-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">

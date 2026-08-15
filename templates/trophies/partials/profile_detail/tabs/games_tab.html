@@ -4,7 +4,10 @@
 <div id="tab-results">
     {% comment %}The site game grid, not a vertical list: `.pp-gcard` is a cover-forward portrait card,
     and `.pp-gbrowse__grid` is the unscoped grid Browse Games lays them out in.{% endcomment %}
-    <div id="games-grid" class="pp-gbrowse__grid">
+{% comment %}`pp-reveal` is baked in on HTMX swaps ONLY: htmx settle restores server attributes on
+id'd elements after afterSwap, so a class added there is wiped -- which un-hides the cards for a frame
+and flashes. On the first (non-htmx) render staggerReveal adds it itself, before paint.{% endcomment %}
+    <div id="games-grid" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}">
         {% include 'trophies/partials/profile_detail/game_list_items.html' %}
     </div>
     <div id="games-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">

@@ -5,7 +5,7 @@ comes back with is decided by whether anything was asked for.
 {% endcomment %}
 {% if is_searching %}
     {% if trophy_log %}
-    <div id="trophies-grid" class="pp-actt pp-actt--log">
+    <div id="trophies-grid" class="pp-actt pp-actt--log{% if request.htmx %} pp-reveal{% endif %}">
         {% include 'trophies/partials/profile_detail/trophy_list_items.html' %}
     </div>
     <div id="trophies-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">

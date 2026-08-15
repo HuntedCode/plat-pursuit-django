@@ -145,6 +145,7 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
         // down. Both are rebuilt per tab swap; see their call sites below.
         var scroller = null;
         var panelHandle = null;
+        var revealHandle = null;
 
         function initTabContent() {
             var tab = getTabFromUrl();
@@ -199,6 +200,24 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             // submit listener on that same form, each closing over a detached grid.
             if (scroller) { scroller.destroy(); scroller = null; }
 
+            // Which SHAPE the trophies tab is in, derived the same way the view derives it: from the
+            // search params. It used to read `?view=`, the removed Activity/Log switcher's param -- which
+            // nothing sets any more, so this was unconditionally true and the search results were handed
+            // the day wall's page size AND the day wall's card selector.
+            var params = new URLSearchParams(window.location.search);
+            var isActivity = !(tab === 'trophies' && ((params.get('q') || '').trim() || params.get('tier')));
+
+            // Every grid has its OWN card class, and BOTH the scroller and the reveal are driven by it --
+            // the scroller appends only what matches, the reveal animates only what matches. Hoisted above
+            // both so there is one definition rather than two that can disagree: a wrong selector does not
+            // degrade, it silently stops the scroll after page one (which is exactly what had happened to
+            // Games since its card was rebuilt onto `.pp-gcard`) or silently leaves a wall un-revealed.
+            var cardSel = '.card';
+            if (tab === 'games') { cardSel = '.pp-gcard'; }
+            else if (tab === 'ratings') { cardSel = '.pp-rcard'; }
+            else if (tab === 'badges') { cardSel = '.pp-gallery__card'; }
+            else if (tab === 'trophies') { cardSel = isActivity ? '.pp-act__cell' : '.pp-actt__card'; }
+
             var gridEl = document.getElementById(tab + '-grid');
             var sentinelEl = document.getElementById(tab + '-sentinel');
             if (gridEl && sentinelEl) {
@@ -210,24 +229,6 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
                 // 2 after an HTMX history restore. The selector is the CELL, not the tile: the scroller
                 // appends only what matches it and discards the rest, so selecting the tile alone dropped
                 // every month header from every appended page.
-                // Which SHAPE the trophies tab is in, derived the same way the view derives it: from the
-                // search params. It used to read `?view=`, the removed Activity/Log switcher's param --
-                // which nothing sets any more, so this was unconditionally true and the search results
-                // were handed the day wall's page size AND the day wall's card selector. The scroller
-                // appends only what its selector matches, so search simply stopped after one page.
-                var params = new URLSearchParams(window.location.search);
-                var isActivity = !(tab === 'trophies' && ((params.get('q') || '').trim() || params.get('tier')));
-
-                // Every grid has its OWN card class, and the scroller appends only what its selector
-                // matches -- so a wrong selector here does not degrade, it silently stops the scroll after
-                // page one. That is exactly what had happened to Games since its card was rebuilt onto
-                // `.pp-gcard`: `.card` matched nothing in the appended HTML, so it looked like there was
-                // simply no more history.
-                var cardSel = '.card';
-                if (tab === 'games') { cardSel = '.pp-gcard'; }
-                else if (tab === 'ratings') { cardSel = '.pp-rcard'; }
-                else if (tab === 'trophies') { cardSel = isActivity ? '.pp-act__cell' : '.pp-actt__card'; }
-
                 scroller = PlatPursuit.InfiniteScroller.create({
                     gridId: tab + '-grid',
                     sentinelId: tab + '-sentinel',
@@ -237,6 +238,9 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
                     30 and its resume arithmetic was wrong by that gap.{% endcomment %}
                     paginateBy: {{ scroll_per_page|default:30 }},
                     cardSelector: cardSel,
+                    // Appended pages reveal as they SCROLL into view rather than all at once, which
+                    // is the observer half of staggerReveal.
+                    onAppend: function (nodes) { if (revealHandle) { revealHandle.observe(nodes); } },
                     formSelector: '#' + tab + '-form'
                     {% comment %}NO `scrollKey`, and it is a bug fix rather than an omission.
 
@@ -267,6 +271,54 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
                 document.querySelectorAll('[data-countup]:not([data-counted])').forEach(function (el) {
                     el.setAttribute('data-counted', '1');
                     PlatPursuit.countUp(el, 850);
+                });
+            }
+
+            // ── The wall lands ────────────────────────────────────────────────────────────────────────
+            // Every other card wall on the site does this -- Browse Games, the badge gallery, companies,
+            // franchises, genres, milestones, plat cards, recently-added, tag detail, and the hunter wall
+            // this page is reached FROM. All four profile tabs were the only ones that just appeared, so
+            // clicking a hunter made the cards stop landing.
+            //
+            // The interesting half is not the fade: it is that each card's own MEASURE fills as it lands,
+            // 150ms behind the card so it reads as a consequence of arriving rather than a second
+            // simultaneous animation. Games fills its completion bar; Ratings sweeps its star bar. Those
+            // are the one figure each of those cards exists for. Trophies and Badges take the land alone --
+            // a day tile and a medallion have no single measure that wants drawing.
+            //
+            // `staggerReveal` handles reduced-motion (returns null), the flash-to-black ordering, and
+            // idempotency when a swap re-selects a card. Reveal-on-append is wired through the scroller.
+            if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
+            var revealGrid = gridEl || document.querySelector('#tab-content [data-badge-wall]');
+            if (revealGrid && PlatPursuit.staggerReveal) {
+                var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+                var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
+                revealHandle = PlatPursuit.staggerReveal({
+                    grid: revealGrid, cardSelector: cardSel, step: 22,
+                    reveal: function (el, delayMs) {
+                        if (!el.animate) { return; }
+                        el.animate([{ opacity: 0 }, { opacity: 1 }],
+                                   { duration: 420, delay: delayMs, easing: fadeEase, fill: 'backwards' });
+                        el.animate([{ transform: 'translateY(14px) scale(0.965)' }, { transform: 'none' }],
+                                   { duration: 500, delay: delayMs, easing: springEase, fill: 'backwards' });
+
+                        // Games: the completion bar. A solid bar, so it scales -- GPU-cheap and no distortion.
+                        var bar = el.querySelector('.pp-gcard__barfill');
+                        if (bar) {
+                            bar.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }],
+                                        { duration: 540, delay: delayMs + 150, easing: fadeEase, fill: 'backwards' });
+                        }
+                        // Ratings: the star bar. WIDTH, not scaleX -- the overlay is five star GLYPHS, and
+                        // scaling those horizontally stretches them into something that is not a star. The
+                        // usual "transform/opacity only" rule is about layout cost, and this element is
+                        // absolutely positioned, so its width change lays out itself and nothing else.
+                        el.querySelectorAll('.pp-stars__on').forEach(function (on) {
+                            var to = on.parentElement && on.parentElement.style.getPropertyValue('--fill');
+                            if (!to) { return; }
+                            on.animate([{ width: '0%' }, { width: to.trim() }],
+                                       { duration: 560, delay: delayMs + 150, easing: fadeEase, fill: 'backwards' });
+                        });
+                    },
                 });
             }
 
