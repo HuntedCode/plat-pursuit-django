@@ -96,7 +96,7 @@ ever does nothing.{% endcomment %}
         <a href="{{ base_url }}?tab=ratings&set={{ slug }}"
            hx-get="{{ base_url }}?tab=ratings&set={{ slug }}"
            hx-target="#tab-content" hx-swap="innerHTML" hx-push-url="true"
-           role="tab" aria-controls="tab-content"
+           role="tab" aria-controls="tab-content" data-set="{{ slug }}"
            aria-selected="{% if rating_set == slug %}true{% else %}false{% endif %}"
            class="pp-switch__chip {% if rating_set == slug %}is-active{% endif %}">
             <span class="pp-switch__lbl">{{ label }}</span>

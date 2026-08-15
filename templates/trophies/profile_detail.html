@@ -63,6 +63,55 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
         function getTabFromUrl() {
             return new URLSearchParams(window.location.search).get('tab') || 'games';
         }
+        function getSetFromUrl() {
+            return new URLSearchParams(window.location.search).get('set') || 'games';
+        }
+
+        // ── Directional slide on a view change ────────────────────────────────────────────────────
+        // The shared `slideViewIn`, the same motion every other rebuilt segmented switcher uses: the
+        // incoming panel arrives from the side implied by the move, so a switch reads as travel rather
+        // than as a redraw. Both switchers on this page feed it -- the tab strip and the Ratings tab's
+        // Games/DLC control -- because they swap the same panel and animating one but not the other
+        // would read as a bug in whichever missed out.
+        //
+        // Direction is captured on CLICK, not derived after the swap. `hx-push-url` rewrites the URL as
+        // part of the swap, so reading "where were we" in afterSwap races the very thing being compared
+        // against -- by then the URL already says where we ARE.
+        //
+        // The order comes from the rendered chips rather than a hardcoded list, so it cannot fall out of
+        // step with the tabs the view actually offers.
+        var pendingSlide = null;
+
+        function slideOrder(chips, key) {
+            return Array.prototype.map.call(chips, function (c) { return c.dataset[key]; });
+        }
+
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            var tabChip = e.target.closest('#profile-tab-bar [data-tab]');
+            if (tabChip) {
+                pendingSlide = {
+                    from: getTabFromUrl(), to: tabChip.dataset.tab,
+                    order: slideOrder(document.querySelectorAll('#profile-tab-bar [data-tab]'), 'tab'),
+                };
+                return;
+            }
+            var setChip = e.target.closest('#tab-content [data-set]');
+            if (setChip) {
+                pendingSlide = {
+                    from: getSetFromUrl(), to: setChip.dataset.set,
+                    order: slideOrder(document.querySelectorAll('#tab-content [data-set]'), 'set'),
+                };
+            }
+        });
+
+        function playPendingSlide() {
+            var move = pendingSlide;
+            pendingSlide = null;
+            if (!move || !window.PlatPursuit || !PlatPursuit.slideViewIn) { return; }
+            // `slideViewIn` no-ops when from === to, so re-clicking the active chip stays still.
+            PlatPursuit.slideViewIn(document.getElementById('tab-content'), move.from, move.to, move.order);
+        }
 
         function initTabContent() {
             var tab = getTabFromUrl();
@@ -147,8 +196,20 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
                     30 and its resume arithmetic was wrong by that gap.{% endcomment %}
                     paginateBy: {{ scroll_per_page|default:30 }},
                     cardSelector: cardSel,
-                    formSelector: '#' + tab + '-form',
-                    scrollKey: 'profileScrollPos'
+                    formSelector: '#' + tab + '-form'
+                    {% comment %}NO `scrollKey`, and it is a bug fix rather than an omission.
+
+                    That option persists `window.scrollY` to localStorage under one global key when a
+                    filter form submits, and the NEXT scroller created anywhere reads it back and
+                    smooth-scrolls there. It was written for a page that full-reloads on filter, where the
+                    position genuinely is lost. This page swaps through HTMX end to end, so it is never
+                    lost -- which leaves the restore able to do only one thing: move you somewhere you did
+                    not ask to go.
+
+                    Which is what it did. `create()` bails early when its grid is absent (an empty results
+                    wall renders no grid at all), so the saved value survived unconsumed until some later
+                    scroller picked it up -- typically the one built when you switched tabs, teleporting
+                    you to a scroll position that belonged to a different, longer wall.{% endcomment %}
                 });
             }
 
@@ -193,6 +254,9 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             if (e.detail.target.id === 'tab-content') {
                 updateActiveTab();
                 initTabContent();
+                // After initTabContent, so the panel is fully built before it travels -- animating first
+                // and then mutating what is inside it is what makes a slide look like it stutters.
+                playPendingSlide();
             } else if (e.detail.target.id === 'tab-results') {
                 initTabContent();
             }

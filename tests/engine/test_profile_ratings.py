@@ -470,6 +470,48 @@ def test_the_set_rides_the_sort_form_so_page_two_stays_on_it(client):
     assert 'name="set" value="dlc"' in form
 
 
+def test_switching_view_does_not_teleport_the_scroll(client):
+    """Switching tabs jumped to roughly the bottom of the wall, and the animation was not the cause.
+
+    `InfiniteScroller`'s `scrollKey` persists `window.scrollY` to localStorage under one GLOBAL key when a
+    filter form submits, and the next scroller created ANYWHERE reads it back and smooth-scrolls there.
+    `create()` also bails early when its grid is absent -- an empty results wall renders no grid -- so a
+    saved value could survive unconsumed until the scroller built for a different tab picked it up, at a
+    position that belonged to a different and longer wall.
+
+    The option exists for pages that full-reload on filter, where the position genuinely is lost. This one
+    swaps through HTMX end to end, so there is nothing to restore and a restore can only move you."""
+    profile = ProfileFactory(is_linked=True)
+    _rated(profile, title='Anything')
+
+    body = client.get(_url(profile), **CF).content.decode()
+    script = body[body.index('InfiniteScroller.create'):]
+    script = script[:script.index('});')]
+
+    assert 'scrollKey' not in script, 'the profile scroller restores a saved scroll position again'
+
+
+def test_switching_view_slides_the_panel_in_directionally(client):
+    """The shared `slideViewIn`, the same motion every other rebuilt segmented switcher uses. BOTH
+    switchers on this page feed it -- the tab strip and the Ratings tab's Games/DLC control -- because
+    they swap the same panel and animating one but not the other reads as a bug in whichever missed out.
+
+    Direction is captured on CLICK rather than derived after the swap: `hx-push-url` rewrites the URL as
+    part of the swap, so reading "where were we" in afterSwap races the thing being compared against."""
+    profile = ProfileFactory(is_linked=True)
+    _with_dlc(profile)
+
+    body = client.get(_url(profile), **CF).content.decode()
+
+    # Both chip families carry the hook the direction is read from.
+    assert 'data-set="dlc"' in body and 'data-tab="ratings"' in body
+    assert 'slideViewIn' in body, 'the panel no longer slides on a view change'
+    # Captured on click, played after the panel is rebuilt -- animating first and then mutating what is
+    # inside it is what makes a slide stutter.
+    assert 'pendingSlide' in body
+    assert body.index('initTabContent();') < body.index('playPendingSlide();')
+
+
 def test_an_empty_dlc_wall_does_not_contradict_the_chip_above_it(client):
     """"No ratings yet" under a DLC chip showing a count reads as a bug. The empty state is named for the
     set you are looking at."""
