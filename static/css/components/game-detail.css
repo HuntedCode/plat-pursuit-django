@@ -1276,7 +1276,10 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__herorow { display: flex; align-items: center; justify-content: space-between; gap: 14px 20px; flex-wrap: wrap; }
 .gd-cond__rating { display: flex; align-items: baseline; gap: 9px; }
 /* Fractional gold stars: a dim 5-star base with a gold overlay clipped to the score % (--fill). */
-.gd-cond__stars { position: relative; display: inline-block; font-size: 1.35rem; line-height: 1; letter-spacing: 3px; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
+/* letter-spacing: 0 is GEOMETRY, not taste -- see components/stars.css. The overlay is clipped by width,
+   so a gap between the glyphs makes the fill's unit `glyph + gap`, and a half-fill then lands past the
+   middle of the third glyph. This carried 3px and drew a 4.5 nearer a 4.6. */
+.gd-cond__stars { position: relative; display: inline-block; font-size: 1.35rem; line-height: 1; letter-spacing: 0; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
 .gd-cond__stars::before { content: "\2605\2605\2605\2605\2605"; }
 .gd-cond__stars-on { position: absolute; top: 0; left: 0; width: var(--fill, 0%); overflow: hidden; white-space: nowrap; color: var(--pp-rating-star); transition: width var(--pp-dur) var(--pp-ease); }
 .gd-cond__stars-on::before { content: "\2605\2605\2605\2605\2605"; }
@@ -1391,7 +1394,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
     .gd-rate__stat-lbl { font-size: 0.7rem; }
 
     .gd-cond { gap: 18px; }
-    .gd-cond__stars { font-size: 1.6rem; letter-spacing: 4px; }
+    .gd-cond__stars { font-size: 1.6rem; }   /* no letter-spacing -- it skews the fractional fill */
     .gd-cond__score-n { font-size: 2.75rem; }
     .gd-cond__of { font-size: 1.05rem; }
     .gd-cond__summary { font-size: 1.42rem; }
@@ -1574,7 +1577,8 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-blurb__name:hover { color: var(--pp-primary); }
 .gd-blurb__you { flex: none; font-size: 0.56rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 15%, transparent); padding: 1px 6px; border-radius: 999px; }
 /* Fractional gold stars: same two-layer technique as the conditions hero, sized down for the card. */
-.gd-blurb__stars { position: relative; display: inline-block; flex: none; margin-left: auto; font-size: 0.78rem; line-height: 1; letter-spacing: 2px; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
+/* letter-spacing: 0 -- same clipped-overlay geometry as .gd-cond__stars above. */
+.gd-blurb__stars { position: relative; display: inline-block; flex: none; margin-left: auto; font-size: 0.78rem; line-height: 1; letter-spacing: 0; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
 .gd-blurb__stars::before { content: "\2605\2605\2605\2605\2605"; }
 .gd-blurb__stars-on { position: absolute; top: 0; left: 0; width: var(--fill, 0%); overflow: hidden; white-space: nowrap; color: var(--pp-rating-star); }
 .gd-blurb__stars-on::before { content: "\2605\2605\2605\2605\2605"; }

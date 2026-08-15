@@ -18,9 +18,21 @@
  * file and their markup carries its own `data-cond-stars` hooks; folding them in is a follow-up, and
  * until then this is the file to extend rather than a fourth copy.
  * ========================================================================== */
+/* NO letter-spacing, and this is load-bearing geometry rather than a style preference.
+ *
+ * The overlay is clipped by WIDTH, so the fill percentage is only honest if each star occupies exactly a
+ * fifth of the element. Any gap between the glyphs breaks that: the unit the fill measures becomes
+ * `glyph + gap`, and a half-fill then covers two whole units plus half of a unit -- which lands past the
+ * middle of the third GLYPH, because the half-gap it swallowed is invisible. With a 0.2em gap a 2.5 draws
+ * its third star about 60% full, and the error grows with the gap.
+ *
+ * Zero gap makes unit == glyph, so `--fill: 50%` is exactly two and a half stars, in any font, at any
+ * size. If these ever need more air, it has to come from a bigger `--star` or from spacing OUTSIDE the
+ * element -- not from letter-spacing, word-spacing, or a gap between the glyphs.
+ */
 .pp-stars {
     position: relative; display: inline-block; flex: none;
-    font-size: var(--star, 1.3rem); line-height: 1; letter-spacing: 0.2em;
+    font-size: var(--star, 1.3rem); line-height: 1; letter-spacing: 0;
     color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent);
 }
 .pp-stars::before { content: "\2605\2605\2605\2605\2605"; }

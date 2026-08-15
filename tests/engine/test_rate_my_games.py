@@ -661,6 +661,30 @@ def test_the_overall_score_shows_the_stars_it_sets():
     assert '.gd-qr__range[name="overall_rating"] { accent-color: var(--pp-rating-star); }' in css
 
 
+@pytest.mark.parametrize('rel,block', [
+    ('static/css/components/stars.css', '.pp-stars {'),
+    ('static/css/components/game-detail.css', '.gd-cond__stars {'),
+    ('static/css/components/game-detail.css', '.gd-blurb__stars {'),
+])
+def test_no_star_bar_puts_a_gap_between_its_glyphs(rel, block):
+    """A fractional star bar is an overlay CLIPPED BY WIDTH, so the fill is only honest when each star
+    occupies exactly a fifth of the element. Any inter-glyph gap makes the measured unit `glyph + gap`,
+    and a half-fill then covers two whole units plus half a unit -- landing past the middle of the third
+    GLYPH, because the half-gap it swallowed is invisible. All three of these carried 2-4px and drew a 4.5
+    nearer a 4.6; the reported symptom was a half star looking three-quarters full.
+
+    Pinned because it reads as a style value and will be "tidied" back the moment someone decides the
+    stars look cramped. Air has to come from a bigger font-size or from margin OUTSIDE the element."""
+    css = (ROOT / rel).read_text(encoding='utf-8')
+    rule = css[css.index(block):]
+    rule = rule[:rule.index('}')]
+
+    assert 'letter-spacing: 0' in rule or 'letter-spacing' not in rule, (
+        f'{block} in {rel} spaces its glyphs apart, which skews the fractional fill'
+    )
+    assert 'word-spacing' not in rule, f'{block} in {rel} spaces its glyphs apart via word-spacing'
+
+
 def test_the_star_bar_is_the_shared_primitive():
     """A fourth hand-rolled fractional-star block would be the fourth in this codebase. It lives in
     components/stars.css now, extracted from profile-hero.css when this became its third caller -- a
