@@ -630,6 +630,51 @@ def test_the_recommendation_offers_three_choices_not_four():
     assert 'bad_game_good_plat' not in bare
 
 
+def test_the_fields_read_in_the_order_both_hosts_lay_out():
+    """SOURCE order is the contract, not the modal's grid. The two-column modal pairs adjacent fields
+    (Difficulty|Grindiness, then Hours|Fun) and spans the rest, while the wizard renders the identical
+    partial in ONE column -- so a grid `order` property would have made the two hosts read differently.
+
+    The recommendation sits after the scores because it is the CONCLUSION: everything above describes what
+    the platinum was like, and it says what that adds up to."""
+    bare = render_to_string('partials/_rating_fields.html', {})
+    order = re.findall(r'name="([a-z_]+)"', bare)
+    # The three radios share one name; collapse the run so this reads as fields, not inputs.
+    fields = [n for i, n in enumerate(order) if i == 0 or n != order[i - 1]]
+
+    assert fields == ['difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking',
+                      'overall_rating', 'recommendation', 'blurb'], fields
+
+
+def test_the_overall_score_shows_the_stars_it_sets():
+    """Everywhere else on the site this figure renders as stars, so the control shows the thing being set
+    rather than only the number setting it -- and the track takes the star colour so the two read as one
+    measurement. Driven from `setReadout`, which already runs on every slider input, so the bar moves with
+    the thumb rather than on submit."""
+    bare = render_to_string('partials/_rating_fields.html', {})
+    js = (ROOT / 'static' / 'js' / 'quick-rate.js').read_text(encoding='utf-8')
+    css = (ROOT / 'static' / 'css' / 'components' / 'game-detail.css').read_text(encoding='utf-8')
+
+    assert 'data-gd-qr-stars' in bare
+    assert 'pp-stars' in bare, 'the star bar should reuse the shared primitive, not a fourth copy'
+    assert 'data-gd-qr-stars' in js[js.index('function setReadout'):js.index('function refreshCount')]
+    assert '.gd-qr__range[name="overall_rating"] { accent-color: var(--pp-rating-star); }' in css
+
+
+def test_the_star_bar_is_the_shared_primitive():
+    """A fourth hand-rolled fractional-star block would be the fourth in this codebase. It lives in
+    components/stars.css now, extracted from profile-hero.css when this became its third caller -- a
+    primitive parked inside one page's stylesheet is one the next person copies instead of finds."""
+    shared = ROOT / 'static' / 'css' / 'components' / 'stars.css'
+    profile = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+
+    assert shared.exists()
+    assert '.pp-stars {' in shared.read_text(encoding='utf-8')
+    assert '.pp-stars {' not in profile, 'the star primitive is defined in two places again'
+    assert '@import "./components/stars.css";' in (
+        ROOT / 'static' / 'css' / 'input.css').read_text(encoding='utf-8')
+
+
 def test_the_modal_fits_without_scrolling():
     """The form is the one people meet in bulk, and a submit button below the fold is a form people abandon
     halfway. At 460px single-column it ran past `.gd-modal__body`'s 70vh on a laptop; it is wider and

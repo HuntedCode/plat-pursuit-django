@@ -1441,9 +1441,18 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
     .gd-modal--qr .gd-qr {
         display: grid; grid-template-columns: 1fr 1fr; gap: 11px 16px; align-content: start;
     }
-    /* Full width: the recommendation (three tiles across), the overall score (the headline figure, and a
-       0.5-5 track reads better long), the quick take, the fine print and the actions. The four remaining
-       sliders pair up. */
+    /* The reading order the two columns produce:
+     *
+     *     Difficulty | Grindiness
+     *     Hours      | Fun
+     *     Overall            (full)
+     *     Recommendation     (full)
+     *     Quick take         (full)
+     *
+     * The four axes pair up as two rows of related questions, then the three full-width rows are the
+     * conclusion: the score, what it adds up to, and anything you want to say about it. Source order in
+     * the partial matches, because the wizard renders the same fields in ONE column and has to read the
+     * same way -- grid `order` would have made the two hosts disagree. */
     .gd-modal--qr .gd-qr__field--rec,
     .gd-modal--qr .gd-qr__field--blurb,
     .gd-modal--qr .gd-qr__field:has([name="overall_rating"]),
@@ -1456,6 +1465,13 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-qr__val { font-weight: 800; color: var(--pp-primary); font-variant-numeric: tabular-nums; }
 .gd-qr__of { font-size: 0.7rem; color: var(--pp-text-mute); font-weight: 600; }
 .gd-qr__range { width: 100%; accent-color: var(--pp-primary); cursor: pointer; }
+/* The overall track takes the STAR colour, because its output is stars: the control and the figure it
+   sets are then visibly the same measurement rather than two unrelated readings. Selected by input name
+   so the partial needs no extra class -- the name is already the API contract. */
+.gd-qr__range[name="overall_rating"] { accent-color: var(--pp-rating-star); }
+/* The live star bar, pushed to the label's far end so the row reads "Overall .......... ★★★½☆ 3.5 / 5":
+   name on the left, value on the right, the way every other readout in this form sits. */
+.gd-qr__stars { margin-left: auto; --star: 0.95rem; }
 .gd-qr__num { width: 100%; padding: 8px 11px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font-size: 0.85rem; }
 .gd-qr__num:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
 .gd-qr__scale { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--pp-text-mute); }
@@ -1473,8 +1489,11 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
  * Not a segmented strip: a strip implies these are points on one axis, and the middle option is a
  * statement about the game AND the platinum separately rather than a midpoint between the other two.
  */
-.gd-qr__field--rec { gap: 7px; border: 0; padding: 0; margin: 0; min-inline-size: 0; }
-.gd-qr__field--rec legend { padding: 0; }
+/* A wider gap than the other fields use: a `<legend>` sits tight against what follows it, and the three
+   tiles are a block rather than the single control the other labels head, so they need the question to
+   read as separate from them rather than stuck to them. */
+.gd-qr__field--rec { gap: 11px; border: 0; padding: 0; margin: 0; min-inline-size: 0; }
+.gd-qr__field--rec legend { padding: 0; margin-bottom: 2px; }
 .gd-qr__recs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .gd-qr__rec {
     display: flex; flex-direction: column; align-items: center; justify-content: flex-start;

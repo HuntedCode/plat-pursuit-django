@@ -54,6 +54,15 @@
         var input = field(form, name);
         if (!out || !input) { return; }
         out.textContent = name === 'overall_rating' ? parseFloat(input.value).toFixed(1) : String(input.value);
+
+        // Overall also drives a star bar, because that is the form the score takes everywhere else on the
+        // site -- so the control shows the thing being set, not only the number setting it. Percentage of
+        // 5 rather than a rounded glyph count: the slider steps in halves and the bar is clipped by width,
+        // so 3.5 draws as three and a half stars.
+        if (name === 'overall_rating') {
+            var stars = form.querySelector('[data-gd-qr-stars]');
+            if (stars) { stars.style.setProperty('--fill', (parseFloat(input.value) / 5) * 100 + '%'); }
+        }
     }
 
     function refreshCount(form) {

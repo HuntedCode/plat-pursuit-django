@@ -575,21 +575,9 @@
 .pp-taste__rec { margin: 0; font-size: 0.78rem; color: var(--pp-text-mute); }
 .pp-taste__rec b { color: var(--pp-success); font-weight: 800; font-variant-numeric: tabular-nums; }
 
-/* Fractional gold stars: a dim 5-star base under a gold overlay clipped to `--fill`, sized by `--star`.
-   Shared by the summary and by every card, because the tab shows the same figure at two scales and two
-   copies of this is how one of them ends up rounding 4.3 to a whole glyph while the other does not. */
-.pp-stars {
-    position: relative; display: inline-block; flex: none;
-    font-size: var(--star, 1.3rem); line-height: 1; letter-spacing: 0.2em;
-    color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent);
-}
-.pp-stars::before { content: "\2605\2605\2605\2605\2605"; }
-.pp-stars__on {
-    position: absolute; top: 0; left: 0; width: var(--fill, 0%);
-    overflow: hidden; white-space: nowrap; color: var(--pp-rating-star);
-}
-.pp-stars__on::before { content: "\2605\2605\2605\2605\2605"; }
-
+/* `.pp-stars` -- the fractional star bar this header and every rating card draw -- moved to
+   components/stars.css when the quick-rate form became its third caller. Callers set `--fill` and
+   `--star`; this surface sets `--star` on `.pp-taste__score` below. */
 .pp-taste__score { display: flex; align-items: baseline; gap: 9px; flex: none; }
 .pp-taste__scoreline { display: inline-flex; align-items: baseline; gap: 1px; }
 .pp-taste__score-n { font-size: 1.8rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--pp-text); font-variant-numeric: tabular-nums; }

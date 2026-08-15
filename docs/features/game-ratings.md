@@ -38,6 +38,8 @@ All four rating filters (`rating_tone` / `rating_verdict` / `rating_summary` / `
 | `templates/trophies/partials/profile_detail/tabs/ratings_{tab,results}.html` | Profile tab shell (summary + sort) and its swap target |
 | `templates/trophies/partials/profile_detail/rating_list_items.html` | One `.pp-rcard`; also the template the scroller appends |
 | `static/css/components/profile-hero.css` | `.pp-taste*`, `.pp-rwall`, `.pp-rcard*` |
+| `static/css/components/stars.css` | `.pp-stars` — the shared fractional star bar (taste header, rating cards, quick-rate form) |
+| `templates/partials/_rating_fields.html` | The shared form fields, in the order both hosts lay out |
 
 ## Profile Ratings tab
 
@@ -71,6 +73,8 @@ The one **directive** field. Every score describes what the platinum was *like* 
 **Three, and the middle one is why the field exists**: a platinum can be a bad experience attached to a game worth playing, and no yes/no can say that.
 
 A fourth (`bad_game_good_plat`, "only for the trophy" — the shovelware verdict) was built and then **dropped**, because the two fields already say it together: the **stars rate the game** and the **recommendation rates the platinum**, so a shovelware plat is "Do it" at 1.5 stars. Splitting it across the two controls is what makes three enough. Migration `0295` maps any surviving row to `worth_it` — narrowing `choices` does not touch the column, so a retired value would otherwise sit there valid-to-Postgres and render its raw slug through `get_recommendation_display`.
+
+It sits **after the scores, not before them** — every field above describes what the platinum was like, and this says what that adds up to, so it reads as a conclusion rather than a question asked before you have thought about the answer. (An earlier cut led with it on the grounds that it is the fastest field to answer; ordering by "quickest first" was optimising the wrong thing on a form you meet in bulk.)
 
 Rendered as three labelled tiles **across one row**, never a segmented strip: a strip implies these are points on one axis, and the middle option is a statement about the game *and* the platinum separately rather than a midpoint. One row rather than three stacked is also most of what keeps the modal from scrolling (below).
 
