@@ -196,6 +196,60 @@ def test_the_card_shows_the_title_the_hunter_is_wearing():
     assert cards.get_card_data(profile, standing)['display_title'] == 'Case Hardened'
 
 
+def test_the_card_carries_the_hunters_verdict():
+    """Every other part of a rating was already on the card -- score, difficulty, grind, fun, the quick
+    take -- but not the one piece that is ADVICE rather than a record. A plat card is read by someone
+    deciding whether to go after the same platinum, which is exactly the question this answers.
+
+    The LABEL is resolved server-side because the card renders a dict and cannot call
+    `get_recommendation_display`, so the four display strings stay in the model."""
+    from trophies.models import UserConceptRating
+
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    UserConceptRating.objects.create(
+        profile=profile, concept=game.concept, concept_trophy_group=None,
+        recommendation='good_game_bad_plat', difficulty=8, grindiness=9,
+        hours_to_platinum=62, fun_ranking=2, overall_rating=4.5,
+    )
+
+    rating = cards.get_card_data(profile, standing)['user_rating']
+
+    assert rating['recommendation'] == 'good_game_bad_plat'
+    assert rating['recommendation_label'] == 'Great game, rough platinum'
+
+
+def test_a_rating_from_before_the_verdict_existed_leaves_the_pill_off():
+    """Rather than drawing an empty or neutral one. The wizard is asking for those, so a card made today
+    may gain a verdict tomorrow -- the layout has to stand without it either way."""
+    from trophies.models import UserConceptRating
+
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    UserConceptRating.objects.create(
+        profile=profile, concept=game.concept, concept_trophy_group=None,
+        difficulty=8, grindiness=9, hours_to_platinum=62, fun_ranking=2, overall_rating=4.5,
+    )
+
+    assert cards.get_card_data(profile, standing)['user_rating']['recommendation'] == ''
+
+
+def test_the_card_sizes_its_svgs_because_nothing_else_will():
+    """The card is inline-styled for Playwright and ships NO stylesheet, so an `<svg>` with only a
+    viewBox renders at the SVG default of 300x150 and destroys the layout. The shared glyph is used by
+    web surfaces that size it in CSS, so the attribute is the plat card's whole defence -- and the failure
+    is invisible from here, since the HTML is valid either way and only the rendered PNG is wrong."""
+    from django.template.loader import render_to_string
+
+    svg = render_to_string('partials/_recommendation_icon.html',
+                           {'value': 'worth_it', 'size': 22})
+
+    assert 'width="22"' in svg and 'height="22"' in svg
+    # And a caller that forgets the size still gets a sane one rather than 300x150.
+    bare = render_to_string('partials/_recommendation_icon.html', {'value': 'skip'})
+    assert 'width="24"' in bare
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────────────────────────
 
 def test_html_endpoint_renders_the_card(client):

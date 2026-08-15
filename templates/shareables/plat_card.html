@@ -252,6 +252,28 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                     {% endif %}
                 </div>
 
+                {% comment %}The verdict -- the one thing on this card that is ADVICE rather than a
+                record. Everything above says what the platinum was; this says whether to go after it,
+                which is the question anyone reading someone else's plat card is actually asking.
+
+                Its own row rather than a fourth cell in the numbers: those are all "N/10" and this is a
+                phrase, so it would either be truncated or force every cell to the width of "Great game,
+                rough platinum". A pill also reads as a conclusion drawn from the row above it, which is
+                what it is.
+
+                Colours are the card's own tone hexes -- the same green/amber/red the numbers use -- so
+                the row and the pill agree, and the glyph is the shared one every other surface draws.
+                Sized explicitly: there is no stylesheet here, and an unsized SVG renders at 300x150.
+
+                Absent on ratings written before the field existed; the Rate My Games wizard is asking for
+                those, so a card made today may gain one tomorrow.{% endcomment %}
+                {% if user_rating.recommendation %}
+                {% if user_rating.recommendation == 'worth_it' %}{% with rec_c='#3add9e' %}{% include 'shareables/partials/_plat_card_verdict.html' %}{% endwith %}
+                {% elif user_rating.recommendation == 'skip' %}{% with rec_c='#ff5860' %}{% include 'shareables/partials/_plat_card_verdict.html' %}{% endwith %}
+                {% else %}{% with rec_c='#fcca21' %}{% include 'shareables/partials/_plat_card_verdict.html' %}{% endwith %}
+                {% endif %}
+                {% endif %}
+
                 {% comment %}Their own take, in their own words -- the one thing on the card that no
                 other hunter's card can have, and the reason this space is worth filling with a
                 sentence instead of a fifth number. Optional (most ratings carry none), so the layout

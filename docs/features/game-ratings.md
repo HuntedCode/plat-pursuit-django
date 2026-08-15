@@ -40,6 +40,7 @@ All four rating filters (`rating_tone` / `rating_verdict` / `rating_summary` / `
 | `static/css/components/profile-hero.css` | `.pp-taste*`, `.pp-rwall`, `.pp-rcard*` |
 | `static/css/components/stars.css` | `.pp-stars` — the shared fractional star bar (taste header, rating cards, quick-rate form) |
 | `templates/partials/_rating_fields.html` | The shared form fields, in the order both hosts lay out |
+| `templates/shareables/partials/_plat_card_verdict.html` | The verdict pill on a plat card (a partial only because the colour is a literal hex chosen by `{% if %}`) |
 | `templates/partials/_recommendation_icon.html` | One glyph per recommendation — thumbs for the two ends, a tilde for the qualified middle. Shared by the form and the community split |
 
 ## Profile Ratings tab

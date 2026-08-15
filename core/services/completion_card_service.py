@@ -461,6 +461,9 @@ def _user_rating(profile, concept):
     # game-detail modal, from a second hand-built copy.
     payload = rating.as_prefill()
     payload.update({
+        # The label, because the card renders a DICT and cannot call `get_recommendation_display`. Resolved
+        # here rather than mapped in the template, so the four display strings stay in the model.
+        'recommendation_label': rating.get_recommendation_display(),
         # The hunter's own words about the game -- 140 chars, already auto-filtered on submit,
         # reportable, and staff-soft-hideable via `blurb_hidden`, which is why it's safe to render on
         # an image that leaves the site. Optional, so the card must look right without it.
