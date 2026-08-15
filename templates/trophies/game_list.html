@@ -422,128 +422,23 @@
         }
 
         var form = document.getElementById('gbrowse-form');
-        var toggle = document.getElementById('gbrowse-filters-toggle');
-        var panel = document.getElementById('gbrowse-advanced');
-        var badge = document.getElementById('gbrowse-filter-count');
-        if (!form || !toggle || !panel) { return; }
+        if (!form) { return; }
 
-        // Animated expand/collapse of the (tall) filter panel: height + opacity tween instead of a hard
-        // display:none jump. The `hidden` attribute is still applied at the END of a collapse (and removed at
-        // the START of an expand) so collapsed controls stay out of the tab order. Reduced-motion / non-user
-        // toggles (load, minibar reach when already animating) fall back to the instant hidden toggle.
-        var panelAnimEnd = null;
-        function clearPanelAnim() {
-            if (panelAnimEnd) { panel.removeEventListener('transitionend', panelAnimEnd); panelAnimEnd = null; }
-        }
-        function setPanel(open, animate) {
-            toggle.classList.toggle('is-open', open);
-            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-            clearPanelAnim();
-            // The active-filter chips only belong OUTSIDE the open panel: adding one while the box is open
-            // shoves the whole toolbar down. Hide them the instant we open (via a class on the stable
-            // toolbar-card, which survives the chips' OOB swaps), and reveal them again only once the box
-            // has finished animating CLOSED.
-            var achipsHost = panel.closest('.pp-gbrowse__toolbar') || panel.parentElement;
-            if (open && achipsHost) { achipsHost.classList.add('is-filters-open'); }
-            var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            if (!animate || reduce) {
-                panel.style.height = ''; panel.style.opacity = '';
-                if (open) { panel.removeAttribute('hidden'); refreshScrollFades(); }
-                else { panel.setAttribute('hidden', ''); if (achipsHost) { achipsHost.classList.remove('is-filters-open'); } }
-                return;
-            }
-            if (open) {
-                // Collapse the box BEFORE revealing it, so removing `hidden` doesn't paint a full-height
-                // panel for a frame (the "pop"). scrollHeight still reports the true content height even at
-                // height:0 (overflow-hidden), so we can measure the target while collapsed.
-                panel.style.height = '0px'; panel.style.opacity = '0';
-                panel.removeAttribute('hidden');
-                var target = panel.scrollHeight;
-                void panel.offsetHeight;                       // flush the collapsed start state
-                panel.style.height = target + 'px'; panel.style.opacity = '1';
-                refreshScrollFades();                          // scroll containers now have real dimensions
-                panelAnimEnd = function (e) {
-                    if (e.target !== panel || e.propertyName !== 'height') { return; }   // ignore bubbled child transitions
-                    clearPanelAnim();
-                    panel.style.height = ''; panel.style.opacity = '';   // release to auto so content can reflow
-                };
-            } else {
-                panel.style.height = panel.scrollHeight + 'px'; panel.style.opacity = '1';
-                void panel.offsetHeight;
-                panel.style.height = '0px'; panel.style.opacity = '0';
-                panelAnimEnd = function (e) {
-                    if (e.target !== panel || e.propertyName !== 'height') { return; }
-                    clearPanelAnim();
-                    panel.setAttribute('hidden', ''); panel.style.height = ''; panel.style.opacity = '';
-                    if (achipsHost) { achipsHost.classList.remove('is-filters-open'); }   // box is closed -> chips may show
-                };
-            }
-            panel.addEventListener('transitionend', panelAnimEnd);
-        }
-
-        // Scroll-aware edge fades on the long chip lists (genres/themes = vertical, letters = horizontal).
-        // A fade only appears on an edge that has hidden content past it, so a full row at rest is never
-        // clipped. Measured lazily (containers are 0-size while the panel is collapsed, so this runs on open).
-        function setFade(el, axis) {
-            if (axis === 'y') {
-                el.style.setProperty('--fade-t', el.scrollTop > 1 ? '16px' : '0px');
-                el.style.setProperty('--fade-b', (el.scrollTop + el.clientHeight < el.scrollHeight - 1) ? '16px' : '0px');
-            } else {
-                el.style.setProperty('--fade-l', el.scrollLeft > 1 ? '20px' : '0px');
-                el.style.setProperty('--fade-r', (el.scrollLeft + el.clientWidth < el.scrollWidth - 1) ? '20px' : '0px');
-            }
-        }
-        function refreshScrollFades() {
-            panel.querySelectorAll('.pp-gbrowse__fchips--scroll').forEach(function (el) { setFade(el, 'y'); });
-            panel.querySelectorAll('.pp-gbrowse__fchips--letters').forEach(function (el) { setFade(el, 'x'); });
-        }
-        function wireScrollFades() {
-            panel.querySelectorAll('.pp-gbrowse__fchips--scroll').forEach(function (el) {
-                if (el._fadeWired) { return; } el._fadeWired = true;
-                el.addEventListener('scroll', function () { setFade(el, 'y'); }, { passive: true });
-            });
-            panel.querySelectorAll('.pp-gbrowse__fchips--letters').forEach(function (el) {
-                if (el._fadeWired) { return; } el._fadeWired = true;
-                el.addEventListener('scroll', function () { setFade(el, 'x'); }, { passive: true });
-            });
-        }
-        wireScrollFades();
-        window.addEventListener('resize', function () { if (toggle.getAttribute('aria-expanded') === 'true') { refreshScrollFades(); } });
-
-        // Active CONTENT-filter count for the toggle badge: every set value except display/sort/search state
-        // and the platform/regions SCOPE selectors (platform always carries the PS5/PS4 default from the
-        // dispatch redirect, so counting it would show a permanent "2" + auto-open the drawer on every
-        // landing). Range sliders parked at default and the letter "All" option are skipped too.
-        var SKIP = { page: 1, view: 1, sort: 1, query: 1, platform: 1, regions: 1 };
-        function activeCount() {
-            var n = 0;
-            new FormData(form).forEach(function (value, key) {
-                if (SKIP[key] || !value) { return; }
-                if (key === 'letter' && value === '') { return; }
-                var el = form.querySelector('[name="' + key + '"]');
-                if (el && el.type === 'range') {
-                    if (el.dataset.dualRangeLo !== undefined && el.value === el.min) { return; }
-                    if (el.dataset.dualRangeHi !== undefined && el.value === el.max) { return; }
-                }
-                n += 1;
-            });
-            return n;
-        }
-        var prevBadgeN = null;
-        function refreshBadge() {
-            if (!badge) { return; }
-            var n = activeCount();
-            badge.textContent = n;
-            badge.hidden = (n === 0);
-            // Pop the count when it actually changes (not on the initial paint), so applying a filter registers.
-            if (n > 0 && prevBadgeN !== null && n !== prevBadgeN) {
-                badge.classList.remove('is-pop'); void badge.offsetWidth; badge.classList.add('is-pop');
-            }
-            prevBadgeN = n;
-        }
-        toggle.addEventListener('click', function () { setPanel(toggle.getAttribute('aria-expanded') !== 'true', true); });
-        form.addEventListener('change', refreshBadge);
-        form.addEventListener('input', refreshBadge);
+        // The filter drawer. Everything this used to do by hand -- the height tween, the aria/is-open
+        // bookkeeping, the active-count badge and its pop, the results dim, the open-on-load rule, the
+        // edge-fades on the long chip lists, and hiding the active-filter chips while the box is open --
+        // is the shared controller now. This page only names its elements and its display-state params.
+        var panelHandle = PlatPursuit.filterPanel && PlatPursuit.filterPanel({
+            form: form,
+            toggle: '#gbrowse-filters-toggle',
+            panel: '#gbrowse-advanced',
+            countEl: '#gbrowse-filter-count',
+            // platform/regions are SCOPE here, not filters: the saved-defaults dispatch redirect always
+            // carries a platform, so counting it would show a permanent "2" and auto-open the drawer on
+            // every landing. Tag detail counts the same params precisely because it has no such default.
+            skip: { page: 1, view: 1, sort: 1, query: 1, platform: 1, regions: 1 },
+            chipsHost: '.pp-gbrowse__toolbar',
+        });
 
         // Contract discipline dropdowns. PlatPursuit.discPopovers owns the open/close mechanics (shared with
         // the Career board); this owns the server-side SELECTION -- the job checkboxes, a per-discipline count
@@ -649,7 +544,7 @@
             if (grid && grid === handledGrid) { return; }
             handledGrid = grid;
             t.classList.remove('is-swapping');
-            refreshBadge();
+            if (panelHandle) { panelHandle.refresh(); }
             // Header result-count tick (old -> new). Read the NEW total off the freshly-swapped grid
             // (#items-grid[data-result-count]) -- that's the main swap target, so it's reliably the new
             // content right here, unlike an OOB text swap on the header (whose timing raced the animation
@@ -684,9 +579,6 @@
             if (r) { r.classList.remove('is-swapping', 'pointer-events-none'); }
         });
 
-        refreshBadge();
-        // Collapse on load (renders open for no-JS); stay open if filters are already applied.
-        setPanel(activeCount() > 0, false);
         initReveal();
         initScroller();
 
@@ -696,7 +588,7 @@
         var mbFilters = document.querySelector('[data-minibar-filters]');
         if (mbFilters) {
             mbFilters.addEventListener('click', function () {
-                if (toggle && toggle.getAttribute('aria-expanded') !== 'true') { setPanel(true, true); }
+                if (panelHandle) { panelHandle.setOpen(true, true); }
                 if (form) { form.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
             });
         }

@@ -145,6 +145,9 @@
         // (which swaps in fresh nodes without re-firing afterSwap). The body-level listeners below are added
         // once and persist across a restore (document.body survives), so wireView must NOT re-add them.
         var scroller = null, revealHandle = null, peek = null, peekEl = null, vtoggles = [];
+        // The filter drawer's handle. Page-level because the toolbar is REPLACED on every view swap, so
+        // each wireFilters() must destroy the previous one rather than stack a second set of listeners.
+        var panelHandle = null;
         // Read the active view from the swapped-in island (the toggle HTMX-swaps #badge-view, no full
         // reload): the Gallery root is .pp-bgal, the Series root .pp-slist; each carries its own page size.
         function viewConfig() {
@@ -252,25 +255,10 @@
         // swap since the form/toolbar are replaced; the actual filtering is HTMX-native (the form's hx-trigger).
         function wireFilters() {
             var form = document.getElementById('filter-form');
-            var toggle = document.getElementById('bgal-filters-toggle');
-            var panel = document.getElementById('bgal-advanced');
-            var countEl = document.getElementById('bgal-filter-count');
             var clearBtn = document.getElementById('bgal-clear');
-            // The panel's gap/padding/divider live on .pp-bgal__advanced-in so it collapses to a true 0;
-            // the shared helper tweens height+opacity + toggles `hidden`. Caller owns aria/is-open.
-            function setPanel(open, animate) {
-                if (!panel || !toggle) { return; }
-                toggle.classList.toggle('is-open', open);
-                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-                if (window.PlatPursuit && PlatPursuit.animatePanel) {
-                    PlatPursuit.animatePanel(panel, open, animate);
-                } else if (open) {
-                    panel.removeAttribute('hidden');
-                } else {
-                    panel.setAttribute('hidden', '');
-                }
-            }
             function activeCount() {
+                // Checked boxes, not set params: this toolbar's only filters ARE checkboxes, and counting
+                // FormData would fold in the search box and the view.
                 return form ? form.querySelectorAll('input[type="checkbox"]:checked').length : 0;
             }
             function searchInput() {
@@ -281,24 +269,25 @@
                 var qi = searchInput();
                 return qi ? qi.value.trim() : '';
             }
+            // The panel, its badge, the dim and the open-on-load rule all come from the shared controller;
+            // the CLEAR button is this page's own, so its visibility is refreshed alongside.
+            if (panelHandle && panelHandle.destroy) { panelHandle.destroy(); }
+            panelHandle = window.PlatPursuit && PlatPursuit.filterPanel && PlatPursuit.filterPanel({
+                form: form,
+                toggle: '#bgal-filters-toggle',
+                panel: '#bgal-advanced',
+                countEl: '#bgal-filter-count',
+                count: activeCount,
+                // Open if anything is applied INCLUDING the search, so what is filtering stays visible.
+                openOnLoad: activeCount() > 0 || !!searchValue(),
+            });
             function refreshControls() {
-                var n = activeCount();
-                if (countEl) { countEl.textContent = n; countEl.hidden = (n === 0); }
-                if (clearBtn) { clearBtn.hidden = (n === 0 && !searchValue()); }  // shown only when something's set
-            }
-            if (toggle) {
-                toggle.addEventListener('click', function () { setPanel(panel.hasAttribute('hidden'), true); });
+                if (panelHandle) { panelHandle.refresh(); }
+                if (clearBtn) { clearBtn.hidden = (activeCount() === 0 && !searchValue()); }  // shown only when something's set
             }
             if (form) {
                 form.addEventListener('change', refreshControls);
-                form.addEventListener('input', refreshControls);  // live-update while typing in search
-                // Settle the results the INSTANT a filter/sort changes -- this spans the hx-trigger's 250ms
-                // debounce (most of the felt wait on a fast server), so the dim is actually perceptible
-                // rather than a few-ms flash during the request. Cleared when the new grid swaps in (below).
-                form.addEventListener('change', function () {
-                    var results = document.getElementById('browse-results');
-                    if (results) { results.classList.add('is-swapping'); }
-                });
+                form.addEventListener('input', refreshControls);   // live-update while typing in search
             }
             if (clearBtn && form) {
                 clearBtn.addEventListener('click', function () {
@@ -316,9 +305,6 @@
                 PlatPursuit.wireSearchField(qi, { onClear: function () { refreshControls(); if (form) { form.requestSubmit(); } } });
             }
             refreshControls();
-            // Collapse the panel on load (it renders open for the no-JS case); keep it open if filters are
-            // already applied, so what's active stays visible.
-            setPanel(activeCount() > 0 || searchValue(), false);
         }
 
         // Keep the toggle's active chip in sync after a view swap (the toggle sits outside #badge-view).
