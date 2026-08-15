@@ -537,3 +537,236 @@
 }
 .pp-tsearch__chip:focus-within { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .pp-tsearch__clear { color: var(--pp-text-mute); font: inherit; font-size: 12px; font-weight: 600; }
+
+
+/* ==========================================================================
+ * RATINGS TAB -- a hunter's taste.
+ *
+ * `.pp-taste` is the summary above the wall; `.pp-rcard` is one rating.
+ *
+ * Tone is the shared `[data-tone]` vocabulary from the game-detail conditions card (good / warn / bad /
+ * high, from the `rating_tone` filter), so a 9/10 difficulty is the same colour on a hunter's profile as
+ * it is on the game's own page. The token name is local to each block; the SCALE is not.
+ * ========================================================================== */
+
+/* ---- The summary ---------------------------------------------------------------------------------
+ * A content card, not a `.pp-toolbar-card`: that surface is quiet chrome, and this is the tab's headline.
+ */
+.pp-taste {
+    padding: 16px 16px 14px;
+    border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-1, var(--pp-bg-2));
+    border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 16px rgba(0, 0, 0, 0.24);
+    margin-bottom: 14px;
+}
+@media (min-width: 768px) { .pp-taste { padding: 20px 22px 18px; } }
+
+.pp-taste__head { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+/* Score beside sentence from tablet up. On a phone the sentence needs the full measure -- it is a whole
+   clause list, and at 375px sharing a row with a star bar leaves it three words wide. */
+@media (min-width: 768px) {
+    .pp-taste__head { flex-direction: row; align-items: center; gap: 20px; margin-bottom: 18px; }
+    .pp-taste__summary { flex: 1; min-width: 0; }
+}
+
+/* Fractional gold stars: a dim 5-star base under a gold overlay clipped to `--fill`, sized by `--star`.
+   Shared by the summary and by every card, because the tab shows the same figure at two scales and two
+   copies of this is how one of them ends up rounding 4.3 to a whole glyph while the other does not. */
+.pp-stars {
+    position: relative; display: inline-block; flex: none;
+    font-size: var(--star, 1.3rem); line-height: 1; letter-spacing: 0.2em;
+    color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent);
+}
+.pp-stars::before { content: "\2605\2605\2605\2605\2605"; }
+.pp-stars__on {
+    position: absolute; top: 0; left: 0; width: var(--fill, 0%);
+    overflow: hidden; white-space: nowrap; color: var(--pp-rating-star);
+}
+.pp-stars__on::before { content: "\2605\2605\2605\2605\2605"; }
+
+.pp-taste__score { display: flex; align-items: baseline; gap: 9px; flex: none; }
+.pp-taste__scoreline { display: inline-flex; align-items: baseline; gap: 1px; }
+.pp-taste__score-n { font-size: 1.8rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.pp-taste__of { font-size: 0.8rem; font-weight: 600; color: var(--pp-text-mute); }
+@media (min-width: 768px) {
+    .pp-taste__score { --star: 1.5rem; }
+    .pp-taste__score-n { font-size: 2.2rem; }
+}
+
+.pp-taste__summary { margin: 0; font-size: 1rem; line-height: 1.35; font-weight: 600; color: var(--pp-text-dim); text-wrap: balance; }
+@media (min-width: 768px) { .pp-taste__summary { font-size: 1.15rem; } }
+
+/* The "/10" after a Tally figure: a quiet subscript, not part of the number, so the eye lands on the
+   figure the way it does in every other `.scard` on the site. */
+.pp-taste__unit { font-size: 0.5em; font-weight: 600; color: var(--pp-text-mute); margin-left: 1px; }
+
+/* Two columns at 375px rather than four: four `.scard`s across a phone leaves each one narrower than the
+   figure it holds. */
+.pp-taste__stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+@media (min-width: 768px) { .pp-taste__stats { grid-template-columns: repeat(4, 1fr); gap: 12px; } }
+
+/* ---- The wall ------------------------------------------------------------------------------------
+ * WIDE cards, not tall ones. The first cut was a cover-forward portrait card, which borrowed `.pp-gcard`'s
+ * shape and with it its EMPHASIS: the game as the subject and the score as an annotation on it. This tab
+ * is the other way round. A wide card gives the rating room to be shown in full -- all four axes side by
+ * side and the quick take at its real length -- and demotes the cover to what it is here: a recognition
+ * anchor, not the headline.
+ *
+ * Two columns from `md:` up, one below. A track floor of 420px means a 1024px viewport gets two and a
+ * wide desktop three, without the count being pinned to a breakpoint.
+ */
+.pp-rwall { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 768px) { .pp-rwall { grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px; } }
+
+.pp-rcard {
+    position: relative;
+    display: flex; min-width: 0;
+    /* No padding on the CARD: the art panel bleeds to its edges, so the box metrics live on the body.
+       `overflow: hidden` is what clips that panel to the card's radius. */
+    padding: 0; overflow: hidden;
+    border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-1, var(--pp-bg-2));
+    border: 1px solid var(--pp-border);
+    /* The score's tone as a left edge, the way the trophy cards carry their tier. An edge rather than a
+       fill: a wall of cards each flooded with its verdict colour would read as an alert list, and most of
+       these are perfectly ordinary games. */
+    border-left: 3px solid var(--tone-c);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 14px rgba(0, 0, 0, 0.26);
+    transition: border-color var(--pp-dur-fast, 0.15s) var(--pp-ease),
+                box-shadow var(--pp-dur-fast, 0.15s) var(--pp-ease);
+    /* Declared on the BASE, not only on the [data-tone] states that can set it: an undefined custom
+       property invalidates the whole declaration it appears in rather than falling back, so a missing
+       tone would leave the card with no left border at all. The same trap emptied the badge meters. */
+    --tone-c: var(--pp-border);
+}
+.pp-rcard[data-tone="good"] { --tone-c: var(--pp-success); }
+.pp-rcard[data-tone="warn"] { --tone-c: var(--pp-warning); }
+.pp-rcard[data-tone="bad"]  { --tone-c: var(--pp-error); }
+
+/* Hover glow, not scale -- the wall is dense and a scaling card shoves its neighbours. */
+@media (hover: hover) {
+    .pp-rcard:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                    0 6px 20px -4px color-mix(in oklab, var(--pp-primary) 34%, transparent);
+    }
+}
+/* The whole card is the link, so the ring belongs to the card and not to a line of title text. */
+.pp-rcard:focus-within { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* The art panel: the game's landscape image, full card height and bled to its edges.
+   A FIXED WIDTH and a stretched height rather than an `aspect-ratio` box -- the panel's job is to fill
+   the card's left column whatever that card's content makes it, so its ratio has to give. That is also
+   why the image is absolutely positioned rather than sized at 100%: the panel's height comes from the
+   flex stretch, and a percentage against a height resolved that way is the indeterminate case where an
+   image silently falls back to its intrinsic size. */
+.pp-rcard__art { position: relative; flex: none; width: 92px; background: var(--pp-bg-2); }
+@media (min-width: 768px) { .pp-rcard__art { width: 150px; } }
+.pp-rcard__shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* A COVER standing in for missing landscape art keeps its logo: portrait art cropped to a wide-ish panel
+   loses the bottom, and the top is where the title sits. A screenshot takes centre, which is the default. */
+.pp-rcard__shot--cover { object-position: top; }
+/* Only the generic PSN title icon: contain it rather than blowing a small square up to fill the panel. */
+.pp-rcard__shot--placeholder { object-fit: contain; padding: 16%; opacity: 0.7; }
+
+/* Two jobs, one overlay. It fades the image into the card's surface on the right so the panel does not
+   end in a hard vertical seam, and it holds the whole image back a little -- a wall of 20 screenshots at
+   full strength competes with the numbers, which are what the card is for. */
+.pp-rcard__art::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(to right,
+                color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 22%, transparent) 0%,
+                color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 30%, transparent) 55%,
+                var(--pp-bg-1, var(--pp-bg-2)) 100%);
+}
+
+.pp-rcard__body {
+    display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1;
+    padding: 11px 13px 12px;
+    /* A CONTAINER, so the stat strip below can lay itself out against the width it actually has. A media
+       query is the wrong tool here: this card's width comes from the wall's `auto-fill` track count minus
+       the art panel, so the same viewport gives it a different body width depending on how many columns
+       fit -- and a viewport breakpoint would put four cells in a 300px body and truncate every label. */
+    container-type: inline-size;
+}
+@media (min-width: 768px) { .pp-rcard__body { gap: 7px; padding: 13px 15px 14px; } }
+
+/* Title left, score right. The score is the HEADLINE of this card -- same line as the title, not tucked
+   under it -- which is the whole point of the wide shape. */
+.pp-rcard__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.pp-rcard__ident { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pp-rcard__title {
+    font-size: 0.88rem; font-weight: 700; line-height: 1.3; color: var(--pp-text);
+    /* Wraps freely. Nothing is clamped or height-reserved on this card: the rows of a two-column grid
+       stretch to their tallest member anyway, so reserving lines would only add empty space to the short
+       ones without making a single row more even. */
+    transition: color var(--pp-dur-fast, 0.15s) var(--pp-ease);
+}
+@media (min-width: 768px) { .pp-rcard__title { font-size: 0.95rem; } }
+@media (hover: hover) { .pp-rcard:hover .pp-rcard__title { color: var(--pp-secondary); } }
+/* Stretched link: the anchor is the title, its ::after is the whole card. */
+.pp-rcard__link::after { content: ''; position: absolute; inset: 0; z-index: 2; }
+
+.pp-rcard__dlc {
+    align-self: flex-start; max-width: 100%;
+    padding: 1px 7px; border-radius: 999px;
+    font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--pp-secondary);
+    background: color-mix(in oklab, var(--pp-secondary) 12%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-secondary) 32%, transparent);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* The overall score: stars over the figure, right-aligned, tabular so a column of cards lines up. */
+.pp-rcard__verdict { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; --star: 0.86rem; }
+.pp-rcard__scoreline { display: inline-flex; align-items: baseline; gap: 1px; font-variant-numeric: tabular-nums; }
+.pp-rcard__score-n { font-size: 1.15rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--pp-text); }
+.pp-rcard__of { font-size: 0.62rem; font-weight: 600; color: var(--pp-text-mute); }
+@media (min-width: 768px) { .pp-rcard__verdict { --star: 0.95rem; } .pp-rcard__score-n { font-size: 1.3rem; } }
+
+/* All FOUR scored axes, in full -- the fifth is the overall above. Every cell is figure-over-word, and the
+   word carries the polarity (a 9 difficulty says "Brutal") because a bare number can be read backwards
+   and a word cannot. 2x2 at 375px, one row from `md:` where the card has the width for it. */
+.pp-rcard__stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+/* One row only once a cell can hold the word "Difficulty" -- 360px of body is ~84px per cell, which is
+   the point where the key stops needing an ellipsis. Below that it stays 2x2 rather than truncating four
+   labels to fit a shape. */
+@container (min-width: 360px) { .pp-rcard__stats { grid-template-columns: repeat(4, 1fr); } }
+.pp-rcard__stat {
+    display: flex; flex-direction: column; gap: 1px; min-width: 0;
+    padding: 5px 8px; border-radius: var(--pp-radius-sm);
+    background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent);
+    border: 1px solid var(--pp-border);
+    --stat-c: var(--pp-text-dim);
+}
+.pp-rcard__stat[data-tone="good"] { --stat-c: var(--pp-success); }
+.pp-rcard__stat[data-tone="warn"] { --stat-c: var(--pp-warning); }
+.pp-rcard__stat[data-tone="bad"]  { --stat-c: var(--pp-error); }
+.pp-rcard__stat[data-tone="high"] { --stat-c: var(--pp-accent); }
+.pp-rcard__stat-k { font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
+.pp-rcard__stat-n { font-size: 0.92rem; font-weight: 800; line-height: 1.15; color: var(--stat-c); font-variant-numeric: tabular-nums; }
+.pp-rcard__stat-of { font-size: 0.58rem; font-weight: 600; color: var(--pp-text-mute); margin-left: 1px; }
+.pp-rcard__stat-lbl {
+    font-size: 0.6rem; font-weight: 600; color: var(--pp-text-dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Their words, at their real length. The blurb is capped at 140 characters at the source, so there is
+   nothing here worth truncating -- and truncating the one part of a rating that is not a number, on the
+   tab that exists to show what someone thought, would cut exactly the thing the reader came for. */
+.pp-rcard__take {
+    margin: 1px 0 0; padding: 7px 9px;
+    border-radius: var(--pp-radius-sm);
+    border-left: 2px solid color-mix(in oklab, var(--pp-text-mute) 30%, transparent);
+    background: color-mix(in oklab, var(--pp-bg-2) 35%, transparent);
+    font-size: 0.72rem; line-height: 1.45; font-style: italic; color: var(--pp-text-dim);
+}
+
+.pp-rcard__foot {
+    display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap;
+    margin-top: auto; padding-top: 1px;
+    font-size: 0.63rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums;
+}
+.pp-rcard__vs b { color: var(--pp-text-dim); font-weight: 700; }
+.pp-rcard__when { margin-left: auto; }

@@ -1,0 +1,137 @@
+{% load humanize custom_filters %}{% comment %} One rating, as a card. The wall's whole content, and the
+template the scroller appends -- so it holds cards and nothing else.
+
+WIDE, and deliberately not a cover-forward portrait card. The first cut was one, which borrowed
+`.pp-gcard`'s shape and with it its EMPHASIS: the game as the subject, the score as an annotation. This
+tab is the other way round, so the card is turned on its side. That buys the two things the portrait
+version could not give: all four scored axes side by side rather than a chosen subset, and the quick take
+at its real length rather than clamped to three lines.
+
+The cover stays, at the size its actual job needs. It is a recognition anchor -- cover art is how anyone
+identifies a game at a glance -- not the headline.
+
+Nothing on this card is clamped or height-reserved. The rows of a grid stretch to their tallest member
+anyway, so reserving lines would only pad the short cards without making any row more even.
+
+Each rating carries `card_game`, `community_avg` and `community_n`, attached in bulk by
+`rating_service.build_profile_ratings_page` -- never resolved per card, which would be an N+1 on a wall.
+{% endcomment %}
+{% for r in profile_ratings %}
+{% with g=r.card_game %}
+<article class="pp-rcard" data-tone="{{ r.overall_rating|rating_tone:'overall' }}">
+    {% comment %}The game's own LANDSCAPE art, bleeding to the card's edges as a full-height panel. A wide
+    card wanted a wide image: a 3:4 cover chip sat in it as a tall sliver against short content, and the
+    portrait ratio is the one thing this shape has no room for.
+
+    `Concept.landscape_url` is the shared chain -- trusted IGDB screenshots, then artworks, then PSN
+    GAMEHUB art -- reading only the `igdb_*_image_ids` columns, so it adds no query to a page that already
+    selects the match (and never touches `raw_response`).
+
+    The COVER is the fallback, not the default: plenty of concepts have no landscape art at all, and a
+    portrait cover cropped into this panel still says which game. It takes `object-position: top` where a
+    screenshot takes centre, because that is where a cover keeps its logo.{% endcomment %}
+    {% with shot=r.concept.landscape_url %}
+    <span class="pp-rcard__art">
+        {% if shot %}
+        <img class="pp-rcard__shot" src="{{ shot }}" alt="" loading="lazy" decoding="async">
+        {% elif g %}
+        <img class="pp-rcard__shot pp-rcard__shot--cover{% if not g.has_cover_art %} pp-rcard__shot--placeholder{% endif %}"
+             src="{{ g.display_image_url }}" alt="" loading="lazy" decoding="async">
+        {% elif r.concept.cover_url %}
+        {% comment %}A concept with no owned Game behind it -- possible after a concept merge re-points a
+        rating onto a survivor the hunter does not own a copy of. The concept's own cover still draws;
+        only the LINK is unavailable, so the card stays whole rather than blank.{% endcomment %}
+        <img class="pp-rcard__shot pp-rcard__shot--cover" src="{{ r.concept.cover_url }}" alt="" loading="lazy" decoding="async">
+        {% endif %}
+    </span>
+    {% endwith %}
+
+    <div class="pp-rcard__body">
+        <div class="pp-rcard__head">
+            <span class="pp-rcard__ident">
+                {% comment %}A STRETCHED link: the anchor is the title, but its ::after covers the card, so
+                the cover and the whole surface are the tap target. The card takes the focus ring via
+                `:focus-within`, because the ring belongs to the card and not to a line of text.
+                {% endcomment %}
+                {% if g %}
+                <a class="pp-rcard__title pp-rcard__link" href="{% url 'game_detail_with_profile' g.np_communication_id profile.psn_username %}">{{ r.concept.unified_title }}</a>
+                {% else %}
+                <span class="pp-rcard__title">{{ r.concept.unified_title }}</span>
+                {% endif %}
+
+                {% comment %}Which trophy set was scored. A DLC pack is rated separately from its base
+                game, so a card with no label is the base game and one with a label is that pack -- without
+                it the same title appears twice on the wall with two different scores and no way to tell
+                why.{% endcomment %}
+                {% if r.concept_trophy_group %}
+                <span class="pp-rcard__dlc" title="This rating is for the {{ r.concept_trophy_group.display_name }} trophy set">{{ r.concept_trophy_group.display_name }}</span>
+                {% endif %}
+            </span>
+
+            {% comment %}The overall score, on the title's line rather than under it: it is the headline of
+            this card, and putting it anywhere else is what made the portrait version read as a game card
+            with a score attached. Stars and figure together -- a bar is read at a glance, a number is read
+            exactly.{% endcomment %}
+            <span class="pp-rcard__verdict">
+                <span class="pp-stars" style="--fill: {% widthratio r.overall_rating 5 100 %}%;"
+                      role="img" aria-label="Scored {{ r.overall_rating|floatformat:1 }} out of 5"><span class="pp-stars__on"></span></span>
+                <span class="pp-rcard__scoreline" aria-hidden="true">
+                    <b class="pp-rcard__score-n">{{ r.overall_rating|floatformat:1 }}</b><span class="pp-rcard__of">/5</span>
+                </span>
+            </span>
+        </div>
+
+        {% comment %}All four scored axes, in full. The fifth is the overall above. Each cell is
+        key / figure / verdict word, and the WORD carries the polarity -- a 9 difficulty says "Brutal" --
+        because a bare number can be read backwards where a word cannot. Same vocabulary and the same tone
+        thresholds as the game's own Ratings tab, so a score reads identically on both.{% endcomment %}
+        <div class="pp-rcard__stats">
+            <span class="pp-rcard__stat" data-tone="{{ r.difficulty|rating_tone:'difficulty' }}">
+                <span class="pp-rcard__stat-k">Difficulty</span>
+                <b class="pp-rcard__stat-n">{{ r.difficulty }}<span class="pp-rcard__stat-of">/10</span></b>
+                <span class="pp-rcard__stat-lbl">{{ r.difficulty|rating_verdict:'difficulty' }}</span>
+            </span>
+            <span class="pp-rcard__stat" data-tone="{{ r.grindiness|rating_tone:'grindiness' }}">
+                <span class="pp-rcard__stat-k">Grind</span>
+                <b class="pp-rcard__stat-n">{{ r.grindiness }}<span class="pp-rcard__stat-of">/10</span></b>
+                <span class="pp-rcard__stat-lbl">{{ r.grindiness|rating_verdict:'grindiness' }}</span>
+            </span>
+            <span class="pp-rcard__stat" data-tone="{{ r.fun_ranking|rating_tone:'fun' }}">
+                <span class="pp-rcard__stat-k">Fun</span>
+                <b class="pp-rcard__stat-n">{{ r.fun_ranking }}<span class="pp-rcard__stat-of">/10</span></b>
+                <span class="pp-rcard__stat-lbl">{{ r.fun_ranking|rating_verdict:'fun' }}</span>
+            </span>
+            <span class="pp-rcard__stat" data-tone="{{ r.hours_to_platinum|rating_tone:'hours' }}">
+                <span class="pp-rcard__stat-k">Hours</span>
+                <b class="pp-rcard__stat-n">{{ r.hours_to_platinum|intcomma }}<span class="pp-rcard__stat-of">h</span></b>
+                <span class="pp-rcard__stat-lbl">to platinum</span>
+            </span>
+        </div>
+
+        {% comment %}Their words, at their real length. The blurb is capped at 140 characters at the source,
+        so there is nothing here worth truncating -- and truncating the one part of a rating that is not a
+        number, on the tab that exists to show what someone thought, would cut exactly the thing the reader
+        came for.
+
+        `blurb_hidden` is checked here as well as in the summary's count: this queryset is not
+        `visible_blurbs()`, and a staff-hidden take must not surface on the author's own profile just
+        because the filter lives somewhere else.{% endcomment %}
+        {% if r.blurb and not r.blurb_hidden %}
+        <p class="pp-rcard__take">{{ r.blurb }}</p>
+        {% endif %}
+
+        <div class="pp-rcard__foot">
+            {% comment %}Their score against everyone else's, and the only comparison on the card. Present
+            only when someone besides this hunter has rated the same set -- against a sample of one it is
+            the same number printed twice with a "vs" between them.{% endcomment %}
+            {% if r.community_avg %}
+            <span class="pp-rcard__vs" title="{{ r.community_n|intcomma }} hunters have rated this">
+                Community <b>{{ r.community_avg|floatformat:1 }}</b>
+            </span>
+            {% endif %}
+            <time class="pp-rcard__when" datetime="{{ r.updated_at|date:'c' }}">Rated {{ r.updated_at|date:"M Y" }}</time>
+        </div>
+    </div>
+</article>
+{% endwith %}
+{% endfor %}

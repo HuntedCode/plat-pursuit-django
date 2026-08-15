@@ -55,10 +55,9 @@ def test_the_igdb_raw_response_is_never_hauled_PER_CARD(client):
     `raw_response` is the ~30 KB IGDB API blob no cover-art template reads; widening the join without
     deferring it trades a query storm for the May 2026 web-server OOM.
 
-    Asserted as "does not scale", not "never happens". The page still touches `raw_response` in a handful
-    of BOUNDED places outside the grid -- the header's recent/rarest platinum and the showcase providers,
-    one or two rows each -- which phases 2 and 5 rewrite anyway. What must never come back is the version
-    that pays that cost once per card.
+    Asserted as "does not scale", not "never happens": a configured showcase can still fetch a bounded row
+    or two. What must never come back is the version that pays that cost once per card. The header's four
+    platinum-highlight queries were the last unbounded-ish offenders and now defer it -- see below.
     """
     small = _profile_with_games(2)
     with CaptureQueriesContext(connection) as few:
@@ -114,6 +113,42 @@ def test_every_mapped_tab_template_can_actually_be_built():
 
     for mapped in ProfileDetailView._TAB_TEMPLATES:
         assert mapped in buildable, f"'{mapped}' has a template but no way to build its context"
+
+
+def test_the_platinum_highlights_do_not_haul_the_igdb_blob(client):
+    """The header's four highlight cards each join `concept__igdb_match` for the cover chain, and three of
+    them did it without deferring `raw_response` -- so every profile render, on every tab, dragged three
+    copies of a ~30 KB blob nothing reads. Bounded (one row each) rather than per-card, which is why it
+    survived the games-grid fix, but the standing rule is that the `select_related` and the `defer` travel
+    together.
+    """
+    profile = ProfileFactory(is_linked=True)
+    _completed_game(profile, with_platinum=True)
+
+    with CaptureQueriesContext(connection) as ctx:
+        client.get(f'/hunters/{profile.psn_username}/?tab=ratings', **CF)
+
+    offenders = [q['sql'][:160] for q in ctx.captured_queries if 'raw_response' in q['sql']]
+    assert not offenders, 'the IGDB blob is back on the profile header:\n  ' + '\n  '.join(offenders)
+
+
+def test_every_paginated_tab_tells_the_scroller_its_real_page_size(client):
+    """The scroller gates its first fetch on the grid holding a FULL page and resumes by counting the cards
+    already there, so a size that disagrees with the server's does not render a wrong-sized page -- it
+    disables the scroll, or re-fetches a page that is already on screen.
+
+    The Games tab never set one. The template variable was named for the Trophies tab, which was the only
+    tab that set it, so Games was measured against the template default of 30 while the server paged by 50.
+    """
+    from trophies.views.profile_views import ProfileDetailView
+
+    profile = _profile_with_games(2)
+
+    for tab in ProfileDetailView._INFINITE_SCROLL_TEMPLATES:
+        response = client.get(f'/hunters/{profile.psn_username}/?tab={tab}', **CF)
+        size = response.context.get('scroll_per_page')
+        assert size, f"the {tab} tab appends pages but never tells the scroller how big one is"
+        assert f'paginateBy: {size}' in response.content.decode()
 
 
 def test_the_games_tab_uses_the_site_game_card(client):

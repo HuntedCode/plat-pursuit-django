@@ -967,8 +967,8 @@ def test_both_shapes_tell_the_scroller_their_own_page_size(client):
     browsing = client.get(f'/hunters/{profile.psn_username}/?tab=trophies', **CF)
     searching = client.get(f'/hunters/{profile.psn_username}/?tab=trophies&q=Findable', **CF)
 
-    assert browsing.context['trophies_per_page'] == DAYS_PER_PAGE
-    assert searching.context['trophies_per_page'] > 0
+    assert browsing.context['scroll_per_page'] == DAYS_PER_PAGE
+    assert searching.context['scroll_per_page'] > 0
 
 
 def test_a_bogus_tier_cannot_split_the_context_from_the_template(client):

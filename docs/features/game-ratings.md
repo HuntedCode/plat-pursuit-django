@@ -1,4 +1,8 @@
-# Game-Detail Ratings Tab
+# Ratings
+
+`UserConceptRating` surfaces in two places, and they are mirror images of one question. The **game-detail Ratings tab** answers "what does the community think of this game". The **profile Ratings tab** answers "what does this hunter think of games". Both are documented here, and both are built in `rating_service.py`, so the two definitions of "the community average" cannot drift apart.
+
+## Game-detail Ratings tab
 
 The **Ratings** tab on a game's detail page (`/games/<np>/`, `?view=ratings`) is where the community's take on a game lives: an aggregate difficulty/grindiness/fun/hours/overall verdict, per trophy group (base + each DLC), plus optional short written "quick takes." It is the read/write home for `UserConceptRating` (the structured rating model kept after the review hub was archived, see [Review Hub](review-hub.md)).
 
@@ -30,6 +34,29 @@ All four rating filters (`rating_tone` / `rating_verdict` / `rating_summary` / `
 | `static/css/components/game-detail.css` | `.gd-rate*`, `.gd-cond*`, `.gd-blurb*` |
 | `static/js/game-detail.js` | `ratingsTab` IIFE: DLC selector, quick-rate submit + live-update, report, guidelines sheet |
 | `api/rating_views.py` | `GroupRatingView` (rate, incl. blurb), `BlurbReportView` |
+| `trophies/services/rating_service.py` | `RatingService` (community averages) **+ the profile half**: `profile_rating_summary`, `build_profile_ratings_page`, `PROFILE_RATING_SORTS` |
+| `templates/trophies/partials/profile_detail/tabs/ratings_{tab,results}.html` | Profile tab shell (summary + sort) and its swap target |
+| `templates/trophies/partials/profile_detail/rating_list_items.html` | One `.pp-rcard`; also the template the scroller appends |
+| `static/css/components/profile-hero.css` | `.pp-taste*`, `.pp-rwall`, `.pp-rcard*` |
+
+## Profile Ratings tab
+
+`/hunters/<user>/?tab=ratings` — the fourth tab on a hunter's profile, and the only one about **taste** rather than totals. Games, Trophies and Badges all answer "how much"; this is the one thing two hunters with identical numbers would answer differently.
+
+Two layers, and the top one is why it is not just a list. A rating read alone has no scale: 6/10 difficulty means one thing from someone whose average is 3 and another from someone whose average is 8.
+
+| Layer | What it is |
+|---|---|
+| **Taste summary** (`.pp-taste`) | Their average score as fractional stars, the **same synthesized sentence** the game pages use (`rating_summary` reads averages, and averages are averages whether they came from a hundred people rating one game or one person rating a hundred), then four `.scard` figures: games rated / average difficulty + its verdict word / hours signed off on / quick takes written. Rendered only when they have rated something. |
+| **The wall** (`.pp-rwall` → `.pp-rcard`) | One **wide** card per rating (1 column on mobile, `auto-fill minmax(420px)` from `md:`): a full-height **landscape art panel** bled to the card's left edge, then the title with the overall score on its own line as stars + figure, the DLC pack when the rating is for one, **all four scored axes in full** (difficulty / grind / fun / hours) as key-figure-verdict cells, the quick take **whole**, and their score against the community's. |
+
+The card was first built cover-forward and portrait, and **reversed**: that shape is `.pp-gcard`'s, and it carries `.pp-gcard`'s emphasis — the game as the subject, the score as an annotation on it. This tab is the other way round. Turning the card on its side is also what let the rating be shown in full: the portrait version had to pick three of the five axes and clamp the take to three lines, both of which are the card fighting its own content. Nothing on the wide card is clamped or height-reserved — grid rows stretch to their tallest member anyway, so reserving lines only pads the short cards without evening out a single row.
+
+The art followed the same logic one step further. A wide card wants a **wide image**, so the panel draws `Concept.landscape_url` (trusted IGDB screenshots → artworks → PSN GAMEHUB art) rather than the 3:4 cover, which sat in this shape as a tall sliver against short content. It reads only the `igdb_*_image_ids` columns off a match the page already selects, so it costs no query and never touches `raw_response` (pinned by test). The **cover is the fallback** — many concepts have no landscape art — and takes `object-position: top` there, where a screenshot takes centre, because the top is where a cover keeps its logo.
+
+Six sorts (`PROFILE_RATING_SORTS`): recently rated / highest / lowest / hardest / longest / A-Z. Grindiness and fun were deliberately **not** given sorts — hours is what grind feels like in a unit people use, and "most fun" and "highest rated" rank nearly the same shelf.
+
+`build_profile_ratings_page` is **three queries flat** whatever the page size: the ratings, the community scores for the concepts on that page, and the games behind those concepts. Nothing scales with account size.
 
 ## Data model
 
@@ -43,6 +70,9 @@ All four rating filters (`rating_tone` / `rating_verdict` / `rating_summary` / `
 - **The stored blurb is plain, UN-escaped text** (`sanitize_text` un-escapes entities). Render it ONLY in an auto-escaped `{{ }}` HTML text context — never `|safe`, never a JS/attribute/JSON-to-client context. `visible_blurbs()` documents this.
 - **Per-group queries must stay bounded.** The blurb preview is `visible_blurbs().filter(...)[:6]` with `select_related('profile')`; keep it index-backed and capped (whale-safe).
 - **SSR↔JS parity.** The four rating filters have JS twins in `game-detail.js`; a threshold/wording change must move both.
+- **`annotate_community_ratings` cannot score a DLC rating.** The shared browse helper correlates on the concept alone and hard-filters to `concept_trophy_group__isnull=True`, so a DLC rating scored through it is compared against its **base game's** community — a comparison that renders convincingly and means something else. Correlating on the group instead is not the fix either: a base-game rating carries a NULL group and `NULL = NULL` never matches in SQL, so every base row would come back silently unmatched. `_community_scores` groups in the database and pairs up in Python, which sidesteps both. Pinned by test.
+- **The rating card's stat strip is laid out by a CONTAINER query, the only one in the codebase.** Its width is the wall's `auto-fill` track minus the art panel, so the same viewport gives it different widths depending on how many columns fit — a viewport breakpoint put four cells in a 300px body and ellipsised every label. `.pp-rcard__body` is `container-type: inline-size` and the strip goes 2×2 → one row at `@container (min-width: 360px)`.
+- **A rating hangs off a Concept; a cover and a link need a Game.** `display_image_url` is the site's one cover chain and `game_detail_with_profile` is keyed on `np_communication_id`, so the profile wall resolves concept → owned Game in one bulk query. The pick is **ordered** (platinumed, then furthest progress, then id) because a concept can span several platform SKUs and a card that changed which version it linked to between loads would look like a bug in the link.
 
 ## Deferred / future work — the "blurbs at scale" cluster
 

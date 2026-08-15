@@ -239,7 +239,9 @@ class ProfileDetailView(DetailView):
             has_plat=True,
             play_duration__isnull=False,
             play_duration__gt=timedelta(0),
-        ).select_related('game', 'game__concept', 'game__concept__igdb_match').order_by('play_duration').first()
+        ).select_related(
+            'game', 'game__concept', 'game__concept__igdb_match',
+        ).defer('game__concept__igdb_match__raw_response').order_by('play_duration').first()
 
         if fastest_plat_game:
             fastest_plat_trophy = EarnedTrophy.objects.filter(
@@ -247,7 +249,9 @@ class ProfileDetailView(DetailView):
                 trophy__game=fastest_plat_game.game,
                 trophy__trophy_type='platinum',
                 earned=True,
-            ).select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match').first()
+            ).select_related(
+                'trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match',
+            ).defer('trophy__game__concept__igdb_match__raw_response').first()
             if fastest_plat_trophy:
                 header_stats['fastest_platinum'] = {
                     'trophy': fastest_plat_trophy.trophy,
@@ -271,7 +275,9 @@ class ProfileDetailView(DetailView):
                 trophy__trophy_type='platinum',
                 earned=True,
                 earned_date_time__isnull=False,
-            ).select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match').order_by('earned_date_time')
+            ).select_related(
+                'trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match',
+            ).defer('trophy__game__concept__igdb_match__raw_response').order_by('earned_date_time')
 
             # Use array slicing to get the Nth item (0-indexed)
             try:
@@ -552,6 +558,10 @@ class ProfileDetailView(DetailView):
         context['form'] = form
         context['selected_genres'] = self.request.GET.getlist('genres')
         context['selected_themes'] = self.request.GET.getlist('themes')
+        # The scroller gates its first fetch on the grid holding a FULL page. This tab never set the size,
+        # so the template's default (30) was measured against a server page of 50 -- the two only agreed by
+        # accident, and the resume arithmetic after a history restore did not.
+        context['scroll_per_page'] = per_page
         return context
 
     def _build_trophies_tab_context(self, profile, per_page, page_number):
@@ -572,8 +582,8 @@ class ProfileDetailView(DetailView):
         context = {'trophy_query': query, 'trophy_selected': tiers, 'trophy_tiers': self._TROPHY_TIERS,
                    'is_searching': bool(query or tiers),
                    # The scroller gates its first fetch on the grid being a FULL page, so it needs the size
-                   # for whichever shape is rendered -- set on only one branch, the other never scrolls.
-                   'trophies_per_page': per_page if (query or tiers) else DAYS_PER_PAGE}
+                   # of whichever shape is rendered -- days or trophies, which page differently.
+                   'scroll_per_page': per_page if (query or tiers) else DAYS_PER_PAGE}
         if context['is_searching']:
             context.update(self._build_trophy_search_context(profile, per_page, page_number, query, tiers))
         else:
@@ -614,11 +624,7 @@ class ProfileDetailView(DetailView):
         except (TypeError, ValueError):
             page = 1        # public, crawled URL: a hand-edited ?page= must not 500
 
-        context = build_activity_page(profile, page=page)
-        # Handed to the scroller: it gates its first fetch on the grid being a FULL page, so a mismatch
-        # here does not cause a wrong-sized page -- it silently disables infinite scroll altogether.
-        context['activity_per_page'] = DAYS_PER_PAGE
-        return context
+        return build_activity_page(profile, page=page)
 
     def _build_trophy_search_context(self, profile, per_page, page_number, query, tiers):
         """Matching trophies, newest first.
@@ -722,6 +728,44 @@ class ProfileDetailView(DetailView):
         })
         return context
 
+    def _build_ratings_tab_context(self, profile):
+        """What this hunter thinks of what they have played.
+
+        The one tab that is about TASTE rather than totals. Games, Trophies and Badges all answer "how
+        much"; this answers "and were they any good", which is the only thing on the profile that a second
+        hunter with identical numbers would answer differently.
+
+        Two layers, and the top one is why this is not just a list: a summary of everything they have rated
+        (their average score, the hours they have signed off on, and the same synthesized sentence the game
+        pages use, pointed at a person instead of a game), then the wall. A rating with no aggregate above
+        it is a number without a scale -- 6/10 difficulty means one thing from someone whose average is 3
+        and another from someone whose average is 8.
+
+        Both halves are built in `rating_service`, next to the community-average code they must agree with.
+        """
+        from trophies.services.rating_service import (
+            PROFILE_RATING_SORTS, RATINGS_PER_PAGE, build_profile_ratings_page, profile_rating_summary,
+        )
+
+        sort = self.request.GET.get('sort', '')
+        if sort not in dict(PROFILE_RATING_SORTS):
+            sort = PROFILE_RATING_SORTS[0][0]
+
+        try:
+            page = max(int(self.request.GET.get('page', 1)), 1)
+        except (TypeError, ValueError):
+            page = 1        # public, crawled URL: a hand-edited ?page= must not 500
+
+        return {
+            # Not computed for a scroll append: that response is cards only, and the summary describes the
+            # whole set, so it would be an extra aggregate per appended page that nothing renders.
+            'rating_summary_stats': None if self._is_scroll_append() else profile_rating_summary(profile),
+            'profile_ratings': build_profile_ratings_page(profile, sort=sort, page=page),
+            'sort': sort,
+            'sort_options': PROFILE_RATING_SORTS,
+            'scroll_per_page': RATINGS_PER_PAGE,
+        }
+
     def _build_lists_tab_context(self, public_lists_qs):
         """Build context for lists tab — public game lists for this profile."""
         return {'profile_lists': public_lists_qs.order_by('-like_count', '-created_at')}
@@ -802,6 +846,8 @@ class ProfileDetailView(DetailView):
             tab_context = self._build_trophies_tab_context(profile, per_page, page_number)
         elif tab == 'badges':
             tab_context = self._build_badges_tab_context(profile)
+        elif tab == 'ratings':
+            tab_context = self._build_ratings_tab_context(profile)
         elif tab == 'lists':
             tab_context = self._build_lists_tab_context(public_lists_qs)
         else:
@@ -824,16 +870,10 @@ class ProfileDetailView(DetailView):
             ('games', 'Games'),
             ('trophies', 'Trophies'),
             ('badges', 'Badges'),
+            ('ratings', 'Ratings'),
         )
 
-        # Tab template mapping for {% include %} and HTMX partial returns
-        tab_templates = {
-            'games': 'trophies/partials/profile_detail/tabs/games_tab.html',
-            'trophies': 'trophies/partials/profile_detail/tabs/trophies_tab.html',
-            'badges': 'trophies/partials/profile_detail/tabs/badges_tab.html',
-            'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
-        }
-        context['tab_template'] = tab_templates.get(tab, tab_templates['games'])
+        context['tab_template'] = self._TAB_TEMPLATES.get(tab, self._TAB_TEMPLATES['games'])
 
         # Own profile check (for edit controls)
         context['is_own_profile'] = (
@@ -851,20 +891,24 @@ class ProfileDetailView(DetailView):
 
         return context
 
-    # Template maps for HTMX partial responses
+    # Template maps for HTMX partial responses. Also the map `get_context_data` picks `tab_template` from,
+    # so the full-page render and the HTMX swap cannot answer with different templates for the same tab.
     _TAB_TEMPLATES = {
         'games': 'trophies/partials/profile_detail/tabs/games_tab.html',
         'trophies': 'trophies/partials/profile_detail/tabs/trophies_tab.html',
         'badges': 'trophies/partials/profile_detail/tabs/badges_tab.html',
+        'ratings': 'trophies/partials/profile_detail/tabs/ratings_tab.html',
         'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
     }
     _RESULTS_TEMPLATES = {
         'games': 'trophies/partials/profile_detail/tabs/games_results.html',
         'trophies': 'trophies/partials/profile_detail/tabs/trophies_results.html',
+        'ratings': 'trophies/partials/profile_detail/tabs/ratings_results.html',
     }
     _INFINITE_SCROLL_TEMPLATES = {
         'games': 'trophies/partials/profile_detail/game_list_items.html',
         'trophies': 'trophies/partials/profile_detail/trophy_list_items.html',
+        'ratings': 'trophies/partials/profile_detail/rating_list_items.html',
     }
     #: The trophies tab has two views, and only one of them scrolls tiles -- Activity appends day tiles,
     #: while the Log appends trophy rows. Keyed by view so the scroller cannot be handed the wrong half.
@@ -872,6 +916,16 @@ class ProfileDetailView(DetailView):
         ('trophies', 'activity'): 'trophies/partials/profile_detail/activity_tiles.html',
         ('trophies', 'search'): 'trophies/partials/profile_detail/trophy_list_items.html',
     }
+
+    def _is_scroll_append(self):
+        """True when `InfiniteScroller` is asking for the next page of cards.
+
+        One definition, read by both the context builders (which skip work the append never renders) and
+        `get_template_names` (which answers with the items partial). Two copies of a condition that picks
+        the TEMPLATE and the condition that picks the CONTEXT is exactly how the trophies tab ended up
+        rendering the search template over the day wall's context.
+        """
+        return self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
     def get_template_names(self):
         tab = self.request.GET.get('tab', 'games')
@@ -893,7 +947,7 @@ class ProfileDetailView(DetailView):
                 return [self._TAB_TEMPLATES[tab]]
 
         # Infinite scroll (XMLHttpRequest from InfiniteScroller)
-        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        if self._is_scroll_append():
             # The trophies tab appends day TILES while browsing and trophy CARDS while searching, so the
             # scroller's template follows the same intent the page does.
             searching = tab == 'trophies' and any(self._trophy_search_params())
