@@ -971,8 +971,11 @@ def test_search_results_actually_append_a_second_page(client):
     assert "classList.contains('pp-actt')" not in page, (
         'the shape is read off an attribute htmx settle rewrites mid-swap'
     )
-    assert "querySelector('#tab-content .pp-actt__card')" in page, (
-        'the shape is no longer read off the swapped-in cards themselves'
+    # Scoped to the GRID's direct children. The day modal renders a `.pp-actt__card` per trophy and mounts
+    # inside `#tab-content`, and closing it only sets `hidden` -- so an unscoped query would read "search"
+    # while looking at the day wall, once any swap island changed.
+    assert "querySelector('#trophies-grid > .pp-actt__card')" in page, (
+        "the shape is no longer read off the grid's own cards"
     )
 
     # The concrete case the DOM check fixes: a tier the view does not recognise.
@@ -1353,7 +1356,11 @@ def test_the_day_modal_can_be_swiped_closed():
 
     # And the grabber needs somewhere to sit: the pill floats at the dialog's top, over a header whose own
     # padding is 4px. Touch-only, and keyed on `.pp-dismissable` so it cannot pad a sheet with no gesture.
+    # NO grabber-clearance rule, deliberately. The pill occupies 9-13px and this dialog carries 28px of
+    # its own padding (34px below 640px), so the header already starts clear of it. The sheets that DO
+    # pad -- quick-rate, plat-card -- set `padding: 0` on their dialog and butt the head against its top
+    # edge. A rule was added here on a false premise and cost 12px of dead space above the date.
     css = (root / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
-    assert '.pp-detail-modal__dialog.pp-dismissable .pp-actday__head' in css, (
-        'the swipe grabber will sit on top of the date'
+    assert '.pp-dismissable .pp-actday__head { padding-top' not in css, (
+        'dead grabber padding is back -- this dialog already clears the pill'
     )

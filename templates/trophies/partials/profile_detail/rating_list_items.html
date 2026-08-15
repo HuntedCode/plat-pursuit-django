@@ -116,6 +116,11 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
         key / figure / verdict word, and the WORD carries the polarity -- a 9 difficulty says "Brutal" --
         because a bare number can be read backwards where a word cannot. Same vocabulary and the same tone
         thresholds as the game's own Ratings tab, so a score reads identically on both.{% endcomment %}
+        {% comment %}The wrapper exists ONLY to be the query container. An element is never its own
+        container, so `container-type` on the strip itself made the @container rule unmatchable --
+        it has to sit on an ancestor. It cannot go back on the body: containment there captures the
+        stretched link's ::after and shrinks the card's tap target to the body.{% endcomment %}
+        <div class="pp-rcard__statswrap">
         <div class="pp-rcard__stats">
             <span class="pp-rcard__stat" data-tone="{{ r.difficulty|rating_tone:'difficulty' }}">
                 <span class="pp-rcard__stat-k">Difficulty</span>
@@ -137,6 +142,7 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
                 <b class="pp-rcard__stat-n">{{ r.hours_to_platinum|intcomma }}<span class="pp-rcard__stat-of">h</span></b>
                 <span class="pp-rcard__stat-lbl">to platinum</span>
             </span>
+        </div>
         </div>
 
         {% comment %}Their words, behind the plat card's big opening quote -- the same mark, so a take

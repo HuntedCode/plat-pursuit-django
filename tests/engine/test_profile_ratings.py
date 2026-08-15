@@ -730,10 +730,20 @@ def test_nothing_between_the_card_and_its_stretched_link_establishes_containment
         'the card body establishes containment again -- it is an ancestor of the stretched link'
     )
 
-    strip = css[css.index('.pp-rcard__stats {'):]
-    assert 'container-type: inline-size;' in strip[:strip.index('\n}')], (
-        'the stat strip lost its container, so its @container rule has nothing to measure'
+    # The container is a WRAPPER, and it has to be one. An element is never its own query container, so
+    # `container-type` on the strip itself left the @container rule with nothing to resolve against and it
+    # silently never matched -- the strip was 2x2 at every width, desktop included. Nor can it go back on
+    # the body, which is what captured the stretched link in the first place.
+    assert '.pp-rcard__statswrap { container-type: inline-size; }' in css, (
+        'the stat strip has no ANCESTOR container, so its @container rule can never match'
     )
+    strip = css[css.index('.pp-rcard__stats {'):]
+    assert 'container-type' not in strip[:strip.index('\n}')], (
+        'container-type is back on the strip itself, where it cannot be queried'
+    )
+    markup = (ROOT / 'templates' / 'trophies' / 'partials' / 'profile_detail'
+              / 'rating_list_items.html').read_text(encoding='utf-8')
+    assert 'pp-rcard__statswrap' in markup, 'the container element is not rendered'
 
 
 def test_the_quick_rate_modal_caps_the_dialog_not_the_body():

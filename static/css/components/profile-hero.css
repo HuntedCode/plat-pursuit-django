@@ -300,13 +300,12 @@
    posters, which is the room the tiered structure exists to give them. */
 .pp-actday .pp-detail-modal__dialog { width: min(1040px, 100%); max-height: 88vh; overflow-y: auto; }
 .pp-actday__head { padding: 4px 4px 12px; border-bottom: 1px solid var(--pp-divider, var(--pp-border)); margin-bottom: 12px; }
-/* Room for the swipe grabber, touch only. The shared `.pp-dismissable::before` pill floats at the
-   dialog's top (9px) and would otherwise sit on the date. Same treatment the quick-rate modal and the
-   plat-card sheet already use, and keyed on `.pp-dismissable` so it only applies once the gesture is
-   actually wired -- no dead padding on a sheet that cannot be swiped. */
-@media (hover: none) and (pointer: coarse) {
-    .pp-actday .pp-detail-modal__dialog.pp-dismissable .pp-actday__head { padding-top: 16px; }
-}
+/* NO grabber clearance rule here, deliberately. The pill occupies 9-13px and this dialog already has
+   28px of its own padding (34px below 640px, added for the badge peek's medallion), so the header's
+   content starts well clear of it. The precedents that DO pad -- the quick-rate modal and the plat-card
+   sheet -- both set `padding: 0` on their dialog and butt their heads against its top edge, which is why
+   they need it and this does not. A rule was added here on the assumption it was needed and cost 12px of
+   dead space above the date on every touch device. */
 .pp-actday__date { margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--pp-text); }
 @media (min-width: 768px) { .pp-actday__date { font-size: 1.25rem; } }
 .pp-actday__stats { margin: 4px 0 0; font-size: 0.76rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
@@ -775,9 +774,12 @@
 .pp-rcard__art { position: relative; flex: none; width: 100%; height: 80px; background: var(--pp-bg-2); }
 @media (min-width: 768px) { .pp-rcard { flex-direction: row; } .pp-rcard__art { width: 150px; height: auto; } }
 .pp-rcard__shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-/* A COVER standing in for missing landscape art keeps its logo: portrait art cropped to a wide-ish panel
-   loses the bottom, and the top is where the title sits. A screenshot takes centre, which is the default. */
-.pp-rcard__shot--cover { object-position: top; }
+/* A COVER standing in for missing landscape art. `top` was written for the 92px COLUMN, where a 3:4 cover
+   scaled by height and the value did nothing anyway. In the 4.3:1 band it scales by WIDTH instead, so
+   `top` shows the topmost ~17% of the box art -- usually the background above the key art. Centre is the
+   honest crop for a wide band, and the column at `md:` is unaffected either way (it also scales by
+   height there, so the value is inert). */
+.pp-rcard__shot--cover { object-position: center; }
 /* Only the generic PSN title icon: contain it rather than blowing a small square up to fill the panel. */
 /* A FIXED inset on the band, a percentage only on the column.
    Percentage padding resolves against the containing block's WIDTH on all four sides -- so 16% of a
@@ -895,22 +897,23 @@
    and a word cannot. 2x2 at 375px, one row from `md:` where the card has the width for it. */
 .pp-rcard__stats {
     display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px;
-    /* The container is the STRIP, not the card body. A media query is the wrong tool for it either way --
-       this card's width comes from the wall's `auto-fill` track count minus the art panel, so the same
-       viewport gives it a different body width depending on how many columns fit, and a viewport
-       breakpoint would put four cells in a 300px body and truncate every label.
-
-       But `container-type` also applies layout containment, which makes the element a containing block
-       for absolutely-positioned descendants. On the BODY that captured `.pp-rcard__link::after`, whose
-       `inset: 0` then covered the body instead of the card -- so the art panel, the verdict stamp on it
-       and the card's own padding all stopped being clickable while `:focus-within` still drew the ring
-       around the whole card. The strip is a block child of the body, so it measures the same width and
-       contains nothing that needs to escape it. */
-    container-type: inline-size;
 }
+
 /* One row only once a cell can hold the word "Difficulty" -- 360px of body is ~84px per cell, which is
    the point where the key stops needing an ellipsis. Below that it stays 2x2 rather than truncating four
    labels to fit a shape. */
+/* The query container is a WRAPPER, and it has to be: an element is never its own container, so
+   `container-type` on the strip itself left this @container rule with nothing to resolve against and it
+   silently never matched -- the strip was 2x2 at every width, desktop included.
+   It cannot go back on the card BODY either. `container-type` applies layout containment, which makes the
+   element a containing block for absolutely-positioned descendants; on the body that captured
+   `.pp-rcard__link::after`, whose `inset: 0` then covered the body instead of the card, so the art panel,
+   the verdict stamp and the card's padding all stopped being clickable while `:focus-within` went on
+   ringing the whole card. The wrapper is a block child of the body -- same inline size, and nothing inside
+   it needs to escape.
+   A media query is the wrong tool regardless: this card's width is the wall's `auto-fill` track minus the
+   art panel, so one viewport gives it different widths depending on how many columns fit. */
+.pp-rcard__statswrap { container-type: inline-size; }
 @container (min-width: 360px) { .pp-rcard__stats { grid-template-columns: repeat(4, 1fr); } }
 .pp-rcard__stat {
     display: flex; flex-direction: column; gap: 1px; min-width: 0;
@@ -966,6 +969,17 @@
     font-size: 0.72rem; line-height: 1.45; color: var(--pp-text);
 }
 @media (min-width: 768px) { .pp-rcard__take { font-size: 0.76rem; } }
+
+/* The equal-height reserves are released below `md:`. They exist so cards in the same GRID ROW match,
+   and under 768px `.pp-rwall` is a single column -- every row holds exactly one card, so there is nothing
+   to even out and the reserved lines are pure height. That matters here because the stacked band already
+   adds 80px, and the stack's own rationale ("the title and take wrap less") is worth nothing while a
+   clamped two-line title reserves two lines whether it uses them or not. */
+@media (max-width: 767px) {
+    .pp-rcard__title { min-height: 0; }
+    .pp-rcard__take { min-height: 0; }
+}
+
 /* The box is drawn at the same size whether or not there is a take, so the placeholder centres in it --
    top-left would read as text that failed to arrive rather than as a stated absence. */
 .pp-rcard__take--empty { align-items: center; justify-content: center; }

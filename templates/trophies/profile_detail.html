@@ -246,8 +246,14 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             // every day with nothing left to un-hide it.
             //
             // The cards are the swapped-in content itself, so no attribute restoration can misreport them.
+            // Scoped to the GRID's own children, not the panel. The day modal renders a `.pp-actt__card`
+            // per trophy and mounts inside `#tab-content`, and closing it only sets `hidden` -- so those
+            // cards outlive the modal. An unscoped query would then read "search" while looking at the day
+            // wall. It is unreachable today only by coincidence (both re-init triggers are ancestors of
+            // the modal mount, so the swap that re-runs this is the swap that destroys it), and that is
+            // too thin a margin for the bug it would recreate.
             var isActivity = !(tab === 'trophies'
-                               && document.querySelector('#tab-content .pp-actt__card'));
+                               && document.querySelector('#trophies-grid > .pp-actt__card'));
 
             // TWO selectors, because the scroller and the reveal are asking different questions, and on
             // one view the answers differ.
