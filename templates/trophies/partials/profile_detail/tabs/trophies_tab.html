@@ -31,19 +31,29 @@ spinner -- but only for markup that opts into them, which a hand-rolled field do
         </span>
 
         {% comment %}Tier is the one axis of a trophy that is both obvious to ask for and free to filter --
-        a column on Trophy, not a computed grade. Checkboxes inside the shared chip, so `:has(input:checked)`
-        drives the active state and the control works without JS.{% endcomment %}
+        a column on Trophy, not a computed grade.
+
+        CHECKBOXES, so several can be on at once: "their golds and platinums" is one question, and asking
+        it as two searches is what a filter exists to avoid. They also toggle OFF by clicking, which radios
+        cannot -- so the only thing Clear has to do is reset everything at once.
+
+        Inside the shared chip, so `:has(input:checked)` drives the active state straight off the DOM and
+        the control works with JS off; `browse-filters.js` auto-submits any checkbox change.{% endcomment %}
         <div class="pp-tsearch__chips" role="group" aria-label="Filter by trophy type">
             {% for value, label in trophy_tiers %}
             <label class="pp-bgal__chip pp-tsearch__chip" data-tier="{{ value }}">
-                <input type="radio" name="tier" value="{{ value }}"{% if trophy_tier == value %} checked{% endif %}>
+                <input type="checkbox" name="tier" value="{{ value }}"{% if value in trophy_selected %} checked{% endif %}>
                 <i></i>{{ label }}
             </label>
             {% endfor %}
-            {% if trophy_tier %}
-            {% comment %}Radios cannot be unchecked by clicking, so clearing the tier is its own control
-            rather than a second click on the active chip.{% endcomment %}
-            <button type="submit" name="tier" value="" class="pp-bgal__chip pp-tsearch__clear">Clear</button>
+            {% if is_searching %}
+            {% comment %}Clear re-renders the WHOLE tab, not just the results. The toolbar lives outside
+            `#tab-results`, so clearing through the usual target left every chip still looking active --
+            the results changed and the controls describing them did not.{% endcomment %}
+            <a class="pp-bgal__chip pp-tsearch__clear"
+               href="{% url 'profile_detail' psn_username=profile.psn_username %}?tab=trophies"
+               hx-get="{% url 'profile_detail' psn_username=profile.psn_username %}?tab=trophies"
+               hx-target="#tab-content" hx-swap="innerHTML" hx-push-url="true">Clear</a>
             {% endif %}
         </div>
     </div>

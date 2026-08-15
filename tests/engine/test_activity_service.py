@@ -416,8 +416,9 @@ def test_every_game_in_a_day_arrives_open(client):
                       HTTP_HX_REQUEST='true', **CF).content.decode()
 
     assert 'first-game-trophy' in body and 'second-game-trophy' in body
-    assert 'data-act-toggle' not in body, 'a collapse toggle survived the removal of the poster state'
-    assert body.count('pp-act__session is-open') == 2
+    # Collapsible, but OPEN -- no `hidden` on any panel, so every trophy is in the rendered page.
+    assert body.count('data-act-collapse') == 2
+    assert 'pp-act__trophies" id' in body and 'pp-act__trophies" hidden' not in body
 
 
 def test_a_month_header_opens_each_month():
@@ -710,7 +711,7 @@ def test_an_unknown_tier_is_discarded_not_trusted(client):
     response = client.get(f'/hunters/{profile.psn_username}/?tab=trophies&tier=nonsense', **CF)
 
     assert response.status_code == 200
-    assert response.context['trophy_tier'] == ''
+    assert response.context['trophy_selected'] == []
     assert response.context['is_searching'] is False, 'a bogus tier put the tab into search mode'
 
 
@@ -915,7 +916,7 @@ def test_the_tier_chips_work_without_javascript(client):
     tab = (Path(__file__).resolve().parents[2]
            / 'templates/trophies/partials/profile_detail/tabs/trophies_tab.html').read_text(encoding='utf-8')
 
-    assert 'type="radio" name="tier"' in tab, 'the chips are not real form fields'
+    assert 'type="checkbox" name="tier"' in tab, 'the chips are not real form fields'
 
     profile = ProfileFactory(is_linked=True)
     _earn(profile, GameFactory(), _at(1), tier='platinum', name='NoJS Plat')
@@ -1077,3 +1078,228 @@ def test_a_long_search_query_is_bounded(client):
 
     assert response.status_code == 200
     assert len(response.context['trophy_query']) <= 80
+
+
+def test_the_day_modal_stacks_its_games():
+    """A regression worth a guard, because it was caused by a CLEANUP.
+
+    The modal's games were an `auto-fill` grid left over from when a session could be a collapsed poster,
+    with every session spanning `1 / -1` -- a grid that could never produce more than one column. Deleting
+    the span rule as dead code dropped the sessions into narrow columns where their trophy cards clipped.
+
+    A stack says what the grid always meant, and cannot be broken by removing a rule somewhere else.
+    """
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2]
+           / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+
+    rule = re.search(r'(?m)^\.pp-actday__games\s*\{([^}]*)\}', css)
+    assert rule, 'the modal has no layout rule for its games'
+    body = rule.group(1)
+    assert 'flex' in body and 'column' in body, 'the modal games are a grid again'
+    assert 'grid-template-columns' not in body
+
+    # And the rule that follows must still be its own -- the regex that removed the span left a dangling
+    # selector which swallowed the next rule whole.
+    assert re.search(r'(?m)^\.pp-actday__link\s*\{', css), 'the day link rule lost its selector'
+
+
+def _session_markup():
+    """The session partial with its comments stripped. Its prose NAMES the `<button>` and the `<a>` it
+    explains, so any slice taken on the raw text matches the explanation rather than the markup."""
+    import re
+    from pathlib import Path
+
+    tpl = (Path(__file__).resolve().parents[2]
+           / 'templates/trophies/partials/profile_detail/_activity_session.html').read_text(encoding='utf-8')
+    return re.sub(r'{%\s*comment\s*%}[\s\S]*?{%\s*endcomment\s*%}', '', tpl)
+
+
+def test_a_day_still_links_to_its_games(client):
+    """The regression the audit caught, and the worst kind: a whole route disappearing as a side effect.
+
+    Making the session header one big <button> forced the title's link out -- an `<a>` inside a `<button>`
+    is invalid -- so a day had no route to any game's detail page, on the surface that exists to be
+    crawled. The title is the LINK and the chevron is the toggle: two controls, each named for its own job.
+    """
+    partial = _session_markup()
+
+    assert 'game_detail_with_profile' in partial, 'a day no longer links to its games'
+    # The link must not sit inside the toggle, which is the arrangement that removed it.
+    toggle = partial[partial.index('<button'):partial.index('</button>')]
+    assert '<a ' not in toggle and 'pp-act__title' not in toggle
+
+    profile = ProfileFactory(is_linked=True)
+    game = GameFactory()
+    _earn(profile, game, _at(1))
+    body = client.get(f'/hunters/{profile.psn_username}/day/{_at(1).date().isoformat()}/', **CF).content.decode()
+    assert f'/games/{game.np_communication_id}/' in body
+
+
+def test_the_toggle_is_named_for_the_game_not_the_whole_card():
+    """A button wrapping the row took its accessible name from everything inside it -- "Elden Ring 12
+    trophies over 2.5h 1 3 8 Hide the trophies". The toggle is its own control now, named for the game,
+    with `aria-expanded` carrying the state so the NAME never has to describe it."""
+    partial = _session_markup()
+    toggle = partial[partial.index('<button'):partial.index('</button>')]
+
+    assert 'aria-label="Trophies from' in toggle
+    assert 'aria-expanded' in toggle and 'aria-controls' in toggle
+    for leaked in ('pp-act__stats', 'pp-act__tiers', 'pp-act__cover'):
+        assert leaked not in toggle, f'{leaked} is inside the button and joins its accessible name'
+
+
+def test_the_collapse_uses_the_shared_panel_helper():
+    """A hand-rolled tween got two things wrong that `PlatPursuit.animatePanel` gets right: `transitionend`
+    BUBBLES, so it needs an `ev.target !== panel` guard rather than only a property check, and a second
+    click mid-tween must clear the previous listener instead of stacking another.
+
+    It also toggles the panel's `hidden` attribute -- which is what actually removes a collapsed panel from
+    the accessibility tree. `height: 0; overflow: hidden` hides it from the eye only, so a screen reader
+    would read every trophy while the control claimed `aria-expanded="false"`.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    js = (root / 'static' / 'js' / 'activity-collapse.js').read_text(encoding='utf-8')
+
+    # Comments stripped: the prose NAMES the pitfalls the helper handles, so a raw check matches the
+    # explanation rather than an actual re-implementation.
+    import re
+    code = re.sub(r'/\*[\s\S]*?\*/', '', js)
+
+    assert 'PlatPursuit.animatePanel' in code, 'the tween is hand-rolled again'
+    assert 'scrollHeight' not in code and 'transitionend' not in code, 'it is re-implementing the helper'
+    # Both hosts must load it, or the affordance is missing on one of them.
+    for tpl in ('profile_detail.html', 'activity_day.html'):
+        assert 'activity-collapse.js' in (root / 'templates' / 'trophies' / tpl).read_text(encoding='utf-8')
+
+
+def test_the_panel_can_collapse_to_a_true_zero():
+    """`animatePanel`'s contract, and the reason it is documented: under border-box, a border or padding on
+    the panel clamps its collapsed height and snaps away the instant `hidden` lands. The divider therefore
+    lives on the inner wall, not on the panel."""
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2]
+           / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+
+    panel = re.search(r'(?m)^\.pp-act__trophies\s*\{([^}]*)\}', css)
+    assert panel, 'the panel lost its rule'
+    body = panel.group(1)
+    assert 'overflow: hidden' in body and 'transition' in body
+    assert 'border' not in body and 'padding' not in body, (
+        'a border or padding on the panel clamps its collapsed height'
+    )
+    assert '.pp-act__trophies[hidden]' in css, 'a collapsed panel is not removed from the a11y tree'
+
+
+def test_no_session_rule_depends_on_is_open():
+    """`.is-open` used to mean "row rather than poster" and carried the row's whole layout; when it came to
+    mean "trophies showing", collapsing dropped that layout and the cover reverted to a full-width poster.
+    The state lives on the panel's `hidden` attribute now, so the class should not survive at all."""
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2]
+           / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+    css = re.sub(r'/\*[\s\S]*?\*/', '', css)      # the comments record why it went
+
+    assert '.is-open' not in css, 'a session rule still keys off .is-open'
+
+
+def test_every_search_card_cover_is_the_same_size():
+    """Cards came out at slightly different heights depending on the GAME.
+
+    The art box takes its height from `width` + `aspect-ratio`, and a percentage-sized child resolving
+    against a derived height is indeterminate -- so the image fell back to its intrinsic size, which
+    differs between an IGDB cover and a PSN fallback. Only the cards whose art happened to be a different
+    shape came out wrong, which is what made it look random.
+
+    Pinning the image to the box is the same fix the medallion cover needed, for the same reason. If it
+    ever goes back to percentage sizing, uneven cards come back with it.
+    """
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2]
+           / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+
+    cover = re.search(r'(?m)^\.pp-actt__cover\s*\{([^}]*)\}', css)
+    assert cover, 'the search card cover lost its rule'
+    assert 'position: absolute' in cover.group(1) and 'inset: 0' in cover.group(1), (
+        'the cover is percentage-sized again, so its size follows the source art rather than the box'
+    )
+
+    box = re.search(r'(?m)^\.pp-actt__art\s*\{([^}]*)\}', css)
+    assert box and 'aspect-ratio: 3 / 4' in box.group(1), 'the box has no ratio to derive its height from'
+    assert 'position: relative' in box.group(1), 'the pinned cover has nothing to pin to'
+
+
+def test_several_trophy_types_can_be_filtered_at_once(client):
+    """"Their golds and platinums" is one question. Asking it as two searches is what a filter exists to
+    avoid, and radios made that impossible."""
+    profile = ProfileFactory(is_linked=True)
+    game = GameFactory()
+    _earn(profile, game, _at(1), tier='platinum', name='The Plat')
+    _earn(profile, game, _at(1), tier='gold', name='A Gold')
+    _earn(profile, game, _at(1), tier='bronze', name='A Bronze')
+
+    response = client.get(
+        f'/hunters/{profile.psn_username}/?tab=trophies&tier=platinum&tier=gold', **CF
+    )
+    body = response.content.decode()
+
+    assert response.context['trophy_selected'] == ['platinum', 'gold']
+    assert 'The Plat' in body and 'A Gold' in body
+    assert 'A Bronze' not in body
+
+
+def test_an_unknown_tier_is_dropped_without_losing_the_rest(client):
+    """A stale or hand-edited link still answers with whatever of it made sense, rather than rejecting the
+    whole request or filtering on nonsense."""
+    profile = ProfileFactory(is_linked=True)
+    _earn(profile, GameFactory(), _at(1), tier='gold', name='A Gold')
+
+    response = client.get(
+        f'/hunters/{profile.psn_username}/?tab=trophies&tier=gold&tier=nonsense', **CF
+    )
+
+    assert response.context['trophy_selected'] == ['gold']
+    assert 'A Gold' in response.content.decode()
+
+
+def test_a_selected_chip_shows_as_selected(client):
+    """The chips are real checkboxes, so `:has(input:checked)` reads the active state straight off the DOM
+    -- no class to keep in sync, and toggling one off needs no handler."""
+    profile = ProfileFactory(is_linked=True)
+    _earn(profile, GameFactory(), _at(1), tier='gold')
+
+    body = client.get(f'/hunters/{profile.psn_username}/?tab=trophies&tier=gold', **CF).content.decode()
+
+    assert 'value="gold" checked' in body.replace('" checked', '" checked')
+    assert 'value="bronze" checked' not in body
+
+
+def test_clear_re_renders_the_toolbar_not_just_the_results():
+    """The chips stayed lit after clearing. The toolbar lives OUTSIDE `#tab-results`, so clearing through
+    the usual swap target updated the results and left every control describing the old ones.
+
+    Clear targets the whole tab, which re-renders the form with nothing checked.
+    """
+    import re
+    from pathlib import Path
+
+    tab = (Path(__file__).resolve().parents[2]
+           / 'templates/trophies/partials/profile_detail/tabs/trophies_tab.html').read_text(encoding='utf-8')
+    tab = re.sub(r'{%\s*comment\s*%}[\s\S]*?{%\s*endcomment\s*%}', '', tab)
+
+    clear = tab[tab.index('pp-tsearch__clear'):]
+    clear = clear[:clear.index('>') + 1]
+    assert 'hx-target="#tab-content"' in clear, 'clearing leaves the chips showing filters that are gone'
+
+    # And the toolbar really is outside the results target, which is why that matters.
+    assert tab.index('pp-tsearch') < tab.index('id="tab-results"')

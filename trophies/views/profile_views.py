@@ -567,29 +567,34 @@ class ProfileDetailView(DetailView):
         rarity-range filters (a power-user cross-section of someone ELSE's history). What stayed is the
         one thing Activity genuinely cannot do -- answer "did they ever get this".
         """
-        query, tier = self._trophy_search_params()
+        query, tiers = self._trophy_search_params()
 
-        context = {'trophy_query': query, 'trophy_tier': tier, 'trophy_tiers': self._TROPHY_TIERS,
-                   'is_searching': bool(query or tier),
+        context = {'trophy_query': query, 'trophy_selected': tiers, 'trophy_tiers': self._TROPHY_TIERS,
+                   'is_searching': bool(query or tiers),
                    # The scroller gates its first fetch on the grid being a FULL page, so it needs the size
                    # for whichever shape is rendered -- set on only one branch, the other never scrolls.
-                   'trophies_per_page': per_page if (query or tier) else DAYS_PER_PAGE}
+                   'trophies_per_page': per_page if (query or tiers) else DAYS_PER_PAGE}
         if context['is_searching']:
-            context.update(self._build_trophy_search_context(profile, per_page, page_number, query, tier))
+            context.update(self._build_trophy_search_context(profile, per_page, page_number, query, tiers))
         else:
             context.update(self._build_activity_context(profile))
         return context
 
     def _trophy_search_params(self):
-        """The validated (query, tier) pair -- the ONE definition of "is this a search".
+        """The validated (query, tiers) pair -- the ONE definition of "is this a search".
 
         `get_template_names` and the context builder used to decide that separately, and the template
         chooser read `?tier=` RAW: a bogus tier built the day wall and then rendered it with the search
         template, which reads a `trophy_log` that does not exist.
+
+        Tiers are a LIST: "their golds and platinums" is one question, and asking it as two searches is
+        the kind of thing a filter exists to avoid. Unknown values are dropped rather than rejected, so a
+        stale or hand-edited link still answers with whatever of it made sense.
         """
         query = (self.request.GET.get('q') or '').strip()[:_TROPHY_QUERY_MAX]
-        tier = self.request.GET.get('tier') or ''
-        return query, (tier if tier in dict(self._TROPHY_TIERS) else '')
+        known = dict(self._TROPHY_TIERS)
+        tiers = [t for t in self.request.GET.getlist('tier') if t in known]
+        return query, tiers
 
     #: Quick cross-sections worth keeping beside the search box. Tier is the one axis of a trophy that is
     #: both obvious to ask for and free to filter -- it is a column on Trophy, not a computed grade.
@@ -615,7 +620,7 @@ class ProfileDetailView(DetailView):
         context['activity_per_page'] = DAYS_PER_PAGE
         return context
 
-    def _build_trophy_search_context(self, profile, per_page, page_number, query, tier):
+    def _build_trophy_search_context(self, profile, per_page, page_number, query, tiers):
         """Matching trophies, newest first.
 
         Sliced rather than paginated: `Paginator` runs `COUNT(*)` over the whole match set on every page,
@@ -645,8 +650,8 @@ class ProfileDetailView(DetailView):
             qs = qs.filter(
                 Q(trophy__trophy_name__icontains=query) | Q(trophy__game__title_name__icontains=query)
             )
-        if tier:
-            qs = qs.filter(trophy__trophy_type=tier)
+        if tiers:
+            qs = qs.filter(trophy__trophy_type__in=tiers)
 
         return {'trophy_log': list(qs.order_by('-earned_date_time')[offset:offset + per_page])}
 
