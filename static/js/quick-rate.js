@@ -19,6 +19,7 @@
  *       existing, blurb,               // prefill; null for a fresh rating
  *       submitEl,                      // defaults to [data-gd-qr-submit] inside the form
  *       submitLabel, hoursLabel, playtimeHint,
+ *       announcesSave,                 // the host toasts the save itself; otherwise this does
  *       onSaved(data, payload), onError(message), onChange(state),
  *   })  ->  { setTarget, prefill, submit, state, detach }
  *
@@ -226,6 +227,21 @@
                 busy = false;
                 if (submitEl) { submitEl.disabled = false; submitEl.textContent = submitLabel; }
                 if (o.onSaved) { o.onSaved(data || {}, payload); }
+
+                // Confirming the save is the CONTROLLER's job unless a host claims it with
+                // `announcesSave`. The error path below has always had this fallback and the success path
+                // did not, which is a strange asymmetry to leave in a shared component: a host that
+                // forgets its error handler still shows the error, while a host that forgets to confirm a
+                // save shows nothing at all. That is exactly what happened to the plat-card modal --
+                // editing a rating there closed the dialog and gave no sign it had worked.
+                //
+                // Runs AFTER the host's onSaved, which for QuickRate hosts is after the dialog closes, so
+                // the toast lands on the page's container rather than the modal's popover (the dialog
+                // takes that down with it). The server's message distinguishes a new rating from an
+                // update; hosts wanting their own wording set the flag and say it themselves.
+                if (!o.announcesSave && PP.ToastManager) {
+                    PP.ToastManager.show((data && data.message) || 'Rating saved!', 'success');
+                }
             }).catch(function (error) {
                 // Never treat a failure as a save: the hunter's input is still in the form, and a caller
                 // that downloads on success must not be told the rating landed when it didn't.

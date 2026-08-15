@@ -428,6 +428,10 @@ window.PlatPursuit = window.PlatPursuit || {};
                     var req = el('rmg-req');
                     if (req) { req.classList.toggle('is-met', state.ready); }
                 },
+                // This host names the GAME in its toast ("Elden Ring rated!"), which is what makes a bulk
+                // run legible -- the card has already been replaced by the next one by the time you read
+                // it. Claiming it stops RatingFields adding a generic second toast.
+                announcesSave: true,
                 onSaved: function () {
                     var game = self.current();
                     PP.ToastManager.success((game && game.unified_title ? game.unified_title : 'Rating') + ' rated!');

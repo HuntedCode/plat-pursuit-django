@@ -462,6 +462,9 @@
                         blurb: (data && data.blurb !== undefined && data.blurb !== null) ? data.blurb : payload.blurb,
                     }
                 );
+                // No toast here on purpose: this host does NOT set `announcesSave`, so RatingFields
+                // confirms the save itself. Saying it twice is the failure mode on the other side of the
+                // one this page had, which was saying it not at all.
                 syncRateButton();       // "Rate this game" -> "Edit rating", without waiting on the fetch
                 // The card RENDERS the rating, so the cached copy is now the wrong card. Without this
                 // loadPreview() is handed the stale entry straight back and the preview never changes.

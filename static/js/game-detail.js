@@ -1480,6 +1480,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 existing: ex,
                 blurb: btn.dataset.existingBlurb || '',
                 hoursLabel: btn.dataset.hoursLabel || 'Hours to Platinum',
+                // This host says it itself, at the end of applyRating -- after the whole card has been
+                // live-updated, so the toast confirms a change you can already see rather than arriving
+                // ahead of it. Without the flag RatingFields would add a second one.
+                announcesSave: true,
                 onOpen: () => pageRecede(true),
                 onClose: () => pageRecede(false),
                 onSaved: (data, payload) => applyRating(data, payload),

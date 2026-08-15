@@ -630,6 +630,32 @@ def test_the_recommendation_offers_three_choices_not_four():
     assert 'bad_game_good_plat' not in bare
 
 
+def test_every_host_of_the_shared_form_confirms_a_save():
+    """The plat-card modal saved a rating and said nothing: the dialog closed, and the only sign was a
+    preview redrawing a moment later. Two of the three hosts toasted; that one had been missed.
+
+    The shared controller had the asymmetry behind it -- its ERROR path falls back to a toast when a host
+    supplies no handler, while its SUCCESS path delegated entirely. So forgetting your error handler was
+    harmless and forgetting to confirm a save was silent, which is backwards.
+
+    Confirming is the controller's job now, and a host that wants its own wording says so with
+    `announcesSave`. This pins that every host is on one side of that line rather than neither."""
+    controller = (ROOT / 'static' / 'js' / 'quick-rate.js').read_text(encoding='utf-8')
+    assert 'announcesSave' in controller, 'the controller no longer confirms saves by default'
+
+    # Hosts with custom wording claim it; the rest rely on the default. What must never happen is a host
+    # that claims it and then does not say anything.
+    for rel in ('static/js/game-detail.js', 'static/js/rate-my-games.js'):
+        src = (ROOT / rel).read_text(encoding='utf-8')
+        assert 'announcesSave' in src, f'{rel} would now toast twice'
+        assert 'ToastManager' in src, f'{rel} claims announcesSave but says nothing'
+
+    platcards = (ROOT / 'static' / 'js' / 'plat-cards.js').read_text(encoding='utf-8')
+    assert 'announcesSave: true' not in platcards, (
+        'the plat-card modal claims to announce its own save -- it does not, which is the original bug'
+    )
+
+
 def test_the_prefill_shape_has_one_definition_per_side():
     """The bug this exists to stop: the prefill object was hand-built in FOUR places (the wizard queue,
     the plat-card service, and two in JS), and when `recommendation` was added only one was updated. Game
