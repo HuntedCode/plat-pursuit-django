@@ -456,7 +456,7 @@ def _games_for_concepts(profile, concept_ids):
     return out
 
 
-def _concepts_defining_a_platinum(concept_ids):
+def concepts_defining_a_platinum(concept_ids):
     """Of these concepts, the ones that define a platinum trophy at all.
 
     Page-bounded and index-backed. Asked of the CONCEPT rather than of any one game because "does this
@@ -508,7 +508,7 @@ def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_
 
     community = _community_scores(rows)
     games = _games_for_concepts(profile, {r.concept_id for r in rows})
-    plat_concepts = _concepts_defining_a_platinum(
+    plat_concepts = concepts_defining_a_platinum(
         set() if dlc else {r.concept_id for r in rows}
     )
 

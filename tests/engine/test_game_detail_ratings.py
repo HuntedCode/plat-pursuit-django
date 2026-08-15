@@ -145,7 +145,10 @@ def test_the_split_shows_every_option_including_the_empty_ones():
 
     for value in ('worth_it', 'good_game_bad_plat', 'skip'):
         assert f'data-rec-cell="{value}"' in html, f'{value} is missing from the split'
-    assert '80%' in html and '20%' in html and '0%' in html
+    # '0%' would be satisfied by the '0%' inside '80%', so the zero share is read off its OWN cell.
+    assert '80%' in html and '20%' in html
+    skip = html[html.index('data-rec-cell="skip"'):]
+    assert '>0%<' in skip[:skip.index('gd-cond__rec-lbl')], 'the skipped share is not printed as 0%'
     # The option nobody picked is drawn but held back -- present, not a finding.
     assert 'gd-cond__rec is-none' in html
 
@@ -185,7 +188,11 @@ def test_the_host_tells_the_partial_whether_the_group_has_a_platinum():
     src = (ROOT / 'templates' / 'trophies' / 'partials' / 'game_detail' / 'ratings_panel.html').read_text(
         encoding='utf-8')
 
-    assert 'has_platinum=' in src, 'the panel no longer tells _rating_conditions which kind of group it is'
+    # The exact expression, not the substring. `has_platinum=False` or the word appearing in any other
+    # include would satisfy a bare `'has_platinum=' in src`, and the failure it guards is SILENT.
+    assert 'has_platinum=ct.has_platinum' in src, (
+        'the panel no longer passes the group\'s own has_platinum to _rating_conditions'
+    )
 
 
 def test_the_total_sits_with_the_action_not_beside_the_answered_count():

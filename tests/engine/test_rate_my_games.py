@@ -360,6 +360,75 @@ def _dlc_ready(profile, name=None):
     return game
 
 
+def test_a_games_dlc_packs_stay_together_on_the_page(client):
+    """One card per pack, but a game's packs have to arrive ADJACENT.
+
+    The queue partitions never-rated packs ahead of the recommendation backlog, and a game can have one
+    pack in each half -- so flattening in that partitioned order splits the game across a page boundary
+    and puts twenty other titles between its two packs. The flatten is BY CONCEPT for that reason; the
+    partition still decides which concepts lead.
+    """
+    from tests.factories import EarnedTrophyFactory, TrophyFactory, TrophyGroupFactory
+
+    profile = _hunter()
+    split = _dlc_ready(profile, name='Two Packs')
+    # A second completed pack on the SAME game, rated before the recommendation existed -- so it lands in
+    # the backlog half while its sibling sits in the never-rated half.
+    TrophyGroupFactory(game=split, trophy_group_id='002')
+    second = ConceptTrophyGroupFactory(concept=split.concept, trophy_group_id='002', display_name='Old Blood')
+    EarnedTrophyFactory(
+        profile=profile,
+        trophy=TrophyFactory(game=split, trophy_type='gold', trophy_group_id='002'),
+        earned=True,
+    )
+    UserConceptRating.objects.create(
+        profile=profile, concept=split.concept, concept_trophy_group=second, recommendation='',
+        difficulty=5, grindiness=5, hours_to_platinum=10, fun_ranking=5, overall_rating=4.0,
+    )
+    for i in range(3):
+        _dlc_ready(profile, name=f'Filler {i}')
+    client.force_login(profile.user)
+
+    # A SMALL page, because that is the only place the bug shows: at limit=20 everything lands on one page
+    # and the regrouping hides the flat order entirely. Two items is exactly this game's two packs.
+    groups = client.get(QUEUE, {'queue_type': 'dlc', 'limit': 2}).json()['groups']
+
+    assert len(groups) == 1, (
+        f'page one holds {len(groups)} games -- one game\'s packs were split across the boundary and '
+        f'another title came between them'
+    )
+    assert groups[0]['concept_id'] == split.concept_id
+    assert {i['trophy_group_id'] for i in groups[0]['items']} == {'001', '002'}, (
+        'the two packs of one game did not arrive together'
+    )
+
+
+def _rate_row(profile, game, queue_type, **fields):
+    """A rating on the half of the queue under test -- base game, or the game's '001' DLC group.
+
+    Parametrized alongside `queue_type` so one test body covers both halves against the row shape that
+    half actually reads: base ratings carry `concept_trophy_group=None`, DLC ratings carry the FK, and a
+    row on the wrong side is invisible to the queue being exercised.
+    """
+    from trophies.models import ConceptTrophyGroup
+
+    ctg = None
+    if queue_type == 'dlc':
+        ctg = ConceptTrophyGroup.objects.get(concept=game.concept, trophy_group_id='001')
+    return UserConceptRating.objects.create(
+        profile=profile, concept=game.concept, concept_trophy_group=ctg,
+        difficulty=5, grindiness=5, hours_to_platinum=10, fun_ranking=5, overall_rating=4.0,
+        **fields,
+    )
+
+
+def _flat_items(body, queue_type):
+    """Every item on the page, whichever shape the half returns (a flat `queue`, or nested `groups`)."""
+    if queue_type == 'dlc':
+        return [item for grp in body.get('groups', []) for item in grp.get('items', [])]
+    return body.get('queue', [])
+
+
 @pytest.mark.parametrize('queue_type', ['base', 'dlc'])
 def test_the_queue_never_drags_the_igdb_blob_along(client, queue_type):
     """`raw_response` is the ~30 KB IGDB API payload and nothing on this page reads it.
@@ -392,32 +461,40 @@ def test_the_queue_reads_ids_not_rows_when_it_is_only_asking_what_is_rated(clien
     Pinned by the BLURB, which is the widest column and is only ever read for the items on this page. An
     unbounded query that selects it is a query fetching rows where it needs ids."""
     profile = _hunter()
-    # A backlog to sort past, so the membership pass has something to answer about.
+    # A COMPLETE backlog to skip past...
     for i in range(4):
         game = _dlc_ready(profile, name=f'Done {i}')
-        UserConceptRating.objects.create(
-            profile=profile, concept=game.concept, recommendation='worth_it',
-            difficulty=5, grindiness=5, hours_to_platinum=10, fun_ranking=5, overall_rating=4.0,
-        )
+        _rate_row(profile, game, queue_type, recommendation='worth_it')
+    # ...and an INCOMPLETE one, which is the only state that puts a prefill row on the page. Without it
+    # `__in=[]` short-circuits, the page-bounded fetch never runs, and the count assertion below is
+    # vacuous -- it would pass while a regression re-added the whole-library fetch beside the scalar pass.
+    stale = _dlc_ready(profile, name='Needs a rec')
+    _rate_row(profile, stale, queue_type, recommendation='')
     _dlc_ready(profile, name='Fresh')
     client.force_login(profile.user)
 
     with CaptureQueriesContext(connection) as ctx:
-        assert client.get(QUEUE, {'queue_type': queue_type}).status_code == 200
+        body = client.get(QUEUE, {'queue_type': queue_type}).json()
 
     ratings_sql = [q['sql'] for q in ctx.captured_queries if 'trophies_userconceptrating' in q['sql']]
     blurb = '"trophies_userconceptrating"."blurb"'
 
+    # The prefill actually reached the page -- otherwise the row-fetch assertion below is about a query
+    # that never ran.
+    served = _flat_items(body, queue_type)
+    assert any('existing' in item for item in served), (
+        f'no re-served item on the {queue_type} page, so the prefill fetch never happened'
+    )
     # The scalar pass has to EXIST. Before this, every membership question was answered by building the
     # instances, so there was no id-only query at all -- which is what this catches.
     assert any(blurb not in sql for sql in ratings_sql), (
         f'the {queue_type} queue has no id-only pass over the ratings -- it is building rows to answer '
         f'membership:\n' + '\n'.join(s[:300] for s in ratings_sql)
     )
-    # And the row-fetching pass happens at most once: the page's prefill, nothing else.
-    assert sum(blurb in sql for sql in ratings_sql) <= 1, (
-        f'the {queue_type} queue fetches whole rating rows more than once:\n'
-        + '\n'.join(s[:300] for s in ratings_sql if blurb in s)
+    # And the row-fetching pass happens EXACTLY once: the page's prefill, nothing else.
+    assert sum(blurb in sql for sql in ratings_sql) == 1, (
+        f'the {queue_type} queue does not fetch rating rows exactly once:\n'
+        + '\n'.join(s[:300] for s in ratings_sql)
     )
 
 
@@ -887,7 +964,9 @@ def test_the_modal_fits_without_scrolling():
     css = (ROOT / 'static' / 'css' / 'components' / 'game-detail.css').read_text(encoding='utf-8')
     qr = css[css.index('.gd-modal--qr {'):css.index('/* ---- The recommendation')]
 
-    assert 'grid-template-columns: 1fr 1fr' in qr, 'the quick-rate form is single-column again'
+    assert 'grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)' in qr, (
+        'the quick-rate form is single-column again, or back on a bare 1fr whose auto floor overflows a phone'
+    )
     assert '620px' in qr, 'the modal narrowed back to a width the form does not fit in'
     assert 'max-height: 88vh' in qr, 'the body is back on the shared 70vh cap'
     # The three options in ONE row is most of the height that was bought back.
@@ -906,7 +985,9 @@ def test_the_wizard_lays_the_form_out_two_up_beside_the_list():
     shared = (ROOT / 'static' / 'css' / 'components' / 'game-detail.css').read_text(encoding='utf-8')
 
     assert '520px' in wizard, 'the form rail is back to a width that can only stack'
-    assert 'grid-template-columns: 1fr 1fr' in wizard, 'the wizard form is single-column again'
+    assert 'grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)' in wizard, (
+        'the wizard form is single-column again, or back on a bare 1fr whose auto floor overflows a phone'
+    )
 
     spans = shared[shared.index('.gd-qr__field--rec,\n.gd-qr__field--blurb'):]
     assert 'grid-column: 1 / -1;' in spans[:400], 'the shared span list is gone or host-scoped again'
@@ -938,7 +1019,9 @@ def test_the_wizard_form_pairs_its_axes_at_every_width():
 
     rule = css[css.index('.rmg__form .gd-qr {'):]
     rule = rule[:rule.index('\n}')]
-    assert 'grid-template-columns: 1fr 1fr' in rule, 'the pairing is back behind a breakpoint'
+    assert 'grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)' in rule, (
+        'the pairing is back behind a breakpoint, or back on a bare 1fr'
+    )
 
 
 def test_the_wizard_actions_stay_in_reach_on_a_phone():
@@ -966,7 +1049,7 @@ def test_a_drag_on_a_control_never_dismisses_a_sheet():
     sheet = utils[utils.index('function dismissableSheet('):]
     sheet = sheet[:sheet.index('\n}\n')]
 
-    assert "closest('input, textarea, select, button, a, [role=\"slider\"]')" in sheet, (
+    assert "closest('input, textarea, select, [role=\"slider\"]')" in sheet, (
         'a drag starting on a control can arm the dismiss again'
     )
     assert 'opts.handle' in sheet, 'the handle option is gone'

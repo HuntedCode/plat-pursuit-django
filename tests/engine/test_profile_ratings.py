@@ -749,7 +749,10 @@ def test_the_quick_rate_modal_caps_the_dialog_not_the_body():
     # It has to be able to shrink below its content, or a flex item simply refuses to scroll.
     assert 'min-height: 0' in rule
 
-    assert '.gd-modal--qr { max-height:' in css or 'max-height: 92vh' in css, 'the dialog itself is uncapped'
+    # Scoped to the dialog's own rule. A bare `'max-height: 92vh' in css` would stay green on any other
+    # rule in a 1600-line file once this one is deleted.
+    dialog = css[css.index('.gd-modal--qr { max-height:'):]
+    assert 'max-height: 92vh' in dialog[:dialog.index('}')], 'the dialog itself is uncapped'
 
 
 def test_the_submit_button_cannot_end_up_below_the_fold():
@@ -767,11 +770,16 @@ def test_the_submit_button_cannot_end_up_below_the_fold():
 
     grid = css.index('.gd-modal--qr .gd-qr {')
     breakpoint_640 = css.index('@media (min-width: 640px)', grid)
-    assert 'grid-template-columns: 1fr 1fr' in css[grid:breakpoint_640], (
-        'the two-column pairing is back behind a breakpoint -- it is the mobile layout that needs it most'
+    # `minmax(0, ...)`, not a bare `1fr`: the auto floor of a bare `1fr` is the item's min-content width,
+    # which for the Hours field is its input's intrinsic width -- two of those overflow a 360px phone.
+    assert 'grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)' in css[grid:breakpoint_640], (
+        'the two-column pairing is back behind a breakpoint, or back on a bare 1fr that overflows on a phone'
     )
 
-    actions = css[css.index('.gd-modal--qr .gd-qr__actions {'):]
+    # The LAST rule of that selector -- there are two, and the first is a one-line `margin-top: 0` whose
+    # slice runs past a media query and a comment into this one, so it would find `position: sticky` in a
+    # rule it never indexed.
+    actions = css[css.rindex('.gd-modal--qr .gd-qr__actions {'):]
     actions = actions[:actions.index('\n}')]
     assert 'position: sticky' in actions, 'the actions row can scroll out of reach again'
 

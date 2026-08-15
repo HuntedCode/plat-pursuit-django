@@ -221,7 +221,9 @@
    Only the `display: grid` half lives here; which fields span both columns is stated once in
    game-detail.css, beside the partial they belong to. */
 .rmg__form .gd-qr {
-    display: grid; grid-template-columns: 1fr 1fr; align-content: start;
+    /* minmax(0, ...), not a bare 1fr -- see the note on the modal's copy in game-detail.css. The auto
+       floor is the number input's intrinsic width, which two-up exceeds a 360px phone. */
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-content: start;
     /* Tighter than the modal's. Five sliders in a panel don't need that much air, and every pixel here is
        a pixel the trophy list beside it doesn't get. */
     gap: 10px 12px;
@@ -265,13 +267,20 @@
 @media (max-width: 1023px) {
     .rmg__actions {
         position: sticky; z-index: 20;
-        bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+        /* 3.5rem = the tab bar, in the same unit the rest of the site clears it with (#zoom-wrapper's
+           padding, #back-to-top, #toast-container -- all in input.css). Anything bottom-anchored here has
+           to carry the `.has-mobile-ad` variant too: the ad banner is `position: fixed` at `3.5rem` with
+           `z-index: 40` and 50px of height, so it lands exactly on this bar and wins the stack. Sticky is
+           what makes that fatal rather than cosmetic -- before it, the row scrolled and you could move it
+           clear of the banner; pinned under it, Submit is unreachable for the whole card. */
+        bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
         padding: 10px 12px;
         border-radius: var(--pp-radius-lg);
         background: var(--pp-bg-1);
         border: 1px solid var(--pp-border);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
     }
+    .has-mobile-ad .rmg__actions { bottom: calc(7rem + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* Shortcut hint. Only where there is a keyboard to use -- a touch device gets no value from being told

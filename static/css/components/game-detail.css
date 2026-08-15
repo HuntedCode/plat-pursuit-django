@@ -1511,7 +1511,13 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
  * with a trophy list beside it.
  */
 .gd-modal--qr .gd-qr {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 11px 12px; align-content: start;
+    /* `minmax(0, 1fr)`, never a bare `1fr`. A bare `1fr` is `minmax(auto, 1fr)`, and the auto floor is the
+       item's MIN-CONTENT width -- which for the Hours field is the intrinsic width of its `<input>` (the
+       UA sizes that from `size`, and `width: 100%` resolves to auto against an indefinite track). Two of
+       those floors exceed a 360px phone and the grid overflows its own scrollport sideways. It never bit
+       while this was gated at 640px, because the columns were wide enough that the floor never bound.
+       The house convention throughout this codebase, for exactly this reason. */
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 11px 12px; align-content: start;
 }
 .gd-modal--qr .gd-qr__actions { margin-top: 0; }
 @media (min-width: 640px) { .gd-modal--qr .gd-qr { gap: 11px 16px; } }

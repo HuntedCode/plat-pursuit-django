@@ -809,7 +809,8 @@ const InfiniteScroller = {
      * @param {string} [config.cardSelector='.card'] - CSS selector for cards in fetched HTML
      * @param {Function} [config.onTabChange] - Callback for tab change behavior
      * @param {Function} [config.onAppend] - Called with the array of freshly-appended card nodes after each page load
-     * @returns {Object} Controller with destroy() method
+     * @returns {Object|null} Controller with a destroy() method, or NULL when the grid, sentinel or
+     *   loading element is missing -- callers keeping the handle must null-check before destroying.
      */
     create(config) {
         const grid = document.getElementById(config.gridId);
@@ -1590,6 +1591,12 @@ function staggerReveal(o) {
  * @param {Function} opts.onClose  called when the drag passes the threshold (do the real close here)
  * @param {HTMLElement} [opts.scrim]     backdrop element to fade while dragging
  * @param {number} [opts.threshold=90]   px of downward drag past which it dismisses
+ * @param {string} [opts.handle]   selector the touch must start inside for the drag to arm at all. Omit on
+ *   a sheet you READ; pass one on a sheet you OPERATE, where an accidental dismiss costs unsaved work.
+ *
+ * A drag starting on `input`/`textarea`/`select`/`[role="slider"]` never arms, on every sheet -- those own
+ * their own gestures and this preventDefault()s the movement out from under them. Links and buttons do NOT
+ * count: they have no drag gesture, and excluding them would leave a wall-of-cards sheet undraggable.
  */
 function dismissableSheet(dialog, opts) {
     if (!dialog) { return; }
@@ -1608,12 +1615,22 @@ function dismissableSheet(dialog, opts) {
         if (scrim) { scrim.style.transition = ''; scrim.style.opacity = ''; }
     }
     dialog.addEventListener('touchstart', function (e) {
-        startY = null;
-        // A drag that starts on a CONTROL belongs to the control. `touchmove` below preventDefault()s any
-        // downward movement and translates the whole sheet, so a finger sliding a range input -- which
-        // never travels perfectly horizontally -- was dragging the dialog instead of the thumb. Never a
-        // dismissal gesture on any sheet, which is why this is unconditional rather than an option.
-        if (e.target.closest && e.target.closest('input, textarea, select, button, a, [role="slider"]')) {
+        // A second finger mid-drag is IGNORED rather than allowed to abort. Clearing `startY` here would
+        // strand the sheet at whatever translateY the drag had reached: `touchend` bails on a null startY
+        // and never reaches `resetStyles()`, so the dialog keeps its inline transform AND its
+        // `animation: none` into the next open.
+        if (startY !== null) { return; }
+        // A drag that starts on a DRAGGABLE CONTROL belongs to the control. `touchmove` below
+        // preventDefault()s any downward movement and translates the whole sheet, so a finger sliding a
+        // range input -- which never travels perfectly horizontally -- was dragging the dialog instead of
+        // the thumb, and past the threshold threw the form away. Never a dismissal gesture on any sheet,
+        // which is why this is unconditional rather than an option.
+        //
+        // Links and buttons are deliberately NOT in this list. They have no drag gesture of their own to
+        // protect (a tap and a drag are told apart by movement), and excluding them would gut the sheets
+        // whose bodies are a wall of them -- the badges grid is cards at an 8px gutter, so the only
+        // draggable pixels left would be that gutter. Those sheets show a grabber; it has to mean something.
+        if (e.target.closest && e.target.closest('input, textarea, select, [role="slider"]')) {
             return;
         }
         // And where a `handle` is named, only that region drags at all.
@@ -1653,6 +1670,14 @@ function dismissableSheet(dialog, opts) {
             dialog.style.transform = 'none';
             if (scrim) { scrim.style.transition = 'opacity 0.25s ease'; scrim.style.opacity = ''; }
         }
+    });
+    // A gesture the browser takes away (an incoming call, a system edge-swipe) fires touchcancel and NOT
+    // touchend, so without this the sheet keeps both its inline transform and an armed `startY` -- visibly
+    // stuck, and undraggable from then on because a new touchstart sees a non-null startY.
+    dialog.addEventListener('touchcancel', function () {
+        if (startY === null) { return; }
+        startY = null; dragging = false;
+        resetStyles();
     });
 }
 

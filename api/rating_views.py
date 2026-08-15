@@ -113,16 +113,16 @@ class GroupRatingView(APIView):
 
             from trophies.models import UserConceptRating
             from trophies.forms import UserConceptRatingForm
-            from trophies.services.rating_service import RatingService
+            from trophies.services.rating_service import RatingService, concepts_defining_a_platinum
 
             # Base game (trophy_group_id='default'): concept_trophy_group=None
             # for backward compat. DLC groups store the FK.
             ctg_fk = None if ctg.trophy_group_id == 'default' else ctg
 
             # Whether the middle option reads "tough plat" or "tough trophies", by the same rule the
-            # form's own copy used: a base group whose concept actually defines a platinum.
-            from trophies.services.rating_service import _concepts_defining_a_platinum
-            has_plat = ctg_fk is None and concept.id in _concepts_defining_a_platinum({concept.id})
+            # form's own copy used: a base group whose concept actually defines a platinum. Short-circuits
+            # on a DLC pack, so this costs nothing on that half.
+            has_plat = ctg_fk is None and concept.id in concepts_defining_a_platinum({concept.id})
 
             existing_rating = UserConceptRating.objects.filter(
                 profile=profile,
@@ -564,7 +564,6 @@ class WizardQueueView(APIView):
             shovelware_concept_ids = set(dlc_concept_ids) - clean_concept_ids
 
         groups_dict = OrderedDict()
-        flat_pairs = []
         total_items = 0
 
         for g in dlc_groups:
@@ -581,6 +580,11 @@ class WizardQueueView(APIView):
                     'slug': g.concept.slug,
                     'is_shovelware': cid in shovelware_concept_ids,
                     'items': [],
+                    # Parallel to `items`: the CTG primary key behind each one, so the prefill can be
+                    # attached AFTER the slice. It never leaves the server -- the item itself carries only
+                    # the PSN group id the client sends back -- and it is stripped when the page's groups
+                    # are rebuilt below.
+                    'ctg_pks': [],
                 }
 
             item = {
@@ -593,13 +597,17 @@ class WizardQueueView(APIView):
                 **UserConceptRating.recommendation_copy(has_platinum=False),
             }
             groups_dict[cid]['items'].append(item)
-            # The CTG pk rides alongside so the prefill can be attached after the slice; the item itself
-            # carries only the PSN group id the client sends back.
-            flat_pairs.append((cid, item, g.id))
+            groups_dict[cid]['ctg_pks'].append(g.id)
             total_items += 1
 
+        # Flattened BY CONCEPT, not in `dlc_groups` order. A concept's packs have to stay adjacent, or a
+        # game with two completed packs gets one on page 1 and the other twenty items later -- which is
+        # what iterating the sorted group list produced, because that list is partitioned never-rated
+        # first and a concept can have one pack in each half.
         flat_items = [
-            (groups_dict[cid], item, ctg_pk) for cid, item, ctg_pk in flat_pairs
+            (grp, item, ctg_pk)
+            for grp in groups_dict.values()
+            for item, ctg_pk in zip(grp['items'], grp['ctg_pks'])
         ]
 
         page_items = flat_items[offset:offset + limit]
@@ -624,7 +632,7 @@ class WizardQueueView(APIView):
             cid = grp['concept_id']
             if cid not in page_groups_dict:
                 page_groups_dict[cid] = {
-                    k: v for k, v in grp.items() if k != 'items'
+                    k: v for k, v in grp.items() if k not in ('items', 'ctg_pks')
                 }
                 page_groups_dict[cid]['items'] = []
             page_groups_dict[cid]['items'].append(item)

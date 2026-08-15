@@ -228,12 +228,19 @@ for rebuilt browse grids** (Badges; the pending Challenges/Franchise/Company/Gam
 
 | Method | Parameters | Purpose |
 |--------|-----------|---------|
-| `dismissableSheet(dialog, opts)` | HTMLElement, `{onClose, scrim?, threshold?}` | iOS-style "swipe down to close" for a modal on touch |
+| `dismissableSheet(dialog, opts)` | HTMLElement, `{onClose, scrim?, threshold?, handle?}` | iOS-style "swipe down to close" for a modal on touch |
 
 **The common practice for every mobile modal.** Wire it on the modal's dialog: on a downward flick past
 `threshold` (default 90px) it slides the sheet off (fading `scrim`) and calls `onClose` — which should
 **hide instantly** (the helper already did the exit) and run the same cleanup the close button does. Drag
-only starts from the top of the dialog's scroll (mid-content scroll isn't hijacked). The helper adds
+only starts from the top of the dialog's scroll (mid-content scroll isn't hijacked), and **never from a
+draggable control** (`input`, `textarea`, `select`, `[role="slider"]`) -- a finger sliding a range input
+never travels perfectly horizontally, and the helper preventDefault()s any downward movement, so it was
+dragging the sheet instead of the thumb. Links and buttons are deliberately NOT excluded: they have no
+drag gesture to protect, and excluding them would leave a sheet whose body is a wall of cards with only
+its gutters draggable. Pass **`handle`** (a selector) to restrict the drag to one region -- the quick-rate
+modal uses `'.gd-modal__head'`, because it is the one sheet that is a FORM rather than something you read
+and its grabber pill sits in that header. The helper adds
 `.pp-dismissable` to the dialog, surfacing the shared touch-only grabber handle (`.pp-dismissable::before`):
 it fades in a beat after the sheet opens (`ppGrabIn`), rides the sheet off on a swipe, and fades out on a
 non-drag close (`ppGrabOut`, keyed on the modal's `.is-closing`) — all in `badge-inspect.css`, reduced-motion gated.
