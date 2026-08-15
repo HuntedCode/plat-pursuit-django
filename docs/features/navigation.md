@@ -19,7 +19,7 @@ Navigation is rendered globally via `base.html` includes. The main navbar is sti
 
 Design philosophy: **menus expose the few, hubs expose the many**. The global nav has 4 buttons. Each is a direct link to a hub. The hub does the heavy lifting of "introduce the user to what's in this section." The sub-nav handles "I know what I want, take me to the page." This eliminates the redundancy of having 25 dropdown items spread across menus that duplicate the hubs' job.
 
-A second design principle: **no feature silos**. Every page should link outward to related features. The Challenge Hub links to Milestones. Badge detail links to Titles. Profile pages surface Challenges and Reviews. This "mesh" of cross-links reduces dead ends and increases feature discovery.
+A second design principle: **no feature silos**. Every page should link outward to related features. Badge detail links to Titles. A profile's Ratings tab links each card to the game it rates, and its Games tab uses the site-wide game card so every tile is a route onward. This "mesh" of cross-links reduces dead ends and increases feature discovery.
 
 The four hubs:
 
@@ -44,10 +44,8 @@ See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the detailed design, 
 | `templates/partials/footer.html` | Sitemap grid footer (6-column layout matching the hub structure) |
 | `core/context_processors.py` | `hub_subnav_context()` — URL-prefix matcher that drives the sub-nav |
 | `core/constants.py` *(or new `core/hub_subnav.py`)* | `HUB_SUBNAV_CONFIG` — the hub definitions |
-| `templates/trophies/profile_detail.html` | Profile page with 6 tabs (Games, Trophies, Badges, Lists, Challenges, Reviews) |
+| `templates/trophies/profile_detail.html` | Profile page with 4 tabs (Games, Trophies, Badges, Ratings) |
 | `templates/trophies/partials/profile_detail/profile_detail_header.html` | Profile header with quick links row |
-| `templates/trophies/partials/profile_detail/challenge_list_items.html` | Profile Challenges tab content |
-| `templates/trophies/partials/profile_detail/review_list_items.html` | Profile Reviews tab content (supports infinite scroll) |
 | `trophies/views/profile_views.py` | ProfileDetailView with tab handlers |
 
 ## Global Navbar
@@ -143,23 +141,34 @@ These are the cross-links embedded in feature pages. The "mesh" of cross-links r
 
 ## Profile Page Tabs
 
-The profile page has 6 tabs, switchable via `?tab=` URL parameter:
+The profile page has **4 tabs**, switchable via the `?tab=` URL parameter:
 
-| Tab | Context Variable | Paginated | Infinite Scroll | Filters |
-|-----|-----------------|-----------|-----------------|---------|
-| Games | `profile_games` | Yes (50/page) | Yes | Platform, completion, sort |
-| Trophies | `profile_trophies` | Yes (50/page) | Yes | Grade, earned status, sort |
-| Badges | `profile_badges` | No | No | Tier, earned status, sort |
-| Lists | `profile_lists` | No | No | None |
-| Challenges | `profile_challenges` | No | No | None |
-| Reviews | `profile_reviews` | Yes (50/page) | Yes | None |
+| Tab | Paginated | Infinite scroll | Filters |
+|-----|-----------|-----------------|---------|
+| Games | Yes (50/page) | Yes | Full browse toolbar: live search, sort, and an advanced drawer (platform, the three platinum axes, genres, themes, flags, completion + time-to-beat ranges) |
+| Trophies | Yes (30 days/page) | Yes | Search + tier chips. TWO shapes behind one tab: the day wall while browsing, trophy cards while searching |
+| Badges | No | No | Sort only |
+| Ratings | Yes | Yes | Sort, plus a Games/DLC switcher |
 
-> **Activity tab deferred**: an earlier iteration of the Community Hub initiative added a 7th `Activity` tab backed by a polymorphic `Event` model, then rolled it back. See [Event System (Deferred)](../architecture/event-system-deferred.md) for the design space if you want to revive a per-profile activity timeline.
+Three tabs were retired rather than rebuilt, and the reasons are in the
+[rebuild playbook](../design/rebuild/rebuild-playbook.md): **Lists** (Game Lists is hidden pending a
+revamp, so the tab linked to cards whose links bounced you home), **Challenges** (the system was
+retired), and **Reviews** (text reviews were archived in 2026-05 — the ratings that survived them are
+what the Ratings tab shows). `_build_lists_tab_context` and its template are parked intact with the rest
+of Game Lists; the other two are gone.
+
+There is deliberately **no About tab** — see the Hunter Profile row in the playbook for why the trophy
+timeline and the showcases it was going to pair both came off the page instead.
 
 Tab handlers in `ProfileDetailView`:
-- `_build_games_tab_context()`, `_build_trophies_tab_context()`, `_build_badges_tab_context()`, `_build_lists_tab_context()`, `_build_challenges_tab_context()`, `_build_reviews_tab_context()`
-- Counts for tab badges: `profile_challenge_count`, `profile_review_count`, `profile_lists_count`
-- AJAX partial templates returned for paginated tabs via `get_template_names()`
+- `_build_games_tab_context()`, `_build_trophies_tab_context()`, `_build_badges_tab_context()`,
+  `_build_ratings_tab_context()` (plus the parked `_build_lists_tab_context()`)
+- `_TAB_TEMPLATES` maps a tab to its panel; `_RESULTS_TEMPLATES` to the partial an HTMX filter swap
+  returns; `_INFINITE_SCROLL_TEMPLATES` / `_INFINITE_SCROLL_VIEWS` to the bare items a scroll append
+  returns. A tab in the template map with no branch in the dispatcher renders someone else's data, which
+  is what the archived Reviews tab did — pinned by `test_every_mapped_tab_template_can_actually_be_built`.
+- Every paginated tab sets `scroll_per_page`, because the scroller measures the grid against it and a
+  disagreement silently disables the scroll rather than degrading.
 
 Profile pages live under `/profiles/<u>/`, so they show the Browse sub-nav strip with "Profiles" highlighted as active. (They moved from `/community/profiles/` in 2026-08; the old paths 301.)
 
@@ -174,13 +183,23 @@ Profile pages live under `/profiles/<u>/`, so they show the Browse sub-nav strip
 5. Only the active tab's data is queried (lazy loading)
 6. Scroll position restored from `sessionStorage`
 
-### Infinite Scroll (Reviews Tab)
+### Infinite scroll (Games, Trophies, Ratings)
 
-1. `PlatPursuit.InfiniteScroller.create()` initializes with `reviews-grid`, `reviews-sentinel`, `reviews-loading` IDs
-2. Observer triggers when sentinel enters viewport
-3. AJAX GET to same URL with incremented `?page=` param
-4. View returns `review_list_items.html` partial (detected via `X-Requested-With: XMLHttpRequest`)
-5. New cards appended to `reviews-grid`
+1. `PlatPursuit.InfiniteScroller.create()` initialises against `<tab>-grid`, `<tab>-sentinel`,
+   `<tab>-loading`, told the server's real page size via `scroll_per_page`
+2. The observer fires when the sentinel enters the viewport
+3. AJAX GET to the same URL with an incremented `?page=`, carrying `X-Requested-With: XMLHttpRequest`
+   — which is how `_is_scroll_append()` tells an append from an HTMX filter swap (htmx does not send it)
+4. The view returns the bare items partial for that tab (`_INFINITE_SCROLL_TEMPLATES`, or
+   `_INFINITE_SCROLL_VIEWS` for the Trophies tab, whose two shapes append different things)
+5. New cards are appended to the grid and handed to the reveal, so they land as they scroll in
+
+Two things fail SILENTLY here rather than loudly, and both have bitten: a `cardSelector` that matches
+nothing in the appended HTML reads as "no more pages" and stops the scroll (which is how the Games tab
+lost its scroll when its card was rebuilt onto `.pp-gcard`), and a `paginateBy` that disagrees with the
+server's page size breaks the resume arithmetic. Pinned by
+`test_every_paginated_tab_tells_the_scroller_its_real_page_size` and
+`test_every_grid_gets_the_selector_its_own_cards_use`.
 
 ### Sub-Nav Active State
 

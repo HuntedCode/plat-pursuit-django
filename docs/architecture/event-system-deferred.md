@@ -13,7 +13,7 @@
 >
 > **NOTE (2026-08):** the planned `milestone_service.py` / `challenge_service.py` emitters are moot -- both systems were deleted. Milestone events would now come from the `milestones` app; challenge events would be defined by whatever replaces Challenges.
 > - `trophies/views/community_views.py:CommunityFeedView` and the `/community/feed/` URL
-> - The Activity tab on profile pages (7th profile tab → back to 6 tabs)
+> - The Activity tab on profile pages (rolled back; the profile has 4 tabs today, and its Trophies tab now carries a day-by-day activity wall of its own)
 > - The `pursuit_activity` dashboard module (replaced by restoring the legacy `recent_activity` and `recent_platinums` modules from before Phase 6)
 > - The Pursuit Feed Spotlight section on the Community Hub
 > - The "Pursuit Feed" sub-nav item in the Community hub strip
