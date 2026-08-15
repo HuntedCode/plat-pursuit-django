@@ -10,8 +10,11 @@ at its real length rather than clamped to three lines.
 The cover stays, at the size its actual job needs. It is a recognition anchor -- cover art is how anyone
 identifies a game at a glance -- not the headline.
 
-Nothing on this card is clamped or height-reserved. The rows of a grid stretch to their tallest member
-anyway, so reserving lines would only pad the short cards without making any row more even.
+The QUICK TAKE is height-reserved, and this file first argued the opposite -- that a grid row stretches
+to its tallest member anyway, so reserving lines would only pad the short cards. That has it backwards:
+because the row is as tall as its tallest card, one long take inflates every card beside it, and the ones
+without a take become mostly blank. Reserving three lines is what removes that variance. Everything else
+is free to wrap.
 
 Each rating carries `card_game`, `community_avg` and `community_n`, attached in bulk by
 `rating_service.build_profile_ratings_page` -- never resolved per card, which would be an N+1 on a wall.
@@ -136,17 +139,27 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
             </span>
         </div>
 
-        {% comment %}Their words, at their real length. The blurb is capped at 140 characters at the source,
-        so there is nothing here worth truncating -- and truncating the one part of a rating that is not a
-        number, on the tab that exists to show what someone thought, would cut exactly the thing the reader
-        came for.
+        {% comment %}Their words, behind the plat card's big opening quote -- the same mark, so a take
+        looks like a take on both surfaces.
+
+        RENDERED EVEN WHEN EMPTY, and its three lines reserved in CSS. An earlier note here argued the
+        opposite: that reserving lines "would only pad the short cards without making any row more even".
+        That is wrong in a grid. A row is as tall as its TALLEST card, so one long take inflates every
+        card beside it and the ones without a take end up mostly blank space -- the variance the reserve
+        removes. Three lines rather than two because the blurb is capped at 140 characters, which is about
+        three lines at this width, so almost nothing is actually cut.
 
         `blurb_hidden` is checked here as well as in the summary's count: this queryset is not
         `visible_blurbs()`, and a staff-hidden take must not surface on the author's own profile just
         because the filter lives somewhere else.{% endcomment %}
-        {% if r.blurb and not r.blurb_hidden %}
-        <p class="pp-rcard__take">{{ r.blurb }}</p>
-        {% endif %}
+        {% with take=r.blurb %}
+        <p class="pp-rcard__take">
+            {% if take and not r.blurb_hidden %}
+            <span class="pp-rcard__quote" aria-hidden="true">&ldquo;</span>
+            <span class="pp-rcard__take-txt">{{ take }}</span>
+            {% endif %}
+        </p>
+        {% endwith %}
 
         <div class="pp-rcard__foot">
             {% comment %}Their score against everyone else's, and the only comparison on the card. Present

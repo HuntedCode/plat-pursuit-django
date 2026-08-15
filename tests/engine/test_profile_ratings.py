@@ -387,6 +387,43 @@ def test_the_landscape_art_costs_no_extra_query(client):
     assert not any('raw_response' in q['sql'] for q in ctx.captured_queries)
 
 
+def test_every_card_reserves_room_for_a_quick_take(client):
+    """A grid row is as tall as its TALLEST card, so one long take inflates every card beside it and the
+    ones without a take end up mostly blank. Reserving three lines on every card is what removes that --
+    this file's first cut argued the opposite and produced exactly the raggedness it was trying to avoid.
+
+    Three rather than two because the blurb is capped at 140 characters, which is about three lines at
+    this width, so the clamp almost never actually bites."""
+    profile = ProfileFactory(is_linked=True)
+    _rated(profile, title='Silent')                                   # no take at all
+    _rated(profile, title='Chatty', blurb='Worth every hour of it.')  # a short one
+
+    body = client.get(_url(profile), **CF).content.decode()
+    css = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+    take = css[css.index('.pp-rcard__take {'):]
+    take = take[:take.index('}')]
+
+    # The block is rendered on BOTH cards -- reserving nothing on the silent one would defeat the point.
+    # Matched on the exact class: a bare substring also catches `pp-rcard__take-txt` inside it.
+    assert body.count('class="pp-rcard__take"') == 2
+    assert 'min-height: calc(3 * 1.45em)' in take, 'the take no longer reserves its lines'
+
+
+def test_the_take_uses_the_plat_cards_quote_mark(client):
+    """The same mark on both surfaces, so a take looks like a take wherever you meet it. It replaced a
+    bordered, tinted block: with the card's edge and the stamp both carrying colour, a third framed panel
+    was more chrome than the sentence inside it."""
+    profile = ProfileFactory(is_linked=True)
+    _rated(profile, title='Quoted', blurb='Brilliant, and never again.')
+
+    body = client.get(_url(profile), **CF).content.decode()
+
+    assert 'pp-rcard__quote' in body
+    assert '&ldquo;' in body or '“' in body
+    plat = (ROOT / 'templates' / 'shareables' / 'plat_card.html').read_text(encoding='utf-8')
+    assert '&ldquo;' in plat, 'the plat card stopped using the mark this one was matched to'
+
+
 def test_the_quick_take_is_rendered_whole(client):
     """The take is capped at 140 characters at the source, so there is nothing worth truncating -- and
     clipping the one part of a rating that is not a number, on the tab that exists to show what someone

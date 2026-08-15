@@ -782,15 +782,36 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* Their words, at their real length. The blurb is capped at 140 characters at the source, so there is
-   nothing here worth truncating -- and truncating the one part of a rating that is not a number, on the
-   tab that exists to show what someone thought, would cut exactly the thing the reader came for. */
+/* Their words, behind the plat card's big opening quote -- the same mark on both surfaces, so a take
+   looks like a take wherever you meet it. The quote replaced a bordered, tinted block: with the card's
+   edge and the stamp both carrying colour, a third framed panel was more chrome than the sentence
+   inside it.
+
+   THREE LINES ARE RESERVED whether or not there is a take. A grid row is as tall as its tallest card, so
+   one long take inflates every card beside it and the takeless ones become mostly blank -- reserving is
+   what removes that variance rather than adding to it. Three because the blurb is capped at 140
+   characters, which is about three lines at this width, so the clamp almost never actually bites. */
+/* Sized and coloured like the game page's quick takes (`.gd-blurb__text`), so the same sentence is as
+   easy to read on either surface. UPRIGHT, not italic: the slant was costing legibility at this size for
+   nothing, now that a 1.5rem quote mark says "someone said this" far more plainly than a lean did. */
 .pp-rcard__take {
-    margin: 1px 0 0; padding: 7px 9px;
-    border-radius: var(--pp-radius-sm);
-    border-left: 2px solid color-mix(in oklab, var(--pp-text-mute) 30%, transparent);
-    background: color-mix(in oklab, var(--pp-bg-2) 35%, transparent);
-    font-size: 0.72rem; line-height: 1.45; font-style: italic; color: var(--pp-text-dim);
+    display: flex; align-items: flex-start; gap: 7px;
+    margin: 3px 0 0;
+    min-height: calc(3 * 1.45em);
+    font-size: 0.78rem; line-height: 1.45; color: var(--pp-text);
+}
+@media (min-width: 768px) { .pp-rcard__take { font-size: 0.84rem; } }
+.pp-rcard__quote {
+    flex: none; align-self: flex-start;
+    font-size: 1.5rem; line-height: 0.85;
+    color: color-mix(in oklab, var(--rec-c) 55%, transparent);
+}
+.pp-rcard__take-txt {
+    min-width: 0;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical;
+    /* A take is 140 characters of anything, including a URL or an unspaced run that would otherwise push
+       the card's grid track wider than its share. Same guard the game page's blurbs use. */
+    overflow-wrap: anywhere;
 }
 
 .pp-rcard__foot {
