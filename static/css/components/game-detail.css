@@ -1322,7 +1322,10 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__rec-n { font-size: 0.6rem; font-weight: 600; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
 .gd-cond__rec-from { font-size: 0.68rem; color: var(--pp-text-mute); }
 .gd-cond__count { font-size: 0.76rem; color: var(--pp-text-mute); }
-.gd-cond--empty .gd-cond__count { font-size: 0.84rem; color: var(--pp-text-dim); }
+/* On an UNRATED game this reads "Be the first to rate this." -- a nudge rather than a figure, so it comes
+   up a size. Reached through `:has()` because the count moved out of `.gd-cond` and down to the action
+   row, so it is no longer a descendant of the element carrying `--empty`. */
+.gd-rate__verdict:has(.gd-cond--empty) .gd-cond__count { font-size: 0.84rem; color: var(--pp-text-dim); }
 
 /* Rating spread: a compact column chart that shares the metrics row with the quality tiles (framed like a
    fourth tile). One column per exact 0.5 step (0.5 left -> 5.0 right). Each column is a VISIBLE slot sitting
@@ -1401,7 +1404,11 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__you-scores b { font-size: 0.86rem; font-weight: 800; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
 .gd-cond__you-vs { margin: 0 5px; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
 
-.gd-rate__foot { display: flex; justify-content: flex-end; margin-top: 14px; }
+/* The rating count sits at the far left of this row, opposite the action. `space-between` rather than a
+   margin so the row still puts the button on the right when there is no count to show (an unrated game a
+   visitor cannot rate renders the span empty), and still puts the count on the left when there is no
+   button (already rated, or not eligible). */
+.gd-rate__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
 .gd-rate__cta { flex-shrink: 0; }
 
 /* ---- Desktop (lg+): scale the aggregate up so it fills the width -- the tab previously had NO desktop tier.

@@ -150,6 +150,27 @@ def test_the_split_shows_every_option_including_the_empty_ones():
     assert 'gd-cond__rec is-none' in html
 
 
+def test_the_total_sits_with_the_action_not_beside_the_answered_count():
+    """Two counts touching read as one confused sentence: "from 5 ratings that answered" and "12 ratings"
+    are DIFFERENT denominators (every rating, versus only those carrying a recommendation), and the reader
+    has to work that out before either means anything. The total moved down to the action row, with a row
+    of content between them.
+
+    The live-update has to follow it. `[data-rate-count]` was queried from the conditions grid, which the
+    total is no longer inside -- and that failure is silent: the figure simply stops updating after a save
+    and is right again on reload."""
+    html = _conditions(dict(_AVERAGES, recommendation_split=_SPLIT))
+    foot = html[html.index('gd-rate__foot'):]
+
+    assert 'data-rate-count' in foot, 'the total is not in the action row'
+    assert 'data-rate-count' not in html[:html.index('gd-rate__foot')], 'the total is still in the hero too'
+
+    js = (ROOT / 'static' / 'js' / 'game-detail.js').read_text(encoding='utf-8')
+    assert "panel.querySelector('[data-rate-count]')" in js, (
+        'the live-update looks for the total inside the conditions grid, which no longer contains it'
+    )
+
+
 def test_the_shares_add_up_to_a_hundred():
     """Three percentages printed side by side are expected to total. Naive rounding does not: three equal
     shares give 33/33/33 and read as a missing percent, and 1/3/3 of seven gives 14/43/43 and reads as an

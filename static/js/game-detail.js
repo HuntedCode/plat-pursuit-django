@@ -1530,7 +1530,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const sc = card.querySelector('[data-cond-score]'); if (sc) { countTo(sc, avg.avg_rating, 1); sc.classList.add('pp-tally--glow'); }
                 const st = card.querySelector('[data-cond-stars]');
                 if (st) { st.style.setProperty('--fill', (avg.avg_rating / 5 * 100) + '%'); st.setAttribute('aria-label', avg.avg_rating.toFixed(1) + ' out of 5'); }
-                const ct = card.querySelector('[data-rate-count]');
+                // From the PANEL, not the conditions grid: the total moved down to the action row so it no
+                // longer sits beside the split's own "from N that answered" (two counts touching read as
+                // one confused sentence). Everything else here is still queried from `card`.
+                const ct = panel.querySelector('[data-rate-count]');
                 if (ct && avg.count != null) ct.textContent = avg.count.toLocaleString() + ' rating' + (avg.count === 1 ? '' : 's');
                 const hrs = card.querySelector('[data-cond-hours]'); if (hrs && avg.avg_hours != null) countTo(hrs, Math.round(avg.avg_hours), 0);
                 const byStat = { difficulty: avg.avg_difficulty, grindiness: avg.avg_grindiness, fun: avg.avg_fun };

@@ -68,8 +68,6 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
             </div>
             <span class="gd-cond__rec-from">from <span data-cond-rec-n>{{ averages.recommendation_split.answered|intcomma }}</span> rating{{ averages.recommendation_split.answered|pluralize }} that answered</span>
         </div>
-
-        <span class="gd-cond__count" data-rate-count>{% if averages %}{{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}Be the first to rate this.{% endif %}</span>
     </div>
 
     {% comment %} Conditions: one icon tile per quality; the verdict word is the headline, the number a quiet
@@ -130,7 +128,17 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
     {% endif %}
 </div>
 
+{% comment %}The total sits down here rather than in the hero, opposite the action.
+
+It used to follow the split's own "from N ratings that answered", and two counts touching read as one
+confused sentence -- the reader has to work out that they are different denominators (every rating, versus
+only those carrying a recommendation) before either means anything. A row of content between them is what
+makes that legible.
+
+Its `data-rate-count` hook is unchanged, but the live-update now looks for it from the PANEL rather than
+from the conditions grid, because it no longer lives inside that grid.{% endcomment %}
 <div class="gd-rate__foot">
+    <span class="gd-cond__count" data-rate-count>{% if averages %}{{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}Be the first to rate this.{% endif %}</span>
     {% if can_rate %}
     <button type="button" class="gd-btn gd-btn--primary gd-rate__cta quick-rate-btn"
             data-concept-id="{{ concept_id }}"
