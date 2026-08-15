@@ -44,13 +44,8 @@ from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
 from users.subscription_admin_views import SubscriptionAdminView
 from fundraiser.views import FundraiserView, DonationSuccessView, FundraiserAdminView, BadgeRevealView
 from api.profile_card_views import serve_profile_sig
-from notifications.views import (
-    NotificationInboxView,
-    AdminNotificationCenterView,
-    AdminNotificationHistoryView,
-    AdminScheduledNotificationsView,
-    AdminCancelScheduledView,
-)
+# Notifications are HIDDEN pending their rebuild (2026-08); every view in `notifications/views.py` is
+# parked unrouted. See the redirect block further down for why the URL names survive.
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -231,7 +226,22 @@ urlpatterns = [
     path('dashboard/shareables/profile-card/', RedirectView.as_view(pattern_name='my_shareables_profile_card', permanent=True, query_string=True)),
     path('dashboard/shareables/platinum-grid/', RedirectView.as_view(pattern_name='platinum_grid', permanent=True, query_string=True)),
 
-    path('notifications/', NotificationInboxView.as_view(), name='notification_inbox'),
+    # ── Notifications: HIDDEN pending their rebuild (2026-08) ────────────────────────────────────────
+    # The system comes back rebuilt to the current standard rather than being restyled, so every door is
+    # closed while the models, the data and every PRODUCER (sync, badges, reviews, roadmap notes,
+    # donations, subscriptions) stay exactly as they are. Rows keep accruing behind the closed door,
+    # which is what makes this reversible: restoring it is putting back these five patterns, the API
+    # block in api/urls.py, and the navbar bell.
+    #
+    # 302, never 301: a permanent redirect is cached indefinitely and would keep bouncing people to the
+    # homepage long after the rebuild ships -- specifically the people who used notifications most,
+    # because they are the ones holding the bookmarks.
+    #
+    # The NAMES are load-bearing and must not be dropped. `admin_notification_center` is reversed by
+    # three unrelated staff pages (users/admin/subscription_dashboard.html, fundraiser/fundraiser_admin
+    # .html, fundraiser/badge_reveal.html), so removing it is a NoReverseMatch -- a hard 500 on three
+    # pages that have nothing to do with notifications.
+    path('notifications/', RedirectView.as_view(pattern_name='home', permanent=False), name='notification_inbox'),
 
     # Leaderboards -- their own hub as of 2026-08 (they were the substance left in Community).
     # `/leaderboards/` is the landing; the type segment stays on the per-series route so a second kind of
@@ -380,10 +390,12 @@ urlpatterns = [
     path('staff/review-moderation/action/<int:report_id>/', ReviewModerationActionView.as_view(), name='review_moderation_action'),
     path('staff/review-moderation/log/', ReviewModerationLogView.as_view(), name='review_moderation_log'),
     path('staff/game-families/', GameFamilyManagementView.as_view(), name='game_family_management'),
-    path('staff/notifications/', AdminNotificationCenterView.as_view(), name='admin_notification_center'),
-    path('staff/notifications/history/', AdminNotificationHistoryView.as_view(), name='admin_notification_history'),
-    path('staff/notifications/scheduled/', AdminScheduledNotificationsView.as_view(), name='admin_scheduled_notifications'),
-    path('staff/notifications/scheduled/<int:pk>/cancel/', AdminCancelScheduledView.as_view(), name='admin_cancel_scheduled'),
+    # Notification staff pages: HIDDEN with the rest of the system (see the note on `notification_inbox`
+    # above). Names kept -- three unrelated staff pages reverse `admin_notification_center`.
+    path('staff/notifications/', RedirectView.as_view(pattern_name='home', permanent=False), name='admin_notification_center'),
+    path('staff/notifications/history/', RedirectView.as_view(pattern_name='home', permanent=False), name='admin_notification_history'),
+    path('staff/notifications/scheduled/', RedirectView.as_view(pattern_name='home', permanent=False), name='admin_scheduled_notifications'),
+    path('staff/notifications/scheduled/<int:pk>/cancel/', RedirectView.as_view(pattern_name='home', permanent=False), name='admin_cancel_scheduled'),
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
     # Bookmark-only staff analytics dashboard. Not linked from nav.
     # CSP violation reporting. Ingest endpoint MUST live at the project root

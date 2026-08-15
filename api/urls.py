@@ -6,12 +6,14 @@ from .views import (
     AgreeToGuidelinesView
 )
 # Checklist API views removed during roadmap migration (DB tables retained)
-from .notification_views import (
-    NotificationListView, NotificationMarkReadView, NotificationMarkAllReadView,
-    AdminSendNotificationView, NotificationBulkDeleteView,
-    NotificationDeleteView, NotificationRatingView,
-    AdminNotificationPreviewView, AdminTargetCountView, AdminUserSearchView
-)
+# Nine of the ten notification views are no longer imported: their paths are withdrawn while the system
+# is hidden, and an import with no route is just a name to trip over later. They are untouched in
+# api/notification_views.py -- restoring the system restores this import alongside the paths.
+#
+# AdminUserSearchView is the exception and stays routed: templates/trophies/badge_creation.html uses it
+# as its user picker, so withdrawing it would silently break an unrelated staff tool. It belongs
+# somewhere neutral; rehoming it is a follow-up, not a reason to leave a door open here.
+from .notification_views import AdminUserSearchView
 from .shareable_views import (
     PlatCardHTMLView, PlatCardPNGView, LegacyPlatinumCardHTMLView, LegacyPlatinumCardPNGView,
 )
@@ -130,21 +132,17 @@ urlpatterns = [
     # Community guidelines
     path('guidelines/agree/', AgreeToGuidelinesView.as_view(), name='guidelines-agree'),
 
-    # Notification endpoints
-    path('notifications/', NotificationListView.as_view(), name='notification-list'),
-    path('notifications/mark-all-read/', NotificationMarkAllReadView.as_view(), name='notification-mark-all-read'),
-    path('notifications/bulk-delete/', NotificationBulkDeleteView.as_view(), name='notification-bulk-delete'),
-    path('admin/notifications/send/', AdminSendNotificationView.as_view(), name='admin-send-notification'),
-    path('admin/notifications/preview/', AdminNotificationPreviewView.as_view(), name='admin-notification-preview'),
-    path('admin/notifications/target-count/', AdminTargetCountView.as_view(), name='admin-notification-target-count'),
+    # ── Notifications: WITHDRAWN while the system is hidden (2026-08) ───────────────────────────────
+    # Nine routes gone -- list, mark-read, mark-all-read, bulk-delete, delete, the rating endpoint, and
+    # the three admin compose endpoints. Nothing can read or write into a system with no door, which is
+    # what the rebuild would otherwise have to reconcile. The views are parked in
+    # api/notification_views.py; the models and every producer are untouched.
+    #
+    # `notification-rating` went with them, which also removes the SECOND server-side writer of
+    # UserConceptRating -- `GroupRatingView` is now the only one.
+    #
+    # The user-search endpoint is the deliberate exception (see the import note above).
     path('admin/notifications/user-search/', AdminUserSearchView.as_view(), name='admin-notification-user-search'),
-
-    # Notification rating endpoint (for platinum notifications)
-    path('notifications/<int:pk>/rating/', NotificationRatingView.as_view(), name='notification-rating'),
-
-    # Generic notification detail routes (must be after more specific routes)
-    path('notifications/<int:pk>/read/', NotificationMarkReadView.as_view(), name='notification-mark-read'),
-    path('notifications/<int:pk>/', NotificationDeleteView.as_view(), name='notification-delete'),
 
     # Plat cards. Keyed on the game's default TrophyGroup -- a card is earned by completing that group,
     # platinum or not (see core/services/completion_card_service.py).

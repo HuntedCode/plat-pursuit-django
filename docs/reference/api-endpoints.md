@@ -56,25 +56,15 @@ Staff-authored platinum guides on game detail pages. Replaces the old Checklists
 | POST | `/api/v1/roadmap/<roadmap_id>/upload-image/` | Writer+ on that roadmap | Upload an inline image for the editor (scoped per-roadmap so trial-writer escalation works) |
 | GET | `/api/v1/youtube/attribution-lookup/?url=<youtube_url>` | Login | Resolve a YouTube URL to its channel name + URL via oEmbed (used by the editor's live attribution preview). Rate-limited 30/min/user. Returns `{"channel_name": str, "channel_url": str}` (empty strings on miss). |
 
-### Notifications
+### Notifications — WITHDRAWN (2026-08)
+
+The notification system is **hidden pending its rebuild** ([notification-system.md](../architecture/notification-system.md)). Nine routes are unrouted and now 404: `GET /api/v1/notifications/`, `mark-all-read/`, `bulk-delete/`, `<pk>/read/`, `DELETE <pk>/`, `<pk>/rating/`, and the three admin compose endpoints (`send/`, `preview/`, `target-count/`). The views are parked in `api/notification_views.py`; the models, the data and every producer are untouched.
+
+`POST /api/v1/notifications/<pk>/rating/` is worth calling out separately: it was the **second server-side writer of `UserConceptRating`**, and withdrawing it leaves `GroupRatingView` as the only one.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/api/v1/notifications/` | Login | List notifications |
-| POST | `/api/v1/notifications/mark-all-read/` | Login | Mark all read |
-| POST | `/api/v1/notifications/bulk-delete/` | Login | Bulk delete |
-| POST | `/api/v1/notifications/<pk>/read/` | Login | Mark single read |
-| DELETE | `/api/v1/notifications/<pk>/` | Login | Delete single |
-| POST | `/api/v1/notifications/<pk>/rating/` | Login | Rate platinum notification |
-
-### Admin Notifications
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/v1/admin/notifications/send/` | Staff | Send notification to users |
-| POST | `/api/v1/admin/notifications/preview/` | Staff | Preview notification |
-| GET | `/api/v1/admin/notifications/target-count/` | Staff | Count target audience |
-| GET | `/api/v1/admin/notifications/user-search/` | Staff | Search users for targeting |
+| GET | `/api/v1/admin/notifications/user-search/` | Staff | Search users for targeting. **Still routed** — the Badge Creation page uses it as its user picker, so it outlived the block it belonged to. Wants rehoming somewhere neutral. |
 
 ### Shareable Images
 

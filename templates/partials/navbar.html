@@ -2,8 +2,8 @@
 {% comment %} Navbar (rebuilt to the --pp-* house style, chrome-audit fold). Calm matte frame, glow by state.
 The old hotbar is ABSORBED here: the avatar is status-aware (ring = sync state) and opens a unified panel
 (sync progress + trophy loot + Sync Now, then the account menu). navsync.js drives the sync bits via the
-data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search + notification dropdowns keep their exact
-JS hooks (navbar-search.js / notifications.js); only their trigger buttons are restyled. {% endcomment %}
+data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keeps its exact JS hooks
+(navbar-search.js); only its trigger button is restyled. {% endcomment %}
 <nav class="pp-nav" role="navigation" aria-label="Main navigation">
 <div class="pp-nav__inner container mx-auto">
 
@@ -76,26 +76,9 @@ JS hooks (navbar-search.js / notifications.js); only their trigger buttons are r
 
     <div class="pp-nav__end">
 
-        {# Notifications (notifications.js: #notification-dropdown / -badge / -list / mark-all-read). #}
-        {% if user.is_authenticated %}
-        <div class="dropdown dropdown-end" id="notification-dropdown">
-            <button tabindex="0" class="pp-navicon" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
-                <span id="notification-badge" class="pp-navicon__badge hidden" aria-live="polite">0</span>
-            </button>
-            <div tabindex="0" class="dropdown-content z-[100] card card-compact w-80 md:w-96 p-4 shadow-2xl bg-base-200 mt-3 border-2 border-base-300 max-md:fixed max-md:top-16 max-md:left-2 max-md:right-2 max-md:w-auto">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="font-bold text-lg">Notifications</h3>
-                    <button id="mark-all-read-btn" class="btn btn-xs btn-ghost" aria-label="Mark all as read">Mark all read</button>
-                </div>
-                <div id="notification-list" class="space-y-2 max-h-96 overflow-y-auto">
-                    <div id="notification-loading" class="flex justify-center p-4"><span class="loading loading-spinner loading-md"></span></div>
-                    <div id="notification-empty" class="text-center p-4 hidden"><p class="text-base-content/60">No notifications yet</p></div>
-                </div>
-                <a href="{% url 'notification_inbox' %}" class="btn btn-primary btn-sm mt-3 w-full">View All</a>
-            </div>
-        </div>
-        {% endif %}
+        {% comment %}The notification bell stood here until 2026-08. It is gone with the rest of the
+        system, which comes back rebuilt rather than restyled -- see the redirect block in
+        plat_pursuit/urls.py. It was also the last DaisyUI dropdown in the navbar.{% endcomment %}
 
         {# Premium CTA (non-premium authed) #}
         {% if user.is_authenticated and not user.premium_tier %}

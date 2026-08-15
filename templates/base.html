@@ -212,7 +212,8 @@
     <script src="{% static 'js/utils.js' %}"></script>
     <script src="{% static 'js/medallion.js' %}"></script>
     <script src="{% static 'js/celebrations.js' %}"></script>
-    <script src="{% static 'js/notifications.js' %}"></script>
+    {% comment %}notifications.js was here, on every page of the site. It fetched an unread count per page
+    load for every authed visitor; it went with the notification system in 2026-08.{% endcomment %}
     <script src="{% static 'js/navsync.js' %}"></script>
     <script src="{% static 'js/subnav.js' %}"></script>
     <script src="{% static 'js/main.js' %}"></script>

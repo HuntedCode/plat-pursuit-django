@@ -34,6 +34,7 @@
 | # | Task | When | Done |
 |---|------|------|------|
 | 1 | **Register `recompute_tag_covers` cron** — new daily Render Cron Job (`python manage.py recompute_tag_covers`, 03:45 UTC) keeping the genre/theme tile covers fresh as games sync. Documented in [cron-jobs.md](../../guides/cron-jobs.md). The one-time backfill is task #4 above; this is the ongoing schedule. | Launch (Render dashboard) | ☐ |
+| 2 | **PAUSE the `process_scheduled_notifications` cron** — the notification system is [hidden pending rebuild](rebuild-playbook.md), and this hourly job is the only outbound delivery path still live. With the staff compose UI unrouted nothing new can be scheduled, but the job would keep delivering rows already queued, sending people to a page that redirects home. Un-pausing is the same toggle when the rebuild ships. | Launch (Render dashboard) | ☐ |
 
 ### Manual config (dashboards, env, third-party)
 
@@ -104,6 +105,13 @@ Every item here is deploy-side; the code change is complete and tested.
 - [ ] **Check PlatBot** for hardcoded web URLs. It consumes `/api/v1/*` (unaffected), but any message
       template that links a hunter to their profile or to Rate My Games needs the new path. Redirects
       cover it either way; this is about avoiding a needless hop in a bot people use constantly.
+- [ ] **Grep PlatBot for `/api/v1/notifications`** before the withdrawn notification routes reach prod.
+      Nine of them now 404, and unlike the redirected pages an unrouted API path has no soft landing.
+      Nothing in this repo suggests PlatBot polls them (the Discord side is push, via
+      `discord_notifications.py` webhooks, and the documented consumption is `/api/community-stats/*`),
+      but the Game Lists retirement proved its equivalent claim by grepping the bot's tree rather than
+      reasoning about it -- and "notification" will be far noisier there than "lists" was, since
+      discord.py uses the word itself. Grep for the PATH, not the word.
 - [ ] **Cloudflare cache purge** for `/community/*` so cached 200s aren't served over the new 301s.
 - [ ] **Confirm the origin guard covers the new profile paths in prod.** The guard is skipped when
       `DEBUG`/`IS_BETA`, so its behaviour is only real on prod: a direct-origin GET of

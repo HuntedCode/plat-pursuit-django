@@ -10,7 +10,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 |------------|---------|-----------|--------------|
 | Every 30 min | `refresh_profiles` | Every 30 minutes | TokenKeeper must be running to process queued syncs |
 | Top of every hour | `refresh_homepage_hourly` | Hourly | None |
-| Top of every hour | `process_scheduled_notifications` | Hourly | None |
+| ~~Top of every hour~~ | ~~`process_scheduled_notifications`~~ | **PAUSED (2026-08)** | Notification system hidden |
 | Every 6 hours | `update_leaderboards` | Every 6 hours | Badge data should be reasonably current |
 | Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
@@ -81,7 +81,9 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 - **Idempotency**: Fully safe to re-run. It reconciles the released set to the current count each run (forward-only), and the event row is locked so overlapping runs can't double-release. A missed run self-heals on the next.
 - **Failure impact**: Artwork reveals lag behind the true community count until the next successful run; the banner/page show the last stored count. No data loss.
 
-### process_scheduled_notifications
+### process_scheduled_notifications — PAUSED (2026-08)
+
+> Paused on Render while the notification system is [hidden pending rebuild](../architecture/notification-system.md). This was the only outbound delivery path still live, and with the staff compose UI unrouted nothing new can be scheduled anyway — but the job would keep delivering rows already queued. The command and its schedule are otherwise unchanged; un-pausing is a dashboard toggle.
 
 - **Schedule**: Every hour
 - **Command**: `python manage.py process_scheduled_notifications`
