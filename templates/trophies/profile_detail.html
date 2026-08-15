@@ -180,6 +180,26 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
                     modal.hidden = false;
                     var dialog = modal.querySelector('.pp-detail-modal__dialog');
                     if (dialog) { dialog.focus(); }
+
+                    // Swipe down to close, the same gesture every other sheet on the site offers -- the
+                    // badge peeks, the contract modal, the plat-card share sheet. This one had been the
+                    // odd one out, closable only by the X or the scrim.
+                    //
+                    // Wired HERE rather than once at init: `#act-day-modal` is HTMX-swapped per day, so
+                    // the dialog is a fresh node every time and a single wiring would bind a node that is
+                    // already gone. Adding `.pp-dismissable` is also what surfaces the grabber pill, so a
+                    // sheet never advertises a gesture it does not honour.
+                    //
+                    // The dialog is its own scroll container (`max-height: 88vh; overflow-y: auto`), which
+                    // the helper already accounts for: it walks up from the touch target and refuses to
+                    // arm if anything on the way is scrolled, so reading a long day scrolls rather than
+                    // dragging the sheet off.
+                    if (dialog && PlatPursuit.dismissableSheet) {
+                        PlatPursuit.dismissableSheet(dialog, {
+                            scrim: modal.querySelector('.pp-detail-modal__scrim'),
+                            onClose: closeDay,
+                        });
+                    }
                 });
 
                 panel.addEventListener('click', function (e) {

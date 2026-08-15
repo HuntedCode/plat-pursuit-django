@@ -300,6 +300,13 @@
    posters, which is the room the tiered structure exists to give them. */
 .pp-actday .pp-detail-modal__dialog { width: min(1040px, 100%); max-height: 88vh; overflow-y: auto; }
 .pp-actday__head { padding: 4px 4px 12px; border-bottom: 1px solid var(--pp-divider, var(--pp-border)); margin-bottom: 12px; }
+/* Room for the swipe grabber, touch only. The shared `.pp-dismissable::before` pill floats at the
+   dialog's top (9px) and would otherwise sit on the date. Same treatment the quick-rate modal and the
+   plat-card sheet already use, and keyed on `.pp-dismissable` so it only applies once the gesture is
+   actually wired -- no dead padding on a sheet that cannot be swiped. */
+@media (hover: none) and (pointer: coarse) {
+    .pp-actday .pp-detail-modal__dialog.pp-dismissable .pp-actday__head { padding-top: 16px; }
+}
 .pp-actday__date { margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--pp-text); }
 @media (min-width: 768px) { .pp-actday__date { font-size: 1.25rem; } }
 .pp-actday__stats { margin: 4px 0 0; font-size: 0.76rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }

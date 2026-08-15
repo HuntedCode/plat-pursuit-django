@@ -1330,3 +1330,30 @@ def test_clear_re_renders_the_toolbar_not_just_the_results():
 
     # And the toolbar really is outside the results target, which is why that matters.
     assert tab.index('pp-tsearch') < tab.index('id="tab-results"')
+
+
+def test_the_day_modal_can_be_swiped_closed():
+    """It was the only sheet on the site without the gesture -- the badge peeks, the contract modal and the
+    plat-card share sheet all have it, so a day was closable only by the X or the scrim.
+
+    Wired inside the afterSwap handler rather than once at init, because `#act-day-modal` is HTMX-swapped
+    per day: the dialog is a fresh node every time, and a single wiring would bind one that is already
+    gone. The helper adds `.pp-dismissable`, which is what surfaces the grabber pill -- so a sheet can
+    never advertise a gesture it does not honour."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    page = (root / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')
+
+    swap = page[page.index("if (e.target.id !== 'act-day-modal')"):]
+    swap = swap[:swap.index('panel.addEventListener(\'click\'')]
+    assert 'PlatPursuit.dismissableSheet(dialog' in swap, 'the day modal has no swipe-to-close'
+    assert "scrim: modal.querySelector('.pp-detail-modal__scrim')" in swap, 'the scrim will not fade'
+    assert 'onClose: closeDay' in swap, 'the swipe does not run the same close the X does'
+
+    # And the grabber needs somewhere to sit: the pill floats at the dialog's top, over a header whose own
+    # padding is 4px. Touch-only, and keyed on `.pp-dismissable` so it cannot pad a sheet with no gesture.
+    css = (root / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+    assert '.pp-detail-modal__dialog.pp-dismissable .pp-actday__head' in css, (
+        'the swipe grabber will sit on top of the date'
+    )
