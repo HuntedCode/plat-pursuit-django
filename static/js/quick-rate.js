@@ -340,19 +340,20 @@
             modal.querySelectorAll('[data-gd-modal-close]:not([data-gd-qr-cancel])')
         );
 
-        var fields = attach(form, {
-            conceptId: o.conceptId,
-            groupId: o.groupId,
-            existing: o.existing,
-            blurb: o.blurb,
+        // PASSED THROUGH, not re-listed. This used to enumerate the handful of options the dialog knew
+        // about, which silently dropped every new one: `announcesSave` was the first, and it made Game
+        // Detail toast twice -- the host said it would announce the save, the flag never reached the
+        // controller, and the controller announced it as well.
+        //
+        // Only the three the DIALOG owns are overridden: a default title for the button, and the two
+        // callbacks it has to wrap so the modal closes before the host runs.
+        var fields = attach(form, Object.assign({}, o, {
             submitLabel: o.submitLabel || (o.existing ? 'Update rating' : 'Submit rating'),
-            hoursLabel: o.hoursLabel,
-            playtimeHint: o.playtimeHint,
             onSaved: function (data, payload) {
                 close();
                 if (o.onSaved) { o.onSaved(data, payload); }
             },
-        });
+        }));
 
         var title = el('gd-qr-title');
         if (title) { title.textContent = o.title || (o.existing ? 'Update your rating' : 'Rate this game'); }

@@ -630,6 +630,23 @@ def test_the_recommendation_offers_three_choices_not_four():
     assert 'bad_game_good_plat' not in bare
 
 
+def test_the_modal_wrapper_forwards_options_rather_than_re_listing_them():
+    """`QuickRate.open` is a thin dialog around `RatingFields.attach`, and it used to hand over a
+    hand-written subset of the options it knew about. Every option added after that was silently dropped
+    on the way through -- `announcesSave` was the first, and the symptom was Game Detail toasting TWICE:
+    the host said it would announce the save, the flag never arrived, and the controller announced it too.
+
+    It spreads now and overrides only what the dialog itself owns. This is the third hand-enumerated
+    object in this feature to lose a field it was never updated for (the prefill payload and the plat-card
+    rating dict were the others), which is why it is worth a test rather than a comment."""
+    js = (ROOT / 'static' / 'js' / 'quick-rate.js').read_text(encoding='utf-8')
+    call = js[js.index('var fields = attach(form,'):]
+
+    assert 'Object.assign({}, o' in call[:120], (
+        'QuickRate.open re-lists the options it forwards, so any new one is dropped on the way through'
+    )
+
+
 def test_every_host_of_the_shared_form_confirms_a_save():
     """The plat-card modal saved a rating and said nothing: the dialog closed, and the only sign was a
     preview redrawing a moment later. Two of the three hosts toasted; that one had been missed.
