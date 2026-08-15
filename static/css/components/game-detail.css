@@ -1287,17 +1287,40 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__score-n { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--pp-text); font-variant-numeric: tabular-nums; }
 .gd-cond--empty .gd-cond__score-n, .gd-cond--empty .gd-cond__of { color: var(--pp-text-mute); }
 .gd-cond__of { font-size: 0.9rem; font-weight: 700; color: var(--pp-text-mute); }
-/* The recommendation line: a verdict, so it takes a colour where the count beneath it stays muted. Its
-   own row rather than a tile -- it belongs with the score and the hours as a headline fact, not among the
-   three quality axes. `is-empty` collapses it entirely (no answers yet), which is every game until the
-   backlog clears; the element stays in the DOM so the live update only sets values. */
+/* The recommendation split: three shares of the same total, so they are laid out as equal columns rather
+   than as a sentence -- the comparison IS the information, and equal widths are what let it be read at a
+   glance instead of parsed.
+   `is-empty` collapses the whole block (nobody has answered yet), which is every game until the
+   recommendation backlog clears; it stays in the DOM so the live update only sets values. */
+.gd-cond__recs { display: flex; flex-direction: column; gap: 5px; margin-top: 9px; }
+.gd-cond__recs.is-empty { display: none; }
+.gd-cond__recrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+
 .gd-cond__rec {
-    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-    margin-top: 7px; font-size: 0.78rem; color: var(--pp-text-dim);
+    display: flex; flex-direction: column; align-items: center; gap: 1px; text-align: center;
+    padding: 7px 6px; border-radius: var(--pp-radius-sm);
+    background: color-mix(in oklab, var(--rec-c) 9%, transparent);
+    border: 1px solid color-mix(in oklab, var(--rec-c) 26%, transparent);
+    --rec-c: var(--pp-text-mute);
 }
-.gd-cond__rec.is-empty { display: none; }
-.gd-cond__rec svg { width: 15px; height: 15px; flex: none; color: var(--pp-success); }
-.gd-cond__rec b { font-size: 0.92rem; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+/* Same three tokens the form's options and the profile card's chip use, so an answer is the same colour
+   wherever it appears. */
+.gd-cond__rec[data-rec="worth_it"]           { --rec-c: var(--pp-success); }
+.gd-cond__rec[data-rec="good_game_bad_plat"] { --rec-c: var(--pp-warning); }
+.gd-cond__rec[data-rec="skip"]               { --rec-c: var(--pp-error); }
+/* An option nobody picked is drawn but held back -- present because a zero is information, quiet because
+   it is not a finding. Driven by a class rather than by matching the text, which CSS cannot do; the live
+   update toggles it alongside the figures. */
+.gd-cond__rec.is-none { opacity: 0.5; }
+
+/* Glyph beside the figure rather than above it: the icon says WHICH answer and the percentage says how
+   many, and reading them as one line is what makes the row scannable at three cells wide. */
+.gd-cond__rec-fig { display: inline-flex; align-items: center; gap: 4px; }
+.gd-cond__rec-fig svg { width: 15px; height: 15px; flex: none; color: var(--rec-c); }
+.gd-cond__rec-pct { font-size: 1.05rem; font-weight: 800; line-height: 1.1; color: var(--rec-c); font-variant-numeric: tabular-nums; }
+.gd-cond__rec-lbl { font-size: 0.62rem; font-weight: 600; line-height: 1.25; color: var(--pp-text-dim); }
+.gd-cond__rec-n { font-size: 0.6rem; font-weight: 600; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.gd-cond__rec-from { font-size: 0.68rem; color: var(--pp-text-mute); }
 .gd-cond__count { font-size: 0.76rem; color: var(--pp-text-mute); }
 .gd-cond--empty .gd-cond__count { font-size: 0.84rem; color: var(--pp-text-dim); }
 

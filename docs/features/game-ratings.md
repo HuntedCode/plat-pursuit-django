@@ -40,6 +40,7 @@ All four rating filters (`rating_tone` / `rating_verdict` / `rating_summary` / `
 | `static/css/components/profile-hero.css` | `.pp-taste*`, `.pp-rwall`, `.pp-rcard*` |
 | `static/css/components/stars.css` | `.pp-stars` — the shared fractional star bar (taste header, rating cards, quick-rate form) |
 | `templates/partials/_rating_fields.html` | The shared form fields, in the order both hosts lay out |
+| `templates/partials/_recommendation_icon.html` | One glyph per recommendation — thumbs for the two ends, a tilde for the qualified middle. Shared by the form and the community split |
 
 ## Profile Ratings tab
 
@@ -88,7 +89,7 @@ Rendered as three labelled tiles **across one row**, never a segmented strip: a 
 
 `recommendation_split` is computed inside `RatingService._compute_averages`, so it rides both existing cache entries with no new key and no new invalidation path, and reaches every consumer — including `GroupRatingView`'s JSON response, which is what the live-update reads.
 
-`recommend_pct` is `worth_it` alone — the middle option says the *game* is worth playing and the platinum is not, so folding it in would report the opposite of what those raters meant. The **denominator is answered ratings**, not all of them — counting the pre-field backlog as "would not recommend" would misreport a beloved game as divisive until it clears. The percentage is always printed **with its N**; there is no display floor.
+The card shows **all three options, including the ones nobody picked**: showing only the recommend share reports "everybody said Do it" and "most said Do it, one said skip" as 100% against 83%, when the dissent is often the interesting half — and a zero is a fact too. Each cell is glyph + percentage + label + raw count, dimmed when the count is zero. Percentages use **largest-remainder rounding** so the three sum to exactly 100 (naive rounding gives 33/33/33, which reads as a missing percent). The **denominator is answered ratings**, not all of them — counting the pre-field backlog as "would not recommend" would misreport a beloved game as divisive until it clears. The percentage is always printed **with its N**; there is no display floor.
 
 ## Data model
 

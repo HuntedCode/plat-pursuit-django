@@ -1,0 +1,31 @@
+{% comment %} One glyph per recommendation, in one file.
+
+    👍 green   Do it                     -- send someone after this platinum
+    ~  yellow  Great game, rough platinum -- the qualified answer
+    👎 red     Skip it                    -- don't
+
+Thumbs for the two ends because they are the universal signs for exactly this question, and a TILDE for
+the middle: "so-so" has no thumb, and the alternatives all pull the wrong way -- a half-thumb reads as a
+worse thumbs-up rather than a different answer, and a broken heart (what this first shipped as) says the
+game let you down when the middle option means the opposite, that the game was good and the platinum was
+not.
+
+Colour comes from `--rec-c` on the host, which every surface maps the same way (success / warning /
+error). The glyph carries no colour of its own, so an answer cannot end up green in one place and grey in
+another.
+
+Shared because the form, the community split on game detail, and anything that shows a verdict later must
+agree -- the same answer looking different in two places is the drift this whole feature keeps removing.
+
+Expects `value` (a UserConceptRating.RECOMMENDATIONS key).
+{% endcomment %}
+{% if value == 'worth_it' %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+{% elif value == 'good_game_bad_plat' %}
+{% comment %}A tilde, drawn rather than typed: as text it inherits the font's idea of where the baseline
+is and sits low against the two thumbs beside it. Two strokes so it reads as a wave at 15px, not a dash.
+{% endcomment %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14.5c1.6-3.6 3.2-3.6 4.8 0s3.2 3.6 4.8 0 3.2-3.6 4.8 0"/><path d="M3 8.5c1.6-3.6 3.2-3.6 4.8 0s3.2 3.6 4.8 0 3.2-3.6 4.8 0" opacity="0.35"/></svg>
+{% elif value == 'skip' %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+{% endif %}

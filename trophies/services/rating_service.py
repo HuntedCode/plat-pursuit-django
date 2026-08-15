@@ -11,6 +11,31 @@ from django.core.cache import cache
 from trophies.util_modules.language import calculate_trimmed_mean
 
 
+def _percentages(counts):
+    """Integer percentages that sum to exactly 100 (largest remainder).
+
+    Naive rounding is fine for one figure and visibly wrong for a set: three equal shares round to
+    33/33/33 and read as a missing percent, while 1/3/3 of 7 rounds to 14/43/43 and reads as an extra
+    one. These are printed side by side and expected to total, so the leftover is handed to whichever
+    options were rounded down hardest.
+
+    Returns all zeroes for an empty set rather than dividing by it.
+    """
+    total = sum(counts)
+    if not total:
+        return [0] * len(counts)
+
+    exact = [c / total * 100 for c in counts]
+    out = [int(v) for v in exact]
+    # Hand out what integer truncation left over, biggest fractional part first. Ties break on the
+    # earlier option, which keeps the result stable for identical inputs.
+    leftover = 100 - sum(out)
+    order = sorted(range(len(counts)), key=lambda i: (-(exact[i] - out[i]), i))
+    for i in order[:leftover]:
+        out[i] += 1
+    return out
+
+
 class RatingService:
     """Handles game rating aggregation and statistics."""
 
@@ -63,22 +88,30 @@ class RatingService:
         # in the database (<=5 rows back), and it rides the caller's existing cache entry because this
         # whole dict is what gets cached: no new key, no new invalidation path.
         #
-        # `recommend_pct` is `worth_it` alone. The middle option says the GAME is worth playing and the
-        # platinum is not, so folding it in would report the opposite of what those raters meant -- this
-        # figure is about the platinum, which is what the field rates.
+        # ALL THREE options, always -- including the ones nobody picked. A split that showed only the
+        # recommend share reports "everybody said Do it" and "most said Do it, one said skip it" as the
+        # same 100%-vs-83%, when the interesting part of a verdict is often the dissent. Zeroes are
+        # information too: no one calling a platinum a slog is a fact about the game.
         by_rec = dict(
             ratings_qs.exclude(recommendation='')
             .values_list('recommendation')
             .annotate(c=Count('id'))
         )
         answered = sum(by_rec.values())
+        counts = [by_rec.get(value, 0) for value, _label in UserConceptRating.RECOMMENDATIONS]
         aggregates['recommendation_split'] = {
-            'counts': {value: by_rec.get(value, 0) for value, _label in UserConceptRating.RECOMMENDATIONS},
+            # Ordered to match RECOMMENDATIONS so no display has to know the vocabulary itself: a reworded
+            # label, or a fourth option, reaches every surface without a template edit.
+            'options': [
+                {'value': value, 'label': label, 'count': count, 'pct': pct}
+                for (value, label), count, pct in zip(
+                    UserConceptRating.RECOMMENDATIONS, counts, _percentages(counts)
+                )
+            ],
             # The DENOMINATOR is answered ratings, not all of them: every rating written before the field
             # existed carries no answer, and counting those as "would not recommend" would misreport a
             # beloved game as divisive for as long as the backlog takes to clear.
             'answered': answered,
-            'recommend_pct': round(by_rec.get('worth_it', 0) / answered * 100) if answered else None,
         }
 
         hours_list = list(ratings_qs.values_list('hours_to_platinum', flat=True))

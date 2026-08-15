@@ -11,6 +11,9 @@ Pins:
     Game numbers (with the platinum tile gated on the game actually having a platinum), and the DLC selector
     is adaptive (pills for a few groups, a dropdown once there are many).
 """
+import re
+from pathlib import Path
+
 import pytest
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -20,6 +23,8 @@ from trophies.models import UserConceptRating
 from tests.factories import ConceptFactory, ConceptTrophyGroupFactory, GameFactory, ProfileFactory
 
 pytestmark = pytest.mark.django_db
+
+ROOT = Path(__file__).resolve().parents[2]
 
 _DEFINED = {'bronze': 10, 'silver': 5, 'gold': 2, 'platinum': 1}
 _NO_PLAT = {'bronze': 10, 'silver': 5, 'gold': 2}
@@ -122,30 +127,82 @@ _AVERAGES = {
 }
 
 
-def test_the_recommendation_split_prints_its_sample_size():
+_SPLIT = {
+    'options': [
+        {'value': 'worth_it', 'label': 'Do it', 'count': 4, 'pct': 80},
+        {'value': 'good_game_bad_plat', 'label': 'Great game, rough platinum', 'count': 1, 'pct': 20},
+        {'value': 'skip', 'label': 'Skip it', 'count': 0, 'pct': 0},
+    ],
+    'answered': 5,
+}
+
+
+def test_the_split_shows_every_option_including_the_empty_ones():
+    """Showing only the recommend share reports "everybody said Do it" and "most said Do it, one said
+    skip" as 100% against 83%, when the dissent is often the interesting half. A zero is a fact too:
+    nobody calling a platinum a slog says something about the game."""
+    html = _conditions(dict(_AVERAGES, recommendation_split=_SPLIT))
+
+    for value in ('worth_it', 'good_game_bad_plat', 'skip'):
+        assert f'data-rec-cell="{value}"' in html, f'{value} is missing from the split'
+    assert '80%' in html and '20%' in html and '0%' in html
+    # The option nobody picked is drawn but held back -- present, not a finding.
+    assert 'gd-cond__rec is-none' in html
+
+
+def test_the_shares_add_up_to_a_hundred():
+    """Three percentages printed side by side are expected to total. Naive rounding does not: three equal
+    shares give 33/33/33 and read as a missing percent, and 1/3/3 of seven gives 14/43/43 and reads as an
+    extra one. Largest-remainder hands the leftover to whichever options were rounded down hardest."""
+    from trophies.services.rating_service import _percentages
+
+    assert sum(_percentages([1, 1, 1])) == 100
+    assert sum(_percentages([1, 3, 3])) == 100
+    assert sum(_percentages([2, 1, 0])) == 100
+    assert _percentages([4, 1, 0]) == [80, 20, 0]
+    # Nobody has answered: zeroes, not a division by zero.
+    assert _percentages([0, 0, 0]) == [0, 0, 0]
+
+
+def test_one_glyph_per_answer_across_every_surface():
+    """The form and the community split show the same three answers, so they show the same three glyphs --
+    thumbs for the ends, a tilde for the qualified middle. Two copies is how the same verdict ends up
+    looking like two different things on two pages, which is the drift this feature keeps removing."""
+    from django.template.loader import render_to_string as render
+
+    for tpl in ('partials/_rating_fields.html',
+                'trophies/partials/game_detail/_rating_conditions.html'):
+        src = (ROOT / 'templates' / tpl).read_text(encoding='utf-8')
+        assert "'partials/_recommendation_icon.html'" in src, f'{tpl} draws its own recommendation glyphs'
+
+    # The middle answer is NOT a broken heart (what it first shipped as): that says the game let you down,
+    # when the option means the opposite -- the game was good and the platinum was not.
+    icon = (ROOT / 'templates' / 'partials' / '_recommendation_icon.html').read_text(encoding='utf-8')
+    body = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', icon, flags=re.S)
+    assert 'M19 14c1.49' not in body, 'the middle option is back to a broken heart'
+    for value in ('worth_it', 'good_game_bad_plat', 'skip'):
+        assert value in body, f'{value} has no glyph'
+        assert render('partials/_recommendation_icon.html', {'value': value}).strip(), f'{value} renders nothing'
+
+
+def test_the_split_prints_its_sample_size():
     """"80% would recommend" is honest at 40 ratings and misleading at 5, and there is no way to tell them
     apart without the N. Printed at every size rather than hidden behind a floor -- the same reason the
     doc parks the cross-game percentile: a figure that looks authoritative on thin data erodes trust."""
-    html = _conditions(dict(_AVERAGES, recommendation_split={
-        'counts': {'worth_it': 4, 'good_game_bad_plat': 1, 'skip': 0},
-        'answered': 5, 'recommend_pct': 80,
-    }))
+    html = _conditions(dict(_AVERAGES, recommendation_split=_SPLIT))
 
-    assert '80%' in html
     # The count sits in its own span (the live-update writes it), so the figure and the word it belongs to
     # are not adjacent in the source.
     assert 'data-cond-rec-n>5</span> rating' in html
-    assert 'gd-cond__rec is-empty' not in html
+    assert 'gd-cond__recs is-empty' not in html
 
 
 def test_the_split_is_absent_until_someone_answers():
     """Which is every game until the recommendation backlog clears. The element stays in the DOM (the
     live-update only sets values, it never builds), but it collapses."""
-    html = _conditions(dict(_AVERAGES, recommendation_split={
-        'counts': {}, 'answered': 0, 'recommend_pct': None,
-    }))
+    html = _conditions(dict(_AVERAGES, recommendation_split={'options': [], 'answered': 0}))
 
-    assert 'gd-cond__rec is-empty' in html
+    assert 'gd-cond__recs is-empty' in html
 
 
 def test_a_stale_cached_averages_dict_does_not_break_the_card():
@@ -153,7 +210,7 @@ def test_a_stale_cached_averages_dict_does_not_break_the_card():
     before it existed. A missing key must degrade to "no split", not to a traceback."""
     html = _conditions(_AVERAGES)   # no recommendation_split key at all
 
-    assert 'gd-cond__rec is-empty' in html
+    assert 'gd-cond__recs is-empty' in html
     assert '4.5' in html            # the rest of the card is unaffected
 
 

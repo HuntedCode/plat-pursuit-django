@@ -33,20 +33,41 @@ The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat
         </div>
         <p class="gd-cond__summary" data-cond-summary>{% if averages %}{{ averages|rating_summary }}{% else %}Not yet rated.{% endif %}</p>
 
-        {% comment %}The recommendation split -- the one figure here that is a VERDICT rather than an
-        average, and the only one that answers "should I". It sits with the count rather than among the
-        quality tiles, because it is a headline fact like the score and the hours, not a fourth axis.
+        {% comment %}The recommendation split -- the one thing here that is a VERDICT rather than an
+        average, and the only one that answers "should I". It sits in the hero band with the score and the
+        hours because it is a headline fact, not a fourth quality axis.
 
-        The N is printed beside the percentage at every sample size rather than hidden behind a floor:
-        "80% would recommend, from 5 ratings" is honest at five, where a bare 80% is not. Absent entirely
-        until someone has answered, which is every game until the backlog clears.{% endcomment %}
-        <span class="gd-cond__rec{% if not averages.recommendation_split.answered %} is-empty{% endif %}" data-cond-rec>
-            {% if averages.recommendation_split.answered %}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
-            <b data-cond-rec-pct>{{ averages.recommendation_split.recommend_pct }}%</b>
-            <span>would recommend the platinum, from <span data-cond-rec-n>{{ averages.recommendation_split.answered|intcomma }}</span> rating{{ averages.recommendation_split.answered|pluralize }}</span>
-            {% endif %}
-        </span>
+        ALL THREE options, including the ones nobody picked. Showing only the recommend share reports
+        "everybody said Do it" and "most said Do it, one said skip" as 100% against 83%, when the dissent
+        is often the interesting half -- and a zero is a fact too: nobody calling a platinum a slog says
+        something about the game.
+
+        Figure over word, the same idiom as the quality tiles above: the percentage leads, the raw count
+        is a quiet subscript, and the label says which answer it was. The N is stated once underneath at
+        every sample size rather than hidden behind a floor -- 80% is honest at five ratings and
+        misleading without them, and only the count tells the reader which they are looking at.
+
+        The block is present but collapsed until someone has answered (every game until the recommendation
+        backlog clears), so the live-update only ever sets values and never builds DOM.{% endcomment %}
+        <div class="gd-cond__recs{% if not averages.recommendation_split.answered %} is-empty{% endif %}" data-cond-rec>
+            <div class="gd-cond__recrow">
+                {% for opt in averages.recommendation_split.options %}
+                {% comment %}The glyph is the SHARED one the rating form uses for the same answer -- thumbs
+                for the two ends, a tilde for the qualified middle -- so a verdict looks the same wherever
+                it appears. Colour rides `--rec-c`, set per option below.{% endcomment %}
+                <span class="gd-cond__rec{% if not opt.count %} is-none{% endif %}" data-rec="{{ opt.value }}" data-rec-cell="{{ opt.value }}"
+                      title="{{ opt.count|intcomma }} of {{ averages.recommendation_split.answered|intcomma }} said &ldquo;{{ opt.label }}&rdquo;">
+                    <span class="gd-cond__rec-fig">
+                        {% include 'partials/_recommendation_icon.html' with value=opt.value %}
+                        <b class="gd-cond__rec-pct" data-rec-pct>{{ opt.pct }}%</b>
+                    </span>
+                    <span class="gd-cond__rec-lbl">{{ opt.label }}</span>
+                    <span class="gd-cond__rec-n" data-rec-count>{{ opt.count|intcomma }}</span>
+                </span>
+                {% endfor %}
+            </div>
+            <span class="gd-cond__rec-from">from <span data-cond-rec-n>{{ averages.recommendation_split.answered|intcomma }}</span> rating{{ averages.recommendation_split.answered|pluralize }} that answered</span>
+        </div>
 
         <span class="gd-cond__count" data-rate-count>{% if averages %}{{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}Be the first to rate this.{% endif %}</span>
     </div>

@@ -1548,14 +1548,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 // rather than blanking a figure that is merely stale.
                 const rec = avg.recommendation_split;
                 const recEl = card.querySelector('[data-cond-rec]');
-                if (recEl && rec) {
-                    const pct = recEl.querySelector('[data-cond-rec-pct]');
-                    const n = recEl.querySelector('[data-cond-rec-n]');
-                    if (rec.answered && pct && n) {
-                        pct.textContent = rec.recommend_pct + '%';
-                        n.textContent = rec.answered.toLocaleString();
-                        recEl.classList.remove('is-empty');
-                    }
+                if (recEl && rec && rec.answered) {
+                    // Driven off the server's ORDERED options list rather than off known slugs, so the
+                    // four display strings and the vocabulary itself stay server-side -- a reworded label
+                    // or a new option lands here without a JS edit.
+                    (rec.options || []).forEach((opt) => {
+                        const cell = recEl.querySelector('[data-rec-cell="' + opt.value + '"]');
+                        if (!cell) return;
+                        const pct = cell.querySelector('[data-rec-pct]');
+                        const n = cell.querySelector('[data-rec-count]');
+                        if (pct) pct.textContent = opt.pct + '%';
+                        if (n) n.textContent = opt.count.toLocaleString();
+                        // A share that just went from 0 to 1 stops being held back, and one that is still
+                        // 0 stays quiet -- both directions, or the dimming survives its own reason.
+                        cell.classList.toggle('is-none', !opt.count);
+                    });
+                    const total = recEl.querySelector('[data-cond-rec-n]');
+                    if (total) total.textContent = rec.answered.toLocaleString();
+                    recEl.classList.remove('is-empty');
                 }
                 // Live-update the rating-spread chart bars + per-bar counts (10 columns keyed on the
                 // integer half-step 1..10). Empty count -> clear to '' so the :empty label hides.
