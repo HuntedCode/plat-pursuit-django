@@ -11,7 +11,15 @@
 
     {% include 'trophies/partials/profile_detail/profile_detail_header.html' %}
 
-    {% include 'trophies/partials/profile_detail/profile_showcases_section.html' %}
+    {% comment %}Profile SHOWCASES sat here, above the tab bar, and are hidden pending a ground-up rebuild
+    of profile customization. Not deleted: every row is a choice a hunter made (their platinum case, their
+    favourite games, their showcased badges, their worn titles), and the models, the service and this
+    partial are all intact behind the closed door. Restoring the surface is putting this include and the
+    `rendered_showcases` context back.
+
+    They were deliberately visible to logged-out visitors -- a shared profile link is mostly opened that
+    way, which is the audience customization exists for -- so this is a product decision about an
+    unfinished surface, not a cost one.{% endcomment %}
 
     {% include 'partials/ad_unit.html' with ad_slot="1939843878" %}
 

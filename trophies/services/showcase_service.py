@@ -3,11 +3,21 @@ Profile Showcase service layer.
 
 Steam-style profile customization: users pick showcase types to feature on their
 profile (2 slots free, 5 premium). Each showcase type has a descriptor in
-SHOWCASE_REGISTRY with metadata, a provider function that fetches the display
-data, and an editor partial for user-controlled item selection.
+SHOWCASE_REGISTRY with metadata and a provider function that fetches the display
+data.
 
 New showcase types are added by registering a descriptor and implementing the
 provider function.
+
+HIDDEN 2026-08, pending a ground-up rebuild of profile customization. Nothing here
+changed and no row was touched -- the SURFACE is gone: the profile no longer renders
+the showcase band, /profile-editor/ redirects home, and the four write endpoints are
+withdrawn. This module is intact so restoring it is reopening those doors.
+
+(Each descriptor also used to carry an `editor_template` pointing into
+`trophies/partials/profile_editor/`. That directory has never existed and the key was
+read by nothing, so it was dropped rather than parked -- the real pickers are branches
+in profile_editor.html.)
 """
 import logging
 
@@ -312,7 +322,6 @@ SHOWCASE_REGISTRY = {
         'name': 'Platinum Trophy Case',
         'description': 'Display up to 20 of your favorite platinum trophies.',
         'template': 'trophies/partials/profile_showcases/showcase_platinum_case.html',
-        'editor_template': 'trophies/partials/profile_editor/picker_platinum_case.html',
         'provider': provide_platinum_case,
         'validator': None,
         'requires_premium': False,
@@ -324,7 +333,6 @@ SHOWCASE_REGISTRY = {
         'name': 'Favorite Games',
         'description': 'Feature up to 6 games from your library.',
         'template': 'trophies/partials/profile_showcases/showcase_favorite_games.html',
-        'editor_template': 'trophies/partials/profile_editor/picker_favorite_games.html',
         'provider': provide_favorite_games,
         'validator': _validate_favorite_games_config,
         'requires_premium': False,
@@ -336,7 +344,6 @@ SHOWCASE_REGISTRY = {
         'name': 'Badge Showcase',
         'description': 'Display up to 5 of your earned badges.',
         'template': 'trophies/partials/profile_showcases/showcase_badge.html',
-        'editor_template': 'trophies/partials/profile_editor/picker_badges.html',
         'provider': provide_badge_showcase,
         'validator': None,
         'requires_premium': True,
@@ -348,7 +355,6 @@ SHOWCASE_REGISTRY = {
         'name': 'Recent Platinums',
         'description': 'Your 6 most recently earned platinum trophies.',
         'template': 'trophies/partials/profile_showcases/showcase_recent_platinums.html',
-        'editor_template': None,
         'provider': provide_recent_platinums,
         'validator': None,
         'requires_premium': True,
@@ -362,7 +368,6 @@ SHOWCASE_REGISTRY = {
         'name': 'Title Showcase',
         'description': 'Show off up to 6 of your earned titles.',
         'template': 'trophies/partials/profile_showcases/showcase_titles.html',
-        'editor_template': 'trophies/partials/profile_editor/picker_titles.html',
         'provider': provide_title_showcase,
         'validator': _validate_title_showcase_config,
         'requires_premium': True,

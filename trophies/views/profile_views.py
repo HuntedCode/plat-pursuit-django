@@ -293,19 +293,6 @@ class ProfileDetailView(DetailView):
 
         return header_stats
 
-    def _build_timeline(self, profile):
-        """
-        Build timeline events for profile header.
-
-        Args:
-            profile: Profile instance
-
-        Returns:
-            list[dict] or None: Timeline events, or None if too few events
-        """
-        from trophies.services.timeline_service import get_cached_timeline_events
-        return get_cached_timeline_events(profile)
-
     def _build_games_tab_context(self, profile, per_page, page_number):
         """
         Build context for games tab with filtering and pagination.
@@ -806,34 +793,23 @@ class ProfileDetailView(DetailView):
             'recent_plat__trophy__game', 'rarest_plat__trophy__game'
         ).get(id=profile.id)
 
-        # Build shared context (header stats + timeline)
-        context['header_stats'] = self._build_header_stats(profile)
-
-        # Showcases render for everyone, anonymous included: a shared profile link is
-        # mostly opened logged-out, which is exactly the audience the customization is
-        # for. Every remaining provider is bounded by config or by a small owned table
-        # (<= 20 selected platinums, <= 6 game ids, <= 5 badges, <= 6 titles, 6
-        # date-indexed platinums), so the whole set is cheap regardless of account size.
-        # The one provider that was NOT bounded -- Rarest Trophies, which ranked the
-        # profile's entire earned set on a joined column -- was removed outright rather
-        # than gated, because its cost came from "rank everything I own" and not from
-        # who was looking. See showcase_service.py and migration 0275.
-        from trophies.services.showcase_service import ProfileShowcaseService
-        context['rendered_showcases'] = ProfileShowcaseService.get_rendered_showcases(profile)
-
-        # The timeline IS still gated. It is cached per profile, so a crawler
-        # enumerating distinct profiles has a 0% hit rate by construction -- per-entity
-        # caching cannot protect an enumerable URL space, only gating can. The partial
-        # (profile_timeline.html) self-hides on an empty value, so the anonymous page
-        # loses a section rather than gaining a hole.
+        # Two providers used to run here and neither does any more (2026-08).
         #
-        # The four Platinum Highlight cards in the header are deliberately NOT gated:
-        # they render a "None" empty state when absent, so skipping them would misreport
-        # the profile to logged-out visitors instead of hiding a section. They are also
-        # cheap (two denormed FKs, plus two lookups bounded by the profile's
-        # ProfileGame rows).
-        if self.request.user.is_authenticated and profile.psn_history_public:
-            context['timeline_events'] = self._build_timeline(profile)
+        # SHOWCASES are hidden pending a ground-up rebuild of profile customization -- the doors are
+        # closed but every row is intact, so restoring them is putting this call and the include back.
+        # They were deliberately ungated (a shared profile link is mostly opened logged-out, which is
+        # the audience the customization existed for), so hiding them is a product decision, not a
+        # cost one; the page simply got cheaper on the way.
+        #
+        # The TIMELINE is gone outright. It had rendered nowhere since the header rebuild dropped its
+        # include, while still being built and discarded on every authenticated render of every tab.
+        # Its content had rotted too: a third of its events read the dead legacy UserBadge tables.
+        #
+        # The four Platinum Highlight cards below are deliberately NOT gated and stay: they render a
+        # "None" empty state when absent, so skipping them would misreport the profile to logged-out
+        # visitors rather than hiding a section, and they are cheap (two denormed FKs plus two lookups
+        # bounded by the profile's ProfileGame rows).
+        context['header_stats'] = self._build_header_stats(profile)
 
         # Public game lists count (shown in tab header regardless of active tab)
         public_lists_qs = GameList.objects.filter(profile=profile, is_public=True, is_deleted=False)

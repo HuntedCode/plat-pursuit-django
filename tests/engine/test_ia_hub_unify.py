@@ -202,7 +202,11 @@ def test_my_pursuit_nav_shown_for_authed(client):
     ('/my-pursuit/research-panel/', '/research-panel/'),
     ('/my-pursuit/milestones/', '/milestones/'),
     ('/my-pursuit/titles/', '/titles/'),
-    ('/my-pursuit/profile-editor/', '/profile-editor/'),
+    # Straight to `/`, not to `/profile-editor/`. Profile customization is hidden (2026-08) and the
+    # editor 302s home itself, so pointing here at the canonical path would make every visitor holding
+    # the older bookmark take two hops to reach the same place. Still 301: the /my-pursuit/ -> root
+    # move is permanent whatever happens to customization. See test_showcases_hidden.py.
+    ('/my-pursuit/profile-editor/', '/'),
     ('/dashboard/stats/', '/stats/'),
     ('/dashboard/shareables/', '/shareables/'),
     ('/dashboard/shareables/platinums/', '/shareables/platinums/'),

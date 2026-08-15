@@ -37,7 +37,7 @@ sitemaps = {
     # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
     # for the revamp, since nothing else about the system was deleted.
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
@@ -181,7 +181,16 @@ urlpatterns = [
     path('research-panel/', RedirectView.as_view(url='/career/?view=contracts', permanent=True), name='research_panel'),
     path('milestones/', MilestoneListView.as_view(), name='milestones_list'),
     path('titles/', MyTitlesView.as_view(), name='my_titles'),
-    path('profile-editor/', ProfileEditorView.as_view(), name='profile_editor'),
+    # ── Profile customization: HIDDEN pending a ground-up rebuild ────────────────────────────────
+    # The showcase band is gone from the profile (see profile_detail.html) and this is the surface that
+    # edited it. TEMPORARY on purpose, so `permanent=False` (302): a 301 is cached by browsers
+    # indefinitely and would keep bouncing exactly the people who used customization most, since they
+    # are the ones holding the bookmark.
+    #
+    # The NAME stays resolvable -- the parked showcase section reverses it twice -- and the view, its
+    # template, its JS controller, the service and every row of user data are all intact. This is a
+    # curtain, not a demolition.
+    path('profile-editor/', RedirectView.as_view(url='/', permanent=False), name='profile_editor'),
     # Old /my-pursuit/* → new root canonicals (301). Bare hub path + logbook alias kept by name.
     path('my-pursuit/', RedirectView.as_view(pattern_name='home', permanent=True), name='my_pursuit_hub'),
     path('my-pursuit/collection/', RedirectView.as_view(pattern_name='badge_collection', permanent=True, query_string=True)),
@@ -190,7 +199,10 @@ urlpatterns = [
     path('my-pursuit/research-panel/', RedirectView.as_view(pattern_name='research_panel', permanent=True, query_string=True)),
     path('my-pursuit/milestones/', RedirectView.as_view(pattern_name='milestones_list', permanent=True, query_string=True)),
     path('my-pursuit/titles/', RedirectView.as_view(pattern_name='my_titles', permanent=True, query_string=True)),
-    path('my-pursuit/profile-editor/', RedirectView.as_view(pattern_name='profile_editor', permanent=True, query_string=True)),
+    # Straight to the homepage rather than through `profile_editor`, which now 302s there itself -- no
+    # double hop. Still 301, because the /my-pursuit/ -> root move IS permanent whatever happens to the
+    # editor. `query_string` dropped with it: there is no longer a target that reads one.
+    path('my-pursuit/profile-editor/', RedirectView.as_view(url='/', permanent=True)),
 
     # Dashboard hub: personal-utility pages live under /dashboard/.
     # The original Phase 10 commit put these under /tools/. The Phase 10a

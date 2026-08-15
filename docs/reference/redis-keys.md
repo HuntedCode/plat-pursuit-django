@@ -213,14 +213,6 @@ Position markers, not caches: they carry no payload and losing one costs coverag
 
 **Files**: `trophies/services/comment_service.py`, `trophies/services/checklist_service.py`
 
-### Profile Timeline
-
-| Key Pattern | TTL | Purpose |
-|-------------|-----|---------|
-| `profile:timeline:{profile_id}` | 3600s (invalidated on sync) | Serialized timeline events; deleted by `invalidate_timeline_cache()` |
-
-**Files**: `trophies/services/timeline_service.py`
-
 ### Notifications
 
 | Key Pattern | TTL | Purpose |

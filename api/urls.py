@@ -71,9 +71,6 @@ from .profile_card_views import (
     ProfileCardSettingsView, ProfileCardRegenerateTokenView,
     SetDisplayedBadgeView, ToggleShowcaseBadgeView, ReorderShowcaseBadgesView,
 )
-from .profile_showcase_views import (
-    AddShowcaseView, RemoveShowcaseView, ReorderShowcasesView, UpdateShowcaseConfigView,
-)
 from .community_stats_views import (
     CommunityStatsDayView, CommunityStatsTodayView, CommunityStatsRecordsView,
 )
@@ -242,11 +239,15 @@ urlpatterns = [
     path('badges/showcase/', ToggleShowcaseBadgeView.as_view(), name='toggle-showcase-badge'),
     path('badges/showcase/reorder/', ReorderShowcaseBadgesView.as_view(), name='reorder-showcase-badges'),
 
-    # Profile Showcase endpoints
-    path('profile/showcases/', AddShowcaseView.as_view(), name='add-showcase'),
-    path('profile/showcases/reorder/', ReorderShowcasesView.as_view(), name='reorder-showcases'),
-    path('profile/showcases/<slug:slug>/', RemoveShowcaseView.as_view(), name='remove-showcase'),
-    path('profile/showcases/<slug:slug>/config/', UpdateShowcaseConfigView.as_view(), name='update-showcase-config'),
+    # Profile Showcase endpoints: WITHDRAWN 2026-08 with the rest of the customization surface. The views
+    # are parked in api/profile_showcase_views.py -- restoring them is putting these four lines and the
+    # import back. Withdrawn rather than redirected because these are WRITES: an endpoint left answering
+    # would let anything still holding a reference file rows into a system with no door, which the rebuild
+    # would then have to reconcile.
+    #
+    # /badges/showcase/ and /badges/showcase/reorder/ above are NOT part of this. Despite the name they
+    # belong to the dashboard's badge-showcase module (dashboard.js), and withdrawing them is the
+    # dashboard sunset's job, not this one.
 
     # Rating endpoints (standalone — independent of the archived review system)
     path('ratings/wizard/queue/', WizardQueueView.as_view(), name='rating-wizard-queue'),
