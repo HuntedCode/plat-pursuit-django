@@ -624,18 +624,24 @@
     /* The score's tone as a left edge, the way the trophy cards carry their tier. An edge rather than a
        fill: a wall of cards each flooded with its verdict colour would read as an alert list, and most of
        these are perfectly ordinary games. */
-    border-left: 3px solid var(--tone-c);
+    border-left: 3px solid var(--rec-c);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 14px rgba(0, 0, 0, 0.26);
     transition: border-color var(--pp-dur-fast, 0.15s) var(--pp-ease),
                 box-shadow var(--pp-dur-fast, 0.15s) var(--pp-ease);
-    /* Declared on the BASE, not only on the [data-tone] states that can set it: an undefined custom
-       property invalidates the whole declaration it appears in rather than falling back, so a missing
-       tone would leave the card with no left border at all. The same trap emptied the badge meters. */
-    --tone-c: var(--pp-border);
+    /* The edge carries the RECOMMENDATION, not the star tone it used to. Those are different facts: the
+       stars rate the game and the recommendation rates the platinum, so a card could be edged red for a
+       2-star game the hunter still says to do. The verdict is the thing worth spotting down a wall.
+
+       Declared on the BASE, not only on the [data-rec] states that can set it: an undefined custom
+       property invalidates the whole declaration it appears in rather than falling back, so a rating that
+       predates the field would leave the card with no left border at all. The same trap emptied the badge
+       meters. Cyan is that fallback -- the house accent, so an unanswered card reads as neutral rather
+       than as a fourth verdict. */
+    --rec-c: var(--pp-primary);
 }
-.pp-rcard[data-tone="good"] { --tone-c: var(--pp-success); }
-.pp-rcard[data-tone="warn"] { --tone-c: var(--pp-warning); }
-.pp-rcard[data-tone="bad"]  { --tone-c: var(--pp-error); }
+.pp-rcard[data-rec="worth_it"]           { --rec-c: var(--pp-success); }
+.pp-rcard[data-rec="good_game_bad_plat"] { --rec-c: var(--pp-warning); }
+.pp-rcard[data-rec="skip"]               { --rec-c: var(--pp-error); }
 
 /* Hover glow, not scale -- the wall is dense and a scaling card shoves its neighbours. */
 @media (hover: hover) {
@@ -711,21 +717,36 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* Their verdict. A chip like the DLC label beside it, but tinted by WHICH verdict -- the four are not
-   points on one scale, so they get four colours rather than a gradient. Same token set the game page
-   uses for the same four values. */
+/* Their verdict in WORDS. Plain text rather than a chip: the card's edge and the stamp on the art
+   already carry the colour, and a third bordered, tinted treatment of the same fact was one too many.
+   The glyph says which answer at a glance; this says exactly which, and only needs to be read once the
+   card has your attention. It inherits `--rec-c` from the card, so all three always agree. */
 .pp-rcard__rec {
     align-self: flex-start; max-width: 100%;
-    padding: 1px 8px; border-radius: 999px;
-    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.02em;
-    color: var(--rec-c); border: 1px solid color-mix(in oklab, var(--rec-c) 34%, transparent);
-    background: color-mix(in oklab, var(--rec-c) 12%, transparent);
+    font-size: 0.66rem; font-weight: 700; letter-spacing: 0.01em; color: var(--rec-c);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    --rec-c: var(--pp-text-dim);
 }
-.pp-rcard__rec[data-rec="worth_it"]           { --rec-c: var(--pp-success); }
-.pp-rcard__rec[data-rec="good_game_bad_plat"] { --rec-c: var(--pp-warning); }
-.pp-rcard__rec[data-rec="skip"]               { --rec-c: var(--pp-error); }
+
+/* The verdict, stamped over the art. Big enough to read down a scrolling wall -- which is the whole
+   point, and only affordable here because the art panel is the one part of the card that is not text.
+   Centred rather than cornered: a corner badge reads as a status pip on the artwork, where a centred
+   disc reads as a mark laid ON it. */
+.pp-rcard__stamp {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1;
+    display: grid; place-items: center;
+    width: 46px; height: 46px; border-radius: 50%;
+    color: var(--rec-c);
+    /* Opaque ground, not a tint: a translucent disc sits on a different screenshot every card, and a
+       glyph that is legible over a dark scene and not over a bright one is not legible. */
+    background: color-mix(in oklab, var(--pp-bg-0, #0b0d12) 82%, var(--rec-c));
+    border: 1.5px solid color-mix(in oklab, var(--rec-c) 62%, transparent);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.45);
+}
+.pp-rcard__stamp svg { width: 24px; height: 24px; }
+@media (min-width: 768px) {
+    .pp-rcard__stamp { width: 58px; height: 58px; border-width: 2px; }
+    .pp-rcard__stamp svg { width: 30px; height: 30px; }
+}
 
 /* The overall score: stars over the figure, right-aligned, tabular so a column of cards lines up. */
 .pp-rcard__verdict { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; --star: 0.86rem; }

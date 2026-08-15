@@ -450,6 +450,43 @@ def test_a_dlc_rating_never_calls_its_platinum_rough(client):
     assert 'Great game, rough platinum' not in body
 
 
+def test_the_cards_edge_and_stamp_both_carry_the_verdict(client):
+    """The edge used to encode the STAR tone, which is a different fact: the stars rate the game and the
+    recommendation rates the platinum, so a card could be edged red for a 2-star game the hunter still
+    says to do. The verdict is the thing worth spotting down a wall, so the edge, the stamp on the art and
+    the label in the body are all keyed on it and can never disagree."""
+    profile = ProfileFactory(is_linked=True)
+    _rated(profile, title='Edged', recommendation='skip', overall_rating=5.0)   # loved game, skip the plat
+
+    body = client.get(_url(profile), **CF).content.decode()
+    card = body[body.index('<article class="pp-rcard"'):]
+
+    assert 'data-rec="skip"' in card[:120], 'the card is not keyed on the verdict'
+    assert 'pp-rcard__stamp' in body, 'the verdict is not stamped on the art'
+    # The old key is gone rather than left alongside -- two colours claiming one edge is how they drift.
+    assert 'data-tone=' not in card[:120]
+
+
+def test_an_unanswered_card_falls_back_rather_than_going_edgeless(client):
+    """`--rec-c` is declared on the base, not only on the states that set it: an undefined custom property
+    invalidates the whole declaration it appears in rather than falling back, so a rating from before the
+    field existed would have left the card with no left border at all. Cyan is the house accent, so an
+    unanswered card reads neutral rather than as a fourth verdict."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+    card = css[css.index('.pp-rcard {'):]
+    card = card[:card.index('\n.pp-rcard[')]
+
+    assert '--rec-c: var(--pp-primary);' in card, 'the card has no fallback edge colour'
+    assert 'border-left: 3px solid var(--rec-c);' in card
+
+    profile = ProfileFactory(is_linked=True)
+    _rated(profile, title='Legacy')
+
+    body = client.get(_url(profile), **CF).content.decode()
+    assert 'data-rec=""' in body            # keyed, but empty -- the base colour applies
+    assert 'pp-rcard__stamp' not in body    # and nothing is stamped
+
+
 def test_a_rating_that_predates_the_field_shows_no_verdict_rather_than_a_neutral_one(client):
     """An unanswered question is not an answer. The wizard is already asking it; the card must not fill
     the gap with a fourth state that looks like a considered opinion."""

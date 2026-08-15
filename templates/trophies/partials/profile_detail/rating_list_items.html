@@ -18,7 +18,7 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
 {% endcomment %}
 {% for r in profile_ratings %}
 {% with g=r.card_game %}
-<article class="pp-rcard" data-tone="{{ r.overall_rating|rating_tone:'overall' }}">
+<article class="pp-rcard" data-rec="{{ r.recommendation }}">
     {% comment %}The game's own LANDSCAPE art, bleeding to the card's edges as a full-height panel. A wide
     card wanted a wide image: a 3:4 cover chip sat in it as a tall sliver against short content, and the
     portrait ratio is the one thing this shape has no room for.
@@ -42,6 +42,21 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
         rating onto a survivor the hunter does not own a copy of. The concept's own cover still draws;
         only the LINK is unavailable, so the card stays whole rather than blank.{% endcomment %}
         <img class="pp-rcard__shot pp-rcard__shot--cover" src="{{ r.concept.cover_url }}" alt="" loading="lazy" decoding="async">
+        {% endif %}
+
+        {% comment %}The verdict, stamped over the art at a size you cannot miss.
+
+        It goes HERE because the art panel is the only part of the card with room to spare -- everywhere
+        else is text, and a glyph big enough to read down a scrolling wall would have to displace some of
+        it. On the art it costs nothing and gains the most: the panel is already scrimmed, so a disc sits
+        on it cleanly whatever the screenshot underneath.
+
+        `aria-hidden` because the chip in the body says the same thing in words; a screen reader does not
+        need the verdict twice, and a glyph has no good name of its own here.{% endcomment %}
+        {% if r.recommendation %}
+        <span class="pp-rcard__stamp" aria-hidden="true" title="{{ r.recommendation_text }}">
+            {% include 'partials/_recommendation_icon.html' with value=r.recommendation %}
+        </span>
         {% endif %}
     </span>
     {% endwith %}
