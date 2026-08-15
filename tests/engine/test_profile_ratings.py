@@ -90,6 +90,32 @@ def test_the_summary_reports_the_extreme_not_a_fourth_average():
     assert summary['avg_difficulty'] < 5      # the average would have buried it
 
 
+def test_the_recommend_rate_is_denominated_in_ANSWERED_ratings():
+    """Everything scored before the recommendation existed carries no answer. Counting those against a
+    hunter would read as someone who recommends almost nothing -- for as long as their backlog takes to
+    clear, which for a prolific rater is a long time."""
+    profile = ProfileFactory(is_linked=True)
+    _rated(profile, title='Yes', recommendation='worth_it')
+    _rated(profile, title='Also yes', recommendation='bad_game_good_plat')   # counts: recommends the PLAT
+    _rated(profile, title='No', recommendation='skip')
+    for i in range(6):
+        _rated(profile, title=f'Legacy {i}')            # no recommendation at all
+
+    summary = profile_rating_summary(profile)
+
+    assert summary['count'] == 9
+    assert summary['answered'] == 3
+    assert summary['recommend_pct'] == 67       # 2 of 3 ANSWERED, not 2 of 9
+
+
+def test_a_hunter_who_has_answered_nothing_has_no_rate():
+    """`None`, not zero -- "recommends 0%" is a verdict, and they have not given one."""
+    profile = ProfileFactory(is_linked=True)
+    _rated(profile, title='Legacy')
+
+    assert profile_rating_summary(profile)['recommend_pct'] is None
+
+
 def test_summary_of_an_unrated_hunter_is_empty_not_an_error():
     profile = ProfileFactory(is_linked=True)
 
@@ -376,6 +402,31 @@ def test_the_quick_take_is_rendered_whole(client):
 
     assert take in body
     assert 'line-clamp' not in rule, 'the quick take is being truncated again'
+
+
+def test_the_card_carries_their_recommendation(client):
+    """The card's punchline. Every other figure on it describes what the platinum was LIKE; this one says
+    whether to go and do it -- and the label comes from the model's choices, so the four strings live in
+    exactly one place."""
+    profile = ProfileFactory(is_linked=True)
+    _rated(profile, title='Shovelware Special', recommendation='bad_game_good_plat')
+
+    body = client.get(_url(profile), **CF).content.decode()
+
+    assert 'Only for the trophy' in body
+    assert 'data-rec="bad_game_good_plat"' in body
+
+
+def test_a_rating_that_predates_the_field_shows_no_verdict_rather_than_a_neutral_one(client):
+    """An unanswered question is not an answer. The wizard is already asking it; the card must not fill
+    the gap with a fourth state that looks like a considered opinion."""
+    profile = ProfileFactory(is_linked=True)
+    _rated(profile, title='Legacy Rating')
+
+    body = client.get(_url(profile), **CF).content.decode()
+
+    assert 'Legacy Rating' in body
+    assert 'pp-rcard__rec' not in body
 
 
 def test_a_staff_hidden_take_does_not_surface_on_its_author_s_profile(client):

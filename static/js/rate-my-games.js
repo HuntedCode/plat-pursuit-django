@@ -468,9 +468,29 @@ window.PlatPursuit = window.PlatPursuit || {};
                     ? 'Your tracked playtime: about ' + game.stats.play_hours + ' hour' + (game.stats.play_hours === 1 ? '' : 's') + '.'
                     : '',
             });
-            // No argument = back to the defaults. Both queues serve only UNRATED items, so there is never an
-            // existing rating to prefill here.
-            this.fields.prefill();
+            // A re-served rating MUST arrive with its own scores. The queue serves two kinds of card now:
+            // never-rated games, and ratings written before the recommendation existed. For the second
+            // kind the form's defaults (5 / 5 / 5 / 3.0) are not a neutral starting point -- submitting
+            // them writes those numbers over a considered rating, silently. `existing` is absent on a
+            // fresh card, and prefill() with nothing falls back to the defaults, which is correct there.
+            this.fields.prefill(game.existing, game.existing_blurb);
+            this.showPriorRating(game);
+        },
+
+        /**
+         * "You rated this in Sep 2024" -- shown only on a re-served card.
+         *
+         * Without it, a hunter who has rated for years opens the wizard and is handed back a game they
+         * remember scoring, with no explanation. That reads as a bug, and the fix is one sentence rather
+         * than a second queue: the card says why it is here and what is missing.
+         */
+        showPriorRating(game) {
+            var note = el('rmg-prior');
+            if (!note) { return; }
+            if (!game.rated_at) { note.classList.add('hidden'); return; }
+            var when = new Date(game.rated_at);
+            note.textContent = 'You rated this ' + this.since(when) + '. Add your recommendation to finish it.';
+            note.classList.remove('hidden');
         },
 
         // ---------------------------------------------------------------- //

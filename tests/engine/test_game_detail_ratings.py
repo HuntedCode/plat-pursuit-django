@@ -122,6 +122,41 @@ _AVERAGES = {
 }
 
 
+def test_the_recommendation_split_prints_its_sample_size():
+    """"80% would recommend" is honest at 40 ratings and misleading at 5, and there is no way to tell them
+    apart without the N. Printed at every size rather than hidden behind a floor -- the same reason the
+    doc parks the cross-game percentile: a figure that looks authoritative on thin data erodes trust."""
+    html = _conditions(dict(_AVERAGES, recommendation_split={
+        'counts': {'worth_it': 4, 'good_game_bad_plat': 1, 'bad_game_good_plat': 0, 'skip': 0},
+        'answered': 5, 'recommend_pct': 80,
+    }))
+
+    assert '80%' in html
+    # The count sits in its own span (the live-update writes it), so the figure and the word it belongs to
+    # are not adjacent in the source.
+    assert 'data-cond-rec-n>5</span> rating' in html
+    assert 'gd-cond__rec is-empty' not in html
+
+
+def test_the_split_is_absent_until_someone_answers():
+    """Which is every game until the recommendation backlog clears. The element stays in the DOM (the
+    live-update only sets values, it never builds), but it collapses."""
+    html = _conditions(dict(_AVERAGES, recommendation_split={
+        'counts': {}, 'answered': 0, 'recommend_pct': None,
+    }))
+
+    assert 'gd-cond__rec is-empty' in html
+
+
+def test_a_stale_cached_averages_dict_does_not_break_the_card():
+    """The dict is cached for an hour, so right after the field ships some panels render from one pickled
+    before it existed. A missing key must degrade to "no split", not to a traceback."""
+    html = _conditions(_AVERAGES)   # no recommendation_split key at all
+
+    assert 'gd-cond__rec is-empty' in html
+    assert '4.5' in html            # the rest of the card is unaffected
+
+
 def _conditions(averages, **kw):
     ctx = {
         'averages': averages, 'concept_id': 1, 'group_id': 'default',
@@ -397,7 +432,9 @@ def test_conditions_quick_takes_flag_own_and_gate_report():
     ours = _blurb_row(concept, mine, 'My own take.')
     theirs = _blurb_row(concept, ProfileFactory(), 'Great combat, brutal plat.')
     html = _conditions(_AVERAGES, blurbs=[ours, theirs], viewer_profile_id=mine.id)
-    assert 'Quick takes' in html and 'is-empty' not in html
+    # Scoped to the blurbs SECTION. A bare `'is-empty' not in html` also matched the recommendation row,
+    # which carries the same modifier and is legitimately empty until someone answers.
+    assert 'Quick takes' in html and 'gd-blurbs is-empty' not in html
     assert 'My own take.' in html and 'Great combat, brutal plat.' in html
     assert 'gd-blurb__you' in html                              # own card flagged
     assert html.count('data-blurb-report') == 1                 # only the other card is reportable

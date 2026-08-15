@@ -216,7 +216,7 @@ Review responses include a `body_html` field containing server-rendered markdown
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/api/v1/ratings/wizard/queue/` | Login | Rate My Games queue. `queue_type=base\|dlc`, `limit`, `offset`, `include_shovelware=1`. Serves only UNRATED items, so nothing it returns carries an existing rating. Each item carries `concept_icon_url` (the cover) for the wizard's game header; it also sent `landscape_url` until the header's background wash was dropped, and that field went with it rather than being served to nobody. BOTH branches defer `igdb_match.raw_response` — the DLC branch lists every ratable concept's groups before paginating, so the ~30 KB blob per row is the difference between a page and tens of MB. |
-| POST | `/api/v1/ratings/<concept_id>/group/<group_id>/rate/` | Login | Submit/update a rating. Body: `difficulty, grindiness, hours_to_platinum, fun_ranking, overall_rating, blurb`. An OMITTED `blurb` preserves the stored one; an empty string clears it. Rate-limited 30/min. |
+| POST | `/api/v1/ratings/<concept_id>/group/<group_id>/rate/` | Login | Submit/update a rating. Body: `recommendation, difficulty, grindiness, hours_to_platinum, fun_ranking, overall_rating, blurb`. **`recommendation` is REQUIRED** (`worth_it` / `good_game_bad_plat` / `bad_game_good_plat` / `skip`) — except on an update of an existing rating, where an omitted one falls back to the stored value. An OMITTED `blurb` preserves the stored one; an empty string clears it. Responds with `community_averages` (incl. `recommendation_split`), `blurb`, `recommendation` and `recommendation_label`. Rate-limited 30/min. |
 | GET | `/api/v1/ratings/<concept_id>/group/<group_id>/trophies/` | No | Condensed trophy list with earned status (the wizard's reference panel) |
 | POST | `/api/v1/ratings/blurb/<rating_id>/report/` | Login | Report a public quick take |
 
@@ -226,7 +226,7 @@ Review responses include a `body_html` field containing server-rendered markdown
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| POST | `/api/v1/ratings/<concept_id>/group/<group_id>/rate/` | Login (linked) | Submit/update a rating. Optional `blurb` (<=140 char public "quick take"), sanitized + banned-word filtered. A non-empty blurb requires guidelines agreement (403 `needs_guidelines` if not). Omitting `blurb` preserves an existing one; sending `""` clears it. |
+| POST | `/api/v1/ratings/<concept_id>/group/<group_id>/rate/` | Login (linked) | Submit/update a rating. **`recommendation` is required** on a new rating (an update of an existing one falls back to the stored value when it is omitted). Optional `blurb` (<=140 char public "quick take"), sanitized + banned-word filtered. A non-empty blurb requires guidelines agreement (403 `needs_guidelines` if not). Omitting `blurb` preserves an existing one; sending `""` clears it. |
 | POST | `/api/v1/ratings/blurb/<rating_id>/report/` | Login (linked) | Report a rating's quick take for moderation (reactive: publish -> report -> staff soft-hide via `blurb_hidden`). Body `{reason, details?}`; rate-limited 10/m; can't report your own; deduped per reporter. |
 | POST | `/api/v1/guidelines/agree/` | Login | Record community-guidelines agreement (idempotent). The blurb write path calls this on submit (the modal's fine print is the notice). |
 

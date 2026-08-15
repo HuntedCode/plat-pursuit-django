@@ -27,6 +27,8 @@ class RatingService:
         Returns:
             dict or None
         """
+        from trophies.models import UserConceptRating
+
         if not ratings_qs.exists():
             return None
 
@@ -56,6 +58,30 @@ class RatingService:
              'bar': round(counts[step] / peak * 100)}
             for step in range(1, 11)   # 0.5 (left) -> 5.0 (right)
         ]
+
+        # The RECOMMENDATION split -- the one aggregate that is a verdict rather than an average. Grouped
+        # in the database (<=5 rows back), and it rides the caller's existing cache entry because this
+        # whole dict is what gets cached: no new key, no new invalidation path.
+        #
+        # `recommend_pct` counts the two "yes, go and do this platinum" answers. "Only for the trophy" is
+        # one of them on purpose: it IS a recommendation of the platinum, which is what a trophy site is
+        # being asked about -- the game being poor is what the star score is for.
+        by_rec = dict(
+            ratings_qs.exclude(recommendation='')
+            .values_list('recommendation')
+            .annotate(c=Count('id'))
+        )
+        answered = sum(by_rec.values())
+        aggregates['recommendation_split'] = {
+            'counts': {value: by_rec.get(value, 0) for value, _label in UserConceptRating.RECOMMENDATIONS},
+            # The DENOMINATOR is answered ratings, not all of them: every rating written before the field
+            # existed carries no answer, and counting those as "would not recommend" would misreport a
+            # beloved game as divisive for as long as the backlog takes to clear.
+            'answered': answered,
+            'recommend_pct': round(
+                (by_rec.get('worth_it', 0) + by_rec.get('bad_game_good_plat', 0)) / answered * 100
+            ) if answered else None,
+        }
 
         hours_list = list(ratings_qs.values_list('hours_to_platinum', flat=True))
         aggregates['avg_hours'] = (
@@ -320,6 +346,15 @@ def profile_rating_summary(profile):
         # Quick takes are counted through the SAME predicate `visible_blurbs()` reads by, so the header's
         # figure can never promise takes the cards then withhold as staff-hidden.
         takes=Count('id', filter=~Q(blurb='') & Q(blurb_hidden=False)),
+        # How often this hunter sends people after a platinum -- their own recommend rate, on the same two
+        # values the community split counts. Same one aggregate, so it costs nothing.
+        answered=Count('id', filter=~Q(recommendation='')),
+        recommends=Count('id', filter=Q(recommendation__in=('worth_it', 'bad_game_good_plat'))),
+    )
+    # Denominated in ANSWERED ratings: everything they rated before the field existed carries no answer,
+    # and counting those against them would read as a hunter who recommends almost nothing.
+    row['recommend_pct'] = (
+        round(row['recommends'] / row['answered'] * 100) if row['answered'] else None
     )
     return row
 

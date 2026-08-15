@@ -26,7 +26,7 @@ URL = '/rate-my-games/'
 QUEUE = '/api/v1/ratings/wizard/queue/'
 
 # The API contract. Renaming any of these silently breaks the POST on BOTH surfaces at once now.
-FIELD_NAMES = ('difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking', 'overall_rating', 'blurb')
+FIELD_NAMES = ('recommendation', 'difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking', 'overall_rating', 'blurb')
 
 
 def _hunter():
@@ -137,7 +137,27 @@ def test_the_shared_controller_loads_before_the_page_controller():
 
 def test_a_rating_saves_with_no_quick_take(client):
     """The blurb is optional and must never gate the save -- this is a BULK flow, and most passes through
-    it will be numbers only."""
+    it will be numbers only. The RECOMMENDATION is the one field that does gate it (below)."""
+    profile = _hunter()
+    game = _ratable(profile)
+    client.force_login(profile.user)
+
+    resp = client.post(
+        f'/api/v1/ratings/{game.concept_id}/group/default/rate/',
+        {'recommendation': 'worth_it', 'difficulty': 5, 'grindiness': 4, 'hours_to_platinum': 30,
+         'fun_ranking': 8, 'overall_rating': 4.0, 'blurb': ''},
+        content_type='application/json',
+    )
+
+    assert resp.status_code == 200, resp.content
+    rating = UserConceptRating.objects.get(profile=profile, concept=game.concept)
+    assert rating.blurb == ''
+    assert rating.hours_to_platinum == 30
+
+
+def test_a_rating_will_not_save_without_a_recommendation(client):
+    """Required from here on, which is what makes the re-queue finite: every rating written after this
+    carries one, so the backlog drains and never refills."""
     profile = _hunter()
     game = _ratable(profile)
     client.force_login(profile.user)
@@ -149,10 +169,45 @@ def test_a_rating_saves_with_no_quick_take(client):
         content_type='application/json',
     )
 
+    assert resp.status_code == 400, resp.content
+    assert 'recommendation' in resp.json()['errors']
+    assert not UserConceptRating.objects.filter(profile=profile, concept=game.concept).exists()
+
+
+def test_an_invented_recommendation_is_rejected(client):
+    """It is a choices field, and the payload is client-supplied."""
+    profile = _hunter()
+    game = _ratable(profile)
+    client.force_login(profile.user)
+
+    resp = client.post(
+        f'/api/v1/ratings/{game.concept_id}/group/default/rate/',
+        {'recommendation': 'sideways', 'difficulty': 5, 'grindiness': 4, 'hours_to_platinum': 30,
+         'fun_ranking': 8, 'overall_rating': 4.0},
+        content_type='application/json',
+    )
+
+    assert resp.status_code == 400, resp.content
+
+
+def test_the_response_carries_the_label_so_the_client_never_hardcodes_it(client):
+    """Every other word the ratings JS prints mirrors a Python function (rating_verdict, rating_summary,
+    rating_tone). A choices label has no such twin, so the server sends it -- otherwise four display
+    strings live in JS and drift the first time anyone rewords one."""
+    profile = _hunter()
+    game = _ratable(profile)
+    client.force_login(profile.user)
+
+    resp = client.post(
+        f'/api/v1/ratings/{game.concept_id}/group/default/rate/',
+        {'recommendation': 'bad_game_good_plat', 'difficulty': 2, 'grindiness': 2,
+         'hours_to_platinum': 3, 'fun_ranking': 2, 'overall_rating': 1.5},
+        content_type='application/json',
+    )
+
     assert resp.status_code == 200, resp.content
-    rating = UserConceptRating.objects.get(profile=profile, concept=game.concept)
-    assert rating.blurb == ''
-    assert rating.hours_to_platinum == 30
+    assert resp.json()['recommendation'] == 'bad_game_good_plat'
+    assert resp.json()['recommendation_label'] == 'Only for the trophy'
 
 
 # ── The queue ─────────────────────────────────────────────────────────────────────────────────────
@@ -169,20 +224,110 @@ def test_the_queue_serves_the_hunters_unrated_games(client):
     assert data['queue'][0]['trophy_group_id'] == 'default'
 
 
-def test_a_rated_game_leaves_the_queue(client):
-    """Which is why the wizard has no 'update your existing rating' branch: both queues serve only unrated
-    items, so there is never a rating to prefill."""
+def test_a_fully_rated_game_leaves_the_queue(client):
+    """"Rated" means COMPLETE -- carrying a recommendation -- not merely a row that exists."""
     profile = _hunter()
     game = _ratable(profile)
     client.force_login(profile.user)
     assert client.get(QUEUE).json()['count'] == 1
 
     UserConceptRating.objects.create(
-        profile=profile, concept=game.concept, concept_trophy_group=None,
+        profile=profile, concept=game.concept, concept_trophy_group=None, recommendation='worth_it',
         difficulty=5, grindiness=5, hours_to_platinum=10, fun_ranking=5, overall_rating=3,
     )
 
     assert client.get(QUEUE).json()['count'] == 0
+
+
+def test_a_rating_with_no_recommendation_comes_back_once(client):
+    """The backfill mechanism, and the reason there is no second queue. Every rating written before the
+    recommendation existed lacks one, so each returns here exactly once -- which collects the
+    recommendation AND hands the hunter one chance to add a quick take, without the take ever gating
+    anything. Adding the recommendation then retires it for good."""
+    profile = _hunter()
+    game = _ratable(profile)
+    client.force_login(profile.user)
+
+    rating = UserConceptRating.objects.create(
+        profile=profile, concept=game.concept, concept_trophy_group=None,
+        difficulty=8, grindiness=9, hours_to_platinum=62, fun_ranking=2, overall_rating=4.5,
+    )
+    assert client.get(QUEUE).json()['count'] == 1, 'a rating with no recommendation was treated as done'
+
+    rating.recommendation = 'good_game_bad_plat'
+    rating.save(update_fields=['recommendation'])
+
+    assert client.get(QUEUE).json()['count'] == 0
+
+
+def test_a_requeued_rating_arrives_with_its_own_scores(client):
+    """THE data-loss guard, and the reason this test exists before the feature did.
+
+    The form's defaults are difficulty 5, grindiness 5, fun 5, overall 3.0. A re-served card that loads
+    blank and is then submitted for its recommendation writes those defaults straight over a considered
+    8/9/2/4.5 -- silently, with nothing on screen to notice. So the queue must send the stored row, not
+    just a flag saying one exists.
+    """
+    profile = _hunter()
+    game = _ratable(profile)
+    client.force_login(profile.user)
+
+    UserConceptRating.objects.create(
+        profile=profile, concept=game.concept, concept_trophy_group=None,
+        difficulty=8, grindiness=9, hours_to_platinum=62, fun_ranking=2, overall_rating=4.5,
+        blurb='Brilliant game, miserable platinum.',
+    )
+
+    item = client.get(QUEUE).json()['queue'][0]
+
+    assert item['has_rating'] is True
+    assert item['existing'] == {
+        'recommendation': '',
+        'difficulty': 8, 'grindiness': 9, 'hours_to_platinum': 62,
+        'fun_ranking': 2, 'overall_rating': 4.5,
+    }
+    assert item['existing_blurb'] == 'Brilliant game, miserable platinum.'
+    # When they last rated it -- the card says so, because re-serving a game someone already rated with
+    # no explanation reads as a bug rather than a prompt.
+    assert item['rated_at']
+
+
+def test_a_never_rated_game_carries_no_prefill(client):
+    """The other half of the same contract: `existing` present on a fresh card would prefill it with
+    somebody's idea of a default and pass it off as the hunter's own answer."""
+    profile = _hunter()
+    _ratable(profile)
+    client.force_login(profile.user)
+
+    item = client.get(QUEUE).json()['queue'][0]
+
+    assert item['has_rating'] is False
+    assert 'existing' not in item
+    assert 'rated_at' not in item
+
+
+def test_never_rated_games_lead_the_recommendation_backlog(client):
+    """A hunter with three new games and three hundred old ratings must not have the new ones buried.
+    The backlog items are the fast ones -- everything prefilled, one tap -- so they lose nothing by
+    following."""
+    profile = _hunter()
+    old, fresh = _ratable(profile), _ratable(profile)
+    # The queue orders by the CONCEPT's title, so name them there. "Alpha" would lead on title alone --
+    # which is the point: if the sort were still title-only this test could not tell the difference.
+    old.concept.unified_title = 'Alpha'
+    old.concept.save(update_fields=['unified_title'])
+    fresh.concept.unified_title = 'Zeta'
+    fresh.concept.save(update_fields=['unified_title'])
+    client.force_login(profile.user)
+
+    UserConceptRating.objects.create(
+        profile=profile, concept=old.concept, concept_trophy_group=None,
+        difficulty=5, grindiness=5, hours_to_platinum=10, fun_ranking=5, overall_rating=3,
+    )
+
+    titles = [i['unified_title'] for i in client.get(QUEUE).json()['queue']]
+
+    assert titles == ['Zeta', 'Alpha'], 'the recommendation backlog is burying never-rated games'
 
 
 def test_the_queue_query_count_does_not_grow_with_the_page(client):
@@ -276,7 +421,7 @@ def test_the_queue_reports_the_library_not_just_the_backlog(client, queue_type):
             else dict(before['groups'][0], **before['groups'][0]['items'][0]))
     resp = client.post(
         f"/api/v1/ratings/{item['concept_id']}/group/{item['trophy_group_id']}/rate/",
-        {'difficulty': 5, 'grindiness': 5, 'hours_to_platinum': 10,
+        {'recommendation': 'worth_it', 'difficulty': 5, 'grindiness': 5, 'hours_to_platinum': 10,
          'fun_ranking': 5, 'overall_rating': 3, 'blurb': ''},
         content_type='application/json',
     )
@@ -401,7 +546,7 @@ def test_the_header_states_both_halves_of_both_queues(client):
     first = client.get(QUEUE).json()['queue'][0]
     client.post(
         f"/api/v1/ratings/{first['concept_id']}/group/default/rate/",
-        {'difficulty': 5, 'grindiness': 5, 'hours_to_platinum': 10,
+        {'recommendation': 'worth_it', 'difficulty': 5, 'grindiness': 5, 'hours_to_platinum': 10,
          'fun_ranking': 5, 'overall_rating': 3, 'blurb': ''},
         content_type='application/json',
     )
@@ -466,7 +611,8 @@ def test_everything_the_wizard_hides_can_actually_be_hidden():
 
     # The elements the controller toggles that carry a display of their own. Add to this list whenever the
     # wizard learns to hide something new.
-    for cls in ('rmg__prog', 'rmg__facts', 'rmg__fact', 'rmg__group', 'rmg__flag', 'gd-btn'):
+    for cls in ('rmg__prog', 'rmg__facts', 'rmg__fact', 'rmg__group', 'rmg__flag', 'gd-btn',
+                'rmg__prior'):
         assert cls in restated, f'.{cls} is toggled hidden but keeps its own display'
 
 

@@ -1284,6 +1284,17 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-cond__score-n { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--pp-text); font-variant-numeric: tabular-nums; }
 .gd-cond--empty .gd-cond__score-n, .gd-cond--empty .gd-cond__of { color: var(--pp-text-mute); }
 .gd-cond__of { font-size: 0.9rem; font-weight: 700; color: var(--pp-text-mute); }
+/* The recommendation line: a verdict, so it takes a colour where the count beneath it stays muted. Its
+   own row rather than a tile -- it belongs with the score and the hours as a headline fact, not among the
+   three quality axes. `is-empty` collapses it entirely (no answers yet), which is every game until the
+   backlog clears; the element stays in the DOM so the live update only sets values. */
+.gd-cond__rec {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    margin-top: 7px; font-size: 0.78rem; color: var(--pp-text-dim);
+}
+.gd-cond__rec.is-empty { display: none; }
+.gd-cond__rec svg { width: 15px; height: 15px; flex: none; color: var(--pp-success); }
+.gd-cond__rec b { font-size: 0.92rem; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; }
 .gd-cond__count { font-size: 0.76rem; color: var(--pp-text-mute); }
 .gd-cond--empty .gd-cond__count { font-size: 0.84rem; color: var(--pp-text-dim); }
 
@@ -1424,6 +1435,48 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-qr__hint--muted { color: var(--pp-text-mute); }
 .gd-qr__actions { display: flex; gap: 10px; margin-top: 4px; }
 .gd-qr__actions .gd-btn { flex: 1; justify-content: center; }
+
+/* ---- The recommendation: the form's one required field, and its first ----------------------------
+ * Four choice rows, NOT a segmented 3-point scale. A segment strip implies an ordering, and these are not
+ * points on one axis: two of them are compound statements about the game AND the platinum separately.
+ * Rows rather than a 2x2 grid because two of the four labels are full phrases -- a grid would either
+ * truncate them or size every cell to the longest.
+ */
+.gd-qr__field--rec { gap: 7px; border: 0; padding: 0; margin: 0; min-inline-size: 0; }
+.gd-qr__field--rec legend { padding: 0; }
+.gd-qr__recs { display: flex; flex-direction: column; gap: 5px; }
+.gd-qr__rec {
+    display: flex; align-items: center; gap: 9px; cursor: pointer;
+    padding: 8px 11px; border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    font-size: 0.8rem; font-weight: 600; color: var(--pp-text-dim);
+    transition: border-color var(--pp-dur-fast) var(--pp-ease),
+                background var(--pp-dur-fast) var(--pp-ease),
+                color var(--pp-dur-fast) var(--pp-ease);
+    --rec-c: var(--pp-text-mute);
+}
+/* The radio is the state, not the picture: hidden from sight, still focusable and still what
+   `:has(:checked)` reads. `appearance: none` + zero size rather than `display: none`, which would take it
+   out of the tab order and make the group unreachable by keyboard. */
+.gd-qr__rec input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.gd-qr__rec svg { width: 17px; height: 17px; flex: none; color: var(--rec-c); }
+.gd-qr__rec-lbl { min-width: 0; }
+
+.gd-qr__rec[data-rec="worth_it"]           { --rec-c: var(--pp-success); }
+.gd-qr__rec[data-rec="good_game_bad_plat"] { --rec-c: var(--pp-warning); }
+.gd-qr__rec[data-rec="bad_game_good_plat"] { --rec-c: var(--pp-accent); }
+.gd-qr__rec[data-rec="skip"]               { --rec-c: var(--pp-error); }
+
+@media (hover: hover) {
+    .gd-qr__rec:hover { border-color: color-mix(in oklab, var(--rec-c) 40%, var(--pp-border)); color: var(--pp-text); }
+}
+.gd-qr__rec:has(input:checked) {
+    border-color: color-mix(in oklab, var(--rec-c) 60%, transparent);
+    background: color-mix(in oklab, var(--rec-c) 14%, var(--pp-bg-2));
+    color: var(--pp-text);
+}
+/* The ring belongs to the row -- the input it describes is a 1px box. */
+.gd-qr__rec:focus-within { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
 /* Blurb field inside the quick-rate modal: textarea + remaining-char counter + guidelines fine print. */
 .gd-qr__field--blurb { gap: 5px; }

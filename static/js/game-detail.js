@@ -1538,6 +1538,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     const vd = tile.querySelector('[data-cond-verdict]'); if (vd) vd.textContent = verdictOf(kind, v);
                     const nm = tile.querySelector('[data-cond-num]'); if (nm) countTo(nm, v, 1);
                 });
+                // The recommendation split. Guarded on the key existing rather than on its contents: the
+                // averages dict is CACHED for an hour, so for a while after the field ships some panels
+                // are drawing from a dict pickled before it existed. Missing key -> leave the row alone
+                // rather than blanking a figure that is merely stale.
+                const rec = avg.recommendation_split;
+                const recEl = card.querySelector('[data-cond-rec]');
+                if (recEl && rec) {
+                    const pct = recEl.querySelector('[data-cond-rec-pct]');
+                    const n = recEl.querySelector('[data-cond-rec-n]');
+                    if (rec.answered && pct && n) {
+                        pct.textContent = rec.recommend_pct + '%';
+                        n.textContent = rec.answered.toLocaleString();
+                        recEl.classList.remove('is-empty');
+                    }
+                }
                 // Live-update the rating-spread chart bars + per-bar counts (10 columns keyed on the
                 // integer half-step 1..10). Empty count -> clear to '' so the :empty label hides.
                 if (avg.distribution) {

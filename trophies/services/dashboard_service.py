@@ -1440,9 +1440,12 @@ def provide_rate_my_games(profile):
     # Preview: up to 12 unrated game icons for the scrollable strip
     preview_games = []
     if unrated_count > 0 and plat_concept_ids:
+        # "Rated" means COMPLETE (carries a recommendation), through the one shared definition -- the
+        # ninth and last copy of it. A strip that showed a game as done while the wizard still queued it
+        # is exactly the drift that predicate exists to prevent.
+        from trophies.services.review_hub_service import ReviewHubService
         rated_ids = set(
-            UserConceptRating.objects
-            .filter(profile=profile, concept_trophy_group__isnull=True)
+            ReviewHubService.complete_ratings(profile, concept_trophy_group__isnull=True)
             .values_list('concept_id', flat=True)
         )
         unrated_ids = [cid for cid in plat_concept_ids if cid and cid not in rated_ids][:12]

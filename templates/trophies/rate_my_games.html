@@ -48,12 +48,19 @@ it never tears down to a spinner, which read as a full-page reload.
                 here is what makes "Game 12 of 79" mean something.
 
                 The two "waiting" figures tick DOWN live as you rate; the totals do not move, because
-                rating a game does not change how many you could rate.{% endcomment %}
+                rating a game does not change how many you could rate.
+
+                The waiting SUB-LINE splits the remainder rather than adding a fifth cell: "new" is a whole
+                rating, "need a rec" is one tap on a card that arrives prefilled. Different asks, and
+                lumping them makes a long-standing rater's counter look like it jumped by hundreds
+                overnight with no way to see that most of it is nearly free. Falls back to the old wording
+                when either half is zero, so a first-time hunter reads plain English rather than
+                "12 new - 0 need a rec".{% endcomment %}
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 shrink-0 w-full md:w-auto">
                     <div class="scard">
                         <div class="scard__label">Games waiting</div>
                         <div class="scard__value pp-tally text-primary" id="rmg-waiting-base" data-countup="{{ rating_progress.games_waiting }}">{{ rating_progress.games_waiting|intcomma }}</div>
-                        <div class="scard__sub">still to rate</div>
+                        <div class="scard__sub">{% if rating_progress.games_new and rating_progress.games_need_rec %}{{ rating_progress.games_new|intcomma }} new &middot; {{ rating_progress.games_need_rec|intcomma }} need a rec{% else %}still to rate{% endif %}</div>
                     </div>
                     {% comment %}Neutral: one accent per surface, and it is spent on what is left rather
                     than on the totals, which are context.{% endcomment %}
@@ -65,7 +72,7 @@ it never tears down to a spinner, which read as a full-page reload.
                     <div class="scard">
                         <div class="scard__label">DLC waiting</div>
                         <div class="scard__value pp-tally" id="rmg-waiting-dlc" data-countup="{{ rating_progress.dlc_waiting }}">{{ rating_progress.dlc_waiting|intcomma }}</div>
-                        <div class="scard__sub">still to rate</div>
+                        <div class="scard__sub">{% if rating_progress.dlc_new and rating_progress.dlc_need_rec %}{{ rating_progress.dlc_new|intcomma }} new &middot; {{ rating_progress.dlc_need_rec|intcomma }} need a rec{% else %}still to rate{% endif %}</div>
                     </div>
                     <div class="scard">
                         <div class="scard__label">DLC total</div>
@@ -206,6 +213,12 @@ it never tears down to a spinner, which read as a full-page reload.
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                             <span id="rmg-form-title">Your rating</span>
                         </h3>
+                        {% comment %}Why this card is here, on the cards that need explaining. The queue
+                        serves two kinds now -- games never rated, and ratings written before the
+                        recommendation existed -- and handing someone back a game they remember scoring,
+                        with no explanation, reads as a bug. Filled and unhidden per game by
+                        `showPriorRating`; stays hidden on a fresh card.{% endcomment %}
+                        <p class="rmg__prior hidden" id="rmg-prior"></p>
                         {% comment %}The shared fields. `data-guidelines-agreed` lets RatingFields skip the
                         agree call for a hunter who already agreed -- it is the form's flag, so it lives on the
                         form element rather than in the partial.{% endcomment %}
@@ -215,7 +228,7 @@ it never tears down to a spinner, which read as a full-page reload.
                         <p class="rmg__req" id="rmg-req">
                             <svg class="rmg__req-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
                             <svg class="rmg__req-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                            <span id="rmg-req-text">Hours is the one field we need.</span>
+                            <span id="rmg-req-text">A recommendation and your hours are all we need.</span>
                         </p>
                     </div>
                 </section>

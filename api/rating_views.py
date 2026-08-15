@@ -29,6 +29,23 @@ from api.utils import safe_bool, safe_int
 logger = logging.getLogger('psn_api')
 
 
+def _rating_payload(rating):
+    """A stored rating in the shape the client form prefills from.
+
+    One definition, because two of them is how a re-served card ends up missing a field and silently
+    writing that field's DEFAULT back over a real answer. Keys match the input NAMES, which are the API
+    contract (see templates/partials/_rating_fields.html).
+    """
+    return {
+        'recommendation': rating.recommendation,
+        'difficulty': rating.difficulty,
+        'grindiness': rating.grindiness,
+        'hours_to_platinum': rating.hours_to_platinum,
+        'fun_ranking': rating.fun_ranking,
+        'overall_rating': rating.overall_rating,
+    }
+
+
 def _get_profile_or_error(request):
     """Return (profile, None) or (None, Response)."""
     profile = getattr(request.user, 'profile', None)
@@ -131,7 +148,19 @@ class GroupRatingView(APIView):
             blurb_submitted = 'blurb' in request.data
             preserved_blurb = existing_rating.blurb if existing_rating else ''
 
-            form = UserConceptRatingForm(request.data, instance=existing_rating)
+            # The recommendation gets the SAME protection, for the same reason: "adjust my hours" must not
+            # be able to destroy an answer it never mentioned. It is required, so an omission on a NEW
+            # rating is still rejected -- but on an existing one the stored value stands in, which is the
+            # difference between a partial update and a partial wipe.
+            #
+            # Injected BEFORE validation rather than restored after, because unlike the blurb this field is
+            # required: leaving it absent would fail `is_valid()` and never reach a restore step.
+            data = request.data
+            if 'recommendation' not in data and existing_rating and existing_rating.recommendation:
+                data = data.copy()
+                data['recommendation'] = existing_rating.recommendation
+
+            form = UserConceptRatingForm(data, instance=existing_rating)
             if not form.is_valid():
                 return Response(
                     {'success': False, 'errors': form.errors},
@@ -165,6 +194,12 @@ class GroupRatingView(APIView):
                 'message': 'Rating updated!' if existing_rating else 'Rating submitted successfully!',
                 'community_averages': updated_averages,
                 'blurb': rating.blurb,   # sanitized/stored value, so the client's live card matches on reload
+                'recommendation': rating.recommendation,
+                # The LABEL comes from the server. Every other word the ratings JS prints has a Python twin
+                # it mirrors (rating_verdict, rating_summary, rating_tone), but a choices label has no such
+                # function -- mirroring it would mean hardcoding four display strings in JS that drift the
+                # first time anyone rewords one here.
+                'recommendation_label': rating.get_recommendation_display(),
             })
 
         except Exception as e:
@@ -268,13 +303,21 @@ class WizardQueueView(APIView):
                 )
 
             # ── Base game queue ──────────────────────────────────────── #
-            rated_concept_ids = set(
-                UserConceptRating.objects.filter(
+            # "Rated" means COMPLETE -- a row that carries a recommendation -- not merely a row that
+            # exists. Every rating written before the recommendation shipped therefore comes back through
+            # here exactly once, which is the backfill: it collects the recommendation and hands the
+            # hunter one opportunity to add a quick take, without the take ever gating anything.
+            # The definition lives in ReviewHubService so the queue, the meter and the header cannot
+            # drift apart (they were nine separate copies of it).
+            existing = {
+                r.concept_id: r
+                for r in UserConceptRating.objects.filter(
                     profile=profile,
                     concept_id__in=ratable_concept_ids,
                     concept_trophy_group__isnull=True,
-                ).values_list('concept_id', flat=True)
-            )
+                )
+            }
+            rated_concept_ids = {cid for cid, r in existing.items() if r.recommendation}
 
             wanted_ids = [cid for cid in ratable_concept_ids if cid not in rated_concept_ids]
 
@@ -286,6 +329,11 @@ class WizardQueueView(APIView):
                 .defer('igdb_match__raw_response')
                 .order_by(Lower('unified_title'))
             )
+            # NEVER-RATED FIRST, then the recommendation backlog. A hunter with three new games and three
+            # hundred old ratings must not have the new ones buried behind the backlog -- and the backlog
+            # items are the fast ones (everything is prefilled, one tap), so they lose nothing by
+            # following. Stable within each half: the title ordering above is preserved.
+            concepts.sort(key=lambda c: c.id in existing)
 
             total_count = len(concepts)
             paginated = concepts[offset:offset + limit]
@@ -363,12 +411,22 @@ class WizardQueueView(APIView):
                     # behind the question being asked. Nothing consumed the field once the wash went.
                     'concept_icon_url': c.cover_url or '',
                     'slug': c.slug,
-                    'has_rating': cid in rated_concept_ids,
+                    'has_rating': cid in existing,
                     'trophy_group_id': 'default',
                     'trophy_group_name': 'Base Game',
                     'hours_label': 'Hours to Platinum' if has_plat else 'Hours to Complete',
                     'is_shovelware': cid in shovelware_concept_ids,
                 }
+                # A re-served rating MUST arrive with its own scores. The form's defaults are 5/5/5/3.0,
+                # so a card that loads blank and is submitted for its recommendation silently overwrites a
+                # considered 8/9/2/4.5 with mush -- and the hunter has no way to notice. This is why the
+                # queue sends the row rather than just a flag, and why the prefill branch that was deleted
+                # when the queue served only fresh games has to come back with it.
+                prior = existing.get(cid)
+                if prior:
+                    item['existing'] = _rating_payload(prior)
+                    item['existing_blurb'] = prior.blurb
+                    item['rated_at'] = prior.updated_at.isoformat()
                 if cid in game_stats:
                     item['stats'] = game_stats[cid]
                 if cid in plat_dates:
@@ -457,12 +515,18 @@ class WizardQueueView(APIView):
             return Response({'groups': [], 'total_items': 0, 'has_more': False})
 
         dlc_ctg_ids = [g.id for g in dlc_groups]
-        dlc_rated = set(
-            UserConceptRating.objects.filter(
-                profile=profile,
-                concept_trophy_group_id__in=dlc_ctg_ids,
-            ).values_list('concept_trophy_group_id', flat=True)
-        )
+        # Same rule as the base queue: a row only counts as rated once it carries a recommendation, so
+        # pre-recommendation DLC ratings come back through here once, prefilled.
+        dlc_existing = {
+            r.concept_trophy_group_id: r
+            for r in UserConceptRating.objects.filter(
+                profile=profile, concept_trophy_group_id__in=dlc_ctg_ids,
+            )
+        }
+        dlc_rated = {ctg_id for ctg_id, r in dlc_existing.items() if r.recommendation}
+
+        # Never-rated packs lead, the recommendation backlog follows -- see the base queue for why.
+        dlc_groups.sort(key=lambda g: g.id in dlc_existing)
 
         # Concepts that surface only because of the shovelware opt-in (no
         # non-shovelware game). Skip the query when the opt-in is off.
@@ -494,13 +558,21 @@ class WizardQueueView(APIView):
                     'items': [],
                 }
 
-            groups_dict[cid]['items'].append({
+            prior = dlc_existing.get(g.id)
+            item = {
                 'trophy_group_id': g.trophy_group_id,
                 'trophy_group_name': g.display_name,
-                'has_rating': has_rating,
+                'has_rating': prior is not None,
                 'is_dlc': True,
                 'hours_label': 'Hours to Complete',
-            })
+            }
+            if prior:
+                # Same hazard as the base queue: without these the form loads at 5/5/5/3.0 and submitting
+                # for the recommendation overwrites a real rating.
+                item['existing'] = _rating_payload(prior)
+                item['existing_blurb'] = prior.blurb
+                item['rated_at'] = prior.updated_at.isoformat()
+            groups_dict[cid]['items'].append(item)
             total_items += 1
 
         all_groups = list(groups_dict.values())

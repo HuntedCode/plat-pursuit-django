@@ -31,7 +31,18 @@ above it, and a full filter bar would compete with the strip it sits under.
         {% comment %}The shared sentence, pointed at a person. It encodes difficulty, grindiness AND fun in
         one clause list, which is why those three get no tiles of their own here -- printing the sentence
         and then the three numbers it is made of would say the same thing twice.{% endcomment %}
-        <p class="pp-taste__summary">{{ rating_summary_stats|rating_summary }}</p>
+        <div class="pp-taste__say">
+            <p class="pp-taste__summary">{{ rating_summary_stats|rating_summary }}</p>
+            {% comment %}How often they send people after a platinum. Denominated in ANSWERED ratings and
+            printed with that count, because everything scored before the recommendation existed carries
+            no answer -- counting those would read as a hunter who recommends almost nothing. Absent until
+            they have answered one.{% endcomment %}
+            {% if rating_summary_stats.answered %}
+            <p class="pp-taste__rec">
+                Recommends <b>{{ rating_summary_stats.recommend_pct }}%</b> of the {{ rating_summary_stats.answered|intcomma }} they&rsquo;ve weighed in on
+            </p>
+            {% endif %}
+        </div>
     </div>
 
     <div class="pp-taste__stats">

@@ -37,6 +37,18 @@
     function el(id) { return document.getElementById(id); }
     function field(form, name) { return form.querySelector('[name="' + name + '"]'); }
 
+    // The recommendation is a RADIO GROUP, so `field()` (which returns the first match) would always
+    // report the first option's value rather than the chosen one. Read and write it through these.
+    function recValue(form) {
+        var picked = form.querySelector('[name="recommendation"]:checked');
+        return picked ? picked.value : '';
+    }
+    function setRec(form, value) {
+        form.querySelectorAll('[name="recommendation"]').forEach(function (input) {
+            input.checked = Boolean(value) && input.value === value;
+        });
+    }
+
     function setReadout(form, name) {
         var out = form.querySelector('[data-gd-qr-val="' + name + '"]');
         var input = field(form, name);
@@ -64,6 +76,11 @@
                 ? existing[name] : DEFAULTS[name];
             input.value = v;
         });
+        // Cleared explicitly rather than through DEFAULTS, because its "default" is NOTHING PICKED. The
+        // wizard calls prefill() with no argument between games, and a recommendation left checked from
+        // the previous game would be pre-answered on the next one -- an answer the hunter never gave, on
+        // the one field that is required.
+        setRec(form, existing && existing.recommendation);
         var area = form.querySelector('[data-gd-qr-blurb]');
         if (area) { area.value = blurb || ''; }
         SLIDERS.forEach(function (n) { setReadout(form, n); });
@@ -103,16 +120,27 @@
         }
         function ready() {
             var h = hoursValue();
-            return Boolean(h) && h >= 1;
+            // TWO gates now. The host's submit button is enabled off this and nothing else, so a
+            // requirement missing from here is a requirement the button ignores -- the save would go out
+            // and come back 400 from the server instead of being prevented.
+            return Boolean(h) && h >= 1 && Boolean(recValue(form));
         }
         function announce() {
-            if (o.onChange) { o.onChange({ ready: ready(), hours: hoursValue() || null }); }
+            if (o.onChange) {
+                o.onChange({
+                    ready: ready(),
+                    hours: hoursValue() || null,
+                    recommendation: recValue(form),
+                });
+            }
         }
 
         function onInput(e) {
             if (e.target.matches('[data-gd-qr-slider]')) { setReadout(form, e.target.name); }
             if (e.target.matches('[data-gd-qr-blurb]')) { refreshCount(form); }
             if (e.target.name === 'hours_to_platinum') { announce(); }
+            // Radios fire `input` as well as `change`, so the existing delegated listener covers them.
+            if (e.target.name === 'recommendation') { announce(); }
         }
 
         function doSubmit() {
@@ -128,9 +156,19 @@
                 announce();
                 return;
             }
+            var recommendation = recValue(form);
+            if (!recommendation) {
+                if (!o.onChange && PP.ToastManager) { PP.ToastManager.show('Pick a recommendation.', 'warning'); }
+                announce();
+                return;
+            }
             var area = form.querySelector('[data-gd-qr-blurb]');
             var blurb = area ? area.value.trim() : '';
+            // Hand-built rather than serialized from the form, so a field added to the markup and not to
+            // this object is silently never sent -- and on an EDIT the server would then write its
+            // default over the stored answer.
             var payload = {
+                recommendation: recommendation,
                 difficulty: parseInt(field(form, 'difficulty').value, 10),
                 grindiness: parseInt(field(form, 'grindiness').value, 10),
                 fun_ranking: parseInt(field(form, 'fun_ranking').value, 10),

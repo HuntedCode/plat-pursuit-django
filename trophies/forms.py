@@ -409,10 +409,15 @@ class TrophyCaseForm(forms.Form):
 
 
 class UserConceptRatingForm(forms.ModelForm):
+    """The ONE server-side gate on a rating. Both the API endpoint and any future writer go through it, so
+    a field added to `fields` becomes required everywhere at once."""
+
     class Meta:
         model = UserConceptRating
-        fields = ['difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking', 'overall_rating', 'blurb']
+        fields = ['recommendation', 'difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking',
+                  'overall_rating', 'blurb']
         widgets = {
+            'recommendation': forms.RadioSelect,
             'difficulty': forms.NumberInput(attrs={'type': 'range', 'min': 1, 'max': 10, 'class': 'range range-primary'}),
             'grindiness': forms.NumberInput(attrs={'type': 'range', 'min': 1, 'max': 10, 'class': 'range range-success'}),
             'hours_to_platinum': forms.NumberInput(attrs={'type': 'number', 'min': 1, 'class': 'input'}),
@@ -421,6 +426,7 @@ class UserConceptRatingForm(forms.ModelForm):
             'blurb': forms.Textarea(attrs={'maxlength': 140, 'rows': 2, 'class': 'textarea'}),
         }
         labels = {
+            'recommendation': 'Would you recommend it?',
             'difficulty': 'Platinum Difficulty',
             'grindiness': 'Platinum Grindiness',
             'hours_to_platinum': 'Hours To Platinum',
@@ -428,6 +434,17 @@ class UserConceptRatingForm(forms.ModelForm):
             'overall_rating': 'Overall Game Rating',
             'blurb': 'Quick take (optional)',
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # The model is deliberately permissive (`blank=True`) so pre-existing rows stay valid and
+        # `recommendation=''` can mean "the wizard still owes me this question". A ModelForm inherits that
+        # permissiveness, so without this line the field would be optional on every write path and the
+        # whole point -- every rating from here on carries one -- would quietly not happen.
+        self.fields['recommendation'].required = True
+        # `blank=True` also makes Django prepend an empty choice, which under RadioSelect renders as a
+        # blank fifth radio. Reassign to the model's own list so the control offers exactly four.
+        self.fields['recommendation'].choices = UserConceptRating.RECOMMENDATIONS
 
     def clean_hours_to_platinum(self):
         value = self.cleaned_data.get('hours_to_platinum')

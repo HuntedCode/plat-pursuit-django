@@ -58,8 +58,34 @@ Six sorts (`PROFILE_RATING_SORTS`): recently rated / highest / lowest / hardest 
 
 `build_profile_ratings_page` is **three queries flat** whatever the page size: the ratings, the community scores for the concepts on that page, and the games behind those concepts. Nothing scales with account size.
 
+## The recommendation
+
+The one **directive** field. Every score describes what the platinum was *like* (difficulty, grind, hours, fun, overall); none says whether anyone else should do it, which is the question a trophy site exists to answer. The archived `Review` model carried `recommended` (a bool) and archiving reviews took it with it; this restores it with four values.
+
+| Value | Label |
+|---|---|
+| `worth_it` | Do it |
+| `good_game_bad_plat` | Great game, rough platinum |
+| `bad_game_good_plat` | Only for the trophy |
+| `skip` | Skip it |
+
+**Four, not three.** "Good game, bad plat" has an inverse, and here it is not an edge case — *bad game, good plat* is the shovelware category, which the codebase already recognises formally (`hide_shovelware` filters, the wizard's shovelware opt-in). With three options, a hunter rating a Ratalaika plat must choose between "recommended" (implying the game is good) and "not recommended" (implying skip the plat), and both are wrong. It is rendered as four labelled choices, never a 3-point segmented control — a segment strip implies ordinality, and two of the four are compound statements about the game *and* the platinum separately.
+
+**Permissive model, strict form.** `blank=True, default=''` keeps every pre-existing row valid and makes `recommendation=''` the "needs one" predicate; the requirement lives in `UserConceptRatingForm`, which every server write path goes through. Note the trap: a `blank=True` field added to `Meta.fields` is **not** required by default, so the form sets `required=True` and reassigns `choices` explicitly (Django would otherwise prepend an empty option, rendering a blank fifth radio).
+
+**A partial update is not a partial wipe.** An omitted `recommendation` on an *existing* rating falls back to the stored value — the same protection the blurb has, and for the same reason: "adjust my hours" must not be able to destroy an answer it never mentioned. It is injected *before* validation rather than restored after, because unlike the blurb the field is required and an absent one would never reach a restore step.
+
+**No backfill is possible** — a declared recommendation cannot be inferred from scores. Instead every pre-existing rating is re-served by the wizard once (below), which is also what gives each one an opportunity to gain a quick take.
+
+### The community split
+
+`recommendation_split` is computed inside `RatingService._compute_averages`, so it rides both existing cache entries with no new key and no new invalidation path, and reaches every consumer — including `GroupRatingView`'s JSON response, which is what the live-update reads.
+
+`recommend_pct` counts `worth_it` + `bad_game_good_plat`: both say *go and do this platinum*, which is what is being asked. The game being poor is what the star score is for. The **denominator is answered ratings**, not all of them — counting the pre-field backlog as "would not recommend" would misreport a beloved game as divisive until it clears. The percentage is always printed **with its N**; there is no display floor.
+
 ## Data model
 
+- `UserConceptRating.recommendation` (CharField 20, choices, `blank=True`) — see above.
 - `UserConceptRating.blurb` (CharField 140) + `blurb_hidden` (bool), partial index `rating_blurb_idx`.
 - `UserConceptRating.visible_blurbs()` — the ONLY supported blurb read path (present + not staff-hidden, index-backed).
 - `BlurbReport` — FKs the rating, so it follows the rating through `Concept.absorb()` with no absorb branch.
@@ -72,6 +98,9 @@ Six sorts (`PROFILE_RATING_SORTS`): recently rated / highest / lowest / hardest 
 - **SSR↔JS parity.** The four rating filters have JS twins in `game-detail.js`; a threshold/wording change must move both.
 - **`annotate_community_ratings` cannot score a DLC rating.** The shared browse helper correlates on the concept alone and hard-filters to `concept_trophy_group__isnull=True`, so a DLC rating scored through it is compared against its **base game's** community — a comparison that renders convincingly and means something else. Correlating on the group instead is not the fix either: a base-game rating carries a NULL group and `NULL = NULL` never matches in SQL, so every base row would come back silently unmatched. `_community_scores` groups in the database and pairs up in Python, which sidesteps both. Pinned by test.
 - **The rating card's stat strip is laid out by a CONTAINER query, the only one in the codebase.** Its width is the wall's `auto-fill` track minus the art panel, so the same viewport gives it different widths depending on how many columns fit — a viewport breakpoint put four cells in a 300px body and ellipsised every label. `.pp-rcard__body` is `container-type: inline-size` and the strip goes 2×2 → one row at `@container (min-width: 360px)`.
+- **"Rated" means COMPLETE, in ONE place.** It used to mean "a row exists", spelled out separately in nine spots across the wizard queue, `ReviewHubService` and the dashboard provider. It now means "a row carrying a recommendation", and every one of them reads `ReviewHubService.COMPLETE` / `complete_ratings()`. Nine copies of a definition is nine chances for the header to report zero waiting while the queue is still serving.
+- **A re-served rating MUST arrive prefilled — this is a silent data-loss hazard.** The form's defaults are difficulty 5, grind 5, fun 5, overall 3.0. A re-queued card that loads blank and is then submitted for its recommendation writes those defaults straight over a considered 8/9/2/4.5, with nothing on screen to notice. The queue therefore sends the stored row (`existing`, `existing_blurb`, `rated_at`), not just a flag. Pinned by `test_a_requeued_rating_arrives_with_its_own_scores`.
+- **`get_recommendation_display` has no JS twin.** Every other word the ratings JS prints mirrors a Python function (`rating_verdict`, `rating_summary`, `rating_tone`); a choices label has no such function, so the label comes back **from the API response** (`recommendation_label`). Never hardcode the four strings client-side.
 - **A rating hangs off a Concept; a cover and a link need a Game.** `display_image_url` is the site's one cover chain and `game_detail_with_profile` is keyed on `np_communication_id`, so the profile wall resolves concept → owned Game in one bulk query. The pick is **ordered** (platinumed, then furthest progress, then id) because a concept can span several platform SKUs and a card that changed which version it linked to between loads would look like a bug in the link.
 
 ## Deferred / future work — the "blurbs at scale" cluster

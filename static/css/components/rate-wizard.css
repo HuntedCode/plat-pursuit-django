@@ -198,6 +198,19 @@
 .rmg__req.is-met .rmg__req-ok { display: inline; }
 .rmg__req.is-met { color: var(--pp-text-dim); }
 
+/* "You rated this 2 years ago" -- only on a re-served card, where the question is what changed rather
+   than what to score. A quiet note, not a warning: nothing is wrong, there is just one field missing.
+   `.hidden` restated because this rule sets `display` and unlayered component CSS beats the utility. */
+.rmg__prior {
+    display: flex; align-items: center; gap: 7px;
+    margin: 0 0 11px; padding: 7px 10px;
+    border-radius: var(--pp-radius-sm);
+    border-left: 2px solid color-mix(in oklab, var(--pp-secondary) 55%, transparent);
+    background: color-mix(in oklab, var(--pp-secondary) 9%, transparent);
+    font-size: 12px; color: var(--pp-text-dim);
+}
+.rmg__prior.hidden { display: none; }
+
 .rmg__actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
 .rmg__actions .rmg__spacer { flex: 1 1 auto; }
 

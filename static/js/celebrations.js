@@ -74,27 +74,20 @@ const CelebrationManager = {
         };
 
         frame();
-    },
-
-    /* `celebratePlatinum` was removed in 2026-08 with the notification system. Its only trigger was
-     * notifications.js polling for unread `platinum_earned` rows on every page load, so the confetti was
-     * a side effect of an inbox rather than of earning anything -- it fired on whatever page you happened
-     * to open next. A platinum moment belongs to the rebuild, fired from the earning, not from a poll.
-     *
-     * `loadConfetti` and `fireSideConfetti` stay: easter-eggs.js and reel-spinner.js both use them. */
-
-    /**
-     * Celebrate checklist completion (backwards compatible)
-     */
-    async celebrateChecklistComplete() {
-        try {
-            await this.loadConfetti();
-            this.fireSideConfetti(3000);
-            PlatPursuit.ToastManager.show('Checklist complete! Great job!', 'success');
-        } catch (error) {
-            console.error('Failed to show checklist celebration:', error);
-        }
     }
+
+    /* Two canned celebrations were removed in 2026-08, leaving this a pair of PRIMITIVES that callers
+     * compose rather than a menu of occasions.
+     *
+     * `celebratePlatinum` went with the notification system: its only trigger was notifications.js
+     * polling for unread `platinum_earned` rows on every page load, so the confetti was a side effect of
+     * an inbox rather than of earning anything -- it fired on whatever page you happened to open next.
+     * That moment belongs to the rebuild, fired from the earn.
+     *
+     * `celebrateChecklistComplete` outlived the system it was named for: Roadmaps replaced Checklists and
+     * nothing had called it since.
+     *
+     * `loadConfetti` and `fireSideConfetti` stay -- easter-eggs.js and reel-spinner.js use both. */
 };
 
 // Export to PlatPursuit namespace

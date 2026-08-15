@@ -66,6 +66,17 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
                 {% if r.concept_trophy_group %}
                 <span class="pp-rcard__dlc" title="This rating is for the {{ r.concept_trophy_group.display_name }} trophy set">{{ r.concept_trophy_group.display_name }}</span>
                 {% endif %}
+
+                {% comment %}Their verdict, and the card's punchline: every other figure on it describes
+                what the platinum was LIKE, this one says whether to go and do it. Absent on ratings that
+                predate the field rather than shown as a neutral fourth state -- an unanswered question is
+                not an answer, and the wizard is already asking it.
+
+                The label comes from the model's own choices (`get_recommendation_display`), so the four
+                strings live in exactly one place.{% endcomment %}
+                {% if r.recommendation %}
+                <span class="pp-rcard__rec" data-rec="{{ r.recommendation }}">{{ r.get_recommendation_display }}</span>
+                {% endif %}
             </span>
 
             {% comment %}The overall score, on the title's line rather than under it: it is the headline of

@@ -285,24 +285,42 @@ class ReviewHubService:
 
         return list(plat_concept_ids | full_completion_concept_ids)
 
+    #: What "rated" MEANS, in one place.
+    #:
+    #: It used to mean "a row exists", and that definition was spelled out separately in nine places
+    #: across the queue, this service and the dashboard provider. Adding the recommendation changed it to
+    #: "a row exists AND carries a recommendation", and nine independent copies of a definition is nine
+    #: chances for the header to report zero waiting while the queue is still serving. They all read this
+    #: now.
+    #:
+    #: Blank rather than NULL because the column is `blank=True, default=''` -- see the field's own note
+    #: for why the model stays permissive while the form does not.
+    COMPLETE = ~Q(recommendation='')
+
     @staticmethod
-    def get_unrated_platinum_count(profile):
-        """Count of ratable concepts (non-shovelware) not yet base-game rated."""
+    def complete_ratings(profile, **filters):
+        """The hunter's COMPLETE ratings, however you want them narrowed.
+
+        One entry point so callers cannot accidentally count an incomplete rating as done. Pass whatever
+        scoping the caller needs (`concept_id__in=`, `concept_trophy_group_id__in=`, ...).
+        """
         from trophies.models import UserConceptRating
 
+        return UserConceptRating.objects.filter(
+            ReviewHubService.COMPLETE, profile=profile, **filters
+        )
+
+    @staticmethod
+    def get_unrated_platinum_count(profile):
+        """Count of ratable concepts (non-shovelware) whose base-game rating is missing or incomplete."""
         ratable_ids = ReviewHubService.get_ratable_concept_ids(profile)
         if not ratable_ids:
             return 0
 
-        # Rated concept IDs (base game = null concept_trophy_group)
         rated_concept_ids = set(
-            UserConceptRating.objects
-            .filter(
-                profile=profile,
-                concept_id__in=ratable_ids,
-                concept_trophy_group__isnull=True,
-            )
-            .values_list('concept_id', flat=True)
+            ReviewHubService.complete_ratings(
+                profile, concept_id__in=ratable_ids, concept_trophy_group__isnull=True,
+            ).values_list('concept_id', flat=True)
         )
 
         return len(set(ratable_ids) - rated_concept_ids)
@@ -323,25 +341,36 @@ class ReviewHubService:
 
         `dlc_total` counts COMPLETED DLC groups -- an unfinished one is not something you can rate --
         which is the same set the wizard queue paginates, so its meter and this header agree.
+
+        "Waiting" is SPLIT into `*_new` (never rated) and `*_need_rec` (rated before the recommendation
+        existed, so the wizard owes them one question). They are two different asks -- one is a whole
+        rating, the other is a single tap -- and lumping them would make a long-standing rater's counter
+        jump by hundreds overnight with no way to see that most of it is nearly-free.
         """
         from trophies.models import (
             ConceptTrophyGroup, EarnedTrophy, Trophy, UserConceptRating,
         )
 
         ratable_ids = ReviewHubService.get_ratable_concept_ids(profile)
-        progress = {'games_total': 0, 'games_waiting': 0, 'dlc_total': 0, 'dlc_waiting': 0}
+        progress = {'games_total': 0, 'games_waiting': 0, 'games_new': 0, 'games_need_rec': 0,
+                    'dlc_total': 0, 'dlc_waiting': 0, 'dlc_new': 0, 'dlc_need_rec': 0}
         if not ratable_ids:
             return progress
 
-        rated_concept_ids = set(
-            UserConceptRating.objects.filter(
-                profile=profile,
-                concept_id__in=ratable_ids,
-                concept_trophy_group__isnull=True,      # base game
+        base = {'profile': profile, 'concept_id__in': ratable_ids, 'concept_trophy_group__isnull': True}
+        # Every row, then the complete subset. Two set-based reads rather than one pass in Python: both
+        # ride the (profile, concept) index and return ids, so neither scales with anything but the
+        # ratable set.
+        any_rated = set(UserConceptRating.objects.filter(**base).values_list('concept_id', flat=True))
+        complete = set(
+            ReviewHubService.complete_ratings(
+                profile, concept_id__in=ratable_ids, concept_trophy_group__isnull=True,
             ).values_list('concept_id', flat=True)
         )
         progress['games_total'] = len(ratable_ids)
-        progress['games_waiting'] = len(set(ratable_ids) - rated_concept_ids)
+        progress['games_waiting'] = len(set(ratable_ids) - complete)
+        progress['games_new'] = len(set(ratable_ids) - any_rated)
+        progress['games_need_rec'] = len(any_rated - complete)
 
         dlc_groups = list(
             ConceptTrophyGroup.objects
@@ -383,14 +412,21 @@ class ReviewHubService:
         if not completed:
             return progress
 
-        rated_ctg_ids = set(
+        completed_ids = [g[0] for g in completed]
+        any_rated_ctg = set(
             UserConceptRating.objects.filter(
-                profile=profile,
-                concept_trophy_group_id__in=[g[0] for g in completed],
+                profile=profile, concept_trophy_group_id__in=completed_ids,
+            ).values_list('concept_trophy_group_id', flat=True)
+        )
+        complete_ctg = set(
+            ReviewHubService.complete_ratings(
+                profile, concept_trophy_group_id__in=completed_ids,
             ).values_list('concept_trophy_group_id', flat=True)
         )
         progress['dlc_total'] = len(completed)
-        progress['dlc_waiting'] = sum(1 for g in completed if g[0] not in rated_ctg_ids)
+        progress['dlc_waiting'] = sum(1 for g in completed if g[0] not in complete_ctg)
+        progress['dlc_new'] = sum(1 for g in completed if g[0] not in any_rated_ctg)
+        progress['dlc_need_rec'] = len(any_rated_ctg - complete_ctg)
         return progress
 
     @staticmethod

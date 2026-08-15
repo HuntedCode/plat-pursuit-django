@@ -1506,6 +1506,33 @@ class UserConceptRating(models.Model):
     hours_to_platinum = models.PositiveIntegerField(help_text='Estimated hours to achieve platinum.')
     fun_ranking = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(10)], help_text='Fun ranking for the platinum (1-10)')
     overall_rating = models.FloatField(validators=[MinValueValidator(0.5), MaxValueValidator(5.0)], help_text="Overall game rating (1-5 stars)")
+    # The one DIRECTIVE field. Every score above describes what the platinum was LIKE; none of them says
+    # whether anyone else should do it, which is the question a trophy site exists to answer. The archived
+    # Review model carried `recommended` (a bool) and archiving reviews took it with it; this restores it.
+    #
+    # FOUR values, not three. "Good game, bad plat" has an inverse, and on this site it is not an edge
+    # case -- "bad game, good plat" IS the shovelware category, which the codebase already recognises
+    # formally (hide_shovelware filters, the wizard's shovelware opt-in). With three, a hunter rating a
+    # Ratalaika plat has to choose between "recommended" (implying the game is good) and "not recommended"
+    # (implying skip the plat), and both are wrong.
+    #
+    # Deliberately NOT called `verdict`: `rating_verdict` (and its `verdictOf` JS twin, and
+    # `.gd-cond__verdict` / `.pp-rcard__verdict`) already mean the plain-language WORDS for
+    # difficulty/grind/fun ("Brutal", "A blast"). Two unrelated things under one name is a permanent tax.
+    #
+    # `blank=True` keeps every pre-existing row valid and makes `recommendation=''` the "needs one"
+    # predicate the wizard queues on. The REQUIREMENT lives in UserConceptRatingForm, which every server
+    # write path goes through -- permissive model, strict form.
+    RECOMMENDATIONS = [
+        ('worth_it', 'Do it'),
+        ('good_game_bad_plat', 'Great game, rough platinum'),
+        ('bad_game_good_plat', 'Only for the trophy'),
+        ('skip', 'Skip it'),
+    ]
+    recommendation = models.CharField(
+        max_length=20, choices=RECOMMENDATIONS, blank=True, default='',
+        help_text="Would you send someone else after this platinum? Blank = predates the field (re-asked by the wizard).",
+    )
     # Optional public "quick take" (community micro-review), attached to the rating. Reactive moderation:
     # auto-filtered on submit (banned words / sanitize), reportable, staff soft-hide via blurb_hidden.
     blurb = models.CharField(max_length=140, blank=True, default='', help_text="Optional short public quick take (<=140 chars).")
