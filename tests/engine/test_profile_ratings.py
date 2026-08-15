@@ -491,6 +491,29 @@ def test_switching_view_does_not_teleport_the_scroll(client):
     assert 'scrollKey' not in script, 'the profile scroller restores a saved scroll position again'
 
 
+def test_a_view_change_re_anchors_to_the_switcher(client):
+    """The remaining half of the jump, and nothing scrolled anyone: the page gets SHORTER under them.
+    Swap a 1200px wall in while they are 3000px down a 4000px one and the browser has nowhere to put
+    them -- it clamps scrollY to the new document height, which is the bottom of the incoming wall. That
+    is why it only happened past a certain depth and always landed at the bottom.
+
+    A longer wall has the mirror problem: you keep your depth and arrive halfway down content you have
+    not seen. Either way the answer to "show me the other view" is to show it from its start -- but only
+    once the switcher has scrolled off the top, or someone reading the hero gets yanked for asking."""
+    profile = ProfileFactory(is_linked=True)
+    _rated(profile, title='Anything')
+
+    body = client.get(_url(profile), **CF).content.decode()
+    fn = body[body.index('function keepPanelInView'):]
+    fn = fn[:fn.index('\n        }')]
+
+    assert "getBoundingClientRect().top >= 0" in fn, 'the anchor fires even when the switcher is visible'
+    assert "block: 'start'" in fn, 'the anchor no longer honours the sticky nav offset'
+    assert "behavior: 'auto'" in fn, 'a smooth scroll here fights the slide animation'
+    # Wired into the tab-content swap, and BEFORE the slide plays.
+    assert body.index('keepPanelInView();') < body.index('playPendingSlide();')
+
+
 def test_switching_view_slides_the_panel_in_directionally(client):
     """The shared `slideViewIn`, the same motion every other rebuilt segmented switcher uses. BOTH
     switchers on this page feed it -- the tab strip and the Ratings tab's Games/DLC control -- because

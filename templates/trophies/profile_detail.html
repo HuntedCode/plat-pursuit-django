@@ -105,6 +105,26 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             }
         });
 
+        // ── Re-anchor to the switcher on a view change ────────────────────────────────────────────
+        // Nothing SCROLLS you here -- the page gets shorter under you. Swap a 1200px wall in while you
+        // are 3000px down a 4000px one and the browser has nowhere to put you: it clamps scrollY to the
+        // new document height, which is the bottom of the incoming wall. That is why it only happens
+        // past a certain depth, and why it always lands at the bottom.
+        //
+        // A wall that is LONGER has the mirror problem: you keep your depth and arrive halfway down
+        // content you have not seen. Either way the honest answer to "show me the other view" is to show
+        // it from its start.
+        function keepPanelInView() {
+            var bar = document.getElementById('profile-tab-bar');
+            // Only once the switcher has actually scrolled off the top. Someone still reading the hero
+            // asked for a different tab, not for the page to jump.
+            if (!bar || bar.getBoundingClientRect().top >= 0) { return; }
+            // `block: 'start'` honours the site's `scroll-padding-top`, so this lands below the sticky
+            // nav rather than under it. Instant, not smooth: the panel is already sliding in, and two
+            // motions at once reads as a lurch.
+            bar.scrollIntoView({ block: 'start', behavior: 'auto' });
+        }
+
         function playPendingSlide() {
             var move = pendingSlide;
             pendingSlide = null;
@@ -254,6 +274,9 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             if (e.detail.target.id === 'tab-content') {
                 updateActiveTab();
                 initTabContent();
+                // Anchor first, then animate: scrolling a panel that is mid-slide fights its own
+                // transform, and the browser's clamp has already happened by now either way.
+                keepPanelInView();
                 // After initTabContent, so the panel is fully built before it travels -- animating first
                 // and then mutating what is inside it is what makes a slide look like it stutters.
                 playPendingSlide();
