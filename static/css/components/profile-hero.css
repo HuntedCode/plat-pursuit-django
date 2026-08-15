@@ -697,9 +697,14 @@
 .pp-rcard__ident { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .pp-rcard__title {
     font-size: 0.88rem; font-weight: 700; line-height: 1.3; color: var(--pp-text);
-    /* Wraps freely. Nothing is clamped or height-reserved on this card: the rows of a two-column grid
-       stretch to their tallest member anyway, so reserving lines would only add empty space to the short
-       ones without making a single row more even. */
+    /* TWO LINES RESERVED, for the same reason the quick take reserves four: the card lets a title wrap,
+       so a card whose title does NOT wrap has to hold that second line open or the two sit at different
+       heights. (An earlier note here claimed the opposite -- that a grid row stretches to its tallest
+       member anyway, so reserving would only pad the short cards. The padding is what makes them match.)
+       Clamped to the same two, because a title long enough for a third line would push straight past the
+       space just reserved for it. */
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    min-height: calc(2 * 1.3em);
     transition: color var(--pp-dur-fast, 0.15s) var(--pp-ease);
 }
 @media (min-width: 768px) { .pp-rcard__title { font-size: 0.95rem; } }
@@ -814,11 +819,16 @@
     overflow-wrap: anywhere;
 }
 @media (min-width: 768px) { .pp-rcard__take { font-size: 0.78rem; } }
-/* `line-height: 1` so a glyph two thirds larger than the text does not deepen the line box it sits in --
+/* The house cyan, NOT the verdict colour. Three things on this card already carry that -- the edge, the
+   stamp on the art and the label -- and a fourth turned the quote into another verdict signal when it is
+   really punctuation. Cyan keeps it a typographic mark, and matches the same mark on a platinum plat
+   card.
+
+   `line-height: 1` so a glyph two thirds larger than the text does not deepen the line box it sits in --
    which would break the reserve above, since that counts four lines at the TEXT's line-height. */
 .pp-rcard__quote {
     font-size: 1.05rem; line-height: 1; vertical-align: -0.08em; margin-right: 4px;
-    color: color-mix(in oklab, var(--rec-c) 55%, transparent);
+    color: var(--pp-primary);
 }
 
 .pp-rcard__foot {

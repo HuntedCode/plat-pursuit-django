@@ -410,6 +410,29 @@ def test_every_card_reserves_room_for_a_quick_take(client):
     assert 'min-height: calc(4 * 1.45em)' in take, 'the take no longer reserves its lines'
 
 
+def test_the_title_holds_its_second_line_open(client):
+    """The card lets a long title wrap, so a card whose title does NOT wrap has to hold that line open --
+    otherwise the two sit at different heights and the wall goes ragged again. Clamped to the same two it
+    reserves: a title long enough for a third line would push straight past the space reserved for it."""
+    profile = ProfileFactory(is_linked=True)
+    _rated(profile, title='Nier')
+    _rated(profile, title='The Legend of Heroes: Trails of Cold Steel IV -- The End of Saga')
+
+    body = client.get(_url(profile), **CF).content.decode()
+    css = (ROOT / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
+    rule = css[css.index('.pp-rcard__title {'):]
+    rule = rule[:rule.index('}')]
+
+    assert 'Nier' in body and 'Trails of Cold Steel' in body
+    reserved = re.search(r'min-height: calc\((\d+) \* ([\d.]+)em\)', rule)
+    clamped = re.search(r'-webkit-line-clamp: (\d+)', rule)
+    assert reserved and clamped, 'the title stopped reserving or stopped clamping'
+    assert reserved.group(1) == clamped.group(1), (
+        f'the title reserves {reserved.group(1)} lines but shows {clamped.group(1)}'
+    )
+    assert f'line-height: {reserved.group(2)}' in rule
+
+
 def test_the_take_uses_the_plat_cards_quote_mark(client):
     """The same mark on both surfaces, so a take looks like a take wherever you meet it. It replaced a
     bordered, tinted block: with the card's edge and the stamp both carrying colour, a third framed panel
