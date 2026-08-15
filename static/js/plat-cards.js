@@ -446,11 +446,11 @@
             submitLabel: edit ? 'Save rating' : 'Rate and download',
             // In PROMPT mode the secondary action is "skip, just download"; in EDIT mode a plain cancel.
             cancelLabel: edit ? 'Cancel' : 'Skip, just download',
-            playtimeHint: current.playtime ? 'Your tracked playtime: ' + current.playtime : '',
+            playtimeHint: current.playtime ? 'Playtime: ' + current.playtime : '',
             // A 100% card is a set with no platinum in it, so the middle recommendation must not call one
             // rough. `variant` rides the card's own HTML payload, so this needs no extra request.
             recLabel: current.variant === 'platinum'
-                ? 'Great game, rough platinum' : 'Great game, rough trophies',
+                ? 'Good game, tough plat' : 'Good game, tough trophies',
             recLegend: current.variant === 'platinum'
                 ? 'Would you recommend the platinum?' : 'Would you recommend these trophies?',
             onSaved: function (data, payload) {

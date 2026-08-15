@@ -64,7 +64,7 @@ Six sorts (`PROFILE_RATING_SORTS`): recently rated / highest / lowest / hardest 
 
 `build_profile_ratings_page` is **four queries flat** on the base wall (three on the DLC one) whatever the page size: the ratings, the community scores for the concepts on that page, the games behind those concepts, and which of those concepts define a platinum. Nothing scales with account size.
 
-That fourth query is what words the verdict. "Great game, rough platinum" is wrong on a set with no platinum, and the fact is asked of the **concept**, not of the hunter's own copy: reading it off the attached `card_game` meant a concept they own no copy of (possible after a merge re-points a rating onto a survivor) fell through to "rough trophies" on a real platinum, and a hunter whose only copy is a no-platinum port got the same. It is skipped entirely on the DLC wall, where the answer is always no.
+That fourth query is what words the verdict. "Good game, tough plat" is wrong on a set with no platinum, and the fact is asked of the **concept**, not of the hunter's own copy: reading it off the attached `card_game` meant a concept they own no copy of (possible after a merge re-points a rating onto a survivor) fell through to "tough trophies" on a real platinum, and a hunter whose only copy is a no-platinum port got the same. It is skipped entirely on the DLC wall, where the answer is always no.
 
 ## The recommendation
 
@@ -73,10 +73,10 @@ The one **directive** field. Every score describes what the platinum was *like* 
 | Value | Label | Label when the set has no platinum |
 |---|---|---|
 | `worth_it` | Do it | Do it |
-| `good_game_bad_plat` | Great game, rough platinum | **Great game, rough trophies** |
+| `good_game_bad_plat` | Good game, tough plat | **Good game, tough trophies** |
 | `skip` | Skip it | Skip it |
 
-**The middle label depends on the game.** It is the only one that NAMES the thing that was rough, and "rough platinum" is wrong on a DLC pack (which never has one) and on a base game that never defined one. `RECOMMENDATIONS_NO_PLAT` is the second wording; `recommendation_choices(has_platinum)`, `recommendation_label(has_platinum)` and `recommendation_copy(has_platinum)` are the three ways to reach it. Use `recommendation_label()` rather than `get_recommendation_display()` anywhere the game is known — the latter cannot know, so it always says "platinum".
+**The middle label depends on the game.** It is the only one that NAMES the thing that was rough, and "tough plat" is wrong on a DLC pack (which never has one) and on a base game that never defined one. `RECOMMENDATIONS_NO_PLAT` is the second wording; `recommendation_choices(has_platinum)`, `recommendation_label(has_platinum)` and `recommendation_copy(has_platinum)` are the three ways to reach it. Use `recommendation_label()` rather than `get_recommendation_display()` anywhere the game is known — the latter cannot know, so it always says "platinum".
 
 The **question moves with it** ("Would you recommend the platinum?" / "…these trophies?"), which is why `recommendation_copy()` returns both: swapping one and not the other is worse than leaving both wrong. In the FORM both are set per game through `RatingFields.label({recLabel, recLegend})`, exactly as the hours label is — the form is rendered once and re-pointed at game after game, so a value baked in at render time would be the first game's answer forever.
 

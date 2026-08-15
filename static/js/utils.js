@@ -1597,6 +1597,10 @@ function dismissableSheet(dialog, opts) {
     var onClose = opts.onClose || function () {};
     var scrim = opts.scrim || null;
     var threshold = opts.threshold || 90;
+    // `handle`: a selector the touch must START inside for the drag to arm at all. Without it any downward
+    // touch anywhere in the sheet drags it, which is fine for a sheet you only read and wrong for one you
+    // OPERATE -- see the control guard below.
+    var handle = opts.handle || null;
     var startY = null, dragging = false;
     dialog.classList.add('pp-dismissable');   // surfaces the touch-only grabber handle (.pp-dismissable::before)
     function resetStyles() {
@@ -1604,11 +1608,21 @@ function dismissableSheet(dialog, opts) {
         if (scrim) { scrim.style.transition = ''; scrim.style.opacity = ''; }
     }
     dialog.addEventListener('touchstart', function (e) {
+        startY = null;
+        // A drag that starts on a CONTROL belongs to the control. `touchmove` below preventDefault()s any
+        // downward movement and translates the whole sheet, so a finger sliding a range input -- which
+        // never travels perfectly horizontally -- was dragging the dialog instead of the thumb. Never a
+        // dismissal gesture on any sheet, which is why this is unconditional rather than an option.
+        if (e.target.closest && e.target.closest('input, textarea, select, button, a, [role="slider"]')) {
+            return;
+        }
+        // And where a `handle` is named, only that region drags at all.
+        if (handle && !(e.target.closest && e.target.closest(handle))) { return; }
         // Only a drag from the very TOP of the scroll dismisses. Walk from the touched element up to the
         // dialog: if anything along the way is scrolled (the dialog itself, or an INNER scroll container like
         // the peek's capped info column), let it scroll instead of hijacking the gesture.
         for (var el = e.target; el; el = el.parentNode) {
-            if (el.scrollTop > 0) { startY = null; return; }
+            if (el.scrollTop > 0) { return; }
             if (el === dialog) { break; }
         }
         startY = e.touches[0].clientY; dragging = false;

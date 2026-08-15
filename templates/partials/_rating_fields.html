@@ -37,7 +37,7 @@ default until it does. {% endcomment %}
 <label class="gd-qr__field">
     <span class="gd-qr__lbl" data-gd-qr-hours-label>Hours to Platinum</span>
     <input type="number" name="hours_to_platinum" min="1" max="10000" class="gd-qr__num" placeholder="e.g. 40" inputmode="numeric" />
-    {% if user_play_hours %}<span class="gd-qr__hint">Your tracked playtime: about <b>{{ user_play_hours }}</b> hour{{ user_play_hours|pluralize }}.</span>{% else %}<span class="gd-qr__hint gd-qr__hint--muted">We don't have your playtime for this game.</span>{% endif %}
+    {% if user_play_hours %}<span class="gd-qr__hint">Playtime: about <b>{{ user_play_hours }}</b> hour{{ user_play_hours|pluralize }}.</span>{% else %}<span class="gd-qr__hint gd-qr__hint--muted">No playtime tracked.</span>{% endif %}
 </label>
 <label class="gd-qr__field">
     <span class="gd-qr__lbl">Fun <span class="gd-qr__val" data-gd-qr-val="fun_ranking">5</span></span>
@@ -80,7 +80,7 @@ radio needs its own label. {% endcomment %}
 in one place and a reworded answer reaches every surface at once.
 
 The middle label is the one thing that varies by game: it names what was rough, and on a DLC pack or a
-game with no platinum "rough platinum" is simply wrong. The host swaps it per game through
+game with no platinum "tough plat" is simply wrong. The host swaps it per game through
 `RatingFields.label({recLabel})` -- the same mechanism the hours label already uses, and for the same
 reason (this partial is rendered ONCE and then re-pointed at game after game).{% endcomment %}
 <fieldset class="gd-qr__field gd-qr__field--rec">

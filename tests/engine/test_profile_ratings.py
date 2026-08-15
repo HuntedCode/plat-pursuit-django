@@ -645,27 +645,27 @@ def test_the_card_carries_their_recommendation(client):
 
     body = client.get(_url(profile), **CF).content.decode()
 
-    assert 'Great game, rough platinum' in body
+    assert 'Good game, tough plat' in body
     assert 'data-rec="good_game_bad_plat"' in body
 
 
 def test_a_set_with_no_platinum_does_not_call_one_rough(client):
     """The middle option NAMES the thing that was rough, so on a DLC pack -- or a game that never defined
-    a platinum -- "rough platinum" names a trophy the set has not got."""
+    a platinum -- "tough plat" names a trophy the set has not got."""
     profile = ProfileFactory(is_linked=True)
     # A game with no platinum defined at all.
     _rated(profile, title='No Plat Here', recommendation='good_game_bad_plat')
 
     body = client.get(_url(profile), **CF).content.decode()
 
-    assert 'Great game, rough trophies' in body
-    assert 'Great game, rough platinum' not in body
+    assert 'Good game, tough trophies' in body
+    assert 'Good game, tough plat' not in body
 
 
 def test_the_wording_follows_the_concept_not_the_copy_they_happen_to_own(client):
     """Whether a set ends in a platinum is a fact about the TITLE. Reading it off the hunter's own attached
     game got it wrong twice over: a concept they own no copy of (possible after a merge re-points a rating
-    onto a survivor) has no game at all and fell through to "rough trophies" on a real platinum, and a
+    onto a survivor) has no game at all and fell through to "tough trophies" on a real platinum, and a
     hunter whose only copy is a no-platinum port got the same on a concept that plainly defines one."""
     profile = ProfileFactory(is_linked=True)
     concept = ConceptFactory(unified_title='Merged Away')
@@ -676,7 +676,7 @@ def test_the_wording_follows_the_concept_not_the_copy_they_happen_to_own(client)
     rows = build_profile_ratings_page(profile)
 
     assert rows[0].card_game is None, 'fixture no longer reproduces the unowned-concept case'
-    assert rows[0].recommendation_text == 'Great game, rough platinum'
+    assert rows[0].recommendation_text == 'Good game, tough plat'
 
 
 def test_a_dlc_rating_never_calls_its_platinum_rough(client):
@@ -691,8 +691,8 @@ def test_a_dlc_rating_never_calls_its_platinum_rough(client):
 
     body = client.get(_url(profile, set='dlc'), **CF).content.decode()
 
-    assert 'Great game, rough trophies' in body
-    assert 'Great game, rough platinum' not in body
+    assert 'Good game, tough trophies' in body
+    assert 'Good game, tough plat' not in body
 
 
 def test_the_cards_edge_and_stamp_both_carry_the_verdict(client):

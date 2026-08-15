@@ -669,7 +669,7 @@ def recommendation_split_cells(averages, has_platinum=True):
     DOM, then un-hid an empty row the moment somebody rated it.
 
     And the LABELS come from the group being shown, not from the cached dict. `_compute_averages` is
-    concept-wide and bakes in the platinum wording, so a DLC pack's panel read "Great game, rough platinum"
+    concept-wide and bakes in the platinum wording, so a DLC pack's panel read "Good game, tough plat"
     about a set that has no platinum -- the same fact the radio the hunter clicked had already worded the
     other way. Counts ride the cached dict; the words do not.
     """

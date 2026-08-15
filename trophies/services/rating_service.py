@@ -520,7 +520,7 @@ def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_
         r.community_avg = stats['avg'] if stats and stats['n'] > 1 else None
         r.community_n = stats['n'] if stats else 1
 
-        # The verdict, worded for the set it is about: "rough platinum" is wrong on a DLC pack (which
+        # The verdict, worded for the set it is about: "tough plat" is wrong on a DLC pack (which
         # never has one) and on a game that never defined one.
         #
         # Read off the CONCEPT, not off `card_game`. `card_game` is the hunter's own highest-progress SKU

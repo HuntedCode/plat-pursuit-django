@@ -477,7 +477,7 @@ window.PlatPursuit = window.PlatPursuit || {};
                 // Their tracked playtime for THIS game, where we have it -- the number they're being asked
                 // to estimate is one we can often help with.
                 playtimeHint: game.stats && game.stats.play_hours
-                    ? 'Your tracked playtime: about ' + game.stats.play_hours + ' hour' + (game.stats.play_hours === 1 ? '' : 's') + '.'
+                    ? 'Playtime: about ' + game.stats.play_hours + ' hour' + (game.stats.play_hours === 1 ? '' : 's') + '.'
                     : '',
             });
             // A re-served rating MUST arrive with its own scores. The queue serves two kinds of card now:

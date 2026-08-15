@@ -214,13 +214,19 @@
 .rmg__fhead svg { width: 16px; height: 16px; flex: none; color: var(--pp-text-mute); }
 /* Tighter than the modal's 15px. Five sliders in a column don't need that much air, and every pixel here
    is a pixel the trophy list beside it doesn't get. */
-.rmg__form .gd-qr { gap: 11px; }
-/* Two-up from the width at which the rail can hold it -- the same layout the quick-rate modal uses, and
-   the reason this column is 520px rather than 360px. Only the `display: grid` half lives here; which
-   fields span both columns is stated once in game-detail.css, beside the partial they belong to. */
-@media (min-width: 1024px) {
-    .rmg__form .gd-qr { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; align-content: start; }
+/* Two-up at EVERY width, the same as the quick-rate modal -- and for the same reason it was lowered
+   there. Eight stacked fields is more than a 360x740 phone has, and the four scored axes are the only
+   ones that pair: a 1fr column in this panel is ~144px on the narrowest phone, which a range input, its
+   scale and its label all sit in. This is also the reason the desktop rail is 520px rather than 360px.
+   Only the `display: grid` half lives here; which fields span both columns is stated once in
+   game-detail.css, beside the partial they belong to. */
+.rmg__form .gd-qr {
+    display: grid; grid-template-columns: 1fr 1fr; align-content: start;
+    /* Tighter than the modal's. Five sliders in a panel don't need that much air, and every pixel here is
+       a pixel the trophy list beside it doesn't get. */
+    gap: 10px 12px;
 }
+@media (min-width: 1024px) { .rmg__form .gd-qr { gap: 10px 14px; } }
 
 /* The one requirement, stated where the eye lands before the button rather than only as a toast on refusal. */
 .rmg__req { display: flex; align-items: center; gap: 7px; margin-top: 12px; font-size: 12px; color: var(--pp-text-mute); }
@@ -246,6 +252,27 @@
 
 .rmg__actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
 .rmg__actions .rmg__spacer { flex: 1 1 auto; }
+
+/* STICKY below `lg`, the same guarantee the quick-rate modal's actions carry: on a phone the hero, the
+ * trophy list and the form stack into one long column, and Skip/Submit ended up under all of it. This is a
+ * BULK flow -- the same two decisions, game after game -- so a hunter who has to scroll to the bottom for
+ * every one of seventy games is paying that scroll seventy times.
+ *
+ * Cleared above the mobile tab bar, which is `position: fixed` at 56px plus the safe-area inset and would
+ * otherwise sit on top of the Submit button. Desktop is left alone: the tab bar is gone, the two panels sit
+ * side by side at matched heights, and the row already lands in view under them.
+ */
+@media (max-width: 1023px) {
+    .rmg__actions {
+        position: sticky; z-index: 20;
+        bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+        padding: 10px 12px;
+        border-radius: var(--pp-radius-lg);
+        background: var(--pp-bg-1);
+        border: 1px solid var(--pp-border);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+    }
+}
 
 /* Shortcut hint. Only where there is a keyboard to use -- a touch device gets no value from being told
    about Enter, and the row is pure noise there. */

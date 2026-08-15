@@ -463,7 +463,7 @@ def _user_rating(profile, concept, has_platinum=True):
     payload.update({
         # The label, because the card renders a DICT and cannot call `get_recommendation_display`. Resolved
         # here rather than mapped in the template, so the display strings stay in the model -- and worded
-        # for THIS card: a 100% card has no platinum, so "rough platinum" would name a trophy the set
+        # for THIS card: a 100% card has no platinum, so "tough plat" would name a trophy the set
         # never had.
         'recommendation_label': rating.recommendation_label(has_platinum),
         # The hunter's own words about the game -- 140 chars, already auto-filtered on submit,

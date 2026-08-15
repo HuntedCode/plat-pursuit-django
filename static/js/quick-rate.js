@@ -277,7 +277,7 @@
             var hoursLbl = form.querySelector('[data-gd-qr-hours-label]');
             if (hoursLbl && next.hoursLabel) { hoursLbl.textContent = next.hoursLabel; }
             // The middle recommendation NAMES the thing that was rough, so it is the one label that
-            // depends on the game: "rough platinum" is wrong on a DLC pack, and on a game that never had
+            // depends on the game: "tough plat" is wrong on a DLC pack, and on a game that never had
             // one. Swapped per game exactly as the hours label is, and for the same reason -- this form is
             // rendered once and then re-pointed at game after game.
             //
@@ -296,7 +296,7 @@
             if (next.playtimeHint !== undefined) {
                 var hint = form.querySelector('.gd-qr__hint');
                 if (hint) {
-                    hint.textContent = next.playtimeHint || "We don't have your playtime for this game.";
+                    hint.textContent = next.playtimeHint || 'No playtime tracked.';
                     hint.classList.toggle('gd-qr__hint--muted', !next.playtimeHint);
                 }
             }
@@ -420,6 +420,12 @@
         if (PP.dismissableSheet && !modal.dataset.qrSwipeWired) {
             modal.dataset.qrSwipeWired = '1';
             PP.dismissableSheet(modal, {
+                // ONLY the header drags this one. Every other sheet on the site is something you read, so
+                // dragging anywhere in it is safe; this is a form of five sliders where the gesture starts
+                // on top of the controls and its cost is an in-progress rating. The grabber pill sits in
+                // the header, so the affordance and the drag region are the same place -- which is what a
+                // grabber is supposed to mean.
+                handle: '.gd-modal__head',
                 onClose: function () {
                     // `swiped` is read by onClosed below: teardown runs from the `close` event either
                     // way, and this tells it the close was a dismissal rather than a bare unmount.

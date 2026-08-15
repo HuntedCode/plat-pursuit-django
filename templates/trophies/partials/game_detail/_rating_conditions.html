@@ -156,7 +156,7 @@ from the conditions grid, because it no longer lives inside that grid.{% endcomm
             {% comment %}The modal is rendered ONCE for the whole page and re-pointed per group, so the
             group's own wording rides on the button that opens it -- exactly as the hours label does.
             Without this a DLC pack's form would ask about a platinum it has not got.{% endcomment %}
-            data-rec-label="{{ rec_label|default:'Great game, rough platinum' }}"
+            data-rec-label="{{ rec_label|default:'Good game, tough plat' }}"
             data-rec-legend="{{ rec_legend|default:'Would you recommend the platinum?' }}"
             {% comment %}`recommendation` is a STRING in a payload that was otherwise purely numeric, so it
             is quoted. Safe to interpolate raw: it is a choices field, so its only possible values are the

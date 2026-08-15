@@ -1527,7 +1527,7 @@ class UserConceptRating(models.Model):
     # write path goes through -- permissive model, strict form.
     RECOMMENDATIONS = [
         ('worth_it', 'Do it'),
-        ('good_game_bad_plat', 'Great game, rough platinum'),
+        ('good_game_bad_plat', 'Good game, tough plat'),
         ('skip', 'Skip it'),
     ]
     #: The same three for a trophy set with NO platinum in it -- every DLC pack, and the games that never
@@ -1539,7 +1539,7 @@ class UserConceptRating(models.Model):
     #: field validates the value and never the label, so this needs no migration and no second column.
     RECOMMENDATIONS_NO_PLAT = [
         ('worth_it', 'Do it'),
-        ('good_game_bad_plat', 'Great game, rough trophies'),
+        ('good_game_bad_plat', 'Good game, tough trophies'),
         ('skip', 'Skip it'),
     ]
 

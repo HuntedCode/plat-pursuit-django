@@ -119,7 +119,7 @@ class GroupRatingView(APIView):
             # for backward compat. DLC groups store the FK.
             ctg_fk = None if ctg.trophy_group_id == 'default' else ctg
 
-            # Whether the middle option reads "rough platinum" or "rough trophies", by the same rule the
+            # Whether the middle option reads "tough plat" or "tough trophies", by the same rule the
             # form's own copy used: a base group whose concept actually defines a platinum.
             from trophies.services.rating_service import _concepts_defining_a_platinum
             has_plat = ctg_fk is None and concept.id in _concepts_defining_a_platinum({concept.id})

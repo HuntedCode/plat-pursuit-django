@@ -207,7 +207,7 @@ def test_the_response_carries_the_label_so_the_client_never_hardcodes_it(client)
 
     assert resp.status_code == 200, resp.content
     assert resp.json()['recommendation'] == 'good_game_bad_plat'
-    assert resp.json()['recommendation_label'] == 'Great game, rough platinum'
+    assert resp.json()['recommendation_label'] == 'Good game, tough plat'
 
 
 # ── The queue ─────────────────────────────────────────────────────────────────────────────────────
@@ -670,8 +670,8 @@ def test_a_set_with_no_platinum_is_not_asked_about_a_platinum(client):
     plat = UserConceptRating.recommendation_copy(True)
     no_plat = UserConceptRating.recommendation_copy(False)
 
-    assert plat['rec_label'] == 'Great game, rough platinum'
-    assert no_plat['rec_label'] == 'Great game, rough trophies'
+    assert plat['rec_label'] == 'Good game, tough plat'
+    assert no_plat['rec_label'] == 'Good game, tough trophies'
     assert 'platinum' in plat['rec_legend'] and 'platinum' not in no_plat['rec_legend']
     # Only the middle option changes -- "Do it" and "Skip it" are about the set either way.
     assert dict(UserConceptRating.RECOMMENDATIONS)['worth_it'] == \
@@ -699,7 +699,7 @@ def test_the_dlc_queue_never_offers_the_platinum_wording(client):
     assert 'recommendation_copy(has_platinum=False)' in dlc, (
         'the DLC queue can hand out platinum wording for a set that has none'
     )
-    assert UserConceptRating.recommendation_copy(False)['rec_label'] == 'Great game, rough trophies'
+    assert UserConceptRating.recommendation_copy(False)['rec_label'] == 'Good game, tough trophies'
 
 
 def test_the_recommendation_offers_three_choices_not_four():
@@ -930,6 +930,51 @@ def test_the_two_wizard_panels_end_level():
     assert 'max-height: none' in scroll[:200], 'the desktop list is back on a viewport cap'
 
 
+def test_the_wizard_form_pairs_its_axes_at_every_width():
+    """Same change, same reason as the quick-rate modal: eight stacked fields is more than a 360x740 phone
+    has, and the four scored axes are the only ones that pair. Behind a 1024px breakpoint this was the
+    desktop-only layout, which is backwards -- the narrow screen is the one that needs the pairing."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
+
+    rule = css[css.index('.rmg__form .gd-qr {'):]
+    rule = rule[:rule.index('\n}')]
+    assert 'grid-template-columns: 1fr 1fr' in rule, 'the pairing is back behind a breakpoint'
+
+
+def test_the_wizard_actions_stay_in_reach_on_a_phone():
+    """A bulk flow charges its scroll cost once per game. Below `lg` the hero, the trophy list and the form
+    stack into one column, so Skip/Submit sat under all of it -- seventy times for a hunter with seventy
+    games waiting. Sticky, and clearing the fixed mobile tab bar that would otherwise cover it."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'rate-wizard.css').read_text(encoding='utf-8')
+
+    block = css[css.index('@media (max-width: 1023px) {'):]
+    block = block[:block.index('\n}\n')]
+    assert '.rmg__actions' in block and 'position: sticky' in block
+    assert 'env(safe-area-inset-bottom' in block, 'nothing clears the fixed mobile tab bar'
+
+
+def test_a_drag_on_a_control_never_dismisses_a_sheet():
+    """`touchmove` preventDefault()s any downward movement and translates the whole dialog, so a finger
+    sliding a range input -- which never travels perfectly horizontally -- dragged the sheet instead of the
+    thumb, and past the threshold threw away an in-progress rating. Unconditional, because a drag that
+    starts on a control belongs to the control on every sheet, not just this one.
+
+    The quick-rate modal goes further and names a HANDLE: it is the only sheet that is a form rather than
+    something you read, and its grabber pill sits in the header, so the affordance and the drag region
+    should be the same place."""
+    utils = (ROOT / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+    sheet = utils[utils.index('function dismissableSheet('):]
+    sheet = sheet[:sheet.index('\n}\n')]
+
+    assert "closest('input, textarea, select, button, a, [role=\"slider\"]')" in sheet, (
+        'a drag starting on a control can arm the dismiss again'
+    )
+    assert 'opts.handle' in sheet, 'the handle option is gone'
+
+    qr = (ROOT / 'static' / 'js' / 'quick-rate.js').read_text(encoding='utf-8')
+    assert "handle: '.gd-modal__head'" in qr, 'the rating form is swipe-dismissable from anywhere again'
+
+
 def test_the_bulk_flow_has_a_keyboard():
     """Seventy games is the same four movements seventy times, so it earns shortcuts. Two things have to
     be true or they do damage: Enter must not fire inside the quick take (where it is a newline the hunter
@@ -1038,7 +1083,7 @@ def test_the_field_partial_renders_standalone():
 
     for name in FIELD_NAMES:
         assert f'name="{name}"' in bare
-    assert "don't have your playtime" in bare
+    assert 'No playtime tracked.' in bare
     assert '<b>42</b>' in hinted
 
 

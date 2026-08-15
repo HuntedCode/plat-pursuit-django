@@ -216,7 +216,7 @@ def test_the_card_carries_the_hunters_verdict():
     rating = cards.get_card_data(profile, standing)['user_rating']
 
     assert rating['recommendation'] == 'good_game_bad_plat'
-    assert rating['recommendation_label'] == 'Great game, rough platinum'
+    assert rating['recommendation_label'] == 'Good game, tough plat'
 
 
 def test_a_rating_from_before_the_verdict_existed_leaves_the_pill_off():

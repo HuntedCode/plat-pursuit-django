@@ -130,7 +130,7 @@ _AVERAGES = {
 _SPLIT = {
     'options': [
         {'value': 'worth_it', 'label': 'Do it', 'count': 4, 'pct': 80},
-        {'value': 'good_game_bad_plat', 'label': 'Great game, rough platinum', 'count': 1, 'pct': 20},
+        {'value': 'good_game_bad_plat', 'label': 'Good game, tough plat', 'count': 1, 'pct': 20},
         {'value': 'skip', 'label': 'Skip it', 'count': 0, 'pct': 0},
     ],
     'answered': 5,
@@ -167,13 +167,13 @@ def test_a_never_rated_game_draws_the_three_answers_at_zero():
 
 def test_the_split_is_worded_for_the_group_being_shown():
     """`_compute_averages` is concept-wide and bakes the platinum wording into the labels it caches. A DLC
-    pack's own panel therefore read "Great game, rough platinum" about a set that has no platinum -- the
+    pack's own panel therefore read "Good game, tough plat" about a set that has no platinum -- the
     same fact the radio the hunter clicked had already worded the other way. Counts ride the cached dict;
     the words come from the group."""
     html = _conditions(dict(_AVERAGES, recommendation_split=_SPLIT), has_platinum=False)
 
-    assert 'Great game, rough trophies' in html
-    assert 'Great game, rough platinum' not in html
+    assert 'Good game, tough trophies' in html
+    assert 'Good game, tough plat' not in html
     # And the counts still come from the cached split, which is the half that IS concept-wide.
     assert '80%' in html and '20%' in html
 
@@ -494,9 +494,9 @@ def test_quick_rate_playtime_hint_and_toast_container():
     top-layer toast container so submit warnings aren't hidden behind the backdrop."""
     tpl = 'trophies/partials/game_detail/quick_rate_modal.html'
     hinted = render_to_string(tpl, {'user_play_hours': 42})
-    assert '<b>42</b>' in hinted and 'playtime' in hinted        # playtime shown as a reference
+    assert '<b>42</b>' in hinted and 'Playtime: about' in hinted   # playtime shown as a reference
     assert 'modal-toast-container' in hinted                     # toasts render in the dialog's top layer
-    assert "don't have your playtime" in render_to_string(tpl, {})   # graceful fallback when untracked
+    assert 'No playtime tracked.' in render_to_string(tpl, {})   # graceful fallback when untracked
 
 
 def test_playtime_hint_reaches_modal_from_context(client):
@@ -507,7 +507,7 @@ def test_playtime_hint_reaches_modal_from_context(client):
     ProfileGame.objects.create(profile=profile, game=game, play_duration=timedelta(hours=42))
     client.force_login(profile.user)
     content = _detail(client, game)
-    assert 'Your tracked playtime' in content and '<b>42</b>' in content
+    assert 'Playtime: about' in content and '<b>42</b>' in content
 
 
 def test_quick_takes_count_in_title():

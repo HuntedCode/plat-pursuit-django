@@ -107,7 +107,7 @@ There is no cover-blur ground: a 3:4 cover blown up to 1200x630 is mostly upscal
 **Rating**: the card carries the hunter's own stars, difficulty, grind, fun, their **verdict** and their
 quick take, so an unrated game makes a visibly thinner card. The verdict is a coloured pill under the
 numbers rather than a fourth cell in them: the others are all "N/10" and it is a phrase, so a cell
-would either truncate it or widen every cell to fit "Great game, rough platinum". It is also the one
+would either truncate it or widen every cell to fit "Good game, tough plat". It is also the one
 thing on the card that is ADVICE rather than a record, which is what someone reading another hunter's
 card is there for. Absent on ratings written before the field existed — the wizard is asking for those,
 so a card made today may gain one tomorrow. Two ways in, both driving the same modal through the same controller:
