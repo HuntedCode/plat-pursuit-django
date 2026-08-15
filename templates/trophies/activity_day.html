@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% load custom_filters humanize %}
+{% block title %}{{ profile.display_psn_username|default:profile.psn_username }} &middot; {{ day|date:"M j, Y" }}{% endblock %}
+
+{% comment %} One day of activity as its own PAGE.
+
+The modal's fallback, and the reason the day has a URL at all: the profile is public and crawled, so a
+day's content cannot live only behind a click. A crawler, a shared link, and a visitor without JS all land
+here; HTMX asks the same view for the modal partial instead.
+
+The sessions are the same markup either way -- only the frame differs.
+{% endcomment %}
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
+            <p class="text-[0.7rem] md:text-xs font-semibold uppercase tracking-[0.14em] text-base-content/50">
+                <a href="{% url 'profile_detail' psn_username=profile.psn_username %}?tab=trophies" class="hover:text-primary transition-colors">
+                    {{ profile.display_psn_username|default:profile.psn_username }}
+                </a>
+            </p>
+            <h1 class="text-2xl md:text-3xl font-bold leading-tight mt-1">{{ day|date:"l, F j, Y" }}</h1>
+            <p class="text-sm text-base-content/60 mt-2">
+                <b>{{ day_trophies|intcomma }}</b> troph{{ day_trophies|pluralize:"y,ies" }}
+                &middot; {{ sessions|length }} game{{ sessions|length|pluralize }}
+                {% if day_platinums %}&middot; {{ day_platinums }} platinum{{ day_platinums|pluralize }}{% endif %}
+            </p>
+        </div>
+    </section>
+
+    <div class="pp-actday__games">
+        {% for s in sessions %}
+        <div class="pp-act__session is-open{% if s.has_platinum %} pp-act__session--plat{% endif %}">
+            <div class="pp-act__row" role="group" aria-label="{{ s.game.title_name }}">
+                <span class="pp-act__cover">
+                    <img class="pp-act__art{% if not s.game.has_cover_art %} pp-act__art--placeholder{% endif %}"
+                         src="{{ s.game.display_image_url }}" alt="" loading="lazy" decoding="async">
+                </span>
+                <span class="pp-act__body">
+                    <a class="pp-act__title" href="{% url 'game_detail_with_profile' s.game.np_communication_id profile.psn_username %}">{{ s.game.title_name }}</a>
+                    <span class="pp-act__stats">
+                        <span class="pp-act__n">{{ s.trophies|intcomma }}</span>
+                        <span class="pp-act__n-lbl">troph{{ s.trophies|pluralize:"y,ies" }}</span>
+                        {% if s.span_label %}<span class="pp-act__span" title="First to last trophy that day">over {{ s.span_label }}</span>{% endif %}
+                    </span>
+                    {% comment %}Same dot-and-figure tier vocabulary as the hero strip and the game card, so
+                    a colour means one thing across the whole profile. Zero tiers are omitted by the service
+                    -- a card should not list what did not happen.{% endcomment %}
+                    <span class="pp-act__tiers">
+                        {% for t in s.tiers %}
+                        <span class="pp-act__tier" data-tier="{{ t.tier }}" title="{{ t.tier|title }}: {{ t.count }}"><i></i>{{ t.count }}</span>
+                        {% endfor %}
+                    </span>
+                </span>
+            </div>
+            <div class="pp-act__trophies">
+                {% include 'trophies/partials/profile_detail/activity_trophies.html' with session_trophies=s.trophies_list %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+{% endblock %}
