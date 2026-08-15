@@ -141,8 +141,10 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             PlatPursuit.slideViewIn(document.getElementById('tab-content'), move.from, move.to, move.order);
         }
 
-        // The live scroller, so each re-init can take the previous one down. See the create() call below.
+        // The live scroller and the Games tab's filter drawer, so each re-init can take the previous one
+        // down. Both are rebuilt per tab swap; see their call sites below.
         var scroller = null;
+        var panelHandle = null;
 
         function initTabContent() {
             var tab = getTabFromUrl();
@@ -272,6 +274,27 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             var form = document.getElementById(tab + '-form');
             if (form && PlatPursuit.initDualRangeSliders) {
                 PlatPursuit.initDualRangeSliders(form);
+            }
+
+            // The Games tab's filter drawer, on the shared browse controller -- the same one Browse Games,
+            // the badge gallery, companies, recently-added and tag detail all run. Destroyed and rebuilt
+            // per init because the toolbar is re-rendered on every tab swap, so a fresh one would otherwise
+            // stack a second set of listeners on each visit.
+            if (panelHandle && panelHandle.destroy) { panelHandle.destroy(); panelHandle = null; }
+            if (tab === 'games' && form && PlatPursuit.filterPanel) {
+                panelHandle = PlatPursuit.filterPanel({
+                    form: form,
+                    toggle: '#pgames-filters-toggle',
+                    panel: '#pgames-advanced',
+                    countEl: '#pgames-filter-count',
+                    // `tab` is which PANEL you are on, not a filter -- it rides in a hidden input so a
+                    // filter swap stays on Games, and counting it would show a permanent 1. Platform has
+                    // no default here (unlike Browse Games), so it IS a filter.
+                    skip: { page: 1, tab: 1, sort: 1, query: 1 },
+                    // This is a tab panel: its results div is the tab's, not the site-wide #browse-results
+                    // that browse-filters.js dims by default.
+                    dimTarget: '#tab-results',
+                });
             }
         }
 

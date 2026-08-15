@@ -347,3 +347,73 @@ def test_the_trophy_counts_count_up_like_every_other_figure(client):
         assert f'data-countup="{value}"' in tiers, f'{value} does not count up'
     # The rendered fallback is still the formatted figure, so a no-JS reader sees 1,400 rather than 1400.
     assert '>1,400<' in tiers
+
+
+# ── The Games tab's filter bar, rebuilt to the browse standard ────────────────────────────────────
+
+def test_the_games_filter_bar_uses_the_browse_vocabulary(client):
+    """It was the last pre-rebuild filter bar on the site -- DaisyUI throughout, a `<details>` for the
+    advanced filters, and an explicit Filter button, next to a Browse Games toolbar that had none of
+    those. Matching the vocabulary is what buys the shared BEHAVIOUR, not just the look."""
+    profile = _profile_with_games(2)
+
+    html = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
+
+    for cls in ('pp-toolbar-card', 'pp-gbrowse__bar', 'pp-bgal__search',
+                'pp-bgal__advbtn', 'pp-bgal__advanced', 'pp-bgal__chip'):
+        assert cls in html, f'{cls} is missing -- the bar is off the browse vocabulary'
+
+    bar = html[html.index('id="games-form"'):html.index('id="tab-results"')]
+    assert '<details' not in bar, 'the advanced filters are back behind a <details>'
+    assert 'select-bordered' not in bar and 'peer-checked:btn' not in bar, 'DaisyUI controls are back'
+    assert 'id="submit-btn"' not in bar, 'the explicit Filter button is back'
+
+
+def test_the_games_search_opts_into_the_shared_affordances(client):
+    """Live search, the spinner, Escape-to-clear, the clear button and the global `/` focus shortcut are
+    all opted into by MARKUP -- the old bar had a hand-rolled field and inherited none of them, which is
+    the same trap the Trophies tab's search hit during its rebuild."""
+    profile = _profile_with_games(2)
+
+    html = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
+    bar = html[html.index('id="games-form"'):html.index('id="tab-results"')]
+
+    assert 'data-live-search' in bar, 'the search does not live-filter'
+    assert 'data-page-search' in bar, 'the / and Cmd-K shortcuts skip this field'
+    assert 'data-search-wrap' in bar and 'data-search-clear' in bar, 'no clear affordance'
+    assert 'pp-search-spin' in bar, 'no in-field busy indicator'
+
+
+def test_the_games_tab_drives_the_shared_filter_panel():
+    """One controller across all six browse surfaces. The wiring also has to name a `dimTarget`: this is a
+    tab panel, so its results div is `#tab-results`, not the site-wide `#browse-results` that
+    browse-filters.js dims by default -- without it the settle would silently target nothing."""
+    src = (ROOT / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')
+
+    assert 'PlatPursuit.filterPanel({' in src, 'the Games tab rolls its own filter panel again'
+    assert "dimTarget: '#tab-results'" in src
+    # Rebuilt per tab swap, so the previous one must come down or each visit stacks another set.
+    assert 'panelHandle.destroy()' in src
+
+    filters = (ROOT / 'templates' / 'trophies' / 'partials' / 'profile_detail'
+               / 'game_filters.html').read_text(encoding='utf-8')
+    for hook in ('id="pgames-filters-toggle"', 'id="pgames-advanced"', 'id="pgames-filter-count"'):
+        assert hook in filters, f'{hook} is missing, so the controller cannot find its parts'
+
+
+def test_no_browse_surface_rolls_its_own_filter_panel():
+    """The consolidation, pinned. Six surfaces had grown five copies of the same ~80 lines and they had
+    already drifted -- different SKIP sets, only some wiring the chip-list scroll fades. A sixth copy is
+    how that starts again."""
+    suspects = [
+        ROOT / 'templates' / 'trophies' / 'game_list.html',
+        ROOT / 'templates' / 'trophies' / 'badge_list.html',
+        ROOT / 'templates' / 'trophies' / 'profile_detail.html',
+        ROOT / 'static' / 'js' / 'company-list.js',
+        ROOT / 'static' / 'js' / 'recently-added.js',
+        ROOT / 'static' / 'js' / 'tag-detail.js',
+    ]
+    for path in suspects:
+        src = path.read_text(encoding='utf-8')
+        assert 'function setPanel' not in src, f'{path.name} has its own panel implementation again'
+        assert 'PlatPursuit.filterPanel' in src, f'{path.name} is not on the shared controller'
