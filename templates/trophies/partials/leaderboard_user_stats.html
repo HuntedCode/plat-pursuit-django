@@ -31,7 +31,7 @@
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                     </svg>
                     <div class="flex flex-col">
-                        <span class="text-xs text-secondary italic font-bold">Series XP</span>
+                        <span class="text-xs text-secondary italic font-bold">Series Points</span>
                         <span class="text-lg font-bold">{{ user_series_xp|intcomma }}</span>
                     </div>
                 </div>
@@ -75,7 +75,7 @@
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                     </svg>
                     <div class="flex flex-col">
-                        <span class="text-xs text-secondary italic font-bold">Your Total XP</span>
+                        <span class="text-xs text-secondary italic font-bold">Your Total Points</span>
                         <span class="text-lg font-bold">{{ user_total_xp|intcomma }}</span>
                     </div>
                 </div>
@@ -97,7 +97,7 @@
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                     </svg>
                     <div class="flex flex-col">
-                        <span class="text-xs text-primary italic font-bold">XP Rank</span>
+                        <span class="text-xs text-primary italic font-bold">Points Rank</span>
                         {% if lb_total_xp_user_rank %}
                             <span class="text-lg font-bold">#{{ lb_total_xp_user_rank }}</span>
                         {% else %}

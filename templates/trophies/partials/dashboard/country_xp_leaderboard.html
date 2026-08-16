@@ -6,7 +6,7 @@
         <div class="flex items-center justify-between mb-3">
             <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
                 <span class="text-xl">{{ data.flag }}</span>
-                Country XP
+                Country Points
             </h2>
             <a href="{% url 'overall_badge_leaderboards' %}?tab=country&country={{ data.country_code }}" class="text-xs text-base-content/40 hover:text-primary transition-colors" aria-label="View full country leaderboard">Full Board</a>
         </div>
@@ -33,7 +33,7 @@
                 </div>
                 <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 lg:p-3 text-center">
                     <div class="text-lg lg:text-2xl font-black text-accent">{{ data.total_xp_formatted }}</div>
-                    <div class="text-xs text-base-content/50 font-medium">Your XP</div>
+                    <div class="text-xs text-base-content/50 font-medium">Your Points</div>
                 </div>
             </div>
 
@@ -71,7 +71,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-accent/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
                 </svg>
-                <p class="text-sm text-base-content/50">No badge XP yet.</p>
+                <p class="text-sm text-base-content/50">No badge Points yet.</p>
                 <p class="text-xs text-base-content/40 mt-1">Start earning badges to climb your country's leaderboard!</p>
                 <a href="{% url 'badges_list' %}" class="btn btn-accent btn-xs mt-3">Explore Badges</a>
             </div>

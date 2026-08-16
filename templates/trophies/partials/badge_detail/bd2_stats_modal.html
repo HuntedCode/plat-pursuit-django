@@ -14,7 +14,7 @@ whale-safe). Rendered only when a profile is on display.
     <div class="bd-mystats__hero">
         <div class="bd-mystats__big">
             <span class="pp-tally bd-mystats__big-v bd-mystats__big-v--xp" data-countup="{{ detail.series_xp }}">{{ detail.series_xp|intcomma }}</span>
-            <span class="bd-mystats__big-k">Series XP</span>
+            <span class="bd-mystats__big-k">Series Points</span>
         </div>
         {% if detail.series_rank %}
         <div class="bd-mystats__big">
@@ -121,7 +121,7 @@ whale-safe). Rendered only when a profile is on display.
                 <span>{{ us.games_hundred|default:0 }} 100%'d</span>
                 <span>{{ g.stages_cleared }}/{{ g.gating_count }} stages cleared</span>
                 {% if g.earners_rank %}<span>Earn #{{ g.earners_rank|intcomma }}</span>{% endif %}
-                <span>{{ g.xp_on_offer|intcomma }} XP on offer</span>
+                <span>{{ g.xp_on_offer|intcomma }} Points on offer</span>
             </span>
         </div>
     </div>

@@ -28,8 +28,8 @@ detail page, deep-linked to this edition's tab; omitted on the badge-detail peek
             {% if gv.gating_count %}<div class="pp-bdetail__stat"><div class="k">Stages</div><div class="v">{% if showcase %}{{ gv.gating_count }} to earn{% else %}{{ gv.stages_cleared }} / {{ gv.gating_count }}{% endif %}</div></div>{% endif %}
             {% if gv.rarity_pct is not None %}<div class="pp-bdetail__stat"><div class="k">Rarity</div><div class="v">{% if gv.rarity_class %}{{ gv.rarity_class|title }} &middot; {% endif %}{{ gv.rarity_pct|floatformat:"-1" }}%</div></div>{% endif %}
             {% if gv.earners_rank %}<div class="pp-bdetail__stat"><div class="k">Earn rank</div><div class="v">#{{ gv.earners_rank|intcomma }}</div></div>{% endif %}
-            {% if gv.xp_on_offer %}<div class="pp-bdetail__stat"><div class="k">XP on offer</div><div class="v">{{ gv.xp_on_offer|intcomma }}</div></div>{% endif %}
-            {% if not showcase and detail.series_xp %}<div class="pp-bdetail__stat"><div class="k">Series XP</div><div class="v">{{ detail.series_xp|intcomma }}</div></div>{% endif %}
+            {% if gv.xp_on_offer %}<div class="pp-bdetail__stat"><div class="k">Points on offer</div><div class="v">{{ gv.xp_on_offer|intcomma }}</div></div>{% endif %}
+            {% if not showcase and detail.series_xp %}<div class="pp-bdetail__stat"><div class="k">Series Points</div><div class="v">{{ detail.series_xp|intcomma }}</div></div>{% endif %}
             {% if gv.earned_count %}<div class="pp-bdetail__stat"><div class="k">Earned by</div><div class="v">{{ gv.earned_count|intcomma }}</div></div>{% endif %}
         </div>
         {% if gv.group_badge.effective_funded_by %}<div class="pp-bdetail__funder">Artwork funded by <span>{{ gv.group_badge.effective_funded_by.display_psn_username|default:gv.group_badge.effective_funded_by.psn_username }}</span></div>{% endif %}

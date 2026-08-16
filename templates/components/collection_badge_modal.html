@@ -24,7 +24,7 @@ CollectionBadgeModalView and fetched on tap. Expects `frame` (a full build_badge
             {% if frame.engraving_rank %}<div class="pp-bdetail__stat"><div class="k">Earn rank</div><div class="v">#{{ frame.engraving_rank|intcomma }}</div></div>{% endif %}
             {% if frame.earned_date %}<div class="pp-bdetail__stat"><div class="k">Earned</div><div class="v">{{ frame.earned_date }}</div></div>{% endif %}
             {% if frame.current_rank %}<div class="pp-bdetail__stat"><div class="k">Leaderboard</div><div class="v">#{{ frame.current_rank|intcomma }}</div></div>{% endif %}
-            {% if frame.series_xp %}<div class="pp-bdetail__stat"><div class="k">Series XP</div><div class="v">{{ frame.series_xp|intcomma }}</div></div>{% endif %}
+            {% if frame.series_xp %}<div class="pp-bdetail__stat"><div class="k">Series Points</div><div class="v">{{ frame.series_xp|intcomma }}</div></div>{% endif %}
             {% if frame.earned_count %}<div class="pp-bdetail__stat"><div class="k">Earned by</div><div class="v">{{ frame.earned_count|intcomma }}</div></div>{% endif %}
         </div>
         {% if frame.funded_by %}<div class="pp-bdetail__funder">Artwork funded by <span>{{ frame.funded_by }}</span></div>{% endif %}

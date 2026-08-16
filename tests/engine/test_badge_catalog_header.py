@@ -1,5 +1,5 @@
 """The badge-list header shows generalized CATALOG stats (from the hourly heartbeat), not the
-viewer's own progress: Badge series / Stages / XP available / New this week. Mirrors the browse
+viewer's own progress: Badge series / Stages / Points available / New this week. Mirrors the browse
 header treatment. Cold cache (no cron yet) simply omits the grid.
 """
 import pytest
@@ -30,7 +30,9 @@ def test_badge_header_scard_grid_renders_when_heartbeat_warm(client):
 
     assert 'scard' in content
     assert 'Badge series' in content and 'Stages' in content
-    assert 'XP available' in content and 'New this week' in content
+    # 'Points available', not 'XP available': badge XP is Badge Points to the reader as of the
+    # 2026-08 rename (see test_badge_points_vocabulary). The internal key is still `earnable_xp`.
+    assert 'Points available' in content and 'New this week' in content
     assert '142' in content          # badges_total flows through
     assert '2,910' in content        # stages (intcomma)
     assert '1,834,000' in content    # total earnable XP (intcomma)
@@ -40,4 +42,4 @@ def test_badge_header_scard_grid_renders_when_heartbeat_warm(client):
 def test_badge_header_grid_absent_when_heartbeat_cold(client):
     # No warm heartbeat (cron hasn't run) -> the grid is gated off, no user-specific stats shown.
     content = client.get(reverse('badges_list')).content.decode()
-    assert 'XP available' not in content   # the catalog scard grid is omitted
+    assert 'Points available' not in content   # the catalog scard grid is omitted

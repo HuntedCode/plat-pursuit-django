@@ -17,7 +17,7 @@ new per-group data. Expects: g (GroupView), target_profile. The base bar is the 
         <span aria-hidden="true">&middot;</span>
         <span class="bd-req__count">{% if target_profile %}<b class="pp-tally">{{ g.stages_cleared }}</b> of {{ g.gating_count }} stage{{ g.gating_count|pluralize }}{% else %}<b class="pp-tally">{{ g.gating_count }}</b> stage{{ g.gating_count|pluralize }}{% endif %}</span>
         <span aria-hidden="true">&middot;</span>
-        <span class="bd-req__xp"><span class="pp-tally">{{ g.xp_on_offer|intcomma }}</span> XP on offer</span>
+        <span class="bd-req__xp"><span class="pp-tally">{{ g.xp_on_offer|intcomma }}</span> Points on offer</span>
     </p>
 
     <div class="bd-req__grid">

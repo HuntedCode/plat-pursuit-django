@@ -2,7 +2,7 @@
 <div class="flex flex-col justify-start gap-2">
     <div class="flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-4">
         <div class="flex items-center gap-2">
-            <h2 class="text-base md:text-lg italic font-bold">Country XP Leaderboard</h2>
+            <h2 class="text-base md:text-lg italic font-bold">Country Points Leaderboard</h2>
             <div class="tooltip tooltip-bottom" data-tip="See how you stack up against hunters in your region">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/50 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
@@ -66,7 +66,7 @@
                     <tr class="bg-white/[0.03] border-b border-base-content/5">
                         <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide w-12"></th>
                         <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">User</th>
-                        <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">Total XP</th>
+                        <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">Total Points</th>
                         <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">Total Badges</th>
                     </tr>
                 </thead>
@@ -139,7 +139,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
             </svg>
-            <p class="text-base-content/50 font-bold mt-3 italic pr-1">No XP earned in {{ selected_country_name }} yet.</p>
+            <p class="text-base-content/50 font-bold mt-3 italic pr-1">No Points earned in {{ selected_country_name }} yet.</p>
             <p class="text-base-content/50 text-sm italic pr-1">Be the first to represent your country on the leaderboard.</p>
         </div>
     {% endif %}

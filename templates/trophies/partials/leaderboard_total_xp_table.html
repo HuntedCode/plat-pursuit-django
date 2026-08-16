@@ -1,7 +1,7 @@
 {% load static custom_filters query_tags humanize %}
 <div class="flex flex-col justify-start gap-2">
     <div class="flex items-center gap-2">
-        <h2 class="text-base md:text-lg italic font-bold">XP Leaderboard</h2>
+        <h2 class="text-base md:text-lg italic font-bold">Points Leaderboard</h2>
         <div class="tooltip tooltip-right" data-tip="Updates in real-time as XP is earned">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/50 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         </div>
@@ -17,7 +17,7 @@
                     <tr class="bg-white/[0.03] border-b border-base-content/5">
                         <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide w-12"></th>
                         <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">User</th>
-                        <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">Total XP</th>
+                        <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">Total Points</th>
                         <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">Total Badges</th>
                     </tr>
                 </thead>
@@ -79,7 +79,7 @@
     {% else %}
         <div class="bg-base-200/50 rounded-lg border-2 border-dashed border-base-300 text-center py-8 px-4">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 mx-auto text-base-content/20 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-            <p class="text-base-content/50 font-bold italic pr-1">No XP earned across any series yet.</p>
+            <p class="text-base-content/50 font-bold italic pr-1">No Points earned across any series yet.</p>
             <p class="text-base-content/40 text-xs italic pr-1">The grind starts here.</p>
         </div>
     {% endif %}

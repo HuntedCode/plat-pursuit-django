@@ -43,11 +43,11 @@
                             <span class="text-sm font-bold text-success">{{ data.velocity.avg_per_month }}</span>
                         </div>
                         <div class="flex items-baseline justify-between">
-                            <span class="text-xs text-base-content/50">XP earned</span>
+                            <span class="text-xs text-base-content/50">Points earned</span>
                             <span class="text-sm font-bold text-warning">{{ data.velocity.xp_in_range }}</span>
                         </div>
                         <div class="flex items-baseline justify-between">
-                            <span class="text-xs text-base-content/50">Avg XP / month</span>
+                            <span class="text-xs text-base-content/50">Avg Points / month</span>
                             <span class="text-sm font-bold">{{ data.velocity.xp_per_month }}</span>
                         </div>
                         <div class="flex items-baseline justify-between">
@@ -94,7 +94,7 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
                         </svg>
-                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Top Series XP</span>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Top Series Points</span>
                     </div>
                     <div class="space-y-1.5">
                         {% for s in data.xp_breakdown %}
@@ -239,11 +239,11 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                         </svg>
-                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">XP Efficiency</span>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Points Efficiency</span>
                     </div>
                     <div class="space-y-1.5">
                         <div class="flex items-baseline justify-between">
-                            <span class="text-xs text-base-content/50">Total XP</span>
+                            <span class="text-xs text-base-content/50">Total Points</span>
                             <span class="text-sm font-bold text-warning">{{ data.xp_efficiency.total_xp }}</span>
                         </div>
                         <div class="flex items-baseline justify-between">
@@ -255,11 +255,11 @@
                             <span class="text-sm font-bold">{{ data.xp_efficiency.completion_xp }} <span class="text-xs text-base-content/30 font-normal">({{ data.xp_efficiency.completion_pct }}%)</span></span>
                         </div>
                         <div class="flex items-baseline justify-between">
-                            <span class="text-xs text-base-content/50">Avg XP per badge</span>
+                            <span class="text-xs text-base-content/50">Avg Points per badge</span>
                             <span class="text-sm font-bold">{{ data.xp_efficiency.xp_per_badge }}</span>
                         </div>
                         <div class="flex items-baseline justify-between">
-                            <span class="text-xs text-base-content/50">Avg XP per stage</span>
+                            <span class="text-xs text-base-content/50">Avg Points per stage</span>
                             <span class="text-sm font-bold">{{ data.xp_efficiency.xp_per_stage }}</span>
                         </div>
                     </div>

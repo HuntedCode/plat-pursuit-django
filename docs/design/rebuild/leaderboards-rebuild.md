@@ -162,7 +162,7 @@ Entity identity + a **top slice** + a link to the full board.
 
 ---
 
-## 2. The rename: badge XP → **Badge Points**
+## 2. The rename: badge XP → **Badge Points**  ✅ SHIPPED
 
 Two sealed economies currently share one word. Badge XP lives in `ProfileBadgeStanding` /
 `SeriesBadgeStanding`; job XP lives in `ProfileJobXP` and rolls up to Pursuer Level. The badge rebuild doc
@@ -193,7 +193,7 @@ sees."* A rename sweep across live Redis keys is an outage risk for zero reader-
 | Badge detail | Per-series figure |
 | Global Boards landing | Tab label (see below) |
 | Dashboard modules ×2 | Badge XP + Country XP providers |
-| `badge_earnable_xp` | Site-heartbeat stat — internal key, user-facing label only |
+| `badge_earnable_xp` | Site-heartbeat stat -- internal key, user-facing label only |
 
 ### Consequence for the landing tabs
 
@@ -375,9 +375,9 @@ Each step leaves the site working.
 
 | # | Step | Ships |
 |---|---|---|
-| 1 | Materialized columns + country denorm + indexes; backfill commands | Nothing user-visible |
-| 2 | Lane B read swap for existing boards; retire Redis reads + cron. **Pin the recompute trigger: badge-game trophy arrival, not badge state change (§3)** | Same pages, new backend |
-| 3 | Badge Points rename (labels) | Vocabulary fixed before new surfaces spread it |
+| 1 | ✅ Materialized columns + country denorm + indexes (0297/0298) | Nothing user-visible |
+| 2 | ✅ Lane B read swap; PROGRESS boards deleted from Redis entirely. Earners/XP/country reads remain, blocked on the badge cutover repointing their legacy consumers. **Still to pin: the recompute trigger -- badge-game trophy arrival, not badge state change (§3)** | Same pages, new backend |
+| 3 | ✅ Badge Points rename (labels) | Vocabulary fixed before new surfaces spread it |
 | 4 | Global Boards landing rebuilt (3 tabs, country filter) | The hub landing |
 | 5 | Badge detail Ranks panel; retire `/leaderboards/badges/<slug>/` + repoint 2 redirects | Boards move to entities |
 | 6 | Badge Boards + Game Boards directories | Discovery, on shipped machinery |

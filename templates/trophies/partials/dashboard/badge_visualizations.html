@@ -67,11 +67,11 @@
                                 <line x1="12" y1="20" x2="12" y2="4"></line>
                                 <line x1="6" y1="20" x2="6" y2="14"></line>
                             </svg>
-                            XP by Year
+                            Points by Year
                         </h3>
                         {% if xp.has_data %}
                             <div class="flex items-center gap-3 mb-2">
-                                <span class="text-xs"><span class="font-bold text-success">{{ xp.total }}</span> <span class="text-base-content/40">total XP</span></span>
+                                <span class="text-xs"><span class="font-bold text-success">{{ xp.total }}</span> <span class="text-base-content/40">total Points</span></span>
                                 <span class="text-xs"><span class="font-bold text-warning">{{ xp.best_year }}</span> <span class="text-base-content/40">best ({{ xp.best_xp }})</span></span>
                             </div>
                             <div style="max-height: 200px;">
@@ -84,7 +84,7 @@
                             </div>
                         {% else %}
                             <div class="text-center py-6">
-                                <p class="text-xs text-base-content/40">No XP data available.</p>
+                                <p class="text-xs text-base-content/40">No Points data available.</p>
                             </div>
                         {% endif %}
                     {% else %}
@@ -92,11 +92,11 @@
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                             </svg>
-                            XP Growth
+                            Points Growth
                         </h3>
                         {% if xp.has_data %}
                             <div class="flex items-center gap-3 mb-2">
-                                <span class="text-xs"><span class="font-bold text-success">{{ xp.current_xp }}</span> <span class="text-base-content/40">total XP</span></span>
+                                <span class="text-xs"><span class="font-bold text-success">{{ xp.current_xp }}</span> <span class="text-base-content/40">total Points</span></span>
                                 <span class="text-xs"><span class="font-bold text-warning">+{{ xp.year_xp }}</span> <span class="text-base-content/40">this year</span></span>
                             </div>
                             <div style="max-height: 200px;">
@@ -106,7 +106,7 @@
                             </div>
                         {% else %}
                             <div class="text-center py-6">
-                                <p class="text-xs text-base-content/40">No XP data for {{ data.year }}.</p>
+                                <p class="text-xs text-base-content/40">No Points data for {{ data.year }}.</p>
                             </div>
                         {% endif %}
                     {% endif %}
