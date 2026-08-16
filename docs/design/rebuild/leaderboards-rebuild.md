@@ -87,15 +87,34 @@ catalogue. Without a stated differentiator they converge into second copies of t
 then there are two walls, two filter sets, two test suites and a drift risk — the exact failure the badge
 how-it-works modal was retired to avoid.
 
-**Rule:** a leaderboard directory gets *search plus two or three leaderboard-native sorts*, and nothing
-else. No filter drawer, no facet panel, no genre/platform filters.
+**Rule:** a leaderboard directory gets *search + exactly two sorts*, and nothing else. No filter drawer,
+no facet panel, no genre/platform filters, **no country facet** (see below).
 
-- Native sorts are about the **board**, not the entity: most contested, recently changed hands, biggest
-  mover, most entrants.
-- Scoped by a **minimum-participants gate** — a directory full of one-entrant boards reads as broken and
-  drowns the boards worth looking at.
-- If a directory grows a filter panel, it has become a second Browse Games and belongs folded back into
-  the real one as a view mode instead.
+**The two sorts, settled:**
+
+| Sort | Why |
+|---|---|
+| **Alphabetical** (default) | Stable and predictable. A catalogue whose order shifts between visits is disorienting, and anyone after a specific entity uses search |
+| **Most entrants** | The only sort that answers the question the section exists for — *which boards do people actually compete on* |
+
+Most entrants earns its place by being free: the **minimum-participants gate** needs those same counts
+anyway, to keep the wall from filling with one-entrant boards that read as broken.
+
+| Directory | Count source | Cost |
+|---|---|---|
+| Game Boards | `Game.played_count` (already denormalized) | Free |
+| Job Boards | 24 rows via `profilejobxp_job_xp_idx` | Free |
+| Badge Boards | count per `series_slug` off `sbs_series_xp_idx` | Cheap; needed for the gate regardless |
+
+**Rejected:** *biggest mover* and *recently changed hands*. Both need a previous-position history that
+nothing currently stores, and neither justifies a snapshot table. Revisit only if the section proves out.
+
+Without "most entrants" the directories are alphabetical-only, and the differentiator from `/games/`
+collapses to "the card has a top slice on it" — which would not justify three separate catalogues. That
+one sort is what keeps the thin-directory rule from arguing itself out of existence.
+
+If a directory grows a filter panel, it has become a second Browse Games and belongs folded back into the
+real one as a view mode instead.
 
 The natural pull during implementation will be to reuse Browse Games wholesale, because it is right there
 and it works. Reuse its *card wall, `HtmxListMixin`, `InfiniteScroller` and mini-bar*. Do not reuse its
@@ -184,9 +203,19 @@ recomputes badge XP. This fits the subsystem's own stated principle — *materia
 keep relative data live*: a trophy count is factual and recompute-from-scratch, while rank and rarity stay
 live because they are relative.
 
-> **Open — must be confirmed before building.** The badge write seam runs on badge evaluation. Badge-game
-> trophy counts change on **any** sync. If the seam is narrower than every sync, this column needs its own
-> trigger or it goes stale between badge events.
+**Where it recomputes (checked 2026-08).** The new seam is not wired to sync yet — its only caller today is
+the `evaluate_badges` command, whose own docstring calls `badge_apply` *"the same code the eventual sync"*
+will use. Sync wiring is cutover step 5.
+
+The position it will occupy is proven, though: legacy badge evaluation already runs at sync-complete
+inside `bulk_gamification_update()`, and the Redis progress rebuild is explicitly *"Called at sync-complete
+time after `bulk_gamification_update()` exits."* `recompute_standing` inherits that hook.
+
+> **Pin this in the cutover spec.** If the new engine is wired to evaluate only the *affected* badges as an
+> optimization, a profile's counts across all badge games will not be recomputed on a sync that touched
+> none of them. The column must recompute whenever **badge-game trophies arrive**, not only when a badge's
+> state changes. One line to get right at cutover; expensive to discover afterwards, because the failure is
+> a slowly-drifting number rather than an error.
 
 ### Career XP — materialize the total
 
@@ -220,6 +249,12 @@ board then gets a country slice as an index range scan, at the same speed as its
 
 Country is a **filter on a board, never a board of its own**. No per-country pages, no per-country URLs
 beyond a query parameter. This is the single decision that keeps the section's surface area finite.
+
+**Full boards only — the directories carry no country facet.** It was considered (filter the directory,
+every card's slice becomes that country's) and rejected on caching: a directory cached per (page, sort) is
+a handful of entries, and per (page, sort, country) is that times ~200. The section is public-identical by
+design (§5), and a facet few people would use would forfeit most of that. Competitive comparison is what
+country is for, and that happens on the board itself.
 
 `country_code` must be kept current when a profile changes country — a signal, or the same recompute.
 
@@ -286,17 +321,22 @@ performance lever available.
 
 ---
 
-## 6. Open questions
+## 6. Settled in planning
 
-1. **What sorts the directories.** The one genuinely undecided piece of design. Sorted arbitrarily, a
-   directory of boards is a phone book; sorted by something live, it is the discovery surface this section
-   exists to be. Must be answered in design, not at build time.
-2. **Does the badge write seam run on every sync?** Gates the Global Progress column (§3).
-3. **How many contracts can a job have?** The job-detail Contracts tab is its own wall, and for an authed
-   viewer each row carries per-user state. Needs a stated bound, not an assumed one — that is the
-   assumption that stops being true after a content push.
-4. **Does country propagate from a directory into the board it links to?** Coherent if it does; more state
-   to carry if it does.
+The four questions this plan opened, and how they closed. Recorded because each was weighed rather than
+defaulted, and the reasoning is the part that rots first.
+
+| Question | Answer | Where |
+|---|---|---|
+| What sorts the directories? | **Alphabetical default + most entrants.** Alphabetical because a catalogue that reorders between visits is disorienting; most entrants because it is the only sort that answers "which boards are alive", and the participants gate pays for it already. Biggest-mover / recently-changed-hands rejected — both need history nothing stores | §1 |
+| Does the badge write seam run on every sync? | **Not wired to sync at all yet** — `evaluate_badges` is its only caller; cutover step 5 wires it. The sync-complete hook it will inherit is proven. Residual pinned for the cutover spec | §3 |
+| How many contracts can a job have? | **Unbounded is fine** — the Contracts tab is a browse wall with infinite scroll like any other, which bounds per-request work by construction. The real risk is not length but per-row user state; see the batching gotcha | §1, Gotchas |
+| Does country propagate into the directories? | **No.** Full boards only. Rejected on cache cardinality: ~200× the entries for a facet few would use, against a section whose defining property is being public-identical | §3, §5 |
+
+Still genuinely open, and outside this plan's control:
+
+- **The analytics-cookie caching blocker** (§5). Not a leaderboards decision, but it determines whether
+  the section's central performance property can actually be realized.
 
 ---
 
@@ -307,7 +347,7 @@ Each step leaves the site working.
 | # | Step | Ships |
 |---|---|---|
 | 1 | Materialized columns + country denorm + indexes; backfill commands | Nothing user-visible |
-| 2 | Lane B read swap for existing boards; retire Redis reads + cron | Same pages, new backend |
+| 2 | Lane B read swap for existing boards; retire Redis reads + cron. **Pin the recompute trigger: badge-game trophy arrival, not badge state change (§3)** | Same pages, new backend |
 | 3 | Badge Points rename (labels) | Vocabulary fixed before new surfaces spread it |
 | 4 | Global Boards landing rebuilt (3 tabs, country filter) | The hub landing |
 | 5 | Badge detail Ranks panel; retire `/leaderboards/badges/<slug>/` + repoint 2 redirects | Boards move to entities |
@@ -330,7 +370,12 @@ prerequisite to it.
 - **A personal rank on a directory card forfeits caching for the whole section.** It is not a small
   addition; it changes the section from public-cacheable to per-user.
 - **Country as a page rather than a filter** re-introduces the per-slice materialization this design
-  removes. Query parameter only.
+  removes. Query parameter only — and not on the directories at all (§3).
+- **Per-row user state on a long list must be batched per PAGE.** The job Contracts tab is the live case:
+  each row needs the viewer's completion on that contract's concept, and a `for contract in page:` loop
+  doing a lookup each looks fine at 24 rows and is not at 200. Infinite scroll bounds the rows rendered,
+  never the queries per row — those are two different problems and only one of them is solved by
+  pagination.
 - **`earners_ranks()` is len(held) queries by its own docstring.** Fine for a page of medallions, not for
   a directory. Use the windowed query.
 - **Two XP economies, one word** was the original sin here. After the rename, resist any "total XP" that
