@@ -2,6 +2,8 @@
 import datetime as dt
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from trophies.models import ProfileGame, TrophyGroup, ProfileTrophyGroup
@@ -70,7 +72,9 @@ def test_series_xp_board_is_scoped_to_the_series():
     assert lb.series_rank('gow', top.id) == 1 and lb.series_rank('gow', partial.id) == 2
 
 
-def test_progress_board_orders_by_furthest_along():
+def test_series_board_orders_by_furthest_along():
+    """Renamed from the chasers-only `series_progress_rows`: earners and chasers are ONE board now, so the
+    row carries `advanced_at` (the tiebreak) alongside the progress figures."""
     gb, games = _series('gow', 4)
     ahead = ProfileFactory()
     for g in games[:3]:
@@ -80,9 +84,39 @@ def test_progress_board_orders_by_furthest_along():
     _complete(behind, games[0])                    # 1 of 4 = 2500 bp
     evaluate_and_apply(behind, [gb])
 
-    rows = lb.series_progress_rows('gow')
-    assert rows[0] == (ahead.id, 7500, 3, 4)
-    assert rows[1] == (behind.id, 2500, 1, 4)
+    rows = lb.series_board_rows('gow')
+    assert [r[:4] for r in rows] == [(ahead.id, 7500, 3, 4), (behind.id, 2500, 1, 4)]
+    assert all(r[4] is not None for r in rows), 'advanced_at did not reach the board rows'
+
+
+def test_the_series_board_puts_earners_above_chasers_and_breaks_ties_by_date():
+    """The merge, end to end. An earner outranks every chaser however far along they are, and two hunters
+    on the SAME rung are separated by who got there first -- which is the whole reason a 3-stage badge does
+    not collapse into one giant tie."""
+    gb, games = _series('tie', 2)
+
+    earner = ProfileFactory()
+    for g in games:
+        _complete(earner, g, when=timezone.make_aware(dt.datetime(2024, 6, 1)))
+    evaluate_and_apply(earner, [gb])
+
+    # Created in REVERSE date order on purpose: profile ids then run opposite to the dates, so the
+    # expected order can only come from the tiebreak. Built the other way round, `profile_id` alone
+    # produces the same answer and the assertion passes with no tiebreak at all -- which is exactly what
+    # mutation testing caught here.
+    second_there = ProfileFactory()
+    _complete(second_there, games[0], when=timezone.make_aware(dt.datetime(2023, 1, 1)))
+    evaluate_and_apply(second_there, [gb])
+
+    first_there = ProfileFactory()
+    _complete(first_there, games[0], when=timezone.make_aware(dt.datetime(2021, 1, 1)))
+    evaluate_and_apply(first_there, [gb])
+
+    rows = lb.series_board_rows('tie')
+    assert [r[0] for r in rows] == [earner.id, first_there.id, second_there.id]
+    assert lb.series_board_rank('tie', first_there.id) == 2
+    assert lb.series_board_rank('tie', second_there.id) == 3
+    assert lb.series_board_rank('tie', ProfileFactory().id) is None
 
 
 def test_earners_rank_reflects_completion_order_and_is_live():
@@ -108,3 +142,93 @@ def test_earners_ranks_batched():
     evaluate_and_apply(p, [gb1, gb2])
     ranks = lb.earners_ranks(p.id, [gb1.id, gb2.id])
     assert ranks == {gb1.id: 1, gb2.id: 1}
+
+
+# ------------------------------------------------------------------ Lane B: the new boards ---------------
+
+def _standing(country='', **kw):
+    from trophies.models import ProfileBadgeStanding
+    p = ProfileFactory(country_code=country)
+    ProfileBadgeStanding.objects.create(profile=p, country_code=country, **kw)
+    return p
+
+
+def test_global_progress_ranks_platinums_first_then_total():
+    many_plats = _standing(trophies_platinum=9, trophies_total=50)
+    many_trophies = _standing(trophies_platinum=2, trophies_total=400)
+    tie_loser = _standing(trophies_platinum=9, trophies_total=20)
+
+    assert [r[0] for r in lb.progress_rows()] == [many_plats.id, tie_loser.id, many_trophies.id]
+
+
+def test_progress_rank_expresses_the_same_tiebreak_as_the_order_by():
+    """A two-key board needs a two-key rank. Counting only `trophies_platinum__gt` would report every
+    hunter sharing a platinum count as joint-first -- the board and the rank would disagree, and the rank
+    is what a viewer sees next to their own name."""
+    top = _standing(trophies_platinum=5, trophies_total=300)
+    same_plats_fewer = _standing(trophies_platinum=5, trophies_total=100)
+    fewer_plats = _standing(trophies_platinum=1, trophies_total=999)
+
+    assert lb.progress_rank(top.id) == 1
+    assert lb.progress_rank(same_plats_fewer.id) == 2, 'the tiebreak is missing from the rank'
+    assert lb.progress_rank(fewer_plats.id) == 3
+    assert lb.progress_rank(ProfileFactory().id) is None
+
+
+def test_every_board_can_be_sliced_by_country_without_a_separate_store():
+    """The decision the whole design rests on: country is a FILTER, not a board. Same rows, same indexes,
+    one extra WHERE -- versus the Redis design's separate sorted set per country."""
+    ca_top = _standing(country='CA', total_xp=500, trophies_platinum=9, trophies_total=90)
+    ca_low = _standing(country='CA', total_xp=100, trophies_platinum=1, trophies_total=10)
+    gb_only = _standing(country='GB', total_xp=900, trophies_platinum=99, trophies_total=999)
+
+    assert [r[0] for r in lb.xp_rows(country='CA')] == [ca_top.id, ca_low.id]
+    assert [r[0] for r in lb.progress_rows(country='CA')] == [ca_top.id, ca_low.id]
+
+    # The global board still contains everyone, and the GB hunter tops it.
+    assert lb.xp_rows()[0][0] == gb_only.id
+
+    # Rank is relative to the SLICE: top of Canada is 1st there and 2nd globally.
+    assert lb.xp_rank(ca_top.id, country='CA') == 1
+    assert lb.xp_rank(ca_top.id) == 2
+
+
+def test_career_xp_board_reads_the_jobs_economy():
+    from trophies.models import ProfileCareerStanding
+    big, small = ProfileFactory(), ProfileFactory()
+    ProfileCareerStanding.objects.create(profile=big, total_xp=5000, pursuer_level=30)
+    ProfileCareerStanding.objects.create(profile=small, total_xp=200, pursuer_level=4)
+
+    rows = lb.career_xp_rows()
+    assert [r[0] for r in rows] == [big.id, small.id]
+    assert rows[0][2] == 30, 'pursuer level is not on the row'
+    assert lb.career_xp_rank(small.id) == 2
+    assert lb.career_xp_rank(ProfileFactory().id) is None
+
+
+def test_hydrate_is_one_query_regardless_of_page_size():
+    """The Redis design denormalized display data into a hash and then had to keep it fresh -- a renamed
+    hunter showed a stale name until the next rebuild, and a missing hash entry silently dropped a row
+    from a page. Reading it live cannot go stale, but only if it stays ONE query.
+
+    `displayed_title` is the trap: it is a METHOD doing two queries per profile, so a 50-row page would be
+    ~100 extra round trips to print a word under each name. It is folded in as a subquery.
+    """
+    profiles = [ProfileFactory() for _ in range(12)]
+
+    with CaptureQueriesContext(connection) as ctx:
+        rows = lb.hydrate([p.id for p in profiles])
+
+    assert len(rows) == 12
+    assert len(ctx.captured_queries) == 1, (
+        f'hydrate took {len(ctx.captured_queries)} queries for 12 rows -- it must be one'
+    )
+    assert lb.hydrate([]) == {}, 'the empty page should not touch the database'
+
+
+def test_hydrate_carries_what_a_board_row_draws():
+    p = ProfileFactory(country_code='CA')
+    row = lb.hydrate([p.id])[p.id]
+    for key in ('display_psn_username', 'avatar_url', 'flag', 'user_is_premium', 'country_code',
+                'display_title'):
+        assert key in row, f'{key} is missing from the hydrated row'
