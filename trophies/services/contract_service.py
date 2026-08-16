@@ -513,4 +513,34 @@ def recompute_profile_job_xp(profile):
             pjx.level = floor_level
             pjx.save(update_fields=['total_xp', 'level', 'updated_at'])
 
+    recompute_career_standing(profile)
     return sums
+
+
+def recompute_career_standing(profile):
+    """Roll the per-job cache up into ProfileCareerStanding -- the Career XP board's sort key and Pursuer
+    Level.
+
+    Rides this seam rather than getting its own trigger because the rows it sums are written immediately
+    above: anything that changes a profile's job XP comes through here, so the roll-up cannot drift from
+    its source. Both figures are recompute-from-scratch (Sum over the profile's ~24 rows), so a re-run is
+    idempotent and a missed one is self-healing on the next grant.
+
+    Without it, a global Career XP board would aggregate ~24 rows per user across the whole population on
+    every read; with it, the board is an indexed ORDER BY.
+    """
+    from django.db.models import Sum
+    from trophies.models import ProfileCareerStanding, ProfileJobXP
+
+    totals = ProfileJobXP.objects.filter(profile=profile).aggregate(
+        xp=Sum('total_xp'), lvl=Sum('level'),
+    )
+    country = getattr(profile, 'country_code', '') or ''
+    ProfileCareerStanding.objects.update_or_create(
+        profile=profile,
+        defaults={
+            'total_xp': totals['xp'] or 0,
+            'pursuer_level': totals['lvl'] or 0,
+            'country_code': country,
+        },
+    )

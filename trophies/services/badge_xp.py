@@ -178,16 +178,59 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
         if r is not None and r.gating_count > 0:
             group_prog[gb.series.series_slug][gb.platform_group.key] = [r.base_satisfied_count, r.gating_count]
 
+    # Read ONCE for the whole recompute: this seam writes one row per positive series plus the grand
+    # total, and the profile's country is the same for all of them.
+    country = _country_code(profile_id)
+
     for slug, s in positive.items():
         _upsert(SeriesBadgeStanding, {'profile_id': profile_id, 'series_slug': slug},
                 {'xp': s.xp, 'progress_bp': s.progress_bp,
                  'stages_cleared': s.stages_cleared, 'stages_total': s.stages_total,
-                 'group_progress': dict(group_prog.get(slug, {}))})
+                 'group_progress': dict(group_prog.get(slug, {})),
+                 'country_code': country})
     if zeroed:
         SeriesBadgeStanding.objects.filter(profile_id=profile_id, series_slug__in=zeroed).delete()
 
     total = SeriesBadgeStanding.objects.filter(profile_id=profile_id).aggregate(t=Sum('xp'))['t'] or 0
     if total > 0:
-        _upsert(ProfileBadgeStanding, {'profile_id': profile_id}, {'total_xp': total})
+        fields = {'total_xp': total, 'country_code': country}
+        fields.update(badge_trophy_counts(profile_id))
+        _upsert(ProfileBadgeStanding, {'profile_id': profile_id}, fields)
     else:
         ProfileBadgeStanding.objects.filter(profile_id=profile_id).delete()
+
+
+def _country_code(profile_id):
+    """The profile's country, denormalized onto its standings so a country slice is an index range scan
+    rather than a join-then-filter over a board-ordered scan."""
+    from trophies.models import Profile
+    return Profile.objects.filter(pk=profile_id).values_list('country_code', flat=True).first() or ''
+
+
+def badge_trophy_counts(profile_id):
+    """The Global Progress board's figures: trophies earned across every badge-stage game, by tier.
+
+    DB-aggregated in one grouped query, never iterated -- a whale holds 250k+ EarnedTrophy rows and
+    counting them in Python is the documented OOM/timeout pattern.
+
+    The game set is an `IN (subquery)`, and that is LOAD-BEARING: it dedupes by construction, so a game
+    sitting in five different badges contributes its trophies exactly once. Rewriting this as a join
+    through Stage would multiply each trophy by the number of badges containing its game and produce a
+    number that inflates with catalogue growth rather than with play. It would also be slower. See the
+    gotchas in docs/design/rebuild/leaderboards-rebuild.md.
+    """
+    from django.db.models import Count
+    from trophies.models import EarnedTrophy, Game
+
+    badge_games = Game.objects.filter(concept__stages__isnull=False)
+    rows = dict(
+        EarnedTrophy.objects
+        .filter(profile_id=profile_id, earned=True, trophy__game__in=badge_games)
+        .values('trophy__trophy_type')
+        .annotate(n=Count('id'))
+        .values_list('trophy__trophy_type', 'n')
+    )
+    counts = {f'trophies_{tier}': rows.get(tier, 0)
+              for tier in ('platinum', 'gold', 'silver', 'bronze')}
+    counts['trophies_total'] = sum(counts.values())
+    return counts

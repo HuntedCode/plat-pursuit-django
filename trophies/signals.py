@@ -202,12 +202,40 @@ def _track_profile_premium_transition(sender, instance, **kwargs):
     """Snapshot the old premium value so the post_save handler can detect the edge."""
     if not instance.pk:
         instance._old_user_is_premium = None
+        instance._old_country_code = None
         return
     try:
-        old = Profile.objects.only('user_is_premium').get(pk=instance.pk)
+        old = Profile.objects.only('user_is_premium', 'country_code').get(pk=instance.pk)
         instance._old_user_is_premium = old.user_is_premium
+        instance._old_country_code = old.country_code
     except Profile.DoesNotExist:
         instance._old_user_is_premium = None
+        instance._old_country_code = None
+
+
+@receiver(post_save, sender=Profile, dispatch_uid="propagate_country_to_standings")
+def _propagate_country_to_standings(sender, instance, created, **kwargs):
+    """Keep the denormalized `country_code` on the standing stores in step with the profile.
+
+    The recompute seams (badge_xp.recompute_standing, contract_service.recompute_career_standing) already
+    stamp it on every row they write, which covers the normal case: a profile syncs, its standings are
+    rebuilt, the country travels with them. This handler covers the one path that bypasses them -- the
+    country CHANGING with no recompute behind it, which would otherwise leave a hunter ranked in the
+    country they left until their next badge evaluation.
+
+    Gated on the edge, not fired on every profile save: country changes are rare (it comes from PSN), and
+    three blind UPDATEs on every Profile.save() would be a real cost for a value that almost never moves.
+    """
+    if created:
+        return
+    old = getattr(instance, '_old_country_code', None)
+    new = instance.country_code or ''
+    if old is None or (old or '') == new:
+        return
+
+    from trophies.models import ProfileBadgeStanding, ProfileCareerStanding, ProfileJobXP, SeriesBadgeStanding
+    for model in (ProfileBadgeStanding, ProfileCareerStanding, SeriesBadgeStanding, ProfileJobXP):
+        model.objects.filter(profile_id=instance.pk).update(country_code=new)
 
 
 @receiver(post_save, sender=Profile, dispatch_uid="handle_profile_premium_downgrade")

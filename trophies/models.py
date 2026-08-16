@@ -2881,6 +2881,7 @@ class ProfileJobXP(models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='profile_xp')
     total_xp = models.PositiveIntegerField(default=0)
     level = models.PositiveIntegerField(default=0)
+    country_code = models.CharField(max_length=2, blank=True, default='', db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -2888,6 +2889,9 @@ class ProfileJobXP(models.Model):
         indexes = [
             models.Index(fields=['profile'], name='profilejobxp_profile_idx'),
             models.Index(fields=['job', 'total_xp'], name='profilejobxp_job_xp_idx'),
+            # Country-sliced per-job board. Same column order rationale as the series boards: the always-
+            # filtered key first, then the slice, then the sort.
+            models.Index(fields=['job', 'country_code', '-total_xp'], name='pjx_job_cc_xp_idx'),
         ]
 
     def __str__(self):
@@ -3185,13 +3189,70 @@ class ProfileBadgeStanding(models.Model):
     """Sealed per-profile GRAND badge-XP total for the new subsystem -- the global XP leaderboard sort key (and
     a profile's overall total). Per-series XP + progress live in SeriesBadgeStanding. Recomputed from scratch on
     every evaluation (see services/badge_xp.py), so it can't drift. Isolated from the legacy tier-based
-    ProfileGamification.total_badge_xp (repointed at cutover)."""
+    ProfileGamification.total_badge_xp (repointed at cutover).
+
+    Also carries the GLOBAL PROGRESS board's figures (trophies earned across every badge-stage game). Those
+    are a materialized FACTUAL read-model, the same category as the XP total: recompute-from-scratch in the
+    one write seam, never relative. The board they replace paid a full-population aggregate over
+    EarnedTrophy every 6 hours; here it is an indexed ORDER BY. See
+    docs/design/rebuild/leaderboards-rebuild.md."""
     profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='badge_standing')
     total_xp = models.PositiveIntegerField(default=0, db_index=True)   # global leaderboard sort key
+
+    # Global Progress board. `trophies_total` is the sort key; the per-tier counts are what the row DISPLAYS.
+    # Deliberately a plain total rather than the legacy weighted score (plats*10^9 + golds*10^6 + ...): the
+    # stat is "trophies earned across badge games", and a weighted composite ranks by platinums with the
+    # rest as tiebreakers, which is a different board wearing the same name.
+    trophies_total = models.PositiveIntegerField(default=0, db_index=True)
+    trophies_platinum = models.PositiveIntegerField(default=0)
+    trophies_gold = models.PositiveIntegerField(default=0)
+    trophies_silver = models.PositiveIntegerField(default=0)
+    trophies_bronze = models.PositiveIntegerField(default=0)
+
+    # Denormalized from Profile so a country slice is an index range scan instead of a join-then-filter.
+    # See CountryStandingMixin for why this is copied rather than joined.
+    country_code = models.CharField(max_length=2, blank=True, default='', db_index=True)
+
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            # Country-sliced boards. Both are (country, -value) so a slice is a range scan in board order;
+            # the unsliced boards ride the single-column db_index above.
+            models.Index(fields=['country_code', '-total_xp'], name='pbs_country_xp_idx'),
+            models.Index(fields=['country_code', '-trophies_total'], name='pbs_country_troph_idx'),
+        ]
 
     def __str__(self):
         return f"{self.profile.psn_username} - badge XP {self.total_xp}"
+
+
+class ProfileCareerStanding(models.Model):
+    """Per-profile roll-up of the JOBS economy -- the Career XP board's sort key, and Pursuer Level.
+
+    A sibling of ProfileBadgeStanding, deliberately: the two economies are sealed apart ("Badge XP +
+    leaderboards live inside the box. They never read/write the jobs/contracts economy"), so they get
+    parallel stores rather than sharing one. It is NOT folded into ProfileGamification, which is the LEGACY
+    badge-XP denorm that cutover repoints -- mixing a new economy into a model being retired would tie the
+    two together at exactly the wrong moment.
+
+    Both figures are derivable (total = Sum of the profile's ProfileJobXP.total_xp; level = Sum of their
+    .level), which is why they are safe to materialize: recompute-from-scratch in the seam that already
+    rebuilds ProfileJobXP from the ContractXPGrant ledger. Without this, a global board would aggregate
+    ~24 rows per user across the whole population on every read."""
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='career_standing')
+    total_xp = models.PositiveIntegerField(default=0, db_index=True)      # Career XP board sort key
+    pursuer_level = models.PositiveIntegerField(default=0, db_index=True)  # sum of per-job levels
+    country_code = models.CharField(max_length=2, blank=True, default='', db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['country_code', '-total_xp'], name='pcs_country_xp_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - career XP {self.total_xp} (Lv {self.pursuer_level})"
 
 
 class SeriesBadgeStanding(models.Model):
@@ -3223,6 +3284,7 @@ class SeriesBadgeStanding(models.Model):
                   "edition (gating_count > 0), started or not -- so an untouched edition still carries its "
                   "denominator. Lets the Collection show each edition's own progress without a live eval.",
     )
+    country_code = models.CharField(max_length=2, blank=True, default='', db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -3230,6 +3292,11 @@ class SeriesBadgeStanding(models.Model):
         indexes = [
             models.Index(fields=['series_slug', '-xp'], name='sbs_series_xp_idx'),            # per-series XP board
             models.Index(fields=['series_slug', '-progress_bp'], name='sbs_series_prog_idx'),  # per-series chasers
+            # Country-sliced per-series boards. The column order matters: series first (always filtered),
+            # then country (the slice), then the sort key -- so both the global and sliced forms of a board
+            # are a range scan rather than a filter over a scan.
+            models.Index(fields=['series_slug', 'country_code', '-xp'], name='sbs_series_cc_xp_idx'),
+            models.Index(fields=['series_slug', 'country_code', '-progress_bp'], name='sbs_series_cc_prog_idx'),
         ]
 
     def __str__(self):
