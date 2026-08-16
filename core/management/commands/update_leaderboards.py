@@ -53,11 +53,8 @@ class Command(BaseCommand):
     def _rebuild_single_series(self, slug):
         """Rebuild all leaderboards for a single series."""
         try:
-            earners_count, progress_count = rebuild_series_leaderboards(slug)
-            self.stdout.write(
-                f"Rebuilt sorted sets for {slug}: "
-                f"{earners_count} earners, {progress_count} progress"
-            )
+            earners_count = rebuild_series_leaderboards(slug)
+            self.stdout.write(f"Rebuilt sorted sets for {slug}: {earners_count} earners")
             self.stdout.write(self.style.SUCCESS(f"Rebuilt leaderboards for series: {slug}"))
         except Exception as e:
             logger.exception(f"Failed rebuilding sorted sets for {slug}")
@@ -97,15 +94,12 @@ class Command(BaseCommand):
             logger.exception("Failed rebuilding country XP sorted sets")
             self.stdout.write(self.style.ERROR(f"Failed rebuilding country XP sorted sets: {e}"))
 
-        # Per-series leaderboards (earners + progress + community XP)
+        # Per-series sorted sets (earners + community XP; progress moved to the DB)
         success_count = 0
         for slug in unique_slugs:
             try:
-                earners_count, progress_count = rebuild_series_leaderboards(slug)
-                self.stdout.write(
-                    f"Rebuilt sorted sets for {slug}: "
-                    f"{earners_count} earners, {progress_count} progress"
-                )
+                earners_count = rebuild_series_leaderboards(slug)
+                self.stdout.write(f"Rebuilt sorted sets for {slug}: {earners_count} earners")
                 success_count += 1
             except Exception as e:
                 logger.exception(f"Failed rebuilding sorted sets for {slug}")

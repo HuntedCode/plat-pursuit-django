@@ -64,7 +64,7 @@ XP is denormalized into `ProfileGamification` (one row per profile) with both a 
 | `trophies/signals.py` | Django signal handlers: earned_count updates, gamification recalculation, stage icon auto-population |
 | `trophies/util_modules/constants.py` | XP constants: BRONZE_STAGE_XP (250), SILVER_STAGE_XP (75), GOLD_STAGE_XP (250), PLAT_STAGE_XP (75), BADGE_TIER_XP (3000) |
 | `trophies/token_keeper.py` | Sync pipeline: calls `check_profile_badges()` after game sync |
-| `core/management/commands/update_leaderboards.py` | Cron command to compute and cache all leaderboard data |
+| `core/management/commands/update_leaderboards.py` | Cron: rebuilds the REMAINING sorted sets (earners, XP, country). The global-progress leg was deleted 2026-08 |
 | `trophies/management/commands/` | Various badge/milestone management commands (see Management Commands section) |
 
 ## Data Model
@@ -240,9 +240,16 @@ During sync (bulk operations), the `bulk_gamification_update()` context manager 
 
 ### Leaderboard Calculation
 
-Leaderboards are maintained in Redis sorted sets with incremental signal-driven updates. A reconciliation cron rebuilds from source data periodically. See [Leaderboard System](leaderboard-system.md) for full architecture, computation details, Redis keys, and gotchas.
+Leaderboards are **mid-migration (2026-08)**: the progress boards now read indexed Postgres columns
+(`ProfileBadgeStanding` / `SeriesBadgeStanding`) via `services/badge_leaderboards.py`, while earners,
+Badge Points and country remain on Redis sorted sets until the badge cutover repoints their legacy
+consumers. See [Leaderboard System](leaderboard-system.md) for which board is on which backend, and
+[the rebuild plan](../design/rebuild/leaderboards-rebuild.md) for the sequencing.
 
-**Five leaderboard types:** three per-series (earners, progress, community XP) and two global (total progress, total XP). User rank lookups use `ZREVRANK` for O(log n) lookups. Pagination uses `ZREVRANGE` to fetch only the requested page.
+**Board inventory:** per-series earners + community XP (Redis), the merged per-series board and Global
+Progress (Postgres), Badge Points global + country (Redis), Career XP (Postgres). Redis ranks use
+`ZREVRANK`/`ZREVRANGE`; Postgres ranks are a single indexed `COUNT` of the rows ahead, expressed with the
+same tiebreak as the board's `ORDER BY`.
 
 ## Integration Points
 
@@ -292,7 +299,7 @@ The `post_save` and `post_delete` signals on UserBadge and UserBadgeProgress alw
 Both Badge and Milestone `earned_count` fields are updated via `F('earned_count') + 1` / `F('earned_count') - 1` to prevent race conditions when multiple workers award the same badge concurrently. Direct read-then-write would lose increments under concurrency.
 
 ### Leaderboard data is cached, not live
-Badge views read leaderboard data from cache. If the `update_leaderboards` cron fails or the cache is flushed, leaderboard pages will show empty results until the next successful cron run. The 7-hour TTL means data can be up to 7 hours stale under normal operation.
+The Postgres-backed boards (Global Progress, the per-series board, Career XP) read live indexed columns and cannot go empty or stale -- they are recomputed in the badge write seam on every evaluation. The Redis-backed remainder (earners, Badge Points, country) still depends on the `update_leaderboards` cron: if it fails or Redis is flushed, those boards show empty results until the next successful run.
 
 ### `requires_all` vs `min_required` only matters for megamix
 For series, collection, developer, user, and genre badges, ALL non-zero qualifying stages must be complete regardless of the `requires_all` flag. The `min_required` field is only consulted when `badge_type='megamix'` and `requires_all=False`.
@@ -350,7 +357,7 @@ Stages link to badges via `series_slug` string matching, not a foreign key. This
 
 ## Cache Keys
 
-All leaderboard cache keys are set by the `update_leaderboards` management command with a 7-hour (25,200 second) TTL.
+The REMAINING Redis leaderboard keys are refreshed by the `update_leaderboards` cron. The progress boards no longer live there at all -- they are columns, with no TTL and no rebuild.
 
 | Key Pattern | Type | Description |
 |-------------|------|-------------|

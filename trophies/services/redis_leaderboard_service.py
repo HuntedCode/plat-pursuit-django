@@ -717,47 +717,11 @@ def rebuild_series_leaderboards(series_slug):
     """Rebuild a badge series' remaining sorted sets (earners + community XP).
 
     The per-series PROGRESS set is gone -- nothing reads it now that the board is served from
-    SeriesBadgeStanding. The second return value is kept as a constant 0 so the callers' tuple unpacking
-    and their log lines keep working through the transition; it goes with the rest of this module at the
-    badge cutover.
+    SeriesBadgeStanding -- so this returns a plain earners count rather than the old
+    (earners, progress) pair.
     """
     earners_count = rebuild_earners_leaderboard(series_slug)
-    community_xp = rebuild_community_xp(series_slug)
-    return earners_count, 0
+    rebuild_community_xp(series_slug)
+    return earners_count
 
 
-def rebuild_all_leaderboards():
-    """Full rebuild of all leaderboards. Used by management command for reconciliation."""
-    from trophies.models import Badge
-
-    xp_count = rebuild_xp_leaderboard()
-    country_results = rebuild_country_xp_leaderboards()
-
-    unique_slugs = list(
-        Badge.objects.filter(is_live=True)
-        .values_list('series_slug', flat=True)
-        .distinct()
-        .order_by('series_slug')
-    )
-
-    series_results = {}
-    for slug in unique_slugs:
-        try:
-            earners_count, progress_count = rebuild_series_leaderboards(slug)
-            series_results[slug] = {'earners': earners_count, 'progress': progress_count}
-        except Exception:
-            logger.exception(f"Failed rebuilding leaderboards for series {slug}")
-            series_results[slug] = {'error': True}
-
-    logger.info(
-        f"Full leaderboard rebuild complete: {xp_count} XP entries, "
-        f"{global_progress_count} global progress entries, "
-        f"{len(country_results)} countries, "
-        f"{len(unique_slugs)} series processed"
-    )
-
-    return {
-        'xp': xp_count,
-        'country_xp': country_results,
-        'series': series_results,
-    }

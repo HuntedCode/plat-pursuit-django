@@ -416,3 +416,55 @@ def test_the_evaluation_seam_actually_writes_the_advance_date():
         'tiebreak'
     )
     assert standing.advanced_at == cleared_on.date()
+
+
+# ---------------------------------------------------------------- audit findings ------------------------
+
+@pytest.mark.parametrize('model_path', [
+    'ProfileBadgeStanding', 'ProfileCareerStanding', 'SeriesBadgeStanding', 'ProfileJobXP',
+])
+def test_the_denormalized_country_column_is_no_narrower_than_its_source(model_path):
+    """`Profile.country_code` is max_length=5. A denormalized copy narrower than its source turns any
+    over-long value into a DataError on the propagating UPDATE -- a 500 on profile save, for data the
+    source column accepts without complaint.
+
+    ISO alpha-2 is two characters, which is why these were declared as 2 and why the mismatch looked
+    harmless. The source column is the contract, not the standard it nominally holds.
+    """
+    from trophies import models as m
+    from trophies.models import Profile
+
+    source = Profile._meta.get_field('country_code').max_length
+    mirror = getattr(m, model_path)._meta.get_field('country_code').max_length
+
+    assert mirror >= source, (
+        f'{model_path}.country_code holds {mirror} chars but Profile.country_code allows {source} -- '
+        f'propagating a longer value raises DataError'
+    )
+
+
+def test_a_five_character_country_code_propagates_without_error():
+    """The behavioural half of the test above: exercise the signal with a value the source permits."""
+    from trophies.models import ProfileBadgeStanding
+
+    profile = ProfileFactory(is_linked=True, country_code='CA')
+    ProfileBadgeStanding.objects.create(profile=profile, total_xp=10, country_code='CA')
+
+    profile.country_code = 'GB-NI'      # 5 chars, legal for Profile
+    profile.save()
+
+    assert ProfileBadgeStanding.objects.get(profile=profile).country_code == 'GB-NI'
+
+
+def test_a_null_country_propagates_as_empty_not_none():
+    """`Profile.country_code` is nullable; the standing columns are NOT (blank default ''). Propagating a
+    None straight through would violate the column, so the handler coerces it."""
+    from trophies.models import ProfileBadgeStanding
+
+    profile = ProfileFactory(is_linked=True, country_code='CA')
+    ProfileBadgeStanding.objects.create(profile=profile, total_xp=10, country_code='CA')
+
+    profile.country_code = None
+    profile.save()
+
+    assert ProfileBadgeStanding.objects.get(profile=profile).country_code == ''

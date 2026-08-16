@@ -186,3 +186,28 @@ returns.
 - [ ] **Re-check `/privacy/` in prod.** It now states as fact that the site serves no advertising and sets
       no advertising cookies. That has to be true the moment it is published, which it is only after the
       deploy and the cache purge above.
+
+---
+
+## Leaderboards rebuild (steps 1-3, 2026-08)
+
+Spec: [leaderboards-rebuild.md](leaderboards-rebuild.md). Migrations `0297`, `0298`, `0299`.
+
+- [ ] **Run `evaluate_badges --all` AFTER migrating, and before anyone sees a board.** This is the real
+      backfill and it is easy to miss because nothing errors without it. The migrations add
+      `trophies_*`, `advanced_at` and `country_code` with defaults, so every existing standing starts at
+      **zero trophies, a NULL advance date and no country**. Until a full evaluation rewrites them:
+      Global Progress ranks everyone equal-and-empty; the per-series board loses its tiebreak entirely,
+      so each rung of chasers falls back to profile id; and every country slice returns nothing. The
+      pages render perfectly throughout — they are simply wrong.
+- [ ] **Run `recompute_job_xp --all`** for the same reason on `ProfileCareerStanding`: without it the
+      Career XP board is empty rather than absent.
+- [ ] **Sanity-check one known hunter on each board** after the backfills — a name you can verify by
+      hand. The boards are correct-looking under every failure mode above, so "it rendered" proves
+      nothing.
+- [ ] **Confirm `update_leaderboards` still succeeds** on its next scheduled run. Its global-progress leg
+      was deleted and `rebuild_series_leaderboards` now returns a plain count rather than a pair; the
+      cron's own call sites were updated, but this is the first run against the narrowed service.
+- [ ] **Do NOT flush the `lb:*` Redis keys.** Earners, Badge Points and country sorted sets are still the
+      live backend for `frame_service` (legacy badge frame) and `profile_card_service` + two dashboard
+      modules. Only the four `lb:progress:*` keys are dead, and they will simply expire unused.

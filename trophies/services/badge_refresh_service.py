@@ -73,10 +73,13 @@ def refresh_badge_series_awards(series_slug, skip_notifications=False):
             except Exception:
                 logger.exception("refresh_badge_series_awards: discard notifications for profile %s", profile_id)
 
+    # `progress_count` is a constant 0 in the return tuple: the per-series progress sorted set is gone
+    # (the board reads SeriesBadgeStanding now), but this function's 4-tuple is part of its callers'
+    # contract, so the slot stays until they are revisited.
     earners_count = progress_count = 0
     try:
         from trophies.services.redis_leaderboard_service import rebuild_series_leaderboards
-        earners_count, progress_count = rebuild_series_leaderboards(series_slug)
+        earners_count = rebuild_series_leaderboards(series_slug)
     except Exception:
         logger.exception("refresh_badge_series_awards: leaderboard rebuild for %s", series_slug)
 

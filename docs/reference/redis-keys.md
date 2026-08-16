@@ -127,13 +127,13 @@ Incrementally updated via signals, fully rebuilt by `update_leaderboards` cron e
 | `lb:xp:data` | Hash | XP display data; field=profile_id, value=JSON |
 | `lb:earners:{slug}:scores` | Sorted Set | Per-series earners; score=tier*10^12+(10^12-timestamp) |
 | `lb:earners:{slug}:data` | Hash | Earners display data |
-| `lb:progress:{slug}:scores` | Sorted Set | Per-series progress; score=plats*10^9+golds*10^6+silvers*10^3+bronzes |
-| `lb:progress:{slug}:data` | Hash | Progress display data |
-| `lb:progress:global:scores` | Sorted Set | Global progress leaderboard |
-| `lb:progress:global:data` | Hash | Global progress display data |
 | `lb:xp:country:{cc}:scores` | Sorted Set | Per-country XP leaderboard; same score formula as global XP |
 | `lb:xp:country:{cc}:data` | Hash | Per-country XP display data |
 | `lb:xp:country:index` | Set | Active country codes (ISO alpha-2) with leaderboard entries |
+
+> **Deleted 2026-08:** the four `lb:progress:*` keys (per-series + global). Those boards moved to
+> indexed Postgres columns on `ProfileBadgeStanding` / `SeriesBadgeStanding`. See
+> [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
 | `lb:community_xp:{slug}` | String (int) | Community XP total per series, INCRBY delta from gamification updates |
 | `lb:meta:last_rebuild` | Hash | Rebuild timestamps per leaderboard key |
 

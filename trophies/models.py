@@ -2881,7 +2881,10 @@ class ProfileJobXP(models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='profile_xp')
     total_xp = models.PositiveIntegerField(default=0)
     level = models.PositiveIntegerField(default=0)
-    country_code = models.CharField(max_length=2, blank=True, default='', db_index=True)
+    # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies. A denormalized
+    # column narrower than its source turns any over-long value into a DataError on the propagating
+    # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -3217,7 +3220,10 @@ class ProfileBadgeStanding(models.Model):
 
     # Denormalized from Profile so a country slice is an index range scan instead of a join-then-filter.
     # See CountryStandingMixin for why this is copied rather than joined.
-    country_code = models.CharField(max_length=2, blank=True, default='', db_index=True)
+    # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies. A denormalized
+    # column narrower than its source turns any over-long value into a DataError on the propagating
+    # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -3253,7 +3259,10 @@ class ProfileCareerStanding(models.Model):
     profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='career_standing')
     total_xp = models.PositiveIntegerField(default=0, db_index=True)      # Career XP board sort key
     pursuer_level = models.PositiveIntegerField(default=0, db_index=True)  # sum of per-job levels
-    country_code = models.CharField(max_length=2, blank=True, default='', db_index=True)
+    # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies. A denormalized
+    # column narrower than its source turns any over-long value into a DataError on the propagating
+    # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -3307,7 +3316,10 @@ class SeriesBadgeStanding(models.Model):
     # A row only exists once xp > 0, i.e. at least one stage cleared, so there is no "tied at zero" cohort
     # to rank at all -- and no row without an `advanced_at` in practice (the null is defensive).
     advanced_at = models.DateField(null=True, blank=True)
-    country_code = models.CharField(max_length=2, blank=True, default='', db_index=True)
+    # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies. A denormalized
+    # column narrower than its source turns any over-long value into a DataError on the propagating
+    # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

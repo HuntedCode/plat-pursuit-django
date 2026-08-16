@@ -1,23 +1,44 @@
 # Leaderboard System
 
-The leaderboard system ranks users by badge progress and XP across individual badge series and globally. Rankings are maintained in **Redis sorted sets** with incremental signal-driven updates, providing near-real-time leaderboards with O(log n) rank lookups and efficient pagination.
+The leaderboard system ranks hunters by badge progress and Badge Points, per series and globally.
+
+> **This system is MID-MIGRATION (2026-08).** Two backends run side by side. Read
+> [the rebuild plan](../design/rebuild/leaderboards-rebuild.md) before changing anything here.
 
 ## Architecture Overview
 
-The system uses **Redis sorted sets** for all leaderboard data:
+### The current state: two backends
 
-- Each leaderboard is a sorted set (scores) paired with a hash (display data)
-- Scores are updated incrementally via Django signals when badges are earned, XP changes, or trophies are synced
-- Views query sorted sets directly for pagination (`ZREVRANGE`) and rank lookup (`ZREVRANK`)
-- A reconciliation cron (`update_leaderboards`) runs periodically to fully rebuild all sorted sets from source data, catching any drift from missed signals
+| Board | Backend | Notes |
+|---|---|---|
+| Badge Points (global + country) | Redis sorted sets | Still read by `profile_card_service` + 2 dashboard modules, which display the LEGACY `ProfileGamification.total_badge_xp`. Ranking that against the new store would print a figure beside a rank derived from a different number |
+| Per-series earners | Redis sorted sets | Still read by `frame_service` for the legacy badge frame |
+| Community XP | Redis scalar | Unrelated to the boards; per-series total |
+| **Global Progress** | **Postgres** (`ProfileBadgeStanding`) | Redis version DELETED |
+| **Per-series board** | **Postgres** (`SeriesBadgeStanding`) | Redis version DELETED. Earners + chasers MERGED into one board |
+| **Career XP** | **Postgres** (`ProfileCareerStanding`) | New; no Redis equivalent ever existed |
 
-The XP leaderboard benefits from `ProfileGamification` denormalization: XP totals are maintained in real-time via signals, so both the sorted set update and the rebuild query read pre-aggregated data.
+The Postgres side is `trophies/services/badge_leaderboards.py` ("Lane B"): indexed reads over
+denormalized standing columns, written by the recompute the sync path already runs. No cron, no
+sorted sets, and identity is read live at render so a renamed hunter cannot show a stale name.
+
+The Redis remainder goes with the **badge cutover**, which repoints its consumers off the legacy
+`Badge`/`UserBadge` models.
+
+### Why the progress boards went first
+
+They were the expensive ones and had no readers left after the view swap. The global rebuild ran four
+filtered `COUNT`s plus a `MAX` over `EarnedTrophy` for **every linked profile**, against every
+badge-stage game, every 6 hours; the per-profile write recomputed a hunter's per-series trophy tallies
+on every sync-complete. Both are now materialized columns maintained in the badge write seam.
 
 ## File Map
 
 | File | Purpose |
 |------|---------|
-| `trophies/services/redis_leaderboard_service.py` | All sorted set operations, RedisPaginator/RedisPage, rebuild functions |
+| `trophies/services/redis_leaderboard_service.py` | REMAINING sorted set operations (earners, XP, country, community XP). Progress boards deleted 2026-08 |
+| `trophies/services/badge_leaderboards.py` | **Lane B**: every Postgres-backed board, `hydrate()`, `BoardPaginator`/`BoardPage` |
+| `trophies/services/badge_xp.py` | The write seam: `recompute_standing` materializes the standings, incl. trophy counts and `advanced_at` |
 | `trophies/services/leaderboard_service.py` | ORM computation functions (used by rebuilds) |
 | `trophies/services/xp_service.py` | XP + country XP + community XP sorted set writes via `update_profile_gamification()`, bulk pipeline via `bulk_gamification_update()` |
 | `trophies/signals.py` | Earners sorted set writes on UserBadge post_save/post_delete |
@@ -33,7 +54,6 @@ The XP leaderboard benefits from `ProfileGamification` denormalization: XP total
 | Type | Redis Key | Score Formula | Update Trigger |
 |------|-----------|---------------|----------------|
 | Earners | `lb:earners:{slug}:scores` | `tier * 10^12 + (10^12 - earned_at_unix)` | UserBadge post_save/post_delete signal + sync-complete (bulk exit) |
-| Progress | `lb:progress:{slug}:scores` | `plats * 10^9 + golds * 10^6 + silvers * 10^3 + bronzes` | Sync-complete (bulk_gamification_update exit) |
 | Community XP | `lb:community_xp:{slug}` | N/A (scalar, INCRBY delta) | `update_profile_gamification()` delta + cron reconciliation |
 
 ### Global
@@ -41,7 +61,6 @@ The XP leaderboard benefits from `ProfileGamification` denormalization: XP total
 | Type | Redis Key | Score Formula | Update Trigger |
 |------|-----------|---------------|----------------|
 | Total XP | `lb:xp:scores` | `total_badge_xp * 10^4 + total_badges` | `update_profile_gamification()` signal |
-| Total Progress | `lb:progress:global:scores` | Same as per-series progress | Sync-complete |
 
 ### Per-Country (one sorted set per country with active users)
 
@@ -97,10 +116,6 @@ When adding a new badge series:
 | `lb:xp:data` | Hash | XP display data; field=profile_id, value=JSON |
 | `lb:earners:{slug}:scores` | Sorted Set | Per-series earners |
 | `lb:earners:{slug}:data` | Hash | Earners display data |
-| `lb:progress:{slug}:scores` | Sorted Set | Per-series progress |
-| `lb:progress:{slug}:data` | Hash | Progress display data |
-| `lb:progress:global:scores` | Sorted Set | Global progress |
-| `lb:progress:global:data` | Hash | Global progress display data |
 | `lb:xp:country:{cc}:scores` | Sorted Set | Per-country XP leaderboard; same score as global XP |
 | `lb:xp:country:{cc}:data` | Hash | Per-country XP display data |
 | `lb:xp:country:index` | Set | Active country codes with leaderboard entries |
