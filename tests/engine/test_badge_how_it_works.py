@@ -2,8 +2,9 @@
 
 It lived only in a first-run modal on Browse Badges, which meant the vocabulary the whole badge system
 speaks -- "Ultra HD", "Legacy HD" -- had no URL. Support could not link it, search could not index it, and
-neither badge detail (which renders those editions as TABS) nor the Collection (which renders them as
-filter chips) could point anywhere to say what they meant.
+the three surfaces that render those names straight off `PlatformGroup` could point nowhere to say what
+they meant: badge detail (the group-switch TABS), the gallery filter panel (the PLATFORM CHIPS), and the
+Collection (the edition stat labels).
 
 So the modal became genuinely ONE-SHOT (greet a first visit, then link out) and the teaching moved to
 `/badges/how-it-works/`. What these tests hold down is the part that rots quietly: a page that retypes
@@ -132,6 +133,56 @@ def test_the_modal_is_one_shot_with_no_recall_buttons():
     assert 'badge_howto.html' in page, 'the first-run modal was removed along with its buttons'
 
 
+def test_the_dev_replay_control_never_ships_to_prod():
+    """The modal is one-shot and gated on a localStorage flag, so once dismissed there is no way back to
+    it in a browser short of clearing site data -- which makes iterating on it painful. The replay button
+    fixes that for local work, and it is the ONE re-open path allowed to exist.
+
+    Which makes the gate the whole point. Ungated, this is precisely the permanent recall affordance the
+    rest of this change removed, shipped to every visitor. Exercised through the real view under both
+    settings rather than by matching `{% if %}` in the source, because the string is easy to keep while
+    breaking what feeds it -- `dev_howto` is set in `BadgeListView.get_context_data`, and a template that
+    still reads a context key nobody sets renders nothing and passes a source check.
+    """
+    from django.test import Client, override_settings
+
+    with override_settings(DEBUG=True):
+        assert 'data-howto-replay' in Client().get(reverse('badges_list')).content.decode(), (
+            'the dev replay button is missing in DEBUG -- there is no way to re-open the modal locally'
+        )
+
+    with override_settings(DEBUG=False):
+        assert 'data-howto-replay' not in Client().get(reverse('badges_list')).content.decode(), (
+            'the dev replay button renders with DEBUG off -- it is a permanent recall button in prod'
+        )
+
+
+def test_the_replay_clears_the_flag_rather_than_forcing_the_modal_open():
+    """Replay removes `pp-badges-howto-seen` and then opens normally, so what plays is a genuine first
+    visit: dismissing re-sets the flag exactly as it would for a real visitor, and pressing again re-arms.
+
+    An always-open dev mode would have been simpler and worse -- it cannot show a bug in the gating
+    itself, which is the part of this modal most likely to break and the least likely to be noticed.
+    """
+    modal = (ROOT / 'templates' / 'trophies' / 'partials' / 'badge_list'
+             / 'badge_howto.html').read_text(encoding='utf-8')
+    start = modal.find("closest('[data-howto-replay]')")
+    assert start != -1, 'nothing handles the dev replay button'
+    open_brace = modal.index('{', start)
+    depth, end = 0, None
+    for i, ch in enumerate(modal[open_brace:], open_brace):
+        depth += (ch == '{') - (ch == '}')
+        if depth == 0:
+            end = i
+            break
+    branch = modal[start:end]
+
+    assert 'removeItem(SEEN_KEY' in branch, (
+        'replay does not clear the seen flag, so it is a force-open that bypasses the real gating'
+    )
+    assert 'open(' in branch, 'replay clears the flag but never opens the modal'
+
+
 def test_the_modal_hands_off_to_the_page():
     """Without this link the modal is a dead end: dismissed once, and the reader has no route to the
     fuller version. It trails "Got it" rather than leading, because most readers are done."""
@@ -179,6 +230,64 @@ def test_following_the_link_out_counts_as_having_been_greeted():
     assert 'preventDefault' not in branch, (
         'the hand-off branch cancels the click, so the link goes nowhere'
     )
+
+
+@pytest.mark.parametrize('surface', [
+    'templates/trophies/badge_detail.html',                        # the group-switch TABS
+    'templates/trophies/partials/badge_list/gallery.html',         # the PLATFORM filter chips
+    'templates/trophies/collection.html',                          # the edition stat labels
+])
+def test_every_surface_that_speaks_the_edition_vocabulary_explains_it(surface):
+    """These three render "Ultra HD" / "Legacy HD" straight off `PlatformGroup.name` and each asks the
+    reader to ACT on the word -- pick a tab, tick a chip, read their own total split by it. That is where
+    the question occurs, and without a hint here the page has no inbound link from any of them: the whole
+    argument for giving the teaching an address was that these surfaces could finally point at something.
+
+    Parametrized over the surface LIST so adding a fourth consumer of PlatformGroup.name is a deliberate
+    act -- the file is added here or it is knowingly left without an answer.
+    """
+    src = (ROOT / surface).read_text(encoding='utf-8')
+    markup = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', src, flags=re.S)
+
+    assert 'class="pp-edhint"' in markup, f'{Path(surface).name} names editions with no way to look them up'
+    assert "{% url 'badge_how_it_works' %}" in markup, f'{Path(surface).name} hint points nowhere'
+
+
+def test_the_badge_detail_hint_sits_outside_the_tablist():
+    """`.bd2-groupswitch` is `role="tablist"` and `grid-auto-columns: 1fr`, so putting the link inside it
+    would do two bad things at once: nest an anchor in a `role="tab"` button (interactive inside
+    interactive, which is invalid and leaves the anchor unreachable to a screen reader), and take an
+    equal-width segment of the switcher, shrinking every real tab to fit it.
+
+    Checked against the TAB TEMPLATE -- the span from the switcher's opening tag to the `{% endfor %}`
+    that closes the loop -- rather than against the file, because the hint legitimately appears later in
+    the same file and a whole-file check would pass no matter where it moved.
+    """
+    src = (ROOT / 'templates' / 'trophies' / 'badge_detail.html').read_text(encoding='utf-8')
+    start = src.index('class="bd2-groupswitch"')
+    tab_template = src[start:src.index('{% endfor %}', start)]
+
+    assert 'pp-edhint' not in tab_template, (
+        'the hint is inside the tablist: it becomes an equal-width segment and nests an <a> in a tab'
+    )
+    # And it must still be present just after -- otherwise "outside the tablist" is satisfied by deletion.
+    assert 'pp-edhint' in src[src.index('{% endfor %}', start):], 'the hint is gone from badge detail'
+
+
+def test_the_icon_only_hint_has_an_accessible_name():
+    """The gallery's copy is icon-only -- the "Platform" label it trails already says what the row is, and
+    text there would compete with the chips. That trade is only acceptable while the link carries its own
+    name: the `<svg>` is `aria-hidden`, so without `aria-label` the anchor announces as nothing at all.
+    """
+    src = (ROOT / 'templates' / 'trophies' / 'partials' / 'badge_list' / 'gallery.html').read_text(encoding='utf-8')
+    anchor = src[src.index('<a class="pp-edhint"'):]
+    anchor = anchor[:anchor.index('</a>')]
+
+    assert 'aria-label=' in anchor, 'the icon-only edition hint announces as an unnamed link'
+    assert 'aria-hidden="true"' in anchor, 'the decorative icon is exposed to screen readers'
+    # The name has to be non-empty, not merely present: `aria-label=""` reads as no label at all.
+    label = re.search(r'aria-label="([^"]*)"', anchor)
+    assert label and label.group(1).strip(), 'the edition hint carries an empty aria-label'
 
 
 @pytest.mark.parametrize('partial', [

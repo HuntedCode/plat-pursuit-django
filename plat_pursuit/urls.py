@@ -100,7 +100,8 @@ urlpatterns = [
     path('badges/', BadgeListView.as_view(), name='badges_list'),
     # The badge teaching, at a real address. It lived only in a first-run modal on the page above, so the
     # vocabulary the whole system speaks ("Ultra HD", "Legacy HD") could not be linked, indexed, or reached
-    # from badge detail and the Collection, which both render those editions from the same model.
+    # from the three surfaces that render those names off PlatformGroup without explaining them: the badge
+    # detail group tabs, the gallery's platform filter chips, and the Collection's edition stats.
     path('badges/how-it-works/', BadgeHowItWorksView.as_view(), name='badge_how_it_works'),
     # Public quick-peek modal (fetched on tap from the Series/Gallery medallions). Deliberately NOT under
     # /badges/<x>/<y>/ -- that shape is the profile-scoped detail pattern the Cloudflare-bypass guard

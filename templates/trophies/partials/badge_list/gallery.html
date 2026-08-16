@@ -44,7 +44,16 @@ Degrades to a plain GET (Enter) without JS. {% endcomment %}
                     {% comment %} Platform + State share a row (wraps to stacked at small widths). {% endcomment %}
                     <div class="pp-bgal__crow">
                         <div class="pp-bgal__cgroup">
-                            <span class="pp-bgal__clabel">Platform</span>
+                            {% comment %} The chips below are edition names off PlatformGroup ("Ultra HD",
+                            "Legacy HD"), and ticking one is the first time most readers are asked to act
+                            on that word. Icon-only: the label it trails already says what the row is, and
+                            this row is a control surface where text would compete with the chips.
+                            {% endcomment %}
+                            <span class="pp-bgal__clabel">Platform
+                                <a class="pp-edhint" href="{% url 'badge_how_it_works' %}" aria-label="What do the platform editions mean?" title="What do the platform editions mean?">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                                </a>
+                            </span>
                             {% for pg in gallery_groups %}
                             <label class="pp-bgal__chip"><input type="checkbox" name="group" value="{{ pg.key }}"{% if pg.key in gallery_groups_selected %} checked{% endif %}>{{ pg.name }}</label>
                             {% endfor %}

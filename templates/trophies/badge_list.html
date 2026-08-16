@@ -41,8 +41,9 @@
 
             The "how badges work" teaching is NOT here and no longer has a button here either. It greets a
             first visit once as a modal (badge_howto.html) and then lives at `badge_how_it_works` -- a real
-            URL, because support links it, search indexes it, and badge detail and the Collection both
-            render these editions without being able to explain them. A permanent header button for a
+            URL, because support links it, search indexes it, and three surfaces render these edition
+            names without being able to explain them (the gallery filter chips below, the badge detail
+            group tabs, and the Collection stats -- each now carries a `.pp-edhint`). A header button for a
             one-time explainer was ~37px of the header and the wrong anchor: the confusion happens where
             the edition tabs are, not here. {% endcomment %}
             {% include 'trophies/partials/badge_list/badge_catalog_stats.html' %}
@@ -106,8 +107,11 @@
         {% endif %}
     </div>
 
-    {% comment %} "How badges work" first-run modal (auto-opens once, then recalled by the header/mini-bar
-    buttons). Placed BEFORE the quick-peek modal so a medallion tap inside it opens the peek stacked on top. {% endcomment %}
+    {% comment %} "How badges work" first-run modal: auto-opens once and never again (there is no recall
+    button; from the second visit on the teaching lives at `badge_how_it_works`). Placed BEFORE the
+    quick-peek modal so a medallion tap inside it opens the peek stacked on top, and OUTSIDE #badge-view
+    so a view-toggle swap does not re-render its <script> and double-register the document listeners.
+    {% endcomment %}
     {% include 'trophies/partials/badge_list/badge_howto.html' %}
 
     {% comment %} Quick-peek modal (shared by both views): a medallion tap fetches the public

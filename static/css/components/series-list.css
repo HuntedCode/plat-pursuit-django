@@ -31,6 +31,43 @@
 }
 @media (hover: hover) { .pp-howto__more:hover { border-bottom-color: var(--pp-primary); } }
 .pp-howto__more:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
+
+/* ── .pp-edhint: the ⓘ that points AT the edition vocabulary, from the three places it is spoken ──
+ *
+ * "Ultra HD" / "Legacy HD" come straight off PlatformGroup.name onto the badge detail group tabs, the
+ * gallery's platform filter chips and the Collection's edition stats. Each is a spot where a reader is
+ * asked to act on a word nobody has defined -- pick a tab, tick a chip, read a split of their own total
+ * -- which is where the question actually occurs, and why the answer is anchored here rather than behind
+ * a header button on a page they may never have opened.
+ *
+ * Kept separate from .pp-howto__more above (the trailing text link in the modal + empty states): same
+ * destination, different job. This one is an icon glued to a label in dense chrome and has to survive at
+ * 11px next to a filter heading; that one is a standalone call to action with room to breathe. Merging
+ * them would mean an inline-flex whose border-bottom underlines the icon.
+ *
+ * Deliberately quiet -- text-mute until hover. It answers a question a minority of readers have, and it
+ * sits beside controls that must stay the loudest thing in their row. */
+.pp-edhint {
+    display: inline-flex; align-items: center; gap: 4px; vertical-align: middle;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.02em; line-height: 1;
+    color: var(--pp-text-mute); text-decoration: none;
+    transition: color var(--pp-dur) var(--pp-ease);
+}
+.pp-edhint svg { width: 13px; height: 13px; flex: 0 0 auto; }
+@media (hover: hover) { .pp-edhint:hover { color: var(--pp-primary); } }
+.pp-edhint:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: 3px; }
+@media (prefers-reduced-motion: reduce) { .pp-edhint { transition: none; } }
+
+/* The standalone form: its own line, trailing the control it explains. Right-aligned so it reads as a
+   footnote to the block above rather than as a new item in it.
+   No margin of its own -- one consumer sits mid-page and needs the spacing, the other is the last child
+   of a header card where a bottom margin is just height on a phone. Each says what it needs. */
+.pp-edhint-row { display: flex; justify-content: flex-end; }
+/* The group switcher owns a 16px bottom margin. With the hint following it, that gap belongs BETWEEN the
+   switcher and its footnote, and the footnote takes over holding the page apart below -- otherwise the
+   hint floats midway between two blocks and attaches to neither. */
+.bd2-groupswitch:has(+ .pp-edhint-row) { margin-bottom: 6px; }
+.bd2-groupswitch + .pp-edhint-row { margin-bottom: 16px; }
 .pp-howto__got {
     display: inline-flex; align-items: center; justify-content: center; min-width: 128px; padding: 9px 22px; border-radius: 999px;
     font-size: 13.5px; font-weight: 800; letter-spacing: 0.02em; color: #06140d; cursor: pointer; border: 0;

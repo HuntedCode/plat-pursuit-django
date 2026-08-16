@@ -108,12 +108,30 @@ opens (JS arms + lights .pp-forge + mints beat 3) and is fully reduced-motion-sa
             is where the teaching lives from the second visit on.{% endcomment %}
             <div class="pp-howto__actions">
                 <button type="button" class="pp-howto__got" data-howto-close>Got it</button>
-                <a class="pp-howto__more" href="{% url 'badge_how_it_works' %}" data-howto-more>How badges work &rarr;</a>
+                {% comment %} "Learn more", not "How badges work" -- that was this modal's own H2 verbatim,
+                so the link read as though it reopened the thing already on screen. {% endcomment %}
+                <a class="pp-howto__more" href="{% url 'badge_how_it_works' %}" data-howto-more>Learn more &rarr;</a>
             </div>
           </div>
         </div>
     </div>
 </div>
+{% if dev_howto %}
+{% comment %} Dev-only (settings.DEBUG): replay the first-run modal. It is one-shot by design and gated on a
+localStorage flag, so once dismissed the only way back in a browser is clearing site data by hand. Reuses
+the Collection's `.ccx-dev` panel styling verbatim (claim-ceremony.css); never ships to prod.
+
+"Replay" CLEARS the flag before opening, so the run is repeatable: dismissing re-sets it exactly as a real
+first visit would, and pressing the button again re-arms. That keeps the dev path honest -- you are always
+testing the genuine first-run behaviour, not a special always-open mode that could hide a bug in the
+gating itself. {% endcomment %}
+<div class="ccx-dev">
+    <div class="ccx-dev__title">How badges work</div>
+    <div class="ccx-dev__row">
+        <button type="button" class="ccx-dev__btn" data-howto-replay>Replay</button>
+    </div>
+</div>
+{% endif %}
 {% comment %} First-run controller: auto-opens once on a first visit and never again. There is no re-open path,
 by design -- dismissing sets pp-badges-howto-seen, and from the second visit on the teaching lives at
 `badge_how_it_works`. Each open replays the forge choreography (arm + light + mint beat 3); Escape / scrim /
@@ -191,6 +209,20 @@ close / "Got it" dismiss it. Reduced-motion-safe.
                 try { localStorage.setItem(SEEN_KEY, '1'); } catch (err) {}
                 return;
             }
+            {% if dev_howto %}
+            // Dev-only replay, gated at RENDER time alongside its button rather than just left inert in
+            // prod: shipping a handler for an element that never exists is dead weight in every visitor's
+            // bundle, and it makes "does the recall path ship?" un-greppable.
+            // Clearing the flag first means the reopened modal behaves exactly like a genuine first
+            // visit, including re-setting the flag on dismiss -- so this exercises the real gating
+            // rather than bypassing it.
+            if (e.target.closest('[data-howto-replay]')) {
+                e.preventDefault();
+                try { localStorage.removeItem(SEEN_KEY); } catch (err) {}
+                open(null);
+                return;
+            }
+            {% endif %}
             if (!modal.hidden && e.target.closest('[data-howto-close]')) { e.preventDefault(); close(); }
         });
         document.addEventListener('keydown', function (e) {

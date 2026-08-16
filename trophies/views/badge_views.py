@@ -36,6 +36,7 @@ SERIES_SORTS = [
 SERIES_SORT_KEYS = {k for k, _ in SERIES_SORTS}
 SERIES_SORT_DEFAULT = 'name'
 
+from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.paginator import Paginator
@@ -409,9 +410,14 @@ class BadgeListView(ListView):
 
 
     def get_context_data(self, **kwargs):
-        if self._view_mode() == 'gallery':
-            return self._gallery_context_data(**kwargs)
-        return self._series_context_data(**kwargs)
+        context = (self._gallery_context_data(**kwargs) if self._view_mode() == 'gallery'
+                   else self._series_context_data(**kwargs))
+        # Dev-only replay control for the first-run modal. It is one-shot by design, gated on a
+        # localStorage flag, so once dismissed there is no way back to it in a browser short of clearing
+        # site data by hand -- which makes iterating on the thing needlessly painful. Same shape as the
+        # Collection's `dev_mint` ceremony replay, and it never renders in prod.
+        context['dev_howto'] = settings.DEBUG
+        return context
 
     def _series_context_data(self, **kwargs):
         """Build the Series view context: paginate the per-SERIES queryset (self.object_list), then batch-build
@@ -912,9 +918,11 @@ class BadgeHowItWorksView(TemplateView):
 
     It existed only as a first-run modal on Browse Badges, which meant the explanation for a vocabulary
     the whole badge system speaks ("Ultra HD", "Legacy HD") had no URL: support could not link it, search
-    could not index it, and no other surface could reach it. Badge detail renders those editions as TABS
-    and the Collection as filter chips, both from `PlatformGroup.name`, and neither could say what they
-    meant. The modal keeps its onboarding job -- it greets a first visit once and links here.
+    could not index it, and no other surface could reach it. Three surfaces render those names straight
+    off `PlatformGroup.name` without being able to say what they mean -- badge detail as the group-switch
+    TABS, the Browse Badges gallery as PLATFORM FILTER CHIPS, and the Collection as edition stat labels
+    (plus a per-card caption). Each of the three now carries a `.pp-edhint` link pointing here. The modal
+    keeps its onboarding job: it greets a first visit once and links here.
 
     The edition table is read from `PlatformGroup`, never retyped. That model already owns the mapping
     (`name` + `platforms`), the badge engine routes games by it, and the class docstring calls adding a

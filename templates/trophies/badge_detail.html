@@ -133,6 +133,19 @@ Collection. No extra wrapper container: a nested one would double the horizontal
         </button>
         {% endfor %}
     </div>
+    {% comment %} The edition vocabulary, explained where it is actually spoken. This switcher asks the
+    reader to PICK between "Ultra HD" and "Legacy HD" and nothing on the page says what either means.
+
+    It sits outside the tablist, not inside it: `.bd2-groupswitch` is `role="tablist"` with `1fr` auto
+    columns, so a link in there would both become an equal-width segment and put a non-tab child in a
+    tablist. Only rendered alongside the switcher, since a single-edition series poses no question.
+    {% endcomment %}
+    <div class="pp-edhint-row">
+        <a class="pp-edhint" href="{% url 'badge_how_it_works' %}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            What are editions?
+        </a>
+    </div>
     {% endif %}
 
     {% comment %} Rarity & Community band -- series-level (both groups side by side), sits between the group
