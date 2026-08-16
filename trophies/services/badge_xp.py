@@ -27,6 +27,7 @@ class SeriesStanding:
     progress_bp: int          # furthest-along fraction over the series' group badges, basis points (0-10000)
     stages_cleared: int       # the best group's cleared gating stages (for "N of M" display)
     stages_total: int
+    advanced_at: object = None  # date the profile reached this standing -- the board's tiebreak (see below)
 
 
 def _group_badge_xp(result) -> int:
@@ -62,13 +63,42 @@ def compute_series_standings(results_by_series: dict) -> dict:
     for slug, results in results_by_series.items():
         xp = sum(_group_badge_xp(r) for r in results)
         best = max(results, key=_fraction, default=None)
+        advanced_at = None
         if best is not None and best.gating_count:
             cleared, total = best.base_satisfied_count, best.gating_count
             progress_bp = round(10000 * cleared / total)
+            advanced_at = _advanced_at(best)
         else:
             cleared = total = progress_bp = 0
-        out[slug] = SeriesStanding(xp, progress_bp, cleared, total)
+        out[slug] = SeriesStanding(xp, progress_bp, cleared, total, advanced_at)
     return out
+
+
+def _advanced_at(result) -> object:
+    """The moment a profile reached its CURRENT standing -- the leaderboard's tiebreak.
+
+    A 3-stage badge puts everyone at 1/3 or 2/3 on the same rung, so without this the board sorts ties by
+    profile id, which is arbitrary and reads as unranked. Date breaks them the same way the earners board
+    already does: whoever got there first is higher.
+
+    Earned vs chasing are DIFFERENT dates, deliberately:
+
+    - Earned -> the group's own `earned_date`, i.e. the moment the badge was completed.
+    - Chasing -> the latest gating stage the profile has cleared.
+
+    Using the latest cleared stage for BOTH would be wrong under the `min_count` (megamix) policy, where
+    `earned_date` is the date the need-th stage fell: a hunter who kept clearing optional extra stages
+    afterwards would have their completion date pushed later and lose rank for doing MORE. Under 'all' the
+    two coincide, which is why this only shows up on megamix series.
+
+    No new engine work -- StageResult already carries `base_date`, and it was already being collected for
+    the earn ordering.
+    """
+    if result.base_earned:
+        return result.earned_date
+    dates = [s.base_date for s in result.stages
+             if s.gates and s.base_satisfied and s.base_date is not None]
+    return max(dates) if dates else None
 
 
 def compute_badge_xp(results_by_series: dict) -> tuple:
@@ -187,6 +217,7 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
                 {'xp': s.xp, 'progress_bp': s.progress_bp,
                  'stages_cleared': s.stages_cleared, 'stages_total': s.stages_total,
                  'group_progress': dict(group_prog.get(slug, {})),
+                 'advanced_at': s.advanced_at,
                  'country_code': country})
     if zeroed:
         SeriesBadgeStanding.objects.filter(profile_id=profile_id, series_slug__in=zeroed).delete()

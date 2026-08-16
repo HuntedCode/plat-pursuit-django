@@ -3294,6 +3294,19 @@ class SeriesBadgeStanding(models.Model):
                   "edition (gating_count > 0), started or not -- so an untouched edition still carries its "
                   "denominator. Lets the Collection show each edition's own progress without a live eval.",
     )
+    # The moment this profile reached its current standing: the badge's earn date once earned, otherwise
+    # the latest gating stage they cleared (services/badge_xp._advanced_at).
+    #
+    # This is the per-series board's TIEBREAK, and it is what lets earners and chasers be ONE board rather
+    # than two. A 3-stage series stacks everyone on 1/3 or 2/3, so `progress_bp` alone leaves large ties
+    # sorted by profile id -- arbitrary, and it reads as unranked. Ordering
+    # `(-progress_bp, advanced_at)` gives: earners (10000) on top by completion date, then each rung of
+    # chasers with whoever got there first ahead. Same rule the earners board always used, applied the
+    # whole way down.
+    #
+    # A row only exists once xp > 0, i.e. at least one stage cleared, so there is no "tied at zero" cohort
+    # to rank at all -- and no row without an `advanced_at` in practice (the null is defensive).
+    advanced_at = models.DateField(null=True, blank=True)
     country_code = models.CharField(max_length=2, blank=True, default='', db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -3301,12 +3314,16 @@ class SeriesBadgeStanding(models.Model):
         unique_together = ['profile', 'series_slug']
         indexes = [
             models.Index(fields=['series_slug', '-xp'], name='sbs_series_xp_idx'),            # per-series XP board
-            models.Index(fields=['series_slug', '-progress_bp'], name='sbs_series_prog_idx'),  # per-series chasers
+            # The combined earners+chasers board, in board order. Supersedes the old
+            # (series_slug, -progress_bp): this is that index plus the tiebreak column, so it serves the
+            # shorter ordering too and the two-column version would be dead write cost.
+            models.Index(fields=['series_slug', '-progress_bp', 'advanced_at'], name='sbs_series_board_idx'),
             # Country-sliced per-series boards. The column order matters: series first (always filtered),
             # then country (the slice), then the sort key -- so both the global and sliced forms of a board
             # are a range scan rather than a filter over a scan.
             models.Index(fields=['series_slug', 'country_code', '-xp'], name='sbs_series_cc_xp_idx'),
-            models.Index(fields=['series_slug', 'country_code', '-progress_bp'], name='sbs_series_cc_prog_idx'),
+            models.Index(fields=['series_slug', 'country_code', '-progress_bp', 'advanced_at'],
+                         name='sbs_series_cc_board_idx'),
         ]
 
     def __str__(self):

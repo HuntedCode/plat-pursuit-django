@@ -51,11 +51,40 @@ popularity and most visitors never open it.
 | Entity | Full board |
 |---|---|
 | Game | Ranks panel on game detail (**exists**) |
-| Badge series | New Ranks panel on badge detail (**replaces** `/leaderboards/badges/<slug>/`) |
+| Badge series | New Ranks panel on badge detail (**replaces** `/leaderboards/badges/<slug>/`). ONE board, not two: earners and chasers merged — see below |
 | Job | Ranks tab on new job detail (**new surface**) |
 
 This is what keeps the directories honest: they are discovery, they own no data, and there is exactly one
 canonical location per board. No page can drift from another because no second page exists.
+
+### The per-series board is ONE board, not two
+
+Earners and chasers were separate boards at different grains — earners per EDITION
+(`UserGroupBadge`), progress per SERIES (`SeriesBadgeStanding`). They merge at **series grain**, which is
+what progress already uses, so "earned" means "earned any edition" — consistent with `progress_bp` already
+being the max across editions.
+
+Ordering is `(-progress_bp, advanced_at)`: earners (10000 bp) on top by completion date, then each rung of
+chasers with whoever got there first ahead. One table, one index, one query — no UNION and no
+cross-table pagination.
+
+**Why a tiebreak was needed at all.** `progress_bp` is discrete: `round(10000 * cleared / gating)` where a
+stage clears the moment ONE qualifying game hits `base_complete`. A 3-stage series therefore stacks
+everyone on 1/3 or 2/3, and without a second key those large ties sort by profile id — arbitrary, and it
+reads as unranked. `advanced_at` breaks them the same way the earners board always did: first there wins.
+
+Two things fall out of the engine's own semantics and are easy to get wrong:
+
+- **Earned and chasing use DIFFERENT dates.** Earned takes the group's `earned_date`; chasing takes the
+  latest cleared gating stage. Using "latest stage" for both breaks the `min_count` (megamix) policy,
+  where `earned_date` is the date the need-th stage fell — a hunter clearing optional extra stages
+  afterwards would have their completion pushed later and lose rank for doing more. Under the 'all' policy
+  the two coincide, so this only surfaces on megamix series.
+- **There is no "tied at zero" cohort.** A standing row only exists once `xp > 0`, i.e. at least one stage
+  cleared, so nobody sits on the board at 0%.
+
+The per-EDITION earners rank stays as-is: it is the number on the medallion back ("3rd to earn Ultra HD"),
+not a board page. `earners_rank` keeps doing that job.
 
 ### The Jobs catalogue belongs to Browse, not Leaderboards
 

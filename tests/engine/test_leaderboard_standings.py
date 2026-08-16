@@ -264,3 +264,155 @@ def test_the_progress_index_matches_the_board_order():
     assert meta_indexes.get('pbs_country_prog_idx') == [
         'country_code', '-trophies_platinum', '-trophies_total'
     ], 'the country-sliced progress index must be (country, ...board order)'
+
+
+# ---------------------------------------------------------------- the per-series board tiebreak ---------
+
+def _stage_result(n, *, gates=True, satisfied=True, on=None):
+    from datetime import date
+    from trophies.services.badge_engine import StageResult
+    return StageResult(stage_number=n, gates=gates, base_satisfied=satisfied,
+                       holo_satisfied=False, base_date=on)
+
+
+def _group_result(stages, *, earned=False, earned_date=None):
+    from trophies.services.badge_engine import GroupBadgeResult
+    gating = [s for s in stages if s.gates]
+    return GroupBadgeResult(
+        base_earned=earned, holo=False, gating_count=len(gating),
+        base_satisfied_count=sum(1 for s in gating if s.base_satisfied),
+        holo_satisfied_count=0, earned_date=earned_date, stages=stages,
+    )
+
+
+def test_a_chaser_advances_on_their_latest_cleared_stage():
+    from datetime import date
+    from trophies.services.badge_xp import _advanced_at
+
+    result = _group_result([
+        _stage_result(1, on=date(2026, 1, 5)),
+        _stage_result(2, on=date(2026, 3, 9)),
+        _stage_result(3, satisfied=False),
+    ])
+    assert _advanced_at(result) == date(2026, 3, 9)
+
+
+def test_an_earner_advances_on_their_earn_date_not_their_last_stage():
+    """The megamix case, and the reason these are two different dates.
+
+    Under `min_count`, `earned_date` is the date the NEED-th stage fell. A hunter who keeps clearing
+    optional extra stages afterwards would, if we used "latest cleared stage" for everyone, have their
+    completion date pushed later and LOSE rank for doing more. Under the 'all' policy the two coincide,
+    so this only ever shows up on megamix series -- which is exactly why it would survive casual testing.
+    """
+    from datetime import date
+    from trophies.services.badge_xp import _advanced_at
+
+    result = _group_result(
+        [
+            _stage_result(1, on=date(2026, 1, 5)),
+            _stage_result(2, on=date(2026, 2, 2)),
+            _stage_result(3, on=date(2026, 8, 30)),   # cleared LATER, after the badge was already earned
+        ],
+        earned=True, earned_date=date(2026, 2, 2),    # min_count: earned when the 2nd stage fell
+    )
+
+    assert _advanced_at(result) == date(2026, 2, 2), (
+        'an earner is being ranked by their last extra stage instead of when they earned the badge'
+    )
+
+
+def test_a_profile_with_nothing_cleared_has_no_advance_date():
+    from trophies.services.badge_xp import _advanced_at
+    assert _advanced_at(_group_result([_stage_result(1, satisfied=False)])) is None
+
+
+def test_the_series_board_is_earners_then_chasers_with_dates_breaking_ties():
+    """The whole point of merging the two boards into one.
+
+    A 3-stage series stacks most hunters on 1/3 or 2/3. `progress_bp` alone leaves those large ties
+    ordered by profile id, which is arbitrary and reads as unranked. Ordering by
+    `(-progress_bp, advanced_at)` gives earners on top by completion date, then each rung of chasers with
+    whoever arrived first ahead -- the same rule the earners board always used, applied the whole way down.
+    """
+    from datetime import date
+
+    def standing(bp, on):
+        return SeriesBadgeStanding.objects.create(
+            profile=ProfileFactory(is_linked=True), series_slug='board', xp=1,
+            progress_bp=bp, advanced_at=on,
+        )
+
+    earner_late = standing(10000, date(2026, 5, 1))
+    earner_first = standing(10000, date(2026, 1, 1))
+    two_thirds_late = standing(6667, date(2026, 6, 1))
+    two_thirds_first = standing(6667, date(2026, 2, 1))
+    one_third = standing(3333, date(2026, 1, 15))
+
+    ordered = list(
+        SeriesBadgeStanding.objects.filter(series_slug='board')
+        .order_by('-progress_bp', 'advanced_at', 'profile_id')
+        .values_list('id', flat=True)
+    )
+
+    assert ordered == [earner_first.id, earner_late.id,
+                       two_thirds_first.id, two_thirds_late.id,
+                       one_third.id], 'the combined board is not (progress desc, earliest-there first)'
+
+
+def test_the_board_index_matches_the_board_order():
+    """A composite index only range-scans when it matches the ORDER BY. It also has to be a SUPERSET of the
+    old two-column (series_slug, -progress_bp), which it replaces -- keeping both would be dead write cost
+    on every standing write."""
+    idx = {i.name: i.fields for i in SeriesBadgeStanding._meta.indexes}
+
+    assert idx.get('sbs_series_board_idx') == ['series_slug', '-progress_bp', 'advanced_at'], (
+        f'the combined board index no longer matches the board order: {idx.get("sbs_series_board_idx")}'
+    )
+    assert 'sbs_series_prog_idx' not in idx, (
+        'the superseded two-column progress index is back; the board index already covers that ordering'
+    )
+
+
+def test_the_evaluation_seam_actually_writes_the_advance_date():
+    """End-to-end through `evaluate_and_apply`, because the pure-function tests above cannot see whether
+    the value ever reaches the row.
+
+    Caught by mutation testing: deleting `advanced_at` from the upsert in `recompute_standing` left every
+    other test in this file green. The column would simply stay NULL, every standing would tie, and the
+    board would silently fall back to ordering by profile id -- the exact failure the tiebreak exists to
+    prevent, shipped invisibly.
+    """
+    import datetime as dt
+    from django.utils import timezone
+    from trophies.models import ProfileGame, ProfileTrophyGroup, TrophyGroup
+    from trophies.services.badge_apply import evaluate_and_apply
+    from tests.factories import PlatformGroupFactory, BadgeSeriesFactory, GroupBadgeFactory
+
+    series = BadgeSeriesFactory(series_slug='advance')
+    pg = PlatformGroupFactory(key='ultra-hd', name='Ultra', platforms=['PS5'], exclude_delisted=True)
+    gb = GroupBadgeFactory(series=series, platform_group=pg, is_live=True)
+    games = []
+    for i in (1, 2):
+        stage = StageFactory(series_slug='advance', stage_number=i)
+        concept = ConceptFactory()
+        stage.concepts.add(concept)
+        games.append(GameFactory(concept=concept, title_platform=['PS5']))
+
+    profile = ProfileFactory(is_linked=True)
+    cleared_on = timezone.now() - dt.timedelta(days=30)
+    ProfileGame.objects.update_or_create(profile=profile, game=games[0], defaults={'progress': 50})
+    tg, _ = TrophyGroup.objects.get_or_create(
+        game=games[0], trophy_group_id='default', defaults={'trophy_group_name': 'B'})
+    ProfileTrophyGroup.objects.update_or_create(
+        profile=profile, trophy_group=tg, defaults={'progress': 100, 'last_trophy_at': cleared_on})
+
+    evaluate_and_apply(profile, [gb])
+
+    standing = SeriesBadgeStanding.objects.get(profile=profile, series_slug='advance')
+    assert standing.progress_bp == 5000, 'fixture is wrong -- expected 1 of 2 stages'
+    assert standing.advanced_at is not None, (
+        'the recompute seam did not persist advanced_at; every standing will tie and the board loses its '
+        'tiebreak'
+    )
+    assert standing.advanced_at == cleared_on.date()
