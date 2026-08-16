@@ -46,7 +46,7 @@ The admin dashboard at `/staff/subscriptions/` provides subscriber stats, an att
 | `paypal_subscription_id` | CharField (nullable) | PayPal Subscription ID, set by webhook |
 | `subscription_provider` | CharField (nullable) | "stripe" or "paypal" |
 | `paypal_cancel_at` | DateTimeField (nullable) | When PayPal sub expires after cancellation |
-| `premium_tier` | CharField (nullable) | Internal tier name: ad_free, premium_monthly, etc. |
+| `premium_tier` | CharField (nullable) | Internal tier name: premium_monthly, premium_yearly, supporter |
 | `email_preferences` | JSONField | Dict of preference key to boolean |
 
 ### SubscriptionPeriod

@@ -86,8 +86,11 @@ Deferred value features, each its own future update:
 
 ## Tiers
 
-Keep the existing 4 tiers (`ad_free` / `premium_monthly` / `premium_yearly` / `supporter`); **no
-new tier.** The membership framing sits on top of the existing plumbing. The data-intelligence
+Keep the existing 3 tiers (`premium_monthly` / `premium_yearly` / `supporter`); **no new tier.** The
+membership framing sits on top of the existing plumbing. (There were 4: `ad_free` was retired in
+2026-08 with advertising itself. Its removal *strengthens* this proposal rather than thinning it —
+"premium removes ads" sold the removal of something we inflicted, which is the opposite of the
+support-led framing here, so the pitch now has to stand on genuine value and belonging.) The data-intelligence
 features are **included** in premium — they do not justify a separate higher tier; keep it simple.
 
 ## Placement

@@ -51,7 +51,6 @@ The template system uses Django's template inheritance with a single `base.html`
 ### Key Features
 
 - **Dark theme**: localStorage persistence, loads before DOM paint to prevent flash
-- **AdSense**: Guttered by staff status, API paths, and premium subscription
 - **Background images**: Supports concept-specific backgrounds via `image_urls.bg_url` context
 - **Premium theme gradients**: CSS custom properties via `user_theme_style` context
 
@@ -69,7 +68,6 @@ All defined in `plat_pursuit/context_processors.py`:
 
 | Processor | Provides | Purpose |
 |-----------|----------|---------|
-| `ads` | `ADSENSE_ENABLED`, `ADSENSE_PUB_ID`, `ADSENSE_TEST_MODE` | Control ad visibility |
 | `moderation` | `pending_reports_count`, `pending_proposals_count` | Staff dashboard badge counts (60s cache) |
 | `premium_theme_background` | `user_theme_style` | Premium gradient theme as CSS string |
 | `active_fundraiser` | `active_fundraiser` | Live fundraiser for site banner (60s cache) |

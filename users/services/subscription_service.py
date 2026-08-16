@@ -43,7 +43,7 @@ class SubscriptionService:
             is_live: Whether to check live or test products. If None, checks both.
 
         Returns:
-            str: Premium tier name ('ad_free', 'premium_monthly', etc.) or None if not found
+            str: Premium tier name ('premium_monthly', 'supporter', etc.) or None if not found
         """
         if is_live is None:
             # Check both modes if not specified
@@ -83,8 +83,9 @@ class SubscriptionService:
         """
         Check if a tier grants premium features.
 
-        Note: 'ad_free' tier exists but doesn't grant premium features,
-        only removes ads.
+        Every live tier currently does, but this stays a distinct check rather than a truthiness
+        test on ``premium_tier``: the retired 'ad_free' tier was a paid tier that granted none, and
+        a future non-feature tier would be too.
 
         Args:
             tier: Premium tier name
@@ -107,7 +108,7 @@ class SubscriptionService:
 
         Args:
             user: CustomUser instance
-            tier: Subscription tier name ('ad_free', 'premium_monthly', etc.)
+            tier: Subscription tier name ('premium_monthly', 'supporter', etc.)
             provider: 'stripe' or 'paypal'
             event_type: Original webhook event type (for Discord notification logic)
 
@@ -442,7 +443,7 @@ class SubscriptionService:
 
         Args:
             user: CustomUser instance
-            tier: Subscription tier ('ad_free', 'premium_monthly', etc.)
+            tier: Subscription tier ('premium_monthly', 'supporter', etc.)
             success_url: URL to redirect to after successful payment
             cancel_url: URL to redirect to if payment is canceled
 

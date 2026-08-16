@@ -219,7 +219,6 @@ RARITY_LABELS = {
 }
 
 # Premium Tier Identifiers (matches users.constants but duplicated here for trophies app)
-PREMIUM_TIER_AD_FREE = 'ad_free'
 PREMIUM_TIER_MONTHLY = 'premium_monthly'
 PREMIUM_TIER_YEARLY = 'premium_yearly'
 PREMIUM_TIER_SUPPORTER = 'supporter'

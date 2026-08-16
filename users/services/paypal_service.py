@@ -76,7 +76,7 @@ class PayPalService:
 
         Args:
             user: CustomUser instance
-            tier: Subscription tier ('ad_free', 'premium_monthly', etc.)
+            tier: Subscription tier ('premium_monthly', 'supporter', etc.)
             return_url: URL PayPal redirects to after approval
             cancel_url: URL PayPal redirects to if user cancels
 

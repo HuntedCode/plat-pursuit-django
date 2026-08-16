@@ -21,10 +21,6 @@ load_dotenv()
 AUTH_USER_MODEL = "users.CustomUser"
 SITE_URL = 'https://platpursuit.com'
 
-ADSENSE_PUB_ID = os.getenv('ADSENSE_PUB_ID')
-ADSENSE_ENABLED = os.getenv('ADSENSE_ENABLED', 'False') == 'True'
-ADSENSE_TEST_MODE = os.getenv('ADSENSE_TEST_MODE', 'False') == 'True'
-
 STRIPE_MODE = os.getenv('STRIPE_MODE', 'test')
 
 if STRIPE_MODE == 'live':
@@ -131,24 +127,18 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 # Pragmatic CSP: allows inline scripts/styles (needed for template <script>
 # blocks and Tailwind) while restricting sources to known-good origins.
 #
-# Google AdSense requires broad access to Google domains for scripts, images,
-# iframes, and styles. These are the minimum domains documented by Google.
+# AdSense was removed in 2026-08 (the site is ad-free), which took the whole Google ad surface out of
+# this policy: ~20 googlesyndication / doubleclick / adtrafficquality / Funding Choices origins across
+# four directives, plus 'wasm-unsafe-eval' (AdSense creatives were our only WebAssembly consumer) and
+# the http:// fonts.gstatic.com twin (AdSense creatives loaded Google Sans over http). What remains is
+# our own CDN, PSN/IGDB/S3 image hosts, YouTube embeds, and the Cloudflare analytics beacon.
 CONTENT_SECURITY_POLICY = {
     "DIRECTIVES": {
         "default-src": ["'self'"],
         "script-src": [
             "'self'",
             "'unsafe-inline'",                    # Template <script> blocks
-            "'wasm-unsafe-eval'",                 # AdSense uses WebAssembly for some creative formats. Only enables WebAssembly.compile/instantiate (NOT JS eval); WASM is sandboxed from the DOM, so this is a smaller relaxation than 'unsafe-inline'.
             "https://cdn.jsdelivr.net",           # chart.js, marked, dompurify, confetti
-            "https://pagead2.googlesyndication.com",  # AdSense loader
-            "https://www.googletagservices.com",      # AdSense
-            "https://adservice.google.com",           # AdSense
-            "https://tpc.googlesyndication.com",      # AdSense
-            "https://www.google.com",                 # AdSense
-            "https://fundingchoicesmessages.google.com",  # Funding Choices CMP
-            "https://ep1.adtrafficquality.google",    # AdSense traffic quality (SODAR sodar2.js)
-            "https://ep2.adtrafficquality.google",    # AdSense traffic quality (SODAR sodar2.js, backup)
             "https://static.cloudflareinsights.com",  # Cloudflare Web Analytics beacon. Omitting this is why the CF dashboard read 0 traffic: the beacon was silently CSP-blocked, so the zone looked dead while the site was in fact being hammered.
         ],
         "style-src": [
@@ -158,8 +148,7 @@ CONTENT_SECURITY_POLICY = {
         ],
         "font-src": [
             "'self'",
-            "https://fonts.gstatic.com",
-            "http://fonts.gstatic.com",                # AdSense creatives load Google Sans via http
+            "https://fonts.gstatic.com",               # Google Fonts (preconnected in base.html)
         ],
         "img-src": [
             "'self'",
@@ -169,24 +158,10 @@ CONTENT_SECURITY_POLICY = {
             "http://*.playstation.net",                # PSN avatars (some stored as http)
             "https://*.s3.amazonaws.com",              # S3 media uploads
             "https://*.sonyentertainmentnetwork.com",  # PSN content rating images
-            "https://pagead2.googlesyndication.com",   # AdSense ad images
-            "https://tpc.googlesyndication.com",       # AdSense
-            "https://www.google.com",                  # AdSense
-            "https://www.gstatic.com",                 # AdSense
-            "https://fundingchoicesmessages.google.com",  # Funding Choices CMP UI assets
-            "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR fingerprint pixel)
-            "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR fingerprint pixel, backup)
             "https://images.igdb.com",                 # IGDB company logos & game covers
         ],
         "frame-src": [
             "'self'",
-            "https://pagead2.googlesyndication.com",   # AdSense iframes (some creatives served from here)
-            "https://googleads.g.doubleclick.net",     # AdSense iframes
-            "https://tpc.googlesyndication.com",       # AdSense iframes
-            "https://www.google.com",                  # AdSense iframes
-            "https://fundingchoicesmessages.google.com",  # Funding Choices CMP iframe
-            "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR) iframe
-            "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR) iframe
             "https://www.youtube.com",                 # Roadmap video guides
             "https://www.youtube-nocookie.com",        # Roadmap video guides (privacy-enhanced)
             "https://youtube.com",                     # Roadmap video guides
@@ -195,13 +170,6 @@ CONTENT_SECURITY_POLICY = {
             "'self'",
             "data:",                                   # XHR/fetch of data: URIs (no network egress; just suppresses CSP noise)
             "https://cdn.jsdelivr.net",                # Source maps for chart.js, marked, dompurify, canvas-confetti
-            "https://pagead2.googlesyndication.com",   # AdSense reporting
-            "https://googleads.g.doubleclick.net",     # AdSense ad serving
-            "https://csi.gstatic.com",                 # AdSense performance instrumentation beacons
-            "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR)
-            "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR, backup)
-            "https://fundingchoicesmessages.google.com",  # Funding Choices CMP consent event logging
-            "https://images.igdb.com",                 # AdSense content-categorization scanner fetches cover art via XHR (same origin already trusted on img-src)
             "https://cloudflareinsights.com",          # Cloudflare Web Analytics beacon POSTs its payload here (script itself is on script-src)
         ],
         "worker-src": [
@@ -338,7 +306,6 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-                "plat_pursuit.context_processors.ads",
                 "plat_pursuit.context_processors.moderation",
                 "plat_pursuit.context_processors.high_sync_volume",
                 "plat_pursuit.context_processors.psn_outage",

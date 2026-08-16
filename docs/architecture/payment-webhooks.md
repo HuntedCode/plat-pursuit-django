@@ -40,7 +40,7 @@ Payment-related fields on the user model:
 | `stripe_customer_id` | CharField | Stripe Customer ID, set on first checkout |
 | `paypal_subscription_id` | CharField | Active PayPal subscription ID, set by ACTIVATED webhook |
 | `subscription_provider` | CharField | `'stripe'` or `'paypal'`, tracks which provider is active |
-| `premium_tier` | CharField | Current tier: `ad_free`, `premium_monthly`, `premium_yearly`, or `supporter` |
+| `premium_tier` | CharField | Current tier: `premium_monthly`, `premium_yearly`, or `supporter` |
 | `paypal_cancel_at` | DateTimeField | When a cancelled PayPal subscription will expire (NULL = not cancelling) |
 
 ### SubscriptionPeriod (users/models.py)
@@ -211,9 +211,9 @@ Getting these wrong either revokes access the user paid for or grants indefinite
 
 `users/constants.py` has completely separate product/price/plan ID dictionaries for test and live modes. The mode is determined by `settings.STRIPE_MODE` and `settings.PAYPAL_MODE`. If IDs are mixed (e.g., a live price ID in the test dictionary), webhook events will fail to map to tiers, and `update_user_subscription()` will deactivate the user's subscription due to "unknown product ID." PayPal sandbox plan IDs are currently empty strings (unconfigured), which means PayPal is only testable in live mode.
 
-### ad_free Tier Is Not Premium
+### ACTIVE_PREMIUM_TIERS Is Not PREMIUM_TIER_CHOICES
 
-The `ad_free` tier exists in `PREMIUM_TIER_CHOICES` and has real Stripe/PayPal products, but `ACTIVE_PREMIUM_TIERS` only includes `premium_monthly`, `premium_yearly`, and `supporter`. The `ad_free` tier removes ads but does not set `profile.user_is_premium = True`, and does not grant Discord roles. Code that checks `is_tier_premium()` will return False for `ad_free`.
+Every live tier currently grants premium features, so the two lists happen to hold the same values, and that makes it tempting to collapse them or to test `bool(profile.premium_tier)` instead. Don't. They answer different questions: what can be *bought* versus what *unlocks features*. The retired `ad_free` tier (removed 2026-08 with AdSense itself) was exactly the case that separated them — a real paid tier, with real Stripe/PayPal products, that granted no premium features and no Discord role. A future non-feature tier would separate them again. `tests/engine/test_ads_removed.py` asserts `ACTIVE_PREMIUM_TIERS` stays a subset of the valid choices, since removing a tier from one list and not the other is a live possibility.
 
 ### SubscriptionPeriod Pause During past_due
 
@@ -243,7 +243,6 @@ If the `BILLING.SUBSCRIPTION.CANCELLED` event arrives without a `next_billing_ti
 
 | Tier | Grants Premium | Discord Role | Stripe Product (live) | PayPal Plan (live) |
 |------|---------------|--------------|----------------------|-------------------|
-| `ad_free` | No | None | `prod_ThtXPwe3AD46Au` | `P-51097223GD3632526NGLBPBA` |
 | `premium_monthly` | Yes | Premium | `prod_ThsI3EuCssYlTT` | `P-6FE79903U4175840ENGLBP2A` |
 | `premium_yearly` | Yes | Premium | `prod_ThsIi3Xd8fY2Hk` | `P-3SY42188DC612830VNGLBQMY` |
 | `supporter` | Yes | Supporter (Premium+) | `prod_ThtYQAPoY5pSCN` | `P-5PM309711C131563TNGLBQ3Q` |

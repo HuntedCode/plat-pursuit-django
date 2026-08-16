@@ -66,10 +66,6 @@
         </div>
     </section>
 
-    {% comment %} Ad slot -- after the header, before the view tabs (mirrors the Badges page): a horizontal
-    unit that shows on whichever view is loaded, sitting outside the tab panels. {% endcomment %}
-    {% include 'partials/ad_unit.html' with ad_slot="4650777169" %}
-
     {% if list_badges %}
     {% comment %} Sticky mini-bar: "Collection" + a Filters reach, re-surfaced when the header scrolls away.
     Single view now (the Gallery), so no view switch -- just the Filters button, which pops the Gallery's

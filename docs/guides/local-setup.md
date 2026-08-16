@@ -107,11 +107,6 @@ AWS_S3_ACCESS_KEY_ID=...
 AWS_S3_SECRET_ACCESS_KEY=...
 AWS_S3_REGION_NAME=us-west-2
 
-# === Ads (optional) ===
-ADSENSE_PUB_ID=...
-ADSENSE_ENABLED=False
-ADSENSE_TEST_MODE=False
-
 # === Mobile CORS (optional) ===
 CORS_ALLOWED_ORIGINS=http://localhost:19006
 ```

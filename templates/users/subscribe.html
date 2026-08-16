@@ -246,15 +246,18 @@
                 </div>
             </div>
 
-            {# 11. Ad-Free Browsing (secondary) #}
+            {% comment %} 11. Always Growing (secondary) -- promoted out of its own orphan row when the
+            Ad-Free Browsing card was retired with AdSense (2026-08). Twelve cards is exactly four rows
+            of three, and taking the secondary slot here keeps the primary/secondary/accent rotation
+            running unbroken to the closer. {% endcomment %}
             <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral hover:shadow-secondary/30 hover:border-secondary/50 transition-all">
                 <div class="card-body items-center text-center gap-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                    <h3 class="card-title text-lg">Ad-Free Browsing</h3>
-                    <p class="text-sm text-base-content/70 pr-1">Browse without interruptions. No ads, anywhere on the site. Just you and your trophies.</p>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
+                    <h3 class="card-title text-lg">Always Growing</h3>
+                    <p class="text-sm text-base-content/70 pr-1">New premium features are added regularly. Your subscription gets better over time, and you'll be first to enjoy them.</p>
                     <div class="flex items-center gap-3 mt-2 px-4 py-2 rounded-lg bg-white/[0.03] border border-base-content/5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-                        <span class="text-sm font-semibold text-secondary">Zero ads. Zero distractions.</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                        <span class="text-sm font-semibold text-secondary">Your sub only gets better</span>
                     </div>
                 </div>
             </div>
@@ -272,24 +275,9 @@
                 </div>
             </div>
 
-            {# ── Row 5 ── #}
-
-            {# 13. Always Growing (primary) #}
-            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral hover:shadow-primary/30 hover:border-primary/50 transition-all">
-                <div class="card-body items-center text-center gap-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
-                    <h3 class="card-title text-lg">Always Growing</h3>
-                    <p class="text-sm text-base-content/70 pr-1">New premium features are added regularly. Your subscription gets better over time, and you'll be first to enjoy them.</p>
-                    <div class="flex items-center gap-3 mt-2 px-4 py-2 rounded-lg bg-white/[0.03] border border-base-content/5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-                        <span class="text-sm font-semibold text-primary">Your sub only gets better</span>
-                    </div>
-                </div>
-            </div>
-
             {# ── Full-width emotional closer ── #}
 
-            {# 14. Support PlatPursuit (shimmer, spans full row) #}
+            {# 13. Support PlatPursuit (shimmer, spans full row) #}
             <div class="card shimmer bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral md:col-span-2 xl:col-span-3">
                 <div class="card-body p-5 md:p-8 gap-4">
                     <div class="flex flex-col md:flex-row items-center gap-5 md:gap-8">

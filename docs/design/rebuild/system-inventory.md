@@ -304,7 +304,7 @@ Mostly **Keep**. Flagged where the rebuild needs a change.
 | Monthly Recap | Shipped | **Keep** | Engagement driver; verify TZ fallback + finalized-lock |
 | Analytics & Bot Detection | Shipped | **Keep** | Bot filtering gates leaderboard/challenge eligibility |
 | Site Heartbeat / Homepage | Shipped | **Keep** | Single hourly job; old featured_* services removed |
-| Advertising (AdSense + Funding Choices CMP) | Shipped | **Keep** | CMP order critical; per-page slot IDs |
+| Advertising (AdSense + Funding Choices CMP) | **Removed 2026-08** | **Gone** | Site is ad-free permanently. Removed outright, not env-gated. Took the cookie consent prompt with it (no GA, so the CMP was ads-only) and tightened the CSP. See the Advertising row in [rebuild-playbook.md](rebuild-playbook.md). |
 | Mini-games / Arcade (Stellar Circuit) | Prototype | **Absorb** | Frontend-only Phaser prototype; needs a minimal backend (sessions/scores) before any XP wiring; **also the last ZoomScaler page** |
 | Mobile App API | Backend shipped, FE pending | **Keep + complete** | Token auth; Phase 3 push blocked on Firebase |
 | API Layer (~130 endpoints) | Shipped | **Keep** | Version carefully (web + mobile clients) |

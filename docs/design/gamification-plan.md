@@ -141,7 +141,7 @@ These pull existing pillar content (roadmaps, reviews) into the spine. They're h
 
 ### What's free vs premium in Phase 1
 
-**Phase 1 keeps premium mostly as-is.** The existing premium tiers (Premium Monthly, Premium Yearly, Supporter, Ad Free) and their existing features (custom Dashboard tabs being retired aside, higher game list cap, expanded recap, shimmer flair) carry through unchanged.
+**Phase 1 keeps premium mostly as-is.** The existing premium tiers (Premium Monthly, Premium Yearly, Supporter) and their existing features (custom Dashboard tabs being retired aside, higher game list cap, expanded recap, shimmer flair) carry through unchanged. (The Ad Free tier was retired in 2026-08 along with advertising itself.)
 
 **Everything new in Phase 1 is free.** The Pursuer, the Logbook, the Badge Gallery, the Pursuit home, the cross-link panels. All visible, all functional.
 

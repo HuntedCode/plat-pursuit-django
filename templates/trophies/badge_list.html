@@ -79,10 +79,6 @@
         </div>
     </div>
 
-    {% comment %} Ad slot -- above the tabs, below the header, so it shows on whichever view is loaded (it sits
-    OUTSIDE #badge-view, so a view swap never re-inits it). {% endcomment %}
-    {% include 'partials/ad_unit.html' with ad_slot="8195453976" %}
-
     {% comment %} View toggle: Series (per-series tiles) vs Gallery (per-tier medallion wall). The segmented
     switcher standard, right-aligned; each chip HTMX-swaps the #badge-view island (target='badge-view', no full
     reload), with its href kept as the no-JS fallback. {% endcomment %}

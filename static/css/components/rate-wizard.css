@@ -268,11 +268,12 @@
     .rmg__actions {
         position: sticky; z-index: 20;
         /* 3.5rem = the tab bar, in the same unit the rest of the site clears it with (#zoom-wrapper's
-           padding, #back-to-top, #toast-container -- all in input.css). Anything bottom-anchored here has
-           to carry the `.has-mobile-ad` variant too: the ad banner is `position: fixed` at `3.5rem` with
-           `z-index: 40` and 50px of height, so it lands exactly on this bar and wins the stack. Sticky is
-           what makes that fatal rather than cosmetic -- before it, the row scrolled and you could move it
-           clear of the banner; pinned under it, Submit is unreachable for the whole card. */
+           padding, #back-to-top, #toast-container -- all in input.css). Sticky is what makes a collision
+           here fatal rather than cosmetic: an unpinned row scrolls, so you can always move it clear of
+           whatever overlaps it, but pinned under a fixed element Submit is unreachable for the whole
+           card. Anything else bottom-anchored on mobile has to clear this same 3.5rem. (This used to
+           carry a `.has-mobile-ad` variant as well; the ad banner sat at exactly this offset and won
+           the stack. Ads were removed in 2026-08.) */
         bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
         padding: 10px 12px;
         border-radius: var(--pp-radius-lg);
@@ -280,7 +281,6 @@
         border: 1px solid var(--pp-border);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
     }
-    .has-mobile-ad .rmg__actions { bottom: calc(7rem + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* Shortcut hint. Only where there is a keyboard to use -- a touch device gets no value from being told

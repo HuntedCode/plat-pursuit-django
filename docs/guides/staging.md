@@ -12,7 +12,7 @@ backend-testing environment: **no real emails, no live payments, no PSN sync.**
 | Data | A restored **snapshot** of the prod DB — frozen (no sync worker runs) |
 | Access | **Staff only** — anonymous → login, non-staff → 403 (`BetaStaffGateMiddleware`) |
 | Email | Dummy backend — nothing ever sends |
-| Payments / Ads | Inert — Stripe/PayPal default to test/sandbox, AdSense off |
+| Payments | Inert — Stripe/PayPal default to test/sandbox |
 | PSN sync | **Off** — no TokenKeeper worker, so no token contention with prod |
 | Crawlers | `noindex, nofollow` on every response |
 
@@ -68,7 +68,6 @@ With `BETA` unset, all of the above is a no-op, so this is safe on production.
 | `DEBUG` | `False` (beta mirrors prod) |
 | `STRIPE_MODE` | `test` (test/empty keys, no charges) |
 | `PAYPAL_MODE` | `sandbox` |
-| `ADSENSE_ENABLED` | `False` (ads off) |
 | `SENDGRID_API_KEY` | n/a (dummy email backend) |
 | Discord webhooks / `BOT_API_KEY` | omitted (no PlatBot posts) |
 

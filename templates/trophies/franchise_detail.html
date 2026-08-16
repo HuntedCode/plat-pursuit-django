@@ -95,8 +95,6 @@
         </div>
     </section>
 
-    {% include 'partials/ad_unit.html' with ad_slot="8944812256" %}
-
     {# ── Sort toolbar: the only interactive control; change swaps just #franchise-groups via HTMX. ── #}
     <form id="fr-form"
           hx-get="{% url 'franchise_detail' slug=object.slug %}"

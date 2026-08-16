@@ -32,7 +32,7 @@ Strategic-identity docs and long-form vision documents for systems not yet fully
 | Doc | Description |
 |-----|-------------|
 | [Product Identity](design/product-identity.md) | Strategic identity, 2-minute pitch, IA, hub model, naming, supporting pillars. The strategic frame every other doc serves. |
-| [Rebuild Playbook & Progress](design/rebuild/rebuild-playbook.md) | **Start here for any page rebuild.** Tracks which pages are done (only Career/Collection/Badges) and captures the shared decisions every rebuilt page inherits: stacked structure, header card, segmented tabs, the depth-pass surface ladder, toolbars, premium motion, HTMX swaps, ad slots, modals. Indexes the authoritative docs. |
+| [Rebuild Playbook & Progress](design/rebuild/rebuild-playbook.md) | **Start here for any page rebuild.** Tracks which pages are done (only Career/Collection/Badges) and captures the shared decisions every rebuilt page inherits: stacked structure, header card, segmented tabs, the depth-pass surface ladder, toolbars, premium motion, HTMX swaps, modals. Indexes the authoritative docs. |
 | [Career: Rebuild Reference Standard](design/rebuild/career-reference-standard.md) | **The finished-quality bar for the site-wide rebuild.** Every rebuilt page is measured against Career's polish + coherence: design tokens, mobile-first fit, premium motion, performance, interaction, URL/state — plus the "what would Google/Apple do here?" polishing lens. |
 | [Visual Identity](design/visual-identity.md) | Visual constitution: brief, six adjectives, four signature primitives (Frame, Pursuer Card, Horizon, Tally), Surfaces category (Binder first, more to come), anti-references. The test every visual decision must pass. |
 | [Visual Identity References](design/visual-identity-references.md) | Curated real-world references for each primitive (trading-card chrome, identity-card design, progress UIs, number-as-reward) plus PSN-era and explorer's-office moods. Working doc for sketching/mood-boarding. |
@@ -50,7 +50,6 @@ Self-contained feature documentation. Read the relevant doc when working on that
 
 | Doc | Description |
 |-----|-------------|
-| [Advertising](features/advertising.md) | Google AdSense + Funding Choices CMP, slot inventory, suppression rules, content signals, future gaming-network migration |
 | [Badge Art Reveal](features/badge-art-reveal.md) | Community platinum-driven badge-artwork reveal event: site-wide progress banner + event page (carousel + grid), art auto-released as the community earns badge platinums |
 | [Challenge Systems](features/challenge-systems.md) | **RETIRED 2026-08** (design reference for the planned rewrite): A-Z, Calendar, and Genre platinum challenges |
 | [Comment System (Legacy)](features/comment-system.md) | Read-only legacy: surviving moderation/vote endpoints, why no new comments are accepted |
