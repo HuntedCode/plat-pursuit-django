@@ -639,11 +639,23 @@ def test_forge_explainer_renders_on_gallery_too(client):
     assert 'pp-forge' in html and 'data-forge-mint' in html   # the shared modal teaches on both views
 
 
-def test_howto_modal_and_recall_buttons_present(client):
-    # The journey lives in a first-run modal (hidden by default; JS auto-opens it once) with two recall buttons.
+def test_howto_modal_is_first_run_only(client):
+    """Inverted 2026-08. This used to assert TWO recall buttons (header + mini-bar) that re-opened the
+    modal on demand.
+
+    The teaching moved to `/badges/how-it-works/` -- a real URL, because support links it, search indexes
+    it, and badge detail and the Collection both render these editions without being able to explain
+    them. With a fuller home in place, a button re-opening a SHORTER copy is how the two drift apart, so
+    the modal keeps only its onboarding job: greet a first visit, then hand off.
+
+    The modal itself stays. What went is the permanent chrome around it.
+    """
     _series_groups('x', 'X', [('ultra-hd', 'Ultra HD')])
     html = client.get(SERIES).content.decode()
-    assert 'id="badge-howto" hidden' in html      # the modal, hidden until the JS opens it (first visit / recall)
+
+    assert 'id="badge-howto" hidden' in html      # the modal, hidden until the JS opens it on a first visit
     assert 'pp-howto__got' in html                # the "Got it" dismiss inside it
-    assert 'class="pp-howto-btn' in html          # header recall button
-    assert 'pp-minibar__howto' in html            # mini-bar recall button (persists when the header scrolls away)
+    assert '/badges/how-it-works/' in html        # the hand-off to the permanent home
+
+    assert 'class="pp-howto-btn' not in html, 'the header recall button is back'
+    assert 'pp-minibar__howto' not in html, 'the mini-bar recall button is back'

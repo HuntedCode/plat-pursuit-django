@@ -27,11 +27,6 @@
                             Every badge series to conquer. Collect them all.
                         {% endif %}
                     </p>
-                    {# Recall affordance for the "How badges work" modal (auto-shown once on a first visit). #}
-                    <button type="button" class="pp-howto-btn mt-2.5" data-howto-open>
-                        <svg class="pp-howto-btn__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"></circle><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path></svg>
-                        <span>How badges work</span>
-                    </button>
                 </div>
 
                 {# Catalog size as a Tally stat (mirrors the Collection header's headline number). #}
@@ -42,8 +37,14 @@
             </div>
 
             {% comment %} Generalized catalogue stats (what the collection OFFERS) -- NOT the viewer's own
-            progress, since this is a browse page. The "how badges work" teaching lives in a first-run modal
-            (badge_howto.html, opened by the header/mini-bar buttons), not inline. {% endcomment %}
+            progress, since this is a browse page.
+
+            The "how badges work" teaching is NOT here and no longer has a button here either. It greets a
+            first visit once as a modal (badge_howto.html) and then lives at `badge_how_it_works` -- a real
+            URL, because support links it, search indexes it, and badge detail and the Collection both
+            render these editions without being able to explain them. A permanent header button for a
+            one-time explainer was ~37px of the header and the wrong anchor: the confusion happens where
+            the edition tabs are, not here. {% endcomment %}
             {% include 'trophies/partials/badge_list/badge_catalog_stats.html' %}
         </div>
     </section>
@@ -67,10 +68,6 @@
                     <a href="{% url 'badges_list' %}?view=gallery" hx-get="{% url 'badges_list' %}?view=gallery" hx-target="#badge-view" hx-swap="innerHTML" hx-push-url="true"
                        class="pp-switch__chip{% if view == 'gallery' %} is-active{% endif %}" data-view="gallery" aria-label="Gallery view"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg><span class="pp-switch__lbl">Gallery</span></a>
                 </div>
-                <button type="button" class="pp-minibar__howto" data-howto-open aria-label="How badges work">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
-                    <span class="pp-minibar__flbl">How it works</span>
-                </button>
                 <button type="button" class="pp-minibar__filters" data-minibar-badge-filters aria-label="Open filters">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                     <span class="pp-minibar__flbl">Filters</span>

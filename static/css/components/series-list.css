@@ -8,34 +8,12 @@
 /* View toggle (Series | Gallery) is now the shared .pp-switch component (components/switcher.css). */
 
 /* ── "How badges work" -> the FORGE JOURNEY, in a first-run MODAL (badge_howto.html): it auto-opens once on a
- * first visit and is recalled by the header + mini-bar buttons. This block styles the recall buttons + the modal
- * shell; the .pp-forge body + its choreography (shared, below) render inside the dialog. ── */
-
-/* Recall button in the header: a subtle primary-tinted pill (prominent enough to find, quiet enough to ignore). */
-.pp-howto-btn {
-    display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px;
-    font-size: 12px; font-weight: 700; color: var(--pp-primary); cursor: pointer;
-    background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 34%, transparent);
-    transition: background var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
-}
-.pp-howto-btn__icon { width: 14px; height: 14px; flex: 0 0 auto; }
-@media (hover: hover) {
-    .pp-howto-btn:hover { background: color-mix(in oklab, var(--pp-primary) 18%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); color: color-mix(in oklab, var(--pp-primary) 82%, var(--pp-text)); }
-}
-.pp-howto-btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-
-/* Recall button in the mini-bar: matches the sibling .pp-minibar__filters (icon + a label that hides on phones). */
-.pp-minibar__howto {
-    display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px;
-    font-size: 12px; font-weight: 700; color: var(--pp-text-dim); cursor: pointer;
-    background: transparent; border: 1px solid var(--pp-border);
-    transition: color var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease);
-}
-.pp-minibar__howto svg { width: 15px; height: 15px; flex: 0 0 auto; }
-@media (hover: hover) { .pp-minibar__howto:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); } }
-.pp-minibar__howto:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-@media (max-width: 640px) { .pp-minibar__howto .pp-minibar__flbl { display: none; } }
+ * first visit and never again. This block styles the modal shell; the .pp-forge body + its choreography
+ * (shared, below) render inside the dialog.
+ *
+ * The recall-button styles that used to open this block (.pp-howto-btn in the header, .pp-minibar__howto in
+ * the mini-bar) are deleted: the modal is one-shot now and the teaching lives at `badge_how_it_works`, so
+ * nothing renders those classes. `.pp-minibar__flbl` stays -- the sibling Filters buttons still use it. ── */
 
 /* The how-to modal shell: a wide, scrollable dialog over the shared .pp-detail-modal scrim/entrance
  * (badge-inspect.css). Wide enough that the forge journey goes horizontal on desktop. */
@@ -43,7 +21,16 @@
 .pp-howto__body { padding: 4px 2px; }
 .pp-howto__title { display: flex; align-items: center; gap: 9px; font-family: var(--pp-font-display); font-weight: 800; font-size: 18px; color: var(--pp-text); margin-bottom: 12px; }
 .pp-howto__title-icon { width: 20px; height: 20px; flex: 0 0 auto; color: var(--pp-primary); }
-.pp-howto__actions { display: flex; justify-content: center; margin-top: 18px; }
+/* Two children now: "Got it" leads and the page link trails it as the escape hatch. Wraps rather than
+   letting the link squeeze the button on a narrow phone. */
+.pp-howto__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 16px; margin-top: 18px; }
+/* Quiet by design -- most readers are finished at "Got it"; this is for the ones who are not. */
+.pp-howto__more {
+    font-size: 12.5px; font-weight: 700; color: var(--pp-primary); text-decoration: none;
+    border-bottom: 1px solid color-mix(in oklab, var(--pp-primary) 40%, transparent);
+}
+@media (hover: hover) { .pp-howto__more:hover { border-bottom-color: var(--pp-primary); } }
+.pp-howto__more:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
 .pp-howto__got {
     display: inline-flex; align-items: center; justify-content: center; min-width: 128px; padding: 9px 22px; border-radius: 999px;
     font-size: 13.5px; font-weight: 800; letter-spacing: 0.02em; color: #06140d; cursor: pointer; border: 0;
@@ -311,3 +298,201 @@
 /* A flush divider rule over the stat cards; the cards themselves are the site-wide .scard component
    (elements.css), so no bespoke tile styling lives here. */
 .pp-bhead__stats { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pp-border); }
+
+
+/* ==========================================================================
+ * BADGE "HOW IT WORKS" (/badges/how-it-works/)
+ *
+ * A tutorial, not a spec sheet. The first cut was four captions and a table -- accurate, and bland in a
+ * way the brief explicitly rules out: custom badge artwork is the moat, and a page teaching the badge
+ * system that shows no badges teaches around its subject. So the ARTIFACT leads here and the chrome
+ * stays out of its way ("if the chrome ever fights the art, the chrome loses").
+ *
+ * The fabrication read is canon -- badges are MADE, not just displayed -- so the journey is a forge and
+ * the step numbers are struck plates rather than list bullets. The Patek-atelier test applies: precise,
+ * quiet, single-piece. No neon, no sci-fi.
+ * ========================================================================== */
+
+/* ---- Hero: the mastered medallion, and the promise ------------------------------------------------ */
+.pp-hiw__hero {
+    display: grid; gap: 18px; align-items: center;
+    grid-template-columns: 1fr;
+    padding: 18px 0 26px; text-align: center;
+}
+.pp-hiw__hero-art { display: grid; place-items: center; }
+/* Big enough to read as the object it is. The holo treatment comes from `.pp-med--holographic`. */
+.pp-hiw__hero-art .pp-med { --sz: 150px; }
+.pp-hiw__eyebrow {
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.pp-hiw__h1 {
+    margin-top: 6px;
+    font-size: clamp(1.55rem, 6vw, 2.4rem); font-weight: 800; line-height: 1.12;
+    letter-spacing: -0.02em; color: var(--pp-text); text-wrap: balance;
+}
+.pp-hiw__lede {
+    margin-top: 10px; font-size: 0.92rem; line-height: 1.55; color: var(--pp-text-dim);
+    max-width: 52ch; margin-inline: auto;
+}
+/* The catalogue, as figures. The brief makes numbers first-class material, so they take the tally face
+   at real size rather than sitting as a caption under the prose. */
+.pp-hiw__tally { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 26px; margin-top: 18px; }
+.pp-hiw__t { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.pp-hiw__t .pp-tally { font-size: 1.5rem; line-height: 1; color: var(--pp-primary); }
+.pp-hiw__t-lbl { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+
+@media (min-width: 768px) {
+    .pp-hiw__hero { grid-template-columns: auto minmax(0, 1fr); gap: 34px; text-align: left; padding: 26px 0 38px; }
+    .pp-hiw__hero-art .pp-med { --sz: 190px; }
+    .pp-hiw__lede { margin-inline: 0; font-size: 1rem; }
+    .pp-hiw__tally { justify-content: flex-start; }
+    .pp-hiw__t { align-items: flex-start; }
+    .pp-hiw__t .pp-tally { font-size: 1.8rem; }
+}
+
+/* ---- The forge: four beats ------------------------------------------------------------------------- */
+.pp-hiw__steps { list-style: none; margin: 0 0 30px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.pp-hiw__step {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 16px;
+    padding: 16px; border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+/* Fixed square wells so all four beats align down the page whatever sits in them -- a cover fan, three
+   platinums, or a medallion. */
+.pp-hiw__art { display: grid; place-items: center; width: 84px; height: 84px; }
+.pp-hiw__art--med .pp-med { --sz: 78px; }
+@media (min-width: 768px) {
+    .pp-hiw__step { gap: 22px; padding: 20px 22px; }
+    .pp-hiw__art { width: 104px; height: 104px; }
+    .pp-hiw__art--med .pp-med { --sz: 98px; }
+}
+
+/* The step number as a struck plate: the fabrication read at the smallest scale it can carry. It sits
+   ABOVE the caption rather than beside it, so the caption keeps the full column width on a phone. */
+.pp-hiw__n {
+    display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em;
+    font-variant-numeric: tabular-nums; color: var(--pp-primary);
+    padding: 2px 7px; border-radius: 5px;
+    background: color-mix(in oklab, var(--pp-primary) 11%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, transparent);
+}
+.pp-hiw__cap { margin-top: 6px; font-size: 1rem; font-weight: 800; color: var(--pp-text); line-height: 1.2; }
+.pp-hiw__desc { margin-top: 5px; font-size: 0.85rem; line-height: 1.5; color: var(--pp-text-dim); }
+@media (min-width: 768px) { .pp-hiw__cap { font-size: 1.12rem; } .pp-hiw__desc { font-size: 0.92rem; } }
+
+/* The two payoff beats earn a warmer edge -- claim in the primary, mastery in the holo spectrum. Border
+   and a low outer glow only: the medallion inside is the subject and must not be competed with. */
+.pp-hiw__step--claim { border-color: color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border)); }
+.pp-hiw__step--master {
+    border-color: color-mix(in oklab, #c9a7ff 34%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 18px -6px color-mix(in oklab, #8fd2ea 26%, transparent);
+}
+
+/* ---- Editions ------------------------------------------------------------------------------------- */
+.pp-hiw__sec { font-size: 1.15rem; font-weight: 800; color: var(--pp-text); text-align: center; letter-spacing: -0.01em; }
+.pp-hiw__sec-sub { margin-top: 6px; font-size: 0.85rem; line-height: 1.5; color: var(--pp-text-dim); text-align: center; max-width: 50ch; margin-inline: auto; }
+@media (min-width: 768px) { .pp-hiw__sec { font-size: 1.35rem; } .pp-hiw__sec-sub { font-size: 0.92rem; } }
+
+.pp-hiw__eds { padding: 6px 0 30px; }
+.pp-hiw__edgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 18px; }
+.pp-hiw__ed {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 18px 14px; border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+.pp-hiw__ed-med .pp-med { --sz: 84px; }
+.pp-hiw__ed-name { font-size: 0.95rem; font-weight: 800; color: var(--pp-text); }
+.pp-hiw__ed-plats { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+.pp-hiw__ed-plat {
+    font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; line-height: 1;
+    padding: 4px 7px; border-radius: 4px; color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border);
+}
+@media (min-width: 768px) { .pp-hiw__ed-med .pp-med { --sz: 96px; } }
+
+/* ---- Close ----------------------------------------------------------------------------------------- */
+.pp-hiw__close { padding: 8px 0 34px; }
+.pp-hiw__cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 18px; }
+.pp-hiw__go {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 168px;
+    padding: 11px 24px; border-radius: 999px; text-decoration: none;
+    font-size: 13.5px; font-weight: 800; letter-spacing: 0.02em; color: #06140d;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 92%, white), var(--pp-primary));
+    box-shadow: 0 6px 18px -8px color-mix(in oklab, var(--pp-primary) 70%, transparent);
+    transition: transform var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) { .pp-hiw__go:hover { transform: translateY(-1px); box-shadow: 0 10px 24px -8px color-mix(in oklab, var(--pp-primary) 70%, transparent); } }
+.pp-hiw__go:focus-visible { outline: 2px solid var(--pp-text); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .pp-hiw__go { transition: none; } .pp-hiw__go:hover { transform: none; } }
+/* The signed-in second action is secondary by TREATMENT, not by size -- same target, quieter skin. */
+.pp-hiw__go--quiet {
+    color: var(--pp-text); background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border); box-shadow: none;
+}
+@media (hover: hover) { .pp-hiw__go--quiet:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); box-shadow: none; } }
+
+/* The tappable medallion. The quick-peek is the badge system's best feature and a tutorial that only
+   described it would undersell it, so the affordance is explicit: a labelled hint under the hero, and a
+   lift on hover so the object reads as pickable rather than printed. */
+.pp-hiw__medwrap { display: inline-grid; place-items: center; }
+.pp-hiw__medwrap.pp-forge-peek { cursor: pointer; transition: transform var(--pp-dur) var(--pp-ease); }
+@media (hover: hover) { .pp-hiw__medwrap.pp-forge-peek:hover { transform: translateY(-3px); } }
+.pp-hiw__medwrap.pp-forge-peek:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 6px; border-radius: 14px; }
+@media (prefers-reduced-motion: reduce) {
+    .pp-hiw__medwrap.pp-forge-peek { transition: none; }
+    .pp-hiw__medwrap.pp-forge-peek:hover { transform: none; }
+}
+/* The hint sits UNDER the medallion rather than over it: the art is the moat and chrome does not get to
+   cover it. It is aria-hidden because the wrapper already carries "Inspect this badge" as its label. */
+.pp-hiw__poke {
+    display: inline-flex; align-items: center; gap: 5px; margin-top: 10px;
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--pp-primary);
+    padding: 4px 10px; border-radius: 999px;
+    background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 32%, transparent);
+}
+.pp-hiw__poke svg { width: 13px; height: 13px; }
+@media (prefers-reduced-motion: no-preference) {
+    /* A slow, quiet breath. It is a hint, not an alarm: one cycle every four seconds, opacity only. */
+    .pp-hiw__poke { animation: ppHiwPoke 4s ease-in-out infinite; }
+}
+@keyframes ppHiwPoke { 0%, 100% { opacity: 1; } 50% { opacity: 0.62; } }
+
+/* The artwork claim. Given its own quiet panel because it is the strongest thing on the page and a line
+   inside the lede would bury it. */
+.pp-hiw__craft {
+    padding: 22px 18px; margin-bottom: 30px; border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1); border: 1px solid color-mix(in oklab, var(--pp-secondary) 26%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+.pp-hiw__craft-body {
+    margin-top: 8px; font-size: 0.88rem; line-height: 1.6; color: var(--pp-text-dim);
+    text-align: center; max-width: 58ch; margin-inline: auto;
+}
+@media (min-width: 768px) { .pp-hiw__craft { padding: 28px 26px; } .pp-hiw__craft-body { font-size: 0.95rem; } }
+
+/* The artwork strip inside the handmade claim: the pieces themselves, off the medallion. Deliberately
+   plain framing -- a thin well and a caption -- because the whole section is an argument that the art is
+   good, and chrome competing with it would undercut the argument it is making. */
+.pp-hiw__artstrip {
+    list-style: none; margin: 18px 0 0; padding: 0;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+}
+@media (min-width: 640px) { .pp-hiw__artstrip { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.pp-hiw__piece { display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 0; }
+.pp-hiw__piece img {
+    width: 100%; aspect-ratio: 1 / 1; object-fit: contain;
+    padding: 10px; border-radius: var(--pp-radius-md, 10px);
+    background: color-mix(in oklab, var(--pp-bg-0) 45%, transparent);
+    border: 1px solid var(--pp-border);
+}
+.pp-hiw__piece-cap {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: var(--pp-text-mute);
+    text-align: center; line-height: 1.25;
+    /* One line: these are captions under art, and a two-line series name would make the row ragged. */
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

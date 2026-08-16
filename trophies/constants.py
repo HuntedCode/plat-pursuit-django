@@ -218,6 +218,22 @@ RARITY_LABELS = {
     'common': 'Common',
 }
 
+# PSN platform code -> display label. Only PSVITA actually differs from its code; the rest are here so a
+# caller can map a whole list without special-casing one member.
+#
+# `PlatformGroup.platforms` stores raw PSN codes, so anything RENDERING a group's platforms (the badge
+# how-it-works page) needs this. The browse forms each inline the same pairs as their `choices`; they are
+# left alone rather than refactored here, but this is where a shared list belongs when they are.
+PLATFORM_LABELS = {
+    'PS5': 'PS5',
+    'PS4': 'PS4',
+    'PS3': 'PS3',
+    'PSVITA': 'PS Vita',
+    'PSVR': 'PSVR',
+    'PSVR2': 'PSVR2',
+}
+
+
 # Premium Tier Identifiers (matches users.constants but duplicated here for trophies app)
 PREMIUM_TIER_MONTHLY = 'premium_monthly'
 PREMIUM_TIER_YEARLY = 'premium_yearly'

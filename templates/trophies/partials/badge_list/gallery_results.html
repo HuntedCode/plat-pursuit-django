@@ -15,5 +15,9 @@ pager: infinite scroll (the sentinel + loader live in gallery.html) owns paginat
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>
     <p class="pp-bgal__empty-title">No badges match these filters</p>
     <p class="text-sm mt-1">Try widening your platform or type filters.</p>
+    {% comment %} The one place near the wall worth a teaching link: a stopped reader is already
+    looking, and an empty result is where "am I misunderstanding this?" actually occurs. It costs
+    nothing when the wall has results, which is why it is here and not on the cards. {% endcomment %}
+    <p class="text-sm mt-2"><a class="pp-howto__more" href="{% url 'badge_how_it_works' %}">How badges work &rarr;</a></p>
 </div>
 {% endif %}

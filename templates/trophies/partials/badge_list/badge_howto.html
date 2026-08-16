@@ -1,7 +1,8 @@
 {% load static %}
 {% comment %} "How badges work" -- the teaching moment as a focused MODAL (first-run pattern): it auto-opens once
-on a visitor's first landing (requires dismissing), never auto-pops again, and a persistent "How badges work"
-button in the header + mini-bar re-opens it on demand. Inside is the FORGE JOURNEY: four beats (pick a themed set
+on a visitor's first landing (requires dismissing) and never auto-pops again. It is ONE-SHOT: there is no
+recall button anywhere. Keeping one would mean a permanent affordance re-opening a shorter copy of teaching
+that now has a fuller, linkable home at `badge_how_it_works`, and the two copies would drift. Inside is the FORGE JOURNEY: four beats (pick a themed set
 -> platinum every game -> claim the edition medallion -> master it to holographic), then the two editions as the
 reward legend. Beats 3 + 4 are REAL .pp-med medallions built from an actual badge's subject art on each edition's
 metal (forge_meds.*); tapping any opens that badge's quick-peek. The choreography replays each time the modal
@@ -63,7 +64,7 @@ opens (JS arms + lights .pp-forge + mints beat 3) and is fully reduced-motion-sa
                         {% include 'components/badge_medallion.html' with frame=forge_meds.earned no_id=True %}
                     </span>
                     <span class="pp-forge__cap"><span class="pp-forge__n">3</span> Claim the badge</span>
-                    <span class="pp-forge__desc">The edition medallion is forged and yours.</span>
+                    <span class="pp-forge__desc">The edition medallion is yours.</span>
                 </div>
 
                 {% comment %} The mastery leg -- a holo-tinted connector into the payoff transformation. {% endcomment %}
@@ -100,16 +101,23 @@ opens (JS arms + lights .pp-forge + mints beat 3) and is fully reduced-motion-sa
 
             <p class="pp-forge__foot">Each edition is earned independently, so chase either on its own.</p>
 
+            {% comment %}"Got it" leads, and the link is the escape hatch rather than the primary path --
+            most people are done here. This modal is now genuinely ONE-SHOT: it greets a first visit,
+            sets `pp-badges-howto-seen`, and has no recall buttons anywhere, because keeping a button to
+            re-open a shorter copy of content that has a fuller home is how the two drift apart. The page
+            is where the teaching lives from the second visit on.{% endcomment %}
             <div class="pp-howto__actions">
                 <button type="button" class="pp-howto__got" data-howto-close>Got it</button>
+                <a class="pp-howto__more" href="{% url 'badge_how_it_works' %}" data-howto-more>How badges work &rarr;</a>
             </div>
           </div>
         </div>
     </div>
 </div>
-{% comment %} First-run controller: auto-opens once (first visit, requires dismissing -> sets pp-badges-howto-seen),
-never auto-pops again; the header / mini-bar [data-howto-open] buttons re-open it any time. Each open replays the
-forge choreography (arm + light + mint beat 3); Escape / scrim / close / "Got it" dismiss it. Reduced-motion-safe.
+{% comment %} First-run controller: auto-opens once on a first visit and never again. There is no re-open path,
+by design -- dismissing sets pp-badges-howto-seen, and from the second visit on the teaching lives at
+`badge_how_it_works`. Each open replays the forge choreography (arm + light + mint beat 3); Escape / scrim /
+close / "Got it" dismiss it. Reduced-motion-safe.
 {% endcomment %}
 <script>
     (function () {
@@ -175,8 +183,14 @@ forge choreography (arm + light + mint beat 3); Escape / scrim / close / "Got it
 
         document.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
-            var opener = e.target.closest('[data-howto-open]');
-            if (opener) { e.preventDefault(); open(opener); return; }
+            // Following the link out counts as having been greeted. Without this the reader who takes the
+            // MORE INTERESTED path is the one punished for it: the flag is only written by close(), so
+            // navigating away leaves it unset and the modal auto-pops at them again on their next visit.
+            // No preventDefault -- the navigation is the point; we only record it first.
+            if (e.target.closest('[data-howto-more]')) {
+                try { localStorage.setItem(SEEN_KEY, '1'); } catch (err) {}
+                return;
+            }
             if (!modal.hidden && e.target.closest('[data-howto-close]')) { e.preventDefault(); close(); }
         });
         document.addEventListener('keydown', function (e) {
@@ -196,14 +210,14 @@ forge choreography (arm + light + mint beat 3); Escape / scrim / close / "Got it
             else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
         });
 
-        // First visit: auto-open once, after paint so it doesn't fight the initial load. Dismissing sets the
-        // flag, so future visits never auto-pop -- the buttons remain the way in.
+        // First visit: auto-open once, after paint so it doesn't fight the initial load. Dismissing (or
+        // following the link out) sets the flag, so future visits never auto-pop.
         var seen = false;
         try { seen = localStorage.getItem(SEEN_KEY) === '1'; } catch (e) {}
         if (!seen) {
             window.setTimeout(function () {
                 // Don't interrupt a visitor already typing (e.g. in search); the flag stays unset, so it
-                // auto-opens on a later visit, and the recall buttons remain available now.
+                // auto-opens on a later visit instead.
                 if (isEditable(document.activeElement)) { return; }
                 open(null);
             }, 450);

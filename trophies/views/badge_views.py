@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict
 
-from trophies.constants import EVALUATABLE_BADGE_TYPES
+from trophies.constants import EVALUATABLE_BADGE_TYPES, PLATFORM_LABELS
 from trophies.services.xp_service import get_tier_xp
 from trophies.util_modules.constants import BADGE_TIER_XP
 
@@ -71,6 +71,98 @@ from trophies.services.redis_leaderboard_service import (
 )
 
 logger = logging.getLogger("psn_api")
+
+
+def badge_catalog_stats():
+    """The badge-COLLECTION catalog stats for the header (what the collection OFFERS, not the
+    viewer's own progress -- this is a browse page): badge series, stages to complete, total
+    earnable XP, and new-this-week. All read from the hourly-cached site heartbeat, so it's
+    zero DB cost on the request path; the grid only shows once the cron has warmed the cache
+    (the template gates on earnable_xp)."""
+    from core.services.site_heartbeat import get_cached_heartbeat
+    expanded = (get_cached_heartbeat() or {}).get('expanded') or {}
+
+    def _value(key):
+        return (expanded.get(key) or {}).get('value')
+
+    return {
+        'series': _value('badges_total'),
+        'series_new': (expanded.get('badges_total') or {}).get('delta'),
+        'stages': _value('badge_stages_total'),
+        'earnable_xp': _value('badge_earnable_xp'),
+    }
+
+
+def badge_forge_medallions():
+    """Edition medallions for the header's 'how badges work' forge journey. A teaching abstraction, so it
+    composes a REAL badge's subject art onto each edition's metal plate (Ultra HD -> platinum, Legacy HD ->
+    gold): the journey's claim/master beats + the editions legend show the genuine .pp-med OBJECT with real
+    artwork rather than a bare plate. Picks a representative live badge that HAS custom art (most-earned
+    first, bounded scan); falls back to the plain metal plate on an empty catalog (fresh install / tests)."""
+    from django.templatetags.static import static
+
+    def plate(metal):
+        n = 4 if metal == 'platinum' else 3   # 4_backdrop = platinum plate, 3_backdrop = gold plate
+        return static(f'images/badges/backdrops/{n}_backdrop.png')
+
+    subject, name, source_id, is_avatar = None, 'Platinum Pursuit', None, False
+    for cand in (GroupBadge.objects.filter(is_live=True)
+                 .select_related('series', 'series__submitted_by', 'platform_group')
+                 .order_by('-earned_count', 'id')[:12]):
+        art = cand.art_layers()
+        if art.get('has_custom_image'):      # a real subject (override / series / avatar), not default.png
+            subject, name, source_id, is_avatar = art['main'], cand.series.name, cand.id, art['is_avatar']
+            break
+
+    def frame(metal, holo=False):
+        # Subject rides on OUR metal plate (the subject is metal-agnostic -- the plate carries the edition),
+        # so the same badge shows in both editions' metals. No subject -> the plate alone (graceful).
+        return {
+            'tier': metal,
+            'state': 'earned',
+            'art_layers': [plate(metal)] + ([subject] if subject else []),
+            'is_avatar': is_avatar,          # a user-badge avatar subject -> circle-masked + shrunk
+            'is_holographic': holo,
+            'series_name': name,
+        }
+
+    return {
+        'earned': frame('platinum'),               # beat 3: the badge, claimed (solid)
+        'mastered': frame('platinum', holo=True),  # beat 4: mastered -> holographic
+        'ultra': frame('platinum'),                # editions legend: Ultra HD
+        'legacy': frame('gold'),                   # editions legend: Legacy HD
+        # The real badge behind the art -- tapping any forge medallion opens its quick-peek (like every
+        # other medallion on the page). None on an empty catalog -> the illustrations are non-interactive.
+        'source_id': source_id,
+    }
+
+
+def badge_subject_art(limit=4):
+    """Raw SUBJECT artwork for the how-it-works page's handmade claim: the drawings themselves, not the
+    composed medallion.
+
+    One per SERIES, deliberately. The plate, shape and backing are shared by every badge in an edition, so
+    four medallions from one series would look like four copies of the same object and undersell exactly
+    the thing being claimed. The subject is the part an artist drew.
+
+    Avatar subjects are skipped: a submitter's profile picture is a real custom image as far as
+    `art_layers()` is concerned, but it is not a commissioned piece and putting one here would make the
+    claim false. Bounded scan, most-earned first, so a big catalog does not turn this into a table sweep.
+    """
+    seen, out = set(), []
+    for cand in (GroupBadge.objects.filter(is_live=True)
+                 .select_related('series', 'series__submitted_by', 'platform_group')
+                 .order_by('-earned_count', 'id')[:60]):
+        if cand.series_id in seen:
+            continue
+        art = cand.art_layers()
+        if not art.get('has_custom_image') or art.get('is_avatar'):
+            continue
+        seen.add(cand.series_id)
+        out.append({'src': art['main'], 'series': cand.series.name, 'badge_id': cand.id})
+        if len(out) >= limit:
+            break
+    return out
 
 
 class BadgeListView(ListView):
@@ -302,8 +394,8 @@ class BadgeListView(ListView):
             'gallery_q': g.get('q', ''),
             'gallery_sorts': GALLERY_SORTS,
             'gallery_page_size': GALLERY_PAGE_SIZE,          # keeps the JS paginateBy in sync (no magic 48)
-            'catalog_stats': self._catalog_header_stats(),  # generalized collection stats (hourly-cached)
-            'forge_meds': self._forge_medallions(),          # sample edition medallions for the header explainer
+            'catalog_stats': badge_catalog_stats(),  # generalized collection stats (hourly-cached)
+            'forge_meds': badge_forge_medallions(),          # sample edition medallions for the header explainer
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse_lazy('home')},
                 {'text': 'Badges'},
@@ -315,68 +407,6 @@ class BadgeListView(ListView):
         })
         return context
 
-    def _catalog_header_stats(self):
-        """The badge-COLLECTION catalog stats for the header (what the collection OFFERS, not the
-        viewer's own progress -- this is a browse page): badge series, stages to complete, total
-        earnable XP, and new-this-week. All read from the hourly-cached site heartbeat, so it's
-        zero DB cost on the request path; the grid only shows once the cron has warmed the cache
-        (the template gates on earnable_xp)."""
-        from core.services.site_heartbeat import get_cached_heartbeat
-        expanded = (get_cached_heartbeat() or {}).get('expanded') or {}
-
-        def _value(key):
-            return (expanded.get(key) or {}).get('value')
-
-        return {
-            'series': _value('badges_total'),
-            'series_new': (expanded.get('badges_total') or {}).get('delta'),
-            'stages': _value('badge_stages_total'),
-            'earnable_xp': _value('badge_earnable_xp'),
-        }
-
-    @staticmethod
-    def _forge_medallions():
-        """Edition medallions for the header's 'how badges work' forge journey. A teaching abstraction, so it
-        composes a REAL badge's subject art onto each edition's metal plate (Ultra HD -> platinum, Legacy HD ->
-        gold): the journey's claim/master beats + the editions legend show the genuine .pp-med OBJECT with real
-        artwork rather than a bare plate. Picks a representative live badge that HAS custom art (most-earned
-        first, bounded scan); falls back to the plain metal plate on an empty catalog (fresh install / tests)."""
-        from django.templatetags.static import static
-
-        def plate(metal):
-            n = 4 if metal == 'platinum' else 3   # 4_backdrop = platinum plate, 3_backdrop = gold plate
-            return static(f'images/badges/backdrops/{n}_backdrop.png')
-
-        subject, name, source_id, is_avatar = None, 'Platinum Pursuit', None, False
-        for cand in (GroupBadge.objects.filter(is_live=True)
-                     .select_related('series', 'series__submitted_by', 'platform_group')
-                     .order_by('-earned_count', 'id')[:12]):
-            art = cand.art_layers()
-            if art.get('has_custom_image'):      # a real subject (override / series / avatar), not default.png
-                subject, name, source_id, is_avatar = art['main'], cand.series.name, cand.id, art['is_avatar']
-                break
-
-        def frame(metal, holo=False):
-            # Subject rides on OUR metal plate (the subject is metal-agnostic -- the plate carries the edition),
-            # so the same badge shows in both editions' metals. No subject -> the plate alone (graceful).
-            return {
-                'tier': metal,
-                'state': 'earned',
-                'art_layers': [plate(metal)] + ([subject] if subject else []),
-                'is_avatar': is_avatar,          # a user-badge avatar subject -> circle-masked + shrunk
-                'is_holographic': holo,
-                'series_name': name,
-            }
-
-        return {
-            'earned': frame('platinum'),               # beat 3: the badge, claimed (solid)
-            'mastered': frame('platinum', holo=True),  # beat 4: mastered -> holographic
-            'ultra': frame('platinum'),                # editions legend: Ultra HD
-            'legacy': frame('gold'),                   # editions legend: Legacy HD
-            # The real badge behind the art -- tapping any forge medallion opens its quick-peek (like every
-            # other medallion on the page). None on an empty catalog -> the illustrations are non-interactive.
-            'source_id': source_id,
-        }
 
     def get_context_data(self, **kwargs):
         if self._view_mode() == 'gallery':
@@ -415,8 +445,8 @@ class BadgeListView(ListView):
             'paginator': paginator,
             'is_paginated': page_obj.has_other_pages(),
             'series_page_size': SERIES_PAGE_SIZE,
-            'catalog_stats': self._catalog_header_stats(),
-            'forge_meds': self._forge_medallions(),   # sample edition medallions for the header explainer
+            'catalog_stats': badge_catalog_stats(),
+            'forge_meds': badge_forge_medallions(),   # sample edition medallions for the header explainer
             'form': self.get_filter_form(),
             'series_authed': profile is not None,
             'series_states': [s for s in g.getlist('state') if s in _GALLERY_STATES],
@@ -876,3 +906,68 @@ class OverallBadgeLeaderboardsView(TemplateView):
 
         return ctx
 
+
+class BadgeHowItWorksView(TemplateView):
+    """`/badges/how-it-works/` -- the permanent, addressable home for the badge teaching.
+
+    It existed only as a first-run modal on Browse Badges, which meant the explanation for a vocabulary
+    the whole badge system speaks ("Ultra HD", "Legacy HD") had no URL: support could not link it, search
+    could not index it, and no other surface could reach it. Badge detail renders those editions as TABS
+    and the Collection as filter chips, both from `PlatformGroup.name`, and neither could say what they
+    meant. The modal keeps its onboarding job -- it greets a first visit once and links here.
+
+    The edition table is read from `PlatformGroup`, never retyped. That model already owns the mapping
+    (`name` + `platforms`), the badge engine routes games by it, and the class docstring calls adding a
+    group "a row, not a schema change" -- so a page that hardcoded two editions would be the one place
+    that stopped being true the day a third is seeded.
+    """
+    template_name = 'trophies/badge_how_it_works.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Ordered by the model's own Meta (sort_order, name), which is the same order the badge detail
+        # tabs use -- so the page teaches the editions in the order the reader meets them.
+        groups = PlatformGroup.objects.filter(is_active=True).only(
+            'key', 'name', 'platforms', 'exclude_delisted', 'sort_order',
+        )
+        context['editions'] = [
+            {
+                'key': g.key,
+                'name': g.name,
+                # Raw PSN codes are what the column stores; PSVITA is the only one that reads wrong.
+                'platforms': [PLATFORM_LABELS.get(p, p) for p in (g.platforms or [])],
+                'delisted_gates': g.exclude_delisted,
+            }
+            for g in groups
+        ]
+
+        # The ARTWORK, not an illustration of it. `badge_forge_medallions()` composes a real live badge's
+        # subject onto each edition's metal plate, which is the whole point on a page teaching a system
+        # whose moat IS the custom art: "if the chrome ever fights the art, the chrome loses"
+        # (visual-identity.md). It falls back to the bare plate on an empty catalog, so a fresh install
+        # still renders. Shared verbatim with the browse page's first-run modal -- one source, so the
+        # page and the sheet cannot show different badges.
+        context['forge_meds'] = badge_forge_medallions()
+
+        # Real numbers, because the brief makes them first-class material: "watching them climb is half
+        # the joy of the hobby and we should never bury it." Read from the hourly-cached site heartbeat,
+        # so this costs nothing on the request path and simply omits itself on a cold cache.
+        context['catalog_stats'] = badge_catalog_stats()
+
+        # Raw subject art for the handmade claim -- the pieces themselves, off the medallion. A sentence
+        # asserting the art is hand-drawn is worth less than four pieces of it sitting there, and the
+        # medallion form would work against the point: the plate and shape are the same on every badge,
+        # so it is the SUBJECT that shows a person drew this one.
+        context['craft_art'] = badge_subject_art(limit=4)
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Badges', 'url': reverse_lazy('badges_list')},
+            {'text': 'How badges work'},
+        ]
+        context['seo_description'] = (
+            'How Platinum Pursuit badges work: what a badge series is, how you earn one by platinuming '
+            'every game in the set, and how platform editions are earned independently.'
+        )
+        return context

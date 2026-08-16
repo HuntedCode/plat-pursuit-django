@@ -72,6 +72,10 @@
                     <li><a href="{% url 'privacy' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Privacy</a></li>
                     <li><a href="{% url 'terms' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Terms</a></li>
                     <li><a href="{% url 'about' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">About</a></li>
+                    {% comment %} Sits with About/Contact rather than in a badge column: this is the badge
+                    system's one permanent address, and the informational pages already live here.
+                    {% endcomment %}
+                    <li><a href="{% url 'badge_how_it_works' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">How badges work</a></li>
                     <li><a href="{% url 'contact' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Contact</a></li>
                 </ul>
             </nav>

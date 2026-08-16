@@ -46,5 +46,9 @@
         </svg>
         <p class="pp-slist__empty-title">No badges found</p>
         <p class="text-sm">Try expanding your search or adjusting your filters</p>
+        {% comment %} The one place near the wall worth a teaching link: a stopped reader is already
+        looking, and an empty result is where "am I misunderstanding this?" actually occurs. It costs
+        nothing when the wall has results, which is why it is here and not on the cards. {% endcomment %}
+        <p class="text-sm mt-2"><a class="pp-howto__more" href="{% url 'badge_how_it_works' %}">How badges work &rarr;</a></p>
     </div>
 {% endfor %}
