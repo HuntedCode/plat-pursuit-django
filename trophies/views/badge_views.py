@@ -53,6 +53,7 @@ from django.views.generic import ListView, DetailView, TemplateView
 from ..models import (
     Profile, Badge, UserBadge,
     UserTitle, ProfileGamification, BadgeSeries, GroupBadge, UserGroupBadge, PlatformGroup,
+    ProfileBadgeStanding, SeriesBadgeStanding,
 )
 from ..forms import BadgeSearchForm
 from trophies.services.badge_detail_service import get_badge_detail
@@ -61,16 +62,10 @@ from trophies.services.badge_rarity import (
     annotate_group_rarity, RARITY_CLASSES, RARITY_FILTER_CHOICES, RARITY_UNEARNED,
 )
 from trophies.services.frame_service import build_badge_frame
-from trophies.services.redis_leaderboard_service import (
-    RedisPaginator, RedisPage,
-    get_xp_page, get_xp_rank, get_xp_count,
-    get_progress_counts,
-    get_earners_page, get_earners_rank, get_earners_count,
-    get_progress_page, get_progress_rank, get_progress_count,
-    get_community_xp,
-    get_country_xp_page, get_country_xp_rank, get_country_xp_count,
-    get_active_country_codes,
-)
+# Leaderboards read from Lane B (indexed DB reads over the standing stores). The Redis sorted-set
+# service is no longer imported here -- see docs/design/rebuild/leaderboards-rebuild.md step 2.
+from trophies.services import badge_leaderboards as lb
+from trophies.services.redis_leaderboard_service import get_community_xp
 
 logger = logging.getLogger("psn_api")
 
@@ -693,32 +688,43 @@ class BadgeLeaderboardsView(DetailView):
         earners_page_num = max(1, int(self.request.GET.get('lb_earners_page', 1) or 1))
         progress_page_num = max(1, int(self.request.GET.get('lb_progress_page', 1) or 1))
 
-        # Earners leaderboard
-        earners_total = get_earners_count(series_slug)
-        earners_entries = get_earners_page(series_slug, earners_page_num, paginate_by)
-        earners_paginator = RedisPaginator(earners_total, paginate_by)
-        earners_page_num = min(earners_page_num, earners_paginator.num_pages)
-        context['lb_earners_page_obj'] = RedisPage(earners_entries, earners_page_num, earners_paginator)
-        context['lb_earners_paginator'] = earners_paginator
+        # Both tables are now BRACKETS of the one merged series board (earners above chasers, ties broken
+        # by who got there first). This page renders them as two tables and is retired into a badge-detail
+        # panel at step 5; keeping the split here means the swap changes the backend and nothing else.
+        def _board(earned, page_num, page_key, paginator_key):
+            total = lb.series_board_count(series_slug, earned=earned)
+            paginator = lb.BoardPaginator(total, paginate_by)
+            page_num = min(page_num, paginator.num_pages)
+            offset = (page_num - 1) * paginate_by
+            entries = lb.page(
+                lb.series_board_rows(series_slug, limit=paginate_by, offset=offset, earned=earned),
+                offset,
+                extra=lambda r: {
+                    'progress_bp': r[1], 'stages_cleared': r[2], 'stages_total': r[3],
+                    'earned_date': r[4],
+                    # The old rows carried per-tier trophy counts denormalized into Redis. The series
+                    # board ranks by STAGES, not trophies, so there is nothing equivalent to show; the
+                    # template renders an empty tally rather than a wrong one.
+                    'trophy_totals': {'plats': None, 'golds': None, 'silvers': None, 'bronzes': None},
+                    'last_earned_date': r[4].isoformat() if r[4] else None,
+                },
+            )
+            context[page_key] = lb.BoardPage(entries, page_num, paginator)
+            context[paginator_key] = paginator
 
-        # Progress leaderboard
-        progress_total = get_progress_count(series_slug)
-        progress_entries = get_progress_page(series_slug, progress_page_num, paginate_by)
-        progress_paginator = RedisPaginator(progress_total, paginate_by)
-        progress_page_num = min(progress_page_num, progress_paginator.num_pages)
-        context['lb_progress_page_obj'] = RedisPage(progress_entries, progress_page_num, progress_paginator)
-        context['lb_progress_paginator'] = progress_paginator
+        _board(True, earners_page_num, 'lb_earners_page_obj', 'lb_earners_paginator')
+        _board(False, progress_page_num, 'lb_progress_page_obj', 'lb_progress_paginator')
 
         if user.is_authenticated and hasattr(user, 'profile'):
             profile = user.profile
-            earners_rank = get_earners_rank(series_slug, profile.id)
-            if earners_rank:
-                context['lb_earners_user_rank'] = earners_rank
-                context['lb_earners_user_page'] = (earners_rank - 1) // paginate_by + 1
-            progress_rank = get_progress_rank(series_slug, profile.id)
-            if progress_rank:
-                context['lb_progress_user_rank'] = progress_rank
-                context['lb_progress_user_page'] = (progress_rank - 1) // paginate_by + 1
+            # One rank covers both brackets: the merged board is a single ordering, so a viewer's
+            # position is the same number whichever table they appear in.
+            board_rank = lb.series_board_rank(series_slug, profile.id)
+            if board_rank:
+                context['lb_earners_user_rank'] = board_rank
+                context['lb_earners_user_page'] = (board_rank - 1) // paginate_by + 1
+                context['lb_progress_user_rank'] = board_rank
+                context['lb_progress_user_page'] = (board_rank - 1) // paginate_by + 1
 
             # User stats for this series
             highest_user_badge = UserBadge.objects.filter(
@@ -775,35 +781,54 @@ class OverallBadgeLeaderboardsView(TemplateView):
         context['active_tab'] = active_tab
 
         # Board PAGES are built for the ACTIVE tab only. Every tab used to be assembled on every request,
-        # so `?tab=country` paid for the XP and global-progress pages it would never render -- a page
-        # fetch is a ZREVRANGE plus an HMGET of 50 JSON blobs, twice, thrown away.
-        # The RANKS below stay unconditional: they are single O(log n) ZREVRANKs, and the user-stats strip
-        # sits ABOVE the tabs, so it shows both on whichever tab you are on.
+        # so `?tab=country` paid for the XP and global-progress pages it would never render.
+        # The RANKS below stay unconditional: they are single indexed COUNTs, and the user-stats strip sits
+        # ABOVE the tabs, so it shows both on whichever tab you are on.
+        #
+        # Backed by Lane B (`services/badge_leaderboards`) as of the leaderboards rebuild step 2: indexed
+        # reads over the standing stores instead of Redis sorted sets + a 6-hourly reconciliation cron.
+        # The page shape is deliberately identical -- this swap changes the backend, not the surface.
         if active_tab == 'xp':
-            xp_page_num = max(1, int(self.request.GET.get('lb_total_xp_page', 1) or 1))
-            xp_total = get_xp_count()
-            xp_entries = get_xp_page(xp_page_num, paginate_by)
-            xp_paginator = RedisPaginator(xp_total, paginate_by)
-            xp_page_num = min(xp_page_num, xp_paginator.num_pages)
-            context['lb_total_xp_page_obj'] = RedisPage(xp_entries, xp_page_num, xp_paginator)
-            context['lb_total_xp_paginator'] = xp_paginator
+            page_num = max(1, int(self.request.GET.get('lb_total_xp_page', 1) or 1))
+            paginator = lb.BoardPaginator(ProfileBadgeStanding.objects.count(), paginate_by)
+            page_num = min(page_num, paginator.num_pages)
+            offset = (page_num - 1) * paginate_by
+            entries = lb.page(
+                lb.xp_rows(limit=paginate_by, offset=offset), offset,
+                extra=lambda r: {'total_xp': r[1]},   # total_badges comes from hydrate
+            )
+            context['lb_total_xp_page_obj'] = lb.BoardPage(entries, page_num, paginator)
+            context['lb_total_xp_paginator'] = paginator
         elif active_tab == 'progress':
-            progress_page_num = max(1, int(self.request.GET.get('lb_total_progress_page', 1) or 1))
-            progress_total = get_progress_count(slug=None)
-            progress_entries = get_progress_page(slug=None, page=progress_page_num, page_size=paginate_by)
-            progress_paginator = RedisPaginator(progress_total, paginate_by)
-            progress_page_num = min(progress_page_num, progress_paginator.num_pages)
-            context['lb_total_progress_page_obj'] = RedisPage(progress_entries, progress_page_num, progress_paginator)
-            context['lb_total_progress_paginator'] = progress_paginator
+            page_num = max(1, int(self.request.GET.get('lb_total_progress_page', 1) or 1))
+            paginator = lb.BoardPaginator(
+                ProfileBadgeStanding.objects.filter(trophies_total__gt=0).count(), paginate_by)
+            page_num = min(page_num, paginator.num_pages)
+            offset = (page_num - 1) * paginate_by
+            entries = lb.page(
+                lb.progress_rows(limit=paginate_by, offset=offset), offset,
+                # The template reads `trophy_totals.plats` etc; the row is
+                # (profile_id, platinum, gold, silver, bronze, total).
+                extra=lambda r: {
+                    'trophy_totals': {'plats': r[1], 'golds': r[2], 'silvers': r[3], 'bronzes': r[4]},
+                    'trophies_total': r[5],
+                    # The Redis rows carried a last-earned date denormalized into the display hash. There
+                    # is no equivalent on the standing, and inventing a per-row lookup for it would be a
+                    # query per row -- the template already renders "Unknown" for a missing one.
+                    'last_earned_date': None,
+                },
+            )
+            context['lb_total_progress_page_obj'] = lb.BoardPage(entries, page_num, paginator)
+            context['lb_total_progress_paginator'] = paginator
 
         if user.is_authenticated and hasattr(user, 'profile'):
             profile = user.profile
-            xp_rank = get_xp_rank(profile.id)
+            xp_rank = lb.xp_rank(profile.id)
             if xp_rank:
                 context['lb_total_xp_user_rank'] = xp_rank
                 context['lb_total_xp_user_page'] = (xp_rank - 1) // paginate_by + 1
 
-            progress_rank = get_progress_rank(slug=None, profile_id=profile.id)
+            progress_rank = lb.progress_rank(profile.id)
             if progress_rank:
                 context['lb_total_progress_user_rank'] = progress_rank
                 context['lb_total_progress_user_page'] = (progress_rank - 1) // paginate_by + 1
@@ -841,10 +866,16 @@ class OverallBadgeLeaderboardsView(TemplateView):
                 series_slug__isnull=True
             ).exclude(series_slug='').order_by(Lower('display_series'))
 
-            # ONE pipelined round-trip for every series' count, not one call per row. This was a Redis
-            # N+1 in a Python loop over an unpaginated directory, so its cost grew with the catalogue.
+            # ONE grouped query for every series' participant count, not one call per row. This was a
+            # Redis N+1 in a Python loop over an unpaginated directory, so its cost grew with the
+            # catalogue; it is now a single GROUP BY over the standing store.
             directory = list(series_badges)
-            counts = get_progress_counts([b.series_slug for b in directory])
+            counts = dict(
+                SeriesBadgeStanding.objects
+                .filter(series_slug__in=[b.series_slug for b in directory])
+                .values('series_slug').annotate(n=Count('id'))
+                .values_list('series_slug', 'n')
+            )
             for badge in directory:
                 badge.progress_count = counts.get(badge.series_slug, 0)
             context['series_directory'] = directory
@@ -859,7 +890,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
         ctx = {}
 
         # Determine selected country (default to user's country, fallback to first active)
-        active_codes = get_active_country_codes()
+        active_codes = lb.active_countries()
         selected_cc = self.request.GET.get('country', '').upper()
 
         user_country_code = None
@@ -906,12 +937,18 @@ class OverallBadgeLeaderboardsView(TemplateView):
             return ctx
 
         # Country XP leaderboard page
+        # The country board is the SAME board with a WHERE -- not a separate store. That is the whole
+        # reason slicing is affordable now; the Redis design kept a sorted set per country.
         country_page_num = max(1, int(self.request.GET.get('lb_country_xp_page', 1) or 1))
-        country_total = get_country_xp_count(selected_cc)
-        country_entries = get_country_xp_page(selected_cc, country_page_num, paginate_by)
-        country_paginator = RedisPaginator(country_total, paginate_by)
+        country_total = ProfileBadgeStanding.objects.filter(country_code=selected_cc).count()
+        country_paginator = lb.BoardPaginator(country_total, paginate_by)
         country_page_num = min(country_page_num, country_paginator.num_pages)
-        ctx['lb_country_xp_page_obj'] = RedisPage(country_entries, country_page_num, country_paginator)
+        offset = (country_page_num - 1) * paginate_by
+        country_entries = lb.page(
+            lb.xp_rows(limit=paginate_by, offset=offset, country=selected_cc), offset,
+            extra=lambda r: {'total_xp': r[1]},
+        )
+        ctx['lb_country_xp_page_obj'] = lb.BoardPage(country_entries, country_page_num, country_paginator)
         ctx['lb_country_xp_paginator'] = country_paginator
         ctx['lb_country_xp_total'] = country_total
 
@@ -919,7 +956,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
         if user.is_authenticated and hasattr(user, 'profile'):
             profile = user.profile
             if profile.country_code == selected_cc:
-                country_rank = get_country_xp_rank(selected_cc, profile.id)
+                country_rank = lb.xp_rank(profile.id, country=selected_cc)
                 if country_rank:
                     ctx['lb_country_xp_user_rank'] = country_rank
                     ctx['lb_country_xp_user_page'] = (country_rank - 1) // paginate_by + 1

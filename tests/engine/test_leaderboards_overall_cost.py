@@ -62,58 +62,56 @@ def test_the_series_directory_never_selects_the_igdb_blob(client):
     )
 
 
-def test_the_series_directory_reads_its_counts_in_one_round_trip(client):
-    """Redis N+1. ZCARD is O(1), so the per-call latency WAS the cost, and the directory is unpaginated --
-    the number of round-trips grew with the catalogue on a page anyone can open.
+def test_the_series_directory_count_does_not_scale_with_the_catalogue(client):
+    """Was a Redis N+1 (one ZCARD per series in a Python loop), now one grouped query over the standing
+    store. Either way the property that matters is the same and is asserted directly: the number of
+    queries must not grow with the number of series.
 
-    Pinned as "not per-row" rather than "exactly one call", so batching stays free to change shape (a
-    single MGET, a cached map) without failing for the wrong reason. What must never come back is a call
-    count that scales with the number of series.
+    Pinned as "does not scale" rather than "calls X once" deliberately -- the first version of this test
+    patched a specific Redis helper by name and broke the moment the backend changed, even though the
+    behaviour it guarded was still correct. A scaling assertion outlives the implementation.
     """
-    for i in range(5):
-        _live_series(f'nplus-{i}', f'N Plus {i}')
-
-    with patch('trophies.views.badge_views.get_progress_count') as per_row:
+    for i in range(3):
+        _live_series(f'few-{i}', f'Few {i}')
+    with CaptureQueriesContext(connection) as small:
         assert client.get(URL, {'tab': 'series'}).status_code == 200
 
-    assert per_row.call_count == 0, (
-        f'the directory called get_progress_count {per_row.call_count} times -- one Redis round-trip per '
-        f'series. Use the batched get_progress_counts().'
+    for i in range(12):
+        _live_series(f'many-{i}', f'Many {i}')
+    with CaptureQueriesContext(connection) as large:
+        assert client.get(URL, {'tab': 'series'}).status_code == 200
+
+    assert len(large.captured_queries) == len(small.captured_queries), (
+        f'{len(small.captured_queries)} queries for 3 series but {len(large.captured_queries)} for 15 -- '
+        f'the directory is querying per row again'
     )
 
 
-def test_the_batched_count_helper_returns_a_count_per_series():
-    """The batching is only safe if the pipeline's results still line up with the slugs that produced
-    them. `zip(slugs, pipe.execute())` is order-dependent, and a silently short result would map counts to
-    the WRONG series rather than failing -- a wrong number reads as real data.
-    """
-    from trophies.services.redis_leaderboard_service import get_progress_counts
-
-    slugs = ['aaa', 'bbb', 'ccc']
-    counts = get_progress_counts(slugs)
-
-    assert set(counts) == set(slugs), f'batched counts lost or invented a series: {sorted(counts)}'
-    assert all(isinstance(v, int) for v in counts.values()), 'a count came back non-numeric'
-    assert get_progress_counts([]) == {}, 'the empty case should not touch Redis at all'
+def test_a_series_with_no_participants_still_renders_a_count(client):
+    """A grouped query returns no ROW for a series nobody is chasing, so the lookup must default rather
+    than KeyError -- and it must show 0, not blank. Every new series starts here."""
+    _live_series('nobody', 'Nobody Home')
+    body = client.get(URL, {'tab': 'series'}).content.decode()
+    assert 'Nobody Home' in body, 'a series with no participants vanished from the directory'
 
 
 @pytest.mark.parametrize('tab, must_not_fetch', [
-    ('country', ['get_xp_page', 'get_progress_page']),
-    ('series', ['get_xp_page', 'get_progress_page']),
-    ('progress', ['get_xp_page']),
-    ('xp', ['get_progress_page']),
+    ('country', ['xp_rows', 'progress_rows']),
+    ('series', ['xp_rows', 'progress_rows']),
+    ('progress', ['xp_rows']),
+    ('xp', ['progress_rows']),
 ])
 def test_a_tab_does_not_pay_for_the_boards_it_does_not_render(client, tab, must_not_fetch):
     """Every board used to be assembled on every request. A page fetch is a ZREVRANGE plus an HMGET of 50
     JSON blobs; two of those were built and discarded on three of the four tabs.
 
     The RANK lookups deliberately stay unconditional and are not asserted against here -- they are single
-    O(log n) ZREVRANKs, and the user-stats strip sits above the tab row, so it shows them whichever tab is
+    indexed COUNTs, and the user-stats strip sits above the tab row, so it shows them whichever tab is
     open. Cutting those would change what renders, not just what it costs.
     """
     _live_series('paid', 'Paid')
 
-    patches = {name: patch(f'trophies.views.badge_views.{name}') for name in must_not_fetch}
+    patches = {name: patch(f'trophies.services.badge_leaderboards.{name}') for name in must_not_fetch}
     started = {name: p.start() for name, p in patches.items()}
     try:
         assert client.get(URL, {'tab': tab}).status_code == 200
@@ -125,3 +123,75 @@ def test_a_tab_does_not_pay_for_the_boards_it_does_not_render(client, tab, must_
         assert mock.call_count == 0, (
             f'?tab={tab} still built the {name} board it never renders ({mock.call_count} calls)'
         )
+
+
+# ------------------------------------------------------------------ the Lane B swap ----------------------
+
+def test_the_boards_render_from_the_standing_stores(client):
+    """End-to-end proof of the swap: rows come from `ProfileBadgeStanding` via Lane B, not from a Redis
+    sorted set plus a display hash."""
+    from trophies.models import ProfileBadgeStanding
+    from tests.factories import ProfileFactory
+
+    # `country` (the display name) as well as `country_code`: the picker is built from profiles that
+    # carry both, so a code-only fixture yields an empty picker and no board.
+    top = ProfileFactory(display_psn_username='TopHunter', country_code='CA', country='Canada')
+    ProfileBadgeStanding.objects.create(profile=top, total_xp=900, country_code='CA',
+                                        trophies_platinum=7, trophies_total=140)
+
+    xp_body = client.get(URL, {'tab': 'xp'}).content.decode()
+    assert 'TopHunter' in xp_body, 'the Badge Points board is not reading the standing store'
+
+    progress_body = client.get(URL, {'tab': 'progress'}).content.decode()
+    assert 'TopHunter' in progress_body, 'the Global Progress board is not reading the standing store'
+
+    country_body = client.get(URL, {'tab': 'country', 'country': 'CA'}).content.decode()
+    assert 'TopHunter' in country_body, 'the country slice is not reading the standing store'
+
+
+def test_a_renamed_hunter_shows_their_new_name_immediately(client):
+    """The concrete defect the swap fixes. Redis denormalized display data into a hash written at rank
+    time, so a hunter who changed their PSN name kept the old one on every board until the next signal or
+    the 6-hourly rebuild. Identity is now read live at render, so it cannot be stale.
+    """
+    from trophies.models import ProfileBadgeStanding
+    from tests.factories import ProfileFactory
+
+    hunter = ProfileFactory(display_psn_username='OldName')
+    ProfileBadgeStanding.objects.create(profile=hunter, total_xp=500, trophies_platinum=3,
+                                        trophies_total=60)
+    assert 'OldName' in client.get(URL, {'tab': 'xp'}).content.decode()
+
+    hunter.display_psn_username = 'NewName'
+    hunter.save(update_fields=['display_psn_username'])
+
+    body = client.get(URL, {'tab': 'xp'}).content.decode()
+    assert 'NewName' in body and 'OldName' not in body, (
+        'the board is serving a stale denormalized name -- identity must be read live'
+    )
+
+
+def test_a_board_page_costs_a_constant_number_of_queries(client):
+    """Two reads per board page -- the board itself and one `hydrate()` for the whole page -- plus the
+    request's own fixed overhead. What must never happen is a per-ROW query: `displayed_title` is a METHOD
+    doing two queries per profile, so hydrating 50 rows by calling it would be ~100 round trips to print
+    one word under each name."""
+    from trophies.models import ProfileBadgeStanding
+    from tests.factories import ProfileFactory
+
+    for i in range(3):
+        p = ProfileFactory()
+        ProfileBadgeStanding.objects.create(profile=p, total_xp=100 + i, trophies_total=i)
+    with CaptureQueriesContext(connection) as small:
+        client.get(URL, {'tab': 'xp'})
+
+    for i in range(20):
+        p = ProfileFactory()
+        ProfileBadgeStanding.objects.create(profile=p, total_xp=500 + i, trophies_total=i)
+    with CaptureQueriesContext(connection) as large:
+        client.get(URL, {'tab': 'xp'})
+
+    assert len(large.captured_queries) == len(small.captured_queries), (
+        f'{len(small.captured_queries)} queries for 3 rows but {len(large.captured_queries)} for 23 -- '
+        f'the board is hydrating per row'
+    )

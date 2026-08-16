@@ -18,7 +18,9 @@ rank_of / earners_rank return a profile's LIVE position (the value shown on the 
 indexed reads, whale-safe. rows(...) returns a page of (profile_id, value) for rendering; `hydrate()` turns a
 page of ids into display rows in ONE query.
 """
-from django.db.models import OuterRef, Q, Subquery
+import math
+
+from django.db.models import Count, OuterRef, Q, Subquery
 
 from trophies.models import (
     ProfileBadgeStanding, ProfileCareerStanding, SeriesBadgeStanding, UserGroupBadge, UserTitle,
@@ -53,10 +55,26 @@ def hydrate(profile_ids):
             UserTitle.objects.filter(profile_id=OuterRef('pk'), is_displayed=True)
             .values('title__name')[:1]
         ))
+        # Badges HELD, counted in the same pass. The Redis rows carried this denormalized into the
+        # display hash; counting it per row instead would be a query each, and there is no badge count on
+        # the standing to read.
+        .annotate(badges_held=Count('group_badges', distinct=True))
         .values('id', 'display_psn_username', 'avatar_url', 'flag', 'user_is_premium',
-                'country_code', 'display_title')
+                'country_code', 'display_title', 'badges_held')
     )
     return {r['id']: r for r in rows}
+
+
+def active_countries():
+    """Country codes with at least one ranked profile, for the country picker.
+
+    Replaces the Redis `lb:xp:country:index` set, which had to be maintained alongside every per-country
+    sorted set. Here it is a DISTINCT over the indexed column that already exists.
+    """
+    return sorted(
+        ProfileBadgeStanding.objects.exclude(country_code='')
+        .values_list('country_code', flat=True).distinct()
+    )
 
 
 # ------------------------------------------------------------------ global XP ----------------------------
@@ -134,7 +152,21 @@ def series_xp_rows(series_slug, limit=50, offset=0):
     )
 
 
-def series_board_rows(series_slug, limit=50, offset=0, country=None):
+def series_board_count(series_slug, country=None, earned=None):
+    """How many profiles sit on a series board (optionally one bracket of it)."""
+    return _series_board_qs(series_slug, country, earned).count()
+
+
+def _series_board_qs(series_slug, country, earned):
+    qs = _slice(SeriesBadgeStanding.objects.filter(series_slug=series_slug), country)
+    if earned is True:
+        return qs.filter(progress_bp__gte=10000)
+    if earned is False:
+        return qs.filter(progress_bp__lt=10000)
+    return qs
+
+
+def series_board_rows(series_slug, limit=50, offset=0, country=None, earned=None):
     """The per-series board -- earners AND chasers, one list:
     [(profile_id, progress_bp, stages_cleared, stages_total, advanced_at), ...].
 
@@ -142,9 +174,13 @@ def series_board_rows(series_slug, limit=50, offset=0, country=None):
     chasers with whoever got there first ahead. `advanced_at` is not decoration: progress_bp is discrete
     (cleared / gating stages), so a 3-stage series stacks everyone on 1/3 or 2/3, and without the date
     those large ties would sort by profile id and read as unranked.
+
+    `earned` brackets the board: True = those who finished (10000 bp) ordered by completion date,
+    False = those still chasing, None = the whole board. The bracket exists because the surface being
+    retired renders the two as separate tables; the panel that replaces it can take the whole board.
     """
     return list(
-        _slice(SeriesBadgeStanding.objects.filter(series_slug=series_slug), country)
+        _series_board_qs(series_slug, country, earned)
         .order_by('-progress_bp', 'advanced_at', 'profile_id')
         .values_list('profile_id', 'progress_bp', 'stages_cleared', 'stages_total',
                      'advanced_at')[offset:offset + limit]
@@ -211,3 +247,93 @@ def earners_ranks(profile_id, group_badge_ids):
         gb_id: UserGroupBadge.objects.filter(group_badge_id=gb_id, earned_at__lt=at).count() + 1
         for gb_id, at in held.items()
     }
+
+
+# ------------------------------------------------------------------ page assembly ------------------------
+
+class BoardPaginator:
+    """Template-compatible paginator over a COUNT, not a queryset -- boards are keyset pages, not slices of
+    an evaluated list. Duck-types Django's Paginator for the shared pagination partial.
+
+    Carried over from the Redis service (RedisPaginator) unchanged in behaviour, so the templates neither
+    know nor care which backend produced the page."""
+
+    def __init__(self, total_count, per_page):
+        self.count = total_count
+        self.per_page = per_page
+        self.num_pages = max(1, math.ceil(total_count / per_page))
+
+
+class BoardPage:
+    """Template-compatible page object (see BoardPaginator)."""
+
+    def __init__(self, object_list, number, paginator):
+        self.object_list = object_list
+        self.number = number
+        self.paginator = paginator
+
+    def __iter__(self):
+        return iter(self.object_list)
+
+    def __len__(self):
+        return len(self.object_list)
+
+    @property
+    def has_previous(self):
+        return self.number > 1
+
+    @property
+    def has_next(self):
+        return self.number < self.paginator.num_pages
+
+    @property
+    def previous_page_number(self):
+        return self.number - 1
+
+    @property
+    def next_page_number(self):
+        return self.number + 1
+
+
+def _entry(hydrated, profile_id, rank):
+    """The row shape the leaderboard templates read: identity + rank. Board-specific figures are merged in
+    by the caller.
+
+    Note `displayed_title`: the templates use that key, while `hydrate` annotates `display_title` (the
+    subquery). Mapping it here keeps the templates untouched during the backend swap -- renaming in the
+    template is a step-4 concern, and doing both at once would make a rendering bug and a data bug look
+    identical.
+    """
+    p = hydrated.get(profile_id) or {}
+    return {
+        'profile_id': profile_id,
+        'rank': rank,
+        'psn_username': p.get('display_psn_username', ''),
+        'avatar_url': p.get('avatar_url') or '',
+        'flag': p.get('flag') or '',
+        'is_premium': p.get('user_is_premium', False),
+        'displayed_title': p.get('display_title') or '',
+        'total_badges': p.get('badges_held', 0),
+    }
+
+
+def page(rows, offset, extra=None):
+    """Hydrate a page of board rows into template entries, numbering ranks from `offset`.
+
+    `rows` is whatever the board function returned (profile_id first); `extra` maps a row tuple to the
+    board-specific keys. One hydrate() for the whole page, so a page costs two queries total: the board
+    read and the identity read.
+
+    Rows whose profile vanished between the two reads still render (blank identity) rather than being
+    dropped -- the Redis design silently skipped them, which left pages showing 47 of 50 rows with correct
+    ranks and invisible holes.
+    """
+    rows = list(rows)
+    hydrated = hydrate([r[0] for r in rows])
+    out = []
+    for i, row in enumerate(rows):
+        entry = _entry(hydrated, row[0], offset + i + 1)
+        if extra:
+            entry.update(extra(row))
+        out.append(entry)
+    return out
