@@ -462,3 +462,33 @@ def test_the_subject_art_helper_is_one_piece_per_series_and_skips_avatars():
     )
     assert "art.get('is_avatar')" in fn, 'avatar subjects are no longer excluded from the handmade claim'
     assert '[:60]' in fn, 'the scan is unbounded, so a large catalog turns this into a table sweep'
+
+
+def test_the_journey_stacks_its_art_above_the_copy_on_a_phone():
+    """Side by side, the body of a beat gets 343 - 32 (container) - 32 (padding) - 84 (art) - 16 (gap) =
+    211px, which is ~33 characters of a 0.85rem line. A two-sentence beat runs to four ragged lines there
+    and reads as a squeeze. Stacking hands it the full 311px.
+
+    Pinned on the TRACK COUNT rather than on any single declaration: the failure this guards against is
+    the two-column desktop rule quietly applying at 375px again, and that is true whether it comes back
+    by deleting this block, by widening the breakpoint, or by re-adding `auto` to the phone track list.
+    """
+    css = (ROOT / 'static' / 'css' / 'components' / 'series-list.css').read_text(encoding='utf-8')
+    block = css[css.index('@media (max-width: 767px) {', css.index('.pp-hiw__step {')):]
+    block = block[:block.index('\n}\n') + 2]
+
+    step = re.search(r'\.pp-hiw__step\s*\{([^}]*)\}', block)
+    assert step, 'the phone block no longer restyles the beat'
+    tracks = re.search(r'grid-template-columns:\s*([^;]+);', step.group(1))
+    assert tracks, 'the phone beat does not set its own tracks, so it inherits the two-column desktop grid'
+    assert 'auto' not in tracks.group(1), (
+        f'the phone beat is back on two columns ({tracks.group(1).strip()!r}) -- the art is beside the copy'
+    )
+
+    # The art has to be centred over the copy; a fixed 84px well left-set under centred text reads as a bug.
+    assert 'justify-self: center' in block, 'the art is no longer centred above the copy'
+    # `justify-items` on the step would size the BODY to its max-content instead of the track -- the
+    # reason the centring is done on the art alone.
+    assert 'justify-items' not in block, (
+        'justify-items on the beat sizes the body to max-content rather than the full track'
+    )

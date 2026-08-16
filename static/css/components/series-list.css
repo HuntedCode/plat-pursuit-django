@@ -427,6 +427,26 @@
    platinums, or a medallion. */
 .pp-hiw__art { display: grid; place-items: center; width: 84px; height: 84px; }
 .pp-hiw__art--med .pp-med { --sz: 78px; }
+/* Phone: the art goes ABOVE the copy instead of beside it.
+ *
+ * Side by side, the body gets 343 - 32 (container) - 32 (padding) - 84 (art) - 16 (gap) = 211px, which is
+ * ~33 characters of a 0.85rem line -- narrow enough that a two-sentence beat runs to four ragged lines and
+ * reads as a squeeze rather than a card. Stacking hands it the full 311px and the art stops competing for
+ * the same axis.
+ *
+ * It costs height (~66px a card), which is the trade: this page is scrolled once, deliberately, by someone
+ * deciding whether the badge system is worth their time. Legibility is what it is for. Elsewhere on a
+ * phone we have spent height carefully; here the copy IS the product.
+ *
+ * Centred rather than left-aligned because the hero directly above it is centred at this width, and a
+ * centred 84px well over left-set text reads as a mistake. `justify-self` on the art rather than
+ * `justify-items` on the step: the latter would size the body to its max-content instead of the track.
+ */
+@media (max-width: 767px) {
+    .pp-hiw__step { grid-template-columns: minmax(0, 1fr); gap: 12px; text-align: center; }
+    .pp-hiw__art { justify-self: center; }
+    .pp-hiw__body { min-width: 0; }
+}
 @media (min-width: 768px) {
     .pp-hiw__step { gap: 22px; padding: 20px 22px; }
     .pp-hiw__art { width: 104px; height: 104px; }
