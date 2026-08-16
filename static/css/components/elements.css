@@ -48,6 +48,21 @@
 .scard__value { font-size: 18px; line-height: 1; }  /* face via shared .pp-tally */
 .scard__sub { font-size: 12px; color: var(--pp-text-dim); margin-top: 7px; }
 @media (min-width: 768px) { .scard { padding: 18px; } .scard__value { font-size: 24px; } }
+/* Phone: the stat cell is a LABEL AND A FIGURE, so it should read as one unit rather than as two things
+   with a gap between them. A 12px gap under an 11px label plus 12px of vertical padding made each cell
+   ~67px, and these come in twos and fours -- 184px of a 282px header on Browse Games, 142px on the
+   hunter profile. Both surfaces asked for the same squeeze, so it lives in the primitive rather than
+   being copied per page.
+
+   `__sub` goes entirely below 768px. It is the supplementary line under the figure ("in the catalogue"
+   under Total games, "part of a badge" under In badge series) and it mostly restates its own label; at
+   ~21px a cell it is the single most expensive thing in these grids. It returns at md+, where the header
+   has the room and the extra word is free. */
+@media (max-width: 767px) {
+    .scard { padding: 10px 8px; }
+    .scard__label { margin-bottom: 5px; letter-spacing: 0.08em; }
+    .scard__sub { display: none; }
+}
 
 /* ---- Radar ---- */
 .radar-card { border: var(--pp-border-w) solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 24px 28px 30px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 6px 20px rgba(0, 0, 0, 0.28); }  /* depth pass: subtle lift off the substrate */

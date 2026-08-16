@@ -862,17 +862,35 @@ def test_the_phone_hero_places_areas_by_class_not_by_position():
             )
 
 
-def test_the_phone_hero_does_not_squeeze_the_shared_stat_card():
-    """`.scard` is on a dozen surfaces. Compacting it for this header had to be SCOPED, or fitting one
-    page would have quietly reshaped every other one -- which is a separate decision, worth taking
-    deliberately rather than as a side effect of this change."""
+def test_the_stat_card_squeeze_lives_in_the_primitive_not_per_surface():
+    """The phone squeeze on `.scard` started here, scoped, because reshaping a primitive on 22 surfaces
+    is its own decision. Browse Games then wanted the identical rule, so it moved into elements.css
+    instead of becoming a second copy.
+
+    Asserted from BOTH ends. Checking only that the hero no longer overrides `.scard` would pass just as
+    happily if the squeeze had been deleted outright -- an assertion about an absence needs the presence
+    it implies, or it is a test that nothing happened.
+    """
     _block, rules = _hero_phone_block()
     for sels, _body in rules:
         for sel in sels:
-            if 'scard' in sel:
-                assert sel.startswith('.pp-phero__stats '), (
-                    f'{sel!r} restyles the shared stat card outside this header'
-                )
+            assert 'scard' not in sel, (
+                f'{sel!r} is a second copy of the stat-card squeeze; it belongs in elements.css'
+            )
+
+    elements = (ROOT / 'static' / 'css' / 'components' / 'elements.css').read_text(encoding='utf-8')
+    phone = elements[elements.index('@media (max-width: 767px)'):]
+    phone = phone[:phone.index('\n}\n') + 3]
+    assert '.scard { padding' in phone, 'the primitive lost the phone padding'
+    assert '.scard__label { margin-bottom: 5px' in phone, 'the label/figure gap is back to 12px'
+    assert '.scard__sub { display: none' in phone, 'the sub-line is back on phones'
+    # It must be a PHONE rule. Hiding the sub-line unconditionally would not shorten a header, it would
+    # delete a line of real content from sixteen surfaces at every width.
+    base = elements[:elements.index('@media (max-width: 767px)')]
+    sub_rule = base[base.index('.scard__sub'):]
+    assert 'display: none' not in sub_rule[:sub_rule.index('}')], (
+        'the sub-line is hidden outside the phone block, so it is gone at every width'
+    )
 
 
 def test_the_notched_ring_geometry_agrees_with_itself():
@@ -1010,3 +1028,104 @@ def test_the_platform_chips_still_wrap_if_they_have_to():
     rules = _lib_toolbar_rules()
     chips = next(b for sels, b in rules if any('__fchips' in s for s in sels))
     assert 'nowrap' not in chips, 'the chip row cannot wrap, so a mis-estimate overflows the toolbar'
+
+
+def _facts_phone_rules():
+    """The browse card's facts-row phone block, as (selectors, body) pairs."""
+    import re
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components'
+           / 'game-card.css').read_text(encoding='utf-8')
+    block = css[css.index('Phone + small tablet: the facts row'):]
+    block = block[:block.index('\n}\n', block.index('@media (max-width: 767px)')) + 3]
+    inner = block[block.index('{', block.index('@media')) + 1: block.rindex('}')]
+    inner = re.sub(r'/\*.*?\*/', '', inner, flags=re.S)
+    return css, [([s.strip() for s in sel.split(',')], body)
+                 for sel, body in re.findall(r'([^{}]+)\{([^{}]*)\}', inner)]
+
+
+def test_the_browse_card_facts_row_does_not_clip_the_platinum_flag():
+    """`grid-template-columns: 1fr auto 1fr` cannot shrink to a narrow card. `1fr` is
+    `minmax(auto, 1fr)`, so every track has a min-content floor, and both inner groups are `inline-flex`
+    (nowrap), so their min-content IS their full width. The row's floor is ~182px against 148px of body at
+    2 columns and 178px at 3 -- and `.pp-gcard` sets `overflow: hidden`, so the excess does not wrap or
+    scroll, it CLIPS the last item. That item is the platinum indicator, which is the one fact a trophy
+    hunter scans a browse wall for.
+
+    Invisible above 768px, where the body reaches 221px -- i.e. invisible on every desktop.
+    """
+    _css, rules = _facts_phone_rules()
+    assert len(rules) >= 4, f'only {len(rules)} rules parsed -- the block boundary is wrong'
+
+    # Matched on the track declaration, not on a selector spelling: the container selector carries a
+    # `:has()` gate (see the test below) and pinning its exact text would fail on any re-scope.
+    areas = next(b for _sels, b in rules if 'grid-template-areas' in b)
+    assert 'grid-template-areas' in areas, 'the facts row is back on a single line'
+    assert '1fr' not in areas, (
+        'the facts row is back on fr tracks, which have a min-content floor the card cannot meet'
+    )
+
+    placed = {}
+    for sels, body in rules:
+        if 'grid-area:' in body:
+            for s in sels:
+                placed[s] = body.split('grid-area:')[1].split(';')[0].strip()
+    assert set(placed.values()) == {'rating', 'mid', 'plat'}, f'unplaced facts: {placed}'
+
+
+def test_the_facts_row_scopes_around_the_duplicated_plat_class():
+    """`.pp-gcard__plat` means TWO things on this card: the platinum indicator inside `.pp-gcard__facts`,
+    and a platform chip inside `.pp-gcard__plats` in the footer. They are told apart only by position.
+
+    So every rule here goes through `.pp-gcard__facts >`. Unscoped, `grid-area: plat` would land on each
+    PS5/PS4 chip in the footer -- a grid area that does not exist in that container.
+    """
+    _css, rules = _facts_phone_rules()
+    for sels, _body in rules:
+        for sel in sels:
+            assert sel.startswith('.pp-gcard__facts'), (
+                f'{sel!r} is not scoped to the facts row; `.pp-gcard__plat` is also the footer platform chip'
+            )
+
+
+def test_the_facts_phone_grid_does_not_leak_onto_the_dlc_card():
+    """`.pp-gcard__facts` has a SECOND consumer with a different shape. Recently Added's DLC card puts
+    only `__tro` + `__count` in it -- no `__fact`, no `__mid`, no `__plat` -- so none of the grid-area
+    rules reach those two, and an ungated container rule simply auto-placed them into this two-column
+    grid: packed left instead of spanning the row, plus a row-gap for a declared-but-empty second row.
+
+    The gate is `:has(> .pp-gcard__mid)`, which names the three-part SHAPE rather than the page, so a
+    fourth surface reusing the full facts row is covered without being listed here.
+    """
+    from pathlib import Path
+    _css, rules = _facts_phone_rules()
+
+    container = next(sels for sels, b in rules if 'grid-template-areas' in b)
+    assert all(':has(' in s for s in container), (
+        f'{container} applies to every .pp-gcard__facts, including the two-child DLC card'
+    )
+
+    # The gate only means anything while the DLC card really lacks `__mid`. If that card ever grows one,
+    # this fails here rather than silently re-opening the leak.
+    dlc = (Path(__file__).resolve().parents[2] / 'templates' / 'trophies' / 'partials'
+           / 'recently_added' / 'dlc_card.html').read_text(encoding='utf-8')
+    assert 'pp-gcard__facts' in dlc, 'the DLC card no longer shares the facts row -- retire this gate'
+    assert 'pp-gcard__mid' not in dlc, (
+        'the DLC card now has a `__mid`, so `:has(> .pp-gcard__mid)` no longer excludes it'
+    )
+
+
+def test_the_browse_card_still_shows_every_fact_on_a_phone(client):
+    """The row was split, not trimmed. Two lines cost ~18px of card height and lose nothing -- hiding the
+    DLC chip would have fixed the overflow for free, and is the trade to make later if that height ever
+    matters more than the chip. Pinned so the fix is not quietly turned into a deletion."""
+    from pathlib import Path
+    card = (Path(__file__).resolve().parents[2]
+            / 'templates/trophies/partials/game_list/game_cards.html').read_text(encoding='utf-8')
+
+    for part in ('pp-gcard__fact', 'pp-gcard__tro', 'pp-gcard__dlc', 'pp-gcard__plat'):
+        assert part in card, f'{part} was removed from the browse card rather than re-laid out'
+
+    _css, rules = _facts_phone_rules()
+    for _sels, body in rules:
+        assert 'display: none' not in body, 'a fact is hidden on phones instead of wrapped'

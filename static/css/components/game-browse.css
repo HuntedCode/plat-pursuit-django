@@ -70,6 +70,18 @@
 .pp-gbrowse__bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .pp-gbrowse__bar > .pp-bgal__search { flex: 1 1 200px; }
 .pp-gbrowse__sort { flex: 0 1 auto; }
+/* The sort select may SHRINK on a phone rather than holding its longest option's width.
+   Sized to content it is 189px on Browse Games ("Least Platinums Earned"), and search takes row 1, so
+   row 2 wants sort + Lucky + Filters = 327px in a 319px well. Eight pixels over, and the cost is a whole
+   44px third row. Shrinking, it settles at ~181px there -- ample for a truncated label plus the arrow.
+   `min-width: 0` is required: a flex item will not shrink below its content without it, which is the
+   whole reason the select was holding the row open.
+   Safe on all twelve surfaces that share this bar because it only shrinks under competition; the others
+   (Companies 277px, the profile's Games 163px) already fit and are unaffected. */
+@media (max-width: 767px) {
+    .pp-gbrowse__sort { flex: 1 1 auto; min-width: 0; }
+    .pp-gbrowse__sort .pp-gallery__select { width: 100%; }
+}
 
 /* "I'm Feeling Lucky" -- a small accent-tinted icon button (charm feature: random game matching filters).
    Shares the .pp-bgal__advbtn footprint but leans amber so it reads as a distinct, playful action. */

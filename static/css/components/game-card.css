@@ -106,6 +106,41 @@
 /* Center cell = trophy counts + an optional DLC tag (only when the game has DLC trophy groups; the total
    counts already include DLC, so this is a neutral "there's extra DLC" scope flag, not an added number). */
 .pp-gcard__mid { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Phone + small tablet: the facts row becomes TWO lines, because on one it does not fit and is silently
+   truncated rather than squeezed.
+ *
+ * `1fr auto 1fr` cannot shrink to the card: `1fr` is `minmax(auto, 1fr)`, so each track has a min-content
+ * floor, and both inner groups are `inline-flex` (i.e. nowrap) so their min-content IS their full width.
+ * The row's floor is ~182px against a 148px body at 2 columns and 178px at 3 -- and `.pp-gcard` sets
+ * `overflow: hidden`, so the overflow does not scroll or wrap, it CLIPS the last item. That item is the
+ * platinum indicator, which is the single fact a trophy hunter scans a browse wall for.
+ *
+ * It fits from 768px (221px of body) up, which is why this is invisible on desktop.
+ *
+ * Two lines cost ~18px of card height and lose nothing. Hiding the DLC chip below 768px would fix the
+ * overflow for free (~131px on one line) and is the trade to make if the extra height ever matters more
+ * than the chip.
+ *
+ * Gated on `:has(> .pp-gcard__mid)` because `.pp-gcard__facts` has a SECOND consumer with a different
+ * shape: the Recently Added DLC card (recently_added/dlc_card.html) puts just `__tro` + `__count` in it.
+ * Those get no grid-area, so an ungated rule auto-placed them into this two-column grid -- packing them
+ * left instead of spanning, and adding a row-gap for a declared-but-empty second row. `__mid` is the
+ * three-part row's own marker, so the gate names the shape rather than the page. */
+@media (max-width: 767px) {
+    .pp-gcard__facts:has(> .pp-gcard__mid) {
+        grid-template-columns: auto auto;
+        grid-template-areas: "rating plat" "mid mid";
+        gap: 4px 8px;
+    }
+    .pp-gcard__facts > .pp-gcard__fact { grid-area: rating; }
+    .pp-gcard__facts > .pp-gcard__mid  { grid-area: mid; }
+    /* Scoped through `.pp-gcard__facts` because `.pp-gcard__plat` means two different things on this
+       card: the platinum indicator here, and a platform chip inside `.pp-gcard__plats` in the footer.
+       An unscoped rule would move the PS5 chips into a grid area that does not exist there. */
+    .pp-gcard__facts > .pp-gcard__plat,
+    .pp-gcard__facts > .pp-gcard__plat--no { grid-area: plat; justify-self: end; }
+}
 .pp-gcard__dlc { flex-shrink: 0; font-size: 8px; font-weight: 800; letter-spacing: 0.04em; padding: 1px 4px; border-radius: 4px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-text) 7%, transparent); border: 1px solid var(--pp-border); }
 .pp-gcard__dlc-n { margin-left: 2px; color: var(--pp-text-mute); font-weight: 700; }  /* count reads a touch quieter than the DLC label */
 

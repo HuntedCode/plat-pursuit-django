@@ -246,12 +246,11 @@
     .pp-phero__tier  { font-size: 0.98rem; gap: 5px; }
     .pp-phero__tier i { width: 9px; height: 9px; }
 
-    /* Scoped to this grid, NOT to `.scard` itself: that primitive is on a dozen other surfaces and a
-       site-wide squeeze is a separate decision from fitting this header. The 12px gap under an 11px
-       label is what makes each cell ~67px; at 5px the pair reads as one unit, which is what a stat cell
-       is. (The same win is available site-wide and is worth taking deliberately, not as a side effect.) */
-    .pp-phero__stats .scard { padding: 10px 8px; }
-    .pp-phero__stats .scard__label { margin-bottom: 5px; letter-spacing: 0.08em; }
+    /* No `.scard` override here any more. This header carried the first copy of the phone squeeze,
+       scoped deliberately because a site-wide change to a primitive on 22 surfaces is its own decision.
+       Browse Games then wanted the identical rule, so it moved into the primitive (elements.css) rather
+       than becoming a second copy. `.pp-phero__stats` stays on the grid as a hook, but nothing styles
+       it -- re-adding a local squeeze here would now be a duplicate that can drift from the primitive. */
 }
 
 
