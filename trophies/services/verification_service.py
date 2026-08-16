@@ -158,7 +158,6 @@ class VerificationService:
             update_xp_entry,
             update_country_xp_entry,
             update_earner_leaderboards_for_profile,
-            update_progress_leaderboards_for_profile,
         )
 
         try:
@@ -181,7 +180,8 @@ class VerificationService:
                 )
 
         update_earner_leaderboards_for_profile(profile)
-        update_progress_leaderboards_for_profile(profile)
+        # The progress write is gone with its board: nothing reads that sorted set now that the board is
+        # served from SeriesBadgeStanding, which the badge evaluation recomputes on the same sync.
 
     @staticmethod
     def unlink_profile_from_user(profile):

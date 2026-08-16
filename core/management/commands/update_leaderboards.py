@@ -4,7 +4,6 @@ from django.core.management.base import BaseCommand
 from trophies.models import Badge
 from trophies.services.redis_leaderboard_service import (
     rebuild_xp_leaderboard,
-    rebuild_global_progress_leaderboard,
     rebuild_series_leaderboards,
     rebuild_country_xp_leaderboard,
     rebuild_country_xp_leaderboards,
@@ -81,12 +80,10 @@ class Command(BaseCommand):
             logger.exception("Failed rebuilding XP sorted set")
             self.stdout.write(self.style.ERROR(f"Failed rebuilding XP sorted set: {e}"))
 
-        try:
-            count = rebuild_global_progress_leaderboard()
-            self.stdout.write(f"Rebuilt global progress sorted set: {count} entries")
-        except Exception as e:
-            logger.exception("Failed rebuilding global progress sorted set")
-            self.stdout.write(self.style.ERROR(f"Failed rebuilding global progress sorted set: {e}"))
+        # The global PROGRESS rebuild used to sit here and is gone. It was the most expensive thing this
+        # cron did -- four filtered COUNTs plus a MAX over EarnedTrophy for every linked profile, every
+        # 6 hours -- and nothing reads its sorted set any more: the board is served from
+        # ProfileBadgeStanding's materialized columns. See docs/design/rebuild/leaderboards-rebuild.md.
 
         # Country XP leaderboards
         try:

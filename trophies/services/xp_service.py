@@ -340,15 +340,15 @@ def bulk_gamification_update():
         except Exception as e:
             logger.error(f"Failed to execute leaderboard pipeline: {e}")
 
-        # Update earner + progress leaderboards for affected profiles (after gamification is current)
+        # Update the earner sorted set for affected profiles (after gamification is current).
+        # The per-profile PROGRESS write is gone with its board -- it recomputed a profile's trophy tallies
+        # per series on every sync-complete to feed a sorted set nothing reads any more.
         for profile in profiles_to_update:
             try:
                 from trophies.services.redis_leaderboard_service import (
                     update_earner_leaderboards_for_profile,
-                    update_progress_leaderboards_for_profile,
                 )
                 update_earner_leaderboards_for_profile(profile)
-                update_progress_leaderboards_for_profile(profile)
             except Exception as e:
                 logger.error(f"Failed to update leaderboards for {profile.psn_username}: {e}")
 

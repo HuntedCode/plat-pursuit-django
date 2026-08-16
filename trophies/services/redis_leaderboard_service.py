@@ -15,11 +15,21 @@ Key patterns (raw Redis, DB 0):
     lb:xp:data              - XP display data hash
     lb:earners:{slug}:scores - Per-series earners sorted set
     lb:earners:{slug}:data   - Per-series earners display data
-    lb:progress:{slug}:scores - Per-series progress sorted set
-    lb:progress:{slug}:data   - Per-series progress display data
-    lb:progress:global:scores - Global progress sorted set
-    lb:progress:global:data   - Global progress display data
     lb:meta:last_rebuild      - Rebuild timestamps per leaderboard
+
+RETIRED (leaderboards rebuild, step 2): the PROGRESS boards -- global and per-series -- are gone from
+here entirely. They are served by services/badge_leaderboards over indexed standing columns, and their
+rebuild was the single most expensive thing in this module: four filtered COUNTs plus a MAX over
+EarnedTrophy for EVERY linked profile, every 6 hours.
+
+What remains is still load-bearing and CANNOT be deleted until the badge cutover:
+  - earners  -> frame_service reads it for the legacy badge frame (Badge/UserBadge)
+  - xp       -> profile_card_service + the dashboard providers rank the LEGACY
+                ProfileGamification.total_badge_xp; ranking that against the new ProfileBadgeStanding
+                would print a figure next to a rank computed from a different number
+  - country  -> same consumers, same reason
+Retire those with the badge cutover, which repoints the XP source. See
+docs/design/rebuild/leaderboards-rebuild.md.
 """
 import json
 import logging
@@ -99,12 +109,6 @@ def _earners_data_key(slug):
     return f'lb:earners:{slug}:data'
 
 
-def _progress_scores_key(slug=None):
-    if slug:
-        return f'lb:progress:{slug}:scores'
-    return 'lb:progress:global:scores'
-
-
 def _country_xp_scores_key(country_code):
     return f'lb:xp:country:{country_code}:scores'
 
@@ -119,12 +123,6 @@ def _country_xp_index_key():
 
 def _community_xp_key(slug):
     return f'lb:community_xp:{slug}'
-
-
-def _progress_data_key(slug=None):
-    if slug:
-        return f'lb:progress:{slug}:data'
-    return 'lb:progress:global:data'
 
 
 def _member(profile_id):
@@ -479,170 +477,6 @@ def rebuild_earners_leaderboard(series_slug):
 # Progress Leaderboard
 # ---------------------------------------------------------------------------
 
-def compute_progress_score(plats, golds, silvers, bronzes):
-    """
-    Composite score: plats desc > golds desc > silvers desc > bronzes desc.
-
-    Date tiebreaker is stored in display data only (not in score).
-    """
-    return plats * 10**9 + golds * 10**6 + silvers * 10**3 + bronzes
-
-
-def _build_progress_display_data(profile, plats, golds, silvers, bronzes, last_earned_date):
-    """Build display data dict for a progress leaderboard entry."""
-    return {
-        'psn_username': profile.display_psn_username,
-        'avatar_url': profile.avatar_url or '',
-        'flag': profile.flag or '',
-        'is_premium': profile.user_is_premium,
-        'displayed_title': profile.displayed_title() or '',
-        'trophy_totals': {
-            'plats': plats,
-            'golds': golds,
-            'silvers': silvers,
-            'bronzes': bronzes,
-        },
-        'last_earned_date': last_earned_date.isoformat() if last_earned_date else 'Unknown',
-    }
-
-
-def update_progress_entry(slug, profile, plats, golds, silvers, bronzes, last_earned_date, pipeline=None):
-    """
-    Update a profile's progress leaderboard position.
-
-    Args:
-        slug: Series slug, or None for global progress leaderboard.
-    """
-    score = compute_progress_score(plats, golds, silvers, bronzes)
-    if score <= 0:
-        _remove_entry(_progress_scores_key(slug), _progress_data_key(slug), profile.id, pipeline=pipeline)
-        return
-
-    display_data = _build_progress_display_data(profile, plats, golds, silvers, bronzes, last_earned_date)
-    _update_entry(
-        _progress_scores_key(slug),
-        _progress_data_key(slug),
-        profile.id, score, display_data, pipeline=pipeline
-    )
-
-
-def get_progress_page(slug, page, page_size=50):
-    """Get a page of progress leaderboard entries. slug=None for global."""
-    return _get_page(_progress_scores_key(slug), _progress_data_key(slug), page, page_size)
-
-
-def get_progress_rank(slug, profile_id):
-    """Get a profile's progress leaderboard rank. slug=None for global."""
-    return _get_rank(_progress_scores_key(slug), profile_id)
-
-
-def get_progress_count(slug):
-    """Get total progress leaderboard participants. slug=None for global."""
-    return _get_count(_progress_scores_key(slug))
-
-
-def get_progress_counts(slugs):
-    """Participant counts for MANY series at once: {slug: count}.
-
-    One pipelined round-trip instead of one per slug. The Series directory renders a count for every live
-    series and had been calling `get_progress_count` in a Python loop -- a Redis N+1 whose cost grew with
-    the catalogue on an unpaginated page. ZCARD is O(1), so the per-call latency WAS the cost, and batching
-    removes essentially all of it.
-    """
-    slugs = list(slugs)
-    if not slugs:
-        return {}
-    pipe = redis_client.pipeline()
-    for slug in slugs:
-        pipe.zcard(_progress_scores_key(slug))
-    return dict(zip(slugs, pipe.execute()))
-
-
-def compute_profile_progress_for_series(profile, series_slug):
-    """
-    Compute a single profile's trophy counts for a specific badge series.
-
-    Used for incremental updates at sync-complete time. Scoped to one profile
-    so it uses FK indexes and is fast.
-
-    Returns:
-        tuple: (plats, golds, silvers, bronzes, last_earned_date) or None if no trophies
-    """
-    from trophies.models import EarnedTrophy, Game
-
-    games = Game.objects.filter(
-        concept__stages__series_slug=series_slug
-    ).distinct()
-
-    trophies = EarnedTrophy.objects.filter(
-        profile=profile,
-        trophy__game__in=games,
-        earned=True
-    )
-
-    if not trophies.exists():
-        return None
-
-    from django.db.models import Count, Q, Max
-
-    counts = trophies.aggregate(
-        plats=Count('id', filter=Q(trophy__trophy_type='platinum')),
-        golds=Count('id', filter=Q(trophy__trophy_type='gold')),
-        silvers=Count('id', filter=Q(trophy__trophy_type='silver')),
-        bronzes=Count('id', filter=Q(trophy__trophy_type='bronze')),
-        last_earned=Max('earned_date_time'),
-    )
-
-    return (
-        counts['plats'],
-        counts['golds'],
-        counts['silvers'],
-        counts['bronzes'],
-        counts['last_earned'],
-    )
-
-
-def compute_profile_progress_global(profile):
-    """
-    Compute a single profile's trophy counts across all badge-related games.
-
-    Returns:
-        tuple: (plats, golds, silvers, bronzes, last_earned_date) or None if no trophies
-    """
-    from trophies.models import EarnedTrophy, Game
-
-    games = Game.objects.filter(
-        concept__stages__isnull=False
-    ).distinct()
-
-    trophies = EarnedTrophy.objects.filter(
-        profile=profile,
-        trophy__game__in=games,
-        earned=True
-    )
-
-    if not trophies.exists():
-        return None
-
-    from django.db.models import Count, Q, Max
-
-    counts = trophies.aggregate(
-        plats=Count('id', filter=Q(trophy__trophy_type='platinum')),
-        golds=Count('id', filter=Q(trophy__trophy_type='gold')),
-        silvers=Count('id', filter=Q(trophy__trophy_type='silver')),
-        bronzes=Count('id', filter=Q(trophy__trophy_type='bronze')),
-        last_earned=Max('earned_date_time'),
-    )
-
-    return (
-        counts['plats'],
-        counts['golds'],
-        counts['silvers'],
-        counts['bronzes'],
-        counts['last_earned'],
-    )
-
-
 def update_earner_leaderboards_for_profile(profile):
     """
     Update earner leaderboard entries for a profile across all series
@@ -678,152 +512,6 @@ def update_earner_leaderboards_for_profile(profile):
 
     logger.debug(f"Updated earner leaderboards for {profile.display_psn_username} across {len(best_per_series)} series")
 
-
-def update_progress_leaderboards_for_profile(profile):
-    """
-    Recompute and update progress leaderboard entries for a profile across all
-    series they participate in, plus the global leaderboard.
-
-    Called at sync-complete time after bulk_gamification_update() exits.
-    """
-    from trophies.models import Stage
-
-    # Find all series this profile might have progress in
-    series_slugs = list(
-        Stage.objects.filter(
-            concepts__games__played_by__profile=profile
-        ).values_list('series_slug', flat=True).distinct()
-    )
-
-    pipe = redis_client.pipeline()
-
-    for slug in series_slugs:
-        result = compute_profile_progress_for_series(profile, slug)
-        if result:
-            plats, golds, silvers, bronzes, last_earned = result
-            update_progress_entry(slug, profile, plats, golds, silvers, bronzes, last_earned, pipeline=pipe)
-        else:
-            _remove_entry(_progress_scores_key(slug), _progress_data_key(slug), profile.id, pipeline=pipe)
-
-    # Global progress
-    global_result = compute_profile_progress_global(profile)
-    if global_result:
-        plats, golds, silvers, bronzes, last_earned = global_result
-        update_progress_entry(None, profile, plats, golds, silvers, bronzes, last_earned, pipeline=pipe)
-    else:
-        _remove_entry(_progress_scores_key(None), _progress_data_key(None), profile.id, pipeline=pipe)
-
-    pipe.execute()
-    logger.debug(f"Updated progress leaderboards for {profile.display_psn_username} across {len(series_slugs)} series")
-
-
-def rebuild_progress_leaderboard(series_slug):
-    """Full rebuild of progress leaderboard for a series."""
-    from trophies.models import Game, UserBadgeProgress, Profile, EarnedTrophy
-    from django.db.models import Count, Q, Max, OuterRef, Exists
-
-    games = Game.objects.filter(
-        concept__stages__series_slug=series_slug
-    ).distinct()
-
-    badge_sub = UserBadgeProgress.objects.filter(
-        profile=OuterRef('pk'), badge__series_slug=series_slug
-    )
-
-    trophy_sub = EarnedTrophy.objects.filter(
-        profile=OuterRef('pk'), trophy__game__in=games, earned=True
-    )
-
-    game_filter = Q(
-        earned_trophy_entries__earned=True,
-        earned_trophy_entries__trophy__game__in=games,
-    )
-
-    profiles = Profile.objects.filter(
-        Q(is_linked=True) & (Exists(badge_sub) | Exists(trophy_sub))
-    ).annotate(
-        plats=Count('earned_trophy_entries__id',
-                     filter=game_filter & Q(earned_trophy_entries__trophy__trophy_type='platinum')),
-        golds=Count('earned_trophy_entries__id',
-                     filter=game_filter & Q(earned_trophy_entries__trophy__trophy_type='gold')),
-        silvers=Count('earned_trophy_entries__id',
-                      filter=game_filter & Q(earned_trophy_entries__trophy__trophy_type='silver')),
-        bronzes=Count('earned_trophy_entries__id',
-                      filter=game_filter & Q(earned_trophy_entries__trophy__trophy_type='bronze')),
-        max_earn_date=Max('earned_trophy_entries__earned_date_time', filter=game_filter)
-    ).only('id', 'display_psn_username', 'flag', 'avatar_url', 'user_is_premium')
-
-    entries = []
-    for p in profiles:
-        score = compute_progress_score(p.plats, p.golds, p.silvers, p.bronzes)
-        if score <= 0:
-            continue
-        display_data = _build_progress_display_data(
-            p, p.plats, p.golds, p.silvers, p.bronzes, p.max_earn_date
-        )
-        entries.append((p.id, score, display_data))
-
-    _rebuild_leaderboard(
-        _progress_scores_key(series_slug),
-        _progress_data_key(series_slug),
-        entries
-    )
-    logger.info(f"Rebuilt progress leaderboard for {series_slug} with {len(entries)} entries")
-    return len(entries)
-
-
-def rebuild_global_progress_leaderboard():
-    """Full rebuild of global progress leaderboard."""
-    from trophies.models import Profile, EarnedTrophy, Game
-    from django.db.models import Count, Q, Max, OuterRef, Exists
-
-    games = Game.objects.filter(concept__stages__isnull=False).distinct()
-
-    trophy_sub = EarnedTrophy.objects.filter(
-        profile=OuterRef('pk'), trophy__game__in=games, earned=True
-    )
-
-    game_filter = Q(
-        earned_trophy_entries__earned=True,
-        earned_trophy_entries__trophy__game__in=games,
-    )
-
-    profiles = Profile.objects.filter(
-        Q(is_linked=True) & Exists(trophy_sub)
-    ).annotate(
-        plats=Count('earned_trophy_entries__id',
-                     filter=game_filter & Q(earned_trophy_entries__trophy__trophy_type='platinum')),
-        golds=Count('earned_trophy_entries__id',
-                     filter=game_filter & Q(earned_trophy_entries__trophy__trophy_type='gold')),
-        silvers=Count('earned_trophy_entries__id',
-                      filter=game_filter & Q(earned_trophy_entries__trophy__trophy_type='silver')),
-        bronzes=Count('earned_trophy_entries__id',
-                      filter=game_filter & Q(earned_trophy_entries__trophy__trophy_type='bronze')),
-        max_earn_date=Max('earned_trophy_entries__earned_date_time', filter=game_filter)
-    ).only('id', 'display_psn_username', 'flag', 'avatar_url', 'user_is_premium')
-
-    entries = []
-    for p in profiles:
-        score = compute_progress_score(p.plats, p.golds, p.silvers, p.bronzes)
-        if score <= 0:
-            continue
-        display_data = _build_progress_display_data(
-            p, p.plats, p.golds, p.silvers, p.bronzes, p.max_earn_date
-        )
-        entries.append((p.id, score, display_data))
-
-    _rebuild_leaderboard(
-        _progress_scores_key(None),
-        _progress_data_key(None),
-        entries
-    )
-    logger.info(f"Rebuilt global progress leaderboard with {len(entries)} entries")
-    return len(entries)
-
-
-# ---------------------------------------------------------------------------
-# Community XP
-# ---------------------------------------------------------------------------
 
 def update_community_xp_deltas(deltas, pipeline=None):
     """
@@ -1026,11 +714,16 @@ def rebuild_country_xp_leaderboards():
 # ---------------------------------------------------------------------------
 
 def rebuild_series_leaderboards(series_slug):
-    """Rebuild all leaderboards for a specific badge series (earners + progress + community XP)."""
+    """Rebuild a badge series' remaining sorted sets (earners + community XP).
+
+    The per-series PROGRESS set is gone -- nothing reads it now that the board is served from
+    SeriesBadgeStanding. The second return value is kept as a constant 0 so the callers' tuple unpacking
+    and their log lines keep working through the transition; it goes with the rest of this module at the
+    badge cutover.
+    """
     earners_count = rebuild_earners_leaderboard(series_slug)
-    progress_count = rebuild_progress_leaderboard(series_slug)
     community_xp = rebuild_community_xp(series_slug)
-    return earners_count, progress_count
+    return earners_count, 0
 
 
 def rebuild_all_leaderboards():
@@ -1038,7 +731,6 @@ def rebuild_all_leaderboards():
     from trophies.models import Badge
 
     xp_count = rebuild_xp_leaderboard()
-    global_progress_count = rebuild_global_progress_leaderboard()
     country_results = rebuild_country_xp_leaderboards()
 
     unique_slugs = list(
@@ -1066,7 +758,6 @@ def rebuild_all_leaderboards():
 
     return {
         'xp': xp_count,
-        'global_progress': global_progress_count,
         'country_xp': country_results,
         'series': series_results,
     }
