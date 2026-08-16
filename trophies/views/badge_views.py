@@ -64,6 +64,7 @@ from trophies.services.frame_service import build_badge_frame
 from trophies.services.redis_leaderboard_service import (
     RedisPaginator, RedisPage,
     get_xp_page, get_xp_rank, get_xp_count,
+    get_progress_counts,
     get_earners_page, get_earners_rank, get_earners_count,
     get_progress_page, get_progress_rank, get_progress_count,
     get_community_xp,
@@ -768,24 +769,32 @@ class OverallBadgeLeaderboardsView(TemplateView):
         user = self.request.user
         paginate_by = 50
 
-        xp_page_num = max(1, int(self.request.GET.get('lb_total_xp_page', 1) or 1))
-        progress_page_num = max(1, int(self.request.GET.get('lb_total_progress_page', 1) or 1))
+        active_tab = self.request.GET.get('tab', 'xp')
+        if active_tab not in ('xp', 'progress', 'series', 'country'):
+            active_tab = 'xp'
+        context['active_tab'] = active_tab
 
-        # XP leaderboard
-        xp_total = get_xp_count()
-        xp_entries = get_xp_page(xp_page_num, paginate_by)
-        xp_paginator = RedisPaginator(xp_total, paginate_by)
-        xp_page_num = min(xp_page_num, xp_paginator.num_pages)
-        context['lb_total_xp_page_obj'] = RedisPage(xp_entries, xp_page_num, xp_paginator)
-        context['lb_total_xp_paginator'] = xp_paginator
-
-        # Progress leaderboard (global)
-        progress_total = get_progress_count(slug=None)
-        progress_entries = get_progress_page(slug=None, page=progress_page_num, page_size=paginate_by)
-        progress_paginator = RedisPaginator(progress_total, paginate_by)
-        progress_page_num = min(progress_page_num, progress_paginator.num_pages)
-        context['lb_total_progress_page_obj'] = RedisPage(progress_entries, progress_page_num, progress_paginator)
-        context['lb_total_progress_paginator'] = progress_paginator
+        # Board PAGES are built for the ACTIVE tab only. Every tab used to be assembled on every request,
+        # so `?tab=country` paid for the XP and global-progress pages it would never render -- a page
+        # fetch is a ZREVRANGE plus an HMGET of 50 JSON blobs, twice, thrown away.
+        # The RANKS below stay unconditional: they are single O(log n) ZREVRANKs, and the user-stats strip
+        # sits ABOVE the tabs, so it shows both on whichever tab you are on.
+        if active_tab == 'xp':
+            xp_page_num = max(1, int(self.request.GET.get('lb_total_xp_page', 1) or 1))
+            xp_total = get_xp_count()
+            xp_entries = get_xp_page(xp_page_num, paginate_by)
+            xp_paginator = RedisPaginator(xp_total, paginate_by)
+            xp_page_num = min(xp_page_num, xp_paginator.num_pages)
+            context['lb_total_xp_page_obj'] = RedisPage(xp_entries, xp_page_num, xp_paginator)
+            context['lb_total_xp_paginator'] = xp_paginator
+        elif active_tab == 'progress':
+            progress_page_num = max(1, int(self.request.GET.get('lb_total_progress_page', 1) or 1))
+            progress_total = get_progress_count(slug=None)
+            progress_entries = get_progress_page(slug=None, page=progress_page_num, page_size=paginate_by)
+            progress_paginator = RedisPaginator(progress_total, paginate_by)
+            progress_page_num = min(progress_page_num, progress_paginator.num_pages)
+            context['lb_total_progress_page_obj'] = RedisPage(progress_entries, progress_page_num, progress_paginator)
+            context['lb_total_progress_paginator'] = progress_paginator
 
         if user.is_authenticated and hasattr(user, 'profile'):
             profile = user.profile
@@ -813,26 +822,31 @@ class OverallBadgeLeaderboardsView(TemplateView):
             {'text': 'Leaderboards'},
         ]
 
-        active_tab = self.request.GET.get('tab', 'xp')
-        if active_tab not in ('xp', 'progress', 'series', 'country'):
-            active_tab = 'xp'
-        context['active_tab'] = active_tab
-
         if active_tab == 'series':
+            # `.defer` on BOTH igdb_match paths. `raw_response` is the ~30 KB IGDB API blob that no
+            # directory row reads, and this queryset joins the table TWICE (the badge's own concept and
+            # its base badge's) for EVERY live series, unpaginated. That is the exact join payload
+            # CLAUDE.md names as the trigger for the May 2026 web-server OOM, on a public page. The
+            # per-series leaderboard view has always deferred it; this one was simply missed.
             series_badges = Badge.objects.live().filter(
                 tier=1
             ).select_related(
                 'base_badge', 'most_recent_concept', 'most_recent_concept__igdb_match',
                 'base_badge__most_recent_concept', 'base_badge__most_recent_concept__igdb_match',
                 'base_badge__title', 'title',
+            ).defer(
+                'most_recent_concept__igdb_match__raw_response',
+                'base_badge__most_recent_concept__igdb_match__raw_response',
             ).exclude(
                 series_slug__isnull=True
             ).exclude(series_slug='').order_by(Lower('display_series'))
 
-            directory = []
-            for badge in series_badges:
-                badge.progress_count = get_progress_count(badge.series_slug)
-                directory.append(badge)
+            # ONE pipelined round-trip for every series' count, not one call per row. This was a Redis
+            # N+1 in a Python loop over an unpaginated directory, so its cost grew with the catalogue.
+            directory = list(series_badges)
+            counts = get_progress_counts([b.series_slug for b in directory])
+            for badge in directory:
+                badge.progress_count = counts.get(badge.series_slug, 0)
             context['series_directory'] = directory
 
         elif active_tab == 'country':

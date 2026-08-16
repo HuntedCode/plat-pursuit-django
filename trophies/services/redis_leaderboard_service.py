@@ -541,6 +541,23 @@ def get_progress_count(slug):
     return _get_count(_progress_scores_key(slug))
 
 
+def get_progress_counts(slugs):
+    """Participant counts for MANY series at once: {slug: count}.
+
+    One pipelined round-trip instead of one per slug. The Series directory renders a count for every live
+    series and had been calling `get_progress_count` in a Python loop -- a Redis N+1 whose cost grew with
+    the catalogue on an unpaginated page. ZCARD is O(1), so the per-call latency WAS the cost, and batching
+    removes essentially all of it.
+    """
+    slugs = list(slugs)
+    if not slugs:
+        return {}
+    pipe = redis_client.pipeline()
+    for slug in slugs:
+        pipe.zcard(_progress_scores_key(slug))
+    return dict(zip(slugs, pipe.execute()))
+
+
 def compute_profile_progress_for_series(profile, series_slug):
     """
     Compute a single profile's trophy counts for a specific badge series.
