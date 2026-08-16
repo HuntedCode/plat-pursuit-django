@@ -8,17 +8,32 @@
 
     {# ── Page Header (rebuild standard: DaisyUI card shell + --pp-* substance, mirroring the Collection header) ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
-            <div class="flex items-start justify-between gap-3 flex-wrap">
-                <div class="min-w-0">
-                    <div class="flex items-center gap-2">
+        {% comment %} `p-3` on a phone, matching the hunter-profile header. Same treatment, same reason:
+        16px of padding on all four sides of a card whose contents are already tight is the cheapest 8px
+        on the page. Restores to p-5/p-6 where there is room. {% endcomment %}
+        <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
+            {% comment %} `pp-bhead` exists for the phone layout ONLY, and does what `pp-phero__id` does on
+            the profile header: reflow into the dead space instead of stacking.
+
+            The lede is nested under the title, so on a phone it renders in a ~233px column beside the
+            tally and wraps to two lines -- while the corner under the tally (~60px wide, ~24px tall) sits
+            empty. Below 768px the row becomes a grid with the lede spanning BOTH columns, where its ~263px
+            fits on one line in the 303px available. Costs nothing, saves ~16px, and the DOM is unchanged
+            so md: up is still exactly the flex row these utility classes describe.
+
+            `display: contents` on the id block is what lets the title and the lede be placed separately
+            without unwrapping them in the markup -- the one thing that property is actually for.
+            {% endcomment %}
+            <div class="pp-bhead flex items-start justify-between gap-3 flex-wrap">
+                <div class="pp-bhead__id min-w-0">
+                    <div class="pp-bhead__title flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="8" r="7"></circle>
                             <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
                         </svg>
                         <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Browse Badges</h1>
                     </div>
-                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                    <p class="pp-bhead__sub text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                         {% if view == 'gallery' %}
                             Every badge in the catalog. Filter by platform, set, and more.
                         {% elif request.GET.series_slug %}
@@ -30,7 +45,7 @@
                 </div>
 
                 {# Catalog size as a Tally stat (mirrors the Collection header's headline number). #}
-                <div class="shrink-0 text-right">
+                <div class="pp-bhead__tally shrink-0 text-right">
                     <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-badge-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</div>
                     <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1" data-badge-count-label>{% if view == 'gallery' %}badge{{ paginator.count|pluralize }}{% else %}series{% endif %}</div>
                 </div>

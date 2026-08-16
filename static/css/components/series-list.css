@@ -32,6 +32,33 @@
 @media (hover: hover) { .pp-howto__more:hover { border-bottom-color: var(--pp-primary); } }
 .pp-howto__more:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
 
+/* ── Browse Badges header, phone layout ──
+ *
+ * The same move the hunter-profile header makes (`.pp-phero__id`): reflow into the dead space rather than
+ * stack. The lede is nested under the title, so on a phone it renders in a ~233px column beside the tally
+ * and wraps to two lines, while the corner under the tally sits empty. Spanning it across both columns
+ * puts its ~263px into the 303px available -- one line, ~16px back, nothing given up.
+ *
+ * Named areas on NAMED elements, per the warning that block already carries: a structural selector like
+ * `> :first-child` would match whichever child happened to be first and re-break the moment one is added.
+ *
+ * Phone only. From 768px the lede has room in its own column, and the DOM is untouched, so md: up remains
+ * exactly the flex row the template's utility classes describe. */
+@media (max-width: 767px) {
+    .pp-bhead {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas: "title tally" "sub sub";
+        align-items: start; gap: 4px 12px;
+    }
+    /* No box of its own, so the title and the lede become grid items of the header row and can be placed
+       separately without unwrapping them in the markup. */
+    .pp-bhead__id { display: contents; }
+    .pp-bhead__title { grid-area: title; min-width: 0; }
+    .pp-bhead__sub   { grid-area: sub; margin-top: 0; }
+    .pp-bhead__tally { grid-area: tally; }
+}
+
 /* ── .pp-edhint: the ⓘ that points AT the edition vocabulary, from the three places it is spoken ──
  *
  * "Ultra HD" / "Legacy HD" come straight off PlatformGroup.name onto the badge detail group tabs, the

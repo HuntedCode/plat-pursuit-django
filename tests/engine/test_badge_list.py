@@ -644,9 +644,10 @@ def test_howto_modal_is_first_run_only(client):
     modal on demand.
 
     The teaching moved to `/badges/how-it-works/` -- a real URL, because support links it, search indexes
-    it, and badge detail and the Collection both render these editions without being able to explain
-    them. With a fuller home in place, a button re-opening a SHORTER copy is how the two drift apart, so
-    the modal keeps only its onboarding job: greet a first visit, then hand off.
+    it, and three surfaces render these edition names without being able to explain them: the badge detail
+    group tabs, this page's gallery filter chips, and the Collection's edition stat labels. With a fuller
+    home in place, a button re-opening a SHORTER copy is how the two drift apart, so the modal keeps only
+    its onboarding job: greet a first visit, then hand off.
 
     The modal itself stays. What went is the permanent chrome around it.
     """
@@ -659,3 +660,44 @@ def test_howto_modal_is_first_run_only(client):
 
     assert 'class="pp-howto-btn' not in html, 'the header recall button is back'
     assert 'pp-minibar__howto' not in html, 'the mini-bar recall button is back'
+
+
+def test_the_header_reflows_the_lede_across_both_columns_on_a_phone(client):
+    """The phone fit, ported from the hunter-profile header rather than re-invented.
+
+    The lede is nested under the title, so at 375px it renders in a ~233px column beside the tally and
+    wraps to two lines -- while the corner under the tally sits empty. Below 768px the row becomes a grid
+    with the lede spanning BOTH columns, where its ~263px fits on one line in the 303px available.
+
+    What this pins is the pairing, which is the part that breaks silently: the CSS places three NAMED
+    areas, and if the template stops emitting any one of those hooks the rule still parses, still
+    compiles, and simply stops applying. Nothing looks broken in review; the header just quietly grows a
+    line again on the size where it can least afford one.
+    """
+    from pathlib import Path
+
+    _series_groups('y', 'Y', [('ultra-hd', 'Ultra HD')])
+    html = client.get(SERIES).content.decode()
+
+    for hook in ('pp-bhead', 'pp-bhead__id', 'pp-bhead__title', 'pp-bhead__sub', 'pp-bhead__tally'):
+        assert hook in html, f'the header lost its {hook!r} hook, so the phone reflow stops applying'
+
+    # p-3 on a phone, matching the profile header it copies. p-4 is 8px this header does not have.
+    assert 'card-body p-3 md:p-5' in html, 'the header card is back on phone padding it cannot afford'
+
+    css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components'
+           / 'series-list.css').read_text(encoding='utf-8')
+    block = css[css.index('.pp-bhead {'):]
+    block = block[:block.index('\n}\n', block.index('.pp-bhead__tally')) + 1]
+
+    assert 'grid-template-areas' in block, 'the header row is no longer a named grid on a phone'
+    assert 'display: contents' in block, (
+        'the id block has a box again, so the title and lede cannot be placed as separate grid items'
+    )
+    # Named elements, not structural selectors -- the exact lesson profile-hero.css records: a
+    # `> :first-child` matches whichever child happens to be first and re-breaks when one is added.
+    assert ':first-child' not in block and ':nth-child' not in block, (
+        'the header grid places children structurally; use the named .pp-bhead__* hooks'
+    )
+    for area in ('title', 'sub', 'tally'):
+        assert f'grid-area: {area}' in block, f'the {area} area is declared but never assigned'
