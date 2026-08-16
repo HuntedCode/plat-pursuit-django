@@ -555,6 +555,7 @@ def test_every_grid_gets_the_selector_its_own_cards_use():
     Games had been in that state since its card was rebuilt onto `.pp-gcard`: the default `.card` matched
     nothing in the appended HTML, so the games grid silently stopped after page one.
     """
+    import re
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
@@ -568,25 +569,64 @@ def test_every_grid_gets_the_selector_its_own_cards_use():
     # has no box to animate. See test_profile_detail_queries for the failure that distinction prevents.
     assert "revealSel = isActivity ? '.pp-gtile'" in js
 
-    # And the selectors must match what those partials actually render.
+    # And the selectors must match what those partials actually render. Matched as a class among others
+    # rather than as the whole attribute: the library variant adds `pp-gcard--lib` (2026-08), and a
+    # selector is satisfied by the class being PRESENT. Pinning the exact attribute string would fail on
+    # a modifier that is deliberately additive -- i.e. it would report a break that is not one, while
+    # still not catching the break that matters (the class disappearing entirely).
     games = (root / 'templates/trophies/partials/profile_detail/game_list_items.html').read_text(encoding='utf-8')
     log = (root / 'templates/trophies/partials/profile_detail/trophy_list_items.html').read_text(encoding='utf-8')
     card = (root / 'templates/trophies/partials/profile_detail/_trophy_card.html').read_text(encoding='utf-8')
-    assert 'class="pp-gcard"' in games
+    assert re.search(r'class="[^"]*\bpp-gcard\b[^"]*"', games), (
+        'the games partial no longer renders .pp-gcard, so the scroller will silently stop after page one'
+    )
     assert '_trophy_card.html' in log and 'pp-actt__card' in card
 
 
 def test_the_results_partials_render_the_same_wall_as_the_tab():
     """A results partial answers the same target the tab first rendered, so a stale class there silently
-    undoes the layout on the first filter. Both had kept a pre-rebuild flex column."""
+    undoes the layout on the first filter. Both had kept a pre-rebuild flex column.
+
+    Compares the wall's FULL class list against the tab's, not the presence of one base class. The weaker
+    version passed for months while `games_results.html` was missing `pp-gbrowse__grid--lib`: the modifier
+    is what sets the library's column ladder, so the wall rendered correctly on load and then reverted to
+    the browse ladder's six columns the moment anyone filtered, sorted or searched. A partial that shares
+    a target has to share its classes exactly -- "contains the base class" is not that.
+    """
+    import re
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2] / 'templates/trophies/partials/profile_detail/tabs'
-    trophies = (root / 'trophies_results.html').read_text(encoding='utf-8')
-    games = (root / 'games_results.html').read_text(encoding='utf-8')
 
+    # The structural guarantee: a tab INCLUDES its results partial rather than restating the wall, so the
+    # two cannot disagree at all. Asserted instead of merely comparing classes, because a class comparison
+    # only catches the drift that has already happened -- this catches the duplication that allows it.
+    for tab_file, results_file in [
+        ('games_tab.html', 'games_results.html'),
+        ('trophies_tab.html', 'trophies_results.html'),
+        ('ratings_tab.html', 'ratings_results.html'),
+    ]:
+        tab = (root / tab_file).read_text(encoding='utf-8')
+        assert results_file in tab, (
+            f'{tab_file} no longer includes {results_file}. If it renders the wall itself, the first '
+            f'filter swaps in different markup -- which is exactly how the Games wall came to use the '
+            f'library column ladder on load and the browse ladder immediately after.'
+        )
+        # And it must not ALSO carry its own copy of the wall.
+        assert not re.search(r'id="[\w-]+-grid"', tab), (
+            f'{tab_file} restates a wall it already includes, so the two copies can drift'
+        )
+
+    # MARKUP only. These files explain themselves in `{% comment %}` blocks that name the very classes
+    # being asserted, so a plain substring check passes against the prose describing a class that is no
+    # longer applied -- which is how a deliberately broken wall came back green while this test watched.
+    def markup(name):
+        return re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '',
+                      (root / name).read_text(encoding='utf-8'), flags=re.S)
+
+    trophies, games = markup('trophies_results.html'), markup('games_results.html')
     assert 'pp-actt--log' in trophies, 'filtering the Log drops it back to a list'
-    assert 'pp-gbrowse__grid' in games, 'filtering Games drops it back to a list'
+    assert 'pp-gbrowse__grid--lib' in games, 'the Games wall lost the library column ladder'
     assert 'flex flex-col' not in trophies and 'flex flex-col' not in games
 
 
@@ -617,12 +657,26 @@ def test_the_log_wall_keeps_climbing_like_its_siblings():
     css = (Path(__file__).resolve().parents[2]
            / 'static' / 'css' / 'components' / 'profile-hero.css').read_text(encoding='utf-8')
 
+    # Checked against the wall's rules OUTSIDE the mobile block. Below 768px the cards are list rows and
+    # one column is the point -- and `auto-fill minmax(182px, 1fr)` still makes THREE columns at 640px, so
+    # without that override the rows would be squeezed into 202px each. The original intent (climb with the
+    # room you have, never pin a count) is unchanged everywhere it applies.
+    mobile = css[css.index('SEARCH RESULTS AS A LIST'):]
+    mobile = mobile[:mobile.index('\n}\n', mobile.index('@media (max-width: 767px)')) + 3]
+    wide = css.replace(mobile, '')
+
     # A track FLOOR at every width, not a fixed count -- the cards are portrait, so the floor is narrower
     # than the old horizontal card's and the wall still climbs with the room it has.
-    rules = re.findall(r'\.pp-actt--log\s*\{([^}]*)\}', css)
+    rules = re.findall(r'\.pp-actt--log\s*\{([^}]*)\}', wide)
     assert rules, 'the search wall has no grid rule'
     assert all('auto-fill' in r for r in rules if 'grid-template-columns' in r), (
         'the search wall is pinned to a fixed column count again'
+    )
+
+    # And the mobile exception is deliberate, not a leak: assert it exists rather than merely tolerating it.
+    mobile_rules = re.findall(r'\.pp-actt--log\s*\{([^}]*)\}', mobile)
+    assert any('minmax(0, 1fr)' in r for r in mobile_rules), (
+        'the log wall is no longer single-column on mobile, so the list rows share a row'
     )
 
 
@@ -1364,3 +1418,113 @@ def test_the_day_modal_can_be_swiped_closed():
     assert '.pp-dismissable .pp-actday__head { padding-top' not in css, (
         'dead grabber padding is back -- this dialog already clears the pill'
     )
+
+
+def _mobile_list_rules():
+    """Every CSS rule inside the search-results mobile block, as (selectors, body) pairs.
+
+    Parsed properly rather than scanned line-by-line. The first version of these tests looked for lines
+    ENDING in `{`, which silently skipped every single-line rule -- and most of this block is single-line,
+    so both guards passed against a deliberately broken stylesheet.
+    """
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components'
+           / 'profile-hero.css').read_text(encoding='utf-8')
+
+    block = css[css.index('SEARCH RESULTS AS A LIST'):]
+    block = block[:block.index('\n}\n', block.index('@media (max-width: 767px)')) + 3]
+
+    inner = block[block.index('{', block.index('@media')) + 1: block.rindex('}')]
+    inner = re.sub(r'/\*.*?\*/', '', inner, flags=re.S)
+    return block, [
+        ([s.strip() for s in sel.split(',')], body)
+        for sel, body in re.findall(r'([^{}]+)\{([^{}]*)\}', inner)
+    ]
+
+
+def test_the_mobile_rule_parser_sees_the_whole_block():
+    """Guards the guards below: if the slice or the regex resolves to nothing, both of them pass over an
+    empty list while reporting that the stylesheet is fine."""
+    block, rules = _mobile_list_rules()
+    assert '@media (max-width: 767px)' in block, 'the list treatment is not gated to mobile'
+    assert len(rules) >= 10, f'only {len(rules)} rules parsed out of the mobile block'
+
+
+def test_the_trophy_search_results_condense_to_a_list_on_mobile_only():
+    """The search-results card is a POSTER on a wide wall and a LIST ROW on a phone, and the switch is the
+    whole point: three of its fields (name, game, description) reserve two lines whether or not they need
+    them, which is what keeps a multi-column wall's rows even -- and at one column there is no neighbour to
+    line up with, so the reserve buys nothing and costs ~230px per result.
+    """
+    _block, rules = _mobile_list_rules()
+
+    # Iterated as a LIST, never collapsed into a {selector: body} dict. A selector legitimately appears in
+    # more than one rule here -- `.pp-actt__name` is placed by one and released by another -- and keying by
+    # selector silently drops all but the last, which reported the grid placements as missing when they
+    # were there.
+
+    # The wall is `auto-fill minmax(182px, 1fr)`, which still makes THREE columns at 640px -- rows squeezed
+    # into 202px read worse than the posters they replace, so the single column is load-bearing.
+    assert any('minmax(0, 1fr)' in body
+               for sels, body in rules if any('pp-actt--log' in s for s in sels)), (
+        'the log wall is not single-column on mobile, so the list rows share a row'
+    )
+
+    # `display: contents` promotes the meta's children into the body grid, so the tier can sit on the
+    # name's line and the rate/date on the game's -- two rows of chrome instead of a centred footer.
+    assert any('display: contents' in body for _s, body in rules), 'the meta row is not unwrapped'
+
+    placed = set()
+    for _sels, body in rules:
+        if 'grid-area:' in body:
+            placed.add(body.split('grid-area:')[1].split(';')[0].strip())
+    wanted = {'name', 'desc', 'game', 'tier', 'rate', 'time'}
+    assert wanted <= placed, f'unplaced parts in the list grid: {sorted(wanted - placed)}'
+
+
+def test_all_three_two_line_reserves_are_released_together():
+    """The reserves have to come off as a SET. Leaving any one of the three holds the row open to two lines
+    of that field alone, which is both taller than the design and inconsistent between rows -- a trophy with
+    a one-line description would sit shorter than its neighbour.
+
+    Asserted against the rule that actually does the releasing, not against the names appearing SOMEWHERE in
+    the block: they each also appear in a `grid-area` line, so a substring check passes with the reserve
+    fully intact. That is the exact form of the vacuous assertion this file has been bitten by before.
+    """
+    _, rules = _mobile_list_rules()
+
+    releasing = [sels for sels, body in rules if 'min-height: 0' in body and 'line-clamp: 1' in body]
+    assert releasing, 'nothing releases the two-line reserves at all'
+
+    released = {s for sels in releasing for s in sels}
+    for part in ('__name', '__game', '__desc'):
+        assert any(part in s for s in released), (
+            f'.pp-actt{part} keeps its two-line reserve, so the list row stays open for it'
+        )
+
+
+def test_the_session_trophy_card_is_untouched_by_the_list_treatment():
+    """The day-modal session card shares `_trophy_card.html` with the search results. It renders WITHOUT
+    `show_game`, so it has no cover art and no `--game` class -- and every mobile rule is scoped to that
+    class so the two cannot drift into each other.
+
+    Asserted on the SCOPING rather than on a render, because the leak would arrive the day someone passes
+    `show_game` from the session context, which no render today would catch.
+    """
+    from pathlib import Path
+
+    _, rules = _mobile_list_rules()
+
+    for sels, _body in rules:
+        for sel in sels:
+            if sel.startswith('.pp-actt--log'):
+                continue          # the wall itself, which the session card does not live in
+            assert 'pp-actt__card--game' in sel, (
+                f'{sel!r} is unscoped, so it also reshapes the day-modal session card'
+            )
+
+    session = (Path(__file__).resolve().parents[2]
+               / 'templates/trophies/partials/profile_detail/activity_trophies.html').read_text(encoding='utf-8')
+    assert 'show_game' not in session, 'the session card now passes show_game, so the scoping above matters'

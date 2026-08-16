@@ -1,59 +1,85 @@
-{% load custom_filters humanize %}{% comment %} A game on someone's profile -- rebuilt 2026-08.
+{% load custom_filters humanize %}{% comment %} A game on someone's profile -- reshaped 2026-08.
 
-Built on `.pp-gcard`, the site's game card, rather than a profile-only shape: the CSS is unscoped and the
-card already models everything this needs, including the completion bar whose five states encode the
-relationship with a game (platinum + 100%, plat-but-DLC-left, 100% without a plat, a plat still to chase,
-in progress). The only difference here is WHOSE progress fills it -- the profile owner's, not the viewer's.
+Still `.pp-gcard`, now with a `--lib` modifier. Feedback said the cover art was large and the record
+hard to read, and the measurement agreed: at 2xl the wall was 6 columns of ~240px cards whose 3/4
+cover ran ~240x320 over a ~110px data block. Roughly 75% art. Retiring the ad rails made it worse
+rather than better -- the container went 1320 -> 1536px while the column count stayed at 6, so every
+cover grew ~40px taller and the data block gained nothing.
 
-What the old card did and this does not: tint its border, ring, title and shadow by platform, which made a
-wall of games light up in five hues and read as decoration. Platform is a chip in the footer, exactly as on
-Browse Games, so it reads on any cover art without recolouring the card around it.
+**The constraint was width, not height.** Nine fields were laid out in horizontal rows inside a 240px
+column, so shrinking the cover would have bought vertical room and changed nothing about the squeeze.
+Hence fewer, wider columns (1/2/3/4) AND a landscape band instead of a portrait poster: at four
+columns a 3/4 cover would be ~489px tall, taller than what we started from. Column count and art
+shape are one decision, not two.
 
-Every field is denormalized on Game or ProfileGame -- no queries per card. The cover chain is joined and
-`raw_response` deferred in the view; adding a field here that is not on that join re-opens the N+1.
+**A modifier, not a new block.** `profile_detail.html` names `.pp-gcard` in three JS hooks -- the
+scroller's append unit, the reveal's animated element, and `.pp-gcard__barfill` in the bar animation --
+and a `cardSelector` that matches nothing fails SILENTLY, reading as "no more pages". That has already
+bitten this page twice. `.pp-gcard` is also shared with Browse Games, Recently Added and the DLC card,
+so a modifier keeps the blast radius at zero. The chips, title and five bar states are genuinely
+identical here; this IS a game card, in its library variant.
+
+**The bar moved into the body.** On the browse card it is absolutely positioned along the bottom of
+the cover. That works under a band but not beside a 64px mobile thumbnail, and splitting its position
+across a breakpoint means two things to maintain. It sits in the body at both sizes instead, keeping
+its `pp-gcard__bar` / `__barfill` names so the reveal animation finds it untouched.
+
+**Gone: the four per-tier counts.** They were four of the card's nine fields and the breakdown is
+game-page detail. What someone comes here for is how far this hunter got and whether they platted it.
+
+Cover chain notes carried over: `Concept.landscape_url` is trusted IGDB screenshots -> artworks -> PSN
+GAMEHUB art, reading only the `igdb_*_image_ids` columns off a match the view already selects, so it
+adds no query and never touches `raw_response`. Measured at 95.1% coverage across the catalogue, which
+is a floor (a real library skews toward better-documented games), so ~1 in 20 cards falls back to the
+portrait cover with `object-position: top` -- where a cover keeps its logo.
+
+Every other field is denormalized on Game or ProfileGame -- no queries per card. Adding a field that
+is not on the view's join re-opens the N+1.
 {% endcomment %}
 {% for pgame in profile_games %}
 {% with game=pgame.game %}
 <a href="{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}"
-   class="pp-gcard" title="{{ game.title_name }}">
+   class="pp-gcard pp-gcard--lib" title="{{ game.title_name }}">
+    {% comment %}The band is a BACKDROP, not the card's picture -- a fixed-height strip of the game's
+    landscape art that the cover sits over, the way a game hub reads. Fixed height and not an aspect
+    ratio: an aspect ratio scales with the card, so at 4 columns a 16/9 band stood 206px tall and was
+    as dominant as the poster it replaced.
+
+    No landscape art means NO BAND rather than a fallback: with the cover now on the card, falling the
+    band back to the same cover would print one image twice. ~5% of cards lose their strip and sit a
+    little shorter, which a grid row absorbs.{% endcomment %}
+    {% with shot=game.concept.landscape_url %}
+    {% if shot %}
     <div class="pp-gcard__cover">
-        <img class="pp-gcard__art{% if not game.has_cover_art %} pp-gcard__art--placeholder{% endif %}"
-             src="{{ game.display_image_url }}" alt="" loading="lazy" decoding="async">
-        {% comment %}The bar is the card's headline fact on a profile: it says at a glance whether this
-        person finished the thing. Same five states as Browse Games so the colour means the same here.
-        {% endcomment %}
-        {% if pgame.progress > 0 %}
-        <span class="pp-gcard__bar">
-            <span class="pp-gcard__barfill pp-gcard__barfill--{% if pgame.has_plat and pgame.progress == 100 %}plat{% elif pgame.has_plat %}platdlc{% elif pgame.progress == 100 %}full{% elif game.defined_trophies.platinum %}chase{% else %}prog{% endif %}"
-                  style="width: {{ pgame.progress }}%"></span>
-        </span>
-        {% endif %}
+        <img class="pp-gcard__art" src="{{ shot }}" alt="" loading="lazy" decoding="async">
     </div>
+    {% endif %}
+    {% endwith %}
 
     <div class="pp-gcard__body">
-        <span class="pp-gcard__title">{{ game.title_name }}</span>
+        {% comment %}The cover, overlapping the band's lower edge. It is here for RECOGNITION -- a title
+        is read, a cover is recognised -- which a landscape screenshot cannot do on its own: screenshots
+        of two shooters look alike in a way their box art never does.{% endcomment %}
+        <img class="pp-pgcard__cover{% if not game.has_cover_art %} pp-pgcard__cover--placeholder{% endif %}"
+             src="{{ game.display_image_url }}" alt="" loading="lazy" decoding="async">
 
-        {% comment %}Their record with it: how far overall, then which trophies are actually left.
+        <span class="pp-pgcard__meta">
+            <span class="pp-gcard__title">{{ game.title_name }}</span>
 
-        The tier row uses the same dot-and-figure vocabulary as the hero's tier strip, so the colours mean
-        the same thing in both places -- and it is the scoped trophy family's own surface, since these ARE
-        trophies. No visible tier labels: four of them at this size on a card in a wall of fifty is more
-        text than the numbers themselves, and the colour already names the tier. The names live on `title`
-        so the information is not colour-only.
+            {% comment %}The headline: how far they got, and out of how much. The bar underneath says the
+            same thing in the colour vocabulary the status filter now shares -- pick "Still to plat" and
+            the wall fills with one colour.{% endcomment %}
+            <span class="pp-pgcard__stats">
+                <span class="pp-pgcard__pct">{{ pgame.progress|default:0 }}%</span>
+                <span class="pp-pgcard__count">{{ pgame.earned_trophies_count|default:0 }} / {{ pgame.earned_trophies_count|add:pgame.unearned_trophies_count }}</span>
+            </span>
 
-        Both dicts are denormalized JSON on ProfileGame / Game -- four tiers cost no queries.{% endcomment %}
-        <span class="pp-pgcard__stats">
-            <span class="pp-pgcard__pct">{{ pgame.progress|default:0 }}%</span>
-            <span class="pp-pgcard__count">{{ pgame.earned_trophies_count|default:0 }} / {{ pgame.earned_trophies_count|add:pgame.unearned_trophies_count }}</span>
-        </span>
-        <span class="pp-pgcard__tiers">
-            {% if game.defined_trophies.platinum %}
-            <span class="pp-pgcard__tier" data-tier="platinum" title="Platinum: {{ pgame.earned_trophies.platinum|default:0 }} of {{ game.defined_trophies.platinum }}"><i></i>{{ pgame.earned_trophies.platinum|default:0 }}/{{ game.defined_trophies.platinum }}</span>
+            {% if pgame.progress > 0 %}
+            <span class="pp-gcard__bar">
+                <span class="pp-gcard__barfill pp-gcard__barfill--{% if pgame.has_plat and pgame.progress == 100 %}plat{% elif pgame.has_plat %}platdlc{% elif pgame.progress == 100 %}full{% elif game.defined_trophies.platinum %}chase{% else %}prog{% endif %}"
+                      style="width: {{ pgame.progress }}%"></span>
+            </span>
             {% endif %}
-            <span class="pp-pgcard__tier" data-tier="gold" title="Gold: {{ pgame.earned_trophies.gold|default:0 }} of {{ game.defined_trophies.gold|default:0 }}"><i></i>{{ pgame.earned_trophies.gold|default:0 }}/{{ game.defined_trophies.gold|default:0 }}</span>
-            <span class="pp-pgcard__tier" data-tier="silver" title="Silver: {{ pgame.earned_trophies.silver|default:0 }} of {{ game.defined_trophies.silver|default:0 }}"><i></i>{{ pgame.earned_trophies.silver|default:0 }}/{{ game.defined_trophies.silver|default:0 }}</span>
-            <span class="pp-pgcard__tier" data-tier="bronze" title="Bronze: {{ pgame.earned_trophies.bronze|default:0 }} of {{ game.defined_trophies.bronze|default:0 }}"><i></i>{{ pgame.earned_trophies.bronze|default:0 }}/{{ game.defined_trophies.bronze|default:0 }}</span>
-        </span>
 
         <span class="pp-gcard__foot">
             <span class="pp-gcard__plats">
@@ -77,6 +103,7 @@ Every field is denormalized on Game or ProfileGame -- no queries per card. The c
             {% else %}
             <span class="pp-gcard__plat--no" title="No platinum">No Plat</span>
             {% endif %}
+        </span>
         </span>
     </div>
 </a>

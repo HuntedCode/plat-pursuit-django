@@ -395,47 +395,59 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
                 });
             }
 
-            // Dual-range sliders (visual init)
+            // The Games bar was the page's only dual-range user (completion + time-to-beat); both ranges
+            // went with the 2026-08 filter reduction, and no other tab form has one, so the init call went
+            // with them. `form` is still needed below.
             var form = document.getElementById(tab + '-form');
-            if (form && PlatPursuit.initDualRangeSliders) {
-                PlatPursuit.initDualRangeSliders(form);
-            }
 
-            // The Games tab's filter drawer, on the shared browse controller -- the same one Browse Games,
-            // the badge gallery, companies, recently-added and tag detail all run. Destroyed and rebuilt
-            // per init because the toolbar is re-rendered on every tab swap, so a fresh one would otherwise
-            // stack a second set of listeners on each visit.
-            // Rebuild the drawer only when its TOOLBAR is a new node.
+            // The Games tab no longer has a filter DRAWER. It was reduced from ten controls to four in
+            // 2026-08 (search / status / sort / platform) once we accepted the tab is a record of what
+            // somebody played rather than a browse page, and four controls are a toolbar, not a collapse.
+            // So `#pgames-filters-toggle` and `#pgames-advanced` are gone from the markup and
+            // `PlatPursuit.filterPanel` is no longer wired here -- the helper still serves the five genuine
+            // browse surfaces (Browse Games, the badge gallery, companies, recently-added, tag detail).
             //
-            // This tab is the one surface where the toolbar OUTLIVES the swap: `#games-form` sits outside
-            // `#tab-results`, so a filter or sort change replaces the results and leaves the bar standing.
-            // Rebuilding over it re-ran `setOpen(activeCount() > 0, false)` and threw away the state the
-            // user had actually set -- open the drawer, change the sort, and it slammed shut under you;
-            // with live search it did that on every debounce. Every other surface re-inits only when its
-            // toolbar is genuinely replaced, where deriving the state fresh is right.
-            var toggleEl = document.getElementById('pgames-filters-toggle');
-            if (panelHandle && toggleEl && toggleEl === panelToggle) {
-                panelHandle.refresh();          // same bar, same drawer -- just re-count the badge
-            } else if (tab === 'games' && form && PlatPursuit.filterPanel) {
-                if (panelHandle && panelHandle.destroy) { panelHandle.destroy(); }
-                panelToggle = toggleEl;
-                panelHandle = PlatPursuit.filterPanel({
-                    form: form,
-                    toggle: '#pgames-filters-toggle',
-                    panel: '#pgames-advanced',
-                    countEl: '#pgames-filter-count',
-                    // `tab` is which PANEL you are on, not a filter -- it rides in a hidden input so a
-                    // filter swap stays on Games, and counting it would show a permanent 1. Platform has
-                    // no default here (unlike Browse Games), so it IS a filter.
-                    skip: { page: 1, tab: 1, sort: 1, query: 1 },
-                    // This is a tab panel: its results div is the tab's, not the site-wide #browse-results
-                    // that browse-filters.js dims by default.
-                    dimTarget: '#tab-results',
-                });
-            } else if (panelHandle && panelHandle.destroy) {
-                // Left the Games tab entirely -- the bar is gone, so the handle must go with it.
-                panelHandle.destroy(); panelHandle = null; panelToggle = null;
+            // The teardown below still has to run: a hunter can arrive on Games from a session that DID
+            // build a panel (a cached page, a back-nav into an older markup, or simply a previous tab), and
+            // an orphaned handle keeps listeners bound to a form node that no longer exists.
+            //
+            // What survives without any JS here: `data-browse-form` + `data-live-search` on the form give
+            // auto-apply, debounced live search, the spinner, Escape-to-clear, the clear button and the
+            // global `/` shortcut, all from browse-filters.js and all opted into by MARKUP.
+            if (panelHandle && panelHandle.destroy) {
+                panelHandle.destroy();
             }
+            panelHandle = null;
+            panelToggle = null;
+
+            // The CHANGE-time half of the filter/sort settle, which `filterPanel`'s `dimTarget` used to
+            // provide. It does not come free from browse-filters.js: that file hard-codes
+            // `#browse-results` on both the add and the remove, so this tab's results div was only ever
+            // dimmed because filterPanel was told to aim at it. Dropping the drawer without this would
+            // retire the settle on Games alone and leave `#tab-results.is-swapping` (browse-gallery.css)
+            // with nothing to apply it.
+            //
+            // Only this half needs JS. The REQUEST-time dim already works from `hx-indicator="#tab-results"`
+            // on the form, which htmx answers with `.htmx-request` -- and that selector is styled alongside
+            // `.is-swapping`. What the request alone cannot cover is the 250ms live-search debounce BEFORE
+            // it fires, which is most of the felt latency: without this the stale grid sits undimmed
+            // through the pause and then flashes.
+            //
+            // Deliberately NOT reduced-motion gated, matching filterPanel and the note in browse-gallery.css:
+            // the dim is a STATE ("working"), not motion. Only the opacity transition is motion, and that is
+            // gated in CSS.
+            if (tab === 'games' && form && !form.dataset.settleBound) {
+                form.dataset.settleBound = '1';   // the toolbar outlives result swaps; bind once per node
+                form.addEventListener('change', markSwapping);
+                form.addEventListener('input', function (e) {
+                    if (e.target && e.target.hasAttribute('data-page-search')) { markSwapping(); }
+                });
+            }
+        }
+
+        function markSwapping() {
+            var results = document.getElementById('tab-results');
+            if (results) { results.classList.add('is-swapping'); }
         }
 
         // The switcher lives OUTSIDE the swapped panel, so its active state is ours to maintain --

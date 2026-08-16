@@ -19,26 +19,50 @@
  *
  * The full-width Horizon band is gone with it, which also buys back ~34px of hero on a phone.
  */
-.pp-phero__dial { position: relative; flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+/* No `position: relative` here: every absolutely-positioned part of the dial (ring, avatar, level plate)
+   anchors to `.pp-phero__ringwrap`. It was needed while the plate was a child of the dial rather than of
+   the ring box, and became a containing block for nothing when the plate moved onto the ring. */
+.pp-phero__dial { flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; }
 
 .pp-phero__ringwrap { position: relative; width: 78px; height: 78px; }
 @media (min-width: 768px) { .pp-phero__ringwrap { width: 100px; height: 100px; } }
 
-/* `rotate(-90deg)` so 0% starts at twelve o'clock rather than three -- the same idiom as the Career
-   page's element-split ring (`.rp-ring`), which is the house pattern for an SVG arc. */
-.pp-phero__ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+/* A NOTCHED ring: the arc spans 70 of its 100 units and leaves a 30-unit (108 degree) gap centred at six
+   o'clock, which is where the level plate sits.
+ *
+ * The plate used to be welded there over a complete ring, which looks right and is wrong: 0% started at
+ * twelve o'clock, so 50% put the arc's leading edge at six o'clock -- exactly under an opaque plate. It
+ * hid the one thing the dial exists to show, across roughly 36-64% progress, and hid MORE of it the
+ * higher the level (a wider plate covers more arc). Moving the plate below the ring fixed the lie and
+ * cost the look. Cutting the ring instead keeps both: there is no arc behind the plate to hide.
+ *
+ * Geometry, so the numbers are not magic. Gap G=28 units centred on unit 50 spans units 36-64; the arc
+ * therefore starts at unit 64 and runs 100-G=72 units. A unit is 3.6 degrees, so the drawing origin has
+ * to move 64*3.6=230.4 degrees from the default three-o'clock start: rotate(-90 + 230.4) = 140.4deg.
+ *
+ * G is sized to the PLATE, and 28 is the tightest it goes. The notch has to clear the plate's chord
+ * (~64px on the 100px ring, ~48px on the 78px one) plus the fill's round linecap, which overhangs the
+ * arc's end by half a stroke-width -- ~2.5px at desktop, ~2px on a phone -- whenever progress is near
+ * 100%. At G=28 the arc stops ~3.2px from the plate; at G=26 that falls to 1.3px and the cap starts
+ * drawing under the plate for exactly the hunters closest to levelling, which is the occlusion this
+ * shape exists to remove. Widen G if the plate ever gets wider; do not narrow it past the cap.
+ * Progress now grows from lower-left, clockwise over the top, to lower-right -- a gauge, which is a
+ * fair reading of a value between two bounds. (This is why it no longer matches Career's `.rp-ring`
+ * house idiom: that ring has nothing sitting in it.) */
+.pp-phero__ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(140.4deg); overflow: visible; }
 .pp-phero__ring circle { fill: none; stroke-width: 5; }
-.pp-phero__ring-track { stroke: var(--pp-border); }
+.pp-phero__ring-track { stroke: var(--pp-border); stroke-dasharray: 72 28; }
 /* `pathLength="100"` makes the dash units percentages, so the template writes the progress figure
-   straight in with no circumference arithmetic. */
+   straight in with no circumference arithmetic -- scaled by 0.7 here because the arc is 70 units, not
+   100. A `--lvl` of 100 must fill the arc exactly, not overrun it into the gap. */
 .pp-phero__ring-fill {
     stroke: var(--pp-primary); stroke-linecap: round;
-    stroke-dasharray: 100 100;
-    /* `* 1px` is load-bearing, not decoration. The keyframe below compiles to `stroke-dashoffset: 100px`,
+    stroke-dasharray: 72 100;
+    /* `* 1px` is load-bearing, not decoration. The keyframe below compiles to `stroke-dashoffset: 72px`,
        and interpolating a LENGTH against a bare <number> is not guaranteed -- browsers may fall back to a
        discrete step, which shows as the ring snapping into place instead of drawing. Both sides are
        lengths, so the animation is a real interpolation. */
-    stroke-dashoffset: calc((100 - var(--lvl, 0)) * 1px);
+    stroke-dashoffset: calc((72 - var(--lvl, 0) * 0.72) * 1px);
     filter: drop-shadow(0 0 3px color-mix(in oklab, var(--pp-primary) 45%, transparent));
 }
 /* The page's one opening flourish on this surface: the arc draws from empty to its real value while the
@@ -46,31 +70,28 @@
    the ring past the hunter's actual progress and settle back, which is a small lie about a real number.
    The keyframe declares only `from`, so it interpolates to the element's own computed offset; that keeps
    `var(--lvl)` out of the keyframe, where a custom property is not reliably interpolated. */
-@keyframes ppLevelRing { from { stroke-dashoffset: 100px; } }
+@keyframes ppLevelRing { from { stroke-dashoffset: 72px; } }
 @media (prefers-reduced-motion: no-preference) {
     .pp-phero__ring-fill { animation: ppLevelRing 1.05s cubic-bezier(0.16, 0.84, 0.34, 1) backwards; }
 }
 
-/* The level, directly UNDER the ring rather than welded onto it.
-   It was absolutely positioned at the ring's bottom centre, which reads well and is wrong: the ring is
-   rotated -90deg, so 0% starts at twelve o'clock and 50% lands at six o'clock -- exactly where the plate
-   sat. Being opaque, it hid the arc's leading edge across roughly 36-64% progress, which is a quarter of
-   all hunters, and hid MORE of it the higher the level (a wider plate covers more arc). The one thing the
-   dial exists to show, obscured precisely where it is least guessable -- and for the same reason the draw
-   uses a decelerating curve rather than a spring: the figure has to be true.
-   In flow, it clears the arc completely and still belongs to the dial, which stacks ring, level, caption. */
+/* The level, worn on the ring at its bottom centre -- sitting IN the notch, not over the arc.
+   It has to stay narrower than the gap's chord or it starts covering arc again, which is the whole
+   problem this shape solves. At a 108 degree gap the chord is ~74px on the 100px desktop ring and ~51px
+   on the 68px phone one, so the plate steps down on mobile rather than keeping one size for both. */
 .pp-phero__lvl {
+    position: absolute; left: 50%; bottom: -3px; transform: translateX(-50%);
     display: inline-flex; align-items: baseline; gap: 2px;
-    padding: 1px 7px; border-radius: 999px;
+    padding: 1px 6px; border-radius: 999px;
     background: var(--pp-bg-0, #0b0d12);
     border: 1px solid color-mix(in oklab, var(--pp-primary) 55%, transparent);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
-    line-height: 1.35;
+    line-height: 1.35; white-space: nowrap;
 }
-.pp-phero__lvl-n { font-size: 0.9rem; font-weight: 800; color: var(--pp-primary); font-variant-numeric: tabular-nums; }
-.pp-phero__lvl-k { font-size: 0.52rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+.pp-phero__lvl-n { font-size: 0.82rem; font-weight: 800; color: var(--pp-primary); font-variant-numeric: tabular-nums; }
+.pp-phero__lvl-k { font-size: 0.5rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
 @media (min-width: 768px) {
-    .pp-phero__lvl { padding: 2px 9px; }
+    .pp-phero__lvl { padding: 2px 9px; bottom: -4px; }
     .pp-phero__lvl-n { font-size: 1.05rem; }
     .pp-phero__lvl-k { font-size: 0.56rem; }
 }
@@ -182,41 +203,180 @@
 .pp-phero__tier[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }
 
 
-/* ==========================================================================
- * PROFILE GAME CARD -- the few parts `.pp-gcard` does not already carry.
+/* ---- Phone fit ----------------------------------------------------------------------------------
  *
- * The card itself is the site's game card (game-card.css, unscoped). What a profile adds is the OWNER's
- * record with the game, which the browse card has no slot for: a completion percentage and their share
- * of its trophies. Everything else -- cover, bar, title, platform chips -- is the shared card.
+ * The hero stood ~365px tall at 375px -- over half an iPhone SE before the tab bar, on a page whose
+ * content is the tabs. Almost none of that was the content's fault.
+ *
+ * The dial column is ~110px tall (ring + level plate + caption) while the name column beside it is ~64px
+ * (name, worn title, sync line). That left ~46px of dead corner, and the tier block -- which is almost
+ * exactly that size -- was stacking BELOW both of them rather than filling it. `flex-wrap` + `flex-basis:
+ * 100%` is what put it there: correct when the alternative was a third column squeezing the username,
+ * wrong once the row could be a grid that spans the dial instead.
+ *
+ * So on a phone the identity row becomes a two-column grid with the dial spanning both rows. Nothing is
+ * removed and nothing shrinks below its own legibility floor; the layout just stops leaving a hole.
+ * ------------------------------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+    .pp-phero__id {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas: "dial name" "dial tiers";
+        align-items: start; gap: 9px 12px;
+    }
+    /* Named areas on named elements. A structural selector (`> div:not(.pp-phero__dial)`) would have
+       matched the tier block too -- and at higher specificity than `.pp-phero__tiers`, so the tiers would
+       have landed in the name area and stacked on top of the username. */
+    .pp-phero__dial  { grid-area: dial; }
+    .pp-phero__who   { grid-area: name; min-width: 0; }
+    .pp-phero__tiers { grid-area: tiers; }
+
+    /* The ring keeps its full 78px here. It was briefly cut to 68 to shorten the dial column, and then
+       the level plate moved onto the ring -- which took ~23px out of that column by itself, more than
+       the shrink had saved. A smaller ring would now be a cost with nothing bought: the plate has to
+       fit inside the arc's notch, and at 68px the gap's chord is 51px against a ~50px plate, i.e. it
+       would touch the arc ends and put back the occlusion the notch exists to remove. */
+    .pp-phero__lvl { padding: 1px 5px; }
+
+    /* The tier block now lives in a ~215px column instead of the full 311px, so it reads as a 2x2 rather
+       than one row -- which is a better shape here anyway: four figures across a narrow column is a line
+       of fine print, four in a square is a block you take in at once. `flex-basis: 100%` has to go with
+       the flex layout that needed it, or it forces one tier per line inside the grid cell. */
+    .pp-phero__tiers { flex-basis: auto; margin-top: 0; gap: 5px 12px; }
+    .pp-phero__tier  { font-size: 0.98rem; gap: 5px; }
+    .pp-phero__tier i { width: 9px; height: 9px; }
+
+    /* Scoped to this grid, NOT to `.scard` itself: that primitive is on a dozen other surfaces and a
+       site-wide squeeze is a separate decision from fitting this header. The 12px gap under an 11px
+       label is what makes each cell ~67px; at 5px the pair reads as one unit, which is what a stat cell
+       is. (The same win is available site-wide and is worth taking deliberately, not as a side effect.) */
+    .pp-phero__stats .scard { padding: 10px 8px; }
+    .pp-phero__stats .scard__label { margin-bottom: 5px; letter-spacing: 0.08em; }
+}
+
+
+/* ==========================================================================
+ * PROFILE GAME CARD -- `.pp-gcard--lib`, the library variant of the site's game card.
+ *
+ * The card is still game-card.css's `.pp-gcard`; this modifier changes only its PROPORTIONS. A modifier
+ * and not a new block on purpose: `profile_detail.html` names `.pp-gcard` in three JS hooks (the
+ * scroller's append unit, the reveal's animated element, and `.pp-gcard__barfill` in the bar animation),
+ * and a `cardSelector` that matches nothing fails silently as "no more pages". The base block is also
+ * shared with Browse Games, Recently Added and the DLC card, so overriding nothing keeps that at zero
+ * risk.
+ *
+ * Why the proportions changed (2026-08): the tab was built as a browse page and is not one -- it is a
+ * record of what somebody played. At 2xl the wall ran 6 columns of ~240px cards whose 3/4 cover was
+ * ~240x320 over a ~110px data block: about 75% art. The constraint was WIDTH, not height -- nine fields
+ * laid out in horizontal rows inside a 240px column -- so shrinking the cover would have bought vertical
+ * room and fixed nothing. Fewer, wider columns plus a landscape band instead. Those are one decision:
+ * at 4 columns a 3/4 cover would stand ~489px tall, taller than what we started from.
  * ========================================================================== */
 .pp-pgcard__stats {
     display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
     font-variant-numeric: tabular-nums;
 }
-/* The percentage leads because the bar above it is the card's headline fact; this is that bar's value in
+/* The percentage leads because the bar below it is the card's headline fact; this is that bar's value in
    words, so it sits at the size of a figure rather than of a label. */
 .pp-pgcard__pct { font-size: 0.8rem; font-weight: 700; color: var(--pp-text); }
 .pp-pgcard__count { font-size: 0.68rem; font-weight: 600; color: var(--pp-text-mute); }
 
+/* The band: a fixed-height BACKDROP strip, not the card's picture.
+   FIXED HEIGHT, not an aspect ratio -- that was the first attempt's mistake. `aspect-ratio: 16/9` scales
+   with the card, so at 4 columns (~367px) the band stood 206px tall and was as dominant as the poster it
+   replaced; the whole point was to stop the art out-weighing the record. A height in px stays a strip at
+   every column count.
+   Rendered only when the concept HAS landscape art (~95%): with the cover now on the card, falling the
+   band back to that same cover would print one image twice. */
+.pp-gcard--lib .pp-gcard__cover { aspect-ratio: auto; height: 72px; flex: none; }
+.pp-gcard--lib .pp-gcard__art { object-position: center; }
 
-/* Per-tier record on a game card: which trophies are actually left, not just how many. Same dot-and-figure
-   vocabulary as the hero's tier strip so a colour means the same thing in both places, and this is the
-   scoped trophy family's own surface -- these ARE trophies. No visible tier labels: four of them at this
-   size, on a card in a wall of fifty, is more text than the numbers; the names live on `title` instead so
-   the information is never colour-only. */
-.pp-pgcard__tiers {
-    display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px;
-    font-variant-numeric: tabular-nums;
+/* The band dissolves into the card instead of ending at a hard horizontal seam. Same overlay, and the
+   same two jobs, as `.pp-rcard__art::after` on the Ratings card: fade the image into the surface, and
+   hold the whole thing back a little so a wall of fifty screenshots does not out-shout the numbers the
+   card exists for. Direction follows the layout -- `to bottom` here because the body is BELOW the band,
+   which is the Ratings card's stacked (mobile) variant rather than its side-by-side one. */
+.pp-gcard--lib .pp-gcard__cover::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(to bottom,
+                color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 22%, transparent) 0%,
+                color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 30%, transparent) 55%,
+                var(--pp-bg-1, var(--pp-bg-2)) 100%);
 }
-.pp-pgcard__tier {
-    display: inline-flex; align-items: center; gap: 3px;
-    font-size: 0.62rem; font-weight: 700; color: var(--pp-text-dim); white-space: nowrap;
+
+/* The cover sits fully ON the card, below the band rather than straddling it. Recognition is a different
+   job from decoration: two shooters' screenshots look alike in a way their box art never does, so the
+   strip alone cannot answer "which game is this" at a glance the way a poster can. The ring + shadow keep
+   it reading as an object placed on the card -- which it still needs now that it no longer breaks a seam
+   to prove it is one. */
+.pp-pgcard__cover {
+    width: 52px; aspect-ratio: 3 / 4; flex: none; align-self: flex-start;
+    object-fit: cover; object-position: top; /* a cover keeps its logo at the top */
+    border-radius: 7px; background: var(--pp-bg-2);
+    border: 1px solid color-mix(in oklab, var(--pp-text) 14%, transparent);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
 }
-.pp-pgcard__tier i { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--tier-c); }
-.pp-pgcard__tier[data-tier="platinum"] { --tier-c: var(--color-trophy-platinum); }
-.pp-pgcard__tier[data-tier="gold"]     { --tier-c: var(--color-trophy-gold); }
-.pp-pgcard__tier[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
-.pp-pgcard__tier[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }
+.pp-pgcard__cover--placeholder { object-fit: contain; padding: 7px; opacity: 0.85; }
+
+/* Body becomes a row: cover in a left gutter, the record in a column beside it. */
+.pp-gcard--lib .pp-gcard__body { flex-direction: row; gap: 10px; align-items: flex-start; }
+/* The record beside the cover, as a GRID so the two layouts differ only in where the parts land -- the
+   mobile block below re-places the same four areas rather than restating them.
+   Order: title, then platform/plat, then the progress pair. The title is clamped to ONE line, and the
+   chip row moves up into the line that frees. A two-line reserve is what the browse card needs to keep a
+   six-column wall even; here the rows are already even because every card has the same four, so the
+   second line was empty on most titles and the chips were stranded at the bottom under a divider.
+   Grouping identity (name + platform) above progress (% + bar) is the arrangement that leaves. */
+.pp-pgcard__meta {
+    display: grid; gap: 5px; flex: 1; min-width: 0;
+    grid-template-areas: "title" "foot" "stats" "bar";
+}
+.pp-gcard--lib .pp-gcard__title {
+    grid-area: title;
+    -webkit-line-clamp: 1; line-clamp: 1; min-height: 0;
+}
+.pp-gcard--lib .pp-pgcard__stats { grid-area: stats; }
+.pp-gcard--lib .pp-gcard__foot   { grid-area: foot; }
+/* The divider earned its keep under a footer. Mid-card it would cut the title off from the chips that
+   now belong with it, and the bar below already draws a line across the card. */
+.pp-gcard--lib .pp-gcard__foot { padding-top: 0; border-top: none; }
+
+/* The bar lives in the BODY here, not absolutely positioned along the cover's bottom edge. It has to
+   clear the mobile thumbnail below, and splitting its position across a breakpoint would mean two
+   things to keep in step. Same class names either way, so the reveal animation finds it untouched. */
+.pp-gcard--lib .pp-gcard__bar {
+    grid-area: bar;
+    position: relative; height: 4px; border-radius: 999px; overflow: hidden;
+    background: color-mix(in oklab, var(--pp-text) 10%, transparent);
+}
+.pp-gcard--lib .pp-gcard__barfill { border-radius: 999px; }
+
+/* Mobile: the card turns into a list row. A full-width row gives the record ~343px to lay out in at
+   375px, against ~166px in the old 2-column grid -- the single biggest legibility win here, and denser
+   too (~56px of scroll per game against ~82px). The art becomes a square thumbnail: it is there to say
+   WHICH game, and a band at this width would cost more height than it earns. */
+@media (max-width: 767px) {
+    /* The BAND goes, not the cover. A 343px-wide strip on top of a row card is a second picture stacked
+       over the one that identifies the game, and it costs ~72px of height per row on the size where
+       height is scarcest. The cover carries recognition here on its own. */
+    .pp-gcard--lib .pp-gcard__cover { display: none; }
+
+    .pp-gcard--lib .pp-gcard__body { flex-direction: row; align-items: center; gap: 10px; padding: 8px; }
+    .pp-pgcard__cover { width: 40px; align-self: center; border-radius: 6px; }
+
+    /* THREE rows, not four. Stacking title / foot / stats / bar made a ~100px list item -- most of it
+       gaps rather than content. The percentage belongs on the title's line anyway: it is the answer to
+       the question the title asks, and pairing them is what a list row is for.
+       Only the PLACEMENT differs from the desktop card -- the areas, the one-line title clamp and the
+       dropped divider are all set once on the base rule, so the two layouts cannot drift apart on
+       anything except where the parts land. */
+    .pp-pgcard__meta {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas: "title stats" "bar bar" "foot foot";
+        align-items: center;
+    }
+    .pp-gcard--lib .pp-pgcard__stats { justify-content: flex-end; gap: 6px; }
+}
 
 /* ==========================================================================
  * PROFILE ACTIVITY -- trophy hunting as SESSIONS (one game, one day).
@@ -600,6 +760,67 @@
 /* Stretched link: the anchor is the game name, its ::after is the whole card. */
 .pp-actt__link::after { content: ''; position: absolute; inset: 0; z-index: 1; }
 .pp-actt--log .pp-actt__card { position: relative; }
+
+/* ──────────────────────────────────────────────────────────────────────────────────────────────────
+ * SEARCH RESULTS AS A LIST -- mobile only, matching the Games tab's `.pp-gcard--lib` rows.
+ *
+ * The poster shape is right on a wide wall and wrong on a phone: it is ~230px tall, of which most is
+ * reserved rather than written. Three fields (name, game, description) each hold TWO lines whether or
+ * not they need them -- deliberately, because that is what keeps a multi-column wall's rows even. At one
+ * column there is no neighbour to line up with, so the reserve buys nothing and costs everything.
+ *
+ * Single column first: the wall is `auto-fill minmax(182px, 1fr)`, which still makes THREE columns at
+ * 640px. Rows squeezed into 202px would read worse than the posters they replaced.
+ * ────────────────────────────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+    .pp-actt--log { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+
+    .pp-actt__card--game {
+        flex-direction: row; align-items: center; text-align: left;
+        gap: 10px; padding: 8px;
+        /* The stripe follows the reading direction: a row's tier belongs on its leading edge, which is
+           where the horizontal variant of this card has always carried it. */
+        border-top: 1px solid var(--pp-border);
+        border-left: 3px solid var(--tier-c, var(--pp-border));
+    }
+
+    /* Scoped to `--game` even though the art + inset icon only render when `show_game` is passed (today,
+       only the search results): the session card inside a day modal shares this partial, and an unscoped
+       rule here would silently reshape it the day someone passes the flag from there too. */
+    .pp-actt__card--game .pp-actt__art { width: 40px; }
+    .pp-actt__card--game .pp-actt__ico--inset {
+        width: 20px; height: 20px; right: -5px; bottom: -5px; border-width: 1.5px;
+    }
+
+    /* `display: contents` on the meta so its three children become grid items of the BODY and can be
+       placed individually -- the tier up on the name's line, the rate and date down on the game's. This
+       is the one thing `display: contents` is actually for; its usual trap (no box, so nothing to style
+       or animate) is precisely the effect wanted here. */
+    .pp-actt__card--game .pp-actt__body {
+        display: grid; width: auto; flex: 1; min-width: 0;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        grid-template-areas: "name name tier" "desc desc desc" "game rate time";
+        align-items: center; gap: 2px 8px; text-align: left;
+    }
+    .pp-actt__card--game .pp-actt__meta { display: contents; }
+
+    .pp-actt__card--game .pp-actt__name { grid-area: name; }
+    .pp-actt__card--game .pp-actt__desc { grid-area: desc; }
+    .pp-actt__card--game .pp-actt__game { grid-area: game; }
+    .pp-actt__card--game .pp-actt__tier { grid-area: tier; }
+    .pp-actt__card--game .pp-actt__rate { grid-area: rate; }
+    .pp-actt__card--game .pp-actt__time { grid-area: time; margin-left: 0; }
+
+    /* Release all three two-line reserves and clamp to one. Every row here has the same structure, so
+       they stay even without the reserve -- and an empty description now collapses instead of holding a
+       blank 28px. The 53px cover is the row's real floor either way. */
+    .pp-actt__card--game .pp-actt__name,
+    .pp-actt__card--game .pp-actt__game,
+    .pp-actt__card--game .pp-actt__desc {
+        -webkit-line-clamp: 1; line-clamp: 1; min-height: 0; width: auto;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+    }
+}
 
 .pp-actt__empty { padding: 14px; font-size: 0.75rem; color: var(--pp-text-mute); text-align: center; }
 

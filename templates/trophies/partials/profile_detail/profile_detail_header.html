@@ -28,10 +28,15 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
      beat every other rebuilt page has had been silently missing here since the rebuild.
 {% endcomment %}
 <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-    <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+    <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
 
-        {# ── Identity ── #}
-        <div class="flex items-start flex-wrap gap-3 md:gap-4 min-w-0">
+        {% comment %}── Identity ──
+        `pp-phero__id` exists for the phone layout only. Below 768px this becomes a GRID with the dial
+        spanning two rows, so the tier block sits in the space beside it rather than stacking underneath:
+        the dial column is ~110px tall against a ~64px name column, and that dead corner is exactly the
+        size the tiers need. Stacking them below instead cost ~55px of a header that has none to spare.
+        From md: up it is the flex row the utility classes describe.{% endcomment %}
+        <div class="pp-phero__id flex items-start flex-wrap gap-3 md:gap-4 min-w-0">
             {% comment %}The identity dial: avatar, level and level-progress as ONE object. They used to be
             three separate things -- avatar here, level figure across the card top-right, progress a
             full-width bar under the whole row -- which split a value from its own progress. See the CSS
@@ -55,30 +60,34 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
                         <svg class="pp-phero__ph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
                     </div>
 
+                    {% comment %}The ring is decorative (aria-hidden) and the plate is not: this is where a
+                    screen reader gets the level AND how far through it, in one phrase, because the ring it
+                    describes says nothing on its own.
+
+                    `role="img"` is load-bearing, not decoration. A bare <span> maps to `role="generic"`,
+                    for which naming is PROHIBITED -- browsers drop the aria-label entirely and read the
+                    contents instead, which here is the single word "412". The same pattern is used
+                    correctly by `.pp-stars` on the rating cards.
+
+                    INSIDE the ring box, because it is absolutely positioned against it: the plate is worn
+                    at the ring's bottom centre, sitting in the arc's notch rather than over the arc. It
+                    was moved out to below the ring once, when the ring was still a complete circle and
+                    the plate covered its leading edge across 36-64% progress -- see the CSS for the
+                    geometry that lets it come back.{% endcomment %}
+                    <span class="pp-phero__lvl" role="img"
+                          aria-label="Level {{ profile.trophy_level|intcomma }}{% if profile.progress %}, {{ profile.progress|floatformat:0 }} percent to level {{ profile.trophy_level|add:1 }}{% endif %}">
+                        <b class="pp-phero__lvl-n pp-tally" data-countup="{{ profile.trophy_level }}">{{ profile.trophy_level|intcomma }}</b>
+                        <span class="pp-phero__lvl-k" aria-hidden="true">Lv</span>
+                    </span>
                 </div>
 
-                {% comment %}The ring is decorative (aria-hidden) and the plate is not: this is where a
-                screen reader gets the level AND how far through it, in one phrase, because the ring it
-                describes says nothing on its own.
-
-                `role="img"` is load-bearing, not decoration. A bare <span> maps to `role="generic"`, for
-                which naming is PROHIBITED -- browsers drop the aria-label entirely and read the contents
-                instead, which here is the single word "412". The same pattern is used correctly by
-                `.pp-stars` on the rating cards.
-
-                It sits UNDER the ring rather than on it: at six o'clock an opaque plate covers the arc's
-                leading edge for any hunter between roughly 36% and 64%. See the CSS.{% endcomment %}
-                <span class="pp-phero__lvl" role="img"
-                      aria-label="Level {{ profile.trophy_level|intcomma }}{% if profile.progress %}, {{ profile.progress|floatformat:0 }} percent to level {{ profile.trophy_level|add:1 }}{% endif %}">
-                    <b class="pp-phero__lvl-n pp-tally" data-countup="{{ profile.trophy_level }}">{{ profile.trophy_level|intcomma }}</b>
-                    <span class="pp-phero__lvl-k" aria-hidden="true">Lv</span>
-                </span>
                 {% if profile.progress %}
                 <p class="pp-phero__tonext" aria-hidden="true">{{ profile.progress|floatformat:0 }}% to {{ profile.trophy_level|add:1 }}</p>
                 {% endif %}
+
             </div>
 
-            <div class="min-w-0 flex-1">
+            <div class="pp-phero__who min-w-0 flex-1">
                 <div class="flex items-center gap-2 flex-wrap">
                     <h1 class="text-lg md:text-xl lg:text-2xl font-bold leading-tight min-w-0 break-words">{{ profile.display_psn_username|default:profile.psn_username }}</h1>
                     {% if profile.user_is_premium %}
@@ -86,7 +95,12 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
                         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>
                     </span>
                     {% endif %}
-                    {% if profile.is_plus %}<span class="pp-phero__tag">PS Plus</span>{% endif %}
+                    {% comment %}The region flag sits with the name, which is what it is about. The PS Plus
+                    pill used to sit beside it and was removed in 2026-08: a subscription almost every
+                    active hunter holds says nothing that distinguishes one profile from another, so it
+                    was a pill's worth of space and a wrap risk on the name's line for no information.
+                    `profile.is_plus` is untouched -- this is a display decision, not a data one.
+                    {% endcomment %}
                     {% if profile.flag %}<span class="pp-phero__tag pp-phero__tag--quiet">{{ profile.flag }}</span>{% endif %}
                 </div>
 
@@ -136,7 +150,7 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
         COMPLETION was stranded at the right end of that tier row, which is otherwise entirely about
         trophy tiers. The two problems solved each other: the duplicate leaves, the stray moves in.
         {% endcomment %}
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+        <div class="pp-phero__stats grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
             <div class="scard">
                 <div class="scard__label">Trophies</div>
                 <div class="scard__value pp-tally" data-countup="{{ header_stats.total_earned_trophies }}">{{ header_stats.total_earned_trophies|intcomma }}</div>

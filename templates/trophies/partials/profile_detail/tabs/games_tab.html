@@ -1,18 +1,13 @@
 {% load custom_filters humanize %}
 {% include 'trophies/partials/profile_detail/game_filters.html' %}
 <div class="border-t border-base-content/10 mt-2 pt-2"></div>
+{% comment %}The wall is INCLUDED, not restated. `games_results.html` is what every filter, sort and
+search swaps into `#tab-results`, so any markup duplicated here is markup that can silently disagree with
+what the page becomes the moment anyone touches it -- and the failure is invisible on load. That is not
+hypothetical: this file carried the only copy of `pp-gbrowse__grid--lib`, so the wall used the library's
+column ladder on first render and reverted to the browse ladder's six columns after the first filter.
+The Trophies and Ratings tabs have always included their results partial; Games was the odd one out.
+{% endcomment %}
 <div id="tab-results">
-    {% comment %}The site game grid, not a vertical list: `.pp-gcard` is a cover-forward portrait card,
-    and `.pp-gbrowse__grid` is the unscoped grid Browse Games lays them out in.{% endcomment %}
-{% comment %}`pp-reveal` is baked in on HTMX swaps ONLY: htmx settle restores server attributes on
-id'd elements after afterSwap, so a class added there is wiped -- which un-hides the cards for a frame
-and flashes. On the first (non-htmx) render staggerReveal adds it itself, before paint.{% endcomment %}
-    <div id="games-grid" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}">
-        {% include 'trophies/partials/profile_detail/game_list_items.html' %}
-    </div>
-    <div id="games-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">
-        <span class="loading loading-spinner loading-lg"></span>
-        <span class="sr-only">Loading more games...</span>
-    </div>
-    <div id="games-sentinel" class="h-1"></div>
+    {% include 'trophies/partials/profile_detail/tabs/games_results.html' %}
 </div>

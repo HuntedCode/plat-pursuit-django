@@ -1,21 +1,29 @@
-{% comment %} The Games tab's toolbar, rebuilt 2026-08 to the browse standard.
+{% comment %} The Games tab's toolbar -- reduced 2026-08 from ten controls to four.
 
-It was the last pre-rebuild filter bar on the site: DaisyUI throughout (`bg-white/[0.03]`,
-`select-bordered`, `peer-checked:btn-primary` chips), a `<details>` for the advanced filters, and an
-explicit Filter button. It carried `data-browse-form`, so it auto-applied selects and checkboxes -- but
-none of the SEARCH affordances, because those are opted into by MARKUP and it had none of the hooks.
+This tab is a RECORD of what somebody has played, not a browse page, and it had inherited Browse
+Games' discovery apparatus wholesale: genre and theme pickers, community rating / difficulty / fun
+ranges, a time-to-beat range, a shovelware toggle, and eight `show_*`/`hide_*` community flags that no
+template ever rendered. Those answer "what should I play next" -- a question about a catalogue. Nobody
+arrives at a hunter's profile to shop.
 
-Now the same vocabulary Browse Games uses (`.pp-toolbar-card` / `.pp-gbrowse__*` / `.pp-bgal__*`), which
-buys the shared behaviour rather than just the look:
+Four controls remain: search, status, sort, platform.
 
-  * `data-live-search` + `data-page-search` -> debounced live filtering, the spinner, Escape-to-clear,
-    the clear button, and the global `/` and Cmd-K focus shortcuts
-  * `PlatPursuit.filterPanel` (wired in profile_detail.html) -> the animated drawer, the active-filter
-    count badge, the results dim, and open-on-load when something is already filtering
+**Status replaced four fields.** `game_has_plat`, `plat_earned`, `is_100` and the completion range
+were all asking one question -- how far did they get -- and this file previously argued they were
+three independent axes that could not collapse "into one status chip row that would have to invent
+combinations." That was wrong, and the card is what shows why: it already renders a five-state
+completion bar, so the states existed and were named. The options here ARE those states, which means
+picking one fills the wall with a single bar colour and the filter teaches you to read the card.
 
-What it deliberately does NOT take from Browse Games: the sticky mini-bar (that belongs to a scrolling
-PAGE, not a tab panel inside one) and "I'm Feeling Lucky" (a catalogue-discovery action, meaningless
-over one hunter's own library).
+**No drawer.** Four controls are a toolbar, not a `filterPanel` collapse -- so the advanced panel, its
+toggle and its active-filter count are gone. `data-browse-form` and `data-live-search` stay, because
+the search affordances (debounced live filtering, the spinner, Escape-to-clear, the clear button, the
+global `/` and Cmd-K shortcuts) come from `browse-filters.js` and are opted into by MARKUP, entirely
+independent of the drawer.
+
+Options come from `sort_options` / `status_options` in the context rather than a bound field's
+`.choices`: both are CharFields so an unknown value can be coerced instead of invalidating the form
+(see `ProfileGamesForm.clean_sort`). Badges and Ratings already feed their toolbars the same way.
 
 `hx-target="#tab-results"` rather than `#browse-results`: this is a tab panel, and the results div it
 swaps is the tab's own. The `tab` hidden input rides along so a filter swap stays on Games.
@@ -24,7 +32,7 @@ swaps is the tab's own. The `tab` hidden input rides along so a filter swap stay
       hx-get="{% url 'profile_detail' psn_username=profile.psn_username %}"
       hx-target="#tab-results" hx-push-url="true" hx-swap="innerHTML" hx-trigger="submit"
       hx-indicator="#tab-results">
-    <div class="pp-toolbar-card pp-gbrowse__toolbar">
+    <div class="pp-toolbar-card pp-gbrowse__toolbar pp-gbrowse__toolbar--lib">
         <div class="pp-gbrowse__bar">
             <span class="pp-bgal__search" data-search-wrap>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -37,187 +45,40 @@ swaps is the tab's own. The `tab` hidden input rides along so a filter swap stay
             </span>
 
             <label class="pp-gbrowse__sort">
-                <span class="sr-only">Sort games</span>
-                <select name="sort" class="pp-gallery__select">
-                    {% for value, display in form.sort.field.choices %}
-                    <option value="{{ value }}" {% if request.GET.sort == value or not request.GET.sort and value == 'recent' %}selected{% endif %}>{{ display }}</option>
+                <span class="sr-only">Filter by completion status</span>
+                <select name="status" class="pp-gallery__select">
+                    {% for value, display in status_options %}
+                    <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ display }}</option>
                     {% endfor %}
                 </select>
             </label>
 
-            <button type="button" class="pp-bgal__advbtn" id="pgames-filters-toggle" aria-expanded="false" aria-controls="pgames-advanced">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                <span>Filters</span>
-                <span class="pp-bgal__advbtn__n" id="pgames-filter-count" aria-live="polite" aria-label="active filters" hidden>0</span>
-            </button>
+            <label class="pp-gbrowse__sort">
+                <span class="sr-only">Sort games</span>
+                <select name="sort" class="pp-gallery__select">
+                    {% for value, display in sort_options %}
+                    <option value="{{ value }}" {% if selected_sort == value %}selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+            </label>
         </div>
 
-        {% comment %}Renders OPEN so the no-JS case can still reach every control; the controller collapses
-        it on load (and leaves it open when a filter is already applied).{% endcomment %}
-        <div class="pp-bgal__advanced" id="pgames-advanced">
-          <div class="pp-bgal__advanced-in">
-
-            <div class="pp-gbrowse__fsec">
-                <div class="pp-gbrowse__flabel">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/></svg>
-                    Platforms
-                </div>
-                <div class="pp-gbrowse__fchips">
-                    {% for value, display in form.platform.field.choices %}
-                    <label class="pp-bgal__chip">
-                        <input type="checkbox" name="platform" value="{{ value }}" {% if value in selected_platforms %}checked{% endif %} />
-                        {{ display }}
-                    </label>
-                    {% endfor %}
-                </div>
+        {% comment %}Platform stays chips rather than a select because it is the one MULTI-choice control
+        left, and it is six short values -- a select would hide behind a click what fits on one row.
+        {% endcomment %}
+        <div class="pp-gbrowse__fsec">
+            <div class="pp-gbrowse__flabel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/></svg>
+                Platforms
             </div>
-
-            {% comment %}The three platinum axes are INDEPENDENT questions -- does this game have a platinum
-            at all, did they earn it, and did they hit 100% -- which is why they stay three selects rather
-            than collapsing into one "status" chip row that would have to invent combinations.{% endcomment %}
-            <div class="pp-gbrowse__fsec">
-                <div class="pp-gbrowse__flabel">
-                    {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-4 h-4' %}
-                    Progress
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <label class="flex flex-col gap-1">
-                        <span class="text-xs text-base-content/50">Has platinum</span>
-                        <select name="game_has_plat" class="pp-gallery__select">
-                            {% for value, display in form.game_has_plat.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.game_has_plat == value %}selected{% endif %}>{{ display }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <label class="flex flex-col gap-1">
-                        <span class="text-xs text-base-content/50">Platinum earned</span>
-                        <select name="plat_earned" class="pp-gallery__select">
-                            {% for value, display in form.plat_earned.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.plat_earned == value %}selected{% endif %}>{{ display }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <label class="flex flex-col gap-1">
-                        <span class="text-xs text-base-content/50">100% complete</span>
-                        <select name="is_100" class="pp-gallery__select">
-                            {% for value, display in form.is_100.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.is_100 == value %}selected{% endif %}>{{ display }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                </div>
+            <div class="pp-gbrowse__fchips">
+                {% for value, display in form.platform.field.choices %}
+                <label class="pp-bgal__chip">
+                    <input type="checkbox" name="platform" value="{{ value }}" {% if value in selected_platforms %}checked{% endif %} />
+                    {{ display }}
+                </label>
+                {% endfor %}
             </div>
-
-            {% if form.genres.field.choices %}
-            <div class="pp-gbrowse__fsec">
-                <div class="pp-gbrowse__flabel">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
-                    Genres
-                </div>
-                {% comment %}`--scroll` caps the height and hands the list to the shared edge-fade logic in
-                `filterPanel`, so a long list is obviously scrollable rather than silently cut.{% endcomment %}
-                <div class="pp-gbrowse__fchips pp-gbrowse__fchips--scroll">
-                    {% for value, display in form.genres.field.choices %}
-                    <label class="pp-bgal__chip">
-                        <input type="checkbox" name="genres" value="{{ value }}" {% if value|stringformat:"s" in selected_genres %}checked{% endif %} />
-                        {{ display }}
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            {% if form.themes.field.choices %}
-            <div class="pp-gbrowse__fsec">
-                <div class="pp-gbrowse__flabel">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="19" cy="13" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="10" cy="19" r="2.5"/></svg>
-                    Themes
-                </div>
-                <div class="pp-gbrowse__fchips pp-gbrowse__fchips--scroll">
-                    {% for value, display in form.themes.field.choices %}
-                    <label class="pp-bgal__chip">
-                        <input type="checkbox" name="themes" value="{{ value }}" {% if value|stringformat:"s" in selected_themes %}checked{% endif %} />
-                        {{ display }}
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            <div class="pp-gbrowse__fsec">
-                <div class="pp-gbrowse__flabel">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-                    Flags
-                </div>
-                {% include 'partials/browse/flag_filters.html' %}
-                <div class="pp-gbrowse__fchips mt-1.5">
-                    <label class="pp-bgal__chip">
-                        <input type="checkbox" name="filter_shovelware" value="on" {% if request.GET.filter_shovelware %}checked{% endif %} />
-                        Hide shovelware
-                    </label>
-                </div>
-            </div>
-
-            <div class="pp-gbrowse__fsec">
-                <div class="pp-gbrowse__flabel">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-                    Ranges
-                </div>
-                {% comment %}Laid out with the same utilities `partials/browse/rating_filters.html` uses,
-                because that partial is included INTO this grid -- a bespoke class here would make our two
-                ranges and its three look like different controls sitting side by side.{% endcomment %}
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    <div class="max-w-xs">
-                        <div class="flex items-center justify-between mb-1.5">
-                            <label class="text-xs text-base-content/50">Completion</label>
-                            <span class="text-xs font-semibold tabular-nums" data-dual-range-label="completion">
-                                {% if request.GET.completion_min and request.GET.completion_min != '0' or request.GET.completion_max and request.GET.completion_max != '100' %}
-                                    {{ request.GET.completion_min|default:'0' }}% - {{ request.GET.completion_max|default:'100' }}%
-                                {% else %}Any{% endif %}
-                            </span>
-                        </div>
-                        <div class="dual-range relative h-5" data-dual-range data-dual-range-name="completion" data-range-unit="%">
-                            <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full bg-base-300"></div>
-                            <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-primary" data-dual-range-fill></div>
-                            <input type="range" name="completion_min" min="0" max="100" step="5"
-                                   value="{{ request.GET.completion_min|default:'0' }}"
-                                   class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
-                                   data-dual-range-lo />
-                            <input type="range" name="completion_max" min="0" max="100" step="5"
-                                   value="{{ request.GET.completion_max|default:'100' }}"
-                                   class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
-                                   data-dual-range-hi />
-                        </div>
-                    </div>
-
-                    <div class="max-w-xs">
-                        <div class="flex items-center justify-between mb-1.5">
-                            <label class="text-xs text-base-content/50">Time-to-beat (IGDB)</label>
-                            <span class="text-xs font-semibold tabular-nums" data-dual-range-label="igdb_time">
-                                {% if request.GET.igdb_time_min and request.GET.igdb_time_min != '0' or request.GET.igdb_time_max and request.GET.igdb_time_max != '1000' %}
-                                    {{ request.GET.igdb_time_min|default:'0' }}h - {{ request.GET.igdb_time_max|default:'1000' }}h
-                                {% else %}Any{% endif %}
-                            </span>
-                        </div>
-                        <div class="dual-range relative h-5" data-dual-range data-dual-range-name="igdb_time" data-range-unit="h">
-                            <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full bg-base-300"></div>
-                            <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-accent" data-dual-range-fill></div>
-                            <input type="range" name="igdb_time_min" min="0" max="1000" step="5"
-                                   value="{{ request.GET.igdb_time_min|default:'0' }}"
-                                   class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
-                                   data-dual-range-lo />
-                            <input type="range" name="igdb_time_max" min="0" max="1000" step="5"
-                                   value="{{ request.GET.igdb_time_max|default:'1000' }}"
-                                   class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
-                                   data-dual-range-hi />
-                        </div>
-                    </div>
-
-                    {% include 'partials/browse/rating_filters.html' %}
-                </div>
-            </div>
-
-          </div>
         </div>
     </div>
     <input type="hidden" name="tab" value="games">

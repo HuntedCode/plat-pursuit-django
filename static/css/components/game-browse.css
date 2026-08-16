@@ -189,6 +189,72 @@
 @media (min-width: 1280px) { .pp-gbrowse__grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 @media (min-width: 1536px) { .pp-gbrowse__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 
+/* `--lib`: the profile Games wall (see `.pp-gcard--lib` in profile-hero.css). Half the columns of the
+   browse ladder, because the two walls answer different questions. Browse is a catalogue you SCAN by
+   cover art, where six narrow columns is right. A hunter's library is a RECORD you read, and its card
+   carries nine fields laid out in horizontal rows -- at 6 columns those had ~240px to share, which is
+   what made the data illegible. This ladder holds ~350px of data width at every size.
+   One column at the base is not a narrow grid but a LIST: paired with `.pp-gcard--lib`'s row flip, each
+   game gets the full ~343px instead of ~166px in a 2-up grid.
+
+   Card widths inside the `container` cap: 343px (base), 362px (md), 322px (lg), 408px (xl), 367px (2xl).
+   The ladder is not monotonic in width and does not need to be -- a column-count ladder never is. What
+   matters is that no step is too NARROW, since the constraint on this card is horizontal: its record is
+   laid out in rows beside a cover, so width is what makes it legible and height is not.
+
+   The steps below 768px are the LIST range: `.pp-gcard--lib` flips the card to a row there, so a second
+   column would stand two list rows side by side, which is the shape the row layout exists to avoid. */
+.pp-gbrowse__grid--lib { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 640px)  { .pp-gbrowse__grid--lib { grid-template-columns: minmax(0, 1fr); } }
+@media (min-width: 768px)  { .pp-gbrowse__grid--lib { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .pp-gbrowse__grid--lib { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1280px) { .pp-gbrowse__grid--lib { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1536px) { .pp-gbrowse__grid--lib { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* `--lib` toolbar: the profile Games bar on a phone.
+ *
+ * It cost ~219px at 375px -- header (~275) plus toolbar left about 160px of an iPhone SE for the games
+ * themselves, on a tab whose content is the games. Almost none of that was the controls; it was the
+ * chrome around them. The "Platforms" heading and the section's divider/margins came to ~52px to
+ * introduce ~63px of chips, and the chips then wrapped to two rows because six of them total 332px in a
+ * 319px well -- over by thirteen pixels.
+ *
+ * Scoped to this toolbar and not to `.pp-gbrowse__*` itself: Browse Games and the other browse surfaces
+ * share those classes but not this control set (theirs live in a drawer), so their bars are a separate
+ * measurement and a separate decision.
+ * ------------------------------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+    .pp-gbrowse__toolbar--lib { padding: 10px 12px; margin-bottom: 10px; }
+
+    /* The heading goes VISUALLY, not from the accessibility tree. It is a plain div rather than a
+       <legend>, so it groups nothing programmatically -- but it is still the label a screen reader meets
+       before six unlabelled-in-context checkboxes, and reading order is worth keeping when the pixels
+       are not. */
+    .pp-gbrowse__toolbar--lib .pp-gbrowse__flabel {
+        position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+        overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+    .pp-gbrowse__toolbar--lib .pp-gbrowse__fsec { padding-top: 8px; margin-top: 8px; }
+
+    /* Sized so all six platforms hold ONE row at 360px, the narrowest phone we build for (six chips come
+       to ~279px in a ~304px well). A horizontal scroll row was the alternative and is worse here: the
+       edge-fade that makes one legible is wired inside `filterPanel`, which this bar no longer uses, so
+       it would scroll with no affordance and hide PSVR2 behind an invisible edge.
+       `flex-wrap` stays WRAP on purpose. These widths come from estimated font metrics, and the honest
+       failure mode for an estimate that is a few pixels out is a second row, not an overflowing bar. */
+    .pp-gbrowse__toolbar--lib .pp-gbrowse__fchips { gap: 6px; }
+    .pp-gbrowse__toolbar--lib .pp-bgal__chip { padding: 5px 9px; font-size: 11px; }
+
+    /* Search takes the whole first line, the two selects split the second evenly.
+       Both halves are needed. Left alone, the search's `flex: 1 1 200px` basis is small enough that all
+       THREE fit one flex line -- and the selects, sized from a 0 basis, would then settle at ~40px each,
+       which is not a control. Giving search a 100% basis breaks the line under it deliberately, and only
+       then can the selects share what is left. */
+    .pp-gbrowse__toolbar--lib .pp-bgal__search { flex: 1 1 100%; }
+    .pp-gbrowse__toolbar--lib .pp-gbrowse__sort { flex: 1 1 0; min-width: 0; }
+    .pp-gbrowse__toolbar--lib .pp-gallery__select { width: 100%; }
+}
+
 /* Infinite-scroll loading spinner. NB: InfiniteScroller toggles the Tailwind `hidden` class on this element,
    so we must NOT set `display` here (unlayered component CSS beats the layered `.hidden` utility -> it would
    never hide). Centre via text-align + an inline-block spinner instead of flex. */

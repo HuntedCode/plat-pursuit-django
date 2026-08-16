@@ -3,11 +3,8 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
-from django.db.models import (
-    Q, F, Case, When, Value, IntegerField, FloatField, Count,
-    Subquery, OuterRef, OrderBy,
-)
-from django.db.models.functions import Lower, Coalesce, Cast
+from django.db.models import Q, F, Count, Subquery, OuterRef
+from django.db.models.functions import Lower
 from django.http import Http404, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse, reverse_lazy
@@ -25,17 +22,13 @@ from ..forms import (
 )
 from ..models import (
     Profile,
-    EarnedTrophy,
     ProfileGame,
-    Game,
     GameList,
-    Trophy,
     TrophyGroup,
     UserTitle,
 )
 from trophies.services.activity_service import DAYS_PER_PAGE
 from trophies.mixins import HtmxListMixin
-from .browse_helpers import annotate_community_ratings
 from trophies.psn_manager import PSNManager
 
 logger = logging.getLogger("psn_api")
@@ -236,9 +229,7 @@ class ProfileDetailView(DetailView):
         # Get form data
         query = form.cleaned_data.get('query')
         platforms = form.cleaned_data.get('platform')
-        game_has_plat = form.cleaned_data.get('game_has_plat')
-        plat_earned = form.cleaned_data.get('plat_earned')
-        is_100 = form.cleaned_data.get('is_100')
+        status = form.cleaned_data.get('status')
         sort_val = form.cleaned_data.get('sort')
 
         # Build queryset
@@ -252,9 +243,7 @@ class ProfileDetailView(DetailView):
         # OOM. Widening the join without deferring it trades a query storm for a memory one.
         games_qs = profile.played_games.all().select_related(
             'game', 'game__concept', 'game__concept__igdb_match',
-        ).defer('game__concept__igdb_match__raw_response').annotate(
-            annotated_total_trophies=F('earned_trophies_count') + F('unearned_trophies_count')
-        )
+        ).defer('game__concept__igdb_match__raw_response')
 
         # Apply profile settings
         if profile.hide_hiddens:
@@ -272,173 +261,38 @@ class ProfileDetailView(DetailView):
             games_qs = games_qs.filter(platform_filter)
             context['selected_platforms'] = platforms
 
-        # Apply plat status filters (three independent axes)
-        if game_has_plat == 'yes':
-            games_qs = games_qs.filter(game__defined_trophies__platinum__gt=0)
-        elif game_has_plat == 'no':
-            games_qs = games_qs.exclude(game__defined_trophies__platinum__gt=0)
-        if plat_earned == 'yes':
+        # Status -- ONE control replacing what used to be three plat/100% selects plus a completion
+        # range. Those were four fields asking a single question (how far did they get), and the card
+        # already answers it with a five-state completion bar; these options ARE those states, so the
+        # filter and the card read as one vocabulary.
+        if status == 'plat':
             games_qs = games_qs.filter(has_plat=True)
-        elif plat_earned == 'no':
-            games_qs = games_qs.filter(has_plat=False)
-        if is_100 == 'yes':
+        elif status == 'full':
             games_qs = games_qs.filter(progress=100)
-        elif is_100 == 'no':
-            games_qs = games_qs.exclude(progress=100)
+        elif status == 'chase':
+            games_qs = games_qs.filter(game__defined_trophies__platinum__gt=0, has_plat=False)
+        elif status == 'unfinished':
+            games_qs = games_qs.filter(progress__lt=100)
 
-        # --- Genre / Theme filters ---
-        genres = form.cleaned_data.get('genres')
-        if genres:
-            games_qs = games_qs.filter(
-                game__concept__concept_genres__genre_id__in=genres,
-            ).distinct()
-        themes = form.cleaned_data.get('themes')
-        if themes:
-            games_qs = games_qs.filter(
-                game__concept__concept_themes__theme_id__in=themes,
-            ).distinct()
-
-        # --- Completion range ---
-        comp_min = form.cleaned_data.get('completion_min') or 0
-        comp_max = form.cleaned_data.get('completion_max') or 100
-        if comp_min > 0:
-            games_qs = games_qs.filter(progress__gte=comp_min)
-        if comp_max < 100:
-            games_qs = games_qs.filter(progress__lte=comp_max)
-
-        # --- Community flag filters (hide wins on conflict) ---
-        if form.cleaned_data.get('hide_delisted'):
-            games_qs = games_qs.filter(game__is_delisted=False)
-        elif form.cleaned_data.get('show_delisted'):
-            games_qs = games_qs.filter(game__is_delisted=True)
-        if form.cleaned_data.get('hide_unobtainable'):
-            games_qs = games_qs.filter(game__is_obtainable=True)
-        elif form.cleaned_data.get('show_unobtainable'):
-            games_qs = games_qs.filter(game__is_obtainable=False)
-        if form.cleaned_data.get('hide_online'):
-            games_qs = games_qs.filter(game__has_online_trophies=False)
-        elif form.cleaned_data.get('show_online'):
-            games_qs = games_qs.filter(game__has_online_trophies=True)
-        if form.cleaned_data.get('hide_buggy'):
-            games_qs = games_qs.filter(game__has_buggy_trophies=False)
-        elif form.cleaned_data.get('show_buggy'):
-            games_qs = games_qs.filter(game__has_buggy_trophies=True)
-        if form.cleaned_data.get('filter_shovelware'):
-            games_qs = games_qs.exclude(
-                game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
-            )
-
-        # --- Community rating filters (dual-range) ---
-        rating_min = form.cleaned_data.get('rating_min') or 0
-        rating_max = form.cleaned_data.get('rating_max') or 5
-        diff_min = form.cleaned_data.get('difficulty_min') or 1
-        diff_max = form.cleaned_data.get('difficulty_max') or 10
-        fun_lo = form.cleaned_data.get('fun_min') or 1
-        fun_hi = form.cleaned_data.get('fun_max') or 10
-        has_rating_filter = (
-            rating_min > 0 or rating_max < 5
-            or diff_min > 1 or diff_max < 10
-            or fun_lo > 1 or fun_hi < 10
-        )
-        needs_rating = has_rating_filter or sort_val in ('rating', 'rating_inv')
-
-        if needs_rating:
-            games_qs = annotate_community_ratings(games_qs, 'game__concept_id')
-            if rating_min > 0:
-                games_qs = games_qs.filter(_avg_rating__gte=float(rating_min))
-            if rating_max < 5:
-                games_qs = games_qs.filter(_avg_rating__lte=float(rating_max))
-            if diff_min > 1:
-                games_qs = games_qs.filter(_avg_difficulty__gte=float(diff_min))
-            if diff_max < 10:
-                games_qs = games_qs.filter(_avg_difficulty__lte=float(diff_max))
-            if fun_lo > 1:
-                games_qs = games_qs.filter(_avg_fun__gte=float(fun_lo))
-            if fun_hi < 10:
-                games_qs = games_qs.filter(_avg_fun__lte=float(fun_hi))
-
-        # --- Time-to-beat filter (dual-range, in hours) ---
-        igdb_lo = form.cleaned_data.get('igdb_time_min') or 0
-        igdb_hi = form.cleaned_data.get('igdb_time_max') or 1000
-        if igdb_lo > 0 or igdb_hi < 1000:
-            # Trusted matches only — pending/rejected matches have TTB
-            # populated but not reviewed.
-            time_q = Q(
-                game__concept__igdb_match__time_to_beat_completely__isnull=False,
-                game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
-            )
-            if igdb_lo > 0:
-                time_q &= Q(game__concept__igdb_match__time_to_beat_completely__gte=int(igdb_lo) * 3600)
-            if igdb_hi < 1000:
-                time_q &= Q(game__concept__igdb_match__time_to_beat_completely__lte=int(igdb_hi) * 3600)
-            games_qs = games_qs.filter(time_q)
+        # The genre/theme pickers, community rating/difficulty/fun ranges, time-to-beat range,
+        # shovelware exclude and eight unrendered show_*/hide_* community flags were removed in
+        # 2026-08 along with eleven sorts. They were DISCOVERY controls inherited wholesale from
+        # Browse Games -- they answer "what should I play next", which is a question about a
+        # catalogue, not about somebody's history. Removing them also drops this tab's
+        # `annotate_community_ratings()` correlated subqueries and its time-to-beat Case.
 
         # --- Sort ---
         order = ['-last_updated_datetime']
         if sort_val == 'oldest':
             order = ['last_updated_datetime']
-        elif sort_val == 'latest_trophy':
-            order = [OrderBy(F('most_recent_trophy_date'), descending=True, nulls_last=True), Lower('game__title_name')]
         elif sort_val == 'alpha':
             order = [Lower('game__title_name')]
         elif sort_val == 'completion':
             order = ['-progress', Lower('game__title_name')]
         elif sort_val == 'completion_inv':
             order = ['progress', Lower('game__title_name')]
-        elif sort_val == 'trophies':
-            order = ['-annotated_total_trophies', Lower('game__title_name')]
         elif sort_val == 'earned':
             order = ['-earned_trophies_count', Lower('game__title_name')]
-        elif sort_val == 'unearned':
-            order = ['-unearned_trophies_count', Lower('game__title_name')]
-        elif sort_val == 'rating' and needs_rating:
-            games_qs = games_qs.filter(_avg_rating__isnull=False)
-            order = ['-_avg_rating', Lower('game__title_name')]
-        elif sort_val == 'rating_inv' and needs_rating:
-            games_qs = games_qs.filter(_avg_rating__isnull=False)
-            order = ['_avg_rating', Lower('game__title_name')]
-        elif sort_val in ('time_to_beat', 'time_to_beat_inv'):
-            games_qs = games_qs.annotate(
-                _time_to_beat=Case(
-                    When(
-                        game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
-                        then=F('game__concept__igdb_match__time_to_beat_completely'),
-                    ),
-                    default=None,
-                    output_field=IntegerField(),
-                ),
-            )
-            if sort_val == 'time_to_beat':
-                order = [OrderBy(F('_time_to_beat'), nulls_last=True)]
-            else:
-                order = [OrderBy(F('_time_to_beat'), descending=True, nulls_last=True)]
-        elif sort_val in ('plat_rarest', 'plat_common'):
-            plat_rate = Subquery(
-                Trophy.objects.filter(
-                    game_id=OuterRef('game_id'), trophy_type='platinum',
-                ).values('earn_rate')[:1],
-                output_field=FloatField(),
-            )
-            games_qs = games_qs.annotate(
-                _plat_rate=Coalesce(plat_rate, Value(0.0), output_field=FloatField()),
-            )
-            if sort_val == 'plat_rarest':
-                order = ['_plat_rate', Lower('game__title_name')]
-            else:
-                order = ['-_plat_rate', Lower('game__title_name')]
-        elif sort_val in ('trophy_count', 'trophy_count_inv'):
-            games_qs = games_qs.annotate(
-                _defined_trophy_count=(
-                    Coalesce(Cast(F('game__defined_trophies__bronze'), IntegerField()), Value(0))
-                    + Coalesce(Cast(F('game__defined_trophies__silver'), IntegerField()), Value(0))
-                    + Coalesce(Cast(F('game__defined_trophies__gold'), IntegerField()), Value(0))
-                    + Coalesce(Cast(F('game__defined_trophies__platinum'), IntegerField()), Value(0))
-                ),
-            )
-            if sort_val == 'trophy_count':
-                order = ['-_defined_trophy_count', Lower('game__title_name')]
-            else:
-                order = ['_defined_trophy_count', Lower('game__title_name')]
 
         games_qs = games_qs.order_by(*order)
 
@@ -463,8 +317,13 @@ class ProfileDetailView(DetailView):
             )
         } if page_game_ids else {}
         context['form'] = form
-        context['selected_genres'] = self.request.GET.getlist('genres')
-        context['selected_themes'] = self.request.GET.getlist('themes')
+        # Options come from the form's constants rather than a bound field's `.choices`, because both
+        # controls are CharFields (see ProfileGamesForm.clean_sort). This also matches how the Badges
+        # and Ratings tabs already feed their toolbars.
+        context['sort_options'] = ProfileGamesForm.SORT_CHOICES
+        context['status_options'] = ProfileGamesForm.STATUS_CHOICES
+        context['selected_status'] = status
+        context['selected_sort'] = sort_val
         # The scroller gates its first fetch on the grid holding a FULL page. This tab never set the size,
         # so the template's default (30) was measured against a server page of 50 -- the two only agreed by
         # accident, and the resume arithmetic after a history restore did not.

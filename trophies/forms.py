@@ -273,94 +273,62 @@ class ProfileSearchForm(forms.Form):
             self.fields['country'].choices = [('', 'All Countries')]
 
 class ProfileGamesForm(forms.Form):
+    """Controls for a hunter's Games tab -- a RECORD of what they played, not a browse page.
+
+    Reduced from ~30 fields and 17 sorts in 2026-08. What came off was the discovery apparatus this
+    tab had inherited wholesale from Browse Games: genre/theme pickers, community rating / difficulty
+    / fun ranges, time-to-beat ranges, shovelware filtering, and eight `show_*`/`hide_*` community
+    flags that no template ever rendered. Those answer "what should I play next," which is a question
+    about a catalogue, not about somebody's history.
+
+    Four controls remain, and `status` is the one that did the work: `game_has_plat`, `plat_earned`,
+    `is_100` and `completion_min/max` were five fields asking one question -- how far did they get --
+    which the card already answers with its five-state completion bar. The options below ARE those
+    states, so the filter and the card speak the same language.
+    """
+
+    DEFAULT_SORT = 'recent'
+
+    SORT_CHOICES = [
+        ('recent', 'Recently Played'),
+        ('oldest', 'Oldest Played'),
+        ('alpha', 'Alphabetical'),
+        ('completion', 'Highest Completion'),
+        ('completion_inv', 'Lowest Completion'),
+        ('earned', 'Most Earned'),
+    ]
+
+    STATUS_CHOICES = [
+        ('', 'All Games'),
+        ('plat', 'Platinum Earned'),
+        ('full', '100% Complete'),
+        ('chase', 'Still to Plat'),
+        ('unfinished', 'Unfinished'),
+    ]
+
     query = forms.CharField(required=False, label='Search by name')
     platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')], required=False, label='Platforms')
-    game_has_plat = forms.ChoiceField(
-        choices=[
-            ('', 'Any'),
-            ('yes', 'Has Platinum'),
-            ('no', 'No Platinum'),
-        ],
-        required=False,
-        label='Has Platinum',
-    )
-    plat_earned = forms.ChoiceField(
-        choices=[
-            ('', 'Any'),
-            ('yes', 'Earned'),
-            ('no', 'Not Earned'),
-        ],
-        required=False,
-        label='Platinum Earned',
-    )
-    is_100 = forms.ChoiceField(
-        choices=[
-            ('', 'Any'),
-            ('yes', '100%'),
-            ('no', 'Not 100%'),
-        ],
-        required=False,
-        label='100% Complete',
-    )
-    sort = forms.ChoiceField(
-        choices=[
-            ('recent', 'Recently Played'),
-            ('oldest', 'Oldest Played'),
-            ('latest_trophy', 'Latest Trophy'),
-            ('alpha', 'Alphabetical'),
-            ('completion', 'Highest Completion'),
-            ('completion_inv', 'Lowest Completion'),
-            ('trophies', 'Most Trophies'),
-            ('earned', 'Most Earned'),
-            ('unearned', 'Most Unearned'),
-            ('rating', 'Highest Rated'),
-            ('rating_inv', 'Lowest Rated'),
-            ('time_to_beat', 'Shortest Time-to-Beat'),
-            ('time_to_beat_inv', 'Longest Time-to-Beat'),
-            ('plat_rarest', 'Rarest Platinum'),
-            ('plat_common', 'Most Common Platinum'),
-            ('trophy_count', 'Most Trophies (Defined)'),
-            ('trophy_count_inv', 'Fewest Trophies (Defined)'),
-        ],
-        required=False,
-        label='Sort By',
-    )
 
-    # New filter fields
-    genres = forms.MultipleChoiceField(required=False, label='Genres')
-    themes = forms.MultipleChoiceField(required=False, label='Themes')
-    completion_min = forms.IntegerField(required=False, min_value=0, max_value=100)
-    completion_max = forms.IntegerField(required=False, min_value=0, max_value=100)
-    rating_min = forms.FloatField(required=False, min_value=0, max_value=5)
-    rating_max = forms.FloatField(required=False, min_value=0, max_value=5)
-    difficulty_min = forms.IntegerField(required=False, min_value=1, max_value=10)
-    difficulty_max = forms.IntegerField(required=False, min_value=1, max_value=10)
-    fun_min = forms.IntegerField(required=False, min_value=1, max_value=10)
-    fun_max = forms.IntegerField(required=False, min_value=1, max_value=10)
-    igdb_time_min = forms.IntegerField(required=False, min_value=0, max_value=1000)
-    igdb_time_max = forms.IntegerField(required=False, min_value=0, max_value=1000)
-    show_delisted = forms.BooleanField(required=False, label='Delisted')
-    show_unobtainable = forms.BooleanField(required=False, label='Unobtainable')
-    show_online = forms.BooleanField(required=False, label='Online Trophies')
-    show_buggy = forms.BooleanField(required=False, label='Buggy Trophies')
-    hide_delisted = forms.BooleanField(required=False, label='Hide Delisted')
-    hide_unobtainable = forms.BooleanField(required=False, label='Hide Unobtainable')
-    hide_online = forms.BooleanField(required=False, label='Hide Online Trophies')
-    hide_buggy = forms.BooleanField(required=False, label='Hide Buggy Trophies')
-    filter_shovelware = forms.BooleanField(required=False, label='Hide Shovelware')
+    # CharField, NOT ChoiceField, so an unrecognised value can be coerced to the default instead of
+    # failing validation. A ChoiceField rejects anything outside `choices` in `validate()`, which runs
+    # BEFORE `clean_<field>` -- so the coercion below would never get a chance to run, the whole form
+    # would be invalid, and the view answers an invalid form with an empty game list. Eleven sorts were
+    # removed in the 2026-08 reduction, so a bookmarked `?sort=rating` would have rendered an EMPTY
+    # Games tab, silently, for exactly the people who used the tab enough to bookmark a sort.
+    # The options are rendered from SORT_CHOICES / STATUS_CHOICES via context, as the Badges and
+    # Ratings tabs already do with their own `sort_options`.
+    status = forms.CharField(required=False, label='Status')
+    sort = forms.CharField(required=False, label='Sort By')
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        from trophies.models import Genre, Theme
-        try:
-            self.fields['genres'].choices = list(
-                Genre.objects.values_list('id', 'name').order_by('name')
-            )
-            self.fields['themes'].choices = list(
-                Theme.objects.values_list('id', 'name').order_by('name')
-            )
-        except Exception:
-            pass
+    def clean_sort(self):
+        return self._coerce(self.cleaned_data.get('sort'), self.SORT_CHOICES, self.DEFAULT_SORT)
+
+    def clean_status(self):
+        return self._coerce(self.cleaned_data.get('status'), self.STATUS_CHOICES, '')
+
+    @staticmethod
+    def _coerce(value, choices, default):
+        return value if value in {key for key, _ in choices} else default
 
 class TrophyCaseForm(forms.Form):
     query = forms.CharField(required=False, label='Search by game name')

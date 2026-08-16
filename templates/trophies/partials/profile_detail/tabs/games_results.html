@@ -1,5 +1,17 @@
 {% load custom_filters humanize %}
-<div id="games-grid" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}">
+{% comment %}The Games wall, in ONE place. `games_tab.html` includes this rather than restating it, so the
+first render and every filter/sort/search swap are the same markup by construction -- the tab used to
+carry its own copy, which is how `pp-gbrowse__grid--lib` came to exist on load and vanish on the first
+interaction, reverting the wall to the browse ladder's six columns.
+
+Browse Games' grid on the `--lib` ladder (1 / 2 / 3 / 3 / 4 rather than 2 / 3 / 4 / 5 / 6): the two walls
+answer different questions -- a catalogue is scanned by cover art, a library is READ -- and at one column
+the row-flipped `.pp-gcard--lib` reads as a list rather than a narrow grid.
+
+`pp-reveal` is baked in on HTMX swaps ONLY: htmx settle restores server attributes on id'd elements after
+afterSwap, so a class added there is wiped -- which un-hides the cards for a frame and flashes. On the
+first (non-htmx) render staggerReveal adds it itself, before paint.{% endcomment %}
+<div id="games-grid" class="pp-gbrowse__grid pp-gbrowse__grid--lib{% if request.htmx %} pp-reveal{% endif %}">
     {% include 'trophies/partials/profile_detail/game_list_items.html' %}
 </div>
 <div id="games-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">
