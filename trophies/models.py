@@ -3199,11 +3199,17 @@ class ProfileBadgeStanding(models.Model):
     profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='badge_standing')
     total_xp = models.PositiveIntegerField(default=0, db_index=True)   # global leaderboard sort key
 
-    # Global Progress board. `trophies_total` is the sort key; the per-tier counts are what the row DISPLAYS.
-    # Deliberately a plain total rather than the legacy weighted score (plats*10^9 + golds*10^6 + ...): the
-    # stat is "trophies earned across badge games", and a weighted composite ranks by platinums with the
-    # rest as tiebreakers, which is a different board wearing the same name.
-    trophies_total = models.PositiveIntegerField(default=0, db_index=True)
+    # Global Progress board. Ranked PLATINUMS first, total trophies as the tiebreak -- a trophy-hunting
+    # board should lead with the trophy that takes a whole game to earn.
+    #
+    # Expressed as a multi-column ORDER BY over a composite index rather than the legacy encoded score
+    # (plats*10^9 + golds*10^6 + silvers*10^3 + bronzes). Same ordering, but the encoding carries a silent
+    # ceiling (999 golds and the field bleeds into the platinum digit), forces a rewrite of every stored
+    # value to change the weighting, and reads as a magic number. A composite index range-scans identically.
+    #
+    # `trophies_total` is both the tiebreak and the figure the row displays; the per-tier counts are the
+    # breakdown beside it.
+    trophies_total = models.PositiveIntegerField(default=0)
     trophies_platinum = models.PositiveIntegerField(default=0)
     trophies_gold = models.PositiveIntegerField(default=0)
     trophies_silver = models.PositiveIntegerField(default=0)
@@ -3217,10 +3223,14 @@ class ProfileBadgeStanding(models.Model):
 
     class Meta:
         indexes = [
-            # Country-sliced boards. Both are (country, -value) so a slice is a range scan in board order;
-            # the unsliced boards ride the single-column db_index above.
+            # Global Progress, in board order. Must match the ORDER BY exactly (-platinum, -total) or the
+            # sort falls back to a scan; the Badge Points board rides `total_xp`'s own db_index.
+            models.Index(fields=['-trophies_platinum', '-trophies_total'], name='pbs_progress_idx'),
+            # Country-sliced boards: (country, ...board order) so a slice is a range scan, not a filter
+            # over a board-ordered scan.
             models.Index(fields=['country_code', '-total_xp'], name='pbs_country_xp_idx'),
-            models.Index(fields=['country_code', '-trophies_total'], name='pbs_country_troph_idx'),
+            models.Index(fields=['country_code', '-trophies_platinum', '-trophies_total'],
+                         name='pbs_country_prog_idx'),
         ]
 
     def __str__(self):

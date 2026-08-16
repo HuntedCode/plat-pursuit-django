@@ -220,3 +220,47 @@ def test_saving_a_profile_without_changing_country_touches_no_standings():
     touched = [q['sql'] for q in ctx.captured_queries
                if 'UPDATE' in q['sql'] and 'standing' in q['sql'].lower()]
     assert not touched, f'a non-country save still rewrote the standings: {touched}'
+
+
+def test_global_progress_ranks_platinums_first_then_total():
+    """A trophy-hunting board leads with the trophy that takes a whole game to earn. Total trophies is the
+    tiebreak, not the lead: 400 bronzes should not outrank a hunter with more platinums.
+
+    Asserted as an actual ORDER BY over real rows rather than by reading the index definition, because the
+    two can disagree -- an index is a performance fact and the ordering is a correctness one.
+    """
+    few_plats_many_trophies = ProfileFactory(is_linked=True)
+    many_plats = ProfileFactory(is_linked=True)
+    tie_breaker_loser = ProfileFactory(is_linked=True)
+
+    ProfileBadgeStanding.objects.create(
+        profile=few_plats_many_trophies, trophies_platinum=2, trophies_total=400)
+    ProfileBadgeStanding.objects.create(
+        profile=many_plats, trophies_platinum=9, trophies_total=50)
+    ProfileBadgeStanding.objects.create(
+        profile=tie_breaker_loser, trophies_platinum=9, trophies_total=20)
+
+    ordered = list(
+        ProfileBadgeStanding.objects
+        .order_by('-trophies_platinum', '-trophies_total', 'profile_id')
+        .values_list('profile_id', flat=True)
+    )
+
+    assert ordered == [many_plats.id, tie_breaker_loser.id, few_plats_many_trophies.id], (
+        'the board is not platinum-leading with total as the tiebreak'
+    )
+
+
+def test_the_progress_index_matches_the_board_order():
+    """A composite index only range-scans when its columns match the ORDER BY exactly. `(-platinum,
+    -total)` against `ORDER BY -platinum, -total` is a scan; any divergence silently becomes a sort of the
+    whole table, which is invisible until the table is large.
+    """
+    meta_indexes = {idx.name: idx.fields for idx in ProfileBadgeStanding._meta.indexes}
+
+    assert meta_indexes.get('pbs_progress_idx') == ['-trophies_platinum', '-trophies_total'], (
+        f'the Global Progress index no longer matches the board order: {meta_indexes.get("pbs_progress_idx")}'
+    )
+    assert meta_indexes.get('pbs_country_prog_idx') == [
+        'country_code', '-trophies_platinum', '-trophies_total'
+    ], 'the country-sliced progress index must be (country, ...board order)'

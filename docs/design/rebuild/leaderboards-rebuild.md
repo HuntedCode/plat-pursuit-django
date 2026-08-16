@@ -172,7 +172,7 @@ Three explicit tabs, no ambiguity:
 
 | Tab | Source |
 |---|---|
-| **Progress** | Trophies earned across badge games (see §3) |
+| **Progress** | Trophies across badge games, ranked PLATINUMS first with total as the tiebreak (see §3) |
 | **Badge Points** | `ProfileBadgeStanding.total_xp` |
 | **Career XP** | Gamification total (see §3) |
 
@@ -242,7 +242,7 @@ board then gets a country slice as an index range scan, at the same speed as its
 
 | Store | Index |
 |---|---|
-| `ProfileBadgeStanding` | `(country_code, -total_xp)` |
+| `ProfileBadgeStanding` | `(-trophies_platinum, -trophies_total)` + `(country_code, -total_xp)` + `(country_code, -trophies_platinum, -trophies_total)` |
 | `SeriesBadgeStanding` | `(series_slug, country_code, -xp)` |
 | `ProfileJobXP` | `(job, country_code, -total_xp)` |
 | `ProfileGame` | own composite; mirrors `pg_game_leaderboard_idx` with `country_code` |
