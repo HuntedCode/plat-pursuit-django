@@ -171,17 +171,45 @@ def test_a_profile_with_no_job_xp_gets_a_zeroed_standing_not_a_crash():
     assert standing.total_xp == 0 and standing.pursuer_level == 0
 
 
-def test_the_job_xp_seam_writes_the_roll_up():
-    """The roll-up rides `recompute_profile_job_xp` rather than getting its own trigger, so that anything
-    changing a profile's job XP necessarily updates the total. If the call is dropped, the board silently
-    freezes at its last value -- no error, just a stale leaderboard."""
+def test_granting_job_xp_updates_the_career_board_immediately():
+    """The LIVE path, end to end. Accepting a contract calls `grant_job_xp`, which is the single primitive
+    every job-XP payout flows through -- contracts, quests, events, manual awards.
+
+    The roll-up was originally hooked to `recompute_profile_job_xp` (the ledger REBUILD), which only
+    management commands call. That looked right and was not: a real accept bumped ProfileJobXP and left
+    ProfileCareerStanding frozen, so the Career board silently stopped at whatever the last backfill
+    produced and every accept after it was invisible. Nothing errored.
+
+    The original test asserted the call existed inside the rebuild function -- true, and no evidence at
+    all about the seam that actually fires. This one grants XP the way the product does and reads the
+    board's own column.
+    """
+    from trophies.services.contract_service import grant_job_xp
+
+    profile = ProfileFactory(is_linked=True)
+    job = _job()
+
+    granted = grant_job_xp(profile, job, 250, source='manual')
+    assert granted == 250
+
+    standing = ProfileCareerStanding.objects.get(profile=profile)
+    assert standing.total_xp == 250, 'the Career board did not move when XP was granted'
+    assert standing.pursuer_level >= 1
+
+    # A second grant must accumulate, not replace -- the board reads a running total, not the last award.
+    grant_job_xp(profile, _job(), 100, source='quest')
+    assert ProfileCareerStanding.objects.get(profile=profile).total_xp == 350
+
+
+def test_the_ledger_rebuild_also_refreshes_the_career_board():
+    """The backfill path stays wired too: `recompute_job_xp --all` must be able to repair a standing that
+    drifted, which is the whole reason it is recompute-from-scratch."""
     import inspect
     from trophies.services import contract_service
 
     source = inspect.getsource(contract_service.recompute_profile_job_xp)
     assert 'recompute_career_standing(' in source, (
-        'the per-job recompute no longer rolls up into ProfileCareerStanding; the Career XP board will '
-        'freeze at whatever it last held'
+        'the ledger rebuild no longer refreshes the standing, so the backfill command cannot repair it'
     )
 
 

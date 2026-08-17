@@ -134,6 +134,17 @@ def grant_job_xp(profile, job, amount, *, source='contract', source_id=None,
     pjx.save(update_fields=['total_xp', 'level', 'updated_at'])
     if pjx.level > old_level:
         _log_job_tier_milestones(profile, job, old_level, pjx.level, first_claim)
+
+    # The Career XP board's roll-up rides THIS primitive, not the ledger-rebuild function, because this
+    # is the seam every grant actually passes through -- contract accepts, quests, events, manual awards.
+    # Hooking it to `recompute_profile_job_xp` instead (as it first was) meant the board only moved when a
+    # management command was run by hand: a live accept updated ProfileJobXP and left the standing frozen,
+    # so the leaderboard silently stopped at whatever the last backfill produced.
+    #
+    # Recomputed from scratch rather than incremented: it is a Sum over a profile's ~24 job rows, an
+    # accept is a rare user-initiated action rather than a hot path, and a re-derived total cannot drift
+    # the way a running one can.
+    recompute_career_standing(profile)
     return amount
 
 

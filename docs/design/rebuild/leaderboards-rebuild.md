@@ -251,8 +251,14 @@ time after `bulk_gamification_update()` exits."* `recompute_standing` inherits t
 Pursuer Level is *computed* as the sum of a profile's `ProfileJobXP.level`, not stored. A global board
 would aggregate ~24 rows per user across the whole population per read.
 
-Materialize a per-profile career-XP total, bumped in the seam that already bumps `ProfileJobXP` on each
-`ContractXPGrant`. Per-discipline totals have the same shape and the same fix, if discipline boards are
+Materialize a per-profile career-XP total, rolled up in **`grant_job_xp`** -- the single primitive every
+job-XP payout flows through (contracts, quests, events, manual awards).
+
+> **Hook the PRIMITIVE, not the rebuild.** This was first wired to `recompute_profile_job_xp`, the ledger
+> REBUILD, which only management commands call. A live contract accept bumped `ProfileJobXP` and left the
+> standing frozen, so the board silently stopped at the last backfill and every accept after it was
+> invisible -- with nothing erroring. The test that "covered" it asserted the call existed inside the
+> rebuild function, which was true and said nothing about the seam that actually fires. Per-discipline totals have the same shape and the same fix, if discipline boards are
 ever wanted — they are **not** in this plan.
 
 ### Per-job boards — already backed
