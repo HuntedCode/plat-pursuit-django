@@ -252,19 +252,50 @@ def test_the_sync_entry_point_never_raises():
 
 
 @patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
-def test_the_sync_entry_point_does_not_announce_while_the_legacy_engine_still_does(mock_send):
-    """Both engines run during cutover 5a and both send to the same webhook, so announcing here would ping
-    a hunter twice for one act -- once tier-shaped from `check_profile_badges`, once edition-shaped from
-    this. 5b flips this on in the same change that stops the legacy notification."""
+def test_the_sync_entry_point_announces_an_earn(mock_send):
+    """Inverted at cutover 5b. This was silent for as long as the legacy engine ran alongside it and sent
+    its own embed to the same webhook -- announcing then would have pinged a hunter twice for one act,
+    once tier-shaped and once edition-shaped. The legacy engine is gone, so this is the only voice left,
+    and a hunter earning a badge mid-sync must hear about it."""
     from trophies.services.badge_apply import evaluate_for_sync
 
-    _series_with_both_editions('quiet', [ULTRA])
+    _series_with_both_editions('loud', [ULTRA])
     profile = ProfileFactory(is_linked=True, is_discord_verified=True, discord_id='123')
-    pg = _finish(profile, _game_in('quiet'))
+    pg = _finish(profile, _game_in('loud'))
 
     result = evaluate_for_sync(profile, [pg.id])
     assert result['awarded'], 'fixture is wrong -- expected an award'
-    assert mock_send.call_count == 0, 'the sync path announced while the legacy engine is still announcing'
+    assert mock_send.call_count == 1, 'the sync path earned a badge and said nothing'
+
+
+@patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
+def test_a_re_earned_badge_is_not_announced_twice(mock_send):
+    """`UserGroupBadge` is binary: a revoke DELETES the row, so a later re-earn is indistinguishable from a
+    first earn and would announce again. PSN flux, a DLC drop or a curator editing a stage could therefore
+    re-ping a hunter about a badge they have held for a year -- the legacy engine's `maintenance` state
+    made that structurally impossible.
+
+    `GroupBadgeAnnouncement` restores the property. A cooldown was the alternative and is NOT sufficient:
+    any TTL short enough to be a cooldown has expired by the time the year-later flux happens, which is
+    the whole case being defended against. So the marker is durable and this test revokes properly (the
+    hold is deleted, exactly as the engine does it) rather than simulating a short gap."""
+    from trophies.models import UserGroupBadge
+    from trophies.services.badge_apply import evaluate_for_sync
+
+    _series_with_both_editions('flap', [ULTRA])
+    profile = ProfileFactory(is_linked=True, is_discord_verified=True, discord_id='123')
+    game = _game_in('flap')
+    pg = _finish(profile, game)
+
+    evaluate_for_sync(profile, [pg.id])
+    assert mock_send.call_count == 1
+
+    # Full revoke: the hold row is gone, which is precisely what makes the re-earn look brand new.
+    UserGroupBadge.objects.filter(profile=profile).delete()
+    evaluate_for_sync(profile, [pg.id])
+
+    assert UserGroupBadge.objects.filter(profile=profile).exists(), 'fixture is wrong -- expected a re-earn'
+    assert mock_send.call_count == 1, 'a re-earned badge announced a second time'
 
 
 def test_the_sync_cost_does_not_grow_with_the_catalogue():
@@ -436,3 +467,64 @@ def test_a_failed_announcement_never_loses_the_badge(mock_send):
     )
     assert result['awarded'], 'the award was rolled back by a failed announcement'
     assert UserGroupBadge.objects.filter(profile=profile).exists()
+
+
+def test_the_announcement_backfill_covers_every_existing_hold():
+    """Migration 0305's data step, exercised directly.
+
+    The table starts empty and `evaluate_for_sync` now announces, so without this backfill the first sync
+    after deploy re-pings every hunter for every badge they already hold. That failure is loud, public and
+    unrecoverable -- you cannot unsend a webhook -- which is why the backfill lives in the migration rather
+    than on a deploy checklist, and why it is called here rather than trusted.
+
+    Imported by `importlib` because the module name starts with a digit.
+    """
+    import importlib
+
+    from django.apps import apps as global_apps
+    from trophies.models import GroupBadgeAnnouncement, UserGroupBadge
+    from trophies.services.badge_apply import evaluate_and_apply
+
+    migration = importlib.import_module('trophies.migrations.0305_group_badge_announcement')
+
+    _series_with_both_editions('backfill', [ULTRA])
+    profile = ProfileFactory(is_linked=True)
+    _finish(profile, _game_in('backfill'))
+
+    # Holds WITHOUT markers: what a pre-migration database looks like.
+    evaluate_and_apply(profile, notify=False)
+    GroupBadgeAnnouncement.objects.all().delete()
+    held = set(UserGroupBadge.objects.values_list('profile_id', 'group_badge_id'))
+    assert held, 'fixture is wrong -- expected at least one hold'
+
+    migration.seed_from_existing_holds(global_apps, None)
+    assert set(GroupBadgeAnnouncement.objects.values_list('profile_id', 'group_badge_id')) == held
+
+    # Idempotent: re-running must not raise on the unique constraint.
+    migration.seed_from_existing_holds(global_apps, None)
+    assert GroupBadgeAnnouncement.objects.count() == len(held)
+
+
+def test_a_backfilled_hold_is_never_announced():
+    """The backfill's actual purpose, end to end: a hunter whose badges predate the marker table must stay
+    silent through their next sync."""
+    from unittest.mock import patch as _patch
+    import importlib
+
+    from django.apps import apps as global_apps
+    from trophies.models import GroupBadgeAnnouncement
+    from trophies.services.badge_apply import evaluate_and_apply, evaluate_for_sync
+
+    migration = importlib.import_module('trophies.migrations.0305_group_badge_announcement')
+
+    _series_with_both_editions('quiet-after-backfill', [ULTRA])
+    profile = ProfileFactory(is_linked=True, is_discord_verified=True, discord_id='123')
+    pg = _finish(profile, _game_in('quiet-after-backfill'))
+    evaluate_and_apply(profile, notify=False)
+    GroupBadgeAnnouncement.objects.all().delete()        # pre-migration state
+    migration.seed_from_existing_holds(global_apps, None)
+
+    with _patch('trophies.discord_utils.discord_notifications.queue_webhook_send') as mock_send:
+        evaluate_for_sync(profile, [pg.id])
+
+    assert mock_send.call_count == 0, 'a pre-existing hold was announced after the backfill'

@@ -55,10 +55,10 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Challenge Systems](features/challenge-systems.md) | **RETIRED 2026-08** (design reference for the planned rewrite): A-Z, Calendar, and Genre platinum challenges |
 | [Comment System (Legacy)](features/comment-system.md) | Read-only legacy: surviving moderation/vote endpoints, why no new comments are accepted |
 | [Community Flags](features/community-flags.md) | User-submitted game data quality flags (delisted, shovelware, VR, buggy trophies) |
-| [Community Hub](features/community-hub.md) | Site-wide community destination: Pursuit Feed, leaderboards, top reviewers, active challenges |
+| [Community Hub](features/community-hub.md) | Retired 2026-08: what the hub was and where each piece went |
 | [Community Trophy Tracker](features/community-trophy-tracker.md) | Daily Discord post summarizing prev-day community trophy stats from Discord-linked profiles, with all-time records and a weighted PP Score |
 | [Company System](features/company-system.md) | Developer / publisher browse + detail pages, IGDB-grouped games, user progress summary |
-| [Dashboard](features/dashboard.md) | Module registry, customization, drag reorder |
+| [Dashboard](features/dashboard.md) | Deleted 2026-08: what it was, why it went, what survived |
 | [Easter Eggs](features/easter-eggs.md) | Hidden finds + the server-side roll API (the title award retired with the legacy milestone engine) |
 | [Engine System](features/engine-system.md) | Game engine browse + detail pages (shared `tag_detail.html` with Genre/Theme), game-detail engine link-out |
 | [Franchise System](features/franchise-system.md) | Franchise / collection browse + detail pages, main vs. tie-in partitioning, user progress summary |

@@ -166,13 +166,13 @@ def evaluate_for_sync(profile, profilegame_ids) -> dict:
     a log line on every sync forever with the boards quietly frozen. And a block buried in a 300-line job
     method is not reachable by a test -- deleting the whole thing passed the entire suite.
 
-    `notify=False` until badge cutover 5b. The LEGACY engine still runs immediately before this in
-    `_job_sync_complete` and still sends its own Discord embed, so announcing here too would ping a hunter
-    twice for one act -- once tier-shaped, once edition-shaped. The adapter is built and tested; 5b flips
-    this to True in the same change that stops the legacy notification.
+    Announces, as of cutover 5b. It was silent while the legacy engine ran immediately before it in
+    `_job_sync_complete` and sent its own embed to the same webhook -- announcing then would have pinged a
+    hunter twice for one act, once tier-shaped and once edition-shaped. The legacy engine is gone, so this
+    is the only voice left. Re-announcement is guarded durably in `announce_badges_earned`.
     """
     try:
-        return evaluate_for_touched_games(profile, profilegame_ids, notify=False)
+        return evaluate_for_touched_games(profile, profilegame_ids, notify=True)
     except Exception:
         logger.exception('group-badge evaluation failed for profile %s', getattr(profile, 'id', None))
         return {'awarded': [], 'revoked': [], 'updated': []}

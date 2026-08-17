@@ -3,7 +3,7 @@ from django.db.models.signals import post_save, post_delete, m2m_changed, pre_sa
 from django.dispatch import receiver
 from django.db.models import F
 from trophies.models import (
-    UserBadge, UserBadgeProgress, Stage, ConceptBundle, Profile, EarnedTrophy, ProfileGame,
+    Stage, ConceptBundle, Profile, EarnedTrophy, ProfileGame,
     GroupBadge, UserGroupBadge,
 )
 
@@ -257,20 +257,6 @@ def country_mirrored_standings():
             SeriesBadgeStanding, ProfileJobXP)
 
 
-@receiver(post_save, sender=UserBadge, dispatch_uid="update_badge_earned_count")
-def update_badge_earned_count_on_save(sender, instance, created, **kwargs):
-    if created:
-        from trophies.models import Badge
-        Badge.objects.filter(pk=instance.badge_id).update(earned_count=F('earned_count') + 1)
-
-@receiver(post_delete, sender=UserBadge, dispatch_uid='decrement_badge_earned_count')
-def decrement_badge_earned_count_on_delete(sender, instance, **kwargs):
-    from trophies.models import Badge
-    Badge.objects.filter(pk=instance.badge_id, earned_count__gt=0).update(
-        earned_count=F('earned_count') - 1
-    )
-
-
 @receiver(pre_delete, sender=Profile, dispatch_uid="reconcile_group_badge_earned_counts_on_profile_delete")
 def reconcile_group_badge_earned_counts_on_profile_delete(sender, instance, **kwargs):
     """GroupBadge.earned_count is a manual denorm owned by badge_apply's award/revoke path (no signals there).
@@ -284,144 +270,6 @@ def reconcile_group_badge_earned_counts_on_profile_delete(sender, instance, **kw
     if gb_ids:
         GroupBadge.objects.filter(pk__in=gb_ids, earned_count__gt=0).update(earned_count=F('earned_count') - 1)
 
-
-
-# --- Gamification Signal Handlers ---
-
-@receiver(post_save, sender=UserBadgeProgress, dispatch_uid="update_gamification_on_progress")
-def update_gamification_on_progress(sender, instance, created, **kwargs):
-    """
-    Update ProfileGamification when badge progress changes.
-
-    Triggered on:
-    - New progress record created
-    - Existing progress updated (completed_concepts changed)
-    """
-    from trophies.services.xp_service import (
-        update_profile_gamification,
-        is_bulk_update_active,
-        defer_profile_update
-    )
-
-    # Defer update if bulk operation is active
-    if is_bulk_update_active():
-        defer_profile_update(instance.profile)
-        return
-
-    try:
-        update_profile_gamification(instance.profile)
-        logger.debug(
-            f"Updated gamification for {instance.profile.psn_username} "
-            f"after progress update on {instance.badge.name}"
-        )
-    except Exception as e:
-        logger.exception(f"Failed to update gamification after progress change: {e}")
-
-
-@receiver(post_save, sender=UserBadge, dispatch_uid="update_gamification_on_badge_earned")
-def update_gamification_on_badge_earned(sender, instance, created, **kwargs):
-    """
-    Update ProfileGamification and earners leaderboard when a badge is earned.
-
-    Adds the 3000 XP badge completion bonus and updates sorted set leaderboard.
-    Only triggers on new badge creation, not updates.
-    """
-    if not created:
-        return
-
-    from trophies.services.xp_service import (
-        update_profile_gamification,
-        is_bulk_update_active,
-        defer_profile_update
-    )
-
-    # Defer update if bulk operation is active
-    if is_bulk_update_active():
-        defer_profile_update(instance.profile)
-        return
-
-    try:
-        update_profile_gamification(instance.profile)
-        logger.info(
-            f"Updated gamification for {instance.profile.psn_username} "
-            f"after earning {instance.badge.name}"
-        )
-    except Exception as e:
-        logger.exception(f"Failed to update gamification after badge earned: {e}")
-
-    # Update earners leaderboard sorted set
-    _update_earner_leaderboard_on_badge_change(instance.profile, instance.badge.series_slug)
-
-
-@receiver(post_delete, sender=UserBadge, dispatch_uid="update_gamification_on_badge_revoked")
-def update_gamification_on_badge_revoked(sender, instance, **kwargs):
-    """
-    Update ProfileGamification and earners leaderboard when a badge is deleted.
-
-    Removes the 3000 XP badge completion bonus and updates sorted set leaderboard.
-    NOTE: lapsing no longer deletes badges (see badge_service._lapse_badge, which
-    moves them to status='maintenance' and refreshes gamification itself). This now
-    fires only on a true UserBadge delete: a Profile deletion cascade or admin removal.
-    """
-    from trophies.models import ProfileGamification
-    from trophies.services.xp_service import (
-        update_profile_gamification,
-        is_bulk_update_active,
-        defer_profile_update
-    )
-
-    # Skip if profile's gamification record was already cascade-deleted
-    # (happens when the Profile itself is being deleted)
-    if not ProfileGamification.objects.filter(profile_id=instance.profile_id).exists():
-        return
-
-    # Defer update if bulk operation is active
-    if is_bulk_update_active():
-        defer_profile_update(instance.profile)
-        return
-
-    try:
-        update_profile_gamification(instance.profile)
-        logger.info(
-            f"Updated gamification for {instance.profile.psn_username} "
-            f"after revoking {instance.badge.name}"
-        )
-    except Exception as e:
-        logger.error(
-            f"Failed to update gamification after badge revoked: {e}",
-            exc_info=True
-        )
-
-    # Update earners leaderboard sorted set
-    _update_earner_leaderboard_on_badge_change(instance.profile, instance.badge.series_slug)
-
-
-def _update_earner_leaderboard_on_badge_change(profile, series_slug):
-    """
-    Update the earners sorted set leaderboard after a badge is earned or revoked.
-
-    Finds the user's highest remaining tier in the series and updates their
-    sorted set entry accordingly, or removes them if no badges remain.
-    """
-    if not profile.is_linked:
-        return
-
-    try:
-        from trophies.services.redis_leaderboard_service import (
-            update_earner_entry, remove_earner_entry,
-        )
-
-        # Find the user's current highest tier badge in this series
-        highest = UserBadge.objects.filter(
-            profile=profile, badge__series_slug=series_slug
-        ).select_related('badge').order_by('-badge__tier', 'earned_at').first()
-
-        if highest:
-            update_earner_entry(series_slug, profile, highest.badge.tier, highest.earned_at)
-        else:
-            remove_earner_entry(series_slug, profile.id)
-    except Exception as e:
-        logger.error(f"Failed to update earner leaderboard for {profile.psn_username}: {e}")
 
 
 # --- Stage Icon Auto-Population ---

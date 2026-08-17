@@ -4,10 +4,9 @@ A new TrophyGroup appears (via sync `get_or_create`) when a game gains a trophy 
 If that game ALREADY existed before this scan window (it has a trophy group created at
 or before the watermark), the new group is DLC -- which can drop earners below 100% and
 must re-evaluate the whole badge series the game belongs to. For each affected series we
-run the same full refresh as `refresh_badge_series` (re-check every earner + rebuild the
-leaderboard) via the shared `badge_refresh_service`. The per-earner lapse behavior
-(delete on main / maintenance on rebuild) is handled by `handle_badge`, so this command
-is branch-agnostic and merges cleanly.
+re-evaluate every profile that has played a game in it, across every LIVE edition, via
+`badge_apply.evaluate_and_apply_batch`. Awards and revokes both fall out of that: DLC can
+newly qualify a hunter as easily as it lapses one.
 
 DLC also grows the game's trophy TOTAL, so every owner's stored `ProfileGame.progress`
 (a PSN-reported, grade-weighted %) is left overstated until they re-sync -- and inactive
@@ -31,8 +30,8 @@ from django.db.models.functions import Least, Round
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from trophies.models import Stage, TrophyGroup, Game, ProfileGame
-from trophies.services.badge_refresh_service import refresh_badge_series_awards
+from trophies.models import Stage, TrophyGroup, Game, GroupBadge, Profile, ProfileGame
+from trophies.services.badge_apply import evaluate_and_apply_batch
 from trophies.util_modules.cache import redis_client
 
 logger = logging.getLogger('psn_api')
@@ -91,13 +90,31 @@ class Command(BaseCommand):
 
         for slug in sorted(affected):
             try:
-                # Automated DLC re-evaluation: stay silent (matches the prior behavior,
-                # where most badges sent no Discord; new DLC mostly lapses badges anyway).
-                processed, changed, earners, _progress = refresh_badge_series_awards(
-                    slug, skip_notifications=True,
+                # Every LIVE edition of the series: DLC lands on a game, and a game can gate more than one
+                # edition, so scoping to a single group badge would leave the others stale.
+                badges = list(
+                    GroupBadge.objects.filter(is_live=True, series__series_slug=slug)
+                    .select_related('series', 'platform_group')
                 )
+                if not badges:
+                    self.stdout.write(f"  skipped '{slug}': no live badges")
+                    continue
+
+                # Everyone who has played a game in the series -- the same population the legacy refresh
+                # walked. Not just current holders: DLC can newly QUALIFY someone as easily as it lapses
+                # someone, and a holders-only scan would only ever take badges away.
+                profiles = Profile.objects.filter(
+                    played_games__game__concept__stages__series_slug=slug
+                ).distinct()
+
+                # `evaluate_and_apply_batch` is silent by construction (no notify parameter), which is the
+                # behaviour this call site wants: an automated DLC sweep should not ping hunters about
+                # badges they effectively already held. It also builds the catalog ONCE for the whole
+                # batch rather than per profile.
+                totals = evaluate_and_apply_batch(profiles, badges)
                 self.stdout.write(self.style.SUCCESS(
-                    f"  refreshed '{slug}': {processed} pairs, {changed} profiles changed, {earners} earners"
+                    f"  refreshed '{slug}': {len(badges)} edition(s), "
+                    f"{totals['awarded']} awarded, {totals['revoked']} revoked, {totals['updated']} updated"
                 ))
             except Exception:
                 logger.exception("detect_dlc_and_refresh: refresh failed for series %s", slug)

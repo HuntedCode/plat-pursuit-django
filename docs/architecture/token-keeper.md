@@ -130,7 +130,7 @@ Both initial and follow-up syncs run through the same `profile_refresh` orchestr
     - Drains deferred IGDB enrichments queued by `sync_title_id`
     - Recomputes `Profile.total_hiddens` from authoritative DB state (`EarnedTrophy.objects.filter(earned=True, user_hidden=True).count()`)
     - Trophy/TrophyGroup completeness check (games with 0 records despite having defined trophies)
-    - Calls `update_plats()`, `update_profilegame_stats()`, `check_profile_badges()`
+    - Calls `update_plats()`, `update_profilegame_stats()`, `evaluate_for_sync()`
     - Creates consolidated badge notifications via `DeferredNotificationService`
     - Calls `update_profile_games()` and `update_profile_trophy_counts()` so denormalized totals reflect the post-sync state regardless of fast/slow path
     - Invalidates timeline, stats, and dashboard module caches
@@ -219,7 +219,14 @@ This handles PSN username changes where a user might have been tracked under the
 
 ### Badge Evaluation
 
-After sync completion, `check_profile_badges(profile, touched_profilegame_ids)` evaluates all badge criteria using a stage completion cache (pre-built in `_build_badge_context()` to avoid N+1 queries). Badge XP is awarded via the gamification system.
+After sync completion, `evaluate_for_sync(profile, touched_profilegame_ids)` evaluates the grouping-badge
+subsystem. It resolves the touched games to their concepts, those concepts to the badge SERIES they appear
+in (via `Stage.concepts` **or** `Stage.concept_bundles`), and evaluates every live edition of those series.
+Badge XP is recomputed from scratch into the standing tables by the same call.
+
+Scoping is by series rather than by badge deliberately: `recompute_standing` REPLACES a series' standing
+from only the editions it is handed, so a badge-scoped call would silently zero the editions it omitted.
+It never raises -- see `evaluate_for_sync` -- so a badge failure cannot fail a sync.
 
 ### Challenge Progress
 
@@ -329,7 +336,7 @@ This same key doubles as a UI-facing "finalizing" signal: `ProfileSyncStatusView
 | Phase | Triggered before | Hotbar badge | Home page copy |
 |-------|------------------|--------------|----------------|
 | `health_check` | The `trophy_summary` health check call | `Verifying...` | "Verifying your trophy data with PSN..." |
-| `stats_badges` | `update_plats()`, `update_profilegame_stats()`, `check_profile_badges()` | `Badges...` | "Updating stats and awarding badges..." |
+| `stats_badges` | `update_plats()`, `update_profilegame_stats()`, `evaluate_for_sync()` | `Badges...` | "Updating stats and awarding badges..." |
 | `finishing` | `update_profile_trophy_counts()`, `recompute_on_sync()` (milestones), status flip, cache invalidation, sig render | `Wrapping up...` | "Wrapping things up..." |
 
 The key is set with the same 1800s TTL as `sync_complete_in_progress` and is cleared in the same `finally` block so they always travel together. `ProfileSyncStatusView` exposes the current phase as `finalize_phase` in the JSON response (only populated when `is_finalizing` is true). The hotbar shows the phase verb directly in the badge (no "Finalizing..." prefix, since the phase label already implies finalization and the badge is too narrow on mobile to fit the longer string); the home page progress card shows the friendlier copy in its phase text element.

@@ -231,7 +231,7 @@ just per-edition. (Cutover: an `evaluate_badges` run backfills it onto existing 
 global XP (`xp_rows`/`xp_rank`), per-series XP (`series_xp_rows`/`series_rank`), per-series progress/chasers
 (`series_progress_rows`), and per-badge earners (`earners_rows` + `earners_rank`/`earners_ranks` -- the LIVE
 position shown on the medallion back, a bounded indexed COUNT). The earners board IS the derived rank (`held
-ORDER BY earned_at`), so no separate rank store. **Next:** 5b.4 -- the XP / Redis stack (§6). 5b.1-5b.3 are done.
+ORDER BY earned_at`), so no separate rank store. **Next:** soak, then decommission the retained legacy tables. 5b is COMPLETE.
 
 ---
 
@@ -348,32 +348,61 @@ Standard parallel-change / expand–contract with a separate schema:
    Coverage added where there was none: `test_badge_legacy_consumers_repointed.py` (the bot contract and
    the digest, neither of which had a single test), plus the catalog stats rewritten onto the new models.
 
-   **5b.4 — the XP / Redis stack.** `xp_service`, `redis_leaderboard_service`, `leaderboard_service`. The
-   leaderboards rebuild's deferred cleanup lives here too, so this finishes both threads.
+   **5b.4 + 5b.5 — the XP / Redis stack and the engine. [DONE 2026-08]** Done as ONE cut, because they
+   are mutually entangled: `badge_service` imports `xp_service`, and the signals import both.
 
-   **5b.5 — remove the engine.** `badge_service`, `badge_refresh_service`, the legacy badge signals in
-   `trophies/signals.py` and `notifications/signals.py`, the legacy admin, and the `check_profile_badges`
-   call in `_job_sync_complete`. Plus the four 5a follow-ups above. `UserBadge` history is retained.
+   Deleted: `badge_service`, `badge_refresh_service`, `xp_service`, `redis_leaderboard_service`,
+   `leaderboard_service`, the gamification + earner-leaderboard signals in `trophies/signals.py`,
+   `notify_badge_awarded` and its helpers in `notifications/signals.py`, the legacy admin for
+   `UserBadge` / `UserBadgeProgress` / `StageCompletionEvent` / `ProfileGamification`, the
+   `check_profile_badges` call in `_job_sync_complete`, the Redis link-time backfill in
+   `verification_service`, and 10 management commands.
 
-   **Not a straight delete:** `/sig/<token>.<ext>` (`api/profile_card_views.serve_profile_sig`) is a public,
-   unauthenticated signature-image route. If anyone has it in a forum signature, removing it breaks an
-   image on a page we do not control — retire it deliberately rather than as part of the sweep.
-6. **Soak**, then **decommission** the old `Badge`/`UserBadge`/`badge_service` once stable.
+   Three things that were NOT in the inventory and were found on the way through:
 
-### Notifications at cutover
+   - **`/staff/badge-create/` was live** and authored four legacy `Badge` rows per submission -- badges
+     nothing can earn, because the engine that evaluated them was being deleted in the same change. All
+     four new models have full Django admin, so the form was superseded, not broken. Deleted with its
+     form, template, `PsnApiService.create_badge_group_from_form`, and `AdminUserSearchView` (the one
+     endpoint the notification withdrawal had deliberately left routed, purely to serve this template's
+     user picker).
+   - **`art_reveal` has a live FK to `Badge`.** Its inline's `autocomplete_fields` requires a registered
+     admin for the model, so deleting `BadgeAdmin` failed the whole admin site's system check
+     (`admin.E039`), not just art_reveal. `BadgeAdmin` is therefore RETAINED and documented as an
+     exception. **Repointing art_reveal onto `BadgeSeries`/`GroupBadge` is the last thread tying the tier
+     model to a live feature, and is its own task.**
+   - **`badge_coverage_service` was worth keeping.** Initially deleted with the rest, then restored and
+     repointed: it is a curator tool that answers "a new game shipped and is missing from its series",
+     which is still a real question. It got simpler in the move -- it scanned `tier=1` only because
+     franchise/collection/developer were set on the base badge and inherited, and `BadgeSeries` carries
+     them directly.
 
-**Discord is ported. On-site is deliberately NOT, and that is a tracked dependency.**
+   **5a follow-ups: all four cleared.**
 
-The notification inbox is parked pending its own rebuild — every view in `notifications/views.py` is
-unrouted and `/notifications/` 302s home — while the *production* side still runs: the app is installed,
-`ready()` connects the signals, and `notify_badge_awarded` (a `post_save` on the legacy `UserBadge`) still
-writes rows. So on-site badge notifications are currently written to a table nobody can open.
+   - `evaluate_for_sync` now announces. The legacy engine was the only reason it was silent.
+   - `detect_dlc_and_refresh` repointed to `evaluate_and_apply_batch` over every live edition of the
+     affected series and every profile that played a game in it. Awards and revokes both fall out of it,
+     which matters: DLC can newly qualify a hunter as easily as it lapses one, and the legacy call was
+     effectively a lapse-only sweep.
+   - **Re-announce guard: `GroupBadgeAnnouncement`** (migration `0305`), append-only, one row per
+     (hunter, badge) ever announced, never deleted. A Redis cooldown was considered and rejected: any TTL
+     short enough to be a cooldown has expired by the time year-later PSN flux re-triggers the earn, which
+     is the exact case the follow-up was written for. The guard lives in `announce_badges_earned` so every
+     caller inherits it, and markers are written BEFORE the send so a crash loses an announcement rather
+     than duplicating one.
+   - Nightly `evaluate_badges --all` is in the cron docs; adding the Render entry (and deleting the
+     `update_leaderboards` one) is on the deploy checklist.
 
-Porting them now would mean designing a new consolidation rule — the legacy one is "group by series, keep
-the highest TIER" and this system has no tiers, it has editions — for invisible output, against an inbox
-that is itself being redesigned.
+   **Guards added.** `test_legacy_badge_engine_removed.py` pins the deletions AND asserts, by AST, that
+   nothing in `trophies/` or `core/` writes the retained `Badge` / `UserBadge` / `UserBadgeProgress` /
+   `ProfileGamification` tables again -- a retained table with no writer is precisely what a later change
+   re-wires by accident. That test found the `/staff/badge-create/` writer.
 
-So `emit_badge_earned` stays the per-badge seam and the notifications rebuild consumes it. **When that
+   **Docs rewritten, not patched:** `badge-system.md` (now describes the live engine),
+   `leaderboard-system.md` (one backend), `gamification.md` (badge XP section), `dashboard.md` and
+   `mobile-app.md` (records of removal), plus `redis-keys.md`, `cron-jobs.md`, `sync-architecture.md`,
+   `token-keeper.md`, `notification-system.md`, `event-system-deferred.md`, `testing.md`.
+
 rebuild lands, badges will be absent from the inbox until it does.** At 5b, delete `notify_badge_awarded`,
 `queue_badge_notification`, `create_badge_notifications` and its `sync_complete` drain call together —
 they are all tier-shaped, and the drain currently spends two Redis round-trips per sync on a queue whose
@@ -405,7 +434,7 @@ Old `UserBadge` history is never deleted at cutover — retained for rollback an
 5. Authoring + processing tools: `convert_series_to_groups`, `evaluate_badges` (its completion-ordered batch IS
    the `earn_rank` backfill), `--compare-legacy` glance. [DONE — Phase 3 complete]
 6. Author dormant badges + art on prod.
-7. Cutover 5a (sync wiring + Discord) [DONE] -> 5b (retire legacy consumers) -> soak + decommission.
+7. Cutover 5a (sync wiring + Discord) [DONE] -> 5b (retire legacy consumers) [DONE] -> soak + decommission.
 
 ---
 

@@ -97,14 +97,42 @@ def announce_badges_earned(profile, group_badges):
     its series AND its edition ("Soulsborne -- Ultra HD"), because in this system those are different badges
     and saying only the series name would make two distinct earns look like a duplicate.
 
+    AT MOST ONCE per (hunter, badge), enforced by `GroupBadgeAnnouncement`. `UserGroupBadge` is binary, so
+    a revoke deletes the row and a later re-earn looks exactly like a first earn -- meaning PSN flux, a DLC
+    drop, or a curator editing a stage would re-ping a hunter about a badge they have held for a year. The
+    legacy engine's `maintenance` state made that impossible; this marker restores the property.
+
+    The guard lives HERE rather than at the call site so every caller inherits it: the sync path, the bot's
+    recheck, a Discord link, and any future one.
+
+    Markers are written BEFORE the send, so a crash mid-send loses an announcement rather than duplicating
+    one. That is the right way round -- duplicate pings are the failure being fixed, and a missed one is
+    invisible.
+
     Never raises: an announcement is the least important thing happening in a sync, and the badges are
     already written by the time this runs.
     """
+    from trophies.models import GroupBadgeAnnouncement
     from trophies.discord_utils.discord_notifications import send_group_badges_earned_notification
 
     if not profile or not group_badges:
         return
     try:
-        send_group_badges_earned_notification(profile, group_badges)
+        already = set(
+            GroupBadgeAnnouncement.objects
+            .filter(profile=profile, group_badge__in=group_badges)
+            .values_list('group_badge_id', flat=True)
+        )
+        fresh = [gb for gb in group_badges if gb.id not in already]
+        if not fresh:
+            return
+
+        # ignore_conflicts: two syncs racing the same profile would otherwise raise on the unique
+        # constraint, and the loser should simply stay silent -- which is exactly what this produces.
+        GroupBadgeAnnouncement.objects.bulk_create(
+            [GroupBadgeAnnouncement(profile=profile, group_badge=gb) for gb in fresh],
+            ignore_conflicts=True,
+        )
+        send_group_badges_earned_notification(profile, fresh)
     except Exception:
         logger.exception("badge announce failed: profile=%s", getattr(profile, 'id', None))

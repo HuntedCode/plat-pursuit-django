@@ -545,26 +545,3 @@ class ProfileSettingsForm(forms.ModelForm):
         fields = ['hide_hiddens', 'hide_zeros']
 
 # Admin Forms
-
-class BadgeCreationForm(forms.Form):
-    name = forms.CharField(max_length=255, required=True, label="Name", widget=forms.TextInput(attrs={'class': 'input w-full'}))
-    series_slug = forms.SlugField(max_length=100, required=False, label="Series Slug", widget=forms.TextInput(attrs={'class': 'input w-full'}))
-    badge_type = forms.ChoiceField(required=True, label="Badge Type", widget=forms.Select(attrs={'class': 'select w-full'}))
-    submitted_by = forms.CharField(max_length=100, required=False, label="Submitted By (PSN Username)", widget=forms.TextInput(attrs={'class': 'input w-full', 'placeholder': 'PSN username of submitter'}))
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Source the type options from the model so the create form stays in sync as badge
-        # types are added/removed (Badge is imported locally to avoid a circular import).
-        from trophies.models import Badge
-        self.fields['badge_type'].choices = Badge.BADGE_TYPES
-
-    def get_badge_data(self):
-        if self.is_valid():
-            return {
-                'name': self.cleaned_data['name'],
-                'series_slug': self.cleaned_data['series_slug'],
-                'badge_type': self.cleaned_data['badge_type'],
-                'submitted_by_username': self.cleaned_data.get('submitted_by', ''),
-            }
-        return {}

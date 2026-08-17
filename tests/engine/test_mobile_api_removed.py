@@ -57,6 +57,7 @@ def test_the_routes_are_unreachable(name):
             reverse(candidate)
 
 
+@pytest.mark.django_db      # the 404 page renders real chrome, which reads the DB
 @pytest.mark.parametrize('path', [
     '/api/v1/auth/login/',
     '/api/v1/mobile/me/',

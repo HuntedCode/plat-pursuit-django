@@ -123,24 +123,18 @@ Incrementally updated via signals, fully rebuilt by `update_leaderboards` cron e
 
 | Key Pattern | Type | Purpose |
 |-------------|------|---------|
-| `lb:xp:scores` | Sorted Set | XP leaderboard; member=profile_id, score=xp*10^4+badges |
-| `lb:xp:data` | Hash | XP display data; field=profile_id, value=JSON |
-| `lb:earners:{slug}:scores` | Sorted Set | Per-series earners; score=tier*10^12+(10^12-timestamp) |
-| `lb:earners:{slug}:data` | Hash | Earners display data |
-| `lb:xp:country:{cc}:scores` | Sorted Set | Per-country XP leaderboard; same score formula as global XP |
-| `lb:xp:country:{cc}:data` | Hash | Per-country XP display data |
-| `lb:xp:country:index` | Set | Active country codes (ISO alpha-2) with leaderboard entries |
 
-> **Deleted 2026-08:** the four `lb:progress:*` keys (per-series + global). Those boards moved to
+> **Deleted 2026-08:** EVERY `lb:*` key. The Redis leaderboards were replaced wholesale by Postgres
+> standing tables in badge cutover 5b.4 (see [leaderboard-system.md](../architecture/leaderboard-system.md)).
+> Nothing reads or writes them; the keys will simply expire or can be dropped by hand. The note below is
+> the earlier, partial removal that preceded it -- the four `lb:progress:*` keys moved to
 > indexed Postgres columns on `ProfileBadgeStanding` / `SeriesBadgeStanding`, joined later in the same
 > migration by `ProfileCareerStanding` (Career XP) and `ProfileEditionStanding` (the per-edition slices of
 > the two badge boards). None of the four has a Redis equivalent, and none ever will -- a store per
 > (board x country x edition) is the multiplication that design avoids. See
 > [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
-| `lb:community_xp:{slug}` | String (int) | Community XP total per series, INCRBY delta from gamification updates |
-| `lb:meta:last_rebuild` | Hash | Rebuild timestamps per leaderboard key |
 
-**Files**: `trophies/services/redis_leaderboard_service.py`, `trophies/services/xp_service.py`, `trophies/signals.py`
+**Files**: none -- all three (`redis_leaderboard_service.py`, `xp_service.py`, and the gamification signals) were deleted in badge cutover 5b.4.
 
 ---
 

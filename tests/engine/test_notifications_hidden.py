@@ -18,7 +18,7 @@ import weakref
 from pathlib import Path
 
 import pytest
-from django.urls import resolve, reverse
+from django.urls import NoReverseMatch, resolve, reverse
 
 from tests.factories import ProfileFactory
 
@@ -110,21 +110,21 @@ def test_the_api_no_longer_accepts_reads_or_writes(client, url):
     assert client.post(url, {}).status_code == control, f'{url} still accepts writes'
 
 
-def test_the_staff_user_picker_survived_the_withdrawal(client):
-    """The one endpoint deliberately left routed. `badge_creation.html` uses it as its user picker, so
-    withdrawing it with the rest would have silently broken a staff tool that has nothing to do with
-    notifications. It belongs somewhere neutral; rehoming it is a follow-up."""
-    src = (ROOT / 'templates' / 'trophies' / 'badge_creation.html').read_text(encoding='utf-8')
-    assert '/api/v1/admin/notifications/user-search/' in src
+def test_the_staff_user_picker_went_with_its_only_consumer():
+    """Inverted at badge cutover 5b. `AdminUserSearchView` was the ONE endpoint deliberately left routed
+    through the notification withdrawal, purely because `badge_creation.html` used it as a user picker.
 
-    staff = ProfileFactory(is_linked=True)
-    staff.user.is_staff = True
-    staff.user.save(update_fields=['is_staff'])
-    client.force_login(staff.user)
+    That staff tool authored LEGACY tier badges -- four `Badge` rows nothing can earn, since the engine
+    that evaluated them is gone. The new models (`BadgeSeries`, `PlatformGroup`, `GroupBadge`) all have
+    full Django admin, so the form was superseded rather than broken, and it was deleted along with the
+    picker whose only reason for existing was to serve it."""
+    assert not (ROOT / 'templates' / 'trophies' / 'badge_creation.html').exists()
 
-    # 200, not merely "not 404". The point of the exception is that the picker still WORKS; a routed but
-    # broken endpoint would satisfy a `!= 404` and leave the staff tool just as dead.
-    assert client.get('/api/v1/admin/notifications/user-search/?q=x').status_code == 200
+    api_urls = (ROOT / 'api' / 'urls.py').read_text(encoding='utf-8')
+    assert 'AdminUserSearchView' not in api_urls
+
+    with pytest.raises(NoReverseMatch):
+        reverse('api:admin-notification-user-search')
 
 
 def test_nothing_in_the_chrome_rings_the_bell():
@@ -202,7 +202,6 @@ def test_the_chokepoint_still_writes():
 # and the whole justification for hiding rather than deleting -- so it is the half worth pinning.
 PRODUCERS = [
     ('trophies/services/psn_api_service.py', 'notify_new_platinum'),
-    ('trophies/services/badge_refresh_service.py', 'DeferredNotificationService'),
     ('fundraiser/services/donation_service.py', '_send_donation_notification'),
     ('users/services/subscription_service.py', 'NotificationService.create_notification'),
     ('notifications/signals.py', 'notify_platinum_earned'),

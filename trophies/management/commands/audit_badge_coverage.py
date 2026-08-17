@@ -1,8 +1,12 @@
 """Daily audit: alert when a franchise/collection/developer badge is missing a game.
 
-For each tier-1 badge that tracks a franchise, collection, and/or developer, finds
-concepts of that source not covered by the badge's stages and emails the findings to
-the badge-alerts inbox. A gap usually means a new game needs adding to the badge.
+For each badge SERIES that tracks a franchise, collection, and/or developer, finds
+concepts of that source not covered by the series' stages and emails the findings to
+the badge-alerts inbox. A gap usually means a new game needs adding to the series.
+
+Series-level, not per-edition: stages belong to the series, and every edition works the
+same stage list, so coverage is one question per series regardless of how many editions
+it ships in.
 
 By default the email is sent only when there are gaps; pass --always for a daily
 heartbeat (an "all clear" email even when nothing is missing).
@@ -26,17 +30,17 @@ def format_report(findings):
     total = sum(len(f['missing']) for f in findings)
     if not findings:
         return ("Badge coverage audit: every tracked franchise/collection/developer "
-                "badge covers its concepts. No gaps found.")
+                "series covers its concepts. No gaps found.")
 
     lines = [
         f"Badge coverage audit: {total} {_plural(total, 'concept')} across "
-        f"{len(findings)} {_plural(len(findings), 'badge')} "
+        f"{len(findings)} {_plural(len(findings), 'series', 'series')} "
         f"{_plural(total, 'is', 'are')} NOT assigned to a badge stage.",
         "A gap usually means a new game needs adding to the badge, or a data error occurred.",
         "",
     ]
     for finding in findings:
-        badge = finding['badge']
+        series = finding['series']
         sources = []
         if finding['franchise']:
             sources.append(f"franchise: {finding['franchise'].name}")
@@ -44,7 +48,7 @@ def format_report(findings):
             sources.append(f"collection: {finding['collection'].name}")
         if finding['developer']:
             sources.append(f"developer: {finding['developer'].name}")
-        lines.append(f"{badge.name}  ({'; '.join(sources)})  [series: {badge.series_slug}]")
+        lines.append(f"{series.name}  ({'; '.join(sources)})  [series: {series.series_slug}]")
         for concept in finding['missing']:
             title = concept.unified_title or concept.concept_id
             lines.append(f"    - {title}  (slug: {concept.slug or 'none'}, concept_id: {concept.concept_id})")
@@ -54,7 +58,7 @@ def format_report(findings):
 
 class Command(BaseCommand):
     help = (
-        "Audit tier-1 franchise/collection/developer badges for concepts missing "
+        "Audit franchise/collection/developer badge series for concepts missing "
         "from their stages and email findings to the badge-alerts inbox."
     )
 
@@ -82,7 +86,7 @@ class Command(BaseCommand):
         total = sum(len(f['missing']) for f in findings)
         subject = (
             f"[PlatPursuit] Badge coverage: {total} unassigned "
-            f"{_plural(total, 'concept')} across {len(findings)} {_plural(len(findings), 'badge')}"
+            f"{_plural(total, 'concept')} across {len(findings)} {_plural(len(findings), 'series', 'series')}"
             if findings else
             "[PlatPursuit] Badge coverage: all clear"
         )

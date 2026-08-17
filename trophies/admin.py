@@ -1315,6 +1315,18 @@ class StageInline(admin.TabularInline):
 
 @admin.register(Badge)
 class BadgeAdmin(admin.ModelAdmin):
+    """RETAINED, deliberately, after the 2026-08 badge cutover removed the rest of the legacy admin.
+
+    `Badge` is no longer earnable and nothing writes it, but it is not orphaned: `art_reveal.ArtRevealItem`
+    has a live FK to it, and that inline's `autocomplete_fields` requires a registered admin for the model
+    (admin.E039). Deleting this registration breaks the whole admin site, not just art_reveal.
+
+    Keeping it also serves the retention policy: `Badge` / `UserBadge` rows are held for rollback and audit,
+    and this is how you would look at them.
+
+    Repointing art_reveal onto `BadgeSeries` / `GroupBadge` is its own task and the last thing tying the
+    legacy tier model to a live feature. See docs/design/rebuild/badge-backend-rebuild.md.
+    """
     list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'set_number', 'rarity_class', 'title', 'franchise_col', 'collection_col', 'developer_col', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by', 'submitted_by']
     list_select_related = ('most_recent_concept', 'title', 'funded_by', 'submitted_by', 'franchise', 'collection', 'developer', 'base_badge', 'base_badge__franchise', 'base_badge__collection', 'base_badge__developer')
     list_filter = ['is_live', 'tier', 'badge_type', 'rarity_class']
@@ -1661,37 +1673,6 @@ class StageAdmin(admin.ModelAdmin):
         return ' '.join(parts)
     bundle_concepts_display.short_description = 'Bundle Concepts'
 
-@admin.register(UserBadge)
-class UserBadgeAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'badge', 'earned_at', 'is_displayed']
-    list_select_related = ('profile', 'badge')
-    list_filter = ['is_displayed', 'earned_at']
-    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'badge__name', 'badge__series_slug']
-    raw_id_fields = ('profile', 'badge')
-    date_hierarchy = 'earned_at'
-
-@admin.register(UserBadgeProgress)
-class UserBadgeProgressAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'badge', 'completed_concepts', 'progress_value', 'last_checked']
-    list_select_related = ('profile', 'badge')
-    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'badge__name']
-    raw_id_fields = ('profile', 'badge')
-
-@admin.register(StageCompletionEvent)
-class StageCompletionEventAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'badge', 'stage', 'concept', 'completed_at', 'created_at']
-    list_select_related = ('profile', 'badge', 'stage', 'concept')
-    list_filter = ['completed_at']
-    search_fields = [
-        'profile__psn_username',
-        'profile__display_psn_username',
-        'badge__name',
-        'concept__unified_title',
-    ]
-    raw_id_fields = ('profile', 'badge', 'stage', 'concept')
-    readonly_fields = ('created_at',)
-    date_hierarchy = 'completed_at'
-    
 @admin.register(FeaturedGuide)
 class FeaturedGuideAdmin(admin.ModelAdmin):
     list_display = ['concept', 'start_date', 'end_date', 'priority']
@@ -2397,33 +2378,6 @@ class RoadmapNoteReadAdmin(admin.ModelAdmin):
 
 
 # ---------- Gamification Admin ----------
-
-@admin.register(ProfileGamification)
-class ProfileGamificationAdmin(admin.ModelAdmin):
-    """Admin interface for ProfileGamification stats."""
-    list_display = [
-        'profile',
-        'total_badge_xp',
-        'total_badges_earned',
-        'last_updated',
-    ]
-    list_select_related = ('profile',)
-    search_fields = ['profile__psn_username', 'profile__display_psn_username']
-    raw_id_fields = ('profile',)
-    readonly_fields = ['last_updated']
-    ordering = ['-total_badge_xp']
-    actions = ['recalculate_selected']
-
-    @admin.action(description='Recalculate XP for selected profiles')
-    def recalculate_selected(self, request, queryset):
-        """Recalculate gamification stats for selected profiles."""
-        from trophies.services.xp_service import update_profile_gamification
-        count = 0
-        for gamification in queryset:
-            update_profile_gamification(gamification.profile)
-            count += 1
-        messages.success(request, f"Recalculated XP for {count} profile(s).")
-
 
 @admin.register(StatType)
 class StatTypeAdmin(admin.ModelAdmin):

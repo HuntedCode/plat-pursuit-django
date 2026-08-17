@@ -301,3 +301,32 @@ Migrations `0303` / `0304` (profile showcases, dashboard config) and `notificati
       as mobile scaffolding, but `IsDiscordBot` authorises by matching the token key against `BOT_API_KEY`.
       If a later cleanup pass removes them "with the mobile stack", every bot endpoint rejects the bot.
       Pinned by `tests/engine/test_mobile_api_removed.py`.
+
+## Badge cutover 5b.4 + 5b.5: the engine comes out (2026-08)
+
+Migration `trophies.0305_group_badge_announcement`.
+
+- [x] **`GroupBadgeAnnouncement` backfill: HANDLED BY THE MIGRATION, no action needed.** Recorded here
+      because it is the highest-consequence thing in this deploy and you should know it is covered.
+
+      The table records who has already been told about which badge. An empty one reads as "nobody has
+      been told about anything", and since this deploy also makes sync announce, the first sync per hunter
+      would re-ping Discord for every badge they already hold -- a webhook storm proportional to the whole
+      userbase's badge count, and unrecoverable, because you cannot unsend a webhook.
+
+      `0305` therefore seeds one marker per existing `UserGroupBadge` in the same migration that creates
+      the table (batched, `ignore_conflicts`, re-runnable). This was deliberately NOT left as a checklist
+      item: a manual step whose failure mode is spamming every hunter is not worth trusting to a checkbox.
+      Covered by `test_the_announcement_backfill_covers_every_existing_hold` and
+      `test_a_backfilled_hold_is_never_announced`.
+- [ ] **Sync now announces badges** (`evaluate_for_sync` flipped to `notify=True`). This is intended --
+      the legacy engine was the only reason it was silent -- but it is the first deploy where the new
+      engine can post to Discord. Watch the webhook after the first few syncs.
+- [ ] **`/staff/badge-create/` is gone.** Anyone authoring badges now does it through Django admin on
+      `BadgeSeries` -> `GroupBadge` (plus `PlatformGroup`). Tell whoever authors badges before they go
+      looking for the form.
+- [ ] **`art_reveal` still FKs the legacy `Badge`**, so `BadgeAdmin` is deliberately retained. Do not
+      "finish the cleanup" by deleting it -- `admin.E039` fails the entire admin site, not just
+      art_reveal. Repointing art_reveal is a tracked follow-up.
+- [ ] **Every `lb:*` Redis key is now garbage.** Nothing reads or writes them. They can be left to expire
+      or dropped by hand; no action is required for correctness.

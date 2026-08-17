@@ -109,7 +109,7 @@ The hybrid strategy is the load-bearing convention. New event sources should be 
 | Source | Strategy | Insertion point |
 |---|---|---|
 | **Sync pipeline** (platinum, rare trophy, concept_100) | Explicit `EventCollector.add_*()` from inside `psn_api_service.py:create_or_update_earned_trophy_from_trophy_data`, gated by `EventCollector.is_active()`. The sync loop in `token_keeper.py:_do_sync_trophies` opens an `event_collector(profile_id=profile.id)` context alongside the existing `sync_signal_suppressor()`. | `psn_api_service.py:458` (just before return), wrapped by `token_keeper.py:1914-1922` |
-| **Badges (sync path)** | Bulk-per-sync emission. After `check_profile_badges()` runs in `_job_sync_complete`, **one** `badge_earned` event is recorded per profile per sync, with `metadata['badges']` listing every badge awarded that sync. Avoids per-day coalescing race conditions entirely. | `token_keeper.py` after `check_profile_badges` (~line 1520) |
+| **Badges (sync path)** | Bulk-per-sync emission. After `evaluate_for_sync()` runs in `_job_sync_complete`, **one** `badge_earned` event is recorded per profile per sync, with `metadata['badges']` listing every badge awarded that sync. Avoids per-day coalescing race conditions entirely. | `token_keeper.py` after `evaluate_for_sync` |
 | **Badges (non-sync path)** | Sibling `post_save` receiver in `trophies/signals.py` next to the existing `update_gamification_on_badge_earned` receiver. Early-returns when `is_bulk_update_active()` is True so sync-time awards don't double-emit. Catches admin tools, manual rechecks, and any future non-sync badge writes. | `trophies/signals.py` (bottom of badge receivers) |
 | **Reviews** | Direct call from `ReviewService.create_review()` after the cache invalidation, before the milestone check. Inside the existing `@transaction.atomic` decorator. | `review_service.py:90` |
 | **Game lists** | Fired on the `is_public` false→true flip in `GameListUpdateView.patch()`, only when `game_list.game_count > 0` (don't surface empty lists). | `api/game_list_views.py:247-266` |
@@ -163,7 +163,13 @@ Two event types are inherently high-volume and need coalescing to keep the feed 
 
 **Strategy**: bulk-per-sync emission, NOT per-day coalescing.
 
-After `check_profile_badges()` runs inside `_job_sync_complete`, the bulk-gamification context already has the list of badges awarded during this sync. The token keeper records one `badge_earned` event per profile per sync, with `metadata['badges']` listing every badge:
+After `evaluate_for_sync()` runs inside `_job_sync_complete`, its return value already carries the list of
+badges awarded during this sync (`result['awarded']`). One `badge_earned` event is recorded per profile per
+sync, with `metadata['badges']` listing every badge.
+
+> **Note (2026-08):** a badge is now identified by series AND edition, not by tier -- `tier` in the sample
+> below is the retired shape. This system is DEFERRED and unrouted, so the payload has not been rebuilt;
+> whoever ships it should emit `{'series_slug': ..., 'edition': ...}`.
 
 ```python
 {

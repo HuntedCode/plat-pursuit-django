@@ -10,10 +10,8 @@ from .views import (
 # is hidden, and an import with no route is just a name to trip over later. They are untouched in
 # api/notification_views.py -- restoring the system restores this import alongside the paths.
 #
-# AdminUserSearchView is the exception and stays routed: templates/trophies/badge_creation.html uses it
 # as its user picker, so withdrawing it would silently break an unrelated staff tool. It belongs
 # somewhere neutral; rehoming it is a follow-up, not a reason to leave a door open here.
-from .notification_views import AdminUserSearchView
 from .shareable_views import (
     PlatCardHTMLView, PlatCardPNGView, LegacyPlatinumCardHTMLView, LegacyPlatinumCardPNGView,
 )
@@ -94,7 +92,6 @@ urlpatterns = [
     # UserConceptRating -- `GroupRatingView` is now the only one.
     #
     # The user-search endpoint is the deliberate exception (see the import note above).
-    path('admin/notifications/user-search/', AdminUserSearchView.as_view(), name='admin-notification-user-search'),
 
     # Plat cards. Keyed on the game's default TrophyGroup -- a card is earned by completing that group,
     # platinum or not (see core/services/completion_card_service.py).

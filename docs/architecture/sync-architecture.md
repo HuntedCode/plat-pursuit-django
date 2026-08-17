@@ -199,7 +199,7 @@ The refactor preserves every existing integration point in `sync_complete`. What
 
 | System | Hook | Change |
 |---|---|---|
-| Badge evaluation | `check_profile_badges()` in `sync_complete` | Unchanged. Still fires after stats are updated. Retroactive credit principle preserved. |
+| Badge evaluation | `evaluate_for_sync()` in `sync_complete` | Scoped to the SERIES of the touched games (all editions). Replaced the legacy `check_profile_badges` in cutover 5b; retroactive credit principle preserved. |
 | Milestones | `milestones.services.recompute_on_sync()` (in the `finishing` phase, after the trophy-count refresh) | Unchanged. |
 | Challenges (A-Z, Calendar, Genre) | Three check functions in `sync_complete` | Unchanged. |
 | Deferred notifications | Platinum during `sync_trophies`, badge consolidation in `sync_complete` | Unchanged. |

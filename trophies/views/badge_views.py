@@ -2,14 +2,6 @@ import logging
 from collections import defaultdict
 
 from trophies.constants import EVALUATABLE_BADGE_TYPES, PLATFORM_LABELS
-from trophies.services.xp_service import get_tier_xp
-from trophies.util_modules.constants import BADGE_TIER_XP
-
-
-def _badge_xp(badge):
-    """Compute total XP value for a badge tier."""
-    return badge.required_stages * get_tier_xp(badge.tier) + BADGE_TIER_XP
-
 
 # Personal-state chips on the group-badge list (Gallery + Series): binary hold only (per-badge in-progress is
 # engine-derived, not whale-safe across a catalog -- it lives on the badge detail page).
@@ -52,7 +44,7 @@ from django.views.generic import ListView, DetailView, TemplateView
 
 from ..models import (
     Profile, Badge, UserBadge,
-    UserTitle, ProfileGamification, BadgeSeries, GroupBadge, UserGroupBadge, PlatformGroup,
+    UserTitle, BadgeSeries, GroupBadge, UserGroupBadge, PlatformGroup,
     ProfileCareerStanding, SeriesBadgeStanding, Game,
 )
 from ..forms import BadgeSearchForm
@@ -65,7 +57,6 @@ from trophies.mixins import HtmxListMixin
 # Leaderboards read from Lane B (indexed DB reads over the standing stores). The Redis sorted-set
 # service is no longer imported here -- see docs/design/rebuild/leaderboards-rebuild.md step 2.
 from trophies.services import badge_leaderboards as lb
-from trophies.services.redis_leaderboard_service import get_community_xp
 
 logger = logging.getLogger("psn_api")
 

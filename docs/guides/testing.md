@@ -81,10 +81,10 @@ Grow the suite outward from the coupling spine identified in the
 
 1. `Concept.absorb()` — data migration on concept reassignment (highest blast radius)
 2. Sync pipeline (`token_keeper` / `psn_api_service`) — completion detection
-3. Badge evaluation (`badge_service`) — tiers, stages, bundles, prerequisites
-4. XP (`xp_service`) — calculation + bulk update + signals
+3. Badge evaluation (`badge_engine` / `badge_apply`) — gating vs satisfaction, bundles, per-edition scope
+4. Badge XP + standings (`badge_xp`) — `recompute_standing` replaces a series' standing wholesale
 5. IGDB matching (`igdb_service`) — the 10-strategy pipeline + enrichment
-6. Leaderboards (`redis_leaderboard_service`)
+6. Leaderboards (`badge_leaderboards`) — rank must equal position on every board
 
 ### Regression tests from hard-won bugs
 

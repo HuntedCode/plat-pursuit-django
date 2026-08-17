@@ -23,7 +23,6 @@ from ..models import (
     CommentReport, GameFamily, ModerationLog,
     ReviewModerationLog, ReviewReport, Trophy,
 )
-from ..forms import BadgeCreationForm
 from ..services.review_service import ReviewService
 from trophies.util_modules.cache import redis_client
 
@@ -104,44 +103,6 @@ class TokenMonitoringView(StaffRequiredMixin, TemplateView):
         for profile_id in stats:
             stats[profile_id]['total'] = sum(stats[profile_id].values())
         return stats
-
-
-class BadgeCreationView(StaffRequiredMixin, FormView):
-    """
-    Admin tool for creating new badge series with multiple tiers.
-
-    Provides form interface for defining:
-    - Badge series metadata (name, slug, description)
-    - Multiple badge tiers with requirements
-    - Associated game concepts and stages
-    - Badge icons and visual assets
-
-    Restricted to staff members only.
-    """
-    template_name = 'trophies/badge_creation.html'
-    form_class = BadgeCreationForm
-    success_url = reverse_lazy('badge_creation')
-
-    def form_valid(self, form):
-        try:
-            badge_data = form.get_badge_data()
-            # Resolve submitted_by PSN username to Profile if provided
-            submitted_by_username = badge_data.pop('submitted_by_username', '')
-            if submitted_by_username:
-                from trophies.models import Profile
-                try:
-                    profile = Profile.objects.get(psn_username__iexact=submitted_by_username)
-                    badge_data['submitted_by'] = profile
-                except Profile.DoesNotExist:
-                    messages.error(self.request, f'Profile "{submitted_by_username}" not found.')
-                    return self.form_invalid(form)
-            PsnApiService.create_badge_group_from_form(badge_data)
-            messages.success(self.request, 'Badge group created successfully!')
-        except Exception as e:
-            logger.exception("Error creating badge")
-            messages.error(self.request, 'Error creating badge. Check logs.')
-            return self.form_invalid(form)
-        return super().form_valid(form)
 
 
 class CommentModerationView(StaffRequiredMixin, ListView):

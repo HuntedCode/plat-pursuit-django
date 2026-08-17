@@ -2,29 +2,33 @@
 
 The leaderboard system ranks hunters by badge progress and Badge Points, per series and globally.
 
-> **This system is MID-MIGRATION (2026-08).** Two backends run side by side. Read
-> [the rebuild plan](../design/rebuild/leaderboards-rebuild.md) before changing anything here.
+> **Migration COMPLETE (2026-08).** There is one backend: Postgres. The Redis sorted-set leaderboards and
+> `redis_leaderboard_service` / `leaderboard_service` / `xp_service` were deleted in badge cutover step
+> 5b.4. History: [leaderboards-rebuild.md](../design/rebuild/leaderboards-rebuild.md),
+> [badge-backend-rebuild.md](../design/rebuild/badge-backend-rebuild.md).
 
 ## Architecture Overview
 
-### The current state: two backends
+### One backend
 
-| Board | Backend | Notes |
+| Board | Store | Notes |
 |---|---|---|
-| Badge Points (global + country) | Redis sorted sets | Still read by `profile_card_service` + 2 dashboard modules, which display the LEGACY `ProfileGamification.total_badge_xp`. Ranking that against the new store would print a figure beside a rank derived from a different number |
-| Per-series earners | Redis sorted sets | Still read by `frame_service` for the legacy badge frame |
-| Community XP | Redis scalar | Unrelated to the boards; per-series total |
-| **Trophies** | **Postgres** (`Profile`'s own counters) | All games, not badge-scoped. Was "Global Progress" -> "Badge Trophies" -> this |
-| **Per-series board** | **Postgres** (`SeriesBadgeStanding`) | Redis version DELETED. Earners + chasers MERGED into one board |
-| **Career XP** | **Postgres** (`ProfileCareerStanding`) | New; no Redis equivalent ever existed |
-| **Badge Points, per edition** | **Postgres** (`ProfileEditionStanding`) | The edition FILTER. Same columns, same names, pre-sliced |
+| Trophies | `Profile`'s own counters | All games, not badge-scoped. Was "Global Progress" -> "Badge Trophies" -> this |
+| Badge Points (global + country) | `ProfileBadgeStanding` | Also carries `badges_held`, the secondary stat |
+| Badge Points, per edition | `ProfileEditionStanding` | The edition FILTER. Same columns, same names, pre-sliced |
+| Per-series board | `SeriesBadgeStanding` | Earners + chasers MERGED into one board |
+| Career XP | `ProfileCareerStanding` | No Redis equivalent ever existed |
 
-The Postgres side is `trophies/services/badge_leaderboards.py` ("Lane B"): indexed reads over
-denormalized standing columns, written by the recompute the sync path already runs. No cron, no
-sorted sets, and identity is read live at render so a renamed hunter cannot show a stale name.
+All of it is `trophies/services/badge_leaderboards.py` ("Lane B"): indexed reads over denormalized
+standing columns, written by the recompute the sync path already runs. No cron, no sorted sets, and
+identity is read live at render so a renamed hunter cannot show a stale name.
 
-The Redis remainder goes with the **badge cutover**, which repoints its consumers off the legacy
-`Badge`/`UserBadge` models.
+**What the Redis backend cost, and why it is worth remembering.** It needed a rebuild cron
+(`update_leaderboards`), incremental writers on four separate paths, a link-time backfill in
+`verification_service` because those writers gated on `is_linked`, and a reconciliation pass because the
+increments drifted anyway. All of that existed to keep a second copy of numbers Postgres already had.
+The standings are recomputed from scratch on every evaluation, so there is nothing to drift and nothing
+to reconcile. If a future board feels like it needs a sorted set, re-read this paragraph first.
 
 ### The surfaces (steps 4-8, complete)
 
@@ -94,99 +98,25 @@ overlap -- a cross-gen game qualifies for both groups -- and went with the Badge
 
 | File | Purpose |
 |------|---------|
-| `trophies/services/redis_leaderboard_service.py` | REMAINING sorted set operations (earners, XP, country, community XP). Progress boards deleted 2026-08 |
-| `trophies/services/badge_leaderboards.py` | **Lane B**: every Postgres-backed board, `hydrate()`, `BoardPaginator`/`BoardPage` |
+| `trophies/services/badge_leaderboards.py` | Every board read: the `*_KEYS` orders, `_ahead_q`, `hydrate()`, `BoardPaginator`/`BoardPage`, `board_count()`, `active_editions()` |
 | `trophies/services/badge_xp.py` | The write seam: `recompute_standing` materializes the standings (xp, progress, `advanced_at`, badges held). Runs on every sync -- it must never grow a profile-wide aggregate |
-| `trophies/services/leaderboard_service.py` | ORM computation functions (used by rebuilds) |
-| `trophies/services/xp_service.py` | XP + country XP + community XP sorted set writes via `update_profile_gamification()`, bulk pipeline via `bulk_gamification_update()` |
-| `trophies/signals.py` | Earners sorted set writes on UserBadge post_save/post_delete |
-| `core/management/commands/update_leaderboards.py` | LEGACY Redis rebuild. Its cron entry is retired -- delete it when the rebuild branch deploys |
-| `trophies/management/commands/refresh_badge_series.py` | Calls `rebuild_series_leaderboards()` after badge awards |
-| `trophies/views/badge_views.py` | `BadgeLeaderboardsView`, `OverallBadgeLeaderboardsView`, `BadgeDetailView` |
-| `trophies/services/dashboard_service.py` | `provide_badge_xp_leaderboard()` and `provide_country_xp_leaderboard()` dashboard modules |
+| `trophies/services/game_leaderboard_service.py` | Per-game boards. Where the rank-equals-position rule was first solved |
+| `trophies/views/badge_views.py` | `BadgeBoardsView`, `GameBoardsView`, `JobBoardsView`, `OverallBadgeLeaderboardsView` |
 
-## Leaderboard Types
+## How a board is served
 
-### Per-Series (one sorted set per live badge series)
+Every board is one indexed Postgres read. There is no cache, no cron and no sorted set.
 
-| Type | Redis Key | Score Formula | Update Trigger |
-|------|-----------|---------------|----------------|
-| Earners | `lb:earners:{slug}:scores` | `tier * 10^12 + (10^12 - earned_at_unix)` | UserBadge post_save/post_delete signal + sync-complete (bulk exit) |
-| Community XP | `lb:community_xp:{slug}` | N/A (scalar, INCRBY delta) | `update_profile_gamification()` delta + cron reconciliation |
+1. `board_store(tab, ...)` picks the standing table for the tab (and the edition slice, if filtered).
+2. `_slice()` applies the country filter -- a WHERE served by a composite index, not a post-filter.
+3. `BoardPaginator` orders by that board's `*_KEYS` and slices the page.
+4. `hydrate()` joins identity (name, avatar, country) at render, so a renamed hunter can never show a
+   stale name.
+5. `*_rank()` answers "where am I" by COUNTing everyone ahead, expressing the SAME key list via
+   `_ahead_q`.
 
-### Global
-
-| Type | Redis Key | Score Formula | Update Trigger |
-|------|-----------|---------------|----------------|
-| Total XP | `lb:xp:scores` | `total_badge_xp * 10^4 + total_badges` | `update_profile_gamification()` signal |
-
-### Per-Country (one sorted set per country with active users)
-
-| Type | Redis Key | Score Formula | Update Trigger |
-|------|-----------|---------------|----------------|
-| Country XP | `lb:xp:country:{cc}:scores` | Same as Total XP | `update_profile_gamification()` signal |
-| Country Index | `lb:xp:country:index` | N/A (SET of active country codes) | SADD during incremental updates + cron rebuild |
-
-Country leaderboards use the same composite score as the global XP leaderboard but are partitioned by ISO 3166-1 alpha-2 country code (from `Profile.country_code`). Profiles without a country code are excluded. The country index SET tracks which countries have active leaderboards, used by the country picker UI.
-
-## Key Flows
-
-### Incremental Updates (Real-Time)
-
-**XP Leaderboard + Country XP + Community XP**: Signal fires on UserBadgeProgress/UserBadge change -> `update_profile_gamification()` -> `update_xp_entry()` writes to global sorted set + `update_country_xp_entry()` writes to per-country sorted set (if profile has country_code) + `update_community_xp_deltas()` applies per-series XP deltas via INCRBY. During bulk sync, writes are pipelined via `bulk_gamification_update()`.
-
-**Earners Leaderboard**: Signal fires on UserBadge post_save/post_delete -> `_update_earner_leaderboard_on_badge_change()` finds highest tier -> ZADD or ZREM. During bulk sync, earner updates are also applied at `bulk_gamification_update()` exit via `update_earner_leaderboards_for_profile()`, which finds the highest tier per series for the profile and writes all entries in a single pipeline.
-
-**Progress Leaderboard**: After `bulk_gamification_update()` exits -> `update_progress_leaderboards_for_profile()` computes per-profile trophy counts for affected series -> ZADD/ZREM per series + global.
-
-### Profile Linking Backfill
-
-When a `Profile` is linked to a `User` (either a brand-new account's first verification or a claim of a previously-unowned synced profile), `VerificationService.link_profile_to_user()` calls `_backfill_leaderboards_for_newly_linked_profile()` to write XP, country XP, earner, and progress entries from the existing `ProfileGamification` row. This is required because all incremental writers gate on `profile.is_linked` and any updates that ran before linking were silently skipped. Without the backfill, the first sync's leaderboard updates are lost and the profile is invisible until the next sync_complete or the reconciliation cron.
-
-The backfill reads pre-aggregated data (the same source the cron rebuild uses), so it cannot place stale or inconsistent entries on the leaderboard. If `ProfileGamification` does not exist yet (e.g., a claimed unowned profile with zero badges), the backfill is a safe no-op and the next sync_complete picks the profile up via the now-unblocked incremental path.
-
-### Reconciliation Cron
-
-1. `update_leaderboards` runs periodically (recommended: every 12-24 hours)
-2. Calls `rebuild_xp_leaderboard()`, `rebuild_global_progress_leaderboard()`, `rebuild_country_xp_leaderboards()`
-3. For each live series: `rebuild_series_leaderboards(slug)` (earners + progress + community XP)
-4. Individual failures caught and logged without blocking
-
-### New Series Bootstrap
-
-When adding a new badge series:
-1. Run `refresh_badge_series --series <slug>` to award badges
-2. Command automatically calls `rebuild_series_leaderboards(slug)` to backfill progress + community XP data
-3. Or run `update_leaderboards --series <slug>` manually
-
-### View Page Load
-
-1. `ZREVRANGE` for the requested page, `HMGET` for display data
-2. `ZREVRANK` for the current user's rank
-3. `ZCARD` for total participant count
-4. `RedisPaginator`/`RedisPage` provide template-compatible paginator interface
-
-## Redis Keys (Raw Redis, DB 0)
-
-| Key | Type | Purpose |
-|-----|------|---------|
-| `lb:xp:scores` | Sorted Set | XP leaderboard; member=profile_id, score=composite |
-| `lb:xp:data` | Hash | XP display data; field=profile_id, value=JSON |
-| `lb:earners:{slug}:scores` | Sorted Set | Per-series earners |
-| `lb:earners:{slug}:data` | Hash | Earners display data |
-| `lb:xp:country:{cc}:scores` | Sorted Set | Per-country XP leaderboard; same score as global XP |
-| `lb:xp:country:{cc}:data` | Hash | Per-country XP display data |
-| `lb:xp:country:index` | Set | Active country codes with leaderboard entries |
-| `lb:community_xp:{slug}` | String (int) | Community XP total per series, maintained via INCRBY delta |
-| `lb:meta:last_rebuild` | Hash | Rebuild timestamps per leaderboard key |
-
-## Composite Score Precision
-
-Redis sorted set scores are 64-bit IEEE 754 doubles, representing integers exactly up to 2^53 (~9 * 10^15).
-
-- **XP**: `total_xp * 10^4 + total_badges` -> max ~10^10 (safe)
-- **Earners**: `tier * 10^12 + (10^12 - timestamp)` -> max ~5 * 10^12 (safe)
-- **Progress**: `plats * 10^9 + golds * 10^6 + silvers * 10^3 + bronzes` -> max ~10^12 (safe)
+The standings themselves are written by `badge_xp.recompute_standing`, which the sync path already runs.
+They are recomputed from scratch each time, so no incremental writer exists to drift.
 
 ## Gotchas and Pitfalls
 
@@ -243,34 +173,26 @@ Redis sorted set scores are 64-bit IEEE 754 doubles, representing integers exact
 - **`BOARD_MIN_ENTRANTS_*` is env-overridable, so tests must pin it.** A dev box that lowered the games
   gate turned an unrelated directory test red for a behaviour that had not changed.
 
-- **Sorted sets must be seeded before first use**: Run `python manage.py update_leaderboards` after deployment to populate all sorted sets from existing data. Without this, leaderboard pages will show empty results.
-
-- **New series need explicit rebuild**: Incremental updates only catch new events. When a badge series is created, existing trophy data won't appear in the progress sorted set until a rebuild runs. `refresh_badge_series` does this automatically.
-
-- **Bulk pipeline scope**: During `bulk_gamification_update()`, XP and community XP sorted set writes are collected into a Redis pipeline and executed together. Earner and progress leaderboard updates run after the pipeline executes (they each create their own pipeline internally).
-
-- **Display data staleness**: Username, avatar, and premium status are stored in Redis hashes and refreshed during gamification updates. Changes outside of sync (e.g., admin edits) won't reflect until the next cron reconciliation.
-
-- **ProfileGamification drift**: If XP signal handlers fail silently, both the denormalized table and sorted set scores drift. Use `audit_profile_gamification` to detect mismatches, then run `update_leaderboards` to reconcile sorted sets.
-
-- **Community XP uses INCRBY deltas**: Updated incrementally by computing the difference between old and new `series_badge_xp` values in `update_profile_gamification()`. If the delta calculation drifts (e.g., missed signal, Redis flush), the cron reconciliation does a full recompute via `rebuild_community_xp(slug)`.
-
-- **Country leaderboard stale entries on region change**: If a user's PSN region changes (extremely rare), the old country's sorted set retains a stale entry until the next cron reconciliation. The new country gets the correct entry immediately. This is by design: adding eager cleanup would add complexity for a near-zero-frequency event.
-
-- **All incremental writers gate on `is_linked`**: `update_xp_entry`, `update_country_xp_entry`, `update_earner_leaderboards_for_profile`, and `update_progress_leaderboards_for_profile` all skip profiles where `is_linked=False`. This is correct (unowned profiles should not appear on user-facing leaderboards), but it means linking a profile must explicitly backfill leaderboards from `ProfileGamification`, otherwise the new user is invisible until the next sync_complete or the cron reconciliation. `VerificationService.link_profile_to_user()` handles this; any other code that flips `is_linked` to `True` (none today) must do the same.
+- **A new badge series needs no rebuild.** This used to be a real chore: the sorted sets only caught
+  incremental events, so a newly authored series showed nothing until a rebuild ran. Standings are
+  recomputed from scratch on every evaluation, so `evaluate_badges --series <slug>` (or just the nightly
+  `--all`) is the whole procedure.
 
 ## Management Commands
 
-| Command | Purpose | Usage |
-|---------|---------|-------|
-| `update_leaderboards` | Full rebuild of all leaderboards (reconciliation) | `python manage.py update_leaderboards` (cron) |
-| `update_leaderboards --series <slug>` | Targeted rebuild for one series | After adding a new badge series |
-| `update_leaderboards --country <CC>` | Targeted rebuild for one country | After data fixes for a specific country |
-| `refresh_badge_series --series <slug>` | Award badges + rebuild series leaderboards | New series setup |
+None. The boards read live from the standing tables, so there is nothing to rebuild.
+
+`evaluate_badges --all` (nightly) is what keeps the standings honest, but it is a badge-evaluation
+command, not a leaderboard one -- see [badge-system.md](badge-system.md).
+
+> **Removed 2026-08:** `update_leaderboards`. It rebuilt the Redis sorted sets from
+> `ProfileGamification`. **Its Render cron entry must be deleted by hand at deploy** -- the schedule
+> outlives the code and will keep firing against a command that no longer exists. Tracked in
+> [prod-deploy-checklist.md](../design/rebuild/prod-deploy-checklist.md).
 
 ## Related Docs
 
 - [Badge System](badge-system.md): Parent system; leaderboards rank badge progress and XP
 - [Gamification](gamification.md): ProfileGamification model that powers the XP leaderboard
 - [Redis Keys](../reference/redis-keys.md): Complete key map for raw Redis and Django cache
-- [Cron Jobs](../guides/cron-jobs.md): Scheduling for `update_leaderboards`
+- [Cron Jobs](../guides/cron-jobs.md): the nightly `evaluate_badges --all` that keeps standings fresh

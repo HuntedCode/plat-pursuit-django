@@ -1,59 +1,63 @@
 """Audit badge coverage: franchise/developer concepts missing from badge stages.
 
-For a badge that tracks a franchise or developer, every game (concept) of that
-franchise/developer is expected to live in one of the badge's series stages. A
-concept that doesn't usually means a new game shipped and needs adding to the badge
-(or a data error). This module finds those gaps; the audit_badge_coverage command
-formats and emails them.
+For a badge series that tracks a franchise, collection or developer, every game (concept) of that
+franchise/collection/developer is expected to live in one of the series' stages. A concept that does not
+usually means a new game shipped and needs adding to the series (or a data error). This module finds those
+gaps; the `audit_badge_coverage` command formats and emails them.
+
+Repointed onto `BadgeSeries` in the 2026-08 badge cutover, and it got simpler doing it. The tier-based
+version scanned `Badge.objects.filter(tier=1)` -- not because tier 1 meant anything here, but because
+franchise/collection/developer were set on the base badge and inherited by the rest, so tier 1 was the
+one-row-per-series trick. `BadgeSeries` carries those three fields directly, so the filter and the
+`effective_*` inheritance both disappear.
+
+Coverage is a SERIES-level question, not a per-edition one: stages belong to the series, and Legacy HD and
+Ultra HD work the same stage list. So this is unchanged by the edition split, and deliberately ignores
+`GroupBadge` entirely.
 """
 
 from django.db.models import Q
 from django.db.models.functions import Lower
 
-from trophies.models import Badge, Concept
+from trophies.models import BadgeSeries, Concept
 
 
 def audit_badge_coverage():
-    """For each tier-1 badge that tracks a franchise, collection, and/or developer,
-    find concepts of that franchise (any non-excluded link) / collection (any
-    non-excluded, non-spin-off member) / developer (developed games) that are
-    NOT covered by any stage of the badge's series.
+    """For each badge series that tracks a franchise, collection, and/or developer, find concepts of that
+    franchise (any non-excluded link) / collection (any non-excluded, non-spin-off member) / developer
+    (developed games) that are NOT covered by any stage of the series.
 
-    Returns a list (sorted by badge name) of dicts, one per badge WITH gaps:
-        {'badge': Badge, 'franchise': Franchise|None, 'collection': Franchise|None,
+    Returns a list (sorted by series name) of dicts, one per series WITH gaps:
+        {'series': BadgeSeries, 'franchise': Franchise|None, 'collection': Franchise|None,
          'developer': Company|None, 'missing': [Concept]}
-
-    Only tier-1 badges are scanned: franchise/collection/developer is set on the
-    series' base (tier-1) badge and inherited by the others, so each series is
-    checked once.
     """
     findings = []
-    badges = (
-        Badge.objects.filter(tier=1)
-        .select_related('franchise', 'collection', 'developer', 'base_badge')
+    all_series = (
+        BadgeSeries.objects
+        .select_related('franchise', 'collection', 'developer')
         .order_by(Lower('name'))
     )
 
-    for badge in badges:
-        # A badge with no series_slug has no stages of its own; skip it rather than
-        # treat every candidate as missing (filtering stages__series_slug='' / None
-        # would match unrelated empty-slug stages, not "this series").
-        if not badge.series_slug:
+    for series in all_series:
+        # A series with no slug has no stages of its own; skip rather than treat every candidate as
+        # missing. Filtering `stages__series_slug=''` would match unrelated empty-slug stages, not "this
+        # series". `series_slug` is unique so there can only ever be one such row, but one is enough to
+        # produce a report claiming an entire franchise is uncovered.
+        if not series.series_slug:
             continue
 
-        franchise = badge.effective_franchise
-        collection = badge.effective_collection
-        developer = badge.effective_developer
+        franchise = series.franchise
+        collection = series.collection
+        developer = series.developer
         if not franchise and not collection and not developer:
             continue
 
-        # Concepts this badge is expected to cover.
+        # Concepts this series is expected to cover.
         candidate_ids = set()
         if franchise:
-            # Every non-excluded linked concept counts. is_excluded=True is an
-            # admin override that says "despite IGDB linking this game to the
-            # franchise, don't expect a franchise badge to cover it" (e.g. a
-            # tie-in cameo that IGDB lists but isn't really a franchise title).
+            # Every non-excluded linked concept counts. is_excluded=True is an admin override that says
+            # "despite IGDB linking this game to the franchise, don't expect a franchise badge to cover
+            # it" (e.g. a tie-in cameo that IGDB lists but isn't really a franchise title).
             candidate_ids |= set(
                 Concept.objects.filter(
                     concept_franchises__franchise=franchise,
@@ -61,11 +65,9 @@ def audit_badge_coverage():
                 ).values_list('id', flat=True)
             )
         if collection:
-            # EVERY linked concept is a member except spin-offs: a game IGDB
-            # types as a "Spin-off" of this series (e.g. Agents of Mayhem in
-            # the Saints Row series) is not expected to live in the collection
-            # badge's stages, so don't flag it missing. Same is_excluded admin
-            # override applies as for franchises.
+            # EVERY linked concept is a member except spin-offs: a game IGDB types as a "Spin-off" of this
+            # series (e.g. Agents of Mayhem in the Saints Row series) is not expected to live in the
+            # collection badge's stages, so don't flag it missing. Same is_excluded override as franchises.
             candidate_ids |= set(
                 Concept.objects.filter(
                     concept_franchises__franchise=collection,
@@ -83,14 +85,14 @@ def audit_badge_coverage():
         if not candidate_ids:
             continue
 
-        # Concepts actually covered by one of this badge series' stages -- either a
-        # direct stage member (Stage.concepts) OR a member of a ConceptBundle on a
-        # stage (Stage.concept_bundles -> ConceptBundle.concepts). Missing the bundle
-        # path falsely flagged bundle-covered games as uncovered.
+        # Concepts actually covered by one of this series' stages -- either a direct stage member
+        # (Stage.concepts) OR a member of a ConceptBundle on a stage (Stage.concept_bundles ->
+        # ConceptBundle.concepts). Missing the bundle path falsely flagged bundle-covered games as
+        # uncovered.
         covered_ids = set(
             Concept.objects.filter(
-                Q(stages__series_slug=badge.series_slug)
-                | Q(bundles__stage__series_slug=badge.series_slug)
+                Q(stages__series_slug=series.series_slug)
+                | Q(bundles__stage__series_slug=series.series_slug)
             ).values_list('id', flat=True)
         )
 
@@ -100,7 +102,7 @@ def audit_badge_coverage():
                 Concept.objects.filter(id__in=missing_ids).order_by(Lower('unified_title'))
             )
             findings.append({
-                'badge': badge,
+                'series': series,
                 'franchise': franchise,
                 'collection': collection,
                 'developer': developer,

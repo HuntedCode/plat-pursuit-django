@@ -181,7 +181,6 @@ During a PSN sync, trophy counts and badge progress are stale until the sync pip
 2. **Queue to Redis**: Uses `RPUSH` to atomically append badge context to the list at `pending_badges:{profile_id}` with a 1-hour TTL.
 3. **Sync completes**: `_job_sync_complete()` in `token_keeper.py` calls `DeferredNotificationService.create_badge_notifications(profile_id)`.
 4. **Consolidation**: The service atomically fetches all items and deletes the key (Redis pipeline). Badges are grouped by `series_slug`. For each series, only the highest tier badge produces a notification. Badges without a series slug get individual notifications.
-5. **Also called by admin commands**: `refresh_badge_series` calls `create_badge_notifications()` at the end to process any queued badges.
 
 ### Scheduled Notification Flow
 
@@ -218,12 +217,9 @@ Platinum share images are no longer rendered inside the notification inbox. The 
 |--------|------------|-----------|
 | **Sync Pipeline** (`token_keeper.py`) | Calls `DeferredNotificationService` at game-sync and full-sync completion | Sync -> Notifications |
 | **Signal Suppression** (`sync_utils.py`) | `sync_signal_suppressor()` disables EarnedTrophy pre_save signal during sync batches | Sync -> Signals |
-| **Badge Service** (`check_profile_badges`) | Awards badges, triggering `post_save` on `UserBadge` | Badges -> Signals |
 | **Subscription System** (`users/views.py`) | Creates subscription/payment notifications and Discord webhooks | Subscriptions -> Notifications |
 | **Admin Panel** | Staff create/schedule/send notifications via ScheduledNotificationService | Admin -> Notifications |
 | **Discord** | Separate webhook system for platinums, badges, roles, subscriptions | Notifications -> Discord |
-| **XP/Gamification** (`xp_service.py`) | Badge notifications fetch fresh XP via `calculate_series_xp()` and `calculate_total_xp()` | Gamification -> Signals |
-| **Admin Commands** (`refresh_badge_series`) | Calls `create_badge_notifications()` at end to flush queued badge notifications | Commands -> Deferred |
 
 ## Gotchas and Pitfalls
 
@@ -233,7 +229,10 @@ The `sync_signal_suppressor()` context manager in `sync_utils.py` uses thread-lo
 
 ### 2. Badge Notifications Are Always Deferred
 
-Unlike platinums (which are only deferred during sync), badge notifications are **always** queued to Redis and never created inline. This is because badges benefit from series consolidation even outside sync (e.g., `refresh_badge_series` can award multiple tiers at once). If you add a code path that awards badges, make sure `create_badge_notifications()` is called afterward to flush the queue.
+> **Badge notifications were removed in the 2026-08 cutover.** `notify_badge_awarded` was a `post_save` on
+> the legacy `UserBadge`, which nothing writes any more. The grouping-badge subsystem announces to DISCORD
+> only, once per run, from `badge_adapters.announce_badges_earned`. There is no on-site or email badge
+> notification today; wiring one is part of the notification-inbox rebuild.
 
 ### 3. The 2-Day Threshold Prevents Initial Sync Spam
 

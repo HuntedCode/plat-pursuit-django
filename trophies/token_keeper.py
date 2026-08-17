@@ -30,7 +30,6 @@ from trophies.util_modules.constants import TITLE_ID_BLACKLIST, TITLE_STATS_SUPP
 from trophies.util_modules.language import detect_asian_language
 from trophies.util_modules.region import detect_region_from_details
 from trophies.services.profile_stats_service import update_profile_games, update_profile_trophy_counts
-from trophies.services.badge_service import check_profile_badges
 from trophies.services.badge_apply import evaluate_for_sync
 from trophies.services.concept_anchor_service import try_anchor_new_game
 
@@ -1481,16 +1480,13 @@ class TokenKeeper:
             _set_phase('stats_badges')
             profile.update_plats()
             PsnApiService.update_profilegame_stats(touched_profilegame_ids)
-            check_profile_badges(profile, touched_profilegame_ids)
-
-            # The REBUILT badge subsystem (GroupBadge/UserGroupBadge + the standings that back the
-            # leaderboards). Runs alongside the legacy engine above, which still owns the surfaces that
-            # read `UserBadge`; the two write different tables and only ever meet on UserTitle, where the
-            # new system is the deliberate authority (see badge_adapters.grant_series_title).
+            # The badge subsystem (GroupBadge/UserGroupBadge + the standings that back the leaderboards).
+            # Scoped to the series the touched games belong to; see evaluate_for_touched_games.
             #
-            # Until this existed, the new tables were written ONLY by `evaluate_badges`, which is on no
-            # schedule -- so every board and every medallion the rebuild reads sat at whatever a manual run
-            # last produced. Scoped to the touched series; see evaluate_for_touched_games.
+            # This is now the ONLY badge evaluation on the sync path. The legacy `check_profile_badges`
+            # ran here alongside it until the 5b cutover, which is why announcements were suppressed:
+            # both engines announced to the same webhook, so a hunter finishing a series got pinged twice.
+            # With the legacy engine gone, this one announces (see `evaluate_for_sync`).
             #
             # `evaluate_for_sync` owns its own error handling, deliberately: a try/except here would wrap
             # the import too, so an ImportError degraded to a log line forever, and a block inside this
@@ -2460,7 +2456,7 @@ class TokenKeeper:
                 job_counter += 2  # sync_trophies = +2 (one without progress, one with)
                 # Only games whose EarnedTrophy aggregates need recomputation are
                 # added to touched_profilegame_ids. update_profilegame_stats and
-                # check_profile_badges scope their work to this list, so adding
+                # evaluate_for_sync scope their work to this list, so adding
                 # untouched games is wasted DB / badge-eval cycles.
                 touched_profilegame_ids.append(profile_game.id)
 

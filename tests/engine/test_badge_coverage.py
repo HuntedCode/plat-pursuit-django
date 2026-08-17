@@ -1,8 +1,14 @@
 """Tests for the badge coverage audit (audit_badge_coverage service + command).
 
-A tier-1 badge that tracks a franchise/developer should cover every non-excluded
-linked concept / developed game in its stages. Missing ones are flagged. Admin
-can suppress a specific link via ConceptFranchise.is_excluded=True.
+A badge SERIES that tracks a franchise/developer should cover every non-excluded linked concept /
+developed game in its stages. Missing ones are flagged. Admin can suppress a specific link via
+ConceptFranchise.is_excluded=True.
+
+Repointed off the tier model in the 2026-08 cutover. The audit scanned `Badge.objects.filter(tier=1)`
+because franchise/collection/developer lived on the base badge and were inherited by the other tiers;
+`BadgeSeries` carries them directly, so both the tier filter and the `effective_*` inheritance are gone
+(and the test that covered that inheritance with them). Coverage stays a SERIES-level question -- stages
+belong to the series and every edition works the same list -- so nothing here needs a GroupBadge.
 """
 
 import pytest
@@ -11,7 +17,7 @@ from django.core.management import call_command
 from trophies.models import ConceptFranchise, Franchise
 from trophies.services.badge_coverage_service import audit_badge_coverage
 from tests.factories import (
-    BadgeFactory, CompanyFactory, ConceptBundleFactory, ConceptCompanyFactory,
+    BadgeSeriesFactory, CompanyFactory, ConceptBundleFactory, ConceptCompanyFactory,
     ConceptFactory, GameFactory, StageFactory,
 )
 
@@ -52,7 +58,7 @@ def _cover(concept, series_slug, stage_number=1):
 
 
 def test_franchise_badge_flags_uncovered_concept():
-    badge = BadgeFactory(series_slug="cov-fran", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-fran")
     fran = _franchise(slug="cov-fran-f")
     badge.franchise = fran
     badge.save()
@@ -66,12 +72,12 @@ def test_franchise_badge_flags_uncovered_concept():
     findings = audit_badge_coverage()
 
     assert len(findings) == 1
-    assert findings[0]['badge'] == badge
+    assert findings[0]['series'] == badge
     assert [c.id for c in findings[0]['missing']] == [missing.id]
 
 
 def test_developer_badge_flags_uncovered_concept():
-    badge = BadgeFactory(series_slug="cov-dev", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-dev")
     dev = CompanyFactory(name="Studio X")
     badge.developer = dev
     badge.save()
@@ -91,7 +97,7 @@ def test_developer_badge_flags_uncovered_concept():
 def test_collection_badge_flags_uncovered_member_via_any_link():
     # Every non-excluded linked concept is a collection member -- an
     # uncovered collection member must be flagged.
-    badge = BadgeFactory(series_slug="cov-coll", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-coll")
     coll = _collection(slug="cov-coll-c")
     badge.collection = coll
     badge.save()
@@ -113,7 +119,7 @@ def test_collection_badge_does_not_flag_spinoff_member():
     """A game IGDB types as a spin-off of the collection (e.g. Agents of Mayhem under the
     Saints Row series) isn't expected in the collection badge's stages, so an uncovered
     spin-off must NOT be flagged. Real members still are."""
-    badge = BadgeFactory(series_slug="cov-spin", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-spin")
     coll = _collection(slug="cov-spin-c")
     badge.collection = coll
     badge.save()
@@ -132,17 +138,8 @@ def test_collection_badge_does_not_flag_spinoff_member():
     assert spinoff.id not in missing_ids
 
 
-def test_effective_collection_inherits_from_base_badge():
-    base = BadgeFactory(series_slug="cov-inh", tier=1)
-    coll = _collection(slug="cov-inh-c")
-    base.collection = coll
-    base.save()
-    child = BadgeFactory(series_slug="cov-inh", tier=2, base_badge=base)
-    assert child.effective_collection == coll
-
-
 def test_no_gap_when_all_covered():
-    badge = BadgeFactory(series_slug="cov-clean", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-clean")
     fran = _franchise(slug="cov-clean-f")
     badge.franchise = fran
     badge.save()
@@ -154,7 +151,7 @@ def test_no_gap_when_all_covered():
 
 
 def test_badge_without_franchise_or_developer_is_skipped():
-    BadgeFactory(series_slug="cov-none", tier=1)  # no franchise/developer
+    BadgeSeriesFactory(series_slug="cov-none")  # no franchise/developer
     _concept_with_game("Loose Game")  # not linked to anything
 
     assert audit_badge_coverage() == []
@@ -164,7 +161,7 @@ def test_excluded_concept_not_flagged():
     # is_excluded=True suppresses a link from badge coverage. Use this for the
     # rare bad-link case where IGDB lists a game under a franchise it shouldn't
     # (cameo, tie-in cross-reference, etc.) without unlinking it entirely.
-    badge = BadgeFactory(series_slug="cov-excl", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-excl")
     fran = _franchise(slug="cov-excl-f")
     badge.franchise = fran
     badge.save()
@@ -178,7 +175,7 @@ def test_non_excluded_concept_counts_toward_franchise_coverage():
     # Without is_main, every non-excluded linked concept counts. Previously
     # tie-ins (is_main=False) were filtered out; now they're required unless
     # an admin explicitly excludes them.
-    badge = BadgeFactory(series_slug="cov-broad", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-broad")
     fran = _franchise(slug="cov-broad-f")
     badge.franchise = fran
     badge.save()
@@ -191,7 +188,7 @@ def test_non_excluded_concept_counts_toward_franchise_coverage():
 
 
 def test_badge_with_both_franchise_and_developer_unions_dedups_and_orders():
-    badge = BadgeFactory(series_slug="cov-both", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-both")
     fran = _franchise(slug="cov-both-f")
     dev = CompanyFactory(name="Both Studio")
     badge.franchise = fran
@@ -222,7 +219,7 @@ def test_badge_with_franchise_and_collection_unions_and_dedups():
     # Franchises and collections share the ConceptFranchise table and can
     # co-occur on one badge. A concept that is both a franchise title AND a
     # collection member must appear exactly once in the missing set.
-    badge = BadgeFactory(series_slug="cov-fc", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-fc")
     fran = _franchise(slug="cov-fc-f")
     coll = _collection(slug="cov-fc-c")
     badge.franchise = fran
@@ -251,7 +248,7 @@ def test_badge_with_franchise_and_collection_unions_and_dedups():
 
 
 def test_covered_across_multiple_stages():
-    badge = BadgeFactory(series_slug="cov-multi", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-multi")
     fran = _franchise(slug="cov-multi-f")
     badge.franchise = fran
     badge.save()
@@ -271,7 +268,7 @@ def test_covered_across_multiple_stages():
 def test_concept_covered_via_bundle_on_stage_is_not_flagged():
     # Coverage must count concepts inside a ConceptBundle on a stage, not just
     # direct Stage.concepts members -- otherwise a bundle-covered game false-flags.
-    badge = BadgeFactory(series_slug="cov-bundle", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-bundle")
     fran = _franchise(slug="cov-bundle-f")
     badge.franchise = fran
     badge.save()
@@ -287,7 +284,7 @@ def test_concept_covered_via_bundle_on_stage_is_not_flagged():
 def test_bundle_on_another_series_stage_does_not_cover():
     # The bundle coverage path must respect series_slug: a concept bundled onto a
     # DIFFERENT series' stage is still missing from THIS badge (guards the filter).
-    badge = BadgeFactory(series_slug="cov-bundle-own", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-bundle-own")
     fran = _franchise(slug="cov-bundle-own-f")
     badge.franchise = fran
     badge.save()
@@ -305,7 +302,7 @@ def test_bundle_on_another_series_stage_does_not_cover():
 def test_blank_series_slug_badge_is_skipped():
     # Guard: a tracked badge with no series_slug has no stages; it must NOT flag
     # every franchise concept as missing.
-    badge = BadgeFactory(series_slug="", tier=1)
+    badge = BadgeSeriesFactory(series_slug="")
     fran = _franchise(slug="cov-blank-f")
     badge.franchise = fran
     badge.save()
@@ -319,7 +316,7 @@ def test_blank_series_slug_badge_is_skipped():
 
 
 def _badge_with_gap():
-    badge = BadgeFactory(series_slug="cov-cmd", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-cmd")
     fran = _franchise(slug="cov-cmd-f")
     badge.franchise = fran
     badge.save()
@@ -340,7 +337,7 @@ def test_command_emails_when_gaps(mailoutbox):
 
 
 def test_command_email_labels_collection_source(mailoutbox):
-    badge = BadgeFactory(series_slug="cov-coll-cmd", tier=1)
+    badge = BadgeSeriesFactory(series_slug="cov-coll-cmd")
     coll = _collection(name="My Collection", slug="cov-coll-cmd-c")
     badge.collection = coll
     badge.save()

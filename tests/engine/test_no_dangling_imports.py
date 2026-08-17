@@ -27,14 +27,18 @@ ROOT = Path(__file__).resolve().parents[2]
 
 #: Hot paths that import lazily and are poorly covered by tests. Not the whole tree: a full sweep would
 #: mostly re-assert what module-level imports already prove at startup.
+#:
+#: `admin.py` is here for the same reason `token_keeper` is: its actions import services inside the method,
+#: so a deleted service leaves a registration that looks fine until a staff member clicks the button. The
+#: 5b cutover left exactly that (a `ProfileGamification` action importing the deleted `xp_service`).
 DEFERRED_IMPORT_HEAVY = [
     'trophies/token_keeper.py',
     'trophies/services/badge_apply.py',
     'trophies/services/badge_xp.py',
     'trophies/services/badge_leaderboards.py',
-    'trophies/services/badge_service.py',
     'core/services/home_service.py',
     'trophies/psn_manager.py',
+    'trophies/admin.py',
 ]
 
 

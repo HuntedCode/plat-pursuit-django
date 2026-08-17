@@ -3106,6 +3106,33 @@ class UserGroupBadge(models.Model):
         return f"{self.profile.psn_username} - {self.group_badge}"
 
 
+class GroupBadgeAnnouncement(models.Model):
+    """One row per (profile, group_badge) that has EVER been announced to Discord. Append-only.
+
+    Exists because `UserGroupBadge` is binary: a revoke deletes the row, so a later re-earn is
+    indistinguishable from a first earn and would announce again. PSN flux, a DLC drop, or a curator
+    editing a stage can therefore re-ping a hunter about a badge they have held for a year -- something the
+    legacy engine's `maintenance` state made structurally impossible.
+
+    A Redis cooldown was the other candidate and is not sufficient: any TTL short enough to be a cooldown
+    has expired by the time the year-later flux happens, which is the exact case that motivates this. So
+    the marker is durable and is deliberately NEVER deleted -- not on revoke, not on re-earn. That
+    permanence IS the feature; the row means "this hunter has been told", which stays true forever.
+
+    Rows die only with their profile or their badge (both CASCADE), and at that point there is no one left
+    to re-notify.
+    """
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='badge_announcements')
+    group_badge = models.ForeignKey(GroupBadge, on_delete=models.CASCADE, related_name='announcements')
+    announced_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['profile', 'group_badge']
+
+    def __str__(self):
+        return f"{self.profile.psn_username} announced {self.group_badge}"
+
+
 class ProfileBadgeStanding(models.Model):
     """Sealed per-profile GRAND badge-XP total for the new subsystem -- the global XP leaderboard sort key (and
     a profile's overall total). Per-series XP + progress live in SeriesBadgeStanding. Recomputed from scratch on
