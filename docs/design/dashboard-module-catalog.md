@@ -1,5 +1,10 @@
 # Dashboard Module Catalog
 
+> **The dashboard was DELETED in 2026-08.** `dashboard_service.py` and the module registry are gone, so
+> the grep commands and "how to build a new module" instructions below do not work. Kept for the module
+> ideas, which are the part worth carrying into whatever replaces it. See
+> [dashboard.md](../features/dashboard.md).
+
 The dashboard is the synced-state home page (`/`) for all logged-in users. Modules are organized into a **tabbed navigation system** with 6 immutable system tabs and up to 6 user-created custom tabs (premium). Each module belongs to a default category tab.
 
 **For the canonical, always-current module list, see [Dashboard System](../features/dashboard.md).** This catalog is the design/roadmap document: it tracks the original vision, what was cut, and what (if anything) remains planned. When the live registry and this doc disagree, the live registry wins and this doc should be updated.
@@ -134,7 +139,7 @@ For the rendering decisions and chart-library choices that resulted, see the liv
 
 ## Future: Pending Full Gamification Launch
 
-The original catalog reserved three modules (XP & Level Progress, P.L.A.T.I.N.U.M. Stats, Leaderboard Position) for after the full gamification system shipped. **The full system has not shipped.** Only the Badge XP foundation exists today (`ProfileGamification.total_badge_xp` populated by signals from badge progress and badge earns). The P.L.A.T.I.N.U.M. stats, Jobs, quests, currency, star chart, and avatar frames described in [Gamification Vision](gamification-vision.md) are all unimplemented.
+The original catalog reserved three modules (XP & Level Progress, P.L.A.T.I.N.U.M. Stats, Leaderboard Position) for after the full gamification system shipped. **The full system has not shipped.** Only the Badge XP foundation exists today (`ProfileGamification.total_badge_xp` populated by signals from badge progress and badge earns). The P.L.A.T.I.N.U.M. stats, Jobs, quests, currency, star chart, and avatar frames described in Gamification Vision (the gamification-vision doc was never written; see design/gamification-plan.md) are all unimplemented.
 
 What's already surfaced from the Badge XP foundation:
 

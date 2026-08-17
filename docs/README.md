@@ -15,14 +15,14 @@ Cross-cutting engine systems. Read these to understand how the core platform wor
 | Doc | Description |
 |-----|-------------|
 | [Token Keeper & Sync Pipeline](architecture/token-keeper.md) | PSN sync engine, job queues, workers, rate limiting, PSN API |
-| [Badge System](architecture/badge-system.md) | Badge evaluation, XP, stages, series, milestones |
-| [Leaderboard System](architecture/leaderboard-system.md) | Precomputed rankings, caching, rank lookups, dashboard integration |
-| [Notification System](architecture/notification-system.md) | 8 services, signals, deferred queue, Discord webhooks, share images |
+| [Badge System](architecture/badge-system.md) | Series x platform edition, the evaluation engine, XP, stages |
+| [Leaderboard System](architecture/leaderboard-system.md) | The Postgres standing tables every board reads; rank-equals-position |
+| [Notification System](architecture/notification-system.md) | HIDDEN pending rebuild: 8 services, signals, deferred queue, Discord webhooks, share images |
 | [Payment & Webhooks](architecture/payment-webhooks.md) | Stripe + PayPal, subscriptions, donations, webhook routing |
 | [Concept Model](architecture/concept-model.md) | Concept sync, absorb(), default concepts, concept lock |
 | [Data Model](architecture/data-model.md) | Core model relationships and entity overview |
 | [Event System (Deferred)](architecture/event-system-deferred.md) | DEFERRED. Polymorphic Event model and Pursuit Feed design, rolled back before reaching production. Preserved for future revival. |
-| [Gamification](architecture/gamification.md) | P.L.A.T.I.N.U.M. stats, XP system, ProfileGamification |
+| [Gamification](architecture/gamification.md) | The two sealed XP economies: badge XP and Contract/job XP |
 | [IA and Sub-Nav](architecture/ia-and-subnav.md) | Hub-of-hubs IA, sub-navigation infrastructure, URL prefix matching, hub configuration |
 
 ## Design

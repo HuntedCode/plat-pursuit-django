@@ -493,7 +493,7 @@ These are the things still TBD that need to be resolved before or during Phase 1
 - [Data Intelligence](data-intelligence.md): the arc this companion is **Phase C** of; the shared per-profile insight engine that becomes the Context Builder
 - [Premium Membership](rebuild/premium-proposal.md): the membership model this is the flagship value within
 - [Stats Page](stats-page.md): the source of truth for the kinds of stats the Context Builder will surface
-- [Gamification Vision](gamification-vision.md): a future system the Journey will eventually read from
+- Gamification Vision (the gamification-vision doc was never written; see design/gamification-plan.md): a future system the Journey will eventually read from
 - [Dashboard Module Catalog](dashboard-module-catalog.md): where the Journey teaser module will live
 - [Review Hub](../features/review-hub.md): ratings and reviews are a key signal source
 - [Challenge Systems](../features/challenge-systems.md): challenge state is read by the Context Builder

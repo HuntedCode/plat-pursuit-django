@@ -1,5 +1,14 @@
 # Profile Showcases
 
+> **DELETED 2026-08, not hidden.** An earlier version of this banner promised the models, service, API
+> views, editor page and JS were only parked. They are gone: `ProfileShowcase` and `ProfileBadgeShowcase`
+> were dropped by migration `0303`, along with `showcase_service.py`, `api/profile_showcase_views.py` and
+> `profile_editor.html`. The cited `tests/engine/test_showcases_hidden.py` no longer exists either; the
+> live invariants moved into `tests/engine/test_profile_banner_retired.py`.
+>
+> Kept as the record of what the feature was and why it went. Rebuilding means designing it again, not
+> un-commenting anything.
+
 > **HIDDEN (2026-08) pending a ground-up rebuild of profile customization.** The profile no longer
 > renders the showcase band, `/profile-editor/` 302s to the homepage, and the four write endpoints are
 > withdrawn. **No data was touched** -- every `ProfileShowcase`, `UserTrophySelection` and

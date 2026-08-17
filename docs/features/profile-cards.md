@@ -1,5 +1,10 @@
 # Profile Cards & Forum Signatures
 
+> **DELETED 2026-08 (badge cutover 5b).** The profile-card renderer, its four API endpoints, the token
+> signature and `render_profile_sigs` are all gone. The Pursuer Card is the identity surface now.
+>
+> Kept as the record of what the feature was.
+
 Shareable profile card images showcasing a user's trophy hunting identity. Two output formats: social media cards (downloadable PNGs) and forum signatures (auto-updating public URLs).
 
 ## Overview

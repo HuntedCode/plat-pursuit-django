@@ -84,67 +84,108 @@ Key relationships:
 
 ## Badge & Gamification Models
 
-Badges are PP's custom achievement system. Players earn badge tiers by completing sets of games (stages) defined by staff.
+Badges are PP's custom achievement system. Staff curate a **series** of games (stages); a hunter earns the
+badge by completing them.
 
-### Badge
-A badge tier (Bronze/Silver/Gold/Platinum) within a series. Grouped by `series_slug`. Higher tiers inherit properties from `base_badge` (the tier-1 badge in the same series). Types include: series, collection, megamix, developer, user, misc. Misc badges use a `requirements` JSON field instead of stages. Key display fields: `name`, `display_title`, `display_series`, `badge_image`. The `is_live` flag controls public visibility.
+> **Rebuilt 2026-08.** A badge is now **series x platform edition**, not one of four tiers. The tier
+> models below (`Badge`, `UserBadge`, `UserBadgeProgress`, `StageCompletionEvent`, `ProfileGamification`)
+> are RETAINED for rollback and audit but have **no writer anywhere in the codebase**. See
+> [badge-system.md](badge-system.md) for how the live engine works.
+
+### The live models
+
+#### PlatformGroup
+A platform set that defines an **edition**, e.g. Ultra HD (PS4/PS5) or Legacy HD (PS3/Vita). Carries the
+shared visual identity every medallion of that edition draws with (`medallion_shape`, `backing_key`,
+`background_image`) plus the routing predicate `matches_platforms()`.
+
+Key fields: `key` (unique), `name`, `platforms` (ArrayField of PSN `title_platform` values),
+`exclude_delisted` (Ultra HD counts delisting; Legacy HD does not), `sort_order`, `is_active`.
+
+#### BadgeSeries
+The abstract series-level definition, one row per `series_slug`. Holds the shared identity and the
+DEFAULTS each edition inherits. **No `is_live` and no `tier`** -- liveness is per-edition.
+
+Key fields: `series_slug` (unique), `name`, `badge_type`, `completion_policy` (`all` / `min_count`),
+`min_required`, `description`, `display_series`, `badge_image`, `holo_badge_image`.
 
 Key relationships:
-- `base_badge` FK to self (nullable, for tier inheritance)
-- `title` FK to `Title` (awarded to user on earn)
-- `most_recent_concept` FK to `Concept`
-- `funded_by` FK to `Profile` (donor who funded artwork)
+- `franchise` / `collection` FK to `Franchise`, `developer` FK to `Company` (drives the coverage audit)
+- `submitted_by` FK to `Profile` (credited on `user` badges; their avatar is the art fallback)
+- `funded_by` FK to `Profile` (donor credited for the artwork -- what the fundraiser writes)
+- `title` FK to `Title` (granted on earning ANY edition of the series)
 
-**Public surfaces** (`BadgeListView`, `/badges/`, rebuilt to `--pp-*`): two views on one page. The **Series** view (default) is one row per `series_slug` showing the next-tier medallion + trophy-type spread + progress ("what's needed"); the **Gallery** view (`?view=gallery`) is a per-*tier* medallion wall for catalog discovery (DB-side tier/type/state/set filters, `build_badge_frame(..., showcase=True)`). Both server-paginate with infinite scroll and share the `.pp-bgal__` toolbar. The personal **Collection** (`/collection/`) is the engaged-scoped album of what a user actually holds.
+#### GroupBadge
+**The earnable thing**: one row per (`BadgeSeries` x `PlatformGroup`), `unique_together`.
 
-### Stage
-Defines one "step" in a badge series. Contains the Concepts a player must platinum (or 100%) to complete the stage. `stage_number` 0 marks optional/tangential entries. `required_tiers` limits which badge tiers require this stage.
+Key fields: `is_live` (default False -- hidden until released), `set_number`, and the engine-owned denorms
+`earned_count`, `required_stages`, `rarity_pct`, `rarity_rank`, `rarity_class`.
+
+Per-edition overrides, each null-means-inherit: `badge_image_override`, `holo_badge_image_override`,
+`funded_by_override`. Resolved by `effective_funded_by`, `effective_holo_image`, and `art_layers()` --
+which is the single source of truth for medallion composition, because backdrop and shape come from the
+`PlatformGroup` and a series alone cannot draw itself.
+
+#### UserGroupBadge
+A profile's CURRENT hold. **Binary**: the row exists iff the profile meets the bar, and a revoke DELETES
+it. There is no `maintenance` state and no permanent rank -- rank is the live position among current
+holders ordered by `earned_at`.
+
+Key fields: `earned_at` (the hunter's COMPLETION date, resynced when a badge's iteration changes),
+`created_at` (when WE awarded the row -- use this for "earned this week"), `is_holo`, `is_displayed`.
+
+#### GroupBadgeAnnouncement
+Append-only marker: one row per (profile, group_badge) ever announced to Discord. Never deleted. Exists
+because holds are binary, so a revoke-then-re-earn is indistinguishable from a first earn and would
+re-ping a hunter about a badge they have held for a year.
+
+#### ProfileBadgeStanding / SeriesBadgeStanding / ProfileEditionStanding
+The materialized read-models the leaderboards sort on, all recomputed from scratch by
+`badge_xp.recompute_standing` on every evaluation (so they cannot drift):
+
+| model | grain | holds |
+|---|---|---|
+| `ProfileBadgeStanding` | per profile | grand `total_xp`, `badges_held`, `country_code` |
+| `SeriesBadgeStanding` | per (profile, series) | `xp`, `progress_bp`, `stages_cleared`/`total`, `advanced_at`, per-edition `group_progress` |
+| `ProfileEditionStanding` | per (profile, edition) | the same totals pre-sliced, backing the boards' edition filter |
+
+#### Stage
+One "step" in a series: the Concepts a hunter must complete. `stage_number` 0 marks optional entries.
+
+**Joined to a series by the `series_slug` STRING, not an FK** -- so nothing stops a stage existing under a
+slug no series owns, and renaming a slug orphans its stages.
 
 Key relationships:
 - `concepts` M2M to `Concept`
-- Grouped by `series_slug` (matches Badge.series_slug)
+- `concept_bundles` reverse FK to `ConceptBundle` (a concept is in EITHER `concepts` OR a bundle on that
+  stage, never both -- any "which series is this game in" query must check both paths)
 
-### UserBadge
-Records that a profile has earned a specific badge tier. One row per profile-badge pair.
+### Retained tier models (no writer)
 
-Key relationships:
-- `profile` FK to `Profile`
-- `badge` FK to `Badge`
+#### Badge
+A tier (Bronze/Silver/Gold/Platinum) within a series, grouped by `series_slug`, with higher tiers
+inheriting from `base_badge`. Superseded by `BadgeSeries` + `GroupBadge`. No admin registration since the
+2026-08 fundraiser/art_reveal repoint.
 
-### UserBadgeProgress
-Tracks in-progress badge completion for a profile. Stores `completed_concepts` count and `progress_value`.
+#### UserBadge / UserBadgeProgress
+Earn records and in-progress tracking for the tier engine. Superseded by `UserGroupBadge` (holds) and the
+standing tables (progress).
 
-Key relationships:
-- `profile` FK to `Profile`
-- `badge` FK to `Badge`
+#### StageCompletionEvent
+Per-(profile, badge, stage) completion events for time-series analytics. The current engine records none.
 
-### StageCompletionEvent
-Records when a profile completed a specific stage for a specific badge tier. Used for time-series badge analytics. One record per (profile, badge, stage) triple. RETAINED table with no live writer: `badge_service` was deleted in cutover 5b, and the current engine records no stage-completion events.
-
-Key relationships:
-- `profile` FK to `Profile`
-- `badge` FK to `Badge`
-- `stage` FK to `Stage`
-- `concept` FK to `Concept` (SET_NULL, nullable: which concept satisfied the stage)
-
-Key fields:
-- `completed_at`: effective completion date (max of game completion vs badge creation for retroactive credit)
-
-### ProfileGamification
-OneToOne extension of Profile for gamification stats. Stores `total_badge_xp`, per-series XP breakdown (`series_badge_xp` JSON), and total/unique badge counts. FROZEN legacy denorm: no writer since cutover 5b.
-
-Key relationships:
-- `profile` OneToOne to `Profile` (primary key)
+#### ProfileGamification
+OneToOne on Profile holding `total_badge_xp` and a per-series JSON breakdown. **Frozen**: it counts the
+retired tier economy and is NOT comparable to `ProfileBadgeStanding.total_xp`. Never show them as the
+same figure.
 
 ### StatType
-Defines stat categories for the gamification system (e.g., "badge_xp"). Designed for future expansion to additional stats like Power, Luck, Agility.
+Defines stat categories for the gamification system. **Vestigial**: the P.L.A.T.I.N.U.M. 8-stat system it
+was built for was retired in 2026-06; only the `badge_xp` record exists.
 
 ### StageStatValue
-Per-stage stat configuration. Maps a Stage to a StatType with values for each badge tier (bronze_value, silver_value, gold_value, platinum_value).
-
-Key relationships:
-- `stage` FK to `Stage`
-- `stat_type` FK to `StatType`
+Per-stage stat configuration, per badge tier. **Vestigial** for the same reason. The discipline radar
+derives from job levels (`ProfileJobXP`), not this table.
 
 ### GameFamily
 Groups related Concepts across platforms and regions without merging them.

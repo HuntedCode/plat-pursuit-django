@@ -86,4 +86,4 @@ locked baseline, don't rush the ambitious stuff). Natural order: **A (engine) �
 - [premium-proposal.md](rebuild/premium-proposal.md) — the membership model this arc anchors
 - [platinum-journey.md](platinum-journey.md) — Phase C, the full companion design
 - [stats-page.md](stats-page.md) — the current My Stats page (the Phase-B starting point)
-- [gamification-vision.md](gamification-vision.md) — a future data source the engine will read
+- gamification-vision.md (the gamification-vision doc was never written; see design/gamification-plan.md) — a future data source the engine will read

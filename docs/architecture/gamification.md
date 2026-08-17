@@ -91,7 +91,7 @@ In `token_keeper.py`'s `sync_complete` (phase `stats_badges`, right after `evalu
 - [Token Keeper](token-keeper.md): badge evaluation during sync recomputes badge standings. The Contract engine's `check_profile_contracts` detection hook also runs here (detection only).
 - [Badge System](badge-system.md): Badge XP is recomputed by `badge_xp.recompute_standing` on every evaluation, from scratch. There are no XP signals: `UserBadgeProgress` / `UserBadge` no longer trigger anything.
 - [Notification System](notification-system.md): Shareable cards read the standing tables directly; `get_badge_xp_for_game()` died with `xp_service`.
-- [Gamification Vision](../design/gamification-vision.md): Original RPG system design (note: the P.L.A.T.I.N.U.M. 8-stat layer is retired; jobs now live on the Contract layer per `job-board-contracts.md`).
+- Gamification Vision (the gamification-vision doc was never written; see design/gamification-plan.md): Original RPG system design (note: the P.L.A.T.I.N.U.M. 8-stat layer is retired; jobs now live on the Contract layer per `job-board-contracts.md`).
 
 ## Gotchas and Pitfalls
 
@@ -118,4 +118,4 @@ In `token_keeper.py`'s `sync_complete` (phase `stats_badges`, right after `evalu
 
 - [Badge System](badge-system.md): How badges are evaluated and awarded
 - [Token Keeper](token-keeper.md): Sync pipeline that triggers badge evaluation
-- [Gamification Vision](../design/gamification-vision.md): Full RPG system design document
+- Gamification Vision (the gamification-vision doc was never written; see design/gamification-plan.md): Full RPG system design document

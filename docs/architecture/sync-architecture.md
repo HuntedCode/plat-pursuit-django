@@ -271,6 +271,6 @@ The work shipped across three phases. The two safety-net phases originally plann
 ## Related Docs
 
 - [token-keeper.md](token-keeper.md): the operational reference for the worker / queue / token system that runs the sync.
-- [sync-optimization.md](sync-optimization.md): historical optimizations preserved by this design (signal suppression, batched updates, deadlock handling).
+- [sync-optimization.md](../guides/management-commands.md): historical optimizations preserved by this design (signal suppression, batched updates, deadlock handling).
 - [Cron Jobs](../guides/cron-jobs.md): scheduling reference for the daily reconciliation crons (`recalc_profile_counters`, `recalc_earn_rates`).
-- [Product Identity](product-identity.md): Pursuer-centric product spine. The reliability of sync (and the hidden-game handling specifically) underpins user trust in their badge progression numbers.
+- [Product Identity](../design/product-identity.md): Pursuer-centric product spine. The reliability of sync (and the hidden-game handling specifically) underpins user trust in their badge progression numbers.

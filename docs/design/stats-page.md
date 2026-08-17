@@ -1,5 +1,12 @@
 # My Stats Page - Design Document
 
+> **HIDDEN 2026-08, and more deleted than this page implies.** `MyStatsView`, `stats_service.py`, the
+> template and its 13 partials, and `/api/v1/stats/premium/` were DELETED in badge cutover 5b -- the
+> "parked, not deleted" wording below and the recipe for bringing it back mechanically are both out of
+> date. `/stats/` 302s to Home.
+>
+> The design thinking stands; the restoration instructions do not.
+
 > Dedicated page at `/stats/` with a video game stats screen aesthetic showing every possible stat about the user's trophy hunting career. Career Overview is free; all other sections are premium-only.
 
 ## Status: HIDDEN for the 1.0 launch (2026-08)

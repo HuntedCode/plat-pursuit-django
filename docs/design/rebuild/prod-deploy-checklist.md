@@ -362,3 +362,31 @@ Migration `trophies.0306_user_group_badge_created_at` (adds the award timestamp 
   display went live, not in this cutover) and is a live payment-flow correctness issue. Repointing both
   apps onto `BadgeSeries` is what actually retires the tier model and lets `BadgeAdmin` go. Pinned by
   `KNOWN_LEGACY_WRITERS` in `tests/engine/test_legacy_badge_engine_removed.py`.
+
+## Fundraiser + art_reveal repoint (2026-08)
+
+Migrations `fundraiser.0006_claim_series_fk` and `art_reveal.0004_item_series_fk`.
+
+- [ ] **RUN `python manage.py convert_series_to_groups --all` FIRST.** This is a hard prerequisite, not
+      advice. Both migrations map their rows to a `BadgeSeries` by slug and **refuse to run** if any row
+      cannot be mapped -- they raise with the offending slugs named rather than nulling the FK, because
+      every `DonationBadgeClaim` row is a payment somebody made. A failed migration is recoverable; a
+      detached donation record is not.
+- [ ] **Snapshot `fundraiser_donationbadgeclaim` and `art_reveal_artrevealitem` before migrating.** Real
+      donation records and commissioned artwork, and the old FK is dropped at the end.
+- [ ] **Verify donor credit renders after the first completed claim.** The whole point: complete a claim
+      in staff admin, then open that badge's detail page and confirm the donor is named ON THE MEDALLION.
+      Before this change the credit was written to `Badge.funded_by`, which nothing displays -- so
+      "the claim completed successfully" was never evidence that it worked.
+- [ ] **`BadgeAdmin` is gone.** The legacy `Badge` / `UserBadge` tables now have NO writer anywhere, which
+      is what makes the soak-then-decommission step meaningful. If you need to inspect them, use dbshell.
+- [ ] **The claim API accepts `series_id` and still tolerates the old `badge_id` key**, so a browser
+      holding the fundraiser page open across the deploy does not get a confusing 400 on a payment
+      action. The tolerance can be dropped a release later.
+
+## Staff badge-creation tool (2026-08)
+
+- [ ] **`/staff/badge-create/` is back**, rebuilt for `BadgeSeries` + editions. Tell whoever authors
+      badges: it creates the series and one `GroupBadge` per checked edition, hidden by default. Stages
+      are still added in Django admin afterwards.
+- [ ] No migration, no data change. Route name is unchanged (`badge_creation`), so old bookmarks work.

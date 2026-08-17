@@ -13,7 +13,7 @@ double-framing a round object. The decision was validated at `/design/badge-pres
 
 `templates/components/badge_medallion.html` + `static/css/components/badge-medallion.css`.
 
-- **Reads the SAME frame dict as `components/frame.html`** (from `build_badge_frame`), so it's a
+- **Reads the SAME frame dict as `components/frame.html`** (from `build_badge_frame` (DELETED 2026-08)), so it's a
   drop-in. Keys used: `tier`, `state`, `series_name`, `art_layers` (a full-URL, filtered list:
   `[backdrop, main[, foreground]]` — a badge with no custom art has NO foreground), `stages_done`,
   `stages_total`, `dom_id`. Optional include params: `extra_class`, and **`no_id`** (pass `no_id=True`
@@ -59,7 +59,7 @@ it and reads as **restored** colour rising over a tarnished base.
 ### The multi-bar meter
 In-progress + maintenance render a **segmented multi-bar** below the art (echoing the job page's tier
 ladder, `.pgl`): **one rounded cell per platinum/100%** toward the badge, filled up to `stages_done`.
-The cells come from `frame['segments']` (a bool list built in `build_badge_frame`, only when countable:
+The cells come from `frame['segments']` (a bool list built in `build_badge_frame` (DELETED 2026-08), only when countable:
 `0 < stages_total <= SEGMENT_CAP`, cap = **12**). Above the cap `segments` is omitted and the template
 renders **one smooth bar** off `progress_pct` (`pp-med__meter--smooth`); the "X / Y" count carries the
 detail. Cool tier colour for in-progress, warm amber for maintenance.
@@ -143,9 +143,9 @@ The companion **flip** (to a back face) is still a planned follow-up.
 - **`art_layers` are full URLs and a *filtered* list.** Render raw (`{{ layer }}`, never `{% static %}`
   — double-prefix) and **loop** rather than hardcode 3 `<img>`s (no-custom-art badges have 2 layers).
   State filters target `nth-child(1)` = backdrop, `nth-child(2)` = subject.
-- **The meter cells come from `frame['segments']`, computed server-side** (`build_badge_frame`), NOT in
+- **The meter cells come from `frame['segments']`, computed server-side** (`build_badge_frame` (DELETED 2026-08)), NOT in
   the template — Django templates can't loop N times without a filter, so the bool list is prebuilt.
-  Change the cap in one place: `frame_service.SEGMENT_CAP`.
+  The Frame was replaced by the Badge Medallion; `frame_service` and its `SEGMENT_CAP` were deleted in 2026-08. Medallion composition now lives in `GroupBadge.art_layers()`.
 - **Only `earned` is bright.** If you touch the state art filters, keep `in_progress` matched to
   `unearned` (they share the dark-mount selectors) — brightening in-progress art breaks the at-a-glance
   "done vs not done" read the meter exists to preserve.

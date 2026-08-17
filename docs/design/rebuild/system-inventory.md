@@ -67,14 +67,14 @@ These are the hard-won, battle-tested backend. **All Keep.** The rebuild does no
 
 ### Badge System (internals)
 - **What:** Tiered (Bronze/Silver/Gold/Platinum) collections of Concepts via Stages; XP per completed concept + bonus per badge; 6 badge types; ConceptBundles for episodic games.
-- **Lives in:** `models.py` (Badge, Stage, UserBadge, UserBadgeProgress, ConceptBundle), `services/badge_service.py`.
+- **Lives in:** `models.py` (BadgeSeries, PlatformGroup, GroupBadge, UserGroupBadge, Stage, ConceptBundle), `services/badge_engine.py` + `badge_apply.py`. **Rebuilt 2026-08**: `badge_service.py` and the tier models' engine are deleted.
 - **Status:** Shipped, mature. O(n) eval via prefetch; prerequisite chains enforced.
 - **Coupling:** Fires in sync `_job_sync_complete`; feeds XP, leaderboards, Discord roles, titles, milestones, notifications. **The centerpiece.**
 - **Disposition:** **Keep + Adapt** — stable framework, but this is *the* surface the Pursuer/Job layer wraps. Adapt = extend (Job XP derivation), not rewrite.
 
 ### Leaderboard System
 - **What:** Redis sorted-set leaderboards (badge earners, progress, XP — per-series/global/per-country). Incremental signal updates + cron reconciliation.
-- **Lives in:** `services/redis_leaderboard_service.py` (~1k lines), `leaderboard_service.py`, `update_leaderboards` cron.
+- **Lives in:** `services/badge_leaderboards.py` (indexed Postgres reads). **Rebuilt 2026-08**: `redis_leaderboard_service.py`, `leaderboard_service.py` and the `update_leaderboards` cron are all deleted.
 - **Status:** Shipped. O(log n) lookups, 7h TTL.
 - **Coupling:** Reads ProfileGamification XP; updated on UserBadge change + sync. Surfaced on dashboard, badge detail, profiles.
 - **Disposition:** **Keep** — display layer for badges+XP. *Recommendation:* alert if last rebuild >1h stale. Gets per-Job leaderboards when Jobs ship.
@@ -90,9 +90,9 @@ These are the hard-won, battle-tested backend. **All Keep.** The rebuild does no
 
 This is the heart of the rebuild. **The foundation (Badge XP) is shipped and solid. The Pursuer layer does not exist yet.**
 
-### Badge XP system (ProfileGamification + xp_service + signals)
+### Badge XP system — REBUILT 2026-08 (standing tables, no signals)
 - **What:** Real-time XP calc/denormalization from badge progress; `total_badge_xp`, `series_badge_xp`. `bulk_gamification_update()` defers recalc during sync.
-- **Lives in:** `models.py` ProfileGamification (~2051-2085), `services/xp_service.py` (~342 lines), `signals.py` (~242-341).
+- **Lives in:** `models.py` ProfileBadgeStanding / SeriesBadgeStanding / ProfileEditionStanding, `services/badge_xp.py`. **Deleted 2026-08**: `xp_service.py`, the gamification signals, and `ProfileGamification` as a live denorm (the table is retained but frozen).
 - **Status:** **Shipped, live.** Only the XP layer is real.
 - **Disposition:** **Keep** — load-bearing; the Pursuer's numeric foundation. Will gain fields (`job_xp`, `job_levels`, title slots) when Jobs ship — extend, don't replace.
 

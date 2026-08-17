@@ -46,15 +46,40 @@ Staff-authored platinum guides on game detail pages. Replaces the old Checklists
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| PUT | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/` | Staff | Update tab metadata (name, intro markdown) |
-| GET/POST | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/steps/` | Staff | List or create steps within a tab |
-| PUT | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/steps/reorder/` | Staff | Reorder steps within a tab |
-| GET/PUT/DELETE | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/steps/<step_id>/` | Staff | Step detail / edit / delete |
-| POST | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/steps/<step_id>/trophies/` | Staff | Attach trophies to a step |
-| PUT | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/trophy-guides/<trophy_id>/` | Staff | Edit per-trophy guide text |
 | POST | `/api/v1/roadmap/<roadmap_id>/publish/` | Staff | Publish or unpublish a roadmap |
 | POST | `/api/v1/roadmap/<roadmap_id>/upload-image/` | Writer+ on that roadmap | Upload an inline image for the editor (scoped per-roadmap so trial-writer escalation works) |
 | GET | `/api/v1/youtube/attribution-lookup/?url=<youtube_url>` | Login | Resolve a YouTube URL to its channel name + URL via oEmbed (used by the editor's live attribution preview). Rate-limited 30/min/user. Returns `{"channel_name": str, "channel_url": str}` (empty strings on miss). |
+
+### Roadmap Collaboration (Staff / Authors)
+
+Concurrent editing for the roadmap editor. Locks stop two authors overwriting each other; notes are the
+review thread on a draft.
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/v1/roadmap/<id>/lock/acquire` | Author | Take the edit lock |
+| POST | `/api/v1/roadmap/<id>/lock/heartbeat` | Author | Keep it alive while editing |
+| POST | `/api/v1/roadmap/<id>/lock/release` | Author | Give it up |
+| POST | `/api/v1/roadmap/<id>/lock/branch` | Author | Branch rather than wait |
+| POST | `/api/v1/roadmap/<id>/lock/break` | Staff | Force-break a stale lock |
+| POST | `/api/v1/roadmap/<id>/lock/merge` | Author | Merge a branch back |
+| GET/POST | `/api/v1/roadmap/<id>/notes` | Author | List / add review notes |
+| GET/PATCH/DELETE | `/api/v1/roadmap/<id>/notes/<note_id>` | Author | One note |
+| POST | `/api/v1/roadmap/<id>/notes/<note_id>/resolve` | Author | Resolve a note |
+| POST | `/api/v1/roadmap/<id>/notes/mark-read` | Author | Mark the thread read |
+| GET | `/api/v1/roadmap/<id>/preview` | Author | Render an unpublished draft |
+| GET | `/api/v1/roadmap/<id>/hidden-authors` | Staff | Authors hidden from credits |
+| GET | `/api/v1/roadmap/<id>/trial-writers` | Staff | Trial-writer roster |
+
+### Community Stats
+
+Denormalized daily community aggregates, feeding the Discord tracker and the site ribbon.
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/v1/community-stats/today` | No | Today's running totals |
+| GET | `/api/v1/community-stats/<date>` | No | One day's totals |
+| GET | `/api/v1/community-stats/records` | No | All-time record days |
 
 ### Notifications — WITHDRAWN (2026-08)
 
@@ -64,7 +89,6 @@ The notification system is **hidden pending its rebuild** ([notification-system.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/api/v1/admin/notifications/user-search/` | Staff | Search users for targeting. **Still routed** — the Badge Creation page uses it as its user picker, so it outlived the block it belonged to. Wants rehoming somewhere neutral. |
 
 ### Shareable Images
 
@@ -88,23 +112,10 @@ The notification system is **hidden pending its rebuild** ([notification-system.
 | GET | `/api/v1/recap/<year>/<month>/deck/` | Login | Every slide's HTML in one response (what the deck uses) |
 | GET | `/api/v1/recap/<year>/<month>/slide/<type>/` | Login | One slide partial. No in-repo caller |
 
-### Game Lists
+### Game Lists — RETIRED (2026-08)
 
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/v1/lists/` | Login | Create game list |
-| GET | `/api/v1/lists/my/` | Login | User's game lists |
-| POST | `/api/v1/lists/quick-add/` | Login | Quick add to default list |
-| GET/PUT | `/api/v1/lists/<id>/` | Login | List detail/update |
-| DELETE | `/api/v1/lists/<id>/delete/` | Login | Delete list |
-| POST | `/api/v1/lists/<id>/items/` | Login | Add item |
-| DELETE | `/api/v1/lists/<id>/items/<id>/` | Login | Remove item |
-| PUT | `/api/v1/lists/<id>/items/<id>/update/` | Login | Update item |
-| PUT | `/api/v1/lists/<id>/items/reorder/` | Login | Reorder items |
-| POST | `/api/v1/lists/<id>/like/` | Login | Toggle like |
-| POST | `/api/v1/lists/<id>/copy/` | Login | Copy list |
-| GET | `/api/v1/games/search/` | Login | Game search (typeahead) |
-| GET | `/api/v1/games/<np_comm_id>/players/` | Public | Game players list (JSON). Sets `authentication_classes = []` / `permission_classes = []`, so it is anonymous despite what this table said previously. Its in-app consumer (the game-detail players modal) was retired in favour of the Ranks tab; kept in case an external client uses it. See [Game Leaderboards](../features/game-leaderboards.md) |
+The Game Lists feature is hidden pending a revamp; all 11 `/api/v1/lists/*` endpoints are unrouted. The
+models and templates are retained.
 
 ### Game Families (Staff Only)
 
@@ -115,8 +126,6 @@ The notification system is **hidden pending its rebuild** ([notification-system.
 | DELETE | `/api/v1/game-families/<id>/delete/` | Staff | Delete family |
 | POST | `/api/v1/game-families/<id>/add-concept/` | Staff | Add concept to family |
 | POST | `/api/v1/game-families/<id>/remove-concept/` | Staff | Remove concept |
-| POST | `/api/v1/game-families/proposals/<id>/approve/` | Staff | Approve proposal |
-| POST | `/api/v1/game-families/proposals/<id>/reject/` | Staff | Reject proposal |
 | GET | `/api/v1/game-families/search-concepts/` | Staff | Search concepts |
 
 ### Fundraiser
@@ -127,27 +136,15 @@ The notification system is **hidden pending its rebuild** ([notification-system.
 | POST | `/api/v1/fundraiser/claim/` | Login | Claim badge series |
 | POST | `/api/v1/admin/fundraiser/claim-status/` | Staff | Update claim status |
 
-### Dashboard
+### Dashboard — DELETED (2026-08)
 
-The dashboard is the synced-state home page for all users (see [Home Page Router](../features/home-page.md) and [Dashboard](../features/dashboard.md)). Auth requirements per endpoint reflect what is exposed in the redesigned site, not the temporary staff gate from the rebuild phase.
+The modular dashboard was deleted in badge cutover 5b, along with `DashboardConfig` (migration `0304`)
+and its three config/reorder/module endpoints. `/dashboard/` 301s to `/`. See
+[dashboard.md](../features/dashboard.md).
 
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| GET | `/api/v1/dashboard/module/<slug>/` | Login | Lazy module HTML |
-| POST | `/api/v1/dashboard/config/` | Login | Update hidden modules / settings / order / tab config |
-| POST | `/api/v1/dashboard/reorder/` | Login (Premium) | Save drag-drop order |
-| POST | `/api/v1/user/quick-settings/` | Login | Quick Settings auto-save (toggles, timezone, region) |
+### Stats Page — HIDDEN (2026-08)
 
-### Stats Page
-
-The `/stats/` premium stats page (12 sections, 120+ stats). See [Stats Page Inventory](stats-page-inventory.md).
-
-> **Hidden for 1.0 (2026-08):** the page itself is parked -- `/stats/` redirects to Home -- so nothing
-> calls this endpoint. It is kept for the rebuild. See [stats-page.md](../design/stats-page.md).
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/v1/stats/premium/` | Login (premium) | Lazy section data for the My Stats page |
+My Stats is hidden pending a rebuild; `/stats/` 302s to Home and the premium stats endpoint is unrouted.
 
 ### Game Flags
 
@@ -166,19 +163,11 @@ Lazy-fetched contract-card HTML injected into the shared `.pp-detail-modal` on t
 | GET | `/career/contracts/<slug>/modal/` | Login + linked | Full contract card with the **viewer's** per-game progress (`ContractModalView`) |
 | GET | `/career/contracts/<slug>/preview/` | **Public** | **Anonymised** contract card (member games show trophy composition, not progress) + a sign-up / link-PSN CTA, for logged-out / unlinked viewers (`ContractModalPreviewView`). Renders only public contract/game data (`build_contract_modal(None, slug)` — no per-user work). |
 
-### Profile Cards & Badge Showcase
+### Profile Cards & Badge Showcase — DELETED (2026-08)
 
-Shareable profile card images, forum signatures, and the public badge showcase. See [Profile Cards](../features/profile-cards.md).
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| GET | `/api/v1/profile-card/html/` | No (token) | Profile card HTML for Playwright rendering |
-| GET | `/api/v1/profile-card/png/` | No (token) | Profile card PNG (cached, served by token) |
-| GET/POST | `/api/v1/profile-card/settings/` | Login | Profile card settings (theme, public sig toggle, displayed badge) |
-| POST | `/api/v1/profile-card/regenerate-token/` | Login | Rotate the public sig token (invalidates the old image URL) |
-| POST | `/api/v1/badges/displayed/` | Login | Set the badge displayed on the profile card |
-| POST | `/api/v1/badges/showcase/` | Login | Toggle a badge in the 5-slot profile showcase |
-| POST | `/api/v1/badges/showcase/reorder/` | Login (Premium) | Drag-reorder the showcase slots |
+Both systems were deleted in badge cutover 5b: the profile-card renderer with its four endpoints, and the
+showcase system including its models (migration `0303`). The Pursuer Card replaced the profile card; see
+`/api/v1/pursuer-card/` under Misc.
 
 ### Subscription Admin (Staff Only)
 
@@ -187,38 +176,10 @@ Shareable profile card images, forum signatures, and the public badge showcase. 
 | POST | `/api/v1/admin/subscriptions/action/` | Staff | Admin action (resend, deactivate) |
 | GET | `/api/v1/admin/subscriptions/user/<id>/` | Staff | User subscription detail |
 
-### Community Reviews
+### Community Reviews — ARCHIVED (2026-05)
 
-> **None of the `reviews/` routes below are wired.** The review system was archived 2026-05 and
-> `api/urls.py` routes none of them; the table is kept as the shape a future rebuild would restore. The
-> RATINGS half of the system is live and listed after it.
-
-Review responses include a `body_html` field containing server-rendered markdown (via `ChecklistService.process_markdown()`), ready for direct insertion into the DOM without a client-side markdown library.
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| GET | `/api/v1/reviews/recent/` | No | Recent reviews feed (paginated, for landing page) |
-| GET | `/api/v1/reviews/search/` | No | Search reviews by concept (typeahead) |
-| GET | `/api/v1/reviews/<concept_id>/group/<group_id>/` | No | List reviews (sort: helpful/newest/oldest) |
-| POST | `/api/v1/reviews/<concept_id>/group/<group_id>/create/` | Login | Create review (body + recommended) |
-| GET | `/api/v1/reviews/<review_id>/` | No | Single review detail |
-| PUT | `/api/v1/reviews/<review_id>/` | Login | Edit own review |
-| DELETE | `/api/v1/reviews/<review_id>/` | Login | Delete own review |
-| POST | `/api/v1/reviews/<review_id>/vote/` | Login | Toggle helpful/funny vote |
-| POST | `/api/v1/reviews/<review_id>/report/` | Login | Report review |
-| GET | `/api/v1/reviews/<review_id>/replies/` | No | List replies |
-| POST | `/api/v1/reviews/<review_id>/replies/` | Login | Create reply |
-| PUT | `/api/v1/reviews/replies/<reply_id>/` | Login | Edit own reply |
-| DELETE | `/api/v1/reviews/replies/<reply_id>/` | Login | Delete own reply |
-
-**Ratings** — the live half of this system. The Rate My Games wizard and the quick-rate modal call these:
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| GET | `/api/v1/ratings/wizard/queue/` | Login | Rate My Games queue. `queue_type=base\|dlc`, `limit`, `offset`, `include_shovelware=1`. Serves only UNRATED items, so nothing it returns carries an existing rating. Each item carries `concept_icon_url` (the cover) for the wizard's game header; it also sent `landscape_url` until the header's background wash was dropped, and that field went with it rather than being served to nobody. BOTH branches defer `igdb_match.raw_response` — the DLC branch lists every ratable concept's groups before paginating, so the ~30 KB blob per row is the difference between a page and tens of MB. |
-| POST | `/api/v1/ratings/<concept_id>/group/<group_id>/rate/` | Login | Submit/update a rating. Body: `recommendation, difficulty, grindiness, hours_to_platinum, fun_ranking, overall_rating, blurb`. **`recommendation` is REQUIRED** (`worth_it` / `good_game_bad_plat` / `skip`) — except on an update of an existing rating, where an omitted one falls back to the stored value. An OMITTED `blurb` preserves the stored one; an empty string clears it. Responds with `community_averages` (incl. `recommendation_split`), `blurb`, `recommendation` and `recommendation_label`. Rate-limited 30/min. |
-| GET | `/api/v1/ratings/<concept_id>/group/<group_id>/trophies/` | No | Condensed trophy list with earned status (the wizard's reference panel) |
-| POST | `/api/v1/ratings/blurb/<rating_id>/report/` | Login | Report a public quick take |
+The Review Hub was archived; all 10 `/api/v1/reviews/*` endpoints are unrouted. Ratings survive at
+`/community/rate-my-games/` — see Ratings & Quick Takes below.
 
 ### Ratings & Quick Takes
 
@@ -229,16 +190,14 @@ Review responses include a `body_html` field containing server-rendered markdown
 | POST | `/api/v1/ratings/<concept_id>/group/<group_id>/rate/` | Login (linked) | Submit/update a rating. **`recommendation` is required** on a new rating (an update of an existing one falls back to the stored value when it is omitted). Optional `blurb` (<=140 char public "quick take"), sanitized + banned-word filtered. A non-empty blurb requires guidelines agreement (403 `needs_guidelines` if not). Omitting `blurb` preserves an existing one; sending `""` clears it. |
 | POST | `/api/v1/ratings/blurb/<rating_id>/report/` | Login (linked) | Report a rating's quick take for moderation (reactive: publish -> report -> staff soft-hide via `blurb_hidden`). Body `{reason, details?}`; rate-limited 10/m; can't report your own; deduped per reporter. |
 | POST | `/api/v1/guidelines/agree/` | Login | Record community-guidelines agreement (idempotent). The blurb write path calls this on submit (the modal's fine print is the notice). |
+| GET | `/api/v1/ratings/wizard/queue/` | Login (linked) | The rating wizard's next batch of unrated groups |
+| GET | `/api/v1/ratings/<concept_id>/group/<group_id>/trophies/` | Login | Trophy list for a group, for the rating modal |
 
 Blurbs are read only through `UserConceptRating.visible_blurbs()` (present + not staff-hidden, backed by the partial `rating_blurb_idx`); the game-detail view previews the newest few per group with `select_related('profile')` (whale-safe). Reports are stored on `BlurbReport` (mirrors `ReviewReport`, triaged in Django admin; FKs the rating, so it follows the rating through `Concept.absorb()` with no absorb branch). The stored blurb is plain, **unescaped** text -- render it only in an auto-escaped HTML text context, never `|safe` or a JS/attribute/JSON context.
 
-### Tutorial System
+### Tutorial System — UNROUTED
 
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/v1/tutorial/welcome/dismiss/` | Login | Dismiss Welcome Tour (skip or complete). Body: `{action: 'complete'|'skip', last_step: 1-4}` |
-| POST | `/api/v1/tutorial/game-detail/dismiss/` | Login | Dismiss Game Detail coach marks tour. Body: `{action: 'complete'|'skip', last_step: 1-5}` |
-| POST | `/api/v1/tutorial/badge-detail/dismiss/` | Login | Dismiss Badge Detail coach marks tour. Body: `{action: 'complete'|'skip', last_step: 1-4}` |
+The tutorial endpoints are not currently routed.
 
 ### Misc
 
@@ -249,6 +208,14 @@ Blurbs are read only through `UserConceptRating.visible_blurbs()` (present + not
 | POST | `/api/v1/tracking/site-event/` | No | Track client-side event |
 | POST | `/api/v1/easter-eggs/roll/` | Login | Server-side easter-egg probability roll |
 | GET | `/api/v1/game-backgrounds/` | Login | Search game backgrounds |
+| GET | `/api/v1/pursuer-card/` | Login | Refresh the Pursuer Card (identity signature) |
+| POST | `/api/v1/collectibles/items/<id>/progress` | Login | Toggle a collectible checklist item |
+| GET | `/api/v1/game-backgrounds/<concept_id>/images` | Login | Background images for a concept |
+| GET | `/api/v1/shareables/completion/<trophy_group_id>/png` | Login | Completion share card (PNG) |
+| GET | `/api/v1/youtube/attribution-lookup` | Staff | Resolve a YouTube video's attribution |
+| GET | `/api/v1/games/search` | Login | Game search (autocomplete/typeahead) |
+| GET | `/api/v1/games/<np_communication_id>/players` | No | Players of a game, for the game-detail panel |
+| POST | `/api/v1/user/quick-settings/` | Login | Toggle the profile quick-settings (hide hiddens / zeros) |
 
 ## Rate Limits
 
