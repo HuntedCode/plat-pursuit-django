@@ -190,3 +190,80 @@ def test_the_representative_edition_prefers_a_live_one():
 def test_the_representative_edition_is_none_before_editions_exist():
     """A series authored but not yet given editions must not explode a template."""
     assert BadgeSeriesFactory(series_slug='bare').representative_group_badge is None
+
+
+def test_deleting_a_claimed_series_is_blocked():
+    """`on_delete=PROTECT`, and this is money, so it gets a test.
+
+    The old `Badge` FK cascaded. That was survivable while `BadgeAdmin` was a rarely-touched legacy
+    surface; it stopped being survivable when the cutover deleted `BadgeAdmin` and left
+    `BadgeSeriesAdmin` as the live badge-authoring page, with delete permission, on a row staff create
+    and edit routinely. One stray delete would have taken the record of somebody's payment with it.
+    """
+    from django.db.models import ProtectedError
+
+    series = _claimable_series()
+    DonationBadgeClaim.objects.create(
+        donation=_donation(), profile=ProfileFactory(), series=series,
+        series_slug=series.series_slug, series_name=series.name,
+    )
+
+    with pytest.raises(ProtectedError):
+        series.delete()
+
+    assert DonationBadgeClaim.objects.count() == 1, 'the payment record survived, as it must'
+
+
+def test_an_unclaimed_series_still_deletes_freely():
+    """PROTECT must not turn ordinary badge authoring into a chore -- only a CLAIMED series is pinned."""
+    series = _claimable_series(slug='no-claim')
+    series.delete()
+    assert not BadgeSeries.objects.filter(series_slug='no-claim').exists()
+
+
+def test_the_tracker_denominator_still_counts_claimed_series():
+    """`include_claimed=True`, and this is why it exists.
+
+    The picker excludes already-claimed series; the tracker must NOT. A claimed-but-pending series has no
+    artwork yet, so it belongs in "how many still need art". Folding the picker's exclusion into the
+    shared helper made the denominator shrink on every claim: the progress bar walked forward before any
+    artwork existed, and "15 of 95 claimed" was measured against a total that moved every time somebody
+    donated. On a live payment page.
+    """
+    unclaimed = _claimable_series(slug='unclaimed')
+    claimed = _claimable_series(slug='claimed')
+    DonationBadgeClaim.objects.create(
+        donation=_donation(), profile=ProfileFactory(), series=claimed,
+        series_slug=claimed.series_slug, series_name=claimed.name,
+    )
+
+    # What a donor can claim right now: one.
+    assert list(DonationService.series_needing_artwork()) == [unclaimed]
+    # What still lacks artwork: both. The claim did not conjure art into existence.
+    assert DonationService.series_needing_artwork(include_claimed=True).count() == 2
+
+
+def test_the_representative_edition_costs_no_query_when_prefetched():
+    """`representative_group_badge` sorts in Python off `group_badges.all()` on purpose.
+
+    The obvious `.filter(is_live=True).order_by(...).first()` bypasses `_prefetched_objects_cache` --
+    any filter or order_by on a related manager does -- so it cost one query per series even with the
+    prefetch warm, AND made the prefetch itself pure waste. Both call sites loop over an unbounded claim
+    list on the public fundraiser page.
+    """
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    for i in range(3):
+        _claimable_series(slug=f'perf-{i}')
+
+    warm = list(
+        BadgeSeries.objects.filter(series_slug__startswith='perf-')
+        .prefetch_related('group_badges__platform_group')
+    )
+
+    with CaptureQueriesContext(connection) as ctx:
+        editions = [s.representative_group_badge for s in warm]
+
+    assert all(e is not None for e in editions), 'fixture is wrong -- every series has a live edition'
+    assert len(ctx) == 0, f'prefetch defeated: {len(ctx)} extra queries for {len(warm)} series'

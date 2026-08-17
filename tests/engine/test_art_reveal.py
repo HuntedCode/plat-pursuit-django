@@ -305,3 +305,36 @@ def test_reveal_does_not_recomplete_an_already_completed_claim(media_root, monke
     reconcile_event(event)
 
     assert calls == []  # already-completed claim is not re-completed / re-notified
+
+
+def test_a_bundled_game_counts_toward_the_community_platinum_total():
+    """The ConceptBundle path in `_badge_concept_ids`, which had an unused factory import and no test.
+
+    A concept is in EITHER `Stage.concepts` OR a `ConceptBundle` on that stage, never both. The pre-2026-08
+    version matched only the first, so every episodic game was missing from the count that this event's
+    entire progress bar is built on -- a reveal that never advances, for a reason nothing surfaces.
+    Mutation-checked: removing the bundle arm makes this fail.
+    """
+    start = timezone.now() - timedelta(days=1)
+    concept = ConceptFactory()
+    BadgeSeriesFactory(series_slug='episodic')
+    stage = StageFactory(series_slug='episodic')
+    ConceptBundleFactory(stage=stage).concepts.add(concept)     # bundle member, NOT in stage.concepts
+    game = GameFactory(concept=concept, shovelware_status='clean')
+    EarnedTrophyFactory(trophy=TrophyFactory(game=game, trophy_type='platinum'))
+
+    assert compute_badge_platinum_count(since=start) == 1
+
+
+def test_release_never_overwrites_existing_series_art():
+    """A curator who has already set the series art beats an automated reveal. Documented in `release()`
+    and previously untested, which is how a documented guarantee quietly stops being true."""
+    event = _event_with_items(n=1, per=5)
+    item = event.items.first()
+    item.series.badge_image = 'badges/series/curator-chose-this.png'
+    item.series.save(update_fields=['badge_image'])
+
+    assert item.release() is True                     # the item still releases
+
+    item.series.refresh_from_db()
+    assert item.series.badge_image.name == 'badges/series/curator-chose-this.png'

@@ -301,27 +301,37 @@ class DonationService:
     # ──────────────────────────────────────────────
 
     @staticmethod
-    def series_needing_artwork():
-        """Badge series a donor can claim: live, no default art yet, not user-submitted, unclaimed.
+    def series_needing_artwork(include_claimed=False):
+        """Badge series that still lack artwork: live, no default art, not user-submitted.
 
-        ONE definition, because there used to be three. The picker queryset, the tracker's "needs art"
-        count and `claim_badge`'s validation each carried a hand-copied filter stack, which is how a
-        predicate drifts: the picker could offer something the claim path then rejected.
+        ONE definition, because there used to be three hand-copied filter stacks (picker, tracker, claim
+        validation) that could drift -- the picker could offer something the claim path then rejected.
 
-        Two of the legacy filters have no successor and are deliberately gone rather than translated:
-        `tier=1` (the series IS the row now) and `series_slug` non-empty (it is unique and required).
-        `is_live` moved -- there is none on BadgeSeries, so liveness is "has at least one live edition".
+        `include_claimed` is the one axis on which those three legitimately DIFFERED, so it is a
+        parameter rather than a silent default:
+
+        - **False (picker, claim validation):** what a donor can claim right now. Excludes series
+          somebody already holds a claim on.
+        - **True (tracker):** what still LACKS ARTWORK, claimed or not -- a claimed-but-pending series
+          has no art yet, so it belongs in the denominator. Folding the exclusion in here made the
+          total shrink every time somebody claimed, which walks the progress bar forward before any
+          artwork exists.
+
+        Two legacy filters have no successor and are deliberately gone rather than translated: `tier=1`
+        (the series IS the row now) and `series_slug` non-empty (unique and required). `is_live` moved --
+        there is none on BadgeSeries, so liveness is "has at least one live edition".
         """
         from trophies.models import BadgeSeries
 
-        return (
+        qs = (
             BadgeSeries.objects
             .filter(group_badges__is_live=True)
             .filter(Q(badge_image__isnull=True) | Q(badge_image=''))
             .exclude(badge_type='user')
-            .exclude(artwork_claim__isnull=False)
-            .distinct()
         )
+        if not include_claimed:
+            qs = qs.exclude(artwork_claim__isnull=False)
+        return qs.distinct()
 
     @staticmethod
     def claim_badge(donation, profile, series_id):

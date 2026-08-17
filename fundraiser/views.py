@@ -146,12 +146,27 @@ class FundraiserView(TemplateView):
 
             completed_claims = []
             pending_claims = []
+            from trophies.services.badge_detail_service import group_medallion_layers
+
             for claim in all_claims:
                 # Medallion composition lives on GroupBadge (the backdrop and shape come from the
-                # PlatformGroup), so a series resolves one edition to draw itself. See
-                # BadgeSeries.representative_group_badge.
+                # PlatformGroup), so a series resolves one edition to draw itself.
+                #
+                # `group_medallion_layers` rather than the raw `art_layers()` dict, because that dict is
+                # NOT what a template consumes: its `backdrop` is either an absolute storage URL or None,
+                # and the legacy `partials/badge.html` runs it through `{% static %}`. In DEBUG that
+                # accidentally resolves; against S3 it percent-encodes the scheme into a 404. This helper
+                # is what every other medallion surface uses -- it returns full URLs and supplies the
+                # backdrop-plate fallback when a PlatformGroup has no background image.
                 edition = claim.series.representative_group_badge if claim.series_id else None
-                claim.badge_layers = edition.art_layers() if edition else None
+                if edition:
+                    tier, layers, is_avatar = group_medallion_layers(edition)
+                    claim.medallion = {
+                        'tier': tier, 'state': 'earned', 'art_layers': layers,
+                        'is_avatar': is_avatar, 'series_name': claim.series_name,
+                    }
+                else:
+                    claim.medallion = None
                 if claim.status == 'completed':
                     completed_claims.append(claim)
                 else:
@@ -160,9 +175,12 @@ class FundraiserView(TemplateView):
             context['completed_claims'] = completed_claims
             context['pending_claims'] = pending_claims
 
-            # Badge tracker stats. `series_needing_artwork()` is the ONE definition of claimable, shared
-            # with the picker below and with claim_badge's validation -- these were three copies.
-            total_needing_art = DonationService.series_needing_artwork().count()
+            # Badge tracker stats. NOTE the `include_claimed=True`: the tracker counts every series that
+            # still LACKS ARTWORK, claimed or not, because a claimed-but-pending series has no art yet.
+            # The picker's already-claimed exclusion must not leak in here -- with it, the denominator
+            # shrinks each time somebody claims, so the progress bar jumps forward before any artwork
+            # exists and "15 of 95" is measured against a moving total.
+            total_needing_art = DonationService.series_needing_artwork(include_claimed=True).count()
 
             claimed_count = len(all_claims)
             completed_count = len(completed_claims)
@@ -438,14 +456,24 @@ class BadgeRevealView(StaffRequiredMixin, TemplateView):
         game_by_slug = {}
         slugs = [c.series_slug for c in pool_claims if c.series_slug]
         if slugs:
-            for slug, title in (
-                Concept.objects
-                .filter(Q(stages__series_slug__in=slugs) | Q(bundles__stage__series_slug__in=slugs))
-                .values_list('stages__series_slug', 'unified_title')
-                .distinct()
-            ):
-                if slug and title and slug not in game_by_slug:
-                    game_by_slug[slug] = title
+            # TWO queries, one per qualifier path, because a single OR'd query cannot project both. The
+            # OR forces a LEFT JOIN, so a bundle-only concept comes back with `stages__series_slug=None`
+            # and is dropped -- or worse, carries the slug of an unrelated series it does have stages in,
+            # attributing the game to the wrong badge. Filtering through both paths is not the same as
+            # reading through both.
+            paths = (
+                ('stages__series_slug', Q(stages__series_slug__in=slugs)),
+                ('bundles__stage__series_slug', Q(bundles__stage__series_slug__in=slugs)),
+            )
+            for column, condition in paths:
+                for slug, title in (
+                    Concept.objects.filter(condition)
+                    .values_list(column, 'unified_title')
+                    .order_by(column, 'unified_title')      # deterministic: same tease line every render
+                    .distinct()
+                ):
+                    if slug and title and slug not in game_by_slug:
+                        game_by_slug[slug] = title
 
         # Build pool data for template and JSON serialization
         pool_badges = []

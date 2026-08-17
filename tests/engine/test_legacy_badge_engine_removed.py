@@ -8,9 +8,10 @@ file exists, because a live table with no writer is exactly the thing a future c
 What is defended here:
 
   - the modules stay deleted
-  - nothing writes the legacy tables on the sync path any more
-  - the retained tables are not silently re-read as if they were current
-  - `BadgeAdmin` STAYS, which is a real exception and not an oversight
+  - nothing writes the legacy tables ANYWHERE any more
+  - `BadgeAdmin` is gone, and art_reveal autocompletes against `BadgeSeriesAdmin` instead (re-adding
+    `autocomplete_fields = ['badge']` would silently require the legacy admin back and fail the WHOLE
+    admin site's system check, not just that inline)
 
 See docs/architecture/badge-system.md and docs/design/rebuild/badge-backend-rebuild.md.
 """
@@ -57,6 +58,19 @@ DELETED_COMMANDS = [
 KNOWN_LEGACY_WRITERS = set()
 
 
+def test_there_are_no_legacy_write_exemptions():
+    """The exemption set is empty and should stay that way.
+
+    Without this, `KNOWN_LEGACY_WRITERS` is a silent escape hatch: anyone can quiet a real finding from
+    the guard below by adding a path to it, and everything stays green. If a genuine exception ever
+    arises, deleting this test is a deliberate act that shows up in review -- which is the point.
+    """
+    assert not KNOWN_LEGACY_WRITERS, (
+        'A legacy-Badge writer was exempted rather than repointed. If that is genuinely correct, say why '
+        'in the commit message and delete this test deliberately.'
+    )
+
+
 @pytest.mark.parametrize('name', DELETED_MODULES)
 def test_the_legacy_services_are_deleted(name):
     assert importlib.util.find_spec(name) is None, f'{name} is back'
@@ -101,6 +115,9 @@ def test_the_retained_tables_have_no_writer():
     - **Cover every write verb**, `save`/`delete`/`bulk_update` included, not just `create`/`update`.
     - **Scan `api/` too.** The legacy `UserBadge` snapshots that this cutover repointed lived in
       `api/views.py`, so excluding that package left the one file most likely to regress unguarded.
+    - **Scan `admin.py` too.** There used to be a blanket `admin.py` carve-out for `BadgeAdmin`. That
+      admin is deleted, and an admin action or inline is one of the likelier places this repoint gets
+      quietly re-opened -- a wildcard exemption for the whole file class outlived its reason.
     """
     watched = {'Badge', 'UserBadge', 'UserBadgeProgress', 'ProfileGamification'}
     verbs = {'create', 'update', 'update_or_create', 'get_or_create', 'bulk_create', 'bulk_update',
@@ -125,7 +142,7 @@ def test_the_retained_tables_have_no_writer():
     for root_pkg in roots:
         for path in sorted((ROOT / root_pkg).glob('**/*.py')):
             rel = path.relative_to(ROOT).as_posix()
-            if '/migrations/' in rel or rel.endswith('admin.py') or rel in KNOWN_LEGACY_WRITERS:
+            if '/migrations/' in rel or rel in KNOWN_LEGACY_WRITERS:
                 continue
             tree = ast.parse(path.read_text(encoding='utf-8'))
             for node in ast.walk(tree):

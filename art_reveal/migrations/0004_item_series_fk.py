@@ -28,6 +28,11 @@ def plan_mapping(rows, series_by_slug):
 
     for item_id, event_id, raw_slug in rows:
         slug = (raw_slug or '').strip()
+        # Blank refused before the lookup -- see the fundraiser migration's note. More likely here, not
+        # less: this slug arrives through a join on the legacy badge, whose `series_slug` is nullable.
+        if not slug:
+            unmapped.append(f'item {item_id} (event {event_id}) -> blank slug')
+            continue
         series_id = series_by_slug.get(slug)
         if not series_id:
             unmapped.append(f'item {item_id} (event {event_id}) -> {slug!r}')
@@ -69,6 +74,9 @@ def link_series(apps, schema_editor):
 
 
 def unlink_series(apps, schema_editor):
+    """Nothing to undo here. Note the migration as a whole is IRREVERSIBLE on a non-empty table: the
+    forward RemoveField destroys `badge_id` and its backward pass re-adds it NOT NULL. Fails atomically;
+    rollback means restore-from-snapshot."""
     pass
 
 

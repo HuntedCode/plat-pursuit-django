@@ -552,14 +552,45 @@ const UnsavedChangesManager = {
  */
 const HTMLUtils = {
     /**
-     * Escape HTML special characters to prevent XSS
+     * Escape for a TEXT context (between tags). NOT safe for attribute values -- see escapeAttr.
+     *
+     * This round-trips through textContent/innerHTML, which runs the HTML fragment-serialization
+     * algorithm. That escapes & < > and U+00A0 and DELIBERATELY LEAVES QUOTES ALONE, because a text
+     * node has no need of them. Correct here, wrong one character later inside quotes.
+     *
      * @param {string} text - Raw text to escape
-     * @returns {string} HTML-safe string
+     * @returns {string} Safe to interpolate between tags
      */
     escape(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    },
+
+    /**
+     * Escape for an ATTRIBUTE value (inside quotes in an HTML string you are about to inject).
+     *
+     * Use this whenever the interpolation sits inside quotes -- `title="${...}"`, `data-x="${...}"`,
+     * `src="${...}"`. `escape()` does not encode " or ', so a value containing a quote closes the
+     * attribute early and the rest is parsed as markup: one `onerror=` later and it is stored XSS.
+     *
+     * Prefer building nodes and assigning `.textContent` / `.setAttribute()` over string-concatenating
+     * HTML at all; this exists for the places that already do the latter.
+     *
+     * NOTE for URL attributes (href/src): this makes the value safe to SIT in the attribute, but does
+     * not make the URL itself safe. A `javascript:` href still executes on click. Validate the scheme
+     * separately when the URL is user-controlled.
+     *
+     * @param {string} text - Raw value to escape
+     * @returns {string} Safe to interpolate inside a quoted attribute
+     */
+    escapeAttr(text) {
+        return String(text ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 };
 

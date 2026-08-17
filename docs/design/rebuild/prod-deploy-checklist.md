@@ -390,3 +390,44 @@ Migrations `fundraiser.0006_claim_series_fk` and `art_reveal.0004_item_series_fk
       badges: it creates the series and one `GroupBadge` per checked edition, hidden by default. Stages
       are still added in Django admin afterwards.
 - [ ] No migration, no data change. Route name is unchanged (`badge_creation`), so old bookmarks work.
+
+### Pre-flight for the repoint migrations (run BEFORE taking the window)
+
+Both migrations refuse to run against an unmappable row. Find out in advance rather than mid-deploy:
+
+```sql
+-- Claims whose series_slug has no BadgeSeries. Any row here blocks fundraiser.0006.
+SELECT c.id, c.series_slug, c.series_name
+FROM fundraiser_donationbadgeclaim c
+LEFT JOIN trophies_badgeseries s ON s.series_slug = c.series_slug
+WHERE s.id IS NULL;
+
+-- Same for art_reveal.0004, which maps through the legacy badge's slug.
+SELECT i.id, i.event_id, b.series_slug
+FROM art_reveal_artrevealitem i
+JOIN trophies_badge b ON b.id = i.badge_id
+LEFT JOIN trophies_badgeseries s ON s.series_slug = b.series_slug
+WHERE s.id IS NULL;
+
+-- Two claims that would collide on one series (the OneToOne cannot hold both).
+SELECT series_slug, count(*) FROM fundraiser_donationbadgeclaim
+GROUP BY series_slug HAVING count(*) > 1;
+```
+
+- [ ] **`convert_series_to_groups --all` does NOT fix every case, despite what the migration error says.**
+      It only sweeps `Badge.objects.filter(is_live=True)`, and it SKIPS any slug whose games match no
+      active `PlatformGroup` -- printing a skip line and still exiting green. Two reachable cases it
+      cannot resolve: a claim on a series later set `is_live=False` (the old claim path never checked
+      liveness), and a series whose games map to no active platform group. For those, hand-create the
+      `BadgeSeries` (the new `/staff/badge-create/` page does it in one form) and re-run migrate.
+- [ ] **These migrations are IRREVERSIBLE on a non-empty table.** `RemoveField` destroys `badge_id`, so
+      `migrate fundraiser 0005` fails with a NOT NULL violation and rolls back atomically. That is safe
+      (no half-reverted schema, no data loss) but it means the rollback plan is restore-from-snapshot,
+      not `migrate` backwards. Take the snapshot.
+- [ ] **Brief window on a payment action.** `ADD COLUMN` takes ACCESS EXCLUSIVE on
+      `fundraiser_donationbadgeclaim`. Milliseconds at this table size, but an in-flight `claim_badge`
+      from an old worker can block and then fail after commit. Deploying outside a fundraiser push, or
+      accepting a single possible 500, is the trade.
+- [ ] **`fundraiser.0007` makes the claim FK PROTECT.** Deleting a `BadgeSeries` that has a claim now
+      raises `ProtectedError` in the admin instead of silently deleting the payment record. If a series
+      genuinely must go, delete or re-point its claim first, deliberately.

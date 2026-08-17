@@ -3013,15 +3013,20 @@ class BadgeSeries(models.Model):
 
         Prefers a LIVE edition in the group's own display order, then any edition, then None for a series
         whose editions have not been created yet.
+
+        Sorts in PYTHON off `group_badges.all()` deliberately. A `.filter()` or `.order_by()` on a
+        related manager bypasses `_prefetched_objects_cache` and issues a fresh query, so the obvious
+        queryset version cost one query per series even with `prefetch_related` warm -- and made the
+        prefetch itself pure waste. Both callers loop over an unbounded claim list on a public page.
         """
-        live = self.group_badges.filter(is_live=True).select_related('platform_group').order_by(
-            'platform_group__sort_order', 'platform_group__name',
-        ).first()
-        if live:
-            return live
-        return self.group_badges.select_related('platform_group').order_by(
-            'platform_group__sort_order', 'platform_group__name',
-        ).first()
+        def order(gb):
+            pg = gb.platform_group
+            return (pg.sort_order, pg.name)
+
+        editions = sorted(self.group_badges.all(), key=order)
+        if not editions:
+            return None
+        return next((gb for gb in editions if gb.is_live), editions[0])
 
 
 class GroupBadge(models.Model):

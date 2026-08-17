@@ -94,8 +94,12 @@ def test_a_submit_creates_the_series_and_one_badge_per_edition(staff_client, edi
 
 def test_editions_start_hidden_unless_asked_for(staff_client, editions):
     """A badge is normally authored, given stages, THEN released. Shipping live by default would put an
-    unearnable badge in front of hunters the moment it is created."""
+    unearnable badge in front of hunters the moment it is created.
+
+    The positive control matters: asserting only "no live badges" also passes when NOTHING was created,
+    so the test would survive the view silently doing nothing at all."""
     staff_client.post(URL, _payload(editions))
+    assert GroupBadge.objects.count() == 2, 'nothing was created -- the absence below proves nothing'
     assert GroupBadge.objects.filter(is_live=True).count() == 0
 
 

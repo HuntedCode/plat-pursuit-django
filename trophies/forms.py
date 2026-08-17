@@ -581,8 +581,7 @@ class BadgeSeriesCreationForm(forms.Form):
     )
     completion_policy = forms.ChoiceField(
         required=True, label='Completion Policy',  # choices sourced from the model in __init__
-        widget=forms.Select(attrs={'class': 'select select-bordered w-full',
-                                   'id': 'id_completion_policy'}),
+        widget=forms.Select(attrs={'class': 'select select-bordered w-full'}),
     )
     min_required = forms.IntegerField(
         required=False, min_value=0, initial=0, label='Stages Required',
@@ -628,17 +627,31 @@ class BadgeSeriesCreationForm(forms.Form):
         self.fields['editions'].initial = list(active.values_list('pk', flat=True))
 
     def clean_series_slug(self):
-        """Fill from the name if blank, and reject a slug that is already taken.
+        """Canonicalize the slug, fill it from the name if blank, and reject one already taken.
 
-        `BadgeSeries.series_slug` is unique, so without this the form would 500 on a duplicate instead of
-        telling the author what happened.
+        ALWAYS re-slugifies, even a hand-entered value. Two reasons, both of which produce a slug that
+        looks right and silently fails to match:
+
+        - `SlugField`'s validator is `^[-a-zA-Z0-9_]+$`, so UPPERCASE passes. `Elden-Ring` and
+          `elden-ring` would be two distinct series, and the uniqueness check below is case-sensitive so
+          it would not even notice.
+        - The page's JS mirrors this into the box as you type, and no client-side slugify matches
+          Django's exactly (it NFKD-normalizes, so `Pokemon` survives an accented source; a naive regex
+          drops the character entirely). Whatever arrives, this is the value that gets stored.
+
+        That matters more than tidiness: `Stage.series_slug` joins to `BadgeSeries.series_slug` by STRING,
+        and stages are authored separately. A slug that differs by one character from what the author
+        typed on the stages orphans them silently -- which is the very thing the orphan-slug panel on
+        this page exists to surface.
         """
         from django.utils.text import slugify
         from trophies.models import BadgeSeries
 
-        slug = (self.cleaned_data.get('series_slug') or '').strip()
-        if not slug:
-            slug = slugify(self.data.get('name', ''))[:100]
+        raw = (self.cleaned_data.get('series_slug') or '').strip()
+        if not raw:
+            # `name` is declared before this field, so it has already been cleaned.
+            raw = self.cleaned_data.get('name', '')
+        slug = slugify(raw)[:100]
         if not slug:
             raise forms.ValidationError('Could not derive a slug from that name; enter one directly.')
         if BadgeSeries.objects.filter(series_slug=slug).exists():

@@ -119,13 +119,14 @@
                         </div>
 
                         {# Submitter: only relevant for user-submitted badges. #}
-                        <div class="form-control hidden" id="submitted-by-field">
+                        <div class="form-control{% if not form.submitted_by.errors %} hidden{% endif %}" id="submitted-by-field">
                             <label class="label py-1">
                                 <span class="label-text font-semibold">Submitted By</span>
                             </label>
                             <div class="relative">
                                 <input type="text" id="submitted-by-search"
                                        class="input input-bordered w-full"
+                                       value="{{ form.submitted_by.value|default:'' }}"
                                        placeholder="Search by PSN username..." autocomplete="off" />
                                 <input type="hidden" name="submitted_by" id="id_submitted_by"
                                        value="{{ form.submitted_by.value|default:'' }}" />
@@ -223,18 +224,28 @@ document.addEventListener('DOMContentLoaded', function () {
     slugInput.addEventListener('input', function () { slugTouched = true; });
     nameInput.addEventListener('input', function () {
         if (slugTouched) return;
+        // Mirrors django.utils.text.slugify: NFKD-normalize and drop combining marks so accented
+        // characters transliterate ("Pokemon", not "Pokmon"), keep underscores (they are \w), and
+        // collapse only whitespace/hyphens. The server re-slugifies regardless, so a divergence here is
+        // a misleading preview rather than a bad row -- but a misleading preview is what makes an author
+        // type a different slug on their stages.
         slugInput.value = nameInput.value
+            .normalize('NFKD').replace(/[̀-ͯ]/g, '')
             .toLowerCase().trim()
-            .replace(/[^a-z0-9\s-]/g, '')
-            .replace(/[\s_-]+/g, '-')
-            .replace(/^-+|-+$/g, '')
+            .replace(/[^a-z0-9\s_-]/g, '')
+            .replace(/[\s-]+/g, '-')
+            .replace(/^[-_]+|[-_]+$/g, '')
             .slice(0, 100);
     });
 
-    // Reveal only the fields the current selections actually use.
+    // Reveal only the fields the current selections use -- but NEVER re-hide one carrying a server-side
+    // error. Without that exception the page re-renders with a rejected value, JS immediately hides the
+    // field and its message, and the author sees a submit button that appears to do nothing forever.
     function syncConditionalFields() {
-        minField.classList.toggle('hidden', policySelect.value !== 'min_count');
-        submitterField.classList.toggle('hidden', typeSelect.value !== 'user');
+        const minHasError = minField.querySelector('.text-error') !== null;
+        const submitterHasError = submitterField.querySelector('.text-error') !== null;
+        minField.classList.toggle('hidden', !minHasError && policySelect.value !== 'min_count');
+        submitterField.classList.toggle('hidden', !submitterHasError && typeSelect.value !== 'user');
     }
     policySelect.addEventListener('change', syncConditionalFields);
     typeSelect.addEventListener('change', syncConditionalFields);
@@ -248,6 +259,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const dropdown    = document.getElementById('submitted-by-dropdown');
     let searchTimer = null;
 
+    // Server-rendered value: keep the hidden field in step with the visible one after a failed submit.
+    if (searchInput.value && !hiddenInput.value) hiddenInput.value = searchInput.value;
+
     searchInput.addEventListener('input', function () {
         const query = searchInput.value.trim();
         hiddenInput.value = query;          // typing IS the value; the dropdown just completes it
@@ -260,12 +274,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     `/api/profile-suggest/?q=${encodeURIComponent(query)}`);
                 const results = (data && data.results) || [];
                 if (!results.length) { dropdown.classList.add('hidden'); return; }
+                // escapeAttr inside quotes, escape between tags. `escape()` does not encode quotes
+                // (it serializes a text node, which has no need of them), so using it in an attribute
+                // lets a value containing `"` close the attribute early and inject markup.
+                const escAttr = PlatPursuit.HTMLUtils.escapeAttr;
+                const escText = PlatPursuit.HTMLUtils.escape;
                 dropdown.innerHTML = results.map(function (r) {
                     return `<button type="button" class="w-full text-left px-3 py-2 hover:bg-base-200 flex items-center gap-2"
-                                    data-username="${PlatPursuit.HTMLUtils.escape(r.psn_username)}">
-                                <img src="${PlatPursuit.HTMLUtils.escape(r.avatar_url || '')}" alt=""
+                                    data-username="${escAttr(r.psn_username)}">
+                                <img src="${escAttr(r.avatar_url || '')}" alt=""
                                      class="w-6 h-6 rounded-full object-cover" />
-                                <span class="text-sm">${PlatPursuit.HTMLUtils.escape(r.display || r.psn_username)}</span>
+                                <span class="text-sm">${escText(r.display || r.psn_username)}</span>
                             </button>`;
                 }).join('');
                 dropdown.classList.remove('hidden');

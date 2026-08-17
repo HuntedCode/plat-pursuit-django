@@ -103,10 +103,134 @@ def test_an_unmappable_item_refuses_and_names_it():
     assert 'convert_series_to_groups' in str(exc.value)
 
 
-def test_nothing_is_planned_when_any_row_fails():
-    """Plan-then-write: a refusal must produce NO mapping at all, not a partial one. An earlier draft
-    updated rows inside the loop and raised at the end, so a refusal still left writes behind -- only
-    survivable because RunPython happens to be transactional."""
+# --- link_series: the ORM half, which plan_mapping tests cannot reach --------
+
+
+class _FakeManager:
+    """Records `values_list` calls and `.filter(...).update(...)` writes, returning canned rows."""
+
+    def __init__(self, rows):
+        self._rows = rows
+        self.values_list_args = None
+        self.updates = []
+
+    def values_list(self, *fields):
+        self.values_list_args = fields
+        return list(self._rows)
+
+    def filter(self, **kwargs):
+        parent = self
+
+        class _Filtered:
+            def update(self, **values):
+                parent.updates.append((kwargs, values))
+        return _Filtered()
+
+
+class _FakeApps:
+    def __init__(self, models):
+        self._models = models
+
+    def get_model(self, app_label, model_name):
+        return self._models[(app_label, model_name)]
+
+
+def _fake(rows, series_rows):
+    """(apps, target_manager) wired the way Django wires a RunPython."""
+    target = _FakeManager(rows)
+    series = _FakeManager(series_rows)
+    return _FakeApps({
+        ('fundraiser', 'DonationBadgeClaim'): type('M', (), {'objects': target}),
+        ('art_reveal', 'ArtRevealItem'): type('M', (), {'objects': target}),
+        ('trophies', 'BadgeSeries'): type('M', (), {'objects': series}),
+    }), target
+
+
+def test_link_series_reads_the_columns_plan_mapping_expects():
+    """`plan_mapping` is tested with hand-made tuples, so nothing otherwise pins that `link_series` reads
+    those columns IN THAT ORDER. Swapping the `values_list` arguments leaves every pure-function test
+    green and surfaces only as a failed production migration -- mutation-proved before this test existed.
+    """
+    apps, target = _fake(
+        rows=[(1, 'souls', 'souls')],
+        series_rows=[('souls', 10)],
+    )
+    fundraiser_mig.link_series(apps, None)
+
+    assert target.values_list_args == ('id', 'series_slug', 'badge__series_slug')
+
+
+def test_link_series_writes_the_mapping():
+    apps, target = _fake(rows=[(1, 'souls', 'souls')], series_rows=[('souls', 10)])
+    fundraiser_mig.link_series(apps, None)
+
+    assert target.updates == [({'id': 1}, {'series_id': 10})]
+
+
+def test_link_series_writes_NOTHING_when_any_row_is_unmappable():
+    """Plan-then-write, asserted where it is observable. An earlier draft updated rows inside the loop
+    and raised at the end, so a refusal still left partial writes behind -- survivable only because
+    RunPython happens to be transactional. This is the assertion the pure function cannot make: on the
+    raise path `plan_mapping` returns nothing, so no observable distinguishes the two orderings there.
+    """
+    apps, target = _fake(
+        rows=[(1, 'souls', 'souls'), (2, 'ghost', 'ghost')],
+        series_rows=[('souls', 10)],
+    )
     with pytest.raises(RuntimeError):
-        art_reveal_mig.plan_mapping([(1, 100, 'souls'), (2, 100, 'ghost')], SERIES)
-    # The good row was never written anywhere, because planning raised before any write could happen.
+        fundraiser_mig.link_series(apps, None)
+
+    assert target.updates == [], 'the mappable row was written before the refusal'
+
+
+def test_link_series_refuses_when_the_denorm_disagrees_with_the_old_fk():
+    """The slug is denormalized and both sides have been admin-editable, so they can drift. Mapping on a
+    drifted slug moves the claim to a DIFFERENT series than its FK named -- and the FK is dropped in the
+    same transaction, so afterwards nothing can notice."""
+    apps, target = _fake(
+        rows=[(1, 'souls', 'bloodborne')],
+        series_rows=[('souls', 10), ('bloodborne', 20)],
+    )
+    with pytest.raises(RuntimeError, match='disagrees'):
+        fundraiser_mig.link_series(apps, None)
+
+    assert target.updates == []
+
+
+def test_link_series_is_a_noop_on_an_empty_table():
+    apps, target = _fake(rows=[], series_rows=[('souls', 10)])
+    fundraiser_mig.link_series(apps, None)
+    assert target.updates == []
+
+
+def test_art_reveal_link_series_reads_its_own_columns():
+    """Different tuple shape: art_reveal has no denorm, so it maps through the legacy badge's slug."""
+    apps, target = _fake(rows=[(1, 100, 'souls')], series_rows=[('souls', 10)])
+    art_reveal_mig.link_series(apps, None)
+
+    assert target.values_list_args == ('id', 'event_id', 'badge__series_slug')
+    assert target.updates == [({'id': 1}, {'series_id': 10})]
+
+
+def test_art_reveal_link_series_writes_nothing_on_refusal():
+    apps, target = _fake(rows=[(1, 100, 'souls'), (2, 100, 'ghost')], series_rows=[('souls', 10)])
+    with pytest.raises(RuntimeError):
+        art_reveal_mig.link_series(apps, None)
+    assert target.updates == []
+
+
+def test_a_blank_slug_never_maps_onto_a_blank_slugged_series():
+    """The one path that produced a WRONG mapping rather than raising.
+
+    `BadgeSeries.series_slug` is `blank=False`, but that is form-level: Postgres accepts '' and `unique`
+    permits exactly one such row. With a bare dict lookup, every null/blank/whitespace claim mapped onto
+    it -- silently attributing somebody's payment to an unrelated series. Both migrations now refuse the
+    blank BEFORE the lookup.
+    """
+    series_with_blank = {'': 99, 'souls': 10}
+
+    for bad in ('', '   ', None):
+        with pytest.raises(RuntimeError, match='blank slug'):
+            fundraiser_mig.plan_mapping([(1, bad)], series_with_blank)
+        with pytest.raises(RuntimeError, match='blank slug'):
+            art_reveal_mig.plan_mapping([(1, 100, bad)], series_with_blank)

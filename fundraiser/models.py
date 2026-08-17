@@ -206,6 +206,12 @@ class DonationBadgeClaim(models.Model):
     `series_slug` / `series_name` stay denormalized on purpose: the emails and notifications read them
     rather than the FK, so a renamed or reorganised series cannot rewrite the historical record of what
     somebody paid for.
+
+    `on_delete=PROTECT`, not CASCADE. The old `Badge` FK cascaded, but the risk profile changed when the
+    cutover deleted `BadgeAdmin` and left `BadgeSeriesAdmin` as the live authoring surface: the cascade
+    now hangs off a row staff routinely create, edit and delete while authoring badges, and one stray
+    delete would take the record of somebody's payment with it. PROTECT turns that into a visible error
+    that forces a human decision, which is the correct outcome for money.
     """
     STATUS_CHOICES = [
         ('claimed', 'Claimed'),
@@ -221,7 +227,7 @@ class DonationBadgeClaim(models.Model):
         null=True, related_name='badge_claims',
     )
     series = models.OneToOneField(
-        'trophies.BadgeSeries', on_delete=models.CASCADE, related_name='artwork_claim',
+        'trophies.BadgeSeries', on_delete=models.PROTECT, related_name='artwork_claim',
         help_text='The claimed badge series. OneToOne enforces one claim per series.',
     )
     series_slug = models.CharField(max_length=100, db_index=True)
