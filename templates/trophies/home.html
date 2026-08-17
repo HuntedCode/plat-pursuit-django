@@ -20,7 +20,7 @@ the two things that make this site worth using one click away.
 The rule this page lives by (and the reason the old dashboard was retired): a curated GLANCE that teases
 and links into a page, NEVER the page's content embedded here.
 
-Context from core/services/home_service.py: hero, glances{claimable, almost_badges, snapshot}, sync,
+Context from core/services/home_service.py: hero, glances{claimable, closest_badge, snapshot}, sync,
 community, recent, profile_url.
 {% endcomment %}
 
@@ -145,10 +145,14 @@ uses, so the lobby promises exactly what the page delivers.{% endcomment %}
     <a href="{% url 'badge_collection' %}" class="home-moat home-moat--collection group">
         <div class="home-moat__body">
             <span class="home-moat__eyebrow">Your Collection</span>
-            {% with next=glances.almost_badges.0 %}
+            {% comment %} The series nearest completion, from the rebuilt subsystem's materialized
+            `progress_bp`. It named a TIER until 2026-08 ("Gold", "Silver") off the legacy badge tables --
+            a word this system does not have. It names the SERIES now, which is also the more useful half:
+            "Soulsborne, 3 of 5" tells you what to go and play. {% endcomment %}
+            {% with next=glances.closest_badge %}
             {% if next %}
-                <span class="home-moat__name">{{ next.tier_name }}</span>
-                <span class="home-moat__rank">{{ next.completed }} of {{ next.required }} &middot; closest badge</span>
+                <span class="home-moat__name">{{ next.series_name }}</span>
+                <span class="home-moat__rank">{{ next.cleared }} of {{ next.total }} &middot; closest badge</span>
             {% else %}
                 <span class="home-moat__name">Your badge binder</span>
                 <span class="home-moat__rank">Earn badges by finishing games</span>

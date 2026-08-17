@@ -276,11 +276,43 @@ Standard parallel-change / expand–contract with a separate schema:
      have held for a year — the legacy maintenance state made that structurally impossible. Needs a
      cooldown or an announced-at marker before `notify=True` goes live.
 
-   **5b — the old system comes out (NOT STARTED).** Repoint or delete every legacy `UserBadge` consumer,
-   then remove `badge_service` and its sync call. Roughly ten modules: `dashboard_service` (23 call sites,
-   and separately queued for sunset, so much of this is deletion rather than migration), `stats_service`,
-   `api/mobile_badge_views`, `api/profile_card_views`, `xp_service`, `redis_leaderboard_service`,
+   **5b — the old system comes out.** Inventoried 2026-08. It is smaller than the raw file count suggests,
+   because most of the surface is already unreachable — the sweep is mostly deleting corpses, not migrating
+   features.
+
+   **5b.1 — the one design decision.** `HomeView` -> `home_service.build_home_context` ->
+   `dashboard_service.provide_badge_progress` puts a LEGACY `UserBadgeProgress` read on the rebuilt
+   homepage, rendering "the next earnable TIER per series" — a concept this system does not have. Replaced
+   by "closest to completing", read from `SeriesBadgeStanding.progress_bp`, which is already materialized
+   and means exactly that. Home also borrows `provide_trophy_snapshot`, `provide_recent_platinums` and
+   `provide_recent_badges`; those must move out of `dashboard_service` before it can be deleted.
+
+   **5b.2 — delete the unreachable.** Verified zero routes, not merely "queued for sunset":
+   - `trophies/views/dashboard_views.py` + `templates/trophies/dashboard.html` — no `urls.py` entry, so the
+     dashboard module API's only real consumer goes with it, and most of `dashboard_service`.
+   - `MyStatsView` (`stats_views.py`) — `/stats/` redirects to Home; parked pending its own rebuild.
+   - The badge showcase picker — `profile_editor.html` block, `/api/v1/badges/showcase/` + `/reorder/`,
+     and the `ProfileBadgeShowcase` model.
+   - `MyProfileCardView` — unrouted; `/shareables/profile-card/` redirects to Plat Cards.
+   - `frame_service` and the two LEGACY peek views (`BadgeQuickPeekView`, `BadgeProgressPeekView`).
+     `build_badge_frame` has exactly three callers: those two, and one `/design/` workshop page. **No live
+     template links to either** — medallion taps go to `group_badge_quick_peek` /
+     `group_badge_progress_peek`, which are the new subsystem and never import `frame_service`. The Frame
+     is the card the Medallion replaced.
+
+   **5b.3 — repoint the live.** `stats_service`, `api/mobile_badge_views` (routed and live),
    `weekly_digest_service`, `core/services/stats`, `api/views`.
+
+   **5b.4 — the XP / Redis stack.** `xp_service`, `redis_leaderboard_service`, `leaderboard_service`. The
+   leaderboards rebuild's deferred cleanup lives here too, so this finishes both threads.
+
+   **5b.5 — remove the engine.** `badge_service`, `badge_refresh_service`, the legacy badge signals in
+   `trophies/signals.py` and `notifications/signals.py`, the legacy admin, and the `check_profile_badges`
+   call in `_job_sync_complete`. Plus the four 5a follow-ups above. `UserBadge` history is retained.
+
+   **Not a straight delete:** `/sig/<token>.<ext>` (`api/profile_card_views.serve_profile_sig`) is a public,
+   unauthenticated signature-image route. If anyone has it in a forum signature, removing it breaks an
+   image on a page we do not control — retire it deliberately rather than as part of the sweep.
 6. **Soak**, then **decommission** the old `Badge`/`UserBadge`/`badge_service` once stable.
 
 ### Notifications at cutover

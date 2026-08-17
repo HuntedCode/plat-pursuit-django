@@ -27,10 +27,10 @@ def test_fresh_profile_builds_every_zone():
     assert 'pursuer_card' not in ctx
     for key in ('pursuer_name', 'pursuer_level', 'pursuer_rank', 'ring'):
         assert key in ctx['hero'], f'the Career CTA reads hero[{key!r}]'
-    # Glances: nothing pending, no in-progress badges, but the (zero-query) snapshot is present.
+    # Glances: nothing pending, no series in progress, but the (zero-query) snapshot is present.
     assert ctx['glances']['claimable']['count'] == 0
     assert ctx['glances']['claimable']['total_xp'] == 0
-    assert ctx['glances']['almost_badges'] == []
+    assert ctx['glances']['closest_badge'] is None
     assert ctx['glances']['snapshot'] is not None
     assert ctx['recent'] == []
     # The trophy-snapshot card's bridge to the profile resolves (reverse-guarded).
@@ -90,15 +90,69 @@ def test_sync_zone_reports_last_and_next():
     assert sync['ready'] or sync['next_sync_time'] is not None
 
 
-def test_unique_series_keeps_closest_per_series():
-    """Almost There shows one entry per badge series -- the nearest tier (the list arrives
-    sorted by completion, so the first occurrence of a series wins)."""
-    rows = [
-        {'series_slug': 'a', 'pct': 90},
-        {'series_slug': 'a', 'pct': 40},   # same series, further off -> dropped
-        {'series_slug': 'b', 'pct': 70},
-    ]
-    assert [r['series_slug'] for r in home_service._unique_series(rows)] == ['a', 'b']
+def test_closest_badge_is_the_series_nearest_completion():
+    """Home's Collection CTA. It reads `SeriesBadgeStanding.progress_bp` -- the materialized furthest-along
+    fraction -- rather than the legacy per-TIER table it borrowed from `dashboard_service` until 2026-08.
+
+    A FINISHED series is excluded: "closest badge" pointing at one already earned is not a reason to click.
+    """
+    from trophies.models import SeriesBadgeStanding
+    from trophies.services import collection_service
+    from tests.factories import BadgeSeriesFactory, ProfileFactory
+
+    profile = ProfileFactory(is_linked=True)
+    BadgeSeriesFactory(series_slug='near', name='Nearly There')
+    BadgeSeriesFactory(series_slug='far', name='Barely Started')
+    BadgeSeriesFactory(series_slug='done', name='Already Earned')
+
+    SeriesBadgeStanding.objects.create(
+        profile=profile, series_slug='far', xp=1, progress_bp=2500, stages_cleared=1, stages_total=4)
+    SeriesBadgeStanding.objects.create(
+        profile=profile, series_slug='near', xp=1, progress_bp=7500, stages_cleared=3, stages_total=4)
+    SeriesBadgeStanding.objects.create(
+        profile=profile, series_slug='done', xp=1, progress_bp=10000, stages_cleared=4, stages_total=4)
+
+    closest = collection_service.closest_badge(profile)
+    assert closest['series_slug'] == 'near', (
+        f"expected the furthest-along unfinished series, got {closest['series_slug']!r}"
+    )
+    assert closest['series_name'] == 'Nearly There'
+    assert (closest['cleared'], closest['total'], closest['pct']) == (3, 4, 75)
+
+
+def test_home_surfaces_the_closest_badge_in_its_glances():
+    """The WIRING, not just the provider. Asserting the provider in isolation left Home free to stop
+    calling it -- stubbing the glance to None passed every test, which is the same gap the badge sync
+    wiring had: the function was covered and the call site was not.
+    """
+    from trophies.models import SeriesBadgeStanding
+    from tests.factories import BadgeSeriesFactory
+
+    profile = ProfileFactory(is_linked=True)
+    BadgeSeriesFactory(series_slug='soulsborne', name='Soulsborne')
+    SeriesBadgeStanding.objects.create(
+        profile=profile, series_slug='soulsborne', xp=1, progress_bp=6000,
+        stages_cleared=3, stages_total=5)
+
+    glance = home_service.build_home_context(profile)['glances']['closest_badge']
+
+    assert glance is not None, 'Home is not reading the closest-badge provider at all'
+    assert glance['series_name'] == 'Soulsborne'
+    assert (glance['cleared'], glance['total']) == (3, 5)
+
+
+def test_closest_badge_is_none_when_every_series_is_finished():
+    """Not an empty dict or a zero -- Home branches on falsiness to show its fallback copy."""
+    from trophies.models import SeriesBadgeStanding
+    from trophies.services import collection_service
+    from tests.factories import BadgeSeriesFactory, ProfileFactory
+
+    profile = ProfileFactory(is_linked=True)
+    BadgeSeriesFactory(series_slug='done', name='Done')
+    SeriesBadgeStanding.objects.create(
+        profile=profile, series_slug='done', xp=1, progress_bp=10000, stages_cleared=4, stages_total=4)
+
+    assert collection_service.closest_badge(profile) is None
 
 
 def test_home_templates_parse():

@@ -17,7 +17,7 @@ Zones, in the order the page reads them:
   block that is already full on the day someone finishes their first sync.
 - **hero** -- Pursuer name, Level, rank title and the discipline-ring arcs, reused verbatim from
   Career (`career_service`) so the lobby's CTA teases exactly what Career pays off.
-- **glances.almost_badges** -- the closest badge: the Collection CTA's forward-looking reason to click.
+- **glances.closest_badge** -- the series nearest completion: the Collection CTA's forward-looking reason to click.
 - **recent_badges** -- the last few medallions earned (REBUILT `UserGroupBadge`, bounded slice): the
   Collection CTA's backward-looking proof. Proof + next goal reads stronger than either alone.
 - **community** -- the cached site heartbeat.
@@ -38,7 +38,7 @@ from django.utils import timezone
 
 from core.services.site_heartbeat import get_cached_heartbeat
 from trophies.services import (
-    career_service, contract_service, dashboard_service,
+    career_service, collection_service, contract_service, dashboard_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,18 +60,6 @@ def _safe(zone, profile, fn, default):
         return default
 
 
-def _unique_series(badges):
-    """Keep one entry per badge series -- the closest-to-next-tier one. `badges` arrives
-    sorted by completion desc, so the first occurrence of each series is its nearest tier."""
-    seen, out = set(), []
-    for b in badges:
-        slug = b.get('series_slug')
-        if slug in seen:
-            continue
-        seen.add(slug)
-        out.append(b)
-    return out
-
 
 def _build_glances(profile):
     """The thin status row -- each a cheap read (a bounded summary, a few rows, denormalized
@@ -82,10 +70,13 @@ def _build_glances(profile):
             'claimable', profile,
             lambda: contract_service.claimable_summary(profile),
             {'count': 0, 'total_xp': 0, 'items': [], 'more': 0}),
-        'almost_badges': _safe(
-            'almost_badges', profile,
-            lambda: _unique_series(dashboard_service.provide_badge_progress(profile, {'limit': 12})
-                                   .get('badges_in_progress', []))[:3], []),
+        # The series they are nearest to finishing. Reads the REBUILT subsystem's materialized
+        # `SeriesBadgeStanding.progress_bp`; it used to borrow `dashboard_service.provide_badge_progress`,
+        # which queried the LEGACY UserBadgeProgress table and rendered "the next earnable TIER per series"
+        # -- a shape this system does not have. The provider already returns one series, so the
+        # de-duplication that wrapped it is gone too.
+        'closest_badge': _safe(
+            'closest_badge', profile, lambda: collection_service.closest_badge(profile), None),
         'snapshot': _safe(
             'snapshot', profile,
             lambda: dashboard_service.provide_trophy_snapshot(profile), None),

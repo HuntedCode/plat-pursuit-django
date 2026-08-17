@@ -269,3 +269,50 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
     except Exception:
         logger.exception("Collection Gallery build failed for profile %s", getattr(profile, 'id', '?'))
     return context
+
+
+def closest_badge(profile):
+    """The series this Pursuer is nearest to finishing, or None. `{series_slug, series_name, cleared,
+    total, pct}`.
+
+    Home's Collection CTA reads this: a forward-looking reason to click, beside the backward-looking proof
+    of the medallions they already hold.
+
+    It replaces `dashboard_service.provide_badge_progress`, which Home borrowed when it was built and which
+    read the LEGACY `UserBadgeProgress` table -- so the rebuilt homepage was showing "the next earnable
+    TIER per series", a shape this system does not have. `progress_bp` is the materialized
+    furthest-along fraction over a series' editions and means exactly "how close are they", so this is a
+    read rather than a computation.
+
+    EXCLUDES the finished (`10000` bp): "closest badge" pointing at one they have already earned is not a
+    reason to click. Ordered by the same `(-progress_bp, advanced_at)` the per-series board uses, so the
+    tie-break is "whoever got to this rung first" rather than an arbitrary row.
+
+    Two bounded reads, both catalog-scoped: the profile's standings (indexed by the `(profile, series_slug)`
+    unique constraint) and one name lookup.
+    """
+    from trophies.models import BadgeSeries
+
+    standing = (
+        SeriesBadgeStanding.objects
+        .filter(profile=profile, progress_bp__gt=0, progress_bp__lt=10000)
+        .order_by('-progress_bp', 'advanced_at')
+        .values('series_slug', 'stages_cleared', 'stages_total')
+        .first()
+    )
+    if not standing:
+        return None
+
+    name = (
+        BadgeSeries.objects.filter(series_slug=standing['series_slug'])
+        .values_list('name', flat=True).first()
+    )
+    total = standing['stages_total'] or 0
+    return {
+        'series_slug': standing['series_slug'],
+        # The slug is a poor label but a correct one; a series row can lag a standing after a rename.
+        'series_name': name or standing['series_slug'],
+        'cleared': standing['stages_cleared'],
+        'total': total,
+        'pct': round(100 * standing['stages_cleared'] / total) if total else 0,
+    }
