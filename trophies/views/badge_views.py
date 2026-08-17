@@ -53,7 +53,7 @@ from django.views.generic import ListView, DetailView, TemplateView
 from ..models import (
     Profile, Badge, UserBadge,
     UserTitle, ProfileGamification, BadgeSeries, GroupBadge, UserGroupBadge, PlatformGroup,
-    ProfileBadgeStanding, ProfileCareerStanding, SeriesBadgeStanding,
+    ProfileBadgeStanding, ProfileCareerStanding, SeriesBadgeStanding, Game,
 )
 from ..forms import BadgeSearchForm
 from trophies.services.badge_detail_service import get_badge_detail
@@ -61,6 +61,7 @@ from trophies.services.badge_list_service import build_list_cards, build_series_
 from trophies.services.badge_rarity import (
     annotate_group_rarity, RARITY_CLASSES, RARITY_FILTER_CHOICES, RARITY_UNEARNED,
 )
+from trophies.mixins import HtmxListMixin
 from trophies.services.frame_service import build_badge_frame
 # Leaderboards read from Lane B (indexed DB reads over the standing stores). The Redis sorted-set
 # service is no longer imported here -- see docs/design/rebuild/leaderboards-rebuild.md step 2.
@@ -646,6 +647,154 @@ class BadgeDetailView(DetailView):
             f"{series.name} badge series on Platinum Pursuit. Earn the badge on each platform, "
             f"track your progress, and climb the leaderboards."
         )
+        return context
+
+
+class BoardDirectoryView(HtmxListMixin, ListView):
+    """Shared base for the board directories (Badge Boards, Game Boards).
+
+    A directory is a catalogue of BOARDS: entity identity, a top slice, a link to the full board. It owns
+    no data and is not a second home for one -- the full board lives on the entity.
+
+    THIN, deliberately (see docs/design/rebuild/leaderboards-rebuild.md). Search plus exactly TWO sorts:
+
+      name     -> alphabetical, the default. A catalogue that reorders between visits is disorienting, and
+                  anyone hunting a specific entity uses search.
+      entrants -> the only sort that answers "which boards are actually alive".
+
+    No filter panel, no facets, no country. These directories catalogue the same entities `/games/` and
+    `/badges/` already catalogue; without a stated differentiator they converge into second copies of
+    those browse pages, and then there are two walls, two filter sets and a drift risk. If one ever grows
+    a filter drawer it has become a second Browse Games and belongs folded back in as a view mode.
+
+    The MINIMUM-PARTICIPANTS gate is what keeps the wall worth scrolling: a directory full of
+    one-entrant boards reads as broken and drowns the boards worth looking at. It also pays for the
+    "entrants" sort, since the counts are needed either way.
+    """
+    paginate_by = 24
+    context_object_name = 'cards'
+    SORTS = (('name', 'Name (A-Z)'), ('entrants', 'Most entrants'))
+    SORT_KEYS = {k for k, _ in SORTS}
+    DEFAULT_SORT = 'name'
+    MIN_ENTRANTS = 1          # a board needs at least one name on it to be worth listing
+    PREVIEW = 5               # top slice per card; the template shows 3 of them on a phone
+
+    def _q(self):
+        return (self.request.GET.get('q') or '').strip()
+
+    def _sort(self):
+        raw = self.request.GET.get('sort') or self.DEFAULT_SORT
+        return raw if raw in self.SORT_KEYS else self.DEFAULT_SORT
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'q': self._q(),
+            'sort': self._sort(),
+            'sorts': self.SORTS,
+            'directory_kind': self.kind,
+        })
+        return context
+
+
+class BadgeBoardsView(BoardDirectoryView):
+    """`/leaderboards/badges/` -- every badge series with a live board.
+
+    Replaces the old `?tab=series` directory, which was built on `Badge.objects.filter(tier=1)` -- the
+    tier concept the badge rebuild retired. This one reads BadgeSeries + the standing store.
+    """
+    kind = 'badges'
+    template_name = 'trophies/board_directory.html'
+    partial_template_name = 'trophies/partials/board_directory_results.html'
+
+    def get_queryset(self):
+        # Only series with a LIVE group badge: a dormant series has no board to preview.
+        qs = BadgeSeries.objects.filter(
+            Exists(GroupBadge.objects.filter(series=OuterRef('pk'), is_live=True))
+        )
+        q = self._q()
+        if q:
+            qs = qs.filter(name__icontains=q)
+
+        counts = lb.series_board_counts(
+            list(qs.values_list('series_slug', flat=True))
+        )
+        live = {slug for slug, n in counts.items() if n >= self.MIN_ENTRANTS}
+        qs = qs.filter(series_slug__in=live)
+
+        if self._sort() == 'entrants':
+            # Ordered in PYTHON off the counts map rather than by re-querying: the map is already built
+            # for the gate, and the alternative is a correlated subquery per row.
+            ordered = sorted(qs, key=lambda s: (-counts.get(s.series_slug, 0), s.name.lower()))
+            return ordered
+        return qs.order_by(Lower('name'))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        series = list(context['cards'])
+        slugs = [s.series_slug for s in series]
+
+        previews = lb.series_board_previews(slugs, n=self.PREVIEW)
+        counts = lb.series_board_counts(slugs)
+        hydrated = lb.hydrate([r[0] for rows in previews.values() for r in rows])
+
+        context['boards'] = [{
+            'key': s.series_slug,
+            'name': s.name,
+            'url': reverse('badge_detail', args=[s.series_slug]) + '#ranks',
+            'entrants': counts.get(s.series_slug, 0),
+            'rows': [
+                dict(lb._entry(hydrated, r[0], i + 1), primary=r[2], primary_label='stages')
+                for i, r in enumerate(previews.get(s.series_slug, []))
+            ],
+        } for s in series]
+        return context
+
+
+class GameBoardsView(BoardDirectoryView):
+    """`/leaderboards/games/` -- every game with a board worth looking at.
+
+    The full board is game detail's Ranks panel, which is already rebuilt; this is discovery over it.
+    """
+    kind = 'games'
+    template_name = 'trophies/board_directory.html'
+    partial_template_name = 'trophies/partials/board_directory_results.html'
+    MIN_ENTRANTS = 3          # games are numerous; a 1-2 name board is noise in a catalogue this size
+
+    def get_queryset(self):
+        # `played_count` is a denormalized column on Game, so the gate and the "entrants" sort are both
+        # free -- no aggregate over ProfileGame, which is one of the largest tables in the schema.
+        qs = Game.objects.filter(played_count__gte=self.MIN_ENTRANTS).select_related(
+            'concept', 'concept__igdb_match',
+        ).defer('concept__igdb_match__raw_response')
+
+        q = self._q()
+        if q:
+            qs = qs.filter(title_name__icontains=q)
+
+        if self._sort() == 'entrants':
+            return qs.order_by('-played_count', Lower('title_name'))
+        return qs.order_by(Lower('title_name'))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        games = list(context['cards'])
+        ids = [g.id for g in games]
+
+        previews = lb.game_board_previews(ids, n=self.PREVIEW)
+        hydrated = lb.hydrate([r[0] for rows in previews.values() for r in rows])
+
+        context['boards'] = [{
+            'key': g.id,
+            'name': g.title_name,
+            'art': g.display_image_url,
+            'url': reverse('game_detail', args=[g.np_communication_id]),
+            'entrants': g.played_count,
+            'rows': [
+                dict(lb._entry(hydrated, r[0], i + 1), primary=r[1], primary_label='%')
+                for i, r in enumerate(previews.get(g.id, []))
+            ],
+        } for g in games]
         return context
 
 

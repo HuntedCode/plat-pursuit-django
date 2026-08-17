@@ -1,0 +1,222 @@
+"""The board DIRECTORIES -- Badge Boards and Game Boards (leaderboards rebuild, step 6).
+
+A directory is a catalogue of BOARDS: entity identity, a top slice, a link to the full board. The load-
+bearing constraint is the preview query. The naive shape is one board read per card, which compounds
+under infinite scroll -- a 24-card page becomes 24 reads, and the next scroll page 24 more. A window
+function collapses that to one, and the tests here pin that it stays one.
+
+The other constraint is the THIN-DIRECTORY rule: search plus exactly two sorts, no filter panel. Without
+it these converge into second copies of `/games/` and `/badges/`, and then there are two walls to
+maintain and a drift risk -- the failure this whole rebuild exists to remove.
+"""
+import datetime as dt
+
+import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+
+from trophies.models import ProfileGame, SeriesBadgeStanding
+from trophies.services import badge_leaderboards as lb
+from tests.factories import ProfileFactory, ConceptFactory, GameFactory
+
+pytestmark = pytest.mark.django_db
+
+
+def _standing(slug, *, bp, on, name=None):
+    p = ProfileFactory(display_psn_username=name or None)
+    SeriesBadgeStanding.objects.create(
+        profile=p, series_slug=slug, xp=10, progress_bp=bp,
+        stages_cleared=bp // 2500, stages_total=4, advanced_at=on,
+    )
+    return p
+
+
+def test_the_preview_is_one_query_however_many_entities(client):
+    """The whole reason a window function is used instead of a loop. Asserted as "does not scale", so it
+    survives a change of implementation but not a change of shape."""
+    few = ['s0', 's1', 's2']
+    for slug in few:
+        _standing(slug, bp=5000, on=dt.date(2024, 1, 1))
+    with CaptureQueriesContext(connection) as small:
+        lb.series_board_previews(few)
+
+    many = [f'm{i}' for i in range(20)]
+    for slug in many:
+        _standing(slug, bp=5000, on=dt.date(2024, 1, 1))
+    with CaptureQueriesContext(connection) as large:
+        lb.series_board_previews(many)
+
+    assert len(small.captured_queries) == 1, 'the preview is not a single query'
+    assert len(large.captured_queries) == 1, (
+        f'{len(large.captured_queries)} queries for 20 series -- the preview is querying per entity'
+    )
+
+
+def test_the_preview_is_capped_per_entity_not_overall():
+    """`LIMIT n` on the whole set would give the top n across ALL series -- one popular series would fill
+    the page and every other card would render empty. The cap is PER PARTITION."""
+    for i in range(8):
+        _standing('busy', bp=9000 - i * 100, on=dt.date(2024, 1, 1 + i))
+    for i in range(8):
+        _standing('quiet', bp=8000 - i * 100, on=dt.date(2024, 1, 1 + i))
+
+    previews = lb.series_board_previews(['busy', 'quiet'], n=5)
+
+    assert len(previews['busy']) == 5
+    assert len(previews['quiet']) == 5, 'a second series got no preview -- the cap is global, not per series'
+
+
+def test_the_preview_matches_the_full_board_order():
+    """A preview that disagrees with the board it previews is worse than no preview. Same ordering
+    expression, including the `advanced_at` tiebreak that stops a rung of chasers sorting by profile id.
+    """
+    later = _standing('ord', bp=5000, on=dt.date(2024, 6, 1), name='SecondThere')
+    earlier = _standing('ord', bp=5000, on=dt.date(2021, 1, 1), name='FirstThere')
+    done = _standing('ord', bp=10000, on=dt.date(2025, 1, 1), name='Finisher')
+
+    preview = [r[0] for r in lb.series_board_previews(['ord'])['ord']]
+    full = [r[0] for r in lb.series_board_rows('ord')]
+
+    assert preview == full[:len(preview)], 'the preview and the board disagree about order'
+    assert preview[0] == done.id and preview[1] == earlier.id
+
+
+def test_counts_feed_both_the_sort_and_the_gate():
+    """"Most entrants" is free precisely because the minimum-participants gate needs the same numbers --
+    a directory full of one-entrant boards reads as broken and drowns the boards worth looking at."""
+    for _ in range(3):
+        _standing('popular', bp=5000, on=dt.date(2024, 1, 1))
+    _standing('lonely', bp=5000, on=dt.date(2024, 1, 1))
+
+    counts = lb.series_board_counts(['popular', 'lonely', 'nobody'])
+    assert counts['popular'] == 3 and counts['lonely'] == 1
+    assert 'nobody' not in counts, 'a series with no entrants should be absent, not zero-filled'
+
+
+def test_game_previews_ride_the_shipped_leaderboard_ordering():
+    """Ordered to match `pg_game_leaderboard_idx` (game, -progress, most_recent_trophy_date, profile), so
+    the window uses the index the shipped game board already uses rather than forcing its own sort."""
+    game = GameFactory(concept=ConceptFactory(), title_platform=['PS5'])
+    top = ProfileFactory()
+    mid = ProfileFactory()
+    ProfileGame.objects.create(profile=top, game=game, progress=100,
+                               most_recent_trophy_date=dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc))
+    ProfileGame.objects.create(profile=mid, game=game, progress=60,
+                               most_recent_trophy_date=dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc))
+
+    preview = lb.game_board_previews([game.id])[game.id]
+    assert [r[0] for r in preview] == [top.id, mid.id]
+
+
+def test_a_game_nobody_has_touched_gets_no_preview():
+    """`progress > 0` -- a wall of zeroes is not a board, and an owner who has earned nothing is not an
+    entrant. It also keeps the count and the rows agreeing."""
+    game = GameFactory(concept=ConceptFactory(), title_platform=['PS5'])
+    ProfileGame.objects.create(profile=ProfileFactory(), game=game, progress=0)
+
+    assert lb.game_board_previews([game.id]) == {}
+
+
+def test_empty_input_touches_the_database_at_all():
+    """An empty page of entities must not issue a query with an empty IN clause."""
+    with CaptureQueriesContext(connection) as ctx:
+        assert lb.series_board_previews([]) == {}
+        assert lb.series_board_counts([]) == {}
+        assert lb.game_board_previews([]) == {}
+    assert len(ctx.captured_queries) == 0
+
+
+# ------------------------------------------------------------------ the pages ----------------------------
+
+def _series_with_board(slug, name, n_hunters, *, live=True):
+    from tests.factories import BadgeSeriesFactory, PlatformGroupFactory, GroupBadgeFactory
+    series = BadgeSeriesFactory(series_slug=slug, name=name)
+    if live:
+        pg = PlatformGroupFactory(key=f'{slug}-pg', name='Ultra HD', platforms=['PS5'])
+        GroupBadgeFactory(series=series, platform_group=pg, is_live=True)
+    for i in range(n_hunters):
+        _standing(slug, bp=9000 - i * 100, on=dt.date(2024, 1, 1 + i))
+    return series
+
+
+def test_badge_boards_lists_series_that_have_a_board(client):
+    from django.urls import reverse
+    _series_with_board('alpha', 'Alpha Series', 3)
+    body = client.get(reverse('badge_boards')).content.decode()
+    assert 'Alpha Series' in body
+    assert 'bdir-card' in body
+
+
+def test_a_dormant_series_is_not_listed(client):
+    """No live GroupBadge means no board to preview. Listing it would offer a race nobody can enter."""
+    from django.urls import reverse
+    _series_with_board('dorm', 'Dormant Series', 3, live=False)
+    body = client.get(reverse('badge_boards')).content.decode()
+    assert 'Dormant Series' not in body
+
+
+def test_the_directory_page_is_a_constant_number_of_queries(client):
+    """The whole point of the windowed preview. A per-card board read would compound under infinite
+    scroll: 24 cards means 24 reads, and the next page 24 more."""
+    from django.urls import reverse
+    for i in range(2):
+        _series_with_board(f'few{i}', f'Few {i}', 3)
+    with CaptureQueriesContext(connection) as small:
+        client.get(reverse('badge_boards'))
+
+    for i in range(14):
+        _series_with_board(f'many{i}', f'Many {i}', 3)
+    with CaptureQueriesContext(connection) as large:
+        client.get(reverse('badge_boards'))
+
+    assert len(large.captured_queries) == len(small.captured_queries), (
+        f'{len(small.captured_queries)} queries for 2 boards but {len(large.captured_queries)} for 16'
+    )
+
+
+def test_the_directory_has_search_and_exactly_two_sorts_and_no_filter_panel(client):
+    """The THIN-DIRECTORY rule, as a test. This page catalogues the same entities `/badges/` already
+    catalogues; the differentiator is that it stays a board catalogue rather than growing into a second
+    Browse Games. A filter drawer here is the signal that it has."""
+    from django.urls import reverse
+    _series_with_board('thin', 'Thin', 3)
+    body = client.get(reverse('badge_boards')).content.decode()
+
+    assert 'name="q"' in body, 'search is missing'
+    assert body.count('<option value="') == 2, 'the directory should offer exactly two sorts'
+    for drawer in ('data-browse-form', 'filterPanel', 'pp-bgal__advanced', 'data-minibar-filters'):
+        assert drawer not in body, f'{drawer} -- the directory grew a filter panel'
+
+
+def test_sorting_by_entrants_puts_the_busiest_board_first(client):
+    from django.urls import reverse
+    _series_with_board('quiet', 'Quiet Series', 1)
+    _series_with_board('busy', 'Busy Series', 6)
+    body = client.get(reverse('badge_boards'), {'sort': 'entrants'}).content.decode()
+    assert body.index('Busy Series') < body.index('Quiet Series')
+
+
+def test_search_narrows_the_catalogue(client):
+    from django.urls import reverse
+    _series_with_board('keep', 'Findable', 2)
+    _series_with_board('drop', 'Unrelated', 2)
+    body = client.get(reverse('badge_boards'), {'q': 'Find'}).content.decode()
+    assert 'Findable' in body and 'Unrelated' not in body
+
+
+def test_game_boards_gates_out_boards_nobody_is_on(client):
+    """Games are numerous; a 1-2 name board is noise in a catalogue this size. `played_count` is a
+    denormalized column, so the gate costs nothing."""
+    from django.urls import reverse
+    from trophies.models import Game
+
+    busy = GameFactory(concept=ConceptFactory(), title_name='Busy Game', title_platform=['PS5'])
+    lonely = GameFactory(concept=ConceptFactory(), title_name='Lonely Game', title_platform=['PS5'])
+    Game.objects.filter(pk=busy.pk).update(played_count=9)
+    Game.objects.filter(pk=lonely.pk).update(played_count=1)
+    for i in range(3):
+        ProfileGame.objects.create(profile=ProfileFactory(), game=busy, progress=90 - i)
+
+    body = client.get(reverse('game_boards')).content.decode()
+    assert 'Busy Game' in body
+    assert 'Lonely Game' not in body, 'a board below the participants gate was listed'

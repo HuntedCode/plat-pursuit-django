@@ -211,3 +211,92 @@
 @keyframes ppRanksSpin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .bd2-ranks__spinner { animation-duration: 2.4s; } }
 .bd2-ranks__err { padding: 26px 0; text-align: center; font-size: 13px; color: var(--pp-text-mute); }
+
+/* ---- Board directories (`/leaderboards/games/`, `/leaderboards/badges/`) ---------------------------- */
+/* A catalogue of BOARDS. The card is entity identity + a top slice + a way in, and nothing else -- it is
+   discovery, not a second copy of the board it links to.
+   Toolbar is search + ONE select, deliberately: the thin-directory rule. A filter drawer here would make
+   this a second Browse Games, and then there are two walls to maintain. */
+.bdir-bar {
+    display: flex; flex-direction: column; gap: 10px; margin: 18px 0 14px;
+}
+.bdir-bar__search { position: relative; display: flex; align-items: center; min-width: 0; }
+.bdir-bar__search svg {
+    position: absolute; left: 10px; width: 15px; height: 15px; color: var(--pp-text-mute);
+    pointer-events: none;
+}
+.bdir-bar__search input {
+    width: 100%; min-width: 0; padding: 8px 12px 8px 32px; border-radius: 8px;
+    font-size: 13px; color: var(--pp-text);
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+}
+.bdir-bar__search input:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
+@media (min-width: 768px) {
+    .bdir-bar { flex-direction: row; align-items: center; gap: 12px; }
+    .bdir-bar__search { flex: 1 1 auto; }
+    .bdir-bar .pp-gallery__select { flex: 0 0 auto; min-width: 180px; }
+}
+
+/* `auto-fill` tracks rather than breakpoint columns, so the wall responds to its CONTAINER -- the same
+   call Browse Hunters made, and it keeps the card legible at any width without a ladder to maintain. */
+.bdir-wall {
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+}
+
+.bdir-card {
+    display: flex; flex-direction: column;
+    border-radius: var(--pp-radius-lg); overflow: hidden;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.22);
+    transition: border-color var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) {
+    .bdir-card:hover { border-color: color-mix(in oklab, var(--pp-primary) 38%, var(--pp-border)); }
+}
+@media (prefers-reduced-motion: reduce) { .bdir-card { transition: none; } }
+
+.bdir-card__head {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; text-decoration: none;
+    border-bottom: 1px solid var(--pp-border);
+}
+/* Square, `object-cover object-top`: PSN fallback art is wider than IGDB's portrait cover, and anchoring
+   to the top keeps a game's logo in frame when it crops. */
+.bdir-card__art {
+    width: 38px; height: 38px; flex: 0 0 auto; border-radius: 6px; overflow: hidden;
+    background: var(--pp-bg-2);
+}
+.bdir-card__art img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.bdir-card__names { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.bdir-card__name {
+    font-size: 13.5px; font-weight: 700; color: var(--pp-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bdir-card__n {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.bdir-card__go { width: 15px; height: 15px; flex: 0 0 auto; color: var(--pp-text-mute); }
+@media (hover: hover) {
+    .bdir-card__head:hover .bdir-card__name { color: var(--pp-primary); }
+    .bdir-card__head:hover .bdir-card__go { color: var(--pp-primary); }
+}
+.bdir-card__head:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+
+.bdir-card__rows { list-style: none; margin: 0; padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 1px; }
+.bdir-row {
+    display: grid; grid-template-columns: 1.6ch 20px minmax(0, 1fr) auto;
+    align-items: center; gap: 8px; padding: 3px 4px; border-radius: 6px;
+    font-size: 12px; color: var(--pp-text-dim);
+}
+.bdir-row__rank { font-variant-numeric: tabular-nums; color: var(--pp-text-mute); font-size: 10.5px; text-align: right; }
+.bdir-row__av { width: 20px; height: 20px; border-radius: 50%; overflow: hidden; background: var(--pp-bg-2); }
+.bdir-row__av img { width: 100%; height: 100%; object-fit: cover; }
+.bdir-row__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--pp-text); }
+.bdir-row__v { font-size: 12px; color: var(--pp-text-dim); }
+/* Rows 4-5 fade: the card is a PREVIEW of something longer, and a hard list of five reads as complete.
+   The phone hides these two outright, so the fade doubles as the explanation for where they went. */
+.bdir-row--dim { opacity: 0.55; }
+@media (max-width: 767px) { .bdir-row--dim { display: none; } }
+
+.bdir-sentinel { display: block; height: 1px; grid-column: 1 / -1; }

@@ -162,15 +162,22 @@ MY_PURSUIT_HUB = HubSubnavConfig(
 # landing-focused, so it carries NO sub-nav items -- the /support/ page features the fundraiser +
 # store instead. The /fundraiser/ prefix maps the campaign page here too. ("Support" is a
 # placeholder name, room for PlatPursuit charm.)
-# The Leaderboards hub. Carries NO sub-nav items on purpose: badge leaderboards are the only kind today,
-# so a rail would be a single pill naming the page you are already on. Add items here the moment a second
-# kind lands (game leaderboards, country XP) and the strip starts rendering on its own.
+# The Leaderboards hub. It carried NO items until 2026-08, on the argument that a rail would be a single
+# pill naming the page you were already on -- that comment invited items "the moment a second kind lands",
+# and the rebuild landed three.
+#
+# Global Boards is the hub LANDING and its first pill, which is the standard shape: the strip's job is to
+# say what else is here, and the page you are on being marked is how you know where you are.
 LEADERBOARDS_HUB = HubSubnavConfig(
     key='leaderboards',
     label='Leaderboards',
     icon='bar-chart',
     prefixes=('/leaderboards/',),
-    items=(),
+    items=(
+        HubSubnavItem('global', 'Global Boards', 'overall_badge_leaderboards', 'bar-chart'),
+        HubSubnavItem('games', 'Game Boards', 'game_boards', 'gamepad-2'),
+        HubSubnavItem('badges', 'Badge Boards', 'badge_boards', 'award'),
+    ),
 )
 
 

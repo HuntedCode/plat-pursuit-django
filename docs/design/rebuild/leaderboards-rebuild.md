@@ -391,7 +391,7 @@ Each step leaves the site working.
 | 3 | ✅ Badge Points rename (labels) | Vocabulary fixed before new surfaces spread it |
 | 4 | ✅ Global Boards landing rebuilt (3 tabs, country filter, `.lb-*` component) | The hub landing |
 | 5 | ✅ Badge detail Ranks panel (`/badge-ranks/<slug>/`, lazy); `/leaderboards/badges/<slug>/` retired + 2 redirects repointed | Boards move to entities |
-| 6 | Badge Boards + Game Boards directories | Discovery, on shipped machinery |
+| 6 | ✅ Badge Boards + Game Boards directories; hub sub-nav live | Discovery, on shipped machinery |
 | 7 | `/jobs/` + `/jobs/<slug>/` (Contracts + Ranks tabs) | New Browse surface |
 | 8 | Job Boards directory; sub-nav goes live | Section complete |
 

@@ -19,6 +19,7 @@ indexed reads, whale-safe. rows(...) returns a page of (profile_id, value) for r
 page of ids into display rows in ONE query.
 """
 import math
+from collections import defaultdict
 
 from django.db.models import Count, OuterRef, Q, Subquery
 
@@ -374,3 +375,84 @@ def page(rows, offset, extra=None):
             entry.update(extra(row))
         out.append(entry)
     return out
+
+
+# ------------------------------------------------------------------ directory previews -------------------
+
+def _top_n_by_partition(qs, partition_field, order_by, n, value_fields):
+    """Top `n` rows per partition, in ONE query, via a window function.
+
+    The naive shape is a query per entity, which compounds under infinite scroll: a 24-card page becomes
+    24 board reads, and a second scroll page 24 more. `ROW_NUMBER() OVER (PARTITION BY ...)` collapses
+    that to one, and Django 4.2+ allows filtering directly on a window expression so it needs no raw SQL.
+
+    Returns {partition_value: [row_tuple, ...]} preserving board order within each partition.
+    """
+    from django.db.models import F, Window
+    from django.db.models.functions import RowNumber
+
+    rows = (
+        qs.annotate(_rn=Window(RowNumber(), partition_by=[F(partition_field)], order_by=order_by))
+        .filter(_rn__lte=n)
+        .values_list(partition_field, *value_fields)
+    )
+    out = defaultdict(list)
+    for row in rows:
+        out[row[0]].append(row[1:])
+    return dict(out)
+
+
+def series_board_previews(series_slugs, n=5):
+    """Top `n` of each series' board: {series_slug: [(profile_id, progress_bp, stages_cleared,
+    stages_total, advanced_at), ...]}.
+
+    Same ordering as the full board, so a preview can never disagree with the board it previews.
+    """
+    from django.db.models import F
+
+    if not series_slugs:
+        return {}
+    return _top_n_by_partition(
+        SeriesBadgeStanding.objects.filter(series_slug__in=list(series_slugs)),
+        'series_slug',
+        [F('progress_bp').desc(), F('advanced_at').asc(), F('profile_id').asc()],
+        n,
+        ('profile_id', 'progress_bp', 'stages_cleared', 'stages_total', 'advanced_at'),
+    )
+
+
+def series_board_counts(series_slugs):
+    """Entrants per series: {series_slug: count}. One grouped query.
+
+    Feeds BOTH the "most entrants" sort and the minimum-participants gate, which is what makes that sort
+    free -- the counts are needed either way.
+    """
+    from django.db.models import Count
+
+    if not series_slugs:
+        return {}
+    return dict(
+        SeriesBadgeStanding.objects.filter(series_slug__in=list(series_slugs))
+        .values('series_slug').annotate(n=Count('id'))
+        .values_list('series_slug', 'n')
+    )
+
+
+def game_board_previews(game_ids, n=5):
+    """Top `n` of each game's board: {game_id: [(profile_id, progress, most_recent_trophy_date), ...]}.
+
+    Ordered to match `pg_game_leaderboard_idx` (game, -progress, most_recent_trophy_date, profile) so the
+    window rides the index the shipped game leaderboard already uses, rather than forcing its own sort.
+    """
+    from django.db.models import F
+    from trophies.models import ProfileGame
+
+    if not game_ids:
+        return {}
+    return _top_n_by_partition(
+        ProfileGame.objects.filter(game_id__in=list(game_ids), progress__gt=0),
+        'game_id',
+        [F('progress').desc(), F('most_recent_trophy_date').asc(), F('profile_id').asc()],
+        n,
+        ('profile_id', 'progress', 'most_recent_trophy_date'),
+    )

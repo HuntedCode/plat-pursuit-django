@@ -21,7 +21,6 @@ def test_the_landing_is_the_leaderboards(client):
 
 @pytest.mark.parametrize('old', [
     '/community/leaderboards/badges/',      # where they lived under Community
-    '/leaderboards/badges/',                # the per-series route's parent
     '/leaderboard/badges/',                 # the pre-2026 path
 ])
 def test_every_old_overall_path_lands_in_one_hop(client, old):
@@ -33,6 +32,15 @@ def test_every_old_overall_path_lands_in_one_hop(client, old):
     assert resp.status_code == 301, f'{old} did not redirect'
     assert resp['Location'] == LANDING, f'{old} -> {resp["Location"]} (expected a single hop)'
     assert client.get(resp['Location']).status_code == 200, 'the destination is not a live page'
+
+
+def test_the_badge_boards_path_became_a_page(client):
+    """`/leaderboards/badges/` used to redirect to the landing -- it existed only so the per-series route
+    had a resolvable parent. It is the Badge Boards DIRECTORY now, so it must serve a page rather than
+    bounce, and its old redirect was deleted rather than left shadowed (a RedirectView that can never run
+    reads as intent and does nothing)."""
+    resp = client.get('/leaderboards/badges/')
+    assert resp.status_code == 200, 'Badge Boards does not serve a page'
 
 
 def test_the_per_series_path_moved_and_keeps_its_series(client):

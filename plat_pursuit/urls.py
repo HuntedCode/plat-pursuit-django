@@ -37,7 +37,7 @@ sitemaps = {
     # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
     # for the revamp, since nothing else about the system was deleted.
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeRanksPanelView, BadgeBoardsView, GameBoardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
@@ -273,14 +273,17 @@ urlpatterns = [
     # `/leaderboards/` is the landing; the type segment stays on the per-series route so a second kind of
     # leaderboard can land beside `badges/` without colliding with a series slug.
     path('leaderboards/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
+    # The board DIRECTORIES. `badges/` must precede the retired per-series redirect below, which would
+    # otherwise capture it as a series slug -- the same ordering rule that keeps /badges/how-it-works/
+    # out of the badge-detail pattern.
+    path('leaderboards/badges/', BadgeBoardsView.as_view(), name='badge_boards'),
+    path('leaderboards/games/', GameBoardsView.as_view(), name='game_boards'),
     # Retired 2026-08: the per-series board moved onto badge detail. Permanent, and it keeps the slug, so
     # every existing link lands on the badge whose board it wanted rather than on a generic index.
     path('leaderboards/badges/<str:series_slug>/', RedirectView.as_view(
         pattern_name='badge_detail', permanent=True, query_string=True)),
 
     # So the per-series route has a resolvable parent rather than a 404 above it.
-    path('leaderboards/badges/', RedirectView.as_view(
-        pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),
     # The paths they lived at under Community. RedirectView resolves `pattern_name` at REQUEST time, so
     # the older /leaderboard/badges/* redirects further down already point straight at the new canonicals
     # -- no chain to collapse.
