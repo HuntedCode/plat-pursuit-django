@@ -84,7 +84,10 @@ def test_profiles_are_a_browse_surface_now():
     assert match['hub'].key == 'browse'
     assert match['active_slug'] == 'profiles'
     catalog = [i.slug for i in match['hub'].items if i.group == 'Catalog']
-    assert catalog == ['games', 'badges', 'recently-added', 'profiles'], catalog
+    # 'jobs' joins Catalog 2026-08: `/jobs/` is the public jobs catalogue (leaderboards rebuild step 7).
+    # It sits beside Games and Badges because those are the three things a hunter pursues; Recently
+    # Added and Hunters keep their positions.
+    assert catalog == ['games', 'badges', 'jobs', 'recently-added', 'profiles'], catalog
 
 
 def test_the_moved_profile_pages_are_still_behind_the_cloudflare_guard():

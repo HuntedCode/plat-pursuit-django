@@ -64,7 +64,10 @@ def test_browse_items_grouped_catalog_curation():
     # Grouped rail, kept consistent with the other hubs' group labels.
     groups = _grouped(hub_subnav(_req('/games/')))
     # Profiles joined Catalog in 2026-08: hunters are another thing you browse.
-    assert groups['Catalog'] == ['games', 'badges', 'recently-added', 'profiles']
+    # 'jobs' joins Catalog 2026-08: `/jobs/` is the public jobs catalogue (leaderboards rebuild step 7).
+    # It sits beside Games and Badges because those are the three things a hunter pursues; Recently
+    # Added and Hunters keep their positions.
+    assert groups['Catalog'] == ['games', 'badges', 'jobs', 'recently-added', 'profiles']
     assert groups['Curation'] == ['franchises', 'companies', 'genres']
 
 

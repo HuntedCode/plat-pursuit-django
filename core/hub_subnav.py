@@ -108,6 +108,10 @@ BROWSE_HUB = HubSubnavConfig(
         '/genres/',
         '/themes/',
         '/engines/',
+        # The public jobs catalogue. Browse rather than Leaderboards: a catalogue of jobs is a browse
+        # surface, and its relationship to Career's Dossier is the Collection-vs-Browse-Badges split --
+        # scope, not pagination.
+        '/jobs/',
         # Both spellings while the /profiles/ -> /hunters/ 301s stand: this is a PATH PREFIX match, so a
         # visitor landing on an old profile URL would otherwise lose the Browse rail on the way through.
         '/hunters/',
@@ -119,6 +123,7 @@ BROWSE_HUB = HubSubnavConfig(
     items=(
         HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2', group='Catalog'),
         HubSubnavItem('badges', 'Badges', 'badges_list', 'award', group='Catalog'),
+        HubSubnavItem('jobs', 'Jobs', 'jobs_browse', 'briefcase', group='Catalog'),
         HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock', group='Catalog'),
         # Label is "Hunters" (2026-08); the SLUG stays `profiles`, matching the url names it maps to
         # below -- it is an internal key, and churning it would touch the overrides map and its tests to

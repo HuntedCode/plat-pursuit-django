@@ -14,6 +14,14 @@ URL-matched.
 |-----|---------|------|-------------|
 | **My Pursuit** (personal) | `/career/` | the personal, login-gated surfaces (at root URLs) | "my identity + progression" |
 | **Browse** | `/games/` | public discovery / list pages | "find content" |
+
+> **2026-08:** Browse's Catalog rail gained **Jobs** (`/jobs/`, + `/jobs/<slug>/`). A catalogue of
+> jobs is a browse surface, not a Leaderboards one -- its relationship to Career's Dossier is the
+> Collection-vs-Browse-Badges split (*scope, not pagination*): Career shows YOUR standing across the
+> 24 jobs, `/jobs/` shows what they are. Leaderboards gained its first sub-nav at the same time
+> (Global / Game / Badge / Job Boards), retiring the "no items on purpose" note it carried while
+> badge leaderboards were the only kind. See
+> [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
 | **Leaderboards** | `/leaderboards/` | how everyone ranks | "where do I stand" |
 | **Support** | `/support/` | the fundraiser + (coming) membership store | "ways to support us" |
 
