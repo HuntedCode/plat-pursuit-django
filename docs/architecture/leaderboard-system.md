@@ -25,6 +25,30 @@ sorted sets, and identity is read live at render so a renamed hunter cannot show
 The Redis remainder goes with the **badge cutover**, which repoints its consumers off the legacy
 `Badge`/`UserBadge` models.
 
+### The surfaces (steps 4-8, complete)
+
+Boards live on the thing they RANK; the hub is a discovery layer over them. There is exactly one
+canonical location per board, so no two pages can drift.
+
+| Surface | URL | What it is |
+|---|---|---|
+| Global Boards | `/leaderboards/` | Progress / Badge Points / Career XP, `.pp-switch` tabs, country FILTER |
+| Game Boards | `/leaderboards/games/` | Directory -> game detail's Ranks panel |
+| Badge Boards | `/leaderboards/badges/` | Directory -> badge detail's Ranks section |
+| Job Boards | `/leaderboards/jobs/` | Directory -> job detail's Ranks tab |
+| Jobs catalogue | `/jobs/`, `/jobs/<slug>/` | In the BROWSE hub; Contracts + Ranks tabs, public |
+
+The three directories share one `BoardDirectoryView` base and one template. Each is THIN by rule: search
+plus exactly two sorts (alphabetical default, most entrants), no filter panel, no country facet. Without
+that rule they converge into second copies of `/games/`, `/badges/` and `/jobs/`.
+
+Directory previews use `ROW_NUMBER() OVER (PARTITION BY ...)` -- one query for the whole page's top
+slices, because a per-card board read compounds under infinite scroll.
+
+Country is a FILTER on the full boards only, never a board and never a directory facet. On the boards it
+is one WHERE served by a `(..., country_code, ...board order)` composite; on the directories it would
+multiply the cache surface ~200x for a view few would use.
+
 ### Why the progress boards went first
 
 They were the expensive ones and had no readers left after the view swap. The global rebuild ran four

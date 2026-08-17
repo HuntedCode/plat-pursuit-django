@@ -141,3 +141,18 @@ def test_a_career_only_hunter_makes_their_country_selectable(client):
 
     sliced = client.get(URL, {'tab': 'career', 'country': 'JP'}).content.decode()
     assert 'CareerOnly' in sliced
+
+
+@pytest.mark.parametrize('page', ['abc', '', '-5', '99999', '1e5', '٣'])
+def test_a_malformed_page_param_does_not_500(client, page):
+    """This board's paginator is hand-rolled rather than Django's, so an unparseable `?page` raised
+    ValueError straight out of the view -- a 500 for a typo'd URL, on a public page. The sibling series
+    wall in the same file already guarded this; the boards did not.
+
+    Clamped to page 1 rather than 404'd: the board is still there, and dropping a reader out of it over a
+    malformed query param is hostile.
+    """
+    _ranked('Someone', plats=2, trophies=30, points=100)
+    resp = client.get(URL, {'tab': 'progress', 'page': page})
+    assert resp.status_code == 200, f'?page={page!r} returned {resp.status_code}'
+    assert 'Someone' in resp.content.decode(), f'?page={page!r} emptied the board'

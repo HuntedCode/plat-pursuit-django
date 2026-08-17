@@ -671,6 +671,9 @@ class BoardDirectoryView(HtmxListMixin, ListView):
     one-entrant boards reads as broken and drowns the boards worth looking at. It also pays for the
     "entrants" sort, since the counts are needed either way.
     """
+    # Declared here so a new directory that forgets it fails loudly and early rather than with an
+    # AttributeError deep in a template render.
+    kind = None               # subclasses MUST set: 'badges' | 'games' | 'jobs'
     paginate_by = 24
     context_object_name = 'cards'
     SORTS = (('name', 'Name (A-Z)'), ('entrants', 'Most entrants'))
@@ -688,6 +691,7 @@ class BoardDirectoryView(HtmxListMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        assert self.kind, f'{type(self).__name__} must set `kind`'
         context.update({
             'q': self._q(),
             'sort': self._sort(),
@@ -744,7 +748,7 @@ class BadgeBoardsView(BoardDirectoryView):
             'url': reverse('badge_detail', args=[s.series_slug]) + '#ranks',
             'entrants': counts.get(s.series_slug, 0),
             'rows': [
-                dict(lb._entry(hydrated, r[0], i + 1), primary=r[2], primary_label='stages')
+                dict(lb.entry(hydrated, r[0], i + 1), primary=r[2], primary_label='stages')
                 for i, r in enumerate(previews.get(s.series_slug, []))
             ],
         } for s in series]
@@ -791,7 +795,7 @@ class GameBoardsView(BoardDirectoryView):
             'url': reverse('game_detail', args=[g.np_communication_id]),
             'entrants': g.played_count,
             'rows': [
-                dict(lb._entry(hydrated, r[0], i + 1), primary=r[1], primary_label='%')
+                dict(lb.entry(hydrated, r[0], i + 1), primary=r[1], primary_label='%')
                 for i, r in enumerate(previews.get(g.id, []))
             ],
         } for g in games]
@@ -839,7 +843,7 @@ class JobBoardsView(BoardDirectoryView):
             'url': reverse('job_detail', args=[j.slug]) + '?tab=ranks',
             'entrants': counts.get(j.slug, 0),
             'rows': [
-                dict(lb._entry(hydrated, r[0], i + 1), primary=r[1], primary_label='XP')
+                dict(lb.entry(hydrated, r[0], i + 1), primary=r[1], primary_label='XP')
                 for i, r in enumerate(previews.get(j.slug, []))
             ],
         } for j in jobs]
@@ -975,7 +979,14 @@ class OverallBadgeLeaderboardsView(TemplateView):
     def _build_board(self, tab, country):
         """One page of the active board: two queries (the board read + one hydrate) plus its count."""
         per = self.paginate_by
-        page_num = max(1, int(self.request.GET.get('page', 1) or 1))
+        # Guarded, because this paginator is hand-rolled rather than Django's: an unparseable `?page`
+        # raised ValueError straight out of the view, i.e. a 500 for a typo'd URL. Clamped to 1 rather
+        # than 404'd, matching the guard the series wall in this same file already uses -- dropping a
+        # reader out of a board for a malformed query param is hostile when the board is still there.
+        try:
+            page_num = max(1, int(self.request.GET.get('page') or 1))
+        except (TypeError, ValueError):
+            page_num = 1
         cc = country or None
 
         # `> 0` on the sort key, so the board holds hunters who have actually done the thing it ranks.

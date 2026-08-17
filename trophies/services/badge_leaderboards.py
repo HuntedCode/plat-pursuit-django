@@ -333,9 +333,14 @@ class BoardPage:
         return self.number + 1
 
 
-def _entry(hydrated, profile_id, rank):
+def entry(hydrated, profile_id, rank):
     """The row shape the leaderboard templates read: identity + rank. Board-specific figures are merged in
     by the caller.
+
+    PUBLIC: the directory views build their preview rows with this directly (they page differently from
+    `page()`, which numbers a single board's slice). It carried a leading underscore and three
+    cross-module callers, which is a contradiction -- either it is internal and they should not reach for
+    it, or it is API. It is API.
 
     Note `displayed_title`: the templates use that key, while `hydrate` annotates `display_title` (the
     subquery). Mapping it here keeps the templates untouched during the backend swap -- renaming in the
@@ -370,10 +375,10 @@ def page(rows, offset, extra=None):
     hydrated = hydrate([r[0] for r in rows])
     out = []
     for i, row in enumerate(rows):
-        entry = _entry(hydrated, row[0], offset + i + 1)
+        row_entry = entry(hydrated, row[0], offset + i + 1)
         if extra:
-            entry.update(extra(row))
-        out.append(entry)
+            row_entry.update(extra(row))
+        out.append(row_entry)
     return out
 
 

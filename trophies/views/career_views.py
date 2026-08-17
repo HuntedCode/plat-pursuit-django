@@ -240,6 +240,7 @@ class JobDetailView(DetailView):
     template_name = 'trophies/job_detail.html'
     context_object_name = 'job'
     BOARD_SIZE = 25
+    CONTRACT_PAGE = 24
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -284,5 +285,3 @@ class JobDetailView(DetailView):
             {'text': job.name},
         ]
         return context
-
-    CONTRACT_PAGE = 24
