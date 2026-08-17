@@ -9,7 +9,7 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _clear_rarity_cache():
-    """Drop the cached rarity denominator between tests.
+    """Drop the caches that would otherwise leak a population figure between tests.
 
     settings_test uses LocMemCache, which lives for the whole run, so anything cached inside one test
     leaks into every test after it. `rarity.community_size` counts linked profiles once an hour, so
@@ -21,14 +21,31 @@ def _clear_rarity_cache():
     query counts and currently pass only because an earlier test happened to warm a cache for them.
     That order-dependence is real and pre-existing (they fail in isolation on unchanged code too), but
     it is not this change's to fix. Widen this to cache.clear() when those four are made self-contained.
+
+    The leaderboard PICKER caches are here for the same reason: they answer "which countries and editions
+    have anyone in them", cached for an hour because they are viewer-independent and change roughly never.
+    In a test run that means the first test to open a board fixes the country list for every test after
+    it, so a test that creates a hunter in a new country finds their country unselectable.
     """
     from django.core.cache import cache
 
     from trophies.services.rarity import COMMUNITY_SIZE_CACHE_KEY
 
-    cache.delete(COMMUNITY_SIZE_CACHE_KEY)
+    keys = [COMMUNITY_SIZE_CACHE_KEY, 'lb:picker:countries', 'lb:picker:editions']
+
+    def _drop():
+        for key in keys:
+            cache.delete(key)
+        # country_options is keyed on the code set, so it has no single key to delete. LocMemCache
+        # exposes its own store; nothing else in the suite relies on those entries surviving.
+        store = getattr(cache, '_cache', None)
+        if store is not None:
+            for raw in [k for k in list(store) if 'lb:picker:country_options' in k]:
+                store.pop(raw, None)
+
+    _drop()
     yield
-    cache.delete(COMMUNITY_SIZE_CACHE_KEY)
+    _drop()
 
 
 @pytest.fixture

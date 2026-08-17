@@ -326,6 +326,10 @@ def test_the_edition_board_costs_the_same_number_of_queries_as_the_global_one(cl
         p = _standing('ultra-hd', total_xp=100 * i)
         ProfileBadgeStanding.objects.create(profile=p, total_xp=100 * i)
 
+    # Warm the picker caches (viewer-independent, hour-TTL) so the first measurement is not paying
+    # cold-start costs the second one skips. The property here is that SLICING is free, not that a cold
+    # page equals a warm one.
+    client.get(URL, {'tab': 'points'})
     with CaptureQueriesContext(connection) as everywhere:
         client.get(URL, {'tab': 'points'})
     with CaptureQueriesContext(connection) as sliced:

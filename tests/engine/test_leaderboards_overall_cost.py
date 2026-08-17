@@ -87,11 +87,16 @@ def test_the_series_directory_count_does_not_scale_with_the_catalogue(client):
     """
     for i in range(3):
         _live_series(f'few-{i}', f'Few {i}')
+    # Warm the picker caches (viewer-independent, hour-TTL) before measuring. A cold request legitimately
+    # costs more than a warm one, and comparing one of each measures cold-start rather than the scaling
+    # property this test is about.
+    client.get(URL, {'tab': 'series'})
     with CaptureQueriesContext(connection) as small:
         assert client.get(URL, {'tab': 'series'}).status_code == 200
 
     for i in range(12):
         _live_series(f'many-{i}', f'Many {i}')
+    client.get(URL, {'tab': 'series'})
     with CaptureQueriesContext(connection) as large:
         assert client.get(URL, {'tab': 'series'}).status_code == 200
 

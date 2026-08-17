@@ -110,6 +110,36 @@ def badge_store(edition=None):
     return ProfileEditionStanding.objects.filter(platform_group_key=edition)
 
 
+#: The picker lookups are VIEWER-INDEPENDENT and change roughly never (a new country appears when a
+#: hunter from one first ranks; an edition when a curator launches one), yet they ran on every request to
+#: `/leaderboards/` -- a public, anonymous-reachable, uncached page. Measured at ~65 ms of the page's
+#: total: `active_countries()` is three table-wide DISTINCTs, and `country_options()` is a DISTINCT ON
+#: that reads all 300,000 index entries to return ten rows (Postgres has no btree skip scan here).
+#:
+#: The VIEW response cannot be cached -- its header carries the viewer's own standing -- but that argument
+#: does not extend to these, which are identical for everybody. An hour is long enough to erase the cost
+#: and short enough that a newly-ranked country appears the same session somebody notices.
+_PICKER_TTL = 60 * 60
+
+
+def _cached(key, build):
+    """Cache a viewer-independent picker lookup. Falls through to `build()` on any cache failure --
+    Redis being down should slow the boards, not break them."""
+    from django.core.cache import cache
+    try:
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
+    except Exception:
+        return build()
+    value = build()
+    try:
+        cache.set(key, value, _PICKER_TTL)
+    except Exception:
+        pass
+    return value
+
+
 def active_editions():
     """Platform editions the picker may offer, as PlatformGroup rows.
 
@@ -126,10 +156,13 @@ def active_editions():
     a config flag, presented as a fact about hunters.
     """
     from trophies.models import PlatformGroup
-    return list(
-        PlatformGroup.objects.filter(is_active=True, group_badges__is_live=True)
-        .distinct().order_by('sort_order', 'name')
-    )
+
+    def build():
+        return list(
+            PlatformGroup.objects.filter(is_active=True, group_badges__is_live=True)
+            .distinct().order_by('sort_order', 'name')
+        )
+    return _cached('lb:picker:editions', build)
 
 
 def hydrate(profile_ids):
@@ -190,6 +223,15 @@ def country_options(codes=None):
     codes = active_countries() if codes is None else codes
     if not codes:
         return []
+    return _cached(f'lb:picker:country_options:{",".join(sorted(codes))}',
+                   lambda: _build_country_options(codes))
+
+
+def _build_country_options(codes):
+    """The uncached body. Keyed on the code set above, so a newly-ranked country produces a different key
+    and cannot serve a stale dropdown that omits it."""
+    from trophies.models import Profile
+
     rows = (Profile.objects.filter(country_code__in=codes)
             .exclude(country__isnull=True).exclude(country='')
             .order_by('country_code', 'country', 'flag')
@@ -216,19 +258,21 @@ def active_countries():
     very board those hunters appear on. The Trophies board widened it again: it ranks every linked hunter
     with a trophy, most of whom have no badge or career standing at all.
     """
-    codes = set(
-        trophy_store().exclude(country_code__isnull=True).exclude(country_code='')
-        .values_list('country_code', flat=True).distinct()
-    )
-    codes |= set(
-        ProfileBadgeStanding.objects.exclude(country_code='')
-        .values_list('country_code', flat=True).distinct()
-    )
-    codes |= set(
-        ProfileCareerStanding.objects.exclude(country_code='')
-        .values_list('country_code', flat=True).distinct()
-    )
-    return sorted(codes)
+    def build():
+        codes = set(
+            trophy_store().exclude(country_code__isnull=True).exclude(country_code='')
+            .values_list('country_code', flat=True).distinct()
+        )
+        codes |= set(
+            ProfileBadgeStanding.objects.exclude(country_code='')
+            .values_list('country_code', flat=True).distinct()
+        )
+        codes |= set(
+            ProfileCareerStanding.objects.exclude(country_code='')
+            .values_list('country_code', flat=True).distinct()
+        )
+        return sorted(codes)
+    return _cached('lb:picker:countries', build)
 
 
 # ------------------------------------------------------------------ global XP ----------------------------

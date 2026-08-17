@@ -179,9 +179,18 @@ class Profile(models.Model):
             # `recalc_profile_counters` -- rather than a badge-scoped denorm. The board this replaced
             # counted trophies in badge-covered games, which needed a full-library aggregate per profile
             # and mostly measured how many badge games somebody had played.
-            models.Index(fields=['-total_plats', '-total_trophies', 'id'], name='profile_board_idx'),
+            # PARTIAL on the board's own population. The board reads `is_linked=True, total_trophies > 0`
+            # (see badge_leaderboards.trophy_store), and neither predicate used to be in the index, so
+            # `is_linked` became a heap filter on every row scanned: measured at 300k profiles / 50k
+            # linked, page 500 walked 149,308 index entries to yield 25,000 (49.7 ms), and `trophy_rank`
+            # abandoned the index entirely for a seq scan of a 48-column table (16.0 ms) on EVERY
+            # authenticated page view. Partial takes all three reads to Index Only Scans (2.6 / 4.2 /
+            # 3.9 ms) and shrinks the index to the ranked population rather than every profile row.
+            models.Index(fields=['-total_plats', '-total_trophies', 'id'], name='profile_board_idx',
+                         condition=Q(is_linked=True, total_trophies__gt=0)),
             models.Index(fields=['country_code', '-total_plats', '-total_trophies', 'id'],
-                         name='profile_board_cc_idx'),
+                         name='profile_board_cc_idx',
+                         condition=Q(is_linked=True, total_trophies__gt=0)),
             models.Index(fields=['is_linked', 'sync_tier'], name='profile_linked_tier_idx'),
             models.Index(fields=['is_discord_verified', 'discord_linked_at'], name='profile_discord_idx'),
         ]

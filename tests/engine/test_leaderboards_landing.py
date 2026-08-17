@@ -102,11 +102,16 @@ def test_a_board_page_is_a_constant_number_of_queries(client):
     is per-row hydration, which is invisible at test scale and quadratic in production."""
     for i in range(3):
         _ranked(f'Few{i}', plats=i, trophies=i * 10, points=i * 100)
+    # Warm the picker caches first. They are viewer-independent and cached for an hour, so a COLD request
+    # legitimately costs more than a warm one -- measuring one of each would compare cold-start against
+    # steady state, when the property this guards is per-ROW cost.
+    client.get(URL, {'tab': 'trophies'})
     with CaptureQueriesContext(connection) as small:
         client.get(URL, {'tab': 'trophies'})
 
     for i in range(20):
         _ranked(f'Many{i}', plats=i, trophies=i * 10, points=i * 100)
+    client.get(URL, {'tab': 'trophies'})          # re-warm: the new rows may add a country key
     with CaptureQueriesContext(connection) as large:
         client.get(URL, {'tab': 'trophies'})
 
