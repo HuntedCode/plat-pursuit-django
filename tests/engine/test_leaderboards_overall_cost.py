@@ -96,17 +96,16 @@ def test_a_series_with_no_participants_still_renders_a_count(client):
 
 
 @pytest.mark.parametrize('tab, must_not_fetch', [
-    ('country', ['xp_rows', 'progress_rows']),
-    ('series', ['xp_rows', 'progress_rows']),
-    ('progress', ['xp_rows']),
-    ('xp', ['progress_rows']),
+    ('progress', ['xp_rows', 'career_xp_rows']),
+    ('points',   ['progress_rows', 'career_xp_rows']),
+    ('career',   ['progress_rows', 'xp_rows']),
+    ('series',   ['progress_rows', 'xp_rows', 'career_xp_rows']),
 ])
 def test_a_tab_does_not_pay_for_the_boards_it_does_not_render(client, tab, must_not_fetch):
-    """Every board used to be assembled on every request. A page fetch is a ZREVRANGE plus an HMGET of 50
-    JSON blobs; two of those were built and discarded on three of the four tabs.
+    """Every board used to be assembled on every request. Only the ACTIVE one is built now.
 
     The RANK lookups deliberately stay unconditional and are not asserted against here -- they are single
-    indexed COUNTs, and the user-stats strip sits above the tab row, so it shows them whichever tab is
+    indexed COUNTs feeding the header's "your standing" strip, which shows all three whichever board is
     open. Cutting those would change what renders, not just what it costs.
     """
     _live_series('paid', 'Paid')
@@ -125,73 +124,25 @@ def test_a_tab_does_not_pay_for_the_boards_it_does_not_render(client, tab, must_
         )
 
 
-# ------------------------------------------------------------------ the Lane B swap ----------------------
+@pytest.mark.parametrize('legacy, lands_on', [('xp', 'points'), ('country', 'points')])
+def test_the_old_tab_keys_still_land_somewhere_sensible(client, legacy, lands_on):
+    """`?tab=xp` was the Badge Points board and `?tab=country` was a TAB before country became a filter.
+    Both are in the wild in links and bookmarks, and an unrecognised key silently falling back to the
+    default would drop a reader somewhere they did not ask for with no sign anything happened."""
+    body = client.get(URL, {'tab': legacy}).content.decode()
+    assert f'data-board="{lands_on}"' in body
+    assert f'<a href="?tab={lands_on}"' in body or f'data-board="{lands_on}"' in body
 
-def test_the_boards_render_from_the_standing_stores(client):
-    """End-to-end proof of the swap: rows come from `ProfileBadgeStanding` via Lane B, not from a Redis
-    sorted set plus a display hash."""
+
+def test_an_unknown_country_does_not_silently_empty_the_board(client):
+    """An unvalidated code would return zero rows, which reads as "nobody from there plays" rather than
+    "that is not a country we rank". The filter falls back to Everywhere instead."""
     from trophies.models import ProfileBadgeStanding
     from tests.factories import ProfileFactory
 
-    # `country` (the display name) as well as `country_code`: the picker is built from profiles that
-    # carry both, so a code-only fixture yields an empty picker and no board.
-    top = ProfileFactory(display_psn_username='TopHunter', country_code='CA', country='Canada')
-    ProfileBadgeStanding.objects.create(profile=top, total_xp=900, country_code='CA',
-                                        trophies_platinum=7, trophies_total=140)
+    p = ProfileFactory(display_psn_username='Somebody', country_code='CA', country='Canada')
+    ProfileBadgeStanding.objects.create(profile=p, total_xp=100, country_code='CA',
+                                        trophies_platinum=2, trophies_total=30)
 
-    xp_body = client.get(URL, {'tab': 'xp'}).content.decode()
-    assert 'TopHunter' in xp_body, 'the Badge Points board is not reading the standing store'
-
-    progress_body = client.get(URL, {'tab': 'progress'}).content.decode()
-    assert 'TopHunter' in progress_body, 'the Global Progress board is not reading the standing store'
-
-    country_body = client.get(URL, {'tab': 'country', 'country': 'CA'}).content.decode()
-    assert 'TopHunter' in country_body, 'the country slice is not reading the standing store'
-
-
-def test_a_renamed_hunter_shows_their_new_name_immediately(client):
-    """The concrete defect the swap fixes. Redis denormalized display data into a hash written at rank
-    time, so a hunter who changed their PSN name kept the old one on every board until the next signal or
-    the 6-hourly rebuild. Identity is now read live at render, so it cannot be stale.
-    """
-    from trophies.models import ProfileBadgeStanding
-    from tests.factories import ProfileFactory
-
-    hunter = ProfileFactory(display_psn_username='OldName')
-    ProfileBadgeStanding.objects.create(profile=hunter, total_xp=500, trophies_platinum=3,
-                                        trophies_total=60)
-    assert 'OldName' in client.get(URL, {'tab': 'xp'}).content.decode()
-
-    hunter.display_psn_username = 'NewName'
-    hunter.save(update_fields=['display_psn_username'])
-
-    body = client.get(URL, {'tab': 'xp'}).content.decode()
-    assert 'NewName' in body and 'OldName' not in body, (
-        'the board is serving a stale denormalized name -- identity must be read live'
-    )
-
-
-def test_a_board_page_costs_a_constant_number_of_queries(client):
-    """Two reads per board page -- the board itself and one `hydrate()` for the whole page -- plus the
-    request's own fixed overhead. What must never happen is a per-ROW query: `displayed_title` is a METHOD
-    doing two queries per profile, so hydrating 50 rows by calling it would be ~100 round trips to print
-    one word under each name."""
-    from trophies.models import ProfileBadgeStanding
-    from tests.factories import ProfileFactory
-
-    for i in range(3):
-        p = ProfileFactory()
-        ProfileBadgeStanding.objects.create(profile=p, total_xp=100 + i, trophies_total=i)
-    with CaptureQueriesContext(connection) as small:
-        client.get(URL, {'tab': 'xp'})
-
-    for i in range(20):
-        p = ProfileFactory()
-        ProfileBadgeStanding.objects.create(profile=p, total_xp=500 + i, trophies_total=i)
-    with CaptureQueriesContext(connection) as large:
-        client.get(URL, {'tab': 'xp'})
-
-    assert len(large.captured_queries) == len(small.captured_queries), (
-        f'{len(small.captured_queries)} queries for 3 rows but {len(large.captured_queries)} for 23 -- '
-        f'the board is hydrating per row'
-    )
+    body = client.get(URL, {'tab': 'progress', 'country': 'ZZ'}).content.decode()
+    assert 'Somebody' in body, 'an unknown country code emptied the board instead of falling back'

@@ -1,0 +1,169 @@
+/* ==========================================================================
+ * LEADERBOARDS -- Global Boards (`/leaderboards/`)
+ *
+ * A board is a RANKED LIST, and the design's whole job is to make the ordering legible at a glance. So
+ * the row leads with the rank as a Tally figure, the identity carries the weight in the middle, and the
+ * numbers sit right-aligned in a fixed column so the eye can run straight down them. Nothing about a row
+ * moves between boards except which figures fill that column.
+ *
+ * Restraint on the podium: only the top three are marked, and only through the row's leading EDGE plus a
+ * warmer rank colour. Medal icons were the obvious move and are wrong here -- an icon per row competes
+ * with the avatar beside it, and at 50 rows a page the wall stops reading as an ordering and starts
+ * reading as decoration.
+ * ========================================================================== */
+
+/* ---- The viewer's own standing (header) ------------------------------------------------------------ */
+/* Shown ONCE, in the header, rather than per row: a row identical for every viewer is what makes this
+   page cacheable. This is the compensation for that decision, and it is a better home anyway -- one
+   place to read all three of your ranks, instead of hunting your own name down a wall. */
+.lb-mine { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.lb-mine__k {
+    font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.lb-mine__rows { display: flex; flex-wrap: wrap; gap: 6px; }
+.lb-mine__row {
+    display: inline-flex; align-items: baseline; gap: 6px;
+    padding: 5px 10px; border-radius: 999px; text-decoration: none;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.lb-mine__lbl { font-size: 11px; font-weight: 700; color: var(--pp-text-dim); }
+.lb-mine__rank { font-size: 13px; color: var(--pp-text); }
+@media (hover: hover) {
+    .lb-mine__row:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+}
+.lb-mine__row:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* The board you are already reading is marked, so the strip doubles as "where am I" rather than only
+   "where can I go". */
+.lb-mine__row.is-active {
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2));
+}
+.lb-mine__row.is-active .lb-mine__rank { color: var(--pp-primary); }
+@media (prefers-reduced-motion: reduce) { .lb-mine__row { transition: none; } }
+
+/* ---- Switcher + country filter --------------------------------------------------------------------- */
+/* The tab strip leads and the filter trails it. On a phone they stack, with the strip full-width so the
+   three chips get equal room -- a segmented control that wraps mid-strip reads as broken. */
+.lb-bar {
+    display: flex; flex-direction: column; align-items: stretch; gap: 10px;
+    margin: 18px 0 14px;
+}
+.lb-bar .pp-switch { width: 100%; }
+.lb-bar .pp-switch__chip { flex: 1 1 0; justify-content: center; }
+.lb-country { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lb-country__lbl {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--pp-text-mute); flex: 0 0 auto;
+}
+/* `min-width: 0` so a long country name shrinks the select instead of pushing the row wide -- a flex
+   item will not shrink below its content without it. */
+.lb-country .pp-gallery__select { flex: 1 1 auto; min-width: 0; }
+.lb-country__go {
+    padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text);
+}
+@media (min-width: 768px) {
+    .lb-bar { flex-direction: row; align-items: center; justify-content: space-between; gap: 14px; }
+    .lb-bar .pp-switch { width: auto; }
+    .lb-bar .pp-switch__chip { flex: 0 0 auto; }
+    .lb-country { flex: 0 0 auto; }
+    .lb-country .pp-gallery__select { flex: 0 0 auto; min-width: 190px; }
+}
+
+/* ---- The wall -------------------------------------------------------------------------------------- */
+.lb-wall { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .lb-row { opacity: 0; }
+    .pp-reveal .lb-row.is-revealed { opacity: 1; }
+}
+
+.lb-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: var(--pp-radius-md, 10px);
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    /* The leading edge is the podium's only structural signal; transparent keeps every row the same
+       width so the wall's left margin does not jitter between ranked and unranked rows. */
+    border-left: 3px solid transparent;
+    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) {
+    .lb-row:hover { background: var(--pp-bg-2); border-color: color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border)); }
+}
+@media (prefers-reduced-motion: reduce) { .lb-row { transition: none; } }
+
+.lb-row__rank {
+    min-width: 2.6ch; text-align: right; font-size: 15px; color: var(--pp-text-mute);
+    font-variant-numeric: tabular-nums;
+}
+
+.lb-row__who { display: flex; align-items: center; gap: 9px; min-width: 0; text-decoration: none; }
+.lb-row__av {
+    width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%; overflow: hidden;
+    display: grid; place-items: center;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text-mute);
+}
+.lb-row__av img { width: 100%; height: 100%; object-fit: cover; }
+.lb-row__av svg { width: 18px; height: 18px; }
+.lb-row__names { display: flex; flex-direction: column; min-width: 0; }
+.lb-row__name {
+    display: flex; align-items: center; gap: 5px; min-width: 0;
+    font-size: 13.5px; font-weight: 700; color: var(--pp-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lb-row__flag { flex: 0 0 auto; }
+.lb-row__prem { color: var(--pp-primary); font-size: 9px; flex: 0 0 auto; }
+.lb-row__title {
+    font-size: 10.5px; color: var(--pp-text-mute); line-height: 1.2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (hover: hover) { .lb-row__who:hover .lb-row__name { color: var(--pp-primary); } }
+.lb-row__who:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: 6px; }
+
+/* Figures right-aligned in a fixed column so the eye runs straight down them. */
+.lb-row__figs { display: flex; align-items: baseline; gap: 14px; flex: 0 0 auto; }
+.lb-row__fig { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.lb-row__v { font-size: 15px; color: var(--pp-text); line-height: 1; }
+.lb-row__k {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--pp-text-mute); line-height: 1;
+}
+.lb-row__fig--sub .lb-row__v { font-size: 12.5px; color: var(--pp-text-dim); }
+
+/* Podium: the leading edge warms, and the rank figure takes the metal. Nothing else changes -- no size
+   jump, no icon, no background wash, so the wall stays a list rather than a leaderboard-shaped poster. */
+.lb-row--podium .lb-row__rank { color: var(--metal, var(--pp-text)); font-weight: 800; }
+.lb-row--podium { border-left-color: color-mix(in oklab, var(--metal, var(--pp-border)) 70%, transparent); }
+.lb-row--p1 { --metal: var(--color-trophy-platinum, #d7e3f4); }
+.lb-row--p2 { --metal: var(--color-trophy-silver, #c0c6cf); }
+.lb-row--p3 { --metal: var(--color-trophy-bronze, #cd8b62); }
+
+@media (min-width: 768px) {
+    .lb-row { gap: 14px; padding: 11px 14px; }
+    .lb-row__rank { min-width: 3ch; font-size: 17px; }
+    .lb-row__av { width: 40px; height: 40px; }
+    .lb-row__name { font-size: 14.5px; }
+    .lb-row__title { font-size: 11.5px; }
+    .lb-row__v { font-size: 17px; }
+    .lb-row__figs { gap: 22px; }
+}
+
+/* Phone: the secondary figure goes. It is the supporting number, the row is 3 columns in ~343px, and
+   keeping both squeezes the name -- which is the thing a reader actually scans for. It returns at md:,
+   where there is room for it to earn its place. */
+@media (max-width: 767px) {
+    .lb-row__fig--sub { display: none; }
+}
+
+/* ---- Empty state ----------------------------------------------------------------------------------- */
+.lb-empty {
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    padding: 44px 20px; border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1); border: 1px dashed var(--pp-border);
+}
+.lb-empty svg { width: 34px; height: 34px; color: var(--pp-text-mute); opacity: 0.7; }
+.lb-empty__title { margin-top: 12px; font-size: 1rem; font-weight: 800; color: var(--pp-text); }
+.lb-empty__sub { margin-top: 5px; font-size: 0.85rem; color: var(--pp-text-dim); max-width: 42ch; }

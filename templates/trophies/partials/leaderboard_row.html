@@ -1,0 +1,51 @@
+{% load humanize %}
+{% comment %} One leaderboard row, shared by all three Global Boards.
+
+The boards differ only in their FIGURES, so the view supplies `primary`/`primary_label` and an optional
+`secondary` pair and this partial stays one file. Three near-identical row templates was the drift the
+rebuild removes.
+
+`entry` comes from `badge_leaderboards.page()`: identity hydrated live from Profile (never a
+denormalized copy, so a renamed hunter reads correctly immediately) plus the board's own numbers.
+{% endcomment %}
+<li class="lb-row{% if entry.rank <= 3 %} lb-row--podium lb-row--p{{ entry.rank }}{% endif %}">
+    {% comment %} Rank as a plain figure, not a medal: only the top three get any treatment at all, and
+    they get it through the row's own edge rather than an icon competing with the avatar. {% endcomment %}
+    <span class="lb-row__rank pp-tally" aria-label="Rank {{ entry.rank }}">{{ entry.rank|intcomma }}</span>
+
+    <a class="lb-row__who" href="{% url 'profile_detail' entry.psn_username %}">
+        <span class="lb-row__av">
+            {% if entry.avatar_url %}
+            <img src="{{ entry.avatar_url }}" alt="" loading="lazy" decoding="async">
+            {% else %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+            {% endif %}
+        </span>
+        <span class="lb-row__names">
+            <span class="lb-row__name">
+                {% if entry.flag %}<span class="lb-row__flag" aria-hidden="true">{{ entry.flag }}</span>{% endif %}
+                {{ entry.psn_username }}
+                {% if entry.is_premium %}<span class="lb-row__prem" title="Supporter">&#9670;</span>{% endif %}
+            </span>
+            {% comment %} The worn title, when there is one. `pr-1` because it is italic inside a clamped
+            box and italic glyphs slant past their box. {% endcomment %}
+            {% if entry.displayed_title %}<span class="lb-row__title italic pr-1">{{ entry.displayed_title }}</span>{% endif %}
+        </span>
+    </a>
+
+    <span class="lb-row__figs">
+        <span class="lb-row__fig">
+            <span class="lb-row__v pp-tally" data-countup="{{ entry.primary|default:0 }}">{{ entry.primary|default:0|intcomma }}</span>
+            <span class="lb-row__k">{{ entry.primary_label }}</span>
+        </span>
+        {% comment %} The supporting figure is what gives the leading one its meaning -- 9 platinums out
+        of 140 trophies is a different hunter from 9 out of 900. Omitted entirely when a board has no
+        second number, rather than rendering an empty cell. {% endcomment %}
+        {% if entry.secondary is not None %}
+        <span class="lb-row__fig lb-row__fig--sub">
+            <span class="lb-row__v pp-tally">{{ entry.secondary|intcomma }}</span>
+            <span class="lb-row__k">{{ entry.secondary_label }}</span>
+        </span>
+        {% endif %}
+    </span>
+</li>

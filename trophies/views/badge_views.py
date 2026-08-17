@@ -53,7 +53,7 @@ from django.views.generic import ListView, DetailView, TemplateView
 from ..models import (
     Profile, Badge, UserBadge,
     UserTitle, ProfileGamification, BadgeSeries, GroupBadge, UserGroupBadge, PlatformGroup,
-    ProfileBadgeStanding, SeriesBadgeStanding,
+    ProfileBadgeStanding, ProfileCareerStanding, SeriesBadgeStanding,
 )
 from ..forms import BadgeSearchForm
 from trophies.services.badge_detail_service import get_badge_detail
@@ -759,210 +759,158 @@ class BadgeLeaderboardsView(DetailView):
 
 
 class OverallBadgeLeaderboardsView(TemplateView):
-    """
-    Display overall badge leaderboards across all badge series.
+    """`/leaderboards/` -- Global Boards, the hub landing.
 
-    Shows two global leaderboards:
-    1. Total XP - Users with the most badge experience points
-    2. Total Progress - Users with the most badge completion percentage
+    THREE boards, one per thing worth ranking, as `.pp-switch` tabs:
 
-    Data is served from Redis sorted sets with near-real-time updates.
+      Progress     -> trophies across badge games (platinums first, total as the tiebreak)
+      Badge Points -> ProfileBadgeStanding.total_xp
+      Career XP    -> the jobs economy (ProfileCareerStanding)
+
+    Progress and Badge Points are DELIBERATELY separate tabs rather than one "XP" board: they are two
+    sealed economies (the badge subsystem never reads or writes the jobs one), a hunter can hold very
+    different ranks in each, and a merged total would be the one figure on the site that means nothing.
+
+    Country is a FILTER across all three, never a board of its own -- one WHERE served by the
+    (country_code, ...board order) composites, versus the old design's separate Redis sorted set per
+    country. That single decision is what keeps this section's surface area finite.
+
+    Every board is public and identical for every viewer, which is what makes the page cacheable; a
+    personal rank on a row would forfeit that. The viewer's OWN standing is shown once, in the header.
     """
     template_name = 'trophies/overall_badge_leaderboards.html'
+    paginate_by = 50
+
+    # (key, label). Order is the tab order; Progress leads because it is the board with the most entrants.
+    BOARDS = (
+        ('progress', 'Progress'),
+        ('points', 'Badge Points'),
+        ('career', 'Career XP'),
+    )
+    BOARD_KEYS = {k for k, _ in BOARDS}
+    # `xp` was the old key for the Badge Points board; `country` was a TAB before country became a filter.
+    # Bookmarks carrying either still land somewhere sensible instead of silently defaulting.
+    LEGACY_TABS = {'xp': 'points', 'country': 'points'}
+
+    def _active_tab(self):
+        raw = self.request.GET.get('tab', 'progress')
+        raw = self.LEGACY_TABS.get(raw, raw)
+        return raw if (raw in self.BOARD_KEYS or raw == 'series') else 'progress'
+
+    def _country(self):
+        """The country slice, validated against countries that actually have ranked hunters.
+
+        Validated rather than trusted: an unknown code would silently return an empty board, which reads
+        as "nobody from there plays" rather than "that is not a country we rank".
+        """
+        cc = (self.request.GET.get('country') or '').upper()
+        return cc if cc and cc in set(lb.active_countries()) else ''
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        paginate_by = 50
+        tab = self._active_tab()
+        country = self._country()
+        profile = getattr(user, 'profile', None) if user.is_authenticated else None
 
-        active_tab = self.request.GET.get('tab', 'xp')
-        if active_tab not in ('xp', 'progress', 'series', 'country'):
-            active_tab = 'xp'
-        context['active_tab'] = active_tab
+        countries = lb.country_options()
+        context.update({
+            'boards': self.BOARDS,
+            'active_tab': tab,
+            'selected_country': country,
+            'countries': countries,
+            'ranked_total': ProfileBadgeStanding.objects.count(),
+            'country_total': len(countries),
+            'breadcrumb': [
+                {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'Leaderboards'},
+            ],
+        })
 
-        # Board PAGES are built for the ACTIVE tab only. Every tab used to be assembled on every request,
-        # so `?tab=country` paid for the XP and global-progress pages it would never render.
-        # The RANKS below stay unconditional: they are single indexed COUNTs, and the user-stats strip sits
-        # ABOVE the tabs, so it shows both on whichever tab you are on.
-        #
-        # Backed by Lane B (`services/badge_leaderboards`) as of the leaderboards rebuild step 2: indexed
-        # reads over the standing stores instead of Redis sorted sets + a 6-hourly reconciliation cron.
-        # The page shape is deliberately identical -- this swap changes the backend, not the surface.
-        if active_tab == 'xp':
-            page_num = max(1, int(self.request.GET.get('lb_total_xp_page', 1) or 1))
-            paginator = lb.BoardPaginator(ProfileBadgeStanding.objects.count(), paginate_by)
-            page_num = min(page_num, paginator.num_pages)
-            offset = (page_num - 1) * paginate_by
-            entries = lb.page(
-                lb.xp_rows(limit=paginate_by, offset=offset), offset,
-                extra=lambda r: {'total_xp': r[1]},   # total_badges comes from hydrate
-            )
-            context['lb_total_xp_page_obj'] = lb.BoardPage(entries, page_num, paginator)
-            context['lb_total_xp_paginator'] = paginator
-        elif active_tab == 'progress':
-            page_num = max(1, int(self.request.GET.get('lb_total_progress_page', 1) or 1))
-            paginator = lb.BoardPaginator(
-                ProfileBadgeStanding.objects.filter(trophies_total__gt=0).count(), paginate_by)
-            page_num = min(page_num, paginator.num_pages)
-            offset = (page_num - 1) * paginate_by
-            entries = lb.page(
-                lb.progress_rows(limit=paginate_by, offset=offset), offset,
-                # The template reads `trophy_totals.plats` etc; the row is
-                # (profile_id, platinum, gold, silver, bronze, total).
-                extra=lambda r: {
-                    'trophy_totals': {'plats': r[1], 'golds': r[2], 'silvers': r[3], 'bronzes': r[4]},
-                    'trophies_total': r[5],
-                    # The Redis rows carried a last-earned date denormalized into the display hash. There
-                    # is no equivalent on the standing, and inventing a per-row lookup for it would be a
-                    # query per row -- the template already renders "Unknown" for a missing one.
-                    'last_earned_date': None,
-                },
-            )
-            context['lb_total_progress_page_obj'] = lb.BoardPage(entries, page_num, paginator)
-            context['lb_total_progress_paginator'] = paginator
+        # Only the ACTIVE board is built; the others cost nothing until asked for.
+        if tab in self.BOARD_KEYS:
+            context['board'] = self._build_board(tab, country)
+        elif tab == 'series':
+            context['series_directory'] = self._series_directory()
 
-        if user.is_authenticated and hasattr(user, 'profile'):
-            profile = user.profile
-            xp_rank = lb.xp_rank(profile.id)
-            if xp_rank:
-                context['lb_total_xp_user_rank'] = xp_rank
-                context['lb_total_xp_user_page'] = (xp_rank - 1) // paginate_by + 1
-
-            progress_rank = lb.progress_rank(profile.id)
-            if progress_rank:
-                context['lb_total_progress_user_rank'] = progress_rank
-                context['lb_total_progress_user_page'] = (progress_rank - 1) // paginate_by + 1
-
-            try:
-                gamification = profile.gamification
-                context['user_total_xp'] = gamification.total_badge_xp
-                context['user_total_badges'] = gamification.total_badges_earned
-            except ProfileGamification.DoesNotExist:
-                context['user_total_xp'] = 0
-                context['user_total_badges'] = 0
-
-        # Leaderboards is its own hub as of 2026-08, so it no longer hangs off Badges.
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Leaderboards'},
-        ]
-
-        if active_tab == 'series':
-            # `.defer` on BOTH igdb_match paths. `raw_response` is the ~30 KB IGDB API blob that no
-            # directory row reads, and this queryset joins the table TWICE (the badge's own concept and
-            # its base badge's) for EVERY live series, unpaginated. That is the exact join payload
-            # CLAUDE.md names as the trigger for the May 2026 web-server OOM, on a public page. The
-            # per-series leaderboard view has always deferred it; this one was simply missed.
-            series_badges = Badge.objects.live().filter(
-                tier=1
-            ).select_related(
-                'base_badge', 'most_recent_concept', 'most_recent_concept__igdb_match',
-                'base_badge__most_recent_concept', 'base_badge__most_recent_concept__igdb_match',
-                'base_badge__title', 'title',
-            ).defer(
-                'most_recent_concept__igdb_match__raw_response',
-                'base_badge__most_recent_concept__igdb_match__raw_response',
-            ).exclude(
-                series_slug__isnull=True
-            ).exclude(series_slug='').order_by(Lower('display_series'))
-
-            # ONE grouped query for every series' participant count, not one call per row. This was a
-            # Redis N+1 in a Python loop over an unpaginated directory, so its cost grew with the
-            # catalogue; it is now a single GROUP BY over the standing store.
-            directory = list(series_badges)
-            counts = dict(
-                SeriesBadgeStanding.objects
-                .filter(series_slug__in=[b.series_slug for b in directory])
-                .values('series_slug').annotate(n=Count('id'))
-                .values_list('series_slug', 'n')
-            )
-            for badge in directory:
-                badge.progress_count = counts.get(badge.series_slug, 0)
-            context['series_directory'] = directory
-
-        elif active_tab == 'country':
-            context.update(self._get_country_tab_context(user, paginate_by))
-
+        # The viewer's own standing, ONCE, in the header -- not per row (see the class docstring).
+        if profile:
+            cc = country or None
+            context['my_standing'] = {
+                'progress': lb.progress_rank(profile.id, country=cc),
+                'points': lb.xp_rank(profile.id, country=cc),
+                'career': lb.career_xp_rank(profile.id, country=cc),
+            }
         return context
 
-    def _get_country_tab_context(self, user, paginate_by):
-        """Build context for the Country XP leaderboard tab."""
-        ctx = {}
+    def _build_board(self, tab, country):
+        """One page of the active board: two queries (the board read + one hydrate) plus its count."""
+        per = self.paginate_by
+        page_num = max(1, int(self.request.GET.get('page', 1) or 1))
+        cc = country or None
 
-        # Determine selected country (default to user's country, fallback to first active)
-        active_codes = lb.active_countries()
-        selected_cc = self.request.GET.get('country', '').upper()
-
-        user_country_code = None
-        if user.is_authenticated and hasattr(user, 'profile') and user.profile.country_code:
-            user_country_code = user.profile.country_code
-
-        if selected_cc not in active_codes:
-            selected_cc = user_country_code if user_country_code in active_codes else ''
-
-        # Build country list for picker (single DB query for display names/flags)
-        if active_codes:
-            country_list = list(
-                Profile.objects.filter(
-                    country_code__in=active_codes
-                ).exclude(
-                    country__isnull=True
-                ).exclude(
-                    country=''
-                ).values_list('country', 'country_code', 'flag').distinct().order_by('country')
-            )
-            # Deduplicate by country_code (multiple profiles have the same data)
-            seen = set()
-            deduplicated = []
-            for country_name, cc, flag in country_list:
-                if cc not in seen:
-                    seen.add(cc)
-                    deduplicated.append({
-                        'name': country_name or cc,
-                        'code': cc,
-                        'flag': flag or '',
-                    })
-            ctx['country_list'] = deduplicated
+        # `> 0` on the sort key, so the board holds hunters who have actually done the thing it ranks.
+        # A wall of zeroes is not a leaderboard, and it would also make the count disagree with the rows.
+        if tab == 'career':
+            qs = ProfileCareerStanding.objects.filter(total_xp__gt=0)
+        elif tab == 'points':
+            qs = ProfileBadgeStanding.objects.filter(total_xp__gt=0)
         else:
-            ctx['country_list'] = []
+            qs = ProfileBadgeStanding.objects.filter(trophies_total__gt=0)
+        if country:
+            qs = qs.filter(country_code=country)
 
-        # Selected country info
-        ctx['selected_country_code'] = selected_cc
-        selected_info = next((c for c in ctx['country_list'] if c['code'] == selected_cc), None)
-        ctx['selected_country_name'] = selected_info['name'] if selected_info else ''
-        ctx['selected_country_flag'] = selected_info['flag'] if selected_info else ''
-        ctx['user_country_code'] = user_country_code
+        paginator = lb.BoardPaginator(qs.count(), per)
+        page_num = min(page_num, paginator.num_pages)
+        offset = (page_num - 1) * per
 
-        if not selected_cc:
-            return ctx
+        if tab == 'progress':
+            rows = lb.progress_rows(limit=per, offset=offset, country=cc)
+            entries = lb.page(rows, offset, extra=lambda r: {
+                'primary': r[1], 'primary_label': 'platinums',
+                'secondary': r[5], 'secondary_label': 'trophies',
+            })
+        elif tab == 'points':
+            rows = lb.xp_rows(limit=per, offset=offset, country=cc)
+            entries = lb.page(rows, offset, extra=lambda r: {
+                'primary': r[1], 'primary_label': 'points',
+                'secondary': None, 'secondary_label': 'badges',
+            })
+        else:
+            rows = lb.career_xp_rows(limit=per, offset=offset, country=cc)
+            entries = lb.page(rows, offset, extra=lambda r: {
+                'primary': r[1], 'primary_label': 'XP',
+                'secondary': r[2], 'secondary_label': 'level',
+            })
+        return lb.BoardPage(entries, page_num, paginator)
 
-        # Country XP leaderboard page
-        # The country board is the SAME board with a WHERE -- not a separate store. That is the whole
-        # reason slicing is affordable now; the Redis design kept a sorted set per country.
-        country_page_num = max(1, int(self.request.GET.get('lb_country_xp_page', 1) or 1))
-        country_total = ProfileBadgeStanding.objects.filter(country_code=selected_cc).count()
-        country_paginator = lb.BoardPaginator(country_total, paginate_by)
-        country_page_num = min(country_page_num, country_paginator.num_pages)
-        offset = (country_page_num - 1) * paginate_by
-        country_entries = lb.page(
-            lb.xp_rows(limit=paginate_by, offset=offset, country=selected_cc), offset,
-            extra=lambda r: {'total_xp': r[1]},
+    def _series_directory(self):
+        """The per-series board directory, still on the LEGACY Badge model.
+
+        Temporary: step 6 of the leaderboards rebuild promotes this to a proper Badge Boards directory at
+        `/leaderboards/badges/`, built on BadgeSeries/GroupBadge. It stays reachable at `?tab=series` in
+        the meantime so the section has no gap, and is deliberately NOT in the tab strip -- that strip is
+        for boards, and a directory sitting in it was the incoherence this rebuild is removing.
+        """
+        badges = Badge.objects.live().filter(tier=1).select_related(
+            'base_badge', 'most_recent_concept', 'most_recent_concept__igdb_match',
+            'base_badge__most_recent_concept', 'base_badge__most_recent_concept__igdb_match',
+            'base_badge__title', 'title',
+        ).defer(
+            'most_recent_concept__igdb_match__raw_response',
+            'base_badge__most_recent_concept__igdb_match__raw_response',
+        ).exclude(series_slug__isnull=True).exclude(series_slug='').order_by(Lower('display_series'))
+
+        directory = list(badges)
+        counts = dict(
+            SeriesBadgeStanding.objects
+            .filter(series_slug__in=[b.series_slug for b in directory])
+            .values('series_slug').annotate(n=Count('id'))
+            .values_list('series_slug', 'n')
         )
-        ctx['lb_country_xp_page_obj'] = lb.BoardPage(country_entries, country_page_num, country_paginator)
-        ctx['lb_country_xp_paginator'] = country_paginator
-        ctx['lb_country_xp_total'] = country_total
-
-        # User's country rank
-        if user.is_authenticated and hasattr(user, 'profile'):
-            profile = user.profile
-            if profile.country_code == selected_cc:
-                country_rank = lb.xp_rank(profile.id, country=selected_cc)
-                if country_rank:
-                    ctx['lb_country_xp_user_rank'] = country_rank
-                    ctx['lb_country_xp_user_page'] = (country_rank - 1) // paginate_by + 1
-
-        return ctx
-
+        for badge in directory:
+            badge.progress_count = counts.get(badge.series_slug, 0)
+        return directory
 
 class BadgeHowItWorksView(TemplateView):
     """`/badges/how-it-works/` -- the permanent, addressable home for the badge teaching.

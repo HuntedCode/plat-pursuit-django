@@ -65,16 +65,53 @@ def hydrate(profile_ids):
     return {r['id']: r for r in rows}
 
 
+def country_options():
+    """Countries with ranked hunters, as [{code, name, flag}], for the picker.
+
+    Names and flags come from Profile rows rather than a hardcoded table, so a country appears exactly as
+    the hunters from it are already labelled elsewhere on the site. Deduped by CODE, because the same
+    country can carry slightly different `country` spellings across profiles and the picker must not show
+    it twice.
+    """
+    from trophies.models import Profile
+
+    codes = active_countries()
+    if not codes:
+        return []
+    rows = (Profile.objects.filter(country_code__in=codes)
+            .exclude(country__isnull=True).exclude(country='')
+            .values_list('country_code', 'country', 'flag'))
+    seen = {}
+    for code, name, flag in rows:
+        if code not in seen:
+            seen[code] = {'code': code, 'name': name or code, 'flag': flag or ''}
+    # Any code with ranked hunters but no labelled profile still gets an entry -- otherwise selecting it
+    # from a URL would validate but show a blank picker.
+    for code in codes:
+        seen.setdefault(code, {'code': code, 'name': code, 'flag': ''})
+    return sorted(seen.values(), key=lambda c: c['name'].lower())
+
+
 def active_countries():
-    """Country codes with at least one ranked profile, for the country picker.
+    """Country codes with at least one ranked profile on ANY board, for the country picker.
 
     Replaces the Redis `lb:xp:country:index` set, which had to be maintained alongside every per-country
-    sorted set. Here it is a DISTINCT over the indexed column that already exists.
+    sorted set. Here it is a DISTINCT over indexed columns that already exist.
+
+    The UNION matters: the two economies are sealed apart, so a hunter can have Career XP and no badge
+    standing at all. Reading only ProfileBadgeStanding left their country missing from the picker, which
+    made it unselectable on the Career board they DO appear on -- the filter would have been quietly
+    incomplete for exactly the surface it was added to serve.
     """
-    return sorted(
+    codes = set(
         ProfileBadgeStanding.objects.exclude(country_code='')
         .values_list('country_code', flat=True).distinct()
     )
+    codes |= set(
+        ProfileCareerStanding.objects.exclude(country_code='')
+        .values_list('country_code', flat=True).distinct()
+    )
+    return sorted(codes)
 
 
 # ------------------------------------------------------------------ global XP ----------------------------

@@ -378,7 +378,7 @@ Each step leaves the site working.
 | 1 | ✅ Materialized columns + country denorm + indexes (0297/0298) | Nothing user-visible |
 | 2 | ✅ Lane B read swap; PROGRESS boards deleted from Redis entirely. Earners/XP/country reads remain, blocked on the badge cutover repointing their legacy consumers. **Still to pin: the recompute trigger -- badge-game trophy arrival, not badge state change (§3)** | Same pages, new backend |
 | 3 | ✅ Badge Points rename (labels) | Vocabulary fixed before new surfaces spread it |
-| 4 | Global Boards landing rebuilt (3 tabs, country filter) | The hub landing |
+| 4 | ✅ Global Boards landing rebuilt (3 tabs, country filter, `.lb-*` component) | The hub landing |
 | 5 | Badge detail Ranks panel; retire `/leaderboards/badges/<slug>/` + repoint 2 redirects | Boards move to entities |
 | 6 | Badge Boards + Game Boards directories | Discovery, on shipped machinery |
 | 7 | `/jobs/` + `/jobs/<slug>/` (Contracts + Ranks tabs) | New Browse surface |
