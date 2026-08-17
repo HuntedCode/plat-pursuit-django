@@ -239,7 +239,7 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     if zeroed:
         SeriesBadgeStanding.objects.filter(profile_id=profile_id, series_slug__in=zeroed).delete()
 
-    total = SeriesBadgeStanding.objects.filter(profile_id=profile_id).aggregate(t=Sum('xp'))['t'] or 0
+    total = _live_standings(profile_id).aggregate(t=Sum('xp'))['t'] or 0
     if total > 0:
         badges_total, badges_by_edition = badges_held_counts(profile_id)
         _upsert(ProfileBadgeStanding, {'profile_id': profile_id},
@@ -251,6 +251,29 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
         # holding a hunter the other has dropped is the kind of disagreement nobody would think to check.
         ProfileBadgeStanding.objects.filter(profile_id=profile_id).delete()
         ProfileEditionStanding.objects.filter(profile_id=profile_id).delete()
+
+
+def _live_standings(profile_id):
+    """The profile's SeriesBadgeStanding rows for series that still have a LIVE edition.
+
+    Both profile-wide sums go through here, and that liveness gate is the point. `recompute_standing`
+    only ever DELETES standings for the series it was handed, and every caller hands it live badges --
+    so when a whole series goes dormant, or its `BadgeSeries` is deleted (`series_slug` is a bare
+    SlugField, not an FK, so nothing cascades), its row survives forever. Summing it left XP from badges
+    nobody can see in every holder's Badge Points total, permanently, with no self-heal: the nightly
+    `evaluate_badges --all` is also live-scoped, so it never revisits the orphan either.
+
+    The dormant rows are left in place rather than deleted. Deleting them here would be wrong -- this
+    function is called on a scoped recompute that has no business ruling on series it did not evaluate --
+    and a dormant series is often dormant temporarily. Made inert instead: the row keeps its history and
+    contributes nothing while its badges are unreleased, then counts again the moment one goes live.
+
+    One extra subquery, bounded by catalogue size.
+    """
+    from trophies.models import BadgeSeries, SeriesBadgeStanding
+
+    live_slugs = BadgeSeries.objects.filter(group_badges__is_live=True).values_list('series_slug', flat=True)
+    return SeriesBadgeStanding.objects.filter(profile_id=profile_id, series_slug__in=live_slugs)
 
 
 def _write_edition_standings(profile_id, country, badges_by_edition):
@@ -270,7 +293,7 @@ def _write_edition_standings(profile_id, country, badges_by_edition):
     from trophies.models import ProfileEditionStanding, SeriesBadgeStanding
 
     xp_by_edition = defaultdict(int)
-    for blob in SeriesBadgeStanding.objects.filter(profile_id=profile_id).values_list('group_xp', flat=True):
+    for blob in _live_standings(profile_id).values_list('group_xp', flat=True):
         for key, xp in (blob or {}).items():
             xp_by_edition[key] += xp
 

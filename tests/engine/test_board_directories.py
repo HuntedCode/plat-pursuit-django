@@ -31,9 +31,14 @@ def _standing(slug, *, bp, on, name=None):
     return p
 
 
-def test_the_preview_is_one_query_however_many_entities(client):
-    """The whole reason a window function is used instead of a loop. Asserted as "does not scale", so it
-    survives a change of implementation but not a change of shape."""
+def test_the_preview_reads_once_per_entity_on_the_page():
+    """One index-limited read per entity requested -- NOT one query total.
+
+    The single-query version (a `ROW_NUMBER()` window) was measured 1,000x slower in the 2026-08 audit,
+    because a window's LIMIT is applied after every row of every partition has been read and sorted. The
+    property worth pinning is that the reads track the entities ASKED FOR (a page of cards), so nothing
+    grows with the size of the standing table.
+    """
     few = ['s0', 's1', 's2']
     for slug in few:
         _standing(slug, bp=5000, on=dt.date(2024, 1, 1))
@@ -46,9 +51,9 @@ def test_the_preview_is_one_query_however_many_entities(client):
     with CaptureQueriesContext(connection) as large:
         lb.series_board_previews(many)
 
-    assert len(small.captured_queries) == 1, 'the preview is not a single query'
-    assert len(large.captured_queries) == 1, (
-        f'{len(large.captured_queries)} queries for 20 series -- the preview is querying per entity'
+    assert len(small.captured_queries) == len(few)
+    assert len(large.captured_queries) == len(many), (
+        'the preview should read once per requested entity; a different count means the shape changed'
     )
 
 
@@ -162,9 +167,21 @@ def test_a_dormant_series_is_not_listed(client, settings):
     assert 'Dormant Series' not in body
 
 
-def test_the_directory_page_is_a_constant_number_of_queries(client):
-    """The whole point of the windowed preview. A per-card board read would compound under infinite
-    scroll: 24 cards means 24 reads, and the next page 24 more."""
+def test_the_directory_previews_scale_with_the_PAGE_not_the_catalogue(client):
+    """The invariant, restated after a 2026-08 performance audit measured the old one backwards.
+
+    This used to assert a CONSTANT query count, because the previews were one
+    `ROW_NUMBER() OVER (PARTITION BY ...)` query and "one query beats N" is normally the right instinct.
+    It is wrong here, and badly: Postgres cannot push a LIMIT into a window partition, so `WHERE rn <= 5`
+    runs AFTER the window has read and sorted EVERY row of EVERY partition. Measured on realistic data
+    the single query took 1,279 ms with a 30 MB external sort spilling to disk, against 1.6 ms for the
+    per-partition reads -- and the "most entrants" sort puts the biggest partitions on page one, so that
+    is the typical case rather than the tail.
+
+    So the property that actually matters is not "one query"; it is that the work is bounded by what is
+    ON THE PAGE. A page of 24 cards issues ~24 index-limited reads whether the catalogue holds 30 series
+    or 3,000, and each read stops after 5 rows instead of scanning a table.
+    """
     from django.urls import reverse
     for i in range(2):
         _series_with_board(f'few{i}', f'Few {i}', 3)
@@ -176,8 +193,29 @@ def test_the_directory_page_is_a_constant_number_of_queries(client):
     with CaptureQueriesContext(connection) as large:
         client.get(reverse('badge_boards'))
 
-    assert len(large.captured_queries) == len(small.captured_queries), (
-        f'{len(small.captured_queries)} queries for 2 boards but {len(large.captured_queries)} for 16'
+    # Both pages fit inside one page of cards, so both do the same bounded work.
+    assert len(large.captured_queries) <= len(small.captured_queries) + 14, (
+        f'{len(small.captured_queries)} queries for 2 boards but {len(large.captured_queries)} for 16 -- '
+        f'that is more than one read per additional card, so something scales with the catalogue'
+    )
+
+
+def test_a_preview_read_is_limited_not_a_partition_scan():
+    """Each per-partition read must carry its own LIMIT. Without it the "N small seeks" reasoning above
+    collapses into N table scans, which is worse than the window function it replaced."""
+    from trophies.services import badge_leaderboards as lb
+
+    for i in range(3):
+        _series_with_board(f'lim{i}', f'Lim {i}', 3)
+    slugs = [f'lim{i}' for i in range(3)]
+
+    with CaptureQueriesContext(connection) as ctx:
+        lb.series_board_previews(slugs, n=5)
+
+    preview_sql = [q['sql'] for q in ctx.captured_queries if 'seriesbadgestanding' in q['sql'].lower()]
+    assert preview_sql, 'no preview query ran at all'
+    assert all('LIMIT 5' in sql for sql in preview_sql), (
+        'a preview read has no LIMIT, so it scans the whole partition'
     )
 
 
