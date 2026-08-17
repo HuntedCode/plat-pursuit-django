@@ -38,10 +38,45 @@ from django.utils import timezone
 
 from core.services.site_heartbeat import get_cached_heartbeat
 from trophies.services import (
-    career_service, collection_service, contract_service, dashboard_service,
+    career_service, collection_service, contract_service, profile_stats_service,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _recent_platinums(profile, settings=None):
+    """Last N platinums earned, with cover art and rarity -- the Home recent strip.
+
+    Moved here from `dashboard_service` when the dashboard was retired; Home is its only caller.
+
+    NOTE: `showcase_service.provide_recent_platinums` runs the same query for the showcase registry, with a
+    different result shape. Two implementations of one idea is how they drift -- worth converging, but that
+    is its own change with its own risk, so it is recorded rather than done here.
+    """
+    from trophies.models import EarnedTrophy
+
+    settings = settings or {}
+    limit = settings.get('limit', 6)
+    plats = (
+        EarnedTrophy.objects
+        .filter(profile=profile, trophy__trophy_type='platinum', earned=True)
+        .select_related('trophy__game__concept', 'trophy__game__concept__igdb_match')
+        .order_by('-earned_date_time')[:limit]
+    )
+
+    platinums = []
+    for et in plats:
+        game = et.trophy.game
+        concept = getattr(game, 'concept', None) if game else None
+        platinums.append({
+            'game_name': concept.unified_title if concept else game.title_name if game else 'Unknown',
+            'icon_url': concept.cover_url if concept else (game.title_image if game else ''),
+            'earned_date': et.earned_date_time,
+            'earn_rate': et.trophy.trophy_earn_rate,
+            'np_communication_id': game.np_communication_id if game else None,
+        })
+
+    return {'platinums': platinums}
 
 
 # How many recent platinums feed the auto-scrolling marquee. Each is a game-cover image
@@ -79,7 +114,7 @@ def _build_glances(profile):
             'closest_badge', profile, lambda: collection_service.closest_badge(profile), None),
         'snapshot': _safe(
             'snapshot', profile,
-            lambda: dashboard_service.provide_trophy_snapshot(profile), None),
+            lambda: profile_stats_service.trophy_snapshot(profile), None),
     }
 
 
@@ -192,7 +227,7 @@ def build_home_context(profile):
         'community': _safe('community', profile, lambda: _build_community(get_cached_heartbeat()), None),
         'recent': _safe(
             'recent', profile,
-            lambda: dashboard_service.provide_recent_platinums(profile, {'limit': RECENT_LIMIT})
+            lambda: _recent_platinums(profile, {'limit': RECENT_LIMIT})
             .get('platinums', []), []),
         # The trophy-snapshot card bridges gamification-first home -> trophy-data profile.
         'profile_url': _safe(

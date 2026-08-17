@@ -9,7 +9,7 @@ safe) and the contract jobs are resolved in one batched query.
 """
 import logging
 
-from trophies.services import career_service, dashboard_service
+from trophies.services import career_service, profile_stats_service
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ def build_pursuer_card(profile, *, career_ctx=None, showcase_limit=6):
     hero = (career_ctx or {}).get('hero') or {}
     if not hero.get('pursuer_rank'):
         return None
-    snap = dashboard_service.provide_trophy_snapshot(profile)
+    snap = profile_stats_service.trophy_snapshot(profile)
     rarest = _platinums(profile, showcase_limit, recent=False)
     # One extra recent platinum beyond what's shown: the forge's slot-in beat renders the previous
     # top-6, then shifts them right (this +1 slides off the end) as the new platinum enters at the

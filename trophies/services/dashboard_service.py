@@ -50,57 +50,6 @@ SIZE_LIMITS = {
 # Data Providers
 # ---------------------------------------------------------------------------
 
-def provide_trophy_snapshot(profile):
-    """Trophy collection summary. Zero additional queries (all on Profile)."""
-    total_earned = profile.total_trophies  # total_trophies is already the earned count
-    total_all = total_earned + profile.total_unearned
-    return {
-        'total_plats': profile.total_plats,
-        'total_golds': profile.total_golds,
-        'total_silvers': profile.total_silvers,
-        'total_bronzes': profile.total_bronzes,
-        'total_trophies': total_all,
-        'total_earned': total_earned,
-        'total_unearned': profile.total_unearned,
-        'total_games': profile.total_games,
-        'total_completes': profile.total_completes,
-        'total_hiddens': profile.total_hiddens,
-        'avg_progress': profile.avg_progress,
-        'trophy_level': profile.trophy_level,
-        'tier': profile.tier,
-        'is_plus': profile.is_plus,
-        'earn_rate': round(total_earned / total_all * 100, 1) if total_all else 0,
-    }
-
-
-def provide_recent_platinums(profile, settings=None):
-    """Last N platinum trophies earned with game info and rarity."""
-    from trophies.models import EarnedTrophy
-
-    settings = settings or {}
-    limit = settings.get('limit', 6)
-    plats = (
-        EarnedTrophy.objects
-        .filter(profile=profile, trophy__trophy_type='platinum', earned=True)
-        .select_related('trophy__game__concept', 'trophy__game__concept__igdb_match')
-        .order_by('-earned_date_time')[:limit]
-    )
-
-    platinums = []
-    for et in plats:
-        game = et.trophy.game
-        concept = getattr(game, 'concept', None) if game else None
-        platinums.append({
-            'game_name': concept.unified_title if concept else game.title_name if game else 'Unknown',
-            'icon_url': concept.cover_url if concept else (game.title_image if game else ''),
-            'earned_date': et.earned_date_time,
-            'earn_rate': et.trophy.trophy_earn_rate,
-            'np_communication_id': game.np_communication_id if game else None,
-        })
-
-    return {'platinums': platinums}
-
-
 def provide_recent_activity(profile, settings=None):
     """Trophy-focused activity feed with grouping by game + day.
 
@@ -4136,22 +4085,6 @@ def provide_badge_visualizations(profile, settings=None):
 
 DASHBOARD_MODULES = [
     {
-        'slug': 'trophy_snapshot',
-        'name': 'Trophy Snapshot',
-        'description': 'Your trophy collection at a glance: platinums, golds, completion rate, and more.',
-        'category': 'at_a_glance',
-        'template': 'trophies/partials/dashboard/trophy_snapshot.html',
-        'provider': provide_trophy_snapshot,
-        'requires_premium': False,
-        'load_strategy': 'server',
-        'default_order': 1,  # at_a_glance #1
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 0,
-        'default_size': 'medium',
-        'allowed_sizes': ['small', 'medium', 'large'],
-    },
-    {
         'slug': 'recent_activity',
         'name': 'Recent Activity',
         'description': 'Your latest trophy earns and badge awards in one feed.',
@@ -4165,25 +4098,6 @@ DASHBOARD_MODULES = [
         'configurable_settings': [
             {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 8,
              'options': [{'value': 5, 'label': '5'}, {'value': 8, 'label': '8'}, {'value': 12, 'label': '12'}]},
-        ],
-        'cache_ttl': 300,
-        'default_size': 'medium',
-        'allowed_sizes': ['small', 'medium', 'large'],
-    },
-    {
-        'slug': 'recent_platinums',
-        'name': 'Recent Platinums',
-        'description': 'Your latest platinum conquests with rarity and earn dates.',
-        'category': 'at_a_glance',
-        'template': 'trophies/partials/dashboard/recent_platinums.html',
-        'provider': provide_recent_platinums,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 3,  # at_a_glance #3
-        'default_settings': {'limit': 6},
-        'configurable_settings': [
-            {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
-             'options': [{'value': 3, 'label': '3'}, {'value': 6, 'label': '6'}, {'value': 10, 'label': '10'}]},
         ],
         'cache_ttl': 300,
         'default_size': 'medium',
