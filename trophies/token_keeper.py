@@ -1554,14 +1554,6 @@ class TokenKeeper:
             invalidate_dashboard_cache(profile_id)
 
             # Re-render forum signature if enabled (SVG only: fast, no Playwright)
-            try:
-                from trophies.models import ProfileCardSettings
-                if ProfileCardSettings.objects.filter(profile_id=profile_id, public_sig_enabled=True).exists():
-                    from core.services.profile_card_renderer import render_sig_svg
-                    render_sig_svg(profile)
-                    logger.debug(f"[profile {profile_id}] forum sig re-rendered")
-            except Exception:
-                logger.exception(f"[profile {profile_id}] forum sig render failed")
 
             # (job-worker bookend logs DONE; trailing narration line dropped)
         except PSNOutageError:

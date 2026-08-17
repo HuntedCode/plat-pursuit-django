@@ -257,21 +257,6 @@ def country_mirrored_standings():
             SeriesBadgeStanding, ProfileJobXP)
 
 
-@receiver(post_save, sender=Profile, dispatch_uid="handle_profile_premium_downgrade")
-def _handle_profile_premium_downgrade(sender, instance, created, **kwargs):
-    """Deactivate premium-only showcases when user_is_premium goes True -> False."""
-    if created:
-        return
-    old = getattr(instance, '_old_user_is_premium', None)
-    if old is True and instance.user_is_premium is False:
-        from trophies.services.showcase_service import ProfileShowcaseService
-        try:
-            ProfileShowcaseService.handle_premium_downgrade(instance)
-        except Exception:
-            logger.exception(
-                f"Failed to deactivate showcases on premium downgrade for profile {instance.pk}"
-            )
-
 @receiver(post_save, sender=UserBadge, dispatch_uid="update_badge_earned_count")
 def update_badge_earned_count_on_save(sender, instance, created, **kwargs):
     if created:

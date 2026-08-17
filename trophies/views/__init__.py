@@ -7,7 +7,7 @@ Re-exports all view classes for backward compatibility with existing URL configu
 from .game_views import GamesListView, GameDetailView, GuideListView, RecentlyAddedView, RandomGameView
 from .game_leaderboard_views import GameLeaderboardView
 from .trophy_views import TrophyCaseView, ToggleSelectionView
-from .profile_views import ProfilesListView, ProfileDetailView, ProfileDayView, LinkPSNView, ProfileVerifyView, ProfileEditorView
+from .profile_views import ProfilesListView, ProfileDetailView, ProfileDayView, LinkPSNView, ProfileVerifyView
 from .badge_views import BadgeHowItWorksView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, BadgeRanksPanelView, BadgeBoardsView, GameBoardsView, JobBoardsView, OverallBadgeLeaderboardsView
 # Checklist views removed during roadmap migration (DB tables retained)
 from .sync_views import ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView
@@ -24,7 +24,7 @@ from .dashboard_views import DashboardView
 from .title_views import MyTitlesView
 from .platinum_grid_views import PlatinumGridView
 from .roadmap_views import RoadmapDetailView, RoadmapEditorView
-from .shareables_views import PlatCardsView, MyProfileCardView
+from .shareables_views import PlatCardsView
 from .career_views import CareerView, JobsBrowseView, JobDetailView, ContractsResultsView, ContractModalView, ContractModalPreviewView
 from .collection_views import CollectionView, CollectionBadgeModalView
 from .stats_views import MyStatsView
@@ -38,7 +38,7 @@ __all__ = [
     # Trophy views
     'TrophyCaseView', 'ToggleSelectionView',
     # Profile views
-    'ProfilesListView', 'ProfileDetailView', 'ProfileDayView', 'LinkPSNView', 'ProfileVerifyView', 'ProfileEditorView',
+    'ProfilesListView', 'ProfileDetailView', 'ProfileDayView', 'LinkPSNView', 'ProfileVerifyView',
     # Badge views
     'BadgeHowItWorksView', 'BadgeListView', 'BadgeDetailView', 'BadgeQuickPeekView', 'BadgeProgressPeekView', 'GroupBadgeInspectView', 'BadgeRanksPanelView', 'BadgeBoardsView', 'GameBoardsView', 'JobBoardsView', 'OverallBadgeLeaderboardsView',
     # Checklist views (removed, DB tables retained)
@@ -63,7 +63,7 @@ __all__ = [
     # Roadmap views
     'RoadmapDetailView', 'RoadmapEditorView',
     # Shareables views
-    'PlatCardsView', 'MyProfileCardView',
+    'PlatCardsView',
     # The Lab view
     'CareerView', 'JobsBrowseView', 'JobDetailView', 'ContractsResultsView', 'ContractModalView', 'ContractModalPreviewView',
     # Collection album view

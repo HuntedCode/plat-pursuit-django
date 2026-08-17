@@ -44,18 +44,14 @@ def _build_context(profile, user, monkeypatch):
     assertions are about the data layer alone and cannot pass by accident on a template
     that hides its output.
 
-    The showcase provider is still monkeypatched even though the view no longer calls it:
-    that is what makes "it does not run" an assertion rather than an absence.
+    The showcase system was DELETED in 2026-08 (profile customization removed rather than parked), so
+    there is no provider left to monkeypatch -- `test_profile_banner_retired` owns the assertion that it
+    stayed gone. What remains here is the timeline provider, which is the other unbounded thing this file
+    was written for.
     """
     calls = []
 
-    from trophies.services.showcase_service import ProfileShowcaseService
 
-    monkeypatch.setattr(
-        ProfileShowcaseService,
-        'get_rendered_showcases',
-        staticmethod(lambda p: calls.append('showcases') or []),
-    )
 
     request = RequestFactory().get(f'/community/profiles/{profile.psn_username}/')
     request.user = user
@@ -87,7 +83,6 @@ def test_neither_retired_provider_runs_for_any_viewer(monkeypatch, anonymous):
     # provider was skipped. `timeline_events` is never SET by the view any more, so a `.get()` on it
     # returns None whatever the code does -- coverage-shaped, but unable to fail. What actually pins
     # the timeline's removal is `test_the_timeline_is_gone_not_merely_unrendered` below.
-    assert not context.get('rendered_showcases')
 
 
 def test_the_timeline_is_gone_not_merely_unrendered():
@@ -117,21 +112,6 @@ def test_the_game_detail_timeline_was_not_caught_in_the_crossfire():
     from trophies.views.game_views import GameDetailView
 
     assert hasattr(GameDetailView, '_build_timeline_events')
-
-
-def test_rarest_trophies_showcase_type_is_gone():
-    """The unbounded provider must stay deleted, not merely unregistered. It ranked the
-    profile's whole earned set on a joined column; re-adding it re-adds the outage.
-
-    Still load-bearing with the showcases hidden: hiding parked the SURFACE, and a rebuild that reads
-    this registry must not find the type waiting in it."""
-    from trophies.models import ProfileShowcase
-    from trophies.services import showcase_service
-
-    assert not hasattr(ProfileShowcase, 'SHOWCASE_RAREST')
-    assert 'rarest_trophies' not in dict(ProfileShowcase.SHOWCASE_TYPES)
-    assert 'rarest_trophies' not in showcase_service.SHOWCASE_REGISTRY
-    assert not hasattr(showcase_service, 'provide_rarest_trophies')
 
 
 def test_the_header_stats_are_free_and_ungated(monkeypatch):

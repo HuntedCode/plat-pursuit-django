@@ -636,48 +636,6 @@ def provide_library_health_alerts(profile, settings=None):
     }
 
 
-def provide_profile_badge_showcase_editor(profile):
-    """Premium dedicated editor for the 5-slot ProfileBadgeShowcase.
-
-    Surfaces only the showcase concern (no share-card mode toggle), with
-    drag-reorder support persisted via /api/v1/badges/showcase/reorder/.
-    """
-    from trophies.models import ProfileBadgeShowcase
-
-    showcase_qs = (
-        ProfileBadgeShowcase.objects
-        .filter(profile=profile)
-        .select_related('badge', 'badge__base_badge')
-        .order_by('display_order')
-    )
-
-    slots = []
-    TIER_NAMES = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
-    for sc in showcase_qs:
-        badge = sc.badge
-        try:
-            layers = badge.get_badge_layers()
-            image_url = layers.get('main', '')
-        except Exception:
-            image_url = ''
-        slots.append({
-            'badge_id': badge.id,
-            'name': badge.name,
-            'series': getattr(badge, 'series_name', '') or getattr(badge, 'series_slug', ''),
-            'tier': badge.tier,
-            'tier_name': TIER_NAMES.get(badge.tier, ''),
-            'image_url': image_url,
-            'display_order': sc.display_order,
-        })
-
-    return {
-        'slots': slots,
-        'used_count': len(slots),
-        'max_slots': 5,
-        'has_data': True,
-    }
-
-
 def provide_vr_trophy_hunter(profile):
     """VR-specific progress card. Always renders; empty state encourages VR adoption."""
     from trophies.models import ProfileGame
@@ -4533,22 +4491,6 @@ DASHBOARD_MODULES = [
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 1800,
-        'default_size': 'medium',
-        'allowed_sizes': ['medium', 'large'],
-    },
-    {
-        'slug': 'profile_badge_showcase_editor',
-        'name': 'Profile Showcase',
-        'description': 'Drag-reorder your 5-slot profile badge showcase. Manage the badges that appear on your public profile.',
-        'category': 'premium',
-        'template': 'trophies/partials/dashboard/profile_badge_showcase_editor.html',
-        'provider': provide_profile_badge_showcase_editor,
-        'requires_premium': True,
-        'load_strategy': 'lazy',
-        'default_order': 9,  # premium #9
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 0,
         'default_size': 'medium',
         'allowed_sizes': ['medium', 'large'],
     },

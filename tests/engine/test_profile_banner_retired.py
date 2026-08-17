@@ -12,7 +12,7 @@ import pytest
 from django.core.exceptions import FieldDoesNotExist
 
 from tests.factories import ProfileFactory
-from trophies.models import Profile, ProfileShowcase
+from trophies.models import Profile
 
 pytestmark = pytest.mark.django_db
 
@@ -68,39 +68,44 @@ def test_the_settings_api_no_longer_accepts_banner_settings():
         assert f'elif setting == {setting}' not in src, f'the {setting} branch survived'
 
 
-# ── The challenge showcase ────────────────────────────────────────────────────────────────────────
+# ── The showcase system ───────────────────────────────────────────────────────────────────────────
 
-def test_the_challenge_showcase_type_is_retired():
-    """Challenges are retired, and this type was ALREADY unrenderable -- offered as a valid choice while
-    never registered in SHOWCASE_REGISTRY, so a stored row resolved to no descriptor at all."""
-    assert not hasattr(ProfileShowcase, 'SHOWCASE_CHALLENGE')
-    assert 'challenge_showcase' not in dict(ProfileShowcase.SHOWCASE_TYPES)
+def test_the_whole_showcase_system_is_gone():
+    """Profile customization was REMOVED in 2026-08, not parked.
 
+    It was hidden first, behind a comment in `profile_detail.html` that said explicitly not to delete it --
+    "every row is a choice a hunter made" -- on the expectation that the surface would come back. The
+    profile was then rebuilt without it, so the rows stopped being a choice anyone could act on and the
+    door stopped leading anywhere.
 
-def test_every_offered_showcase_type_can_actually_render():
-    """The invariant the challenge showcase broke: a type the model offers must have a descriptor, or
-    `get_descriptor` raises for a row the user was allowed to create."""
-    from trophies.services.showcase_service import SHOWCASE_REGISTRY
+    What this pins is the part that rots: a removed feature leaving its plumbing behind. Six showcase
+    types, a registry, a service, an editor view, a parked API and two tables all went together, so the
+    check is that none of them came back one import at a time.
+    """
+    from django.apps import apps
 
-    offered = {value for value, _ in ProfileShowcase.SHOWCASE_TYPES}
-
-    assert offered == set(SHOWCASE_REGISTRY), (
-        f'offered but unrenderable: {sorted(offered - set(SHOWCASE_REGISTRY))}; '
-        f'renderable but not offered: {sorted(set(SHOWCASE_REGISTRY) - offered)}'
+    model_names = {m.__name__ for m in apps.get_app_config('trophies').get_models()}
+    assert not {'ProfileShowcase', 'ProfileBadgeShowcase'} & model_names, (
+        'a showcase model is back; the tables were dropped in 0303'
     )
 
+    for gone in (
+        ROOT / 'trophies' / 'services' / 'showcase_service.py',
+        ROOT / 'api' / 'profile_showcase_views.py',
+        ROOT / 'templates' / 'trophies' / 'profile_editor.html',
+        ROOT / 'static' / 'js' / 'profile-editor.js',
+        ROOT / 'templates' / 'trophies' / 'partials' / 'profile_showcases',
+        ROOT / 'templates' / 'trophies' / 'partials' / 'profile_detail' / 'profile_showcases_section.html',
+    ):
+        assert not gone.exists(), f'{gone.name} is back'
 
-def test_the_migration_deletes_the_retired_rows_not_just_the_choices():
-    """Django does not enforce `choices` in the database, so narrowing them leaves every existing row
-    intact and unresolvable. Both halves have to ship together -- and the data half must run FIRST, while
-    the value is still legal."""
-    src = (ROOT / 'trophies' / 'migrations' / '0292_drop_challenge_showcase.py').read_text(encoding='utf-8')
-    # Scoped to the operations list: both names are also mentioned in the helper's docstring above it, so
-    # comparing first-occurrence indexes over the whole file compares prose against code.
-    ops = src[src.index('operations = ['):]
 
-    assert 'RunPython' in ops, 'the retired rows are never deleted'
-    assert ops.index('RunPython') < ops.index('AlterField'), 'the rows are deleted after the choices narrow'
+def test_the_profile_page_no_longer_reserves_a_slot_for_them():
+    """The hidden band left a `{% comment %}` block holding its place. A removed feature keeping a
+    placeholder is how the next reader concludes it is coming back."""
+    profile = (ROOT / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')
+    assert 'rendered_showcases' not in profile
+    assert 'SHOWCASES sat here' not in profile
 
 
 # ── The stray Pursuer Card scripts ────────────────────────────────────────────────────────────────

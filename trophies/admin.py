@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge
 
 
 # Register your models here.
@@ -1669,39 +1669,6 @@ class UserBadgeAdmin(admin.ModelAdmin):
     search_fields = ['profile__psn_username', 'profile__display_psn_username', 'badge__name', 'badge__series_slug']
     raw_id_fields = ('profile', 'badge')
     date_hierarchy = 'earned_at'
-
-@admin.register(ProfileBadgeShowcase)
-class ProfileBadgeShowcaseAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'badge', 'display_order', 'created_at']
-    list_select_related = ('profile', 'badge')
-    list_filter = ['display_order']
-    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'badge__name']
-    raw_id_fields = ('profile', 'badge')
-    date_hierarchy = 'created_at'
-
-
-@admin.register(ProfileShowcase)
-class ProfileShowcaseAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'showcase_type', 'sort_order', 'is_active', 'updated_at']
-    list_select_related = ('profile',)
-    list_filter = ['showcase_type', 'is_active']
-    search_fields = ['profile__psn_username', 'profile__display_psn_username']
-    raw_id_fields = ('profile',)
-    readonly_fields = ('created_at', 'updated_at')
-    fieldsets = (
-        (None, {
-            'fields': ('profile', 'showcase_type', 'sort_order', 'is_active'),
-        }),
-        ('Configuration', {
-            'fields': ('config',),
-            'description': 'Type-specific JSON config (e.g. selected item IDs). '
-                           'Leave empty for automatic showcases.',
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',),
-        }),
-    )
 
 @admin.register(UserBadgeProgress)
 class UserBadgeProgressAdmin(admin.ModelAdmin):

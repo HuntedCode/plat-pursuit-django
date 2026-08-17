@@ -49,9 +49,8 @@ def _recent_platinums(profile, settings=None):
 
     Moved here from `dashboard_service` when the dashboard was retired; Home is its only caller.
 
-    NOTE: `showcase_service.provide_recent_platinums` runs the same query for the showcase registry, with a
-    different result shape. Two implementations of one idea is how they drift -- worth converging, but that
-    is its own change with its own risk, so it is recorded rather than done here.
+    It briefly had a twin in `showcase_service`, which served the showcase registry with a different result
+    shape. That whole system was deleted with profile customization, so this is now the only one.
     """
     from trophies.models import EarnedTrophy
 

@@ -66,11 +66,6 @@ from .roadmap_note_views import (
     RoadmapNoteListCreateView, RoadmapNoteDetailView,
     RoadmapNoteResolveView, RoadmapNoteMarkReadView,
 )
-from .profile_card_views import (
-    ProfileCardHTMLView, ProfileCardPNGView,
-    ProfileCardSettingsView, ProfileCardRegenerateTokenView,
-    SetDisplayedBadgeView, ToggleShowcaseBadgeView, ReorderShowcaseBadgesView,
-)
 from .community_stats_views import (
     CommunityStatsDayView, CommunityStatsTodayView, CommunityStatsRecordsView,
 )
@@ -229,15 +224,8 @@ urlpatterns = [
     path('user/quick-settings/', UpdateQuickSettingsAPIView.as_view(), name='user-quick-settings'),
 
     # Profile Card endpoints
-    path('profile-card/html/', ProfileCardHTMLView.as_view(), name='profile-card-html'),
-    path('profile-card/png/', ProfileCardPNGView.as_view(), name='profile-card-png'),
-    path('profile-card/settings/', ProfileCardSettingsView.as_view(), name='profile-card-settings'),
-    path('profile-card/regenerate-token/', ProfileCardRegenerateTokenView.as_view(), name='profile-card-regenerate-token'),
 
     # Badge display selection
-    path('badges/displayed/', SetDisplayedBadgeView.as_view(), name='set-displayed-badge'),
-    path('badges/showcase/', ToggleShowcaseBadgeView.as_view(), name='toggle-showcase-badge'),
-    path('badges/showcase/reorder/', ReorderShowcaseBadgesView.as_view(), name='reorder-showcase-badges'),
 
     # Profile Showcase endpoints: WITHDRAWN 2026-08 with the rest of the customization surface. The views
     # are parked in api/profile_showcase_views.py -- restoring them is putting these four lines and the
