@@ -197,7 +197,7 @@ Spec: [leaderboards-rebuild.md](leaderboards-rebuild.md). Migrations `0297`, `02
       backfill and it is easy to miss because nothing errors without it. The migrations add
       `trophies_*`, `advanced_at` and `country_code` with defaults, so every existing standing starts at
       **zero trophies, a NULL advance date and no country**. Until a full evaluation rewrites them:
-      Global Progress ranks everyone equal-and-empty; the per-series board loses its tiebreak entirely,
+      Badge Trophies ranks everyone equal-and-empty; the per-series board loses its tiebreak entirely,
       so each rung of chasers falls back to profile id; and every country slice returns nothing. The
       pages render perfectly throughout — they are simply wrong.
 - [ ] **Run `recompute_job_xp --all`** for the same reason on `ProfileCareerStanding`: without it the
@@ -211,3 +211,31 @@ Spec: [leaderboards-rebuild.md](leaderboards-rebuild.md). Migrations `0297`, `02
 - [ ] **Do NOT flush the `lb:*` Redis keys.** Earners, Badge Points and country sorted sets are still the
       live backend for `frame_service` (legacy badge frame) and `profile_card_service` + two dashboard
       modules. Only the four `lb:progress:*` keys are dead, and they will simply expire unused.
+
+---
+
+## Leaderboards: the edition filter + the Progress rename (2026-08)
+
+Spec: [leaderboards-rebuild.md](leaderboards-rebuild.md). Migration `0300`.
+
+- [ ] **`evaluate_badges --all` again, AFTER migrating.** `ProfileEditionStanding` is created empty and
+      `SeriesBadgeStanding.group_xp` defaults to `{}`, so until a full evaluation runs, **every edition
+      board is empty and reads as "nobody is on Legacy HD yet"**. Same failure shape as the backfill
+      above: the page is perfect, the answer is wrong. If the earlier `--all` has not run yet, one run
+      covers both.
+- [ ] **Check the picker actually offers both editions.** `active_editions()` requires BOTH `is_active` and
+      at least one live group badge, so an edition missing from the dropdown means one of those is off.
+      Both directions matter and only one is benign:
+      - `is_active=True, is_live=False` (seeded, unlaunched) -> absent. Deliberate: it could only ever
+        offer an empty board.
+      - `is_active=False, is_live=True` (deactivated, badges still live) -> also absent, and this is the
+        one that used to be a silent defect. The picker gated on `is_live` alone while the WRITE seam gates
+        on `is_active`, so the edition stayed selectable while its rows stopped being maintained and were
+        deleted on each re-sync: the board drained over days and finished at "Nobody is on Legacy HD yet",
+        a sentence about a config flag presented as a fact about hunters.
+- [ ] **Spot-check one hunter's edition figures against their all-editions row.** They will NOT sum, by
+      design — a cross-gen game counts in both editions. What to verify is that each edition is
+      *no larger than* the all-editions total.
+- [ ] **`?tab=progress` must still land on Badge Trophies.** The board key changed and the old one is
+      aliased; the links in the wild are bookmarks and Discord posts, which nobody will report as broken —
+      they will just quietly land on the default board.

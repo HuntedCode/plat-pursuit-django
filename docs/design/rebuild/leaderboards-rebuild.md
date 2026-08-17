@@ -202,9 +202,16 @@ Three explicit tabs, no ambiguity:
 
 | Tab | Source |
 |---|---|
-| **Progress** | Trophies across badge games, ranked PLATINUMS first with total as the tiebreak (see §3) |
+| **Badge Trophies** | Trophies across badge games, ranked PLATINUMS first with total as the tiebreak (see §3) |
 | **Badge Points** | `ProfileBadgeStanding.total_xp` |
 | **Career XP** | Gamification total (see §3) |
+
+> **Renamed 2026-08.** The first tab shipped as **Progress**, which named the STORE rather than what the
+> board ranks -- every other board on the site is named for its figure. Key `progress` -> `trophies`,
+> aliased in `LEGACY_TABS` alongside `xp` and `country`. The service functions moved with it
+> (`progress_rows`/`progress_rank` -> `badge_trophy_rows`/`badge_trophy_rank`); the `pbs_progress_idx`
+> index name did not, because renaming an index costs a migration on a large table to change a string only
+> a DBA reads.
 
 Do **not** merge into a single "total XP". The architecture forbids the economies mixing, and a merged
 number would be the one figure on the site that means nothing.
@@ -216,7 +223,7 @@ number would be the one figure on the site that means nothing.
 Everything here exists to make each board a single indexed range scan. Two new materialized columns, one
 denormalized column, and a set of composite indexes.
 
-### Global Progress — keep it, and materialize it
+### Badge Trophies (then called "Global Progress") — keep it, and materialize it
 
 **The dedupe question is already answered, and the intuition about it is inverted.** The current rebuild
 counts `EarnedTrophy` rows filtered by `trophy__game__in=games`, where `games` is a **subquery** of
@@ -279,12 +286,45 @@ board then gets a country slice as an index range scan, at the same speed as its
 | Store | Index |
 |---|---|
 | `ProfileBadgeStanding` | `(-trophies_platinum, -trophies_total)` + `(country_code, -total_xp)` + `(country_code, -trophies_platinum, -trophies_total)` |
+| `ProfileEditionStanding` | `(edition, -total_xp)` + `(edition, -plat, -total)` + both again with `country_code` between |
 | `SeriesBadgeStanding` | `(series_slug, country_code, -xp)` |
 | `ProfileJobXP` | `(job, country_code, -total_xp)` |
 | `ProfileGame` | own composite; mirrors `pg_game_leaderboard_idx` with `country_code` |
 
 Country is a **filter on a board, never a board of its own**. No per-country pages, no per-country URLs
 beyond a query parameter. This is the single decision that keeps the section's surface area finite.
+
+### Platform edition — the second filter (added 2026-08)
+
+Legacy HD and Ultra HD are different games; the XP model says so outright, accruing XP per GROUP BADGE
+rather than per series. So "who leads Legacy HD" is a real question the all-editions board cannot answer,
+and it gets the same treatment country did rather than a board of its own.
+
+**`ProfileEditionStanding`** — one row per (profile, platform group), carrying `total_xp` and the same
+`trophies_*` tally, with columns **named identically to `ProfileBadgeStanding`'s**. That is what makes the
+filter a STORE SWAP (`badge_store(edition)` returns a manager) rather than a branch through every query
+body. Indexed `(edition, ...board order)` and `(edition, country, ...board order)`, so the two filters
+compose and each is still a range scan.
+
+Applied to the two BADGE boards only. Career XP has no editions; a control that renders and changes
+nothing promises a slice that does not exist.
+
+Three decisions worth keeping:
+
+- **Per-edition XP is stored per SERIES** (`SeriesBadgeStanding.group_xp`, `{key: xp}`) and re-summed
+  across all the profile's series rows. `recompute_standing` may be scoped to a subset of series, so a
+  profile-wide figure written from the call's own results would silently halve every time one series was
+  re-run. Same rule the grand total already followed.
+- **The split is one grouped query**, `GROUP BY (title_platform, trophy_type)`, with games routed to
+  editions in Python by the same INTERSECTION rule `badge_engine._qualifies` uses. A filtered count per
+  edition looks free at two editions and becomes the cost model at six — and it would put the price of
+  seeding a new group on every profile's sync.
+- **An unknown edition key reads NOTHING**, not everything. Falling back to the all-editions store would
+  show the global board under an edition heading: a wrong answer wearing a right one's clothes.
+
+**Editions overlap and do not sum to the all-editions row.** A cross-gen game qualifies for both groups, so
+its trophies count toward both. Splitting them would make an edition's trophy count disagree with the
+badges that edition awards.
 
 **Full boards only — the directories carry no country facet.** It was considered (filter the directory,
 every card's slice becomes that country's) and rejected on caching: a directory cached per (page, sort) is
@@ -403,8 +443,20 @@ prerequisite to it.
 
 ## Gotchas and Pitfalls
 
-- **`IN (subquery)` is what dedupes Global Progress.** Anyone "fixing" it into a join through Stage will
+- **`IN (subquery)` is what dedupes the Badge Trophies board.** Anyone "fixing" it into a join through Stage will
   silently start double-counting trophies for games in multiple badges, and the number will look plausible.
+- **The per-edition figures do not sum to the all-editions row.** Cross-gen games count in both. The
+  all-editions total is READ from `ProfileBadgeStanding`, never added up from the editions.
+- **A profile-wide figure must be re-summed from every `SeriesBadgeStanding` row**, never from the results
+  of the recompute call, which may be scoped to one series.
+- **Any new store with a `country_code` mirror has to join `signals.country_mirrored_standings()`.**
+  Forgetting it does not error; it strands a relocated hunter under their old flag on that board alone.
+- **A board's `> 0` membership rule belongs in the row function, not only on the count.** An edition
+  standing survives on zero points when the hunter has trophies there but no cleared gating stage, so an
+  unfiltered read hands the last page rows the count never promised.
+- **Tab links are built in the VIEW, per target board.** A single shared querystring tail was the first
+  attempt and it handed Career an edition it ignores — so the link went one place and the rank shown beside
+  it was measured somewhere else.
 - **Retiring a URL *name* 500s its `RedirectView`s**, it does not 404 them. Repoint in the same change.
 - **The directories will want Browse Games' filter panel.** That is the convergence the thin-directory
   rule exists to prevent. Reuse the wall, not the facets.

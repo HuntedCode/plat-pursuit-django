@@ -240,8 +240,10 @@ During sync (bulk operations), the `bulk_gamification_update()` context manager 
 
 ### Leaderboard Calculation
 
-Leaderboards are **mid-migration (2026-08)**: the progress boards now read indexed Postgres columns
-(`ProfileBadgeStanding` / `SeriesBadgeStanding`) via `services/badge_leaderboards.py`, while earners,
+Leaderboards are **mid-migration (2026-08)**: Badge Trophies (formerly "Global Progress"), the merged
+per-series board, Career XP and the per-EDITION slices of the two badge boards now read indexed Postgres
+columns (`ProfileBadgeStanding` / `ProfileEditionStanding` / `SeriesBadgeStanding` /
+`ProfileCareerStanding`) via `services/badge_leaderboards.py`, while earners,
 Badge Points and country remain on Redis sorted sets until the badge cutover repoints their legacy
 consumers. See [Leaderboard System](leaderboard-system.md) for which board is on which backend, and
 [the rebuild plan](../design/rebuild/leaderboards-rebuild.md) for the sequencing.
@@ -299,7 +301,7 @@ The `post_save` and `post_delete` signals on UserBadge and UserBadgeProgress alw
 Both Badge and Milestone `earned_count` fields are updated via `F('earned_count') + 1` / `F('earned_count') - 1` to prevent race conditions when multiple workers award the same badge concurrently. Direct read-then-write would lose increments under concurrency.
 
 ### Leaderboard data is cached, not live
-The Postgres-backed boards (Global Progress, the per-series board, Career XP) read live indexed columns and cannot go empty or stale -- they are recomputed in the badge write seam on every evaluation. The Redis-backed remainder (earners, Badge Points, country) still depends on the `update_leaderboards` cron: if it fails or Redis is flushed, those boards show empty results until the next successful run.
+The Postgres-backed boards (Badge Trophies, the per-series board, Career XP) read live indexed columns and cannot go empty or stale -- they are recomputed in the badge write seam on every evaluation. The Redis-backed remainder (earners, Badge Points, country) still depends on the `update_leaderboards` cron: if it fails or Redis is flushed, those boards show empty results until the next successful run.
 
 ### `requires_all` vs `min_required` only matters for megamix
 For series, collection, developer, user, and genre badges, ALL non-zero qualifying stages must be complete regardless of the `requires_all` flag. The `min_required` field is only consulted when `badge_type='megamix'` and `requires_all=False`.

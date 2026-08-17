@@ -10,9 +10,20 @@ denormalized copy, so a renamed hunter reads correctly immediately) plus the boa
 {% endcomment %}
 <li class="lb-row{% if entry.rank <= 3 %} lb-row--podium lb-row--p{{ entry.rank }}{% endif %}">
     {% comment %} Rank as a plain figure, not a medal: only the top three get any treatment at all, and
-    they get it through the row's own edge rather than an icon competing with the avatar. {% endcomment %}
-    <span class="lb-row__rank pp-tally" aria-label="Rank {{ entry.rank }}">{{ entry.rank|intcomma }}</span>
+    they get it through the row's own edge rather than an icon competing with the avatar.
 
+    The word "Rank" is `sr-only` text rather than an `aria-label`. ARIA prohibits `aria-label` on a bare
+    `<span>` (it maps to `role=generic`), so it was either ignored -- leaving a naked number -- or, where
+    honoured, it REPLACED the visible text with an un-comma'd value: "Rank 1234" spoken over "1,234" shown.
+    {% endcomment %}
+    <span class="lb-row__rank pp-tally"><span class="sr-only">Rank </span>{{ entry.rank|intcomma }}</span>
+
+    {% comment %} The link is gated on there being a name to link to. `page()` promises that a row whose
+    profile vanished between the board read and the hydrate still RENDERS rather than being dropped (the
+    Redis design skipped them, leaving pages of 47 rows with correct numbering and invisible holes) -- but
+    `{% url %}` cannot reverse an empty username against `<str:psn_username>`, so honouring that promise
+    unconditionally raised NoReverseMatch and took the whole page down with a 500. {% endcomment %}
+    {% if entry.psn_username %}
     <a class="lb-row__who" href="{% url 'profile_detail' entry.psn_username %}">
         <span class="lb-row__av">
             {% if entry.avatar_url %}
@@ -24,18 +35,38 @@ denormalized copy, so a renamed hunter reads correctly immediately) plus the boa
         <span class="lb-row__names">
             <span class="lb-row__name">
                 {% if entry.flag %}<span class="lb-row__flag" aria-hidden="true">{{ entry.flag }}</span>{% endif %}
-                {{ entry.psn_username }}
-                {% if entry.is_premium %}<span class="lb-row__prem" title="Supporter">&#9670;</span>{% endif %}
+                {% comment %} The name gets its OWN element. `.lb-row__name` is a flex container, and
+                `text-overflow: ellipsis` on a flex container does nothing for its items -- a bare text node
+                becomes an anonymous flex item at min-content width, and a PSN ID has no spaces to break on,
+                so a long name was hard-clipped with no ellipsis and pushed the supporter mark out of the
+                row entirely. The truncation has to live on a block-level child. {% endcomment %}
+                <span class="lb-row__uname">{{ entry.psn_username }}</span>
+                {% comment %} The same status is a star on Browse Hunters; matching it here is the point --
+                one object, one glyph, wherever you meet it. Labelled rather than `title`-only, which
+                screen readers do not reliably announce and touch never surfaces. {% endcomment %}
+                {% if entry.is_premium %}
+                <span class="lb-row__prem" role="img" aria-label="Supporter" title="Supporter">
+                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.11 6.47L12 17.35 6.19 20.4 7.3 13.93 2.6 9.35l6.5-.95L12 2.5z"/></svg>
+                </span>
+                {% endif %}
             </span>
             {% comment %} The worn title, when there is one. `pr-1` because it is italic inside a clamped
             box and italic glyphs slant past their box. {% endcomment %}
             {% if entry.displayed_title %}<span class="lb-row__title italic pr-1">{{ entry.displayed_title }}</span>{% endif %}
         </span>
     </a>
+    {% else %}
+    {% comment %} No name to link to -- the row still holds its slot so the numbering stays honest. {% endcomment %}
+    <span class="lb-row__who lb-row__who--gone"><span class="lb-row__names"><span class="lb-row__name">Unknown hunter</span></span></span>
+    {% endif %}
 
     <span class="lb-row__figs">
         <span class="lb-row__fig">
-            <span class="lb-row__v pp-tally" data-countup="{{ entry.primary|default:0 }}">{{ entry.primary|default:0|intcomma }}</span>
+            {% comment %} NO `data-countup` here, deliberately. A page of 50 rows would mean 50 concurrent
+            rAF loops writing textContent into laid-out grid rows, fighting the staggerReveal already
+            running -- the "frantic counters" the visual identity warns against. The Tally ticks ONCE, on
+            the header figure. {% endcomment %}
+            <span class="lb-row__v pp-tally">{{ entry.primary|default:0|intcomma }}</span>
             <span class="lb-row__k">{{ entry.primary_label }}</span>
         </span>
         {% comment %} The supporting figure is what gives the leading one its meaning -- 9 platinums out

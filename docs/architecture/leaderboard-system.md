@@ -14,9 +14,10 @@ The leaderboard system ranks hunters by badge progress and Badge Points, per ser
 | Badge Points (global + country) | Redis sorted sets | Still read by `profile_card_service` + 2 dashboard modules, which display the LEGACY `ProfileGamification.total_badge_xp`. Ranking that against the new store would print a figure beside a rank derived from a different number |
 | Per-series earners | Redis sorted sets | Still read by `frame_service` for the legacy badge frame |
 | Community XP | Redis scalar | Unrelated to the boards; per-series total |
-| **Global Progress** | **Postgres** (`ProfileBadgeStanding`) | Redis version DELETED |
+| **Badge Trophies** | **Postgres** (`ProfileBadgeStanding`) | Redis version DELETED. Was called "Global Progress" until 2026-08 |
 | **Per-series board** | **Postgres** (`SeriesBadgeStanding`) | Redis version DELETED. Earners + chasers MERGED into one board |
 | **Career XP** | **Postgres** (`ProfileCareerStanding`) | New; no Redis equivalent ever existed |
+| **Both badge boards, per edition** | **Postgres** (`ProfileEditionStanding`) | The edition FILTER. Same columns, same names, pre-sliced |
 
 The Postgres side is `trophies/services/badge_leaderboards.py` ("Lane B"): indexed reads over
 denormalized standing columns, written by the recompute the sync path already runs. No cron, no
@@ -32,7 +33,7 @@ canonical location per board, so no two pages can drift.
 
 | Surface | URL | What it is |
 |---|---|---|
-| Global Boards | `/leaderboards/` | Progress / Badge Points / Career XP, `.pp-switch` tabs, country FILTER |
+| Global Boards | `/leaderboards/` | Badge Trophies / Badge Points / Career XP, `.pp-switch` tabs, country + edition FILTERS |
 | Game Boards | `/leaderboards/games/` | Directory -> game detail's Ranks panel |
 | Badge Boards | `/leaderboards/badges/` | Directory -> badge detail's Ranks section |
 | Job Boards | `/leaderboards/jobs/` | Directory -> job detail's Ranks tab |
@@ -49,7 +50,31 @@ Country is a FILTER on the full boards only, never a board and never a directory
 is one WHERE served by a `(..., country_code, ...board order)` composite; on the directories it would
 multiply the cache surface ~200x for a view few would use.
 
-### Why the progress boards went first
+### The two filters on Global Boards
+
+Both change what the board READS rather than post-filtering it, which is what keeps a slice the same cost
+as the whole thing.
+
+| Filter | Applies to | Mechanism |
+|---|---|---|
+| Country | all three boards | a WHERE on the denormalized `country_code`, served by `(country, ...board order)` |
+| Edition | the two BADGE boards | a different STORE: `ProfileEditionStanding`, indexed `(edition, [country,] ...board order)` |
+
+Edition exists because Legacy HD and Ultra HD are genuinely different games -- XP accrues per GROUP BADGE,
+not per series -- so "who leads Legacy HD" is a question the all-editions board cannot answer. It is absent
+from Career XP because the jobs economy has no editions; a control that renders but changes nothing
+promises a slice that does not exist.
+
+`ProfileEditionStanding` names its columns identically to `ProfileBadgeStanding`, so `badge_store(edition)`
+picks a manager and every board query stays as written. An unrecognised key returns an EMPTY store rather
+than falling back to all editions: silently widening would show the global board under an edition heading.
+The view validates the key first, so that path only runs on a bug.
+
+**Editions overlap.** A cross-gen game qualifies for both groups by the engine's own platform-intersection
+rule, so its trophies count toward both and the per-edition figures do NOT sum to the all-editions row.
+That is correct, and the all-editions total is read from `ProfileBadgeStanding` rather than added up here.
+
+### Why the badge-trophy boards went first
 
 They were the expensive ones and had no readers left after the view swap. The global rebuild ran four
 filtered `COUNT`s plus a `MAX` over `EarnedTrophy` for **every linked profile**, against every
@@ -155,6 +180,53 @@ Redis sorted set scores are 64-bit IEEE 754 doubles, representing integers exact
 - **Progress**: `plats * 10^9 + golds * 10^6 + silvers * 10^3 + bronzes` -> max ~10^12 (safe)
 
 ## Gotchas and Pitfalls
+
+- **A board's rank and a board's row numbering are two different definitions, and they only agree if the
+  ordering is TOTAL.** `page()` numbers by slot; `*_rank()` counts everyone ahead. Every board's canonical
+  order therefore ends in `profile_id` (the `*_KEYS` tuples) and the rank count expresses that same full
+  key list via `_ahead_q`, the way `game_leaderboard_service` already did. Badge Points is quantized to
+  `500a + 600b`, so large ties are the norm, not an edge case: without the unique tail every member of a
+  tie group was told the group's FIRST slot.
+
+- **A board's membership rule (`> 0`) belongs in the service, beside the rows.** It lived in the view as a
+  hand-rolled copy next to the paginator, and the copy drifted -- Career grew the filter in the service and
+  not in the view, so the last page ran past the total the footer promised. `board_count()` is now the one
+  definition, read by the paginator and the header tally alike.
+
+- **The edition split adds a `Game` join to the trophy tally, and it is not free.** Checked against the
+  emitted SQL, not assumed: `game_id IN (SELECT ...)` reads Game under its own alias, so the outer query
+  was *not* already joining it. The added join is a PK probe over the rows that survive the IN test, so it
+  is strictly cheaper than the `Trophy` join the same query already pays -- a constant factor. It is on the
+  SYNC path only. To measure it on real data, time `evaluate_badges --username <whale>` before and after.
+
+- **Rendering a board does no Python aggregation at all.** Every board is an indexed `ORDER BY` plus one
+  `hydrate()`. The Python loop in `badge_trophy_tallies` iterates the GROUPED AGGREGATE (one row per
+  distinct platform list x tier, bounded by the catalogue's platform vocabulary), never `EarnedTrophy`
+  rows. `test_the_aggregate_does_not_grow_with_the_library` is what stops that distinction eroding.
+
+- **Every store with a `country_code` mirror must be in `signals.country_mirrored_standings()`.** Missing
+  one does not error. It leaves that board ranking a relocated hunter under their old flag while the others
+  have already moved them, which only a reader who emigrated would ever notice.
+  `ProfileEditionStanding` shipped with the column and without the entry;
+  `test_every_store_with_a_country_mirror_is_in_the_propagation_list` now asks the models rather than the
+  list.
+
+- **The editions do not sum to the all-editions row, and that is not a bug.** A cross-gen game qualifies
+  for both platform groups (the engine matches on platform INTERSECTION), so its trophies count in both.
+  Splitting them (half each, or first-match-wins) would make an edition's trophy count disagree with the
+  badges that edition awards.
+
+- **`recompute_standing` may be scoped to a subset of series, so every profile-wide figure must be
+  re-summed from ALL the profile's `SeriesBadgeStanding` rows** -- never from the call's own results. That
+  is why per-edition XP is stored per series in `group_xp` rather than only aggregated. Summing the call's
+  results instead would silently halve a hunter's edition standing every time one series was re-run.
+
+- **A board's membership rule belongs in the row function, not only on the count that pages it.** An
+  edition standing survives on zero points when the hunter has trophies but no cleared gating stage there,
+  so an unfiltered read would hand the last page rows the count never promised.
+
+- **`BOARD_MIN_ENTRANTS_*` is env-overridable, so tests must pin it.** A dev box that lowered the games
+  gate turned an unrelated directory test red for a behaviour that had not changed.
 
 - **Sorted sets must be seeded before first use**: Run `python manage.py update_leaderboards` after deployment to populate all sorted sets from existing data. Without this, leaderboard pages will show empty results.
 

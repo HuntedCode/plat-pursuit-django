@@ -3194,15 +3194,19 @@ class ProfileBadgeStanding(models.Model):
     every evaluation (see services/badge_xp.py), so it can't drift. Isolated from the legacy tier-based
     ProfileGamification.total_badge_xp (repointed at cutover).
 
-    Also carries the GLOBAL PROGRESS board's figures (trophies earned across every badge-stage game). Those
+    Also carries the BADGE TROPHIES board's figures (trophies earned across every badge-stage game). Those
     are a materialized FACTUAL read-model, the same category as the XP total: recompute-from-scratch in the
     one write seam, never relative. The board they replace paid a full-population aggregate over
     EarnedTrophy every 6 hours; here it is an indexed ORDER BY. See
-    docs/design/rebuild/leaderboards-rebuild.md."""
+    docs/design/rebuild/leaderboards-rebuild.md.
+
+    This row is the ALL-EDITIONS standing. ProfileEditionStanding carries the same two figures sliced per
+    platform edition, and is a separate table rather than a JSON column here for the same reason country is
+    denormalized rather than joined: a board is an ORDER BY that has to ride an index."""
     profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='badge_standing')
     total_xp = models.PositiveIntegerField(default=0, db_index=True)   # global leaderboard sort key
 
-    # Global Progress board. Ranked PLATINUMS first, total trophies as the tiebreak -- a trophy-hunting
+    # Badge Trophies board. Ranked PLATINUMS first, total trophies as the tiebreak -- a trophy-hunting
     # board should lead with the trophy that takes a whole game to earn.
     #
     # Expressed as a multi-column ORDER BY over a composite index rather than the legacy encoded score
@@ -3229,8 +3233,10 @@ class ProfileBadgeStanding(models.Model):
 
     class Meta:
         indexes = [
-            # Global Progress, in board order. Must match the ORDER BY exactly (-platinum, -total) or the
+            # Badge Trophies, in board order. Must match the ORDER BY exactly (-platinum, -total) or the
             # sort falls back to a scan; the Badge Points board rides `total_xp`'s own db_index.
+            # The index NAME still says progress -- that was the board's old label, and renaming an index
+            # costs a migration on a large table to change a string only a DBA reads.
             models.Index(fields=['-trophies_platinum', '-trophies_total'], name='pbs_progress_idx'),
             # Country-sliced boards: (country, ...board order) so a slice is a range scan, not a filter
             # over a board-ordered scan.
@@ -3241,6 +3247,62 @@ class ProfileBadgeStanding(models.Model):
 
     def __str__(self):
         return f"{self.profile.psn_username} - badge XP {self.total_xp}"
+
+
+class ProfileEditionStanding(models.Model):
+    """ProfileBadgeStanding sliced per PLATFORM EDITION -- what backs the edition filter on the two badge boards.
+
+    Legacy HD and Ultra HD are different games (the XP model says so explicitly: XP accrues PER GROUP BADGE),
+    so "who leads Legacy HD" is a real question the all-editions board cannot answer. This is that answer,
+    materialized.
+
+    A TABLE rather than a JSON column on ProfileBadgeStanding, for the same reason `country_code` is
+    denormalized rather than joined: a leaderboard is an ORDER BY over the whole population, and it has to
+    ride a composite index. A `{key: xp}` blob would force a per-key expression index to sort at all, and the
+    country slices would each need their own -- which is a table with extra steps.
+
+    Same write seam and the same recompute-from-scratch rule as its parent (services/badge_xp.py), so it
+    cannot drift from it. The columns are deliberately NAMED IDENTICALLY to ProfileBadgeStanding's, which is
+    what lets the read layer swap stores by picking a manager instead of branching every query body.
+
+    Editions OVERLAP by design: a cross-gen game on ['PS3','PS4'] qualifies for both groups (the engine's own
+    rule is platform INTERSECTION), so its trophies count toward both editions and the per-edition figures do
+    not sum to the all-editions row. That is correct -- each edition answers "how far are you in THIS one" --
+    and it is why the all-editions total is read from ProfileBadgeStanding rather than added up from here.
+    """
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='edition_standings')
+    # The PlatformGroup key, denormalized as a slug rather than an FK -- the same call SeriesBadgeStanding
+    # makes with `series_slug`. It keeps the board's composite indexes narrow and lets a slice be filtered
+    # straight off the URL's value without resolving a row first.
+    platform_group_key = models.SlugField(max_length=40)
+
+    total_xp = models.PositiveIntegerField(default=0)          # Badge Points, this edition
+    trophies_total = models.PositiveIntegerField(default=0)    # Badge Trophies, this edition
+    trophies_platinum = models.PositiveIntegerField(default=0)
+    trophies_gold = models.PositiveIntegerField(default=0)
+    trophies_silver = models.PositiveIntegerField(default=0)
+    trophies_bronze = models.PositiveIntegerField(default=0)
+
+    # max_length MATCHES Profile.country_code (5). See ProfileBadgeStanding for why a narrower mirror is a
+    # DataError waiting to happen.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['profile', 'platform_group_key']
+        indexes = [
+            # Edition first (always filtered), then the board's own ORDER BY -- so a sliced board is a range
+            # scan. The country forms put the slice between the two, matching ProfileBadgeStanding's pattern.
+            models.Index(fields=['platform_group_key', '-total_xp'], name='pes_ed_xp_idx'),
+            models.Index(fields=['platform_group_key', '-trophies_platinum', '-trophies_total'],
+                         name='pes_ed_troph_idx'),
+            models.Index(fields=['platform_group_key', 'country_code', '-total_xp'], name='pes_ed_cc_xp_idx'),
+            models.Index(fields=['platform_group_key', 'country_code', '-trophies_platinum', '-trophies_total'],
+                         name='pes_ed_cc_troph_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - {self.platform_group_key} xp {self.total_xp}"
 
 
 class ProfileCareerStanding(models.Model):
@@ -3302,6 +3364,20 @@ class SeriesBadgeStanding(models.Model):
         help_text="Per-edition read-model {platform_group_key: [stages_cleared, gating_count]} for every EARNABLE "
                   "edition (gating_count > 0), started or not -- so an untouched edition still carries its "
                   "denominator. Lets the Collection show each edition's own progress without a live eval.",
+    )
+    # Per-edition XP for THIS series: {platform_group_key: xp}. Kept beside group_progress rather than folded
+    # into it, because the two answer different questions and group_progress is a documented shape the
+    # Collection unpacks as a 2-list -- widening it to a 3-list would break every reader to save a column.
+    #
+    # It exists to keep the per-edition GRAND total honest under scoped recomputes. `recompute_standing` may
+    # be called for a SUBSET of series, and its invariant is that the profile-wide totals are re-summed from
+    # every one of the profile's series rows rather than from the call's own results. `xp` gives that for the
+    # overall total; this gives it per edition. Without it, a scoped run would have to either rewrite the
+    # per-edition standing from partial data (undercount) or leave it stale.
+    group_xp = models.JSONField(
+        default=dict, blank=True,
+        help_text="Per-edition XP {platform_group_key: xp} for this series. Re-summed across the profile's "
+                  "series rows into ProfileEditionStanding, so scoped recomputes stay correct.",
     )
     # The moment this profile reached its current standing: the badge's earn date once earned, otherwise
     # the latest gating stage they cleared (services/badge_xp._advanced_at).

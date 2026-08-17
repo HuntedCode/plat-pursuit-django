@@ -39,3 +39,11 @@
 .pp-switch__chip:has(input:focus-visible) { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .pp-switch__chip svg { width: 15px; height: 15px; flex: none; }
 @media (min-width: 768px) { .pp-switch__chip { padding: 7px 18px; } }   /* roomier chips on desktop */
+
+/* The one unguarded beat in the shared switcher: `transition: ... transform 0.12s` plus the `:active`
+   nudge above had no reduced-motion path, and this file had no `prefers-reduced-motion` block at all.
+   It is small, but it is shared by every `.pp-switch` on the site, so the gap was site-wide. */
+@media (prefers-reduced-motion: reduce) {
+    .pp-switch__chip { transition: none; }
+    .pp-switch__chip:active { transform: none; }
+}

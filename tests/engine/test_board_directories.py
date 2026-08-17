@@ -147,9 +147,16 @@ def test_badge_boards_lists_series_that_have_a_board(client):
     assert 'bdir-card' in body
 
 
-def test_a_dormant_series_is_not_listed(client):
-    """No live GroupBadge means no board to preview. Listing it would offer a race nobody can enter."""
+def test_a_dormant_series_is_not_listed(client, settings):
+    """No live GroupBadge means no board to preview. Listing it would offer a race nobody can enter.
+
+    Gate pinned so this stays a test of DORMANCY. It is a negative assertion, so a raised
+    `BOARD_MIN_ENTRANTS_BADGES` would make it pass vacuously -- filtered out by the threshold rather than
+    by the rule it names, and still green.
+    """
     from django.urls import reverse
+
+    settings.BOARD_MIN_ENTRANTS = {'games': 3, 'badges': 1, 'jobs': 1}
     _series_with_board('dorm', 'Dormant Series', 3, live=False)
     body = client.get(reverse('badge_boards')).content.decode()
     assert 'Dormant Series' not in body
@@ -188,8 +195,13 @@ def test_the_directory_has_search_and_exactly_two_sorts_and_no_filter_panel(clie
         assert drawer not in body, f'{drawer} -- the directory grew a filter panel'
 
 
-def test_sorting_by_entrants_puts_the_busiest_board_first(client):
+def test_sorting_by_entrants_puts_the_busiest_board_first(client, settings):
     from django.urls import reverse
+
+    # Pinned: the badges gate is env-overridable (`BOARD_MIN_ENTRANTS_BADGES`) and 'Quiet Series' has ONE
+    # entrant, so on a box that raised it this test goes red for behaviour that has not changed. The games
+    # path was pinned after exactly that bite; this one was missed.
+    settings.BOARD_MIN_ENTRANTS = {'games': 3, 'badges': 1, 'jobs': 1}
     _series_with_board('quiet', 'Quiet Series', 1)
     _series_with_board('busy', 'Busy Series', 6)
     body = client.get(reverse('badge_boards'), {'sort': 'entrants'}).content.decode()
@@ -204,12 +216,19 @@ def test_search_narrows_the_catalogue(client):
     assert 'Findable' in body and 'Unrelated' not in body
 
 
-def test_game_boards_gates_out_boards_nobody_is_on(client):
+def test_game_boards_gates_out_boards_nobody_is_on(client, settings):
     """Games are numerous; a 1-2 name board is noise in a catalogue this size. `played_count` is a
-    denormalized column, so the gate costs nothing."""
+    denormalized column, so the gate costs nothing.
+
+    The threshold is PINNED here rather than left to the default. It became env-overridable
+    (`BOARD_MIN_ENTRANTS_GAMES`) when a dev database needed a lower one, which quietly made this test
+    depend on the machine running it -- green on CI, red on the developer box that set the variable, for a
+    behaviour that had not changed.
+    """
     from django.urls import reverse
     from trophies.models import Game
 
+    settings.BOARD_MIN_ENTRANTS = {'games': 3, 'badges': 1, 'jobs': 1}
     busy = GameFactory(concept=ConceptFactory(), title_name='Busy Game', title_platform=['PS5'])
     lonely = GameFactory(concept=ConceptFactory(), title_name='Lonely Game', title_platform=['PS5'])
     Game.objects.filter(pk=busy.pk).update(played_count=9)

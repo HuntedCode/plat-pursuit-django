@@ -224,7 +224,12 @@ def _propagate_country_to_standings(sender, instance, created, **kwargs):
     country they left until their next badge evaluation.
 
     Gated on the edge, not fired on every profile save: country changes are rare (it comes from PSN), and
-    three blind UPDATEs on every Profile.save() would be a real cost for a value that almost never moves.
+    a blind UPDATE per store on every Profile.save() would be a real cost for a value that almost never
+    moves.
+
+    EVERY store carrying a denormalized `country_code` has to be in this list. One left out does not error
+    -- it just keeps ranking that hunter in the country they left, on one board out of several, which is
+    the kind of thing only a reader who moved would ever notice.
     """
     if created:
         return
@@ -233,9 +238,23 @@ def _propagate_country_to_standings(sender, instance, created, **kwargs):
     if old is None or (old or '') == new:
         return
 
-    from trophies.models import ProfileBadgeStanding, ProfileCareerStanding, ProfileJobXP, SeriesBadgeStanding
-    for model in (ProfileBadgeStanding, ProfileCareerStanding, SeriesBadgeStanding, ProfileJobXP):
+    for model in country_mirrored_standings():
         model.objects.filter(profile_id=instance.pk).update(country_code=new)
+
+
+def country_mirrored_standings():
+    """The stores holding a denormalized copy of `Profile.country_code`.
+
+    Named and returned rather than inlined so a test can check it against what the models actually declare.
+    Adding a store and forgetting this list does not error -- it leaves that one board ranking a hunter in
+    the country they left, which nobody would think to look for.
+    """
+    from trophies.models import (
+        ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
+        SeriesBadgeStanding,
+    )
+    return (ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding,
+            SeriesBadgeStanding, ProfileJobXP)
 
 
 @receiver(post_save, sender=Profile, dispatch_uid="handle_profile_premium_downgrade")

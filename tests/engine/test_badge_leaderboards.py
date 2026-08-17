@@ -67,8 +67,8 @@ def test_series_xp_board_is_scoped_to_the_series():
     _complete(partial, games[0])                   # 1 stage: 100
     evaluate_and_apply(partial, [gb])
 
-    rows = lb.series_xp_rows('gow')
-    assert [r[0] for r in rows] == [top.id, partial.id]
+    # `series_xp_rows` was removed in the 2026-08 audit -- it had no production caller and this test was
+    # its only reader. `series_rank` is the live half (badge_detail_service reads it) and stays covered.
     assert lb.series_rank('gow', top.id) == 1 and lb.series_rank('gow', partial.id) == 2
 
 
@@ -133,15 +133,20 @@ def test_earners_rank_reflects_completion_order_and_is_live():
     assert [r[0] for r in lb.earners_rows(gb.id)] == [early.id, late.id]
 
 
-def test_earners_ranks_batched():
+def test_earners_rank_is_first_to_complete_order():
+    """The singular `earners_rank` is live -- badge_detail_service reads it for the value on the medallion
+    back. Its batched sibling `earners_ranks` was removed in the 2026-08 audit: no production caller, and
+    it was an N-query loop that would have been the wrong shape for the grid it was written for."""
     gb1, g1 = _series('one', 1)
     gb2, g2 = _series('two', 1)
-    p = ProfileFactory()
-    _complete(p, g1[0])
-    _complete(p, g2[0])
-    evaluate_and_apply(p, [gb1, gb2])
-    ranks = lb.earners_ranks(p.id, [gb1.id, gb2.id])
-    assert ranks == {gb1.id: 1, gb2.id: 1}
+    first = ProfileFactory()
+    _complete(first, g1[0])
+    _complete(first, g2[0])
+    evaluate_and_apply(first, [gb1, gb2])
+
+    assert lb.earners_rank(first.id, gb1.id) == 1
+    assert lb.earners_rank(first.id, gb2.id) == 1
+    assert lb.earners_rank(ProfileFactory().id, gb1.id) is None, 'a non-holder has no earners rank'
 
 
 # ------------------------------------------------------------------ Lane B: the new boards ---------------
@@ -153,15 +158,15 @@ def _standing(country='', **kw):
     return p
 
 
-def test_global_progress_ranks_platinums_first_then_total():
+def test_badge_trophies_board_ranks_platinums_first_then_total():
     many_plats = _standing(trophies_platinum=9, trophies_total=50)
     many_trophies = _standing(trophies_platinum=2, trophies_total=400)
     tie_loser = _standing(trophies_platinum=9, trophies_total=20)
 
-    assert [r[0] for r in lb.progress_rows()] == [many_plats.id, tie_loser.id, many_trophies.id]
+    assert [r[0] for r in lb.badge_trophy_rows()] == [many_plats.id, tie_loser.id, many_trophies.id]
 
 
-def test_progress_rank_expresses_the_same_tiebreak_as_the_order_by():
+def test_badge_trophy_rank_expresses_the_same_tiebreak_as_the_order_by():
     """A two-key board needs a two-key rank. Counting only `trophies_platinum__gt` would report every
     hunter sharing a platinum count as joint-first -- the board and the rank would disagree, and the rank
     is what a viewer sees next to their own name."""
@@ -169,10 +174,10 @@ def test_progress_rank_expresses_the_same_tiebreak_as_the_order_by():
     same_plats_fewer = _standing(trophies_platinum=5, trophies_total=100)
     fewer_plats = _standing(trophies_platinum=1, trophies_total=999)
 
-    assert lb.progress_rank(top.id) == 1
-    assert lb.progress_rank(same_plats_fewer.id) == 2, 'the tiebreak is missing from the rank'
-    assert lb.progress_rank(fewer_plats.id) == 3
-    assert lb.progress_rank(ProfileFactory().id) is None
+    assert lb.badge_trophy_rank(top.id) == 1
+    assert lb.badge_trophy_rank(same_plats_fewer.id) == 2, 'the tiebreak is missing from the rank'
+    assert lb.badge_trophy_rank(fewer_plats.id) == 3
+    assert lb.badge_trophy_rank(ProfileFactory().id) is None
 
 
 def test_every_board_can_be_sliced_by_country_without_a_separate_store():
@@ -183,7 +188,7 @@ def test_every_board_can_be_sliced_by_country_without_a_separate_store():
     gb_only = _standing(country='GB', total_xp=900, trophies_platinum=99, trophies_total=999)
 
     assert [r[0] for r in lb.xp_rows(country='CA')] == [ca_top.id, ca_low.id]
-    assert [r[0] for r in lb.progress_rows(country='CA')] == [ca_top.id, ca_low.id]
+    assert [r[0] for r in lb.badge_trophy_rows(country='CA')] == [ca_top.id, ca_low.id]
 
     # The global board still contains everyone, and the GB hunter tops it.
     assert lb.xp_rows()[0][0] == gb_only.id

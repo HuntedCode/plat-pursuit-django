@@ -53,7 +53,7 @@ from django.views.generic import ListView, DetailView, TemplateView
 from ..models import (
     Profile, Badge, UserBadge,
     UserTitle, ProfileGamification, BadgeSeries, GroupBadge, UserGroupBadge, PlatformGroup,
-    ProfileBadgeStanding, ProfileCareerStanding, SeriesBadgeStanding, Game,
+    ProfileCareerStanding, SeriesBadgeStanding, Game,
 )
 from ..forms import BadgeSearchForm
 from trophies.services.badge_detail_service import get_badge_detail
@@ -909,64 +909,135 @@ class OverallBadgeLeaderboardsView(TemplateView):
 
     THREE boards, one per thing worth ranking, as `.pp-switch` tabs:
 
-      Progress     -> trophies across badge games (platinums first, total as the tiebreak)
-      Badge Points -> ProfileBadgeStanding.total_xp
-      Career XP    -> the jobs economy (ProfileCareerStanding)
+      Badge Trophies -> trophies across badge games (platinums first, total as the tiebreak)
+      Badge Points   -> ProfileBadgeStanding.total_xp
+      Career XP      -> the jobs economy (ProfileCareerStanding)
 
-    Progress and Badge Points are DELIBERATELY separate tabs rather than one "XP" board: they are two
+    Badge Trophies and Badge Points are DELIBERATELY separate tabs rather than one "XP" board: they are two
     sealed economies (the badge subsystem never reads or writes the jobs one), a hunter can hold very
     different ranks in each, and a merged total would be the one figure on the site that means nothing.
 
-    Country is a FILTER across all three, never a board of its own -- one WHERE served by the
-    (country_code, ...board order) composites, versus the old design's separate Redis sorted set per
-    country. That single decision is what keeps this section's surface area finite.
+    TWO filters, both of which swap what the board reads rather than post-filtering it:
 
-    Every board is public and identical for every viewer, which is what makes the page cacheable; a
-    personal rank on a row would forfeit that. The viewer's OWN standing is shown once, in the header.
+      Country -> a WHERE served by the (country_code, ...board order) composites, on all three boards.
+      Edition -> a different STORE (ProfileEditionStanding), on the two BADGE boards only.
+
+    Neither is a board of its own. The old design's answer was a Redis sorted set per country, and an
+    edition-per-board would multiply that again; keeping both as filters is what holds this section's
+    surface area finite. They compose, and the edition indexes carry country to serve the combination.
+
+    Edition is absent from Career XP because there is nothing to slice: the jobs economy has no platform
+    editions, and a control that renders but changes nothing is worse than one that is not there.
+
+    Every board is public, and its ROWS are identical for every viewer -- which is what would let the wall
+    be cached, and why a personal marker never goes in one. The response as a whole is NOT cacheable: the
+    header carries `my_standing`, which is per-viewer. Do not add `cache_page` on the strength of the first
+    sentence; it would serve one logged-in hunter's ranks to every subsequent visitor.
     """
     template_name = 'trophies/overall_badge_leaderboards.html'
     paginate_by = 50
 
-    # (key, label). Order is the tab order; Progress leads because it is the board with the most entrants.
+    # (key, label). Order is the tab order; Badge Trophies leads because it has the most entrants.
     BOARDS = (
-        ('progress', 'Progress'),
+        ('trophies', 'Badge Trophies'),
         ('points', 'Badge Points'),
         ('career', 'Career XP'),
     )
     BOARD_KEYS = {k for k, _ in BOARDS}
-    # `xp` was the old key for the Badge Points board; `country` was a TAB before country became a filter.
-    # Bookmarks carrying either still land somewhere sensible instead of silently defaulting.
-    LEGACY_TABS = {'xp': 'points', 'country': 'points'}
+    # The badge boards -- the two that ProfileBadgeStanding backs, and so the two an edition can slice.
+    EDITION_BOARDS = frozenset({'trophies', 'points'})
+    # `xp` was the old key for the Badge Points board; `country` was a TAB before country became a filter;
+    # `progress` was this board's key while it was called Progress, a name that described the store rather
+    # than what it ranks. Bookmarks carrying any of them still land where they meant to.
+    LEGACY_TABS = {'xp': 'points', 'country': 'points', 'progress': 'trophies'}
 
     def _active_tab(self):
-        raw = self.request.GET.get('tab', 'progress')
+        raw = self.request.GET.get('tab', 'trophies')
         raw = self.LEGACY_TABS.get(raw, raw)
-        return raw if (raw in self.BOARD_KEYS or raw == 'series') else 'progress'
+        return raw if (raw in self.BOARD_KEYS or raw == 'series') else 'trophies'
 
-    def _country(self):
-        """The country slice, validated against countries that actually have ranked hunters.
+    def _country(self, codes):
+        """The country slice, validated against `codes` -- countries that actually have ranked hunters.
 
         Validated rather than trusted: an unknown code would silently return an empty board, which reads
         as "nobody from there plays" rather than "that is not a country we rank".
+
+        Takes the codes rather than resolving them, because the picker needs the same set: this used to
+        call `active_countries()` here and `country_options()` called it again, so every request ran four
+        table-wide DISTINCT aggregates where two would do.
         """
         cc = (self.request.GET.get('country') or '').upper()
-        return cc if cc and cc in set(lb.active_countries()) else ''
+        return cc if cc and cc in set(codes) else ''
+
+    def _edition(self, tab, editions):
+        """The edition slice, validated against LIVE editions and dropped on boards that have none.
+
+        Validated for the same reason country is: an unrecognised key would render an empty board, which
+        reads as "nobody plays that edition" rather than "that is not an edition". Cleared on Career so a
+        reader who picked one and then switched boards does not carry an invisible filter with them.
+        """
+        if tab not in self.EDITION_BOARDS:
+            return ''
+        key = (self.request.GET.get('edition') or '').strip()
+        return key if key in {e.key for e in editions} else ''
+
+    def _href(self, tab, country='', edition=''):
+        """A link to one board under one set of filters. The ONE place a leaderboard URL is assembled.
+
+        Note what is never carried: `page`. Landing on page 7 of a board you just opened, or of a filter
+        you just cleared, is not where anyone meant to go.
+        """
+        params = {'tab': tab}
+        if country:
+            params['country'] = country
+        if edition and tab in self.EDITION_BOARDS:
+            params['edition'] = edition
+        return f'?{urlencode(params)}'
+
+    def _board_links(self, country, edition):
+        """[{key, label, href}] for the tab strip and the standing chips.
+
+        Built here rather than assembled in the template because the rule for what each link carries is
+        PER TARGET, not per page: country follows you everywhere, edition follows you only to the other
+        badge board. A single shared querystring tail was the first attempt and it silently handed Career a
+        filter it ignores -- so the link went one place and the rank shown beside it was measured somewhere
+        else.
+        """
+        return [
+            {'key': key, 'label': label, 'href': self._href(key, country, edition)}
+            for key, label in self.BOARDS
+        ]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
         tab = self._active_tab()
-        country = self._country()
         profile = getattr(user, 'profile', None) if user.is_authenticated else None
 
-        countries = lb.country_options()
+        # Resolved ONCE and shared by the validator and the picker.
+        codes = lb.active_countries()
+        country = self._country(codes)
+        countries = lb.country_options(codes)
+        editions = lb.active_editions()
+        edition = self._edition(tab, editions)
+
         context.update({
-            'boards': self.BOARDS,
+            'boards': self._board_links(country, edition),
             'active_tab': tab,
             'selected_country': country,
             'countries': countries,
-            'ranked_total': ProfileBadgeStanding.objects.count(),
-            'country_total': len(countries),
+            'editions': editions,
+            'selected_edition': edition,
+            # The display name, so the empty state and the standing label can say "Ultra HD" rather than
+            # echo the slug back at the reader.
+            'selected_edition_name': next((e.name for e in editions if e.key == edition), ''),
+            # Only offered where it does something. See the class docstring.
+            'edition_applies': tab in self.EDITION_BOARDS,
+            # The empty state's escape hatches, from the same builder the tab strip uses. Each clears ONE
+            # filter and keeps the other, which is the whole point of naming them separately -- assembled
+            # inline in the template they were a second, untested copy of the rule `_href` owns.
+            'clear_country_href': self._href(tab, '', edition),
+            'clear_edition_href': self._href(tab, country, ''),
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse_lazy('home')},
                 {'text': 'Leaderboards'},
@@ -974,22 +1045,38 @@ class OverallBadgeLeaderboardsView(TemplateView):
         })
 
         # Only the ACTIVE board is built; the others cost nothing until asked for.
+        #
+        # The header tally counts THIS board, from the same `board_count` the paginator uses, so the figure
+        # at the top and the "N total" under the wall are one number read once. It previously counted the
+        # badge store unconditionally: on `?tab=career` that printed the badge population above the career
+        # wall, and under a country slice it printed the global figure above a sliced one.
         if tab in self.BOARD_KEYS:
-            context['board'] = self._build_board(tab, country)
+            board = self._build_board(tab, country, edition)
+            context['board'] = board
+            context['ranked_total'] = board.paginator.count
+            context['ranked_label'] = 'hunter'
         elif tab == 'series':
-            context['series_directory'] = self._series_directory()
+            directory = self._series_directory()
+            context['series_directory'] = directory
+            # The directory lists SERIES, so the tally counts series. Carrying the hunter figure onto a
+            # surface that shows no hunters is the same category error, one page over.
+            context['ranked_total'] = len(directory)
+            context['ranked_label'] = 'series'
 
         # The viewer's own standing, ONCE, in the header -- not per row (see the class docstring).
+        # Each rank is read under the SAME slice as the board it links to, so the number the reader sees
+        # is the one they would find by scrolling. Career takes country only: it has no editions.
         if profile:
             cc = country or None
+            ed = edition or None
             context['my_standing'] = {
-                'progress': lb.progress_rank(profile.id, country=cc),
-                'points': lb.xp_rank(profile.id, country=cc),
+                'trophies': lb.badge_trophy_rank(profile.id, country=cc, edition=ed),
+                'points': lb.xp_rank(profile.id, country=cc, edition=ed),
                 'career': lb.career_xp_rank(profile.id, country=cc),
             }
         return context
 
-    def _build_board(self, tab, country):
+    def _build_board(self, tab, country, edition=''):
         """One page of the active board: two queries (the board read + one hydrate) plus its count."""
         per = self.paginate_by
         # Guarded, because this paginator is hand-rolled rather than Django's: an unparseable `?page`
@@ -1001,33 +1088,28 @@ class OverallBadgeLeaderboardsView(TemplateView):
         except (TypeError, ValueError):
             page_num = 1
         cc = country or None
+        ed = edition or None
 
-        # `> 0` on the sort key, so the board holds hunters who have actually done the thing it ranks.
-        # A wall of zeroes is not a leaderboard, and it would also make the count disagree with the rows.
-        if tab == 'career':
-            qs = ProfileCareerStanding.objects.filter(total_xp__gt=0)
-        elif tab == 'points':
-            qs = ProfileBadgeStanding.objects.filter(total_xp__gt=0)
-        else:
-            qs = ProfileBadgeStanding.objects.filter(trophies_total__gt=0)
-        if country:
-            qs = qs.filter(country_code=country)
-
-        paginator = lb.BoardPaginator(qs.count(), per)
+        # The board's membership rule lives in the SERVICE, next to the rows it governs -- see
+        # `lb.board_count`. This used to be a hand-rolled copy of it here, and the copy drifted.
+        paginator = lb.BoardPaginator(lb.board_count(tab, country=cc, edition=ed), per)
         page_num = min(page_num, paginator.num_pages)
         offset = (page_num - 1) * per
 
-        if tab == 'progress':
-            rows = lb.progress_rows(limit=per, offset=offset, country=cc)
+        if tab == 'trophies':
+            rows = lb.badge_trophy_rows(limit=per, offset=offset, country=cc, edition=ed)
             entries = lb.page(rows, offset, extra=lambda r: {
                 'primary': r[1], 'primary_label': 'platinums',
                 'secondary': r[5], 'secondary_label': 'trophies',
             })
         elif tab == 'points':
-            rows = lb.xp_rows(limit=per, offset=offset, country=cc)
+            rows = lb.xp_rows(limit=per, offset=offset, country=cc, edition=ed)
             entries = lb.page(rows, offset, extra=lambda r: {
+                # No secondary figure: Badge Points is one number. It carried
+                # `'secondary_label': 'badges'` with `secondary: None` behind it -- a label for a value
+                # that never rendered, left over from when hydrate() counted badges held.
                 'primary': r[1], 'primary_label': 'points',
-                'secondary': None, 'secondary_label': 'badges',
+                'secondary': None,
             })
         else:
             rows = lb.career_xp_rows(limit=per, offset=offset, country=cc)

@@ -43,24 +43,39 @@
 .lb-mine__row.is-active .lb-mine__rank { color: var(--pp-primary); }
 @media (prefers-reduced-motion: reduce) { .lb-mine__row { transition: none; } }
 
-/* ---- Switcher + country filter --------------------------------------------------------------------- */
-/* The tab strip leads and the filter trails it. On a phone they stack, with the strip full-width so the
-   three chips get equal room -- a segmented control that wraps mid-strip reads as broken. */
+/* ---- Switcher + filters ---------------------------------------------------------------------------- */
+/* The tab strip leads and the filters trail it. On a phone everything stacks, with the strip full-width so
+   the three chips get equal room -- a segmented control that wraps mid-strip reads as broken -- and the
+   two filters on their own rows. Side by side at 375px they would get ~160px each, which is under a
+   country name. */
 .lb-bar {
     display: flex; flex-direction: column; align-items: stretch; gap: 10px;
     margin: 18px 0 14px;
 }
 .lb-bar .pp-switch { width: 100%; }
 .lb-bar .pp-switch__chip { flex: 1 1 0; justify-content: center; }
-.lb-country { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.lb-country__lbl {
+/* Mobile fit pass for THIS strip. `.pp-switch__chip`'s base padding (6px 14px) is a desktop value that
+   `md:` only enlarges, so the mobile pass was never actually done. Three equal chips inside 343px leave
+   ~56px of label box once border, padding, icon and gap are taken -- and "Badge Trophies" is ~93px at
+   12px/600, so all three labels wrapped to two lines. Compacting the airiness (padding, gap, size) buys
+   ~76px and keeps the labels, which is the trade the rebuild standard asks for: shrink what is
+   expendable, never what carries the meaning. Restored at md: by the base rule. */
+@media (max-width: 767px) {
+    .lb-bar .pp-switch__chip { padding-inline: 7px; gap: 4px; font-size: 11.5px; letter-spacing: 0.01em; }
+    .lb-bar .pp-switch__chip svg { width: 13px; height: 13px; }
+}
+.lb-filters { display: flex; flex-direction: column; align-items: stretch; gap: 8px; min-width: 0; }
+.lb-filters__f { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* inline-flex so the `.pp-edhint` info link sits on the baseline beside the word rather than breaking it. */
+.lb-filters__lbl {
+    display: inline-flex; align-items: center; gap: 4px;
     font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
     color: var(--pp-text-mute); flex: 0 0 auto;
 }
 /* `min-width: 0` so a long country name shrinks the select instead of pushing the row wide -- a flex
    item will not shrink below its content without it. */
-.lb-country .pp-gallery__select { flex: 1 1 auto; min-width: 0; }
-.lb-country__go {
+.lb-filters__f .pp-gallery__select { flex: 1 1 auto; min-width: 0; }
+.lb-filters__go {
     padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700;
     background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text);
 }
@@ -68,8 +83,11 @@
     .lb-bar { flex-direction: row; align-items: center; justify-content: space-between; gap: 14px; }
     .lb-bar .pp-switch { width: auto; }
     .lb-bar .pp-switch__chip { flex: 0 0 auto; }
-    .lb-country { flex: 0 0 auto; }
-    .lb-country .pp-gallery__select { flex: 0 0 auto; min-width: 190px; }
+    .lb-filters { flex-direction: row; align-items: center; flex: 0 0 auto; gap: 14px; }
+    .lb-filters__f { flex: 0 0 auto; }
+    /* Narrower than the 190px this carried with one filter: two selects and their labels now share the
+       row with the tab strip, and the edition names are short. */
+    .lb-filters__f .pp-gallery__select { flex: 0 0 auto; min-width: 160px; }
 }
 
 /* ---- The wall -------------------------------------------------------------------------------------- */
@@ -85,6 +103,11 @@
     align-items: center; gap: 10px;
     padding: 9px 10px; border-radius: var(--pp-radius-md, 10px);
     background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    /* The house material: a top-edge light-catch, the same recipe .bdir-card / .jobc / .scard carry
+       ("material over drop-shadow"). This was the one major rebuilt row surface with no material at all,
+       which is most of why the wall read as a table. A static inset shadow, not a transition, so it costs
+       nothing at 50 rows. */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     /* The leading edge is the podium's only structural signal; transparent keeps every row the same
        width so the wall's left margin does not jitter between ranked and unranked rows. */
     border-left: 3px solid transparent;
@@ -109,13 +132,24 @@
 .lb-row__av img { width: 100%; height: 100%; object-fit: cover; }
 .lb-row__av svg { width: 18px; height: 18px; }
 .lb-row__names { display: flex; flex-direction: column; min-width: 0; }
+/* Layout only. `text-overflow` lived here and did nothing: it applies to a block container's inline
+   content, never to flex ITEMS, so the username (a bare text node, i.e. an anonymous flex item at
+   min-content width, and PSN IDs have no spaces to break on) was hard-clipped with no ellipsis and shoved
+   the supporter mark out of the row. The truncation belongs on the name's own element, below. */
 .lb-row__name {
     display: flex; align-items: center; gap: 5px; min-width: 0;
     font-size: 13.5px; font-weight: 700; color: var(--pp-text);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.lb-row__uname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-row__flag { flex: 0 0 auto; }
-.lb-row__prem { color: var(--pp-primary); font-size: 9px; flex: 0 0 auto; }
+/* A star, matching Browse Hunters -- one status, one glyph, wherever you meet it. It was a bare `&#9670;`
+   diamond here and a Lucide star there, and the diamond is not a Lucide glyph at all (design-system:
+   every UI glyph is an inlined Lucide stroke icon, brand marks and the rating star excepted). */
+.lb-row__prem { color: var(--pp-accent); flex: 0 0 auto; display: inline-flex; align-items: center; }
+.lb-row__prem svg { width: 11px; height: 11px; }
+/* A row whose profile could not be hydrated. It keeps its slot so the numbering stays honest, and reads
+   as absent rather than as a hunter with a blank name. */
+.lb-row__who--gone { color: var(--pp-text-mute); font-style: italic; }
 .lb-row__title {
     font-size: 10.5px; color: var(--pp-text-mute); line-height: 1.2;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -134,12 +168,24 @@
 .lb-row__fig--sub .lb-row__v { font-size: 12.5px; color: var(--pp-text-dim); }
 
 /* Podium: the leading edge warms, and the rank figure takes the metal. Nothing else changes -- no size
-   jump, no icon, no background wash, so the wall stays a list rather than a leaderboard-shaped poster. */
+   jump, no icon, no background wash, so the wall stays a list rather than a leaderboard-shaped poster.
+
+   The MEDALLION metals (--pp-metal-*), not the trophy-chip metals. This read `var(--color-trophy-silver,
+   #c0c6cf)` and so on: the fallbacks were the right colours and never applied, because those tokens DO
+   exist and are the deliberately-dark chip set. Silver (#5f5f5f) and bronze (#8d4d2a) both sit below
+   --pp-text-mute, so ranks 2 and 3 rendered DIMMER than rank 47 and the tinted edge was invisible, while
+   "platinum" resolved to the cyan primary. The effect described in this comment was not happening at all. */
 .lb-row--podium .lb-row__rank { color: var(--metal, var(--pp-text)); font-weight: 800; }
 .lb-row--podium { border-left-color: color-mix(in oklab, var(--metal, var(--pp-border)) 70%, transparent); }
-.lb-row--p1 { --metal: var(--color-trophy-platinum, #d7e3f4); }
-.lb-row--p2 { --metal: var(--color-trophy-silver, #c0c6cf); }
-.lb-row--p3 { --metal: var(--color-trophy-bronze, #cd8b62); }
+.lb-row--p1 { --metal: var(--pp-metal-platinum); }
+.lb-row--p2 { --metal: var(--pp-metal-silver); }
+.lb-row--p3 { --metal: var(--pp-metal-bronze); }
+/* One reserved beat, for first place only: the leader's figure carries the Tally's glow in its own metal.
+   Restraint is the point -- a glow on every podium row would be three competing highlights in the first
+   three rows of a fifty-row wall. */
+.lb-row--p1 .lb-row__rank {
+    text-shadow: 0 0 10px color-mix(in oklab, var(--pp-metal-platinum) 45%, transparent);
+}
 
 @media (min-width: 768px) {
     .lb-row { gap: 14px; padding: 11px 14px; }
@@ -376,3 +422,46 @@
     color: var(--pp-primary);
 }
 .jobd__more { margin-top: 10px; text-align: center; font-size: 11px; color: var(--pp-text-mute); }
+
+/* ---- Pager ----------------------------------------------------------------------------------------- */
+/* Rebuilt from the legacy DaisyUI partial (2026-08 audit). The pill deliberately reuses `.lb-mine__row`'s
+   reading -- same ground, border, radius and primary-tinted active -- because the header's standing chips
+   already established what a small interactive pill looks like on this page. Touch targets are 36px at
+   base and stay comfortable on a phone; the old `btn-xs` was 24px, right on the WCAG 2.5.8 floor. */
+.lb-pager {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    margin: 16px 0 4px;
+}
+.lb-pager__nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.lb-pager__btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    min-height: 36px; padding: 0 12px; border-radius: 999px;
+    font-size: 12px; font-weight: 700; text-decoration: none;
+    color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    transition: border-color var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
+}
+.lb-pager__btn svg { width: 14px; height: 14px; flex: 0 0 auto; }
+@media (hover: hover) {
+    .lb-pager__btn:hover {
+        color: var(--pp-text);
+        border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    }
+}
+.lb-pager__btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* Where you are. Tinted flat rather than a filled button -- it is a position readout, not an action. */
+.lb-pager__at {
+    display: inline-flex; align-items: baseline; gap: 5px;
+    min-height: 36px; padding: 0 14px; border-radius: 999px;
+    background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2));
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+}
+.lb-pager__at .pp-tally { font-size: 14px; color: var(--pp-primary); }
+.lb-pager__of { font-size: 11px; color: var(--pp-text-mute); }
+.lb-pager__total {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+/* The First/Last chevrons are icon-only at base (they are the least-used controls and the row has to fit
+   343px); Prev/Next keep their words, which are the ones people actually aim for. */
+@media (max-width: 767px) { .lb-pager__btn-lbl { display: none; } }
+@media (prefers-reduced-motion: reduce) { .lb-pager__btn { transition: none; } }

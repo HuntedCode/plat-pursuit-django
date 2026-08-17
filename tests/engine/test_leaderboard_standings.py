@@ -2,7 +2,7 @@
 
 Three things get denormalized so every board is an indexed `ORDER BY` instead of an aggregate per read:
 
-- **Badge-game trophy counts** on `ProfileBadgeStanding` — the Global Progress board. Replaces a
+- **Badge-game trophy counts** on `ProfileBadgeStanding` — the Badge Trophies board. Replaces a
   full-population aggregate over `EarnedTrophy` that ran every 6 hours.
 - **`ProfileCareerStanding`** — the Career XP board and Pursuer Level, rolled up from `ProfileJobXP`.
 - **`country_code`** on every standing store — so a country slice is a range scan, not a join-then-filter.
@@ -38,7 +38,7 @@ def _job(n=[0]):
 
 
 def _badge_game(slug='stg', stage_number=1):
-    """A game inside a badge stage -- i.e. one whose trophies count toward Global Progress."""
+    """A game inside a badge stage -- i.e. one whose trophies count toward Badge Trophies."""
     concept = ConceptFactory()
     stage = StageFactory(series_slug=slug, stage_number=stage_number)
     stage.concepts.add(concept)
@@ -51,7 +51,7 @@ def _earn(profile, game, tier, n=1):
         EarnedTrophyFactory(profile=profile, trophy=trophy, earned=True)
 
 
-# ---------------------------------------------------------------- global progress counts ----------------
+# ---------------------------------------------------------------- badge trophy counts ------------------
 
 def test_trophy_counts_are_tallied_by_tier_and_totalled():
     profile = ProfileFactory(is_linked=True)
@@ -232,9 +232,13 @@ def test_changing_country_propagates_to_every_standing_store():
     """The recompute seams stamp `country_code` on rows they write, which covers a syncing profile. This
     covers the path that bypasses them: the country changing with no recompute behind it, which would
     otherwise leave a hunter ranked in the country they left until their next badge evaluation."""
+    from trophies.models import ProfileEditionStanding
+
     profile = ProfileFactory(is_linked=True, country_code='CA')
     ProfileBadgeStanding.objects.create(profile=profile, total_xp=10, country_code='CA')
     ProfileCareerStanding.objects.create(profile=profile, total_xp=10, country_code='CA')
+    ProfileEditionStanding.objects.create(
+        profile=profile, platform_group_key='ultra-hd', total_xp=10, country_code='CA')
     SeriesBadgeStanding.objects.create(profile=profile, series_slug='s', xp=5, country_code='CA')
     ProfileJobXP.objects.create(profile=profile, job=_job(), total_xp=5, country_code='CA')
 
@@ -243,8 +247,33 @@ def test_changing_country_propagates_to_every_standing_store():
 
     assert ProfileBadgeStanding.objects.get(profile=profile).country_code == 'GB'
     assert ProfileCareerStanding.objects.get(profile=profile).country_code == 'GB'
+    assert ProfileEditionStanding.objects.get(profile=profile).country_code == 'GB'
     assert SeriesBadgeStanding.objects.get(profile=profile).country_code == 'GB'
     assert ProfileJobXP.objects.get(profile=profile).country_code == 'GB'
+
+
+def test_every_store_with_a_country_mirror_is_in_the_propagation_list():
+    """The test above can only check the stores somebody remembered to add to it. This one asks the MODELS
+    which stores carry a mirror, and fails if the handler's list has fallen behind.
+
+    ProfileEditionStanding shipped with a `country_code` column and was missing from the handler, so an
+    edition-sliced board would have kept ranking a relocated hunter under their old flag while the
+    all-editions board had already moved them. Nothing errors; the two boards just quietly disagree.
+    """
+    from django.apps import apps
+    from trophies.signals import country_mirrored_standings
+
+    declared = {
+        model for model in apps.get_app_config('trophies').get_models()
+        if 'country_code' in {f.name for f in model._meta.get_fields()}
+        and 'profile' in {f.name for f in model._meta.get_fields()}
+    }
+    handled = set(country_mirrored_standings())
+
+    assert declared <= handled, (
+        f'these stores mirror Profile.country_code but the signal never updates them: '
+        f'{sorted(m.__name__ for m in declared - handled)}'
+    )
 
 
 def test_saving_a_profile_without_changing_country_touches_no_standings():
@@ -263,7 +292,7 @@ def test_saving_a_profile_without_changing_country_touches_no_standings():
     assert not touched, f'a non-country save still rewrote the standings: {touched}'
 
 
-def test_global_progress_ranks_platinums_first_then_total():
+def test_badge_trophies_board_ranks_platinums_first_then_total():
     """A trophy-hunting board leads with the trophy that takes a whole game to earn. Total trophies is the
     tiebreak, not the lead: 400 bronzes should not outrank a hunter with more platinums.
 
@@ -300,11 +329,11 @@ def test_the_progress_index_matches_the_board_order():
     meta_indexes = {idx.name: idx.fields for idx in ProfileBadgeStanding._meta.indexes}
 
     assert meta_indexes.get('pbs_progress_idx') == ['-trophies_platinum', '-trophies_total'], (
-        f'the Global Progress index no longer matches the board order: {meta_indexes.get("pbs_progress_idx")}'
+        f'the Badge Trophies index no longer matches the board order: {meta_indexes.get("pbs_progress_idx")}'
     )
     assert meta_indexes.get('pbs_country_prog_idx') == [
         'country_code', '-trophies_platinum', '-trophies_total'
-    ], 'the country-sliced progress index must be (country, ...board order)'
+    ], 'the country-sliced Badge Trophies index must be (country, ...board order)'
 
 
 # ---------------------------------------------------------------- the per-series board tiebreak ---------
@@ -462,7 +491,8 @@ def test_the_evaluation_seam_actually_writes_the_advance_date():
 # ---------------------------------------------------------------- audit findings ------------------------
 
 @pytest.mark.parametrize('model_path', [
-    'ProfileBadgeStanding', 'ProfileCareerStanding', 'SeriesBadgeStanding', 'ProfileJobXP',
+    'ProfileBadgeStanding', 'ProfileCareerStanding', 'ProfileEditionStanding', 'SeriesBadgeStanding',
+    'ProfileJobXP',
 ])
 def test_the_denormalized_country_column_is_no_narrower_than_its_source(model_path):
     """`Profile.country_code` is max_length=5. A denormalized copy narrower than its source turns any

@@ -13,6 +13,7 @@ from django.urls import reverse
 
 from trophies.models import ProfileBadgeStanding, ProfileCareerStanding
 from tests.factories import ProfileFactory
+from tests.engine.test_leaderboards_overall_cost import active_board
 
 pytestmark = pytest.mark.django_db
 
@@ -32,19 +33,20 @@ def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0,
     return p
 
 
-def test_the_landing_offers_three_boards_and_defaults_to_progress(client):
-    """Progress leads because it is the board with the most entrants -- the one a first-time visitor is
-    most likely to appear on."""
+def test_the_landing_offers_three_boards_and_defaults_to_badge_trophies(client):
+    """Badge Trophies leads because it is the board with the most entrants -- the one a first-time visitor
+    is most likely to appear on.
+
+    It was called "Progress", which named the STORE rather than what the board ranks; every other board on
+    the site is named for its figure. The label is asserted here too, because the key and the label are
+    separately changeable and a rename that only lands in one of them is the likely half-done state.
+    """
     body = client.get(URL).content.decode()
 
-    for key in ('progress', 'points', 'career'):
+    for key in ('trophies', 'points', 'career'):
         assert f'data-board="{key}"' in body, f'the {key} board is missing from the tab strip'
-    assert 'aria-selected="true"' in body
-
-    import re
-    active = re.search(r'data-board="(\w+)"[^>]*aria-selected="true"|aria-selected="true"[^>]*data-board="(\w+)"', body)
-    assert active, 'no tab is marked active'
-    assert 'progress' in active.group(0), 'the landing does not default to Progress'
+    assert active_board(body) == 'trophies', 'the landing does not default to Badge Trophies'
+    assert '>Badge Trophies</span>' in body, 'the board is still labelled something else in the strip'
 
 
 def test_country_is_a_filter_not_a_tab(client):
@@ -57,7 +59,7 @@ def test_country_is_a_filter_not_a_tab(client):
     assert 'data-board="country"' not in body, 'country is back as a tab'
     assert 'name="country"' in body, 'the country filter is missing'
 
-    sliced = client.get(URL, {'tab': 'progress', 'country': 'CA'}).content.decode()
+    sliced = client.get(URL, {'tab': 'trophies', 'country': 'CA'}).content.decode()
     assert 'CanadaTop' in sliced and 'BritTop' not in sliced
 
 
@@ -95,16 +97,53 @@ def test_a_board_page_is_a_constant_number_of_queries(client):
     for i in range(3):
         _ranked(f'Few{i}', plats=i, trophies=i * 10, points=i * 100)
     with CaptureQueriesContext(connection) as small:
-        client.get(URL, {'tab': 'progress'})
+        client.get(URL, {'tab': 'trophies'})
 
     for i in range(20):
         _ranked(f'Many{i}', plats=i, trophies=i * 10, points=i * 100)
     with CaptureQueriesContext(connection) as large:
-        client.get(URL, {'tab': 'progress'})
+        client.get(URL, {'tab': 'trophies'})
 
     assert len(large.captured_queries) == len(small.captured_queries), (
         f'{len(small.captured_queries)} queries for 3 rows but {len(large.captured_queries)} for 23'
     )
+
+
+def test_the_header_tally_counts_the_board_it_sits_above(client):
+    """The header figure and the pager's total are the same number, read once from `board_count`.
+
+    It used to be `ProfileBadgeStanding.objects.count()` regardless of tab, country or the board's own
+    `> 0` membership rule. On `?tab=career` that printed the badge population directly above the career
+    wall -- two totals for one board, on one screen, differing by whatever the ratio happened to be.
+    """
+    # Two hunters on the badge boards, one on Career.
+    _ranked('BadgeOne', plats=1, trophies=10, points=50)
+    _ranked('BadgeTwo', plats=2, trophies=20, points=90)
+    _ranked('CareerOnly', career=900, level=7)
+
+    for tab, expected in (('career', 1), ('trophies', 2), ('points', 2)):
+        resp = client.get(URL, {'tab': tab})
+        assert resp.context['ranked_total'] == expected, (
+            f'?tab={tab} header counted {resp.context["ranked_total"]}, board holds {expected}'
+        )
+        # The header figure and the pager's total are the SAME value, not two reads that happen to match.
+        assert resp.context['ranked_total'] == resp.context['board'].paginator.count, (
+            f'?tab={tab}: the header and the pager are counting different populations'
+        )
+        assert f'>{expected}</div>' in resp.content.decode(), 'the figure did not reach the header'
+
+
+def test_the_header_tally_follows_the_country_slice(client):
+    """A slice changes the population, so it has to change the figure describing it."""
+    _ranked('CanadaOne', country='CA', country_name='Canada', plats=1, trophies=10, points=50)
+    _ranked('CanadaTwo', country='CA', country_name='Canada', plats=2, trophies=20, points=60)
+    _ranked('Brit', country='GB', country_name='Britain', plats=9, trophies=90, points=900)
+
+    everywhere = client.get(URL, {'tab': 'trophies'}).content.decode()
+    assert '>3</div>' in everywhere
+
+    sliced = client.get(URL, {'tab': 'trophies', 'country': 'CA'}).content.decode()
+    assert '>2</div>' in sliced, 'the header kept the global figure over a sliced wall'
 
 
 def test_the_empty_board_says_which_kind_of_empty_it_is(client):
@@ -115,7 +154,7 @@ def test_the_empty_board_says_which_kind_of_empty_it_is(client):
     everywhere = client.get(URL, {'tab': 'career'}).content.decode()
     assert 'still empty' in everywhere
 
-    sliced = client.get(URL, {'tab': 'progress', 'country': 'GB'}).content.decode()
+    sliced = client.get(URL, {'tab': 'trophies', 'country': 'GB'}).content.decode()
     assert 'Elsewhere' in sliced   # sanity: GB has someone on the progress board
 
 
@@ -153,6 +192,6 @@ def test_a_malformed_page_param_does_not_500(client, page):
     malformed query param is hostile.
     """
     _ranked('Someone', plats=2, trophies=30, points=100)
-    resp = client.get(URL, {'tab': 'progress', 'page': page})
+    resp = client.get(URL, {'tab': 'trophies', 'page': page})
     assert resp.status_code == 200, f'?page={page!r} returned {resp.status_code}'
     assert 'Someone' in resp.content.decode(), f'?page={page!r} emptied the board'

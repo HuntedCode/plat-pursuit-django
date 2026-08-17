@@ -57,15 +57,18 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         </div>
     </section>
 
+    {% comment %} A NAV, not a tablist: these are links that reload the page, with no tabpanel to control.
+    Same correction as the Global Boards strip -- `role="tab"` promised in-place switching that does not
+    happen, and `aria-current` says what these are. {% endcomment %}
     <div class="lb-bar">
-        <div class="pp-switch" role="tablist" aria-label="Job view">
+        <nav class="pp-switch" aria-label="Job view">
             <a href="?tab=contracts" class="pp-switch__chip{% if active_tab == 'contracts' %} is-active{% endif %}"
-               role="tab" aria-selected="{% if active_tab == 'contracts' %}true{% else %}false{% endif %}" data-jobtab="contracts">
+               {% if active_tab == 'contracts' %}aria-current="page"{% endif %} data-jobtab="contracts">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>
                 <span class="pp-switch__lbl">Contracts</span>
             </a>
             <a href="?tab=ranks" class="pp-switch__chip{% if active_tab == 'ranks' %} is-active{% endif %}"
-               role="tab" aria-selected="{% if active_tab == 'ranks' %}true{% else %}false{% endif %}" data-jobtab="ranks">
+               {% if active_tab == 'ranks' %}aria-current="page"{% endif %} data-jobtab="ranks">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
                 <span class="pp-switch__lbl">Ranks</span>
             </a>

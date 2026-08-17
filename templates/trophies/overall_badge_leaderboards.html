@@ -2,7 +2,7 @@
 {% load static humanize custom_filters %}
 
 {% block title %}Leaderboards{% endblock %}
-{% block meta_description %}Global Platinum Pursuit leaderboards: trophy progress across badge games, Badge Points, and Career XP. Filter any board by country.{% endblock %}
+{% block meta_description %}Global Platinum Pursuit leaderboards: badge trophies, Badge Points, and Career XP. Slice any board by country, and the badge boards by platform edition.{% endblock %}
 
 {% comment %} Global Boards -- the Leaderboards hub landing, rebuilt to the Career standard (2026-08).
 
@@ -11,11 +11,16 @@ it (no outer card around the switcher or the wall). Career's own layout is the r
 
 THREE boards, not four tabs. Country stopped being a tab and became a FILTER that applies to whichever
 board is open -- the decision that keeps this section finite, since the alternative is a board per
-country. The old Series tab is not in the strip either: it is a DIRECTORY, not a board, and step 6 of the
-rebuild promotes it to `/leaderboards/badges/`. It stays reachable at `?tab=series` until then.
+country. Platform edition is the second filter on that same principle, and it applies to the two BADGE
+boards only; Career XP has no editions to slice, so the control is absent there rather than inert. The old
+Series tab is not in the strip either: it is a DIRECTORY, not a board, and step 6 of the rebuild promotes
+it to `/leaderboards/badges/`. It stays reachable at `?tab=series` until then.
 
-Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.scard` grid, `.pp-tally`, `.pp-head-cascade`,
-`wireTablist`, `staggerReveal`, and the shared pagination partial.
+Both filters live in ONE form, so changing either keeps the other and neither needs the other's hidden
+field. Submitting also drops `page`, which is what a filter change should do.
+
+Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head-cascade`, `staggerReveal`,
+`countUp`, and `.lb-row`, which the badge-detail Ranks panel and the job boards share.
 {% endcomment %}
 
 {% block content %}
@@ -33,29 +38,32 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.scard` grid, `.pp-ta
                         <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Leaderboards</h1>
                     </div>
                     <p class="pp-bhead__sub text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                        Where the hunt is measured. Every board is public, and every one can be sliced by country.
+                        Where the hunt is measured. Every board is public, sliceable by country, and the badge boards by platform edition.
                     </p>
                 </div>
 
+                {% comment %} Counts THIS board, from the same `board_count` the paginator reads, so this
+                figure and the "N total" under the wall are one number read once. {% endcomment %}
                 <div class="pp-bhead__tally shrink-0 text-right">
                     <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-countup="{{ ranked_total }}">{{ ranked_total|intcomma }}</div>
-                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">hunter{{ ranked_total|pluralize }} ranked</div>
+                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">{{ ranked_label }}{{ ranked_total|pluralize }} ranked</div>
                 </div>
             </div>
 
-            {% comment %} The viewer's own standing, once, at the top -- NOT repeated per row. A row
-            identical for every viewer is what makes this page cacheable, and a personal rank in it would
-            forfeit that for a number better shown once anyway. Only ranks the viewer actually holds
-            render; a blank slot says less than no slot. {% endcomment %}
+            {% comment %} The viewer's own standing, once, at the top -- NOT repeated per row. The ROWS are
+            identical for every viewer, which is what would let the wall be cached; a personal marker in
+            one would forfeit that for a number better shown once anyway. (This header block is the part
+            that is per-viewer, so the RESPONSE is not cacheable as a whole -- see the view docstring.)
+            Only ranks the viewer actually holds render; a blank slot says less than no slot. {% endcomment %}
             {% if my_standing %}
             <div class="lb-mine mt-3 md:mt-4">
-                <span class="lb-mine__k">Your standing{% if selected_country %} in {{ selected_country }}{% endif %}</span>
+                <span class="lb-mine__k">Your standing{% if selected_edition %} in {{ selected_edition_name }}{% endif %}{% if selected_country %} in {{ selected_country }}{% endif %}</span>
                 <span class="lb-mine__rows">
-                    {% for key, label in boards %}
-                    {% with rank=my_standing|dict_get:key %}
+                    {% for b in boards %}
+                    {% with rank=my_standing|dict_get:b.key %}
                     {% if rank %}
-                    <a class="lb-mine__row{% if key == active_tab %} is-active{% endif %}" href="?tab={{ key }}{% if selected_country %}&amp;country={{ selected_country }}{% endif %}">
-                        <span class="lb-mine__lbl">{{ label }}</span>
+                    <a class="lb-mine__row{% if b.key == active_tab %} is-active{% endif %}" href="{{ b.href }}">
+                        <span class="lb-mine__lbl">{{ b.label }}</span>
                         <span class="lb-mine__rank pp-tally">#{{ rank|intcomma }}</span>
                     </a>
                     {% endif %}
@@ -70,7 +78,7 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.scard` grid, `.pp-ta
     {% if active_tab == 'series' %}
         {% comment %} Legacy directory, kept reachable until step 6 rebuilds it as Badge Boards. {% endcomment %}
         <div class="mb-3">
-            <a class="pp-edhint" href="?tab=progress">
+            <a class="pp-edhint" href="?tab=trophies">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
                 Back to the boards
             </a>
@@ -79,35 +87,73 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.scard` grid, `.pp-ta
     {% else %}
 
     {% comment %} FREE content below the header: the switcher + the toolbar + the wall, unboxed. {% endcomment %}
+    {% comment %} A NAV, not a `role="tablist"`. These chips are links that trigger a full page load, and
+    there is no tabpanel for them to control -- `role="tab"` + `aria-selected` promised in-place panel
+    switching that never happens, and the roving tabindex `wireTablist` applies made the two boards you are
+    NOT on unreachable by Tab (Arrow keys only, with nothing announcing that). `aria-current="page"`
+    describes what these actually are, exactly.
+
+    Same call the Ratings tab already argued in its own comment. Career's chips DO carry tab roles, and
+    correctly: they are buttons over real `role="tabpanel"` islands. {% endcomment %}
     <div class="lb-bar">
-        <div class="pp-switch" role="tablist" aria-label="Leaderboard">
-            {% for key, label in boards %}
-            <a href="?tab={{ key }}{% if selected_country %}&amp;country={{ selected_country }}{% endif %}"
-               class="pp-switch__chip{% if key == active_tab %} is-active{% endif %}"
-               role="tab" aria-selected="{% if key == active_tab %}true{% else %}false{% endif %}"
-               data-board="{{ key }}">
-                {% if key == 'progress' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-                {% elif key == 'points' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+        <nav class="pp-switch" aria-label="Leaderboard">
+            {% for b in boards %}
+            <a href="{{ b.href }}"
+               class="pp-switch__chip{% if b.key == active_tab %} is-active{% endif %}"
+               {% if b.key == active_tab %}aria-current="page"{% endif %}
+               data-board="{{ b.key }}">
+                {% if b.key == 'trophies' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                {% elif b.key == 'points' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
                 {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>{% endif %}
-                <span class="pp-switch__lbl">{{ label }}</span>
+                <span class="pp-switch__lbl">{{ b.label }}</span>
             </a>
             {% endfor %}
-        </div>
+        </nav>
 
-        {% comment %} Country is a FILTER on whichever board is open, never a board of its own. A plain
-        GET form so it works with JS off; the script below submits on change. `tab` rides along as a
-        hidden field so switching country keeps you on the board you were reading. {% endcomment %}
-        {% if countries %}
-        <form method="get" class="lb-country" data-country-form>
+        {% comment %} The filters, never boards of their own. A plain GET form so it works with JS off; the
+        script below submits on change. `tab` rides along as a hidden field so changing a filter keeps you
+        on the board you were reading, and `page` is absent so a filter change returns you to the top.
+
+        Edition renders only where it does something -- Career XP is the jobs economy and has no platform
+        editions. The hint links to the page that explains the vocabulary, matching the Browse Badges
+        filter chips and the Collection, since this is another surface that speaks those names. {% endcomment %}
+        {% if countries or edition_applies and editions %}
+        <form method="get" class="lb-filters" data-filter-form>
             <input type="hidden" name="tab" value="{{ active_tab }}">
-            <label class="lb-country__lbl" for="lb-country">Country</label>
-            <select class="pp-gallery__select" id="lb-country" name="country">
-                <option value="">Everywhere</option>
-                {% for c in countries %}
-                <option value="{{ c.code }}"{% if c.code == selected_country %} selected{% endif %}>{{ c.flag }} {{ c.name }}</option>
-                {% endfor %}
-            </select>
-            <noscript><button type="submit" class="lb-country__go">Go</button></noscript>
+
+            {% if edition_applies and editions %}
+            <div class="lb-filters__f">
+                {% comment %} The hint sits BESIDE the label, not inside it: a `<label for>` must not wrap
+                another interactive element, and clicking it should navigate rather than focus the select.
+                Same shape the Browse Badges gallery uses. {% endcomment %}
+                <span class="lb-filters__lbl">
+                    <label for="lb-edition">Edition</label>
+                    <a class="pp-edhint" href="{% url 'badge_how_it_works' %}" aria-label="What do the platform editions mean?" title="What do the platform editions mean?">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                    </a>
+                </span>
+                <select class="pp-gallery__select" id="lb-edition" name="edition">
+                    <option value="">All editions</option>
+                    {% for e in editions %}
+                    <option value="{{ e.key }}"{% if e.key == selected_edition %} selected{% endif %}>{{ e.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            {% if countries %}
+            <div class="lb-filters__f">
+                <label class="lb-filters__lbl" for="lb-country">Country</label>
+                <select class="pp-gallery__select" id="lb-country" name="country">
+                    <option value="">Everywhere</option>
+                    {% for c in countries %}
+                    <option value="{{ c.code }}"{% if c.code == selected_country %} selected{% endif %}>{{ c.flag }} {{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <noscript><button type="submit" class="lb-filters__go">Go</button></noscript>
         </form>
         {% endif %}
     </div>
@@ -119,21 +165,33 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.scard` grid, `.pp-ta
         {% endfor %}
     </ol>
 
-    {% include 'partials/leaderboard_pagination.html' with page_obj=board paginator=board.paginator page_param='page' %}
+    {% include 'trophies/partials/leaderboard_pager.html' with page_obj=board paginator=board.paginator page_param='page' %}
 
     {% else %}
     <div class="lb-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+        {% comment %} The empty state names the FILTER that emptied it, because "this board is still empty"
+        under an active slice is a claim about the board that the slice is responsible for. The escape
+        hatch clears only the filter it names, so the reader keeps the other one. {% endcomment %}
         <p class="lb-empty__title">
-            {% if selected_country %}No ranked hunters here yet{% else %}This board is still empty{% endif %}
+            {% if selected_country or selected_edition %}No ranked hunters here yet{% else %}This board is still empty{% endif %}
         </p>
         <p class="lb-empty__sub">
-            {% if selected_country %}Nobody from this country is on this board yet. Try Everywhere.{% else %}Nobody has put a number on this board yet. It fills as hunters sync.{% endif %}
+            {% if selected_edition and selected_country %}Nobody from this country is on the {{ selected_edition_name }} board yet.
+            {% elif selected_edition %}Nobody is on the {{ selected_edition_name }} board yet.
+            {% elif selected_country %}Nobody from this country is on this board yet. Try Everywhere.
+            {% else %}Nobody has put a number on this board yet. It fills as hunters sync.{% endif %}
         </p>
         {% if selected_country %}
-        <a class="pp-edhint mt-3" href="?tab={{ active_tab }}">
+        <a class="pp-edhint mt-3" href="{{ clear_country_href }}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
             Show every country
+        </a>
+        {% endif %}
+        {% if selected_edition %}
+        <a class="pp-edhint mt-3" href="{{ clear_edition_href }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+            Show every edition
         </a>
         {% endif %}
     </div>
@@ -145,13 +203,14 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.scard` grid, `.pp-ta
 {% block js_scripts %}
 <script>
     (function () {
-        {% comment %}The country select submits its own form on change -- a select that needs a separate
+        {% comment %}Either select submits the shared form on change -- a select that needs a separate
         button is a two-step filter, and every other filter on the site applies on change. The <noscript>
         button in the markup covers the JS-off path, so this only ever removes a step.{% endcomment %}
-        var form = document.querySelector('[data-country-form]');
+        var form = document.querySelector('[data-filter-form]');
         if (form) {
-            var sel = form.querySelector('select[name="country"]');
-            if (sel) { sel.addEventListener('change', function () { form.submit(); }); }
+            form.querySelectorAll('select').forEach(function (sel) {
+                sel.addEventListener('change', function () { form.submit(); });
+            });
         }
 
         {% comment %}Rows land as the wall arrives, on the shared engine every other wall uses. The helper
@@ -169,11 +228,19 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.scard` grid, `.pp-ta
             });
         }
 
-        {% comment %}Arrow-key nav across the tab strip. MANUAL activation: the chips are real links, so
-        auto-activating on every arrow keypress would fire a page load per key.{% endcomment %}
-        if (window.PlatPursuit && PlatPursuit.wireTablist) {
-            PlatPursuit.wireTablist(document.querySelectorAll('.pp-switch__chip[data-board]'), { manual: true });
+        {% comment %}The Tally ticks ONCE, on the header figure. There is no global `[data-countup]` boot
+        on this site -- every page wires its own -- so the attribute alone did nothing and the number just
+        appeared. Deliberately not applied to the rows: 50 simultaneous counters is the "frantic counters"
+        anti-pattern, and it would fight the reveal above. `countUp` jumps straight to the target under
+        reduced motion, so this needs no guard of its own.{% endcomment %}
+        var tally = document.querySelector('.pp-bhead__tally [data-countup]');
+        if (tally && window.PlatPursuit && PlatPursuit.countUp) {
+            PlatPursuit.countUp(tally, 850);
         }
+
+        {% comment %}No `wireTablist` here: the strip is a NAV of links, not a tablist (see the markup).
+        Arrow-key roving is for a real tab widget, and the tabindex it applies made the boards you are not
+        on unreachable by Tab.{% endcomment %}
     })();
 </script>
 {% endblock %}

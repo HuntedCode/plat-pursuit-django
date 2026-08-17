@@ -132,7 +132,10 @@ Incrementally updated via signals, fully rebuilt by `update_leaderboards` cron e
 | `lb:xp:country:index` | Set | Active country codes (ISO alpha-2) with leaderboard entries |
 
 > **Deleted 2026-08:** the four `lb:progress:*` keys (per-series + global). Those boards moved to
-> indexed Postgres columns on `ProfileBadgeStanding` / `SeriesBadgeStanding`. See
+> indexed Postgres columns on `ProfileBadgeStanding` / `SeriesBadgeStanding`, joined later in the same
+> migration by `ProfileCareerStanding` (Career XP) and `ProfileEditionStanding` (the per-edition slices of
+> the two badge boards). None of the four has a Redis equivalent, and none ever will -- a store per
+> (board x country x edition) is the multiplication that design avoids. See
 > [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
 | `lb:community_xp:{slug}` | String (int) | Community XP total per series, INCRBY delta from gamification updates |
 | `lb:meta:last_rebuild` | Hash | Rebuild timestamps per leaderboard key |
