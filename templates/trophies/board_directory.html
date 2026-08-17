@@ -8,12 +8,13 @@
 links to the full board on the entity itself (game detail's Ranks panel, badge detail's Ranks section).
 
 THIN by rule (docs/design/rebuild/leaderboards-rebuild.md). Search plus exactly TWO sorts, and no filter
-panel. This page catalogues the same entities `/games/` and `/badges/` already catalogue, so without that
-differentiator it converges into a second Browse Games -- two walls, two filter sets, and drift between
+panel. These pages catalogue the same entities `/games/`, `/badges/` and `/jobs/` already catalogue, so
+without that differentiator they converge into second Browse Games pages -- two walls, two filter sets, and drift between
 them. Reuse the WALL, not the facets.
 
-Both directories share this template; only the card art and the figure label differ, which is why they
-are one file rather than two near-identical ones.
+All THREE directories share this template (Badge, Game, Job); only the card art and the figure label
+differ, which is why they are one file rather than three near-identical ones. Job Boards was the test of
+that: 24 entities is where a bespoke third page would have looked cheapest to write.
 {% endcomment %}
 
 {% block content %}
@@ -24,7 +25,7 @@ are one file rather than two near-identical ones.
             <div class="pp-bhead flex items-start justify-between gap-3 flex-wrap">
                 <div class="pp-bhead__id min-w-0">
                     <div class="pp-bhead__title flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/>
                         </svg>
                         <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{% if directory_kind == 'games' %}Game Boards{% elif directory_kind == 'jobs' %}Job Boards{% else %}Badge Boards{% endif %}</h1>

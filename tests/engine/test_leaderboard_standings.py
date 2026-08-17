@@ -201,15 +201,28 @@ def test_granting_job_xp_updates_the_career_board_immediately():
     assert ProfileCareerStanding.objects.get(profile=profile).total_xp == 350
 
 
-def test_the_ledger_rebuild_also_refreshes_the_career_board():
-    """The backfill path stays wired too: `recompute_job_xp --all` must be able to repair a standing that
-    drifted, which is the whole reason it is recompute-from-scratch."""
-    import inspect
-    from trophies.services import contract_service
+def test_the_ledger_rebuild_repairs_a_drifted_career_standing():
+    """The backfill path, exercised rather than read. `recompute_job_xp --all` must be able to REPAIR a
+    standing, which is the whole reason it is recompute-from-scratch.
 
-    source = inspect.getsource(contract_service.recompute_profile_job_xp)
-    assert 'recompute_career_standing(' in source, (
-        'the ledger rebuild no longer refreshes the standing, so the backfill command cannot repair it'
+    Previously this asserted `'recompute_career_standing(' in inspect.getsource(...)` -- true, and no
+    evidence the call does anything. Corrupting the row and watching the rebuild fix it tests the
+    property the command actually promises.
+    """
+    from trophies.services.contract_service import grant_job_xp, recompute_profile_job_xp
+
+    profile = ProfileFactory(is_linked=True)
+    # XP must arrive through the LEDGER: `recompute_profile_job_xp` rebuilds ProfileJobXP from
+    # ContractXPGrant, so a row written directly with no grants behind it is correctly zeroed. Writing the
+    # cache row by hand and expecting the rebuild to preserve it tests the opposite of the contract.
+    grant_job_xp(profile, _job(), 400, source='manual')
+
+    ProfileCareerStanding.objects.filter(profile=profile).update(total_xp=999999, pursuer_level=42)
+    recompute_profile_job_xp(profile)
+
+    standing = ProfileCareerStanding.objects.get(profile=profile)
+    assert standing.total_xp == 400, (
+        'the ledger rebuild did not repair the standing; the backfill command cannot fix drift'
     )
 
 

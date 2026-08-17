@@ -11,9 +11,11 @@ Badges, recorded as "SCOPE, not pagination": Career shows YOUR standing across t
 what the jobs ARE. They coexist without competing, and this one is readable signed out -- an anonymous
 visitor is exactly who it is for.
 
-Grouped by DISCIPLINE rather than listed flat: the five disciplines are the structure of the system, and
-a 24-item alphabetical list would hide it. Each discipline's accent comes from the shared `--disc-*`
-tokens the Career page already uses.
+One flat wall in the catalogue's own `display_order`, with DISCIPLINE carried as each card's accent and
+label rather than as section headings. At 24 items a flat grid stays scannable, and the discipline filter
+above covers the "show me one discipline" case without spending vertical space on five headers. Accents
+come from the shared `--disc-*` tokens the Career page already uses, so a job reads the same colour
+wherever you meet it.
 {% endcomment %}
 
 {% block content %}
@@ -24,7 +26,7 @@ tokens the Career page already uses.
             <div class="pp-bhead flex items-start justify-between gap-3 flex-wrap">
                 <div class="pp-bhead__id min-w-0">
                     <div class="pp-bhead__title flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
                         </svg>
                         <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Jobs</h1>

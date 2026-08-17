@@ -115,17 +115,40 @@ def test_badge_detail_carries_the_ranks_section_and_fetches_it_lazily(client):
     assert '<li class="lb-row' not in body, 'the board was server-rendered into badge detail'
 
 
-def test_the_ranks_section_is_series_level_not_inside_an_edition_panel():
-    """`.bd2-panel` elements swap per EDITION. The board is per SERIES (earned any edition counts, which
-    matches progress_bp already being the max across them), so nesting it in one would render the same
-    board twice with an edition switcher pretending to change it."""
-    import re
-    src = (ROOT / 'templates' / 'trophies' / 'badge_detail.html').read_text(encoding='utf-8')
-    before = src[:src.index('<section class="bd2-ranks"')]
-    # Every edition panel opened before the Ranks section must also have been closed before it.
-    assert before.count('data-bd2-view=') == before.count('data-bd2-view='), 'sanity'
-    assert '<section class="bd2-ranks"' in src
-    journey = src.index('data-bd2-journey')
-    assert src.index('<section class="bd2-ranks"') < journey, (
-        'the Ranks section sits inside or after the per-edition journey; it is series-level chrome'
+def test_the_ranks_section_renders_once_for_a_multi_edition_series(client):
+    """Series-level, proven BEHAVIOURALLY: a series with two editions must still render exactly one Ranks
+    section. Nested inside a `.bd2-panel` it would render once per edition, with an edition switcher
+    appearing to change a board that is the same either way (the board is per series -- earned any edition
+    counts, matching progress_bp already being the max across them).
+
+    This replaces a source-position check whose first assertion was literally `x == x` -- it read like a
+    sanity guard and tested nothing. Counting rendered occurrences is both stronger and simpler.
+    """
+    from tests.factories import (
+        BadgeSeriesFactory, StageFactory, ConceptFactory, GameFactory,
+        PlatformGroupFactory, GroupBadgeFactory,
     )
+
+    series = BadgeSeriesFactory(series_slug='two', name='Two Editions')
+    st = StageFactory(series_slug='two', stage_number=1)
+    concept = ConceptFactory()
+    st.concepts.add(concept)
+    GameFactory(concept=concept, title_platform=['PS4', 'PS5'])
+    for key, name, plats in (('two-ultra', 'Ultra HD', ['PS5']), ('two-legacy', 'Legacy HD', ['PS4'])):
+        pg = PlatformGroupFactory(key=key, name=name, platforms=plats)
+        GroupBadgeFactory(series=series, platform_group=pg, is_live=True)
+
+    body = client.get(reverse('badge_detail', args=['two'])).content.decode()
+
+    # Counted on the rendered OPENING TAG, not the attribute name: the lazy-fetch script on this same
+    # page queries `[data-ranks-src]`, so counting the bare attribute finds the JS too and reports 2 on
+    # correct markup. That is the third time this session an assertion has matched a page's own script --
+    # the rule is to match what the browser renders, never a token a selector can also contain.
+    sections = body.count('<section class="bd2-ranks"')
+    assert sections == 1, (
+        f'the Ranks section rendered {sections} times -- it is inside a per-edition panel rather than at '
+        f'series level'
+    )
+    assert body.count('id="ranks"') == 1
+    # Sanity that the fixture really is multi-edition, so the assertion above means something.
+    assert 'Ultra HD' in body and 'Legacy HD' in body
