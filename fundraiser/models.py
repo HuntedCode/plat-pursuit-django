@@ -194,8 +194,18 @@ class DonationBadgeClaim(models.Model):
     """
     A donor's claim on a specific badge series for artwork commissioning.
 
-    The badge field is a OneToOneField to enforce that each badge series
-    can only be claimed by one donor (DB-level constraint).
+    The series field is a OneToOneField to enforce that each badge series can only be claimed by one
+    donor (DB-level constraint).
+
+    Repointed off the legacy tier `Badge` in 2026-08 (migration 0006). It always MEANT "a series" -- the
+    old field's own help_text said "Tier 1 badge of the series" -- but pointing at a tier row meant the
+    completion write credited `Badge.funded_by`, while the medallion renders
+    `GroupBadge.effective_funded_by` (`funded_by_override or series.funded_by`). Donors were being
+    credited on a row nothing displays.
+
+    `series_slug` / `series_name` stay denormalized on purpose: the emails and notifications read them
+    rather than the FK, so a renamed or reorganised series cannot rewrite the historical record of what
+    somebody paid for.
     """
     STATUS_CHOICES = [
         ('claimed', 'Claimed'),
@@ -210,9 +220,9 @@ class DonationBadgeClaim(models.Model):
         'trophies.Profile', on_delete=models.SET_NULL,
         null=True, related_name='badge_claims',
     )
-    badge = models.OneToOneField(
-        'trophies.Badge', on_delete=models.CASCADE, related_name='artwork_claim',
-        help_text='Tier 1 badge of the series. OneToOne enforces one claim per badge.',
+    series = models.OneToOneField(
+        'trophies.BadgeSeries', on_delete=models.CASCADE, related_name='artwork_claim',
+        help_text='The claimed badge series. OneToOne enforces one claim per series.',
     )
     series_slug = models.CharField(max_length=100, db_index=True)
     series_name = models.CharField(

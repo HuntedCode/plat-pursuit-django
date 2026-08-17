@@ -125,10 +125,10 @@ class ArtRevealEvent(models.Model):
 
 class ArtRevealItem(models.Model):
     event = models.ForeignKey(ArtRevealEvent, on_delete=models.CASCADE, related_name='items')
-    badge = models.ForeignKey(
-        'trophies.Badge', on_delete=models.CASCADE, related_name='art_reveal_items',
-        help_text='The badge SERIES to reveal (pick its tier-1 base badge). The uploaded '
-                  'artwork is the series art and propagates to all four tiers on release.',
+    series = models.ForeignKey(
+        'trophies.BadgeSeries', on_delete=models.CASCADE, related_name='art_reveal_items',
+        help_text='The badge series to reveal. The uploaded artwork becomes the series default art on '
+                  'release, which every edition of the series inherits.',
     )
     order = models.PositiveIntegerField(help_text='Reveal position, 1-based. Lower numbers reveal first.')
     artwork = models.ImageField(
@@ -147,11 +147,11 @@ class ArtRevealItem(models.Model):
         ordering = ['order']
         constraints = [
             models.UniqueConstraint(fields=['event', 'order'], name='uniq_artreveal_event_order'),
-            models.UniqueConstraint(fields=['event', 'badge'], name='uniq_artreveal_event_badge'),
+            models.UniqueConstraint(fields=['event', 'series'], name='uniq_artreveal_event_series'),
         ]
 
     def __str__(self):
-        return f"#{self.order} {self.badge.name} ({'released' if self.released else 'locked'})"
+        return f"#{self.order} {self.series.name} ({'released' if self.released else 'locked'})"
 
     @property
     def threshold(self):
@@ -159,15 +159,21 @@ class ArtRevealItem(models.Model):
         return self.order * self.event.platinums_per_reveal
 
     def release(self, *, now=None):
-        """Mark released and push the artwork onto the badge so it goes live
-        everywhere. Idempotent: returns False if already released. The badge's
-        existing art is never overwritten."""
+        """Mark released and push the artwork onto the SERIES so it goes live everywhere.
+
+        `BadgeSeries.badge_image` is the default every edition inherits (`GroupBadge.art_layers()`
+        resolves `badge_image_override -> series.badge_image`), so one write reaches every medallion of
+        the series. The pre-2026-08 version wrote the legacy `Badge.badge_image`, which nothing renders.
+
+        Idempotent: returns False if already released. Existing series art is never overwritten -- a
+        curator who has already set art beats an automated reveal.
+        """
         if self.released:
             return False
         now = now or timezone.now()
-        if self.artwork and not self.badge.badge_image:
+        if self.artwork and not self.series.badge_image:
             with self.artwork.open('rb') as f:
-                self.badge.badge_image.save(basename(self.artwork.name), f, save=True)
+                self.series.badge_image.save(basename(self.artwork.name), f, save=True)
         self.released = True
         self.released_at = now
         self.save(update_fields=['released', 'released_at'])

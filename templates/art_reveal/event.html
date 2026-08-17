@@ -82,20 +82,20 @@
                         {% for item in released_items %}
                         <figure class="w-full shrink-0 flex flex-col items-center px-2">
                             <div class="aspect-square w-full max-w-md bg-gradient-to-b from-base-200/60 to-base-300/40 rounded-xl flex items-center justify-center p-6">
-                                <img src="{{ item.artwork.url }}" alt="{{ item.badge.effective_display_series|default:item.badge.name }} badge artwork"
+                                <img src="{{ item.artwork.url }}" alt="{{ item.series.display_series|default:item.series.name }} badge artwork"
                                      class="max-h-full max-w-full object-contain drop-shadow-lg">
                             </div>
                             <figcaption class="text-center mt-4 space-y-0.5">
-                                <p class="text-lg lg:text-xl font-bold">{{ item.badge.effective_display_series|default:item.badge.name }}</p>
+                                <p class="text-lg lg:text-xl font-bold">{{ item.series.display_series|default:item.series.name }}</p>
                                 <p class="text-xs text-base-content/50">
                                     Reveal #{{ item.order }}
                                     {% if item.released_at %}&middot; {{ item.released_at|date:"M j, Y" }}{% endif %}
                                 </p>
-                                {% if item.badge.effective_funded_by %}
+                                {% if item.series.funded_by %}
                                 <p class="text-xs lg:text-sm pt-1.5">
                                     <span class="text-base-content/50">Funded by</span>
-                                    <a href="{% url 'profile_detail' item.badge.effective_funded_by.psn_username %}"
-                                       class="font-semibold text-primary hover:underline">{{ item.badge.effective_funded_by.display_psn_username }}</a>
+                                    <a href="{% url 'profile_detail' item.series.funded_by.psn_username %}"
+                                       class="font-semibold text-primary hover:underline">{{ item.series.funded_by.display_psn_username }}</a>
                                 </p>
                                 {% endif %}
                             </figcaption>
@@ -155,10 +155,10 @@
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">
             {% for item in items %}
             <div class="flex flex-col gap-1.5">
-                <a href="{% url 'badge_detail' item.badge.series_slug %}" class="group flex flex-col gap-1.5">
+                <a href="{% url 'badge_detail' item.series.series_slug %}" class="group flex flex-col gap-1.5">
                     {% if item.released %}
                     <div class="aspect-square rounded-lg bg-base-200 border border-base-content/10 group-hover:border-primary/50 transition-colors p-2.5 flex items-center justify-center">
-                        <img src="{{ item.artwork.url }}" alt="{{ item.badge.effective_display_series|default:item.badge.name }} artwork"
+                        <img src="{{ item.artwork.url }}" alt="{{ item.series.display_series|default:item.series.name }} artwork"
                              class="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform">
                     </div>
                     {% else %}
@@ -167,12 +167,12 @@
                         <span class="absolute top-1.5 right-2 text-[10px] font-bold text-base-content/30">#{{ item.order }}</span>
                     </div>
                     {% endif %}
-                    <p class="text-xs lg:text-sm font-semibold leading-tight truncate group-hover:text-primary transition-colors px-0.5{% if not item.released %} text-base-content/55{% endif %}">{{ item.badge.effective_display_series|default:item.badge.name }}</p>
+                    <p class="text-xs lg:text-sm font-semibold leading-tight truncate group-hover:text-primary transition-colors px-0.5{% if not item.released %} text-base-content/55{% endif %}">{{ item.series.display_series|default:item.series.name }}</p>
                 </a>
-                {% if item.released and item.badge.effective_funded_by %}
-                <a href="{% url 'profile_detail' item.badge.effective_funded_by.psn_username %}"
+                {% if item.released and item.series.funded_by %}
+                <a href="{% url 'profile_detail' item.series.funded_by.psn_username %}"
                    class="block px-0.5 text-[10px] lg:text-[11px] text-base-content/45 hover:text-primary truncate transition-colors">
-                    Funded by <span class="font-medium">{{ item.badge.effective_funded_by.display_psn_username }}</span>
+                    Funded by <span class="font-medium">{{ item.series.funded_by.display_psn_username }}</span>
                 </a>
                 {% endif %}
             </div>

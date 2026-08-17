@@ -20,7 +20,7 @@ from django.views.generic import TemplateView
 from trophies.mixins import StaffRequiredMixin
 
 from fundraiser.models import Fundraiser, Donation, DonationBadgeClaim
-from trophies.models import Badge, Profile
+from trophies.models import Concept, Profile
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ class FundraiserView(TemplateView):
         )
         for claim in (DonationBadgeClaim.objects
                       .filter(donation_id__in=donation_ids_for_wall)
-                      .select_related('badge')
+                      .select_related('series')
                       .order_by('-claimed_at')):
             profile_claims[claim.profile_id].append(claim)
 
@@ -139,14 +139,19 @@ class FundraiserView(TemplateView):
             all_claims = list(
                 DonationBadgeClaim.objects
                 .filter(donation_id__in=fundraiser_donation_ids)
-                .select_related('badge', 'badge__base_badge', 'profile')
+                .select_related('series', 'profile')
+                .prefetch_related('series__group_badges__platform_group')
                 .order_by('-claimed_at')
             )
 
             completed_claims = []
             pending_claims = []
             for claim in all_claims:
-                claim.badge_layers = claim.badge.get_badge_layers() if claim.badge else None
+                # Medallion composition lives on GroupBadge (the backdrop and shape come from the
+                # PlatformGroup), so a series resolves one edition to draw itself. See
+                # BadgeSeries.representative_group_badge.
+                edition = claim.series.representative_group_badge if claim.series_id else None
+                claim.badge_layers = edition.art_layers() if edition else None
                 if claim.status == 'completed':
                     completed_claims.append(claim)
                 else:
@@ -155,14 +160,9 @@ class FundraiserView(TemplateView):
             context['completed_claims'] = completed_claims
             context['pending_claims'] = pending_claims
 
-            # Badge tracker stats
-            total_needing_art = Badge.objects.live().filter(
-                tier=1,
-            ).filter(
-                Q(badge_image__isnull=True) | Q(badge_image=''),
-            ).exclude(
-                series_slug__isnull=True,
-            ).exclude(series_slug='').exclude(badge_type='user').count()
+            # Badge tracker stats. `series_needing_artwork()` is the ONE definition of claimable, shared
+            # with the picker below and with claim_badge's validation -- these were three copies.
+            total_needing_art = DonationService.series_needing_artwork().count()
 
             claimed_count = len(all_claims)
             completed_count = len(completed_claims)
@@ -178,17 +178,10 @@ class FundraiserView(TemplateView):
                 'pending': pending_count,
             }
 
-            # Available badges for claiming (logged-in users only)
-            claimed_badge_ids = DonationBadgeClaim.objects.values_list('badge_id', flat=True)
+            # Available series for claiming (logged-in users only). The already-claimed exclusion is
+            # inside the helper, via the artwork_claim reverse OneToOne.
             context['available_badges'] = (
-                Badge.objects.live().filter(tier=1)
-                .filter(Q(badge_image__isnull=True) | Q(badge_image=''))
-                .exclude(series_slug__isnull=True)
-                .exclude(series_slug='')
-                .exclude(badge_type='user')
-                .exclude(id__in=claimed_badge_ids)
-                .select_related('base_badge')
-                .order_by(Lower('name'))
+                DonationService.series_needing_artwork().order_by(Lower('name'))
             )
 
         # User-specific context
@@ -223,7 +216,7 @@ class FundraiserView(TemplateView):
                     context['user_claims'] = (
                         DonationBadgeClaim.objects
                         .filter(donation_id__in=donation_ids)
-                        .select_related('badge')
+                        .select_related('series')
                         .order_by('-claimed_at')
                     )
                 else:
@@ -378,7 +371,7 @@ class FundraiserAdminView(StaffRequiredMixin, TemplateView):
             context['donations'] = (
                 selected.donations.all()
                 .select_related('profile', 'user')
-                .prefetch_related('badge_claims__badge')
+                .prefetch_related('badge_claims__series')
                 .order_by('-created_at')
             )
 
@@ -399,7 +392,7 @@ class FundraiserAdminView(StaffRequiredMixin, TemplateView):
             context['claims'] = (
                 DonationBadgeClaim.objects
                 .filter(donation_id__in=donation_ids)
-                .select_related('badge', 'profile', 'donation')
+                .select_related('series', 'profile', 'donation')
                 .order_by('status', '-claimed_at')
             )
 
@@ -433,41 +426,43 @@ class BadgeRevealView(StaffRequiredMixin, TemplateView):
         pool_claims = list(
             DonationBadgeClaim.objects
             .filter(status='in_progress')
-            .select_related(
-                'badge', 'badge__most_recent_concept',
-                'badge__most_recent_concept__igdb_match', 'profile',
-            )
+            .select_related('series', 'profile')
+            .prefetch_related('series__group_badges__platform_group')
             .order_by(Lower('series_name'))
         )
+
+        # A representative game per series, for the spinner's tease line. ONE query for the whole pool
+        # rather than one per claim: the legacy version read `Badge.most_recent_concept`, a denorm the
+        # series model does not carry, so the concept is resolved from the series' stages instead --
+        # through BOTH qualifier paths, since a bundled game is not in `Stage.concepts`.
+        game_by_slug = {}
+        slugs = [c.series_slug for c in pool_claims if c.series_slug]
+        if slugs:
+            for slug, title in (
+                Concept.objects
+                .filter(Q(stages__series_slug__in=slugs) | Q(bundles__stage__series_slug__in=slugs))
+                .values_list('stages__series_slug', 'unified_title')
+                .distinct()
+            ):
+                if slug and title and slug not in game_by_slug:
+                    game_by_slug[slug] = title
 
         # Build pool data for template and JSON serialization
         pool_badges = []
         for claim in pool_claims:
-            badge = claim.badge
-            concept = badge.most_recent_concept if badge else None
+            series = claim.series
+            edition = series.representative_group_badge if series else None
 
-            # Use game icon from the badge's most recent concept, fall back to badge layers
             icon_url = ''
-            if concept and concept.cover_url:
-                icon_url = concept.cover_url
-            elif badge:
-                layers = badge.get_badge_layers()
-                icon_url = layers.get('main', '')
-
-            game_name = ''
-            if concept:
-                game_name = concept.unified_title or ''
-
-            donor_name = ''
-            if claim.profile:
-                donor_name = claim.profile.display_psn_username or ''
+            if edition:
+                icon_url = edition.art_layers().get('main', '')
 
             pool_badges.append({
-                'badge_id': badge.id if badge else 0,
-                'series_name': claim.series_name or (badge.name if badge else ''),
-                'game_name': game_name,
+                'series_id': series.id if series else 0,
+                'series_name': claim.series_name or (series.name if series else ''),
+                'game_name': game_by_slug.get(claim.series_slug, ''),
                 'icon': icon_url,
-                'donor': donor_name,
+                'donor': claim.profile.display_psn_username or '' if claim.profile else '',
             })
 
         context['pool_badges'] = pool_badges

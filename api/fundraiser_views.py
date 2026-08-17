@@ -110,10 +110,13 @@ class ClaimBadgeView(LoginRequiredMixin, View):
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid request.'}, status=400)
 
-        badge_id = data.get('badge_id')
+        # `badge_id` is still accepted because a browser holding the page open across the deploy will
+        # send the old key, and this is a payment-adjacent flow -- a confusing 400 there is worth two
+        # lines to avoid. The VALUE is now a BadgeSeries pk either way.
+        series_id = data.get('series_id') or data.get('badge_id')
         donation_id = data.get('donation_id')
 
-        if not badge_id or not donation_id:
+        if not series_id or not donation_id:
             return JsonResponse(
                 {'error': 'Badge and donation are required.'},
                 status=400,
@@ -140,7 +143,7 @@ class ClaimBadgeView(LoginRequiredMixin, View):
             )
 
         try:
-            claim = DonationService.claim_badge(donation, profile, badge_id)
+            claim = DonationService.claim_badge(donation, profile, series_id)
             return JsonResponse({
                 'success': True,
                 'claim': {

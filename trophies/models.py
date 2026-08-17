@@ -3001,6 +3001,28 @@ class BadgeSeries(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_badge_type_display()})"
 
+    @property
+    def representative_group_badge(self):
+        """One edition to stand for the whole series when a surface needs art but has no edition in hand.
+
+        Medallion composition lives on `GroupBadge.art_layers()` because the backdrop, backing and shape
+        come from the `PlatformGroup` -- a series alone cannot draw itself. Callers that legitimately
+        have no edition (the fundraiser's claim tiles, an art-reveal event page) resolve one here rather
+        than re-deriving the layer dict, which is already duplicated once in the admin and should not be
+        duplicated again.
+
+        Prefers a LIVE edition in the group's own display order, then any edition, then None for a series
+        whose editions have not been created yet.
+        """
+        live = self.group_badges.filter(is_live=True).select_related('platform_group').order_by(
+            'platform_group__sort_order', 'platform_group__name',
+        ).first()
+        if live:
+            return live
+        return self.group_badges.select_related('platform_group').order_by(
+            'platform_group__sort_order', 'platform_group__name',
+        ).first()
+
 
 class GroupBadge(models.Model):
     """The earnable per-group badge: one row per (BadgeSeries x PlatformGroup). Carries group-specific state and

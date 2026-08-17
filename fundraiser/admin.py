@@ -33,7 +33,7 @@ class DonationAdmin(admin.ModelAdmin):
 class DonationBadgeClaimAdmin(admin.ModelAdmin):
     list_display = ('series_name', 'profile', 'status', 'claimed_at', 'completed_at')
     list_filter = ('status',)
-    list_select_related = ('donation', 'profile', 'badge')
+    list_select_related = ('donation', 'profile', 'series')
     search_fields = (
         'series_name',
         'series_slug',
@@ -42,5 +42,5 @@ class DonationBadgeClaimAdmin(admin.ModelAdmin):
         'donation__provider_transaction_id',
     )
     readonly_fields = ('claimed_at',)
-    raw_id_fields = ('donation', 'profile', 'badge')
+    raw_id_fields = ('donation', 'profile', 'series')
     date_hierarchy = 'claimed_at'

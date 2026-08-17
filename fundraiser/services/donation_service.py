@@ -19,7 +19,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import F, Sum
+from django.db.models import F, Q, Sum
 from django.urls import reverse
 from django.utils import timezone
 
@@ -301,7 +301,30 @@ class DonationService:
     # ──────────────────────────────────────────────
 
     @staticmethod
-    def claim_badge(donation, profile, badge_id):
+    def series_needing_artwork():
+        """Badge series a donor can claim: live, no default art yet, not user-submitted, unclaimed.
+
+        ONE definition, because there used to be three. The picker queryset, the tracker's "needs art"
+        count and `claim_badge`'s validation each carried a hand-copied filter stack, which is how a
+        predicate drifts: the picker could offer something the claim path then rejected.
+
+        Two of the legacy filters have no successor and are deliberately gone rather than translated:
+        `tier=1` (the series IS the row now) and `series_slug` non-empty (it is unique and required).
+        `is_live` moved -- there is none on BadgeSeries, so liveness is "has at least one live edition".
+        """
+        from trophies.models import BadgeSeries
+
+        return (
+            BadgeSeries.objects
+            .filter(group_badges__is_live=True)
+            .filter(Q(badge_image__isnull=True) | Q(badge_image=''))
+            .exclude(badge_type='user')
+            .exclude(artwork_claim__isnull=False)
+            .distinct()
+        )
+
+    @staticmethod
+    def claim_badge(donation, profile, series_id):
         """
         Claim a badge series for artwork commissioning.
 
@@ -311,17 +334,17 @@ class DonationService:
         Args:
             donation: Completed Donation instance
             profile: Profile of the claiming user
-            badge_id: ID of the Tier 1 badge to claim
+            series_id: ID of the BadgeSeries to claim
 
         Returns the DonationBadgeClaim instance.
         Raises ValueError on validation failure.
         """
-        from trophies.models import Badge
+        from trophies.models import BadgeSeries
 
         try:
             with transaction.atomic():
-                # Lock the badge row to prevent concurrent claims
-                badge = Badge.objects.select_for_update().get(id=badge_id, tier=1)
+                # Lock the series row to prevent concurrent claims
+                series = BadgeSeries.objects.select_for_update().get(id=series_id)
 
                 # Refresh donation inside transaction to get accurate picks count
                 donation.refresh_from_db(fields=['badge_picks_earned', 'badge_picks_used'])
@@ -329,22 +352,27 @@ class DonationService:
                 if donation.badge_picks_remaining <= 0:
                     raise ValueError("No badge picks remaining for this donation.")
 
-                if badge.badge_image:
+                if series.badge_image:
                     raise ValueError("This badge series already has custom artwork.")
 
-                if badge.badge_type == 'user':
+                if series.badge_type == 'user':
                     raise ValueError("User-submitted badges are not eligible for artwork claims.")
 
-                if hasattr(badge, 'artwork_claim'):
+                # A series with no live edition is not visible to hunters, so it is not claimable. There
+                # is no `is_live` on BadgeSeries -- liveness is per-edition on GroupBadge.
+                if not series.group_badges.filter(is_live=True).exists():
+                    raise ValueError("This badge series is not live yet.")
+
+                if hasattr(series, 'artwork_claim'):
                     raise ValueError("This badge series has already been claimed by another donor.")
 
-                series_name = badge.effective_display_series or badge.name
+                series_name = series.display_series or series.name
 
                 claim = DonationBadgeClaim.objects.create(
                     donation=donation,
                     profile=profile,
-                    badge=badge,
-                    series_slug=badge.series_slug,
+                    series=series,
+                    series_slug=series.series_slug,
                     series_name=series_name,
                 )
                 Donation.objects.filter(pk=donation.pk).update(
@@ -352,13 +380,13 @@ class DonationService:
                 )
                 donation.refresh_from_db(fields=['badge_picks_used'])
 
-        except Badge.DoesNotExist:
+        except BadgeSeries.DoesNotExist:
             raise ValueError("Badge not found.")
         except IntegrityError:
             raise ValueError("This badge series has already been claimed by another donor.")
 
         logger.info(
-            f"Badge claim created: {series_name} ({badge.series_slug}) "
+            f"Badge claim created: {series_name} ({series.series_slug}) "
             f"by {profile.psn_username} via donation {donation.id}"
         )
 
@@ -454,14 +482,14 @@ class DonationService:
 
     @staticmethod
     def complete_badge_claim(claim):
-        """Mark a badge-artwork claim complete: stamp completed_at, credit the donor
-        on every tier of the series (Badge.funded_by), and send the artwork-complete
-        email + in-app notification. Idempotent: returns False if already completed.
+        """Mark a badge-artwork claim complete: stamp completed_at, credit the donor on the SERIES
+        (BadgeSeries.funded_by), and send the artwork-complete email + in-app notification. Idempotent:
+        returns False if already completed.
 
-        Single source of truth shared by the staff claim-status endpoint and the
-        Badge Art Reveal release path. Email/notification fire after the DB commit.
+        Single source of truth shared by the staff claim-status endpoint and the Badge Art Reveal release
+        path. Email/notification fire after the DB commit.
         """
-        from trophies.models import Badge
+        from trophies.models import BadgeSeries
 
         if claim.status == 'completed':
             return False
@@ -469,8 +497,11 @@ class DonationService:
         with transaction.atomic():
             claim.status = 'completed'
             claim.completed_at = timezone.now()
-            # Credit the donor on all tiers of this badge series.
-            Badge.objects.filter(series_slug=claim.series_slug).update(funded_by=claim.profile)
+            # Credit the donor on the SERIES, which is what the medallion renders:
+            # GroupBadge.effective_funded_by resolves `funded_by_override or series.funded_by`.
+            # This used to write the legacy `Badge.funded_by`, a row nothing displays -- so donors paid
+            # for artwork and were credited nowhere a hunter could see.
+            BadgeSeries.objects.filter(pk=claim.series_id).update(funded_by=claim.profile)
             claim.save(update_fields=['status', 'completed_at'])
 
         DonationService.send_artwork_complete_email(claim)

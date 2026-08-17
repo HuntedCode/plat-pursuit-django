@@ -1,7 +1,5 @@
 from django.contrib import admin
 
-from trophies.models import Badge
-
 from .models import ArtRevealEvent, ArtRevealItem
 from .services import reconcile_event
 
@@ -9,17 +7,13 @@ from .services import reconcile_event
 class ArtRevealItemInline(admin.TabularInline):
     model = ArtRevealItem
     extra = 0
-    autocomplete_fields = ['badge']
-    fields = ['order', 'badge', 'artwork', 'placeholder_label', 'released', 'released_at']
+    # Autocompletes against BadgeSeriesAdmin, which already declares the required `search_fields`.
+    # The tier-1 queryset narrowing this used to need is gone with the tiers: a reveal applies to the
+    # series, and every edition inherits the released art through GroupBadge.art_layers().
+    autocomplete_fields = ['series']
+    fields = ['order', 'series', 'artwork', 'placeholder_label', 'released', 'released_at']
     readonly_fields = ['released', 'released_at']
     ordering = ['order']
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        # Reveals apply to the tier-1 (base) badge of a series; tiers 2-4 inherit
-        # the art via base_badge fallback, so only base badges are selectable.
-        if db_field.name == 'badge':
-            kwargs['queryset'] = Badge.objects.filter(tier=1)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(ArtRevealEvent)

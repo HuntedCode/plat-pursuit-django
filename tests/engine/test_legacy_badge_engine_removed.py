@@ -46,30 +46,15 @@ DELETED_COMMANDS = [
 ]
 
 
-#: Files that STILL write the legacy `Badge` table, deliberately listed rather than silently unscanned.
+#: Files that still write the legacy `Badge` table. EMPTY, as of the 2026-08 fundraiser/art_reveal
+#: repoint -- the tier tables now have no writer anywhere in the codebase.
 #:
-#: Both are live features that predate the cutover and were never repointed:
-#:   - `fundraiser/services/donation_service.py` credits a donor by writing `Badge.funded_by` on every
-#:     completed artwork donation. The badge display reads `BadgeSeries.funded_by` (via
-#:     `GroupBadge.effective_funded_by`), so that credit currently lands where nothing renders it.
-#:   - `art_reveal/models.py` pushes released artwork onto `Badge.badge_image`.
-#:
-#: Shrinking this set is the goal. Adding to it needs a reason in the commit message.
-KNOWN_LEGACY_WRITERS = {
-    'fundraiser/services/donation_service.py',
-    'art_reveal/models.py',
-}
-
-
-def test_the_known_legacy_writers_still_exist():
-    """The exemption list must not rot into a lie in the other direction. If one of these files stops
-    writing `Badge` (because it got repointed), delete its entry -- an exemption for a file that no longer
-    needs one quietly re-opens a hole."""
-    for rel in KNOWN_LEGACY_WRITERS:
-        assert (ROOT / rel).exists(), f'{rel} is gone; drop it from KNOWN_LEGACY_WRITERS'
-        assert 'Badge' in (ROOT / rel).read_text(encoding='utf-8'), (
-            f'{rel} no longer references Badge; drop it from KNOWN_LEGACY_WRITERS'
-        )
+#: It was not always empty: `fundraiser/services/donation_service.py` credited donors via
+#: `Badge.funded_by` and `art_reveal/models.py` pushed released artwork onto `Badge.badge_image`. Both
+#: wrote rows the medallion does not render, so donors paid for artwork and were credited nowhere
+#: visible. Keeping the list (rather than deleting the concept) is deliberate: it is the seam a future
+#: change would quietly re-open, and an empty set states the invariant better than no set at all.
+KNOWN_LEGACY_WRITERS = set()
 
 
 @pytest.mark.parametrize('name', DELETED_MODULES)
@@ -160,19 +145,26 @@ def test_the_retained_tables_have_no_writer():
     )
 
 
-def test_badge_admin_is_deliberately_kept():
-    """The exception, pinned so a later sweep does not "finish the job".
+def test_badge_admin_is_gone():
+    """Inverted 2026-08. `BadgeAdmin` was retained for one reason: `art_reveal.ArtRevealItemInline` set
+    `autocomplete_fields = ['badge']`, and an autocomplete needs a registered admin for its target model
+    or Django fails the WHOLE admin site with admin.E039 -- not just that inline.
 
-    `art_reveal.ArtRevealItem` has a live FK to `Badge`, and its inline's `autocomplete_fields` requires a
-    registered admin for the model. Without this registration Django raises admin.E039 and the ENTIRE admin
-    site fails its system check -- not just art_reveal.
+    art_reveal now autocompletes against `BadgeSeriesAdmin` (which already declared the required
+    `search_fields`), so the last thing holding the legacy admin open is gone.
     """
     from django.contrib import admin
     from trophies.models import Badge
 
-    assert Badge in admin.site._registry, (
-        'BadgeAdmin was removed; art_reveal.ArtRevealItemInline.autocomplete_fields needs it (admin.E039)'
-    )
+    assert Badge not in admin.site._registry, 'BadgeAdmin is back'
+
+
+def test_the_art_reveal_inline_autocompletes_against_the_series():
+    """The other half of the above, pinned because re-adding `autocomplete_fields = ['badge']` would
+    silently require BadgeAdmin again and break the admin site at check time rather than here."""
+    from art_reveal.admin import ArtRevealItemInline
+
+    assert ArtRevealItemInline.autocomplete_fields == ['series']
 
 
 def test_the_admin_no_longer_registers_the_dead_denorms():

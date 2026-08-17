@@ -278,7 +278,7 @@ const FundraiserPage = {
         option.classList.remove('border-base-300', 'border-2');
         option.classList.add('border-primary', 'border-4', 'bg-primary/5');
 
-        this._state.selectedBadgeId = option.dataset.badgeId;
+        this._state.selectedBadgeId = option.dataset.seriesId;
         this._state.selectedBadgeName = option.dataset.badgeName;
 
         // Show confirm area
@@ -335,7 +335,7 @@ const FundraiserPage = {
 
         try {
             const data = await API.post('/api/v1/fundraiser/claim/', {
-                badge_id: parseInt(badgeId),
+                series_id: parseInt(badgeId),
                 donation_id: donationId,
             });
 
@@ -383,9 +383,9 @@ const FundraiserPage = {
             if (hasPicks && modal) {
                 this._resetPickerState();
                 modal.showModal();
-                const badgeId = tile.dataset.badgeId;
+                const badgeId = tile.dataset.seriesId;
                 const modalTile = document.querySelector(
-                    `#badge-picker-grid .badge-pick-option[data-badge-id="${badgeId}"]`
+                    `#badge-picker-grid .badge-pick-option[data-series-id="${badgeId}"]`
                 );
                 if (modalTile) {
                     this._selectBadge(modalTile);
