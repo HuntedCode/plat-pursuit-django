@@ -37,7 +37,7 @@ sitemaps = {
     # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
     # for the revamp, since nothing else about the system was deleted.
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeRanksPanelView, BadgeBoardsView, GameBoardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeRanksPanelView, BadgeBoardsView, GameBoardsView, JobBoardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, JobsBrowseView, JobDetailView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
@@ -121,6 +121,11 @@ urlpatterns = [
     path('badge-ranks/<str:series_slug>/', BadgeRanksPanelView.as_view(), name='badge_ranks_panel'),
     path('badges/<str:series_slug>/', BadgeDetailView.as_view(), name='badge_detail'),
     path('badges/<str:series_slug>/<str:psn_username>/', BadgeDetailView.as_view(), name='badge_detail_with_profile'),
+
+    # Jobs -- the PUBLIC catalogue, in the BROWSE hub (not Leaderboards). Career:jobs is Collection:Browse
+    # Badges -- scope, not pagination: Career shows YOUR standing across them, this shows what they are.
+    path('jobs/', JobsBrowseView.as_view(), name='jobs_browse'),
+    path('jobs/<slug:slug>/', JobDetailView.as_view(), name='job_detail'),
 
     # Genre/Theme pages
     path('genres/', GenreThemeListView.as_view(), name='genres_list'),
@@ -278,6 +283,7 @@ urlpatterns = [
     # out of the badge-detail pattern.
     path('leaderboards/badges/', BadgeBoardsView.as_view(), name='badge_boards'),
     path('leaderboards/games/', GameBoardsView.as_view(), name='game_boards'),
+    path('leaderboards/jobs/', JobBoardsView.as_view(), name='job_boards'),
     # Retired 2026-08: the per-series board moved onto badge detail. Permanent, and it keeps the slug, so
     # every existing link lands on the badge whose board it wanted rather than on a generic index.
     path('leaderboards/badges/<str:series_slug>/', RedirectView.as_view(

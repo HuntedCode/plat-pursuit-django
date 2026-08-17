@@ -300,3 +300,79 @@
 @media (max-width: 767px) { .bdir-row--dim { display: none; } }
 
 .bdir-sentinel { display: block; height: 1px; grid-column: 1 / -1; }
+
+/* ---- Jobs catalogue + job detail (`/jobs/`) --------------------------------------------------------- */
+/* The public face of the jobs economy. Each card takes its discipline's accent from the shared `--disc-*`
+   tokens the Career page already uses, so a job reads the same colour wherever you meet it. */
+.jobs-wall {
+    display: grid; gap: 10px; margin-top: 2px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+}
+.jobc {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px;
+    padding: 12px 14px; border-radius: var(--pp-radius-lg); text-decoration: none;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    border-left: 3px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 70%, transparent);
+    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) {
+    .jobc:hover { background: var(--pp-bg-2); border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 45%, var(--pp-border)); }
+}
+.jobc:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .jobc { transition: none; } }
+.jobc__ic {
+    width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 8px;
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);
+    color: var(--disc, var(--pp-primary));
+}
+.jobc__ic svg { width: 18px; height: 18px; }
+.jobc__body { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.jobc__name { font-size: 14px; font-weight: 800; color: var(--pp-text); }
+.jobc__disc {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--disc, var(--pp-text-mute));
+}
+.jobc__desc { margin-top: 3px; font-size: 11.5px; line-height: 1.4; color: var(--pp-text-dim); }
+.jobc__facts { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; }
+.jobc__fact { font-size: 10.5px; color: var(--pp-text-mute); }
+.jobc__fact b { color: var(--pp-text); font-size: 12px; }
+
+.jobd__head { display: flex; align-items: center; gap: 12px; }
+.jobd__ic {
+    width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px;
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);
+    color: var(--disc, var(--pp-primary));
+}
+.jobd__ic svg { width: 22px; height: 22px; }
+.jobd__disc {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--disc, var(--pp-text-mute)); margin-top: 2px;
+}
+.jobd__desc { margin-top: 10px; font-size: 0.88rem; line-height: 1.55; color: var(--pp-text-dim); max-width: 68ch; }
+
+.jobd__contracts { display: flex; flex-direction: column; gap: 6px; }
+.jobd__con {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+    padding: 10px 12px; border-radius: var(--pp-radius-md, 10px);
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+}
+/* A contract the viewer has already banked reads quieter, not louder: the list's job is to show what
+   FEEDS this job, and the ones still open are the actionable half. */
+.jobd__con.is-earned { opacity: 0.72; }
+.jobd__con-name { font-size: 13px; font-weight: 700; color: var(--pp-text); flex: 1 1 auto; min-width: 0; }
+.jobd__con-jobs { display: flex; flex-wrap: wrap; gap: 4px; }
+.jobd__con-job {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em; padding: 2px 6px; border-radius: 4px;
+    color: var(--pp-text-mute); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+}
+/* The job you are looking at is marked in its own row -- a contract splits its XP across every job it
+   names, so which one is "this" is the thing a reader needs to see. */
+.jobd__con-job.is-this {
+    color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2));
+}
+.jobd__con-state {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--pp-primary);
+}
+.jobd__more { margin-top: 10px; text-align: center; font-size: 11px; color: var(--pp-text-mute); }

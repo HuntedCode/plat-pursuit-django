@@ -30,7 +30,11 @@ CAREER_WORDS = ('career', 'job', 'contract', 'pursuer')
 # career.html reading `<span>XP</span>` says nothing about which economy it is in, and the answer is in
 # the path. Both filters are kept -- the path catches career surfaces, the line catches a career figure
 # rendered on a shared partial.
-CAREER_PATHS = ('career', 'contracts', 'jobs')
+# Singular stems, matched as substrings of any path PART, so `job_detail.html` and `jobs_browse.html`
+# are both caught. The plural 'jobs' missed `job_detail.html` entirely -- which the guard then flagged as
+# a badge surface saying XP, and it was right to: an un-exempted file IS unclassified. Adding the surface
+# here is the deliberate act of declaring which economy it belongs to.
+CAREER_PATHS = ('career', 'contract', 'job', 'pursuer')
 
 # A rendered text node: between > and <, containing no tags or template expressions.
 TEXT_NODE = re.compile(r'>[^<>{}]*\bXP\b[^<>]*<')

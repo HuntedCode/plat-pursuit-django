@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% load static humanize job_icons custom_filters %}
+
+{% block title %}{{ job.name }}{% endblock %}
+{% block meta_description %}{{ job.name }} on Platinum Pursuit: {{ job.description|truncatechars:140 }}{% endblock %}
+
+{% comment %} `/jobs/<slug>/` -- what a job IS, what feeds it, and who leads it.
+
+Two `.pp-switch` tabs, with the anon/authed split PER TAB rather than per page (game detail's model):
+
+  Contracts -> the aggregation that exists nowhere else. A contract is keyed to one Concept, so its
+               natural home is the game; grouping BY JOB is the view this page adds. Anon sees the games
+               and what they pay; a linked viewer additionally sees their own state on each.
+  Ranks     -> identical for everyone, which is what keeps it cacheable. A board a signed-out visitor
+               cannot see would defeat the discovery this page exists for.
+
+There is no public Contracts BROWSE, deliberately: contracts already have a public home on the game they
+belong to (via `contract_modal_preview`), so a third catalogue would be a third view of one dataset.
+{% endcomment %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 shadow-lg shadow-neutral mb-3"
+             style="--disc: var(--disc-{{ job.discipline }}); border-left-color: var(--disc);">
+        <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="jobd__head">
+                <span class="jobd__ic" style="--disc: var(--disc-{{ job.discipline }});">{% job_icon job.icon '' %}</span>
+                <div class="min-w-0">
+                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ job.name }}</h1>
+                    <p class="jobd__disc">{{ job.get_discipline_display }}</p>
+                </div>
+                <div class="shrink-0 text-right">
+                    <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-countup="{{ board_total }}">{{ board_total|intcomma }}</div>
+                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">hunter{{ board_total|pluralize }}</div>
+                </div>
+            </div>
+
+            {% if job.description %}
+            <p class="jobd__desc">{{ job.description }}</p>
+            {% endif %}
+
+            {% if my_rank %}
+            {% comment %} Once, in the header -- the same rule the Global Boards landing follows, and for
+            the same reason: a per-row personal marker would make the board per-viewer and forfeit
+            caching. {% endcomment %}
+            <div class="lb-mine mt-3">
+                <span class="lb-mine__k">Your standing</span>
+                <span class="lb-mine__rows">
+                    <span class="lb-mine__row is-active">
+                        <span class="lb-mine__lbl">{{ job.name }}</span>
+                        <span class="lb-mine__rank pp-tally">#{{ my_rank|intcomma }}</span>
+                    </span>
+                </span>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <div class="lb-bar">
+        <div class="pp-switch" role="tablist" aria-label="Job view">
+            <a href="?tab=contracts" class="pp-switch__chip{% if active_tab == 'contracts' %} is-active{% endif %}"
+               role="tab" aria-selected="{% if active_tab == 'contracts' %}true{% else %}false{% endif %}" data-jobtab="contracts">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>
+                <span class="pp-switch__lbl">Contracts</span>
+            </a>
+            <a href="?tab=ranks" class="pp-switch__chip{% if active_tab == 'ranks' %} is-active{% endif %}"
+               role="tab" aria-selected="{% if active_tab == 'ranks' %}true{% else %}false{% endif %}" data-jobtab="ranks">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
+                <span class="pp-switch__lbl">Ranks</span>
+            </a>
+        </div>
+    </div>
+
+    {% if active_tab == 'ranks' %}
+        {% if board %}
+        <ol class="lb-wall" data-lb-wall>
+            {% for entry in board %}
+            {% include 'trophies/partials/leaderboard_row.html' with entry=entry %}
+            {% endfor %}
+        </ol>
+        {% else %}
+        <div class="lb-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+            <p class="lb-empty__title">Nobody has banked XP here yet</p>
+            <p class="lb-empty__sub">Accept a contract that pays into {{ job.name }} and the board starts with you.</p>
+        </div>
+        {% endif %}
+
+    {% else %}
+        {% if contracts %}
+        <div class="jobd__contracts">
+            {% for c in contracts %}
+            {% with ec=earned_map|dict_get:c.id %}
+            <div class="jobd__con{% if ec %} is-earned{% endif %}">
+                <span class="jobd__con-name">{{ c.name }}</span>
+                <span class="jobd__con-jobs">
+                    {% for j in c.jobs.all %}<span class="jobd__con-job{% if j.slug == job.slug %} is-this{% endif %}">{{ j.name }}</span>{% endfor %}
+                </span>
+                {% comment %} Viewer state, from a map built ONCE for the page. A lookup per row looks
+                fine at 24 contracts and is not at 200 -- and paging bounds the rows rendered, never the
+                queries per row. {% endcomment %}
+                {% if ec %}
+                <span class="jobd__con-state">
+                    {% if ec.platinum_accepted_at or ec.full_accepted_at %}Banked{% elif ec.platinum_reached_at or ec.full_reached_at %}Ready to claim{% else %}In progress{% endif %}
+                </span>
+                {% endif %}
+            </div>
+            {% endwith %}
+            {% endfor %}
+        </div>
+        {% if contract_total > contracts|length %}
+        <p class="jobd__more">Showing {{ contracts|length }} of {{ contract_total|intcomma }} contracts</p>
+        {% endif %}
+        {% else %}
+        <div class="lb-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>
+            <p class="lb-empty__title">No contracts feed this job yet</p>
+            <p class="lb-empty__sub">Contracts are curated. This one is waiting for its first.</p>
+        </div>
+        {% endif %}
+    {% endif %}
+{% endblock %}

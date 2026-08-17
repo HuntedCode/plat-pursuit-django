@@ -16,7 +16,12 @@ from django.http import HttpResponseNotFound
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 from django.views import View
-from django.views.generic import TemplateView
+from django.db.models import Count, Q
+from django.db.models.functions import Lower
+from django.views.generic import DetailView, ListView, TemplateView
+
+from trophies.models import Contract, EarnedContract, Job
+from trophies.services import badge_leaderboards as lb
 
 from trophies.services import contracts_service
 from trophies.services.career_service import build_career_context
@@ -162,3 +167,122 @@ class ContractModalPreviewView(View):
             return HttpResponseNotFound()
         return render(request, 'trophies/partials/contracts/_contract_modal_preview.html',
                       {'p': p, 'profile': None, 'is_preview': True})
+
+
+class JobsBrowseView(ListView):
+    """`/jobs/` -- the public catalogue of jobs, in the BROWSE hub.
+
+    Not under Leaderboards: a catalogue of jobs is a browse surface and sits with Games, Badges,
+    Franchises and Companies. Its relationship to Career's Dossier is the one this codebase already
+    settled for Collection vs Browse Badges, recorded as "SCOPE, not pagination" -- Career shows YOUR
+    standing across the 24 jobs, this shows what the jobs ARE. They coexist without competing.
+
+    Public by design. An anonymous visitor is exactly who this page is for: it is the readable surface of
+    a system they have not signed up for yet.
+    """
+    model = Job
+    template_name = 'trophies/jobs_browse.html'
+    context_object_name = 'jobs'
+
+    def get_queryset(self):
+        qs = Job.objects.all()
+        q = (self.request.GET.get('q') or '').strip()
+        if q:
+            qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q))
+        disc = (self.request.GET.get('discipline') or '').strip()
+        if disc in dict(Job.DISCIPLINES):
+            qs = qs.filter(discipline=disc)
+        return qs.order_by('display_order', Lower('name'))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        jobs = list(context['jobs'])
+        slugs = [j.slug for j in jobs]
+
+        # One grouped read for the whole page, not a count per card.
+        counts = lb.job_board_counts(slugs)
+        contract_counts = dict(
+            Contract.objects.filter(is_live=True, jobs__slug__in=slugs)
+            .values('jobs__slug').annotate(n=Count('id', distinct=True))
+            .values_list('jobs__slug', 'n')
+        )
+        for job in jobs:
+            job.hunters = counts.get(job.slug, 0)
+            job.contract_count = contract_counts.get(job.slug, 0)
+
+        context.update({
+            'q': (self.request.GET.get('q') or '').strip(),
+            'disciplines': Job.DISCIPLINES,
+            'selected_discipline': (self.request.GET.get('discipline') or '').strip(),
+            'breadcrumb': [
+                {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'Jobs'},
+            ],
+        })
+        return context
+
+
+class JobDetailView(DetailView):
+    """`/jobs/<slug>/` -- what a job IS, the contracts that feed it, and its board.
+
+    Two `.pp-switch` tabs, and the anon/authed split is PER TAB rather than per page -- the model game
+    detail already uses:
+
+      Contracts -> anon sees the games and what they pay; a linked viewer additionally sees their own
+                   state on each. The aggregation by JOB exists nowhere else (a contract is keyed to one
+                   Concept, so its natural home is the game).
+      Ranks     -> identical for everyone. That is what keeps it cacheable, and a board a signed-out
+                   visitor cannot see would defeat the discovery this page exists for.
+    """
+    model = Job
+    slug_field = 'slug'
+    slug_url_kwarg = 'slug'
+    template_name = 'trophies/job_detail.html'
+    context_object_name = 'job'
+    BOARD_SIZE = 25
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        job = self.object
+        profile = getattr(self.request.user, 'profile', None) if self.request.user.is_authenticated else None
+
+        tab = self.request.GET.get('tab', 'contracts')
+        context['active_tab'] = tab if tab in ('contracts', 'ranks') else 'contracts'
+
+        # ---- Ranks ----
+        rows = lb.job_rows(job.slug, limit=self.BOARD_SIZE)
+        context['board'] = lb.page(rows, 0, extra=lambda r: {
+            'primary': r[1], 'primary_label': 'XP',
+            'secondary': r[2], 'secondary_label': 'level',
+        })
+        context['board_total'] = lb.job_board_counts([job.slug]).get(job.slug, 0)
+        context['my_rank'] = lb.job_rank(job.slug, profile.id) if profile else None
+
+        # ---- Contracts ----
+        contracts = list(
+            Contract.objects.filter(is_live=True, jobs=job)
+            .prefetch_related('jobs')
+            .order_by(Lower('name'))[:self.CONTRACT_PAGE]
+        )
+        context['contracts'] = contracts
+        context['contract_total'] = Contract.objects.filter(is_live=True, jobs=job).count()
+
+        # Per-row viewer state, BATCHED for the page. The trap here is a lookup per row: it looks fine at
+        # 24 contracts and is not at 200, and infinite scroll bounds the rows rendered but never the
+        # queries per row.
+        if profile and contracts:
+            context['earned_map'] = {
+                ec.contract_id: ec for ec in EarnedContract.objects.filter(
+                    profile=profile, contract__in=contracts)
+            }
+        else:
+            context['earned_map'] = {}
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Jobs', 'url': reverse_lazy('jobs_browse')},
+            {'text': job.name},
+        ]
+        return context
+
+    CONTRACT_PAGE = 24

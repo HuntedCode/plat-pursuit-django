@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
 {% load static humanize %}
 
-{% block title %}{% if directory_kind == 'games' %}Game Boards{% else %}Badge Boards{% endif %}{% endblock %}
-{% block meta_description %}Browse every {% if directory_kind == 'games' %}game{% else %}badge series{% endif %} leaderboard on Platinum Pursuit. Search the catalogue and see who is on top of each board.{% endblock %}
+{% block title %}{% if directory_kind == 'games' %}Game Boards{% elif directory_kind == 'jobs' %}Job Boards{% else %}Badge Boards{% endif %}{% endblock %}
+{% block meta_description %}Browse every {% if directory_kind == 'games' %}game{% elif directory_kind == 'jobs' %}job{% else %}badge series{% endif %} leaderboard on Platinum Pursuit. Search the catalogue and see who is on top of each board.{% endblock %}
 
 {% comment %} A board DIRECTORY -- discovery over boards that live elsewhere. It owns no data: every card
 links to the full board on the entity itself (game detail's Ranks panel, badge detail's Ranks section).
@@ -27,11 +27,13 @@ are one file rather than two near-identical ones.
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/>
                         </svg>
-                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{% if directory_kind == 'games' %}Game Boards{% else %}Badge Boards{% endif %}</h1>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{% if directory_kind == 'games' %}Game Boards{% elif directory_kind == 'jobs' %}Job Boards{% else %}Badge Boards{% endif %}</h1>
                     </div>
                     <p class="pp-bhead__sub text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                         {% if directory_kind == 'games' %}
                             Every game with a race worth joining. Tap through for the full board.
+                        {% elif directory_kind == 'jobs' %}
+                            Every job someone is levelling. Tap through for the full board.
                         {% else %}
                             Every badge series with hunters on the board. Tap through for the full ranking.
                         {% endif %}
@@ -49,7 +51,7 @@ are one file rather than two near-identical ones.
     <form class="bdir-bar" method="get" data-bdir-form>
         <div class="bdir-bar__search" data-search-wrap>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input type="search" name="q" value="{{ q }}" placeholder="Search {% if directory_kind == 'games' %}games{% else %}series{% endif %}" aria-label="Search boards" data-page-search>
+            <input type="search" name="q" value="{{ q }}" placeholder="Search {% if directory_kind == 'games' %}games{% elif directory_kind == 'jobs' %}jobs{% else %}series{% endif %}" aria-label="Search boards" data-page-search>
         </div>
         <select class="pp-gallery__select" name="sort" aria-label="Sort boards">
             {% for key, label in sorts %}

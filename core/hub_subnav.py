@@ -177,6 +177,7 @@ LEADERBOARDS_HUB = HubSubnavConfig(
         HubSubnavItem('global', 'Global Boards', 'overall_badge_leaderboards', 'bar-chart'),
         HubSubnavItem('games', 'Game Boards', 'game_boards', 'gamepad-2'),
         HubSubnavItem('badges', 'Badge Boards', 'badge_boards', 'award'),
+        HubSubnavItem('jobs', 'Job Boards', 'job_boards', 'briefcase'),
     ),
 )
 

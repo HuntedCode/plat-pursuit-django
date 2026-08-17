@@ -1,6 +1,7 @@
 # Leaderboards — Section Rebuild
 
-> Status: **PLAN — agreed in design, not yet built.** Supersedes nothing; the section has never had a
+> Status: **BUILT (steps 1-8, 2026-08).** Kept as the record of what was decided and why;
+> the build order below is a changelog now. Not browser-verified -- see the playbook row. Supersedes nothing; the section has never had a
 > rebuild-playbook row. Backend audit performed 2026-08; the three cost defects it found are already
 > fixed (commit `2b0bf02e`) and are not part of this plan.
 
@@ -392,8 +393,8 @@ Each step leaves the site working.
 | 4 | ✅ Global Boards landing rebuilt (3 tabs, country filter, `.lb-*` component) | The hub landing |
 | 5 | ✅ Badge detail Ranks panel (`/badge-ranks/<slug>/`, lazy); `/leaderboards/badges/<slug>/` retired + 2 redirects repointed | Boards move to entities |
 | 6 | ✅ Badge Boards + Game Boards directories; hub sub-nav live | Discovery, on shipped machinery |
-| 7 | `/jobs/` + `/jobs/<slug>/` (Contracts + Ranks tabs) | New Browse surface |
-| 8 | Job Boards directory; sub-nav goes live | Section complete |
+| 7 | ✅ `/jobs/` + `/jobs/<slug>/` (Contracts + Ranks tabs, public) | New Browse surface |
+| 8 | ✅ Job Boards directory; sub-nav live with all four | Section complete |
 
 Steps 1–2 are the performance work. **Finishing the cutover *is* the optimization** — it is not a
 prerequisite to it.

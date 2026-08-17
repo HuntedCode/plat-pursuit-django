@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% load static humanize job_icons %}
+
+{% block title %}Jobs{% endblock %}
+{% block meta_description %}The 24 Platinum Pursuit jobs: what each one is, the contracts that feed it, and who leads its board. Every job is public to browse.{% endblock %}
+
+{% comment %} `/jobs/` -- the public catalogue, in the BROWSE hub.
+
+Its relationship to Career's Dossier is the split this codebase already settled for Collection vs Browse
+Badges, recorded as "SCOPE, not pagination": Career shows YOUR standing across the 24 jobs, this shows
+what the jobs ARE. They coexist without competing, and this one is readable signed out -- an anonymous
+visitor is exactly who it is for.
+
+Grouped by DISCIPLINE rather than listed flat: the five disciplines are the structure of the system, and
+a 24-item alphabetical list would hide it. Each discipline's accent comes from the shared `--disc-*`
+tokens the Career page already uses.
+{% endcomment %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="pp-bhead flex items-start justify-between gap-3 flex-wrap">
+                <div class="pp-bhead__id min-w-0">
+                    <div class="pp-bhead__title flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Jobs</h1>
+                    </div>
+                    <p class="pp-bhead__sub text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        Every pursuit specialises. Pick a job to see what feeds it and who is ahead.
+                    </p>
+                </div>
+                <div class="pp-bhead__tally shrink-0 text-right">
+                    <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-countup="{{ jobs|length }}">{{ jobs|length }}</div>
+                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">job{{ jobs|length|pluralize }}</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <form class="bdir-bar" method="get" data-jobs-form>
+        <div class="bdir-bar__search" data-search-wrap>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="search" name="q" value="{{ q }}" placeholder="Search jobs" aria-label="Search jobs" data-page-search>
+        </div>
+        <select class="pp-gallery__select" name="discipline" aria-label="Filter by discipline">
+            <option value="">All disciplines</option>
+            {% for key, label in disciplines %}
+            <option value="{{ key }}"{% if key == selected_discipline %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <noscript><button type="submit" class="lb-country__go">Go</button></noscript>
+    </form>
+
+    <div class="jobs-wall">
+        {% for job in jobs %}
+        <a class="jobc" href="{% url 'job_detail' job.slug %}" style="--disc: var(--disc-{{ job.discipline }});">
+            <span class="jobc__ic">{% job_icon job.icon '' %}</span>
+            <span class="jobc__body">
+                <span class="jobc__name">{{ job.name }}</span>
+                <span class="jobc__disc">{{ job.get_discipline_display }}</span>
+                {% if job.description %}<span class="jobc__desc">{{ job.description|truncatechars:96 }}</span>{% endif %}
+            </span>
+            {% comment %} Two figures, both from grouped reads done once for the whole page rather than a
+            count per card. They are the two questions a reader has about a job they have not met: is
+            anyone doing this, and what feeds it. {% endcomment %}
+            <span class="jobc__facts">
+                <span class="jobc__fact"><b class="pp-tally">{{ job.hunters|intcomma }}</b> hunter{{ job.hunters|pluralize }}</span>
+                <span class="jobc__fact"><b class="pp-tally">{{ job.contract_count|intcomma }}</b> contract{{ job.contract_count|pluralize }}</span>
+            </span>
+        </a>
+        {% empty %}
+        <div class="lb-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <p class="lb-empty__title">No jobs match</p>
+            <p class="lb-empty__sub">{% if q %}Nothing here is called &ldquo;{{ q }}&rdquo;.{% else %}The job catalogue is still being seeded.{% endif %}</p>
+        </div>
+        {% endfor %}
+    </div>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+    (function () {
+        var form = document.querySelector('[data-jobs-form]');
+        if (!form) { return; }
+        var sel = form.querySelector('select[name="discipline"]');
+        if (sel) { sel.addEventListener('change', function () { form.submit(); }); }
+        var q = form.querySelector('input[name="q"]');
+        if (q && window.PlatPursuit && PlatPursuit.debounce) {
+            q.addEventListener('input', PlatPursuit.debounce(function () { form.submit(); }, 450));
+        }
+    })();
+</script>
+{% endblock %}

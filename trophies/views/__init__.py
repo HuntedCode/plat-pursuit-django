@@ -8,7 +8,7 @@ from .game_views import GamesListView, GameDetailView, GuideListView, RecentlyAd
 from .game_leaderboard_views import GameLeaderboardView
 from .trophy_views import TrophyCaseView, ToggleSelectionView
 from .profile_views import ProfilesListView, ProfileDetailView, ProfileDayView, LinkPSNView, ProfileVerifyView, ProfileEditorView
-from .badge_views import BadgeHowItWorksView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, BadgeRanksPanelView, BadgeBoardsView, GameBoardsView, OverallBadgeLeaderboardsView
+from .badge_views import BadgeHowItWorksView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, BadgeRanksPanelView, BadgeBoardsView, GameBoardsView, JobBoardsView, OverallBadgeLeaderboardsView
 # Checklist views removed during roadmap migration (DB tables retained)
 from .sync_views import ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView
 from .admin_views import (
@@ -25,7 +25,7 @@ from .title_views import MyTitlesView
 from .platinum_grid_views import PlatinumGridView
 from .roadmap_views import RoadmapDetailView, RoadmapEditorView
 from .shareables_views import PlatCardsView, MyProfileCardView
-from .career_views import CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView
+from .career_views import CareerView, JobsBrowseView, JobDetailView, ContractsResultsView, ContractModalView, ContractModalPreviewView
 from .collection_views import CollectionView, CollectionBadgeModalView
 from .stats_views import MyStatsView
 from .company_views import CompanyListView, CompanyDetailView
@@ -40,7 +40,7 @@ __all__ = [
     # Profile views
     'ProfilesListView', 'ProfileDetailView', 'ProfileDayView', 'LinkPSNView', 'ProfileVerifyView', 'ProfileEditorView',
     # Badge views
-    'BadgeHowItWorksView', 'BadgeListView', 'BadgeDetailView', 'BadgeQuickPeekView', 'BadgeProgressPeekView', 'GroupBadgeInspectView', 'BadgeRanksPanelView', 'BadgeBoardsView', 'GameBoardsView', 'OverallBadgeLeaderboardsView',
+    'BadgeHowItWorksView', 'BadgeListView', 'BadgeDetailView', 'BadgeQuickPeekView', 'BadgeProgressPeekView', 'GroupBadgeInspectView', 'BadgeRanksPanelView', 'BadgeBoardsView', 'GameBoardsView', 'JobBoardsView', 'OverallBadgeLeaderboardsView',
     # Checklist views (removed, DB tables retained)
     # Sync views
     'ProfileSyncStatusView', 'TriggerSyncView', 'SearchSyncProfileView', 'AddSyncStatusView', 'ProfileSuggestView', 'SiteSuggestView',
@@ -65,7 +65,7 @@ __all__ = [
     # Shareables views
     'PlatCardsView', 'MyProfileCardView',
     # The Lab view
-    'CareerView', 'ContractsResultsView', 'ContractModalView', 'ContractModalPreviewView',
+    'CareerView', 'JobsBrowseView', 'JobDetailView', 'ContractsResultsView', 'ContractModalView', 'ContractModalPreviewView',
     # Collection album view
     'CollectionView',
     'CollectionBadgeModalView',

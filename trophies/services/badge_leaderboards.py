@@ -456,3 +456,63 @@ def game_board_previews(game_ids, n=5):
         n,
         ('profile_id', 'progress', 'most_recent_trophy_date'),
     )
+
+
+# ------------------------------------------------------------------ job boards ---------------------------
+
+def job_rows(job_slug, limit=50, offset=0, country=None):
+    """One job's board: [(profile_id, total_xp, level), ...].
+
+    Served by `pjx_job_cc_xp_idx` when sliced and `profilejobxp_job_xp_idx` otherwise -- both already
+    existed, the latter with a docstring calling ProfileJobXP "the read side for the Lab + leaderboards".
+    `> 0` because a row is created for a job the moment any XP touches it, so unfiltered the board would
+    open with a wall of zeroes.
+    """
+    from trophies.models import ProfileJobXP
+
+    return list(
+        _slice(ProfileJobXP.objects.filter(job_id=job_slug, total_xp__gt=0), country)
+        .order_by('-total_xp', 'profile_id')
+        .values_list('profile_id', 'total_xp', 'level')[offset:offset + limit]
+    )
+
+
+def job_rank(job_slug, profile_id, country=None):
+    """A profile's position on one job's board, or None if they have no XP in it."""
+    from trophies.models import ProfileJobXP
+
+    mine = (ProfileJobXP.objects.filter(job_id=job_slug, profile_id=profile_id)
+            .values_list('total_xp', flat=True).first())
+    if not mine:
+        return None
+    return _slice(ProfileJobXP.objects.filter(job_id=job_slug), country).filter(total_xp__gt=mine).count() + 1
+
+
+def job_board_counts(job_slugs):
+    """Entrants per job: {job_slug: count}. Feeds the Job Boards directory's gate and its sort."""
+    from django.db.models import Count
+    from trophies.models import ProfileJobXP
+
+    if not job_slugs:
+        return {}
+    return dict(
+        ProfileJobXP.objects.filter(job_id__in=list(job_slugs), total_xp__gt=0)
+        .values('job_id').annotate(n=Count('id'))
+        .values_list('job_id', 'n')
+    )
+
+
+def job_board_previews(job_slugs, n=5):
+    """Top `n` of each job's board, in ONE query: {job_slug: [(profile_id, total_xp, level), ...]}."""
+    from django.db.models import F
+    from trophies.models import ProfileJobXP
+
+    if not job_slugs:
+        return {}
+    return _top_n_by_partition(
+        ProfileJobXP.objects.filter(job_id__in=list(job_slugs), total_xp__gt=0),
+        'job_id',
+        [F('total_xp').desc(), F('profile_id').asc()],
+        n,
+        ('profile_id', 'total_xp', 'level'),
+    )

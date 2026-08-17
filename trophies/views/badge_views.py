@@ -798,6 +798,54 @@ class GameBoardsView(BoardDirectoryView):
         return context
 
 
+class JobBoardsView(BoardDirectoryView):
+    """`/leaderboards/jobs/` -- the 24 job boards.
+
+    The smallest directory by far, which is exactly why it must follow the same rules: 24 entities is
+    where a filter panel looks harmless and a third sort looks free. Same base, same two sorts, same gate.
+    """
+    kind = 'jobs'
+    template_name = 'trophies/board_directory.html'
+    partial_template_name = 'trophies/partials/board_directory_results.html'
+
+    def get_queryset(self):
+        from trophies.models import Job
+
+        qs = Job.objects.all()
+        q = self._q()
+        if q:
+            qs = qs.filter(name__icontains=q)
+
+        counts = lb.job_board_counts(list(qs.values_list('slug', flat=True)))
+        live = {slug for slug, n in counts.items() if n >= self.MIN_ENTRANTS}
+        qs = qs.filter(slug__in=live)
+
+        if self._sort() == 'entrants':
+            return sorted(qs, key=lambda j: (-counts.get(j.slug, 0), j.name.lower()))
+        return qs.order_by(Lower('name'))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        jobs = list(context['cards'])
+        slugs = [j.slug for j in jobs]
+
+        previews = lb.job_board_previews(slugs, n=self.PREVIEW)
+        counts = lb.job_board_counts(slugs)
+        hydrated = lb.hydrate([r[0] for rows in previews.values() for r in rows])
+
+        context['boards'] = [{
+            'key': j.slug,
+            'name': j.name,
+            'url': reverse('job_detail', args=[j.slug]) + '?tab=ranks',
+            'entrants': counts.get(j.slug, 0),
+            'rows': [
+                dict(lb._entry(hydrated, r[0], i + 1), primary=r[1], primary_label='XP')
+                for i, r in enumerate(previews.get(j.slug, []))
+            ],
+        } for j in jobs]
+        return context
+
+
 class BadgeRanksPanelView(View):
     """`/badges/<series_slug>/ranks/` -- the series board, fetched into badge detail's Ranks section.
 
