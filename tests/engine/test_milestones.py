@@ -216,9 +216,9 @@ def test_reconcile_adds_highest_removes_stale(monkeypatch, django_capture_on_com
     services.recompute_milestones(p, reconcile_discord=False)
 
     added, removed = [], []
-    monkeypatch.setattr('trophies.services.badge_service.notify_bot_role_earned',
+    monkeypatch.setattr('trophies.services.discord_roles.notify_bot_role_earned',
                         lambda prof, rid: added.append(rid))
-    monkeypatch.setattr('trophies.services.badge_service.notify_bot_role_removed',
+    monkeypatch.setattr('trophies.services.discord_roles.notify_bot_role_removed',
                         lambda prof, rid: removed.append(rid))
 
     with django_capture_on_commit_callbacks(execute=True):
@@ -237,9 +237,9 @@ def test_reconcile_noop_when_not_linked(monkeypatch, django_capture_on_commit_ca
     services.recompute_milestones(p, reconcile_discord=False)
 
     called = []
-    monkeypatch.setattr('trophies.services.badge_service.notify_bot_role_earned',
+    monkeypatch.setattr('trophies.services.discord_roles.notify_bot_role_earned',
                         lambda prof, rid: called.append(rid))
-    monkeypatch.setattr('trophies.services.badge_service.notify_bot_role_removed',
+    monkeypatch.setattr('trophies.services.discord_roles.notify_bot_role_removed',
                         lambda prof, rid: called.append(rid))
 
     with django_capture_on_commit_callbacks(execute=True):
@@ -259,9 +259,9 @@ def test_profile_command_reconciles_already_earned_roles(monkeypatch, django_cap
     services.recompute_milestones(p, reconcile_discord=False)   # earn tiers WITHOUT reconciling (backfill)
 
     added = []
-    monkeypatch.setattr('trophies.services.badge_service.notify_bot_role_earned',
+    monkeypatch.setattr('trophies.services.discord_roles.notify_bot_role_earned',
                         lambda prof, rid: added.append(rid))
-    monkeypatch.setattr('trophies.services.badge_service.notify_bot_role_removed', lambda prof, rid: None)
+    monkeypatch.setattr('trophies.services.discord_roles.notify_bot_role_removed', lambda prof, rid: None)
 
     with django_capture_on_commit_callbacks(execute=True):
         call_command('recompute_milestones', '--profile', p.psn_username)
@@ -276,9 +276,9 @@ def test_reconcile_empty_desired_removes_all_managed(monkeypatch, django_capture
     services.recompute_milestones(p, reconcile_discord=False)
 
     added, removed = [], []
-    monkeypatch.setattr('trophies.services.badge_service.notify_bot_role_earned',
+    monkeypatch.setattr('trophies.services.discord_roles.notify_bot_role_earned',
                         lambda prof, rid: added.append(rid))
-    monkeypatch.setattr('trophies.services.badge_service.notify_bot_role_removed',
+    monkeypatch.setattr('trophies.services.discord_roles.notify_bot_role_removed',
                         lambda prof, rid: removed.append(rid))
 
     with django_capture_on_commit_callbacks(execute=True):

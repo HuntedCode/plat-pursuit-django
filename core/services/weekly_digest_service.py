@@ -88,61 +88,50 @@ class WeeklyDigestService:
 
     @classmethod
     def get_badge_updates(cls, profile, week_start, week_end):
-        """
-        Badges earned this week and the closest badge to earning next.
+        """Group badges earned this week, plus the series they are closest to finishing.
+
+        Repointed off the legacy tier engine in the 2026-08 cutover. Two shape changes reach the email:
+        a badge's secondary label is now its EDITION ("Ultra HD"), because tiers no longer exist; and the
+        closest-badge bar counts STAGES, not games, because that is the unit a group badge is earned in.
 
         Returns: {badges_earned: [...], closest_badge: {...} or None}
         """
-        from trophies.models import Badge, UserBadge, UserBadgeProgress
+        from trophies.models import UserGroupBadge
+        from trophies.services.collection_service import closest_badge
 
-        # Badges earned this week
-        earned_this_week = UserBadge.objects.filter(
-            profile=profile,
-            earned_at__gte=week_start,
-            earned_at__lt=week_end,
-        ).select_related('badge')
+        earned_this_week = (
+            UserGroupBadge.objects.filter(
+                profile=profile,
+                group_badge__is_live=True,
+                earned_at__gte=week_start,
+                earned_at__lt=week_end,
+            )
+            .select_related('group_badge__series', 'group_badge__platform_group')
+            .order_by('earned_at')
+        )
+        badges_earned = [
+            {
+                'name': ugb.group_badge.series.name,
+                'edition': ugb.group_badge.platform_group.name,
+            }
+            for ugb in earned_this_week
+        ]
 
-        badges_earned = []
-        for ub in earned_this_week:
-            badge = ub.badge
-            tier_map = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
-            badges_earned.append({
-                'name': badge.effective_display_series or badge.name,
-                'tier_name': tier_map.get(badge.tier, 'Bronze'),
-            })
-
-        # Closest badge to earning (tier 1, not yet earned, has progress)
-        all_earned_ids = UserBadge.objects.filter(
-            profile=profile,
-        ).values_list('badge_id', flat=True)
-
-        progress_records = UserBadgeProgress.objects.filter(
-            profile=profile,
-            badge__tier=1,
-            badge__is_live=True,
-            completed_concepts__gt=0,
-        ).exclude(
-            badge_id__in=all_earned_ids,
-        ).select_related('badge').order_by('-completed_concepts')
-
-        closest_badge = None
-        for prog in progress_records:
-            badge = prog.badge
-            required = badge.required_stages if badge.required_stages > 0 else 1
-            progress_pct = min(100, int((prog.completed_concepts / required) * 100))
-            if progress_pct >= 1:
-                closest_badge = {
-                    'name': badge.effective_display_series or badge.name,
-                    'progress_pct': progress_pct,
-                    'completed': prog.completed_concepts,
-                    'required': required,
-                }
-                break  # Only need the closest one
+        # `closest_badge` reads the materialized SeriesBadgeStanding the Collection CTA already uses, so the
+        # email and the site name the same series rather than each running their own "nearest" heuristic.
+        nearest = closest_badge(profile)
+        closest = {
+            'name': nearest['series_name'],
+            'progress_pct': nearest['pct'],
+            'completed': nearest['cleared'],
+            'required': nearest['total'],
+        } if nearest else None
 
         return {
             'badges_earned': badges_earned,
-            'closest_badge': closest_badge,
+            'closest_badge': closest,
         }
+
 
     @classmethod
     def get_community_data(cls, week_start, week_end):

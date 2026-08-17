@@ -1,4 +1,4 @@
-from django.urls import path, include
+from django.urls import path
 from .views import (
     SummaryView, GenerateCodeView, VerifyView, UnlinkView, CheckLinkedView,
     RefreshView, SyncRolesView, RecheckBadgesView, TrophyCaseView,
@@ -42,15 +42,6 @@ from .title_views import EquipTitleAPIView
 from .user_settings_views import UpdateTimezoneAPIView, UpdateQuickSettingsAPIView
 from .game_player_views import GamePlayersAPIView
 from .game_flag_views import GameFlagView
-from .mobile_profile_views import MobileProfileView, MobileMyProfileView
-from .mobile_psn_views import MobilePSNGenerateCodeView, MobilePSNVerifyView, MobilePSNStatusView
-from .mobile_sync_views import MobileSyncStatusView, MobileTriggerSyncView
-from .device_token_views import DeviceTokenRegisterView, DeviceTokenDeleteView
-from .mobile_badge_views import (
-    MobileBadgeListView, MobileBadgeSeriesDetailView,
-    MobileUserBadgesView, MobileProfileBadgesView,
-)
-from .mobile_game_views import MobileProfileGamesView, MobileGameTrophiesView
 from .rating_views import GroupRatingView, WizardQueueView, TrophyListView, BlurbReportView
 from .roadmap_views import (
     RoadmapPublishView, RoadmapImageUploadView, RoadmapPreviewView,
@@ -75,36 +66,6 @@ from .pursuer_card_views import PursuerCardRefreshView
 app_name = 'api'
 
 urlpatterns = [
-    # Mobile auth endpoints
-    path('auth/', include('api.mobile_auth_urls')),
-
-    # Mobile profile endpoints
-    path('mobile/me/', MobileMyProfileView.as_view(), name='mobile-my-profile'),
-    path('mobile/profiles/<str:psn_username>/', MobileProfileView.as_view(), name='mobile-profile'),
-
-    # Mobile PSN linking endpoints
-    path('mobile/psn/generate-code/', MobilePSNGenerateCodeView.as_view(), name='mobile-psn-generate-code'),
-    path('mobile/psn/verify/', MobilePSNVerifyView.as_view(), name='mobile-psn-verify'),
-    path('mobile/psn/status/', MobilePSNStatusView.as_view(), name='mobile-psn-status'),
-
-    # Mobile sync endpoints
-    path('mobile/sync/status/', MobileSyncStatusView.as_view(), name='mobile-sync-status'),
-    path('mobile/sync/trigger/', MobileTriggerSyncView.as_view(), name='mobile-sync-trigger'),
-
-    # Push notification device token endpoints
-    path('device-tokens/', DeviceTokenRegisterView.as_view(), name='device-token-register'),
-    path('device-tokens/<str:token>/', DeviceTokenDeleteView.as_view(), name='device-token-delete'),
-
-    # Mobile badge endpoints
-    path('mobile/badges/', MobileBadgeListView.as_view(), name='mobile-badge-list'),
-    path('mobile/badges/<slug:series_slug>/', MobileBadgeSeriesDetailView.as_view(), name='mobile-badge-series-detail'),
-    path('mobile/user/badges/', MobileUserBadgesView.as_view(), name='mobile-user-badges'),
-    path('mobile/profiles/<str:psn_username>/badges/', MobileProfileBadgesView.as_view(), name='mobile-profile-badges'),
-
-    # Mobile game endpoints
-    path('mobile/profiles/<str:psn_username>/games/', MobileProfileGamesView.as_view(), name='mobile-profile-games'),
-    path('mobile/games/<int:game_id>/trophies/', MobileGameTrophiesView.as_view(), name='mobile-game-trophies'),
-
     path('generate-code/', GenerateCodeView.as_view(), name='generate-code'),
     path('verify/', VerifyView.as_view(), name='verify'),
     path('check-linked/', CheckLinkedView.as_view(), name='check-linked'),

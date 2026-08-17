@@ -5,15 +5,12 @@ This service consolidates all badge-related business logic including:
 - Checking if profiles have earned badges
 - Awarding and revoking badges
 - Tracking badge progress
-- Discord role assignments for badges
 """
 import logging
 import time
 from django.db import transaction
 from django.db.models.query import QuerySet
 from django.utils import timezone
-from django.conf import settings
-import requests
 
 from trophies.constants import CONCEPT_BASED_BADGE_TYPES
 from trophies.models import UserTitle
@@ -724,130 +721,6 @@ def handle_badge(profile, badge, _context=None):
 
     # 'misc' badges are admin-awarded only and not evaluated automatically.
     return False
-
-
-def notify_bot_role_earned(profile, role_id):
-    """
-    Notify Discord bot to assign a role to a user.
-
-    This function calls the Discord bot API to assign a role when a user
-    earns a badge or milestone with an associated Discord role.
-
-    Args:
-        profile: Profile instance with discord_id set
-        role_id: Discord role ID to assign
-    """
-    if settings.DEBUG:
-        return
-
-    try:
-        url = settings.BOT_API_URL + "/assign-role"
-        headers = {
-            'Authorization': f"Bearer {settings.BOT_API_KEY}",
-            'Content-Type': 'application/json'
-        }
-        data = {
-            'user_id': profile.discord_id,
-            'role_id': role_id,
-        }
-        response = requests.post(url, json=data, headers=headers, timeout=10)
-        response.raise_for_status()
-        logger.info(
-            f"Bot notified: Assigned role {role_id} to {profile.discord_id}."
-        )
-    except requests.RequestException:
-        logger.exception(
-            f"Bot notification failed for role {role_id} "
-            f"(user {profile.psn_username})"
-        )
-
-
-def notify_bot_role_removed(profile, role_id):
-    """
-    Notify Discord bot to remove a role from a user.
-
-    This function calls the Discord bot API to remove a role when a user
-    loses a badge, milestone, or subscription with an associated Discord role.
-
-    Args:
-        profile: Profile instance with discord_id set
-        role_id: Discord role ID to remove
-    """
-    if settings.DEBUG:
-        return
-
-    try:
-        url = settings.BOT_API_URL + "/remove-role"
-        headers = {
-            'Authorization': f"Bearer {settings.BOT_API_KEY}",
-            'Content-Type': 'application/json'
-        }
-        data = {
-            'user_id': profile.discord_id,
-            'role_id': role_id,
-        }
-        response = requests.post(url, json=data, headers=headers, timeout=10)
-        response.raise_for_status()
-        logger.info(
-            f"Bot notified: Removed role {role_id} from {profile.discord_id}."
-        )
-    except requests.RequestException:
-        logger.exception(
-            f"Bot role removal failed for role {role_id} "
-            f"(user {profile.psn_username})"
-        )
-
-
-def sync_discord_roles(profile):
-    """
-    Sync ALL Discord roles for a verified profile.
-
-    Collects every role the user has earned (milestones, premium) and calls
-    notify_bot_role_earned for each. The bot's /assign-role endpoint is idempotent,
-    so re-assigning an existing role is harmless. Badges no longer grant Discord
-    roles (retired); `badge_roles` stays in the response as 0 for contract stability.
-
-    Intended to be called:
-    - By the bot when a user first verifies (POST /api/v1/sync-roles/)
-    - By a /sync-roles slash command the user can trigger manually
-
-    Args:
-        profile: Profile instance (must have discord_id and is_discord_verified)
-
-    Returns:
-        dict with counts of roles synced by source
-    """
-    if not profile.is_discord_verified or not profile.discord_id:
-        return {'badge_roles': 0, 'milestone_roles': 0, 'premium_roles': 0}
-
-    # `badge_roles` retained at 0 (badges no longer grant roles) so the bot's
-    # sync-roles response shape is unchanged.
-    role_counts = {'badge_roles': 0, 'milestone_roles': 0, 'premium_roles': 0}
-
-    # Milestone roles: the milestones app owns these now (highest earned rung per ladder).
-    from milestones.services import desired_milestone_roles
-    milestone_role_ids = list(desired_milestone_roles(profile))
-    for role_id in milestone_role_ids:
-        notify_bot_role_earned(profile, role_id)
-    role_counts['milestone_roles'] = len(milestone_role_ids)
-
-    # Premium roles
-    if profile.user_is_premium and profile.user:
-        from users.constants import PREMIUM_DISCORD_ROLE_TIERS, SUPPORTER_DISCORD_ROLE_TIERS
-        tier = profile.user.premium_tier
-        if tier in PREMIUM_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_ROLE:
-            notify_bot_role_earned(profile, settings.DISCORD_PREMIUM_ROLE)
-            role_counts['premium_roles'] += 1
-        elif tier in SUPPORTER_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_PLUS_ROLE:
-            notify_bot_role_earned(profile, settings.DISCORD_PREMIUM_PLUS_ROLE)
-            role_counts['premium_roles'] += 1
-
-    total = sum(role_counts.values())
-    logger.info(
-        f"Synced {total} Discord role(s) for {profile.psn_username}: {role_counts}"
-    )
-
-    return role_counts
 
 
 @transaction.atomic

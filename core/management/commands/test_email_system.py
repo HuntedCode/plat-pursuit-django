@@ -1007,7 +1007,7 @@ class Command(BaseCommand):
                 ],
                 'has_challenges': True,
                 'badges_earned': [
-                    {'name': 'Souls Series', 'tier_name': 'Gold'},
+                    {'name': 'Souls Series', 'edition': 'Ultra HD'},
                 ],
                 'has_badges_earned': True,
                 'closest_badge': {

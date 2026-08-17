@@ -16,7 +16,6 @@ PlatPursuit has **71 custom management commands** spread across 5 Django apps: `
 | `update_badge_requirements` | Update `required` and `most_recent_concept` fields on all Badge records. | (none) | `python manage.py update_badge_requirements` |
 | `populate_profilegame_stats` | Recalculate earned/unearned trophy counts, `has_plat`, and most recent trophy date for a single profile's ProfileGame records. | `--username` (required), `--batch_size` (default: 100) | `python manage.py populate_profilegame_stats --username Jlowe` |
 | `check_profile_badge_series` | Check and award badges for a single profile within a specific badge series. | `--username` (required), `--series` (required) | `python manage.py check_profile_badge_series --username Jlowe --series trophy-hunter` |
-| `populate_badges` | Run initial badge check for one or all profiles. Evaluates and awards all applicable badges. | `--username`, `--notify` | `python manage.py populate_badges` |
 | `populate_region_asian_titles` | Detect and flag Asian-language games without concepts, setting `is_regional` and assigning region codes. | (none) | `python manage.py populate_region_asian_titles` |
 | `populate_user_titles` | Backfill UserTitle records for existing badge and milestone awards. **LEGACY** (writes `source_type='badge'`); for the new badge system use `sync_series_titles`. | `--dry-run`, `--badges-only`, `--milestones-only` | `python manage.py populate_user_titles --dry-run` |
 | `sync_series_titles` | Reconcile `UserTitle` against the group badges actually held (NEW badge system). Grants titles the one-shot `award` path missed, and adopts rows another system wrote on a shared Title. Fixes under-counted title rarity and "Be the first" on a title you hold. | `--series`, `--dry-run`, `--prune` | `python manage.py sync_series_titles --dry-run` |
@@ -31,7 +30,6 @@ PlatPursuit has **71 custom management commands** spread across 5 Django apps: `
 | `clean_titles` | Strip TM/registered symbols, normalize Unicode Roman numerals, and remove "trophy set" suffixes from Game, Concept, Trophy, and GameFamily titles. | `--dry-run` | `python manage.py clean_titles --dry-run` |
 | `psn_probe` | Probe PSN API endpoints directly and dump raw payloads. Troubleshooting tool for sync discrepancies. 12 endpoints: `profile`, `profile_legacy`, `presence`, `region`, `friendship`, `trophy_summary`, `trophy_titles`, `trophy_titles_for_title`, `title_stats`, `trophies`, `trophy_groups_summary`, `game_details`. Requires `NPSSO_TOKEN` in `.env`. | `endpoint` (positional), `--user` (default: `abu_abu`), `--np-comm-id`, `--np-title-id`, `--platform` (default: `PS5`), `--trophy-group-id` (default: `all`), `--include-progress`, `--title-ids`, `--limit`, `--offset`, `--page-size`, `--first` (default: `5`, `0` = all) | `python manage.py psn_probe profile_legacy --user abu_abu` |
 | `backfill_game_regions` | Populate `Game.region` from TitleID region data (loaded by `populate_title_ids`). | `--dry-run`, `--verbose` | `python manage.py backfill_game_regions --dry-run --verbose` |
-| `check_all_badges` | Full badge recheck for all profiles (or a single user). Reports awarded and revoked badges with before/after diffing. | `--username`, `--dry-run` | `python manage.py check_all_badges --dry-run` |
 | `audit_badge_coverage` | For each tier-1 franchise/developer badge, find concepts of that franchise (every non-excluded linked concept) / developer (developed games) not covered by the badge's stages, and email the gaps to `badge-alerts@platpursuit.com`. A gap usually means a new game needs adding to the badge. Emails only when gaps exist unless `--always`. | `--dry-run`, `--always` | `python manage.py audit_badge_coverage --dry-run` |
 | `backfill_concept_slugs` | Generate URL slugs for Concepts that don't have one. Handles collisions with counter suffixes. | `--dry-run`, `--batch-size` (default: 100) | `python manage.py backfill_concept_slugs` |
 | `redis_admin` | Swiss-army knife for Redis operations: flush caches, manage TokenKeeper queues, adjust bulk thresholds, migrate whale jobs. | `--flushall`, `--flush-index`, `--flush-game-page <np_id>`, `--flush-token-keeper`, `--flush-complete-lock <profile_id>`, `--flush-dashboard <profile_id>`, `--flush-concept <concept_id>`, `--flush-community`, `--get-bulk-threshold`, `--set-bulk-threshold <n>`, `--move-whale-jobs` (all mutually exclusive) | `python manage.py redis_admin --flush-index` |
@@ -141,7 +139,6 @@ Commands for staff to run manually as needed.
 | `backfill_shovelware` | One-shot wipe + rebuild of shovelware state (use after migrations / major data corrections) |
 | `lock_admin_concepts` | Lock concepts with admin-duplicate suffixes |
 | `refresh_badge_series` | Re-evaluate a badge series after stage/concept changes |
-| `check_all_badges` | Full badge recheck with awarded/revoked reporting |
 | `audit_subscription_status` | Verify premium users against payment provider status |
 | `audit_profile_gamification` | Find XP discrepancies in gamification records |
 | `sync_all_discord_roles` | Re-push Discord roles for all verified users |
@@ -172,7 +169,6 @@ Commands that were run once (or a few times) for data migration. They remain in 
 | `backfill_stage_completions` | Backfill historical StageCompletionEvent rows |
 | `fix_badge_picks` | Recompute fundraiser badge_picks_earned for multi-donation users |
 | `mark_recaps_sent` | Prevent stale recap sends after email fix |
-| `populate_badges` | Initial badge evaluation for all profiles |
 | `populate_profile_plats` | Recalculate platinum counts for all profiles |
 | `populate_profilegame_stats` | Recalculate per-game stats for a profile |
 | `populate_region_asian_titles` | Detect and tag Asian-language games |
@@ -207,13 +203,13 @@ Commands for debugging and monitoring. These do not modify data (except where no
 
 The most common flag across the codebase. When provided, the command previews what changes would be made without writing to the database. Always run with `--dry-run` first when using a command for the first time or on production data.
 
-Commands that support `--dry-run`: `backfill_default_concepts`, `backfill_concept_slugs`, `backfill_stub_concept_icons`, `backfill_game_regions`, `backfill_subscription_periods`, `check_all_badges`, `clean_titles`, `generate_monthly_recaps`, `lock_admin_concepts`, `mark_recaps_sent`, `match_game_families`, `populate_banned_words`, `populate_user_titles`, `process_scheduled_notifications`, `recalc_earn_rates`, `recalculate_gamification`, `send_monthly_recap_emails`, `send_weekly_digest`, `sync_all_discord_roles`, `update_shovelware`.
+Commands that support `--dry-run`: `backfill_default_concepts`, `backfill_concept_slugs`, `backfill_stub_concept_icons`, `backfill_game_regions`, `backfill_subscription_periods`, `clean_titles`, `generate_monthly_recaps`, `lock_admin_concepts`, `mark_recaps_sent`, `match_game_families`, `populate_banned_words`, `populate_user_titles`, `process_scheduled_notifications`, `recalc_earn_rates`, `recalculate_gamification`, `send_monthly_recap_emails`, `send_weekly_digest`, `sync_all_discord_roles`, `update_shovelware`.
 
 ### `--username` / `--profile`
 
 Many commands accept a PSN username to target a single profile instead of processing all profiles. The flag name varies:
 
-- `--username`: `populate_profilegame_stats`, `check_profile_badge_series`, `populate_badges`, `check_all_badges`
+- `--username`: `populate_profilegame_stats`, `check_profile_badge_series`
 - `--profile`: `recalculate_gamification`, `sync_all_discord_roles`, `audit_profile_gamification`
 - `--profile-id`: `generate_monthly_recaps`, `send_monthly_recap_emails`, `send_weekly_digest`
 

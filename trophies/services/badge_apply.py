@@ -15,6 +15,7 @@ from typing import Optional
 
 from django.db import transaction
 from django.db.models import F
+from django.db.models.functions import Greatest
 from django.utils import timezone
 
 from trophies.models import GroupBadge, UserGroupBadge
@@ -83,7 +84,15 @@ def apply_changes(profile, changes, gb_map: dict) -> dict:
             result['awarded'].append(gb.id)
         elif ch.action == 'revoke':
             UserGroupBadge.objects.filter(profile=profile, group_badge=gb).delete()
-            GroupBadge.objects.filter(id=gb.id).update(earned_count=F('earned_count') - 1)
+            # Clamped at 0. `earned_count` carries a `>= 0` check constraint, so a bare `- 1` turns any
+            # drift between the held rows and this denorm into an IntegrityError -- and because the whole
+            # apply runs in one transaction, that aborts the ENTIRE evaluation, not just the counter.
+            # Drift is reachable: a cutover backfill or admin surgery can create a hold without touching
+            # the denorm. A counter that under-reports by one is a cosmetic rarity error; a 500 that
+            # discards a hunter's whole badge evaluation is not.
+            GroupBadge.objects.filter(id=gb.id).update(
+                earned_count=Greatest(F('earned_count') - 1, 0)
+            )
             revoke_series_title_if_orphaned(profile.id, gb.series)
             result['revoked'].append(gb.id)
         elif ch.action == 'update':

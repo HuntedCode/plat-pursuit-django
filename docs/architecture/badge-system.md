@@ -1,5 +1,16 @@
 # Badge System
 
+> **STATUS (2026-08): this documents the LEGACY tier-based engine, which is being retired.**
+> The live engine is the grouping-badge subsystem (`BadgeSeries` x `PlatformGroup` -> `GroupBadge`,
+> earned per EDITION rather than per tier). See
+> [badge-backend-rebuild.md](../design/rebuild/badge-backend-rebuild.md) for the current design and the
+> cutover plan; this page is rewritten when step 5b.5 removes the legacy engine.
+>
+> Already repointed off the legacy tables (step 5b.3): the sync path, the bot's `/recheck-badges` and
+> `/sync-roles`, the community-stats ribbon, the weekly digest, Home and the Collection. Discord role
+> assignment moved out of `badge_service` entirely to `trophies/services/discord_roles.py` -- it stopped
+> being badge logic when migration 0251 dropped `Badge.discord_role_id`.
+
 The Badge System is the core gamification layer of Platinum Pursuit, rewarding users for completing curated sets of PlayStation games organized into badge series. Each series tracks a theme (franchise, developer, or curated collection) and offers up to four tiers of difficulty. Completing stages within a series earns XP, and completing all required stages for a tier awards the badge itself along with a 3,000 XP bonus. The system also includes a parallel Milestone subsystem that rewards cumulative platform-wide achievements (platinum counts, playtime, community engagement, and more) using a pluggable handler architecture. Milestones integrate with Discord role assignments; **badges no longer grant Discord roles** (retired). Both integrate with in-app notifications and a leaderboard system backed by periodic cache refreshes. Earned-badge Discord notifications are sent as ONE consolidated batch per check run (`send_badge_earned_notification`, gated on the profile being Discord-linked), not per badge.
 
 ## Architecture Overview
@@ -333,8 +344,7 @@ Stages link to badges via `series_slug` string matching, not a foreign key. This
 
 | Command | Usage | Purpose |
 |---------|-------|---------|
-| `populate_badges` | `--username <user>`, `--notify` | Run `initial_badge_check` for one user or all profiles |
-| `check_all_badges` | `--username <user>`, `--dry-run` | Full badge recheck for all profiles with before/after diff reporting |
+| `evaluate_badges` | `<username>`, `--all`, `--series <slug>`, `--dry-run` | **Current.** Evaluate group badges and apply earns. Replaced `populate_badges` and `check_all_badges`, both deleted in step 5b.3 |
 | `refresh_badge_series` | `--series <slug>` (required) | Check all profiles against a specific badge series; consolidates notifications |
 | `check_profile_badge_series` | `--username <user>`, `--series <slug>` (both required) | Check one user against one badge series |
 | `update_badge_requirements` | (no args) | Recalculate `required_stages` and `most_recent_concept` for all badges |

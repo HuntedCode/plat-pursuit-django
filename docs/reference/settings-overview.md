@@ -27,7 +27,7 @@ Key Django settings, third-party integrations, and constants files used across P
 | Sentry | Auto-configured | `sentry-sdk` |
 | AWS S3 | `AWS_STORAGE_BUCKET_NAME`, `AWS_S3_ACCESS_KEY_ID`, `AWS_S3_SECRET_ACCESS_KEY` | `django-storages`, `boto3` |
 | Discord | `BOT_API_URL`, `BOT_API_KEY`, `DISCORD_*_WEBHOOK_URL`, `DISCORD_*_ROLE` | Custom service |
-| CORS | `CORS_ALLOWED_ORIGINS` | `django-cors-headers` (mobile app) |
+| CORS | `CORS_ALLOWED_ORIGINS` | `django-cors-headers` (no current consumer; see mobile-app.md) |
 
 ### Payment Mode Switching
 
@@ -94,7 +94,7 @@ The primary constants file (~235 lines). Contains:
 - **Test/live mode isolation**: Stripe and PayPal keys are completely separate per mode. Mixing test keys with live webhook secrets will silently fail webhook verification.
 - **DATABASE_URL priority**: If `DATABASE_URL` is set, individual `DB_*` vars are ignored. Cannot mix them.
 - **Redis single instance**: Both Django cache and raw Redis (Token Keeper) use the same Redis instance but different databases/key prefixes.
-- **CORS is mobile-only**: Only needed for the React Native Expo dev server. Web app uses same-origin.
+- **CORS has no current consumer**: it existed for the React Native Expo dev server, and the mobile API was removed in 2026-08 (see [Mobile App](../guides/mobile-app.md)). The web app is same-origin. Left configured because it is inert without `CORS_ALLOWED_ORIGINS` set, and a mobile rebuild will want it back.
 
 ## Related Docs
 

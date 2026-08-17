@@ -349,7 +349,7 @@ class Profile(models.Model):
         should_remove_roles = self.discord_id and self.is_discord_verified
 
         if should_remove_roles:
-            from trophies.services.badge_service import notify_bot_role_removed
+            from trophies.services.discord_roles import notify_bot_role_removed
 
             # Badges no longer grant Discord roles (retired); only milestone + premium
             # roles are managed now.

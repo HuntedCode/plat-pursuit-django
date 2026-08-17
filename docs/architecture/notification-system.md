@@ -51,7 +51,7 @@ Signal fires (post_save)
 
 | File | Purpose |
 |------|---------|
-| `notifications/models.py` | Data models: Notification, NotificationTemplate, ScheduledNotification, DeviceToken, NotificationLog |
+| `notifications/models.py` | Data models: Notification, NotificationTemplate, ScheduledNotification, NotificationLog |
 | `notifications/signals.py` | Django signal handlers for EarnedTrophy, UserBadge, UserMilestone, Profile events |
 | `notifications/apps.py` | AppConfig that imports signals on `ready()` |
 | `notifications/validators.py` | SectionValidator for structured notification sections |
@@ -123,17 +123,6 @@ Admin-created notifications with future delivery. Processed by the hourly cron c
 | `email_cta_text` | CharField | Legacy. Defaults to `action_text` if blank |
 
 Status lifecycle: `pending` -> `processing` -> `sent` (or `failed`). Can be `cancelled` while still `pending`.
-
-### DeviceToken
-
-Push notification device tokens for mobile.
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `user` | FK(CustomUser) | CASCADE |
-| `token` | CharField(512) | Unique. Expo push token or raw FCM/APNs token |
-| `platform` | CharField | ios / android |
-| `last_used` | DateTimeField | auto_now |
 
 ### NotificationLog
 

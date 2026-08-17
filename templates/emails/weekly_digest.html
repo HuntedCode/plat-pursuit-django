@@ -360,7 +360,7 @@
         {% for badge in your_week.badges_earned %}
         <div class="badge-earned-item">
             <span class="badge-name">{{ badge.name }}</span>
-            <span class="badge-tier">&middot; {{ badge.tier_name }}</span>
+            <span class="badge-tier">&middot; {{ badge.edition }}</span>
         </div>
         {% endfor %}
         {% endif %}
@@ -372,7 +372,7 @@
             <div class="progress-bar-bg">
                 <div class="progress-bar-fill" style="width: {{ your_week.closest_badge.progress_pct }}%;"></div>
             </div>
-            <span class="badge-progress-text">{{ your_week.closest_badge.completed|intcomma }}/{{ your_week.closest_badge.required|intcomma }} games ({{ your_week.closest_badge.progress_pct }}%)</span>
+            <span class="badge-progress-text">{{ your_week.closest_badge.completed|intcomma }}/{{ your_week.closest_badge.required|intcomma }} stages ({{ your_week.closest_badge.progress_pct }}%)</span>
         </div>
         {% endif %}
         {% endif %}

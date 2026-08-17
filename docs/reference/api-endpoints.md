@@ -1,13 +1,13 @@
 # API Endpoints
 
-All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The web app uses session/CSRF authentication; the mobile app uses token authentication (`Authorization: Token <token>`). Staff-only endpoints require the `StaffRequiredAPIMixin`. There are approximately 130 endpoints across 19 categories.
+All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The web app uses session/CSRF authentication; PlatBot uses token authentication (`Authorization: Token <token>`, matched against `BOT_API_KEY` by `IsDiscordBot`). Staff-only endpoints require the `StaffRequiredAPIMixin`.
 
 ## Authentication Patterns
 
 | Pattern | Usage |
 |---------|-------|
-| Session + CSRF | Web app (default for all non-mobile endpoints) |
-| Token auth | Mobile app endpoints (`/api/v1/auth/`, `/api/v1/mobile/`) |
+| Session + CSRF | Web app (the default) |
+| Token auth | PlatBot endpoints (`/api/v1/verify/`, `/sync-roles/`, `/recheck-badges/`, ...) |
 | Login required | Most write operations |
 | Staff required | Admin endpoints, game family management, roadmap editor, subscription admin |
 | No auth | Some read-only endpoints (recent reviews feed, review list/detail/replies, profile card image rendering) |
@@ -250,30 +250,6 @@ Blurbs are read only through `UserConceptRating.visible_blurbs()` (present + not
 | POST | `/api/v1/easter-eggs/roll/` | Login | Server-side easter-egg probability roll |
 | GET | `/api/v1/game-backgrounds/` | Login | Search game backgrounds |
 
-### Mobile App
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/v1/auth/login/` | No | Login (returns token) |
-| POST | `/api/v1/auth/signup/` | No | Create account |
-| POST | `/api/v1/auth/logout/` | Token | Invalidate token |
-| POST | `/api/v1/auth/password-reset/` | No | Password reset email |
-| GET | `/api/v1/mobile/me/` | Token | Current user profile |
-| GET | `/api/v1/mobile/profiles/<psn>/` | Token | Profile by PSN username |
-| POST | `/api/v1/mobile/psn/generate-code/` | Token | Generate verification code |
-| POST | `/api/v1/mobile/psn/verify/` | Token | Verify PSN account |
-| GET | `/api/v1/mobile/psn/status/` | Token | PSN link status |
-| GET | `/api/v1/mobile/sync/status/` | Token | Sync status |
-| POST | `/api/v1/mobile/sync/trigger/` | Token | Trigger sync |
-| POST | `/api/v1/device-tokens/` | Token | Register device token |
-| DELETE | `/api/v1/device-tokens/<token>/` | Token | Unregister device |
-| GET | `/api/v1/mobile/badges/` | Token | Badge series list |
-| GET | `/api/v1/mobile/badges/<slug>/` | Token | Badge series detail |
-| GET | `/api/v1/mobile/user/badges/` | Token | Current user's badges |
-| GET | `/api/v1/mobile/profiles/<psn>/badges/` | Token | Profile's badges |
-| GET | `/api/v1/mobile/profiles/<psn>/games/` | Token | Profile's games |
-| GET | `/api/v1/mobile/games/<id>/trophies/` | Token | Game trophy list |
-
 ## Rate Limits
 
 Rate limits are applied via `django-ratelimit` on specific endpoints:
@@ -287,7 +263,7 @@ Rate limits are applied via `django-ratelimit` on specific endpoints:
 
 ## Related Docs
 
-- [Mobile App](../guides/mobile-app.md): Mobile-specific endpoint details
+- [Mobile App](../guides/mobile-app.md): why the mobile API was removed, and what to know when rebuilding it
 - [Roadmap System](../features/roadmap-system.md): Roadmap editor API details (replaced the legacy Checklists API)
 - [Challenge Systems](../features/challenge-systems.md): Challenge API details
 - [Community Flags](../features/community-flags.md): Game flag categories and effects

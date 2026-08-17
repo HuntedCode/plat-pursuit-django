@@ -306,7 +306,7 @@ Mostly **Keep**. Flagged where the rebuild needs a change.
 | Site Heartbeat / Homepage | Shipped | **Keep** | Single hourly job; old featured_* services removed |
 | Advertising (AdSense + Funding Choices CMP) | **Removed 2026-08** | **Gone** | Site is ad-free permanently. Removed outright, not env-gated. Took the cookie consent prompt with it (no GA, so the CMP was ads-only) and tightened the CSP. See the Advertising row in [rebuild-playbook.md](rebuild-playbook.md). |
 | Mini-games / Arcade (Stellar Circuit) | Prototype | **Absorb** | Frontend-only Phaser prototype; needs a minimal backend (sessions/scores) before any XP wiring; **also the last ZoomScaler page** |
-| Mobile App API | Backend shipped, FE pending | **Keep + complete** | Token auth; Phase 3 push blocked on Firebase |
+| Mobile App API | **Removed 2026-08** | **Rebuild with the client** | 15 endpoints + DeviceToken deleted; a client will be a full rebuild, so the API should be designed against it. See guides/mobile-app.md |
 | API Layer (~130 endpoints) | Shipped | **Keep** | Version carefully (web + mobile clients) |
 | Management Commands & Cron (~69 cmds) | Shipped | **Keep** | Drift-correction backbone; Render-scheduled |
 | Security / Settings / Redis / SEO | Shipped | **Keep** | Solid baseline; CSP allowlist is manual |

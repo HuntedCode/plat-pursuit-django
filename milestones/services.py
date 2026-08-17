@@ -180,7 +180,7 @@ def reconcile_discord_roles(profile):
 
     def _fire():
         # Imported here (not at module load) to avoid an import cycle with trophies.services.
-        from trophies.services.badge_service import notify_bot_role_earned, notify_bot_role_removed
+        from trophies.services.discord_roles import notify_bot_role_earned, notify_bot_role_removed
         for role_id in desired:
             notify_bot_role_earned(profile, role_id)
         for role_id in to_remove:

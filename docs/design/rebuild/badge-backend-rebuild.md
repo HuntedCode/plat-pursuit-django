@@ -231,7 +231,7 @@ just per-edition. (Cutover: an `evaluate_badges` run backfills it onto existing 
 global XP (`xp_rows`/`xp_rank`), per-series XP (`series_xp_rows`/`series_rank`), per-series progress/chasers
 (`series_progress_rows`), and per-badge earners (`earners_rows` + `earners_rank`/`earners_ranks` -- the LIVE
 position shown on the medallion back, a bounded indexed COUNT). The earners board IS the derived rank (`held
-ORDER BY earned_at`), so no separate rank store. **Next:** 5b -- retire the legacy consumers (§6).
+ORDER BY earned_at`), so no separate rank store. **Next:** 5b.4 -- the XP / Redis stack (§6). 5b.1-5b.3 are done.
 
 ---
 
@@ -300,8 +300,53 @@ Standard parallel-change / expand–contract with a separate schema:
      `group_badge_progress_peek`, which are the new subsystem and never import `frame_service`. The Frame
      is the card the Medallion replaced.
 
-   **5b.3 — repoint the live.** `stats_service`, `api/mobile_badge_views` (routed and live),
-   `weekly_digest_service`, `core/services/stats`, `api/views`.
+   **5b.3 — repoint the live. [DONE 2026-08]** Six surfaces, not the four inventoried; the extra two were
+   found on the way in and are the more interesting half.
+
+   - **`api/views`** — the bot contract. `/recheck-badges` now runs `evaluate_and_apply` and reads the
+     deltas straight off its result, dropping the two before/after `UserBadge` snapshot queries it used to
+     diff. `/verify` and the mobile PSN verify both run a full evaluation with `notify=True`: safe because
+     `awarded` is a TRANSITION, so an already-synced hunter is awarded nothing and told nothing.
+   - **`core/services/stats` + `site_heartbeat`** — the community ribbon. Badge XP now reads the
+     materialized `ProfileBadgeStanding.total_xp` the boards sort on, so ribbon and leaderboard cannot
+     disagree. Earnable XP is explicitly an UPPER BOUND (true XP counts only GATING stages, which needs a
+     full catalog build — far too heavy for an hourly cron); the legacy figure approximated too.
+   - **`weekly_digest_service`** — the email. A badge's secondary label is its EDITION now, and the
+     closest-badge bar counts STAGES not games. Reads `collection_service.closest_badge`, so the email and
+     the site's Collection CTA name the same series instead of each running their own heuristic.
+   - **`stats_service`** — turned out to be fully ORPHANED by the 5b.2 deletions, so it was deleted rather
+     than repointed.
+   - **`api/mobile_badge_views`** — DELETED with its four routes. Tier-shaped throughout (`tier`,
+     `all_tiers`, `user_highest_tier`), a shape this subsystem does not have. Verified no consumer:
+     PlatBot calls only the bot endpoints, and there is no PlatPursuit mobile client. Rewriting an API
+     nobody consumes is speculative; rebuild against `GroupBadge` when a client needs it.
+   - **Discord roles — extracted, not repointed.** `sync_discord_roles` / `notify_bot_role_earned` /
+     `notify_bot_role_removed` stopped being badge logic when migration 0251 dropped
+     `Badge.discord_role_id`. They now live in `trophies/services/discord_roles.py`. This was load-bearing:
+     seven live consumers outside the badge system (milestones, subscriptions, the premium-downgrade hook
+     on `Profile`) call them, so leaving them in `badge_service` would have made 5b.5 take subscriptions
+     and milestone roles down with it.
+   - **`trophies/utils.py` — deleted.** A back-compat re-export shim with exactly ONE consumer importing
+     ONE function, but it imported `badge_service` AND `leaderboard_service` at module level, so it was a
+     5b.5 breakage waiting to happen. `users/views.py` now imports from `profile_stats_service` directly.
+   - **`populate_badges` + `check_all_badges` — deleted.** Both are `evaluate_badges` with fewer options.
+
+   Two faults found and fixed while doing it:
+
+   - **A live sync bug** (introduced by the 5b.2 deletions): `_job_sync_complete` still imported the
+     deleted `dashboard_service`. Because it is a function-level import inside a `try/except Exception`,
+     `manage.py check` passed and the whole suite stayed green — every sync would have raised, been
+     swallowed, and silently skipped the rest of the job. Guarded now by
+     `tests/engine/test_no_dangling_imports.py`, which AST-walks the import-heavy hot paths and resolves
+     every module without executing anything.
+   - **An unclamped denorm decrement** in `apply_changes`: `earned_count` carries a `>= 0` check
+     constraint, and the whole apply runs in one transaction, so any drift between held rows and the
+     denorm turned a revoke into an IntegrityError that discarded the ENTIRE evaluation. Drift is
+     reachable exactly where the cutover is heading — a backfill writing holds directly. Clamped with
+     `Greatest(..., 0)`.
+
+   Coverage added where there was none: `test_badge_legacy_consumers_repointed.py` (the bot contract and
+   the digest, neither of which had a single test), plus the catalog stats rewritten onto the new models.
 
    **5b.4 — the XP / Redis stack.** `xp_service`, `redis_leaderboard_service`, `leaderboard_service`. The
    leaderboards rebuild's deferred cleanup lives here too, so this finishes both threads.

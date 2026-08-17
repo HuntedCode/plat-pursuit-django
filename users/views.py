@@ -26,7 +26,7 @@ from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
 from users.models import CustomUser
 from trophies.forms import ProfileSettingsForm
-from trophies.utils import update_profile_trophy_counts
+from trophies.services.profile_stats_service import update_profile_trophy_counts
 
 logger = logging.getLogger('users.views')
 

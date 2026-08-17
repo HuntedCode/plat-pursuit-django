@@ -365,12 +365,6 @@ Key relationships:
 ### NotificationLog
 Audit log for bulk notification sends. Snapshots the sent content and tracks recipient count.
 
-### DeviceToken
-Push notification tokens for mobile devices (iOS/Android). Used by the FCM push notification service.
-
-Key relationships:
-- `user` FK to `CustomUser`
-
 ---
 
 ## Core/Infrastructure Models (core app)
@@ -433,7 +427,6 @@ CustomUser
   |-- 1:1 --> Profile
   |-- 1:N --> SubscriptionPeriod
   |-- 1:N --> Notification (as recipient)
-  |-- 1:N --> DeviceToken
   |-- 1:N --> EmailLog
   |-- 1:N --> Donation
 

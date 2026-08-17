@@ -271,3 +271,32 @@ def test_out_of_scope_badge_is_never_revoked():
     evaluate_and_apply(profile, [gb2])
     assert UserGroupBadge.objects.filter(profile=profile, group_badge=gb1).exists()
     assert not UserGroupBadge.objects.filter(profile=profile, group_badge=gb2).exists()
+
+
+def test_revoke_clamps_the_denorm_at_zero():
+    """A hold whose award never incremented `earned_count` must still revoke cleanly.
+
+    `earned_count` carries a `>= 0` check constraint and `apply_changes` runs the whole evaluation in one
+    transaction, so an unclamped `F('earned_count') - 1` turned any drift into an IntegrityError that
+    discarded the ENTIRE apply -- every other badge in the run included. Drift is reachable whenever a hold
+    is written outside this layer: a cutover backfill, an import, admin surgery.
+
+    Found by the 5b.3 repoint of the bot's /recheck-badges, which is exactly a caller that runs a full
+    evaluation over a profile whose holds may predate this engine.
+    """
+    ultra = _ultra()
+    series, _game_obj, _ = _one_stage_series('clamp')
+    gb = GroupBadgeFactory(series=series, platform_group=ultra)
+    profile = ProfileFactory()
+
+    # A hold with the denorm still at 0: what a backfill that wrote rows directly leaves behind.
+    UserGroupBadge.objects.create(profile=profile, group_badge=gb)
+    assert gb.earned_count == 0
+
+    # The profile never completed the game, so this must revoke.
+    res = evaluate_and_apply(profile, [gb])
+
+    assert res['revoked'] == [gb.id]
+    assert not UserGroupBadge.objects.filter(profile=profile, group_badge=gb).exists()
+    gb.refresh_from_db()
+    assert gb.earned_count == 0                            # clamped, not -1

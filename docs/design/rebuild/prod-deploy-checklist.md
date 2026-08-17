@@ -276,3 +276,28 @@ Spec: [leaderboards-rebuild.md](leaderboards-rebuild.md). Migration `0300`.
       0, so until that runs the Badge Points board shows every hunter as holding **0 badges** beside a
       correct points total — a wrong number rather than a missing one, which is the harder kind to notice.
       If you are running the backfill for the edition standings anyway, this rides along with it.
+
+## Badge cutover 5b: deletions (2026-08)
+
+Migrations `0303` / `0304` (profile showcases, dashboard config) and `notifications.0017_drop_device_token`.
+
+- [ ] **`notifications.0017_drop_device_token` drops a table with rows in it.** `DeviceToken` collected
+      Expo/FCM push tokens from the mobile logout view. Nothing ever read them and the
+      `PushNotificationService` its docstring named was never written, so the data has no consumer — but it
+      is real user data being dropped, not an empty scaffold. Take the pre-migrate snapshot you would take
+      for any destructive migration.
+- [ ] **Delete the `update_leaderboards` cron entry in the Render dashboard.** Already removed from the
+      docs; the schedule itself lives in Render and outlives the deploy. It will keep firing against a
+      command that no longer exists.
+- [ ] **Add the nightly `evaluate_badges --all` cron entry in Render.** This is the reconcile that keeps
+      every badge figure honest, and it is the ONLY thing that keeps the sync-path evaluation from drifting.
+      Without it the boards are as stale as the last manual run — the exact condition the cutover set out
+      to fix.
+- [ ] **15 mobile endpoints are gone (`/api/v1/auth/*`, `/api/v1/mobile/*`, `/api/v1/device-tokens/*`).**
+      Verified unconsumed: PlatBot calls only the bot endpoints. If anything external was quietly polling
+      them it will start seeing 404s, which is the intended outcome but worth knowing before it is reported
+      as an outage. See [../../guides/mobile-app.md](../../guides/mobile-app.md).
+- [ ] **DRF token auth was deliberately KEPT.** `rest_framework.authtoken` and `TokenAuthentication` read
+      as mobile scaffolding, but `IsDiscordBot` authorises by matching the token key against `BOT_API_KEY`.
+      If a later cleanup pass removes them "with the mobile stack", every bot endpoint rejects the bot.
+      Pinned by `tests/engine/test_mobile_api_removed.py`.

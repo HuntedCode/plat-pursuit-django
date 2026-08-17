@@ -131,11 +131,12 @@ def compute_site_heartbeat() -> dict:
     # Catalogue coverage: distinct games that are part of a live badge series / a live contract. Surfaced on
     # Browse Games' header as discovery hooks. Catalogue-wide aggregates -> hourly cron, never the request path.
     try:
-        from trophies.models import Game, Badge
+        from trophies.models import Game, BadgeSeries
+        # A series is live when it has at least one live GROUP badge -- liveness moved from the badge row
+        # to the per-edition GroupBadge in the 2026-08 cutover.
         _live_series = (
-            Badge.objects.filter(is_live=True)
-            .exclude(series_slug__isnull=True).exclude(series_slug='')
-            .values_list('series_slug', flat=True)
+            BadgeSeries.objects.filter(group_badges__is_live=True)
+            .distinct().values_list('series_slug', flat=True)
         )
         games_in_badges = Game.objects.filter(concept__stages__series_slug__in=_live_series).distinct().count()
     except Exception:

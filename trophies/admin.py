@@ -111,14 +111,14 @@ class ProfileAdmin(admin.ModelAdmin):
     def recheck_badges(self, request, queryset):
         """Run a full badge recheck for selected profiles."""
         import logging
-        from trophies.services.badge_service import initial_badge_check
+        from trophies.services.badge_apply import evaluate_and_apply
 
         logger = logging.getLogger("psn_api")
         success = 0
         failed_profiles = []
         for profile in queryset:
             try:
-                initial_badge_check(profile, discord_notify=False)
+                evaluate_and_apply(profile, notify=False)
                 success += 1
             except Exception as e:
                 logger.exception(f"Badge recheck failed for {profile.psn_username}")

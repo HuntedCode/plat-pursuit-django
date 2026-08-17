@@ -25,7 +25,7 @@ from users.constants import (
     ACTIVE_PREMIUM_TIERS,
 )
 from trophies.discord_utils.discord_notifications import send_subscription_notification
-from trophies.services.badge_service import notify_bot_role_earned
+from trophies.services.discord_roles import notify_bot_role_earned
 
 logger = logging.getLogger('users.services.subscription')
 
@@ -233,7 +233,7 @@ class SubscriptionService:
         # Side effects after commit: Discord role removal (only the role matching the user's tier)
         # Deferred via on_commit to avoid blocking the webhook response with HTTP calls.
         if hasattr(user, 'profile') and user.profile.is_discord_verified and user.profile.discord_id:
-            from trophies.services.badge_service import notify_bot_role_removed
+            from trophies.services.discord_roles import notify_bot_role_removed
             profile = user.profile
             if original_tier in PREMIUM_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_ROLE:
                 role_id = settings.DISCORD_PREMIUM_ROLE
