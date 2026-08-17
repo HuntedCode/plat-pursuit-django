@@ -2,13 +2,13 @@
 
 > ## 🗑️ HIDDEN pending rebuild (2026-08)
 >
-> **The surface is gone; the plumbing is not.** The inbox (`/notifications/`), the four staff pages and nine of the ten API routes are withdrawn — pages 302 to home, API routes 404. Everything described below still *runs*: the models, the signals, the deferred queue, the scheduled-delivery service and every producer (sync, badges, reviews, roadmap notes, donations, subscriptions). Rows keep accruing behind a closed door, which is what makes this reversible.
+> **The surface is gone; the plumbing is not.** The inbox (`/notifications/`), the four staff pages and all ten API routes are withdrawn — pages 302 to home, API routes 404. Everything described below still *runs*: the models, the signals, the deferred queue, the scheduled-delivery service and every producer (sync, badges, reviews, roadmap notes, donations, subscriptions). Rows keep accruing behind a closed door, which is what makes this reversible.
 >
 > **Why hidden rather than deleted.** The producers are wired into `psn_api_service` (sync), `token_keeper` (the worker), `donation_service` (Stripe) and `subscription_service` — and a rebuilt notification system still needs "badge earned", "platinum earned", "sync finished", "donation received". Deleting those call sites would mean writing them again later, in the four files least worth re-opening. Hiding throws away only the part being rebuilt.
 >
 > **What was actually removed:** the navbar bell, `static/js/notifications.js` (which fetched an unread count on *every* page load for every authed user), `CelebrationManager.celebratePlatinum` and the `.pp-navicon__badge` CSS. The platinum confetti went deliberately — it fired from an inbox poll rather than from earning anything, so it went off on whatever page you opened next.
 >
-> **Two deliberate exceptions:** `/api/v1/admin/notifications/user-search/` stays routed (the Badge Creation page uses it as a user picker; it wants rehoming), and the URL *names* are all preserved, because three unrelated staff pages reverse `admin_notification_center` and losing the name is a hard 500 on each.
+> **One deliberate exception:** the URL *names* are all preserved, because three unrelated staff pages reverse `admin_notification_center` and losing the name is a hard 500 on each. (`/api/v1/admin/notifications/user-search/` was a second exception until cutover 5b, kept only for the staff Badge Creation page's user picker. That page authored legacy tier badges and was deleted, so the endpoint went with it.)
 >
 > **Outbound delivery** is stopped by pausing the hourly `process_scheduled_notifications` Render cron — a dashboard change, on the deploy checklist. Nothing else sends: `PushNotificationService` does not exist yet and the recap email is already paused.
 >

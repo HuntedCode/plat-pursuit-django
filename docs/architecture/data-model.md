@@ -119,7 +119,7 @@ Key relationships:
 - `badge` FK to `Badge`
 
 ### StageCompletionEvent
-Records when a profile completed a specific stage for a specific badge tier. Used for time-series badge analytics. One record per (profile, badge, stage) triple. Automatically created/deleted by `badge_service._record_stage_completions` during badge evaluation.
+Records when a profile completed a specific stage for a specific badge tier. Used for time-series badge analytics. One record per (profile, badge, stage) triple. RETAINED table with no live writer: `badge_service` was deleted in cutover 5b, and the current engine records no stage-completion events.
 
 Key relationships:
 - `profile` FK to `Profile`
@@ -131,7 +131,7 @@ Key fields:
 - `completed_at`: effective completion date (max of game completion vs badge creation for retroactive credit)
 
 ### ProfileGamification
-OneToOne extension of Profile for gamification stats. Stores `total_badge_xp`, per-series XP breakdown (`series_badge_xp` JSON), and total/unique badge counts. Updated via signals when badge progress changes.
+OneToOne extension of Profile for gamification stats. Stores `total_badge_xp`, per-series XP breakdown (`series_badge_xp` JSON), and total/unique badge counts. FROZEN legacy denorm: no writer since cutover 5b.
 
 Key relationships:
 - `profile` OneToOne to `Profile` (primary key)

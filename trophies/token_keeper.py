@@ -1509,12 +1509,14 @@ class TokenKeeper:
             except Exception:
                 logger.exception(f"[profile {profile_id}] sync_complete contract detection failed")
 
-            # Create consolidated badge notifications
-            try:
-                from notifications.services.deferred_notification_service import DeferredNotificationService
-                DeferredNotificationService.create_badge_notifications(profile_id, profile=profile)
-            except Exception as e:
-                logger.error(f"[profile {profile_id}] sync_complete badge notification failed: {e}", exc_info=True)
+            # Badge notifications are NOT flushed here any more. The only producer that ever filled the
+            # `pending_badges:{profile_id}` queue was `notify_badge_awarded`, a post_save on the legacy
+            # `UserBadge` that the 5b cutover deleted -- so this was a Redis read per sync for a queue
+            # nothing writes. Worse, on the first post-deploy sync it would have flushed any surviving
+            # keys into notifications carrying tier-shaped context (`badge_tier`, `next_tier_progress`)
+            # that no longer describes anything. The new subsystem announces to Discord from
+            # `badge_adapters.announce_badges_earned`; wiring an on-site badge notification is part of the
+            # notification-inbox rebuild.
 
             # NOTE: the new milestones app (platinums/trophies/completions/badges/level/playtime) is recomputed
             # LATER, in the 'finishing' phase below -- it reads the post-sync denorm counts (total_trophies /

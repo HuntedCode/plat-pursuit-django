@@ -131,8 +131,17 @@ class VerifyView(APIView):
                     # TRANSITION. A hunter who has already synced holds their badges, so this awards
                     # nothing and announces nothing. It only speaks up when the link genuinely surfaces
                     # badges for the first time, and then as ONE consolidated message.
-                    from trophies.services.badge_apply import evaluate_and_apply
-                    evaluate_and_apply(profile, notify=True)
+                    #
+                    # Guarded, like the milestone recompute below it. The Discord link has ALREADY
+                    # committed by this point, so an exception here would 500 an account that is in fact
+                    # linked -- and skip the milestone recompute and role push that follow. The legacy
+                    # `initial_badge_check` was effectively non-raising (per-badge try/except inside), so
+                    # the repoint quietly removed insulation the call site never had to provide.
+                    try:
+                        from trophies.services.badge_apply import evaluate_and_apply
+                        evaluate_and_apply(profile, notify=True)
+                    except Exception:
+                        logger.exception(f"[verify] badge evaluation failed for {psn_username}")
                     # New milestones app: compute + grant the ladder roles they've already earned on link.
                     # Community members (site account OR the Discord link just made) earn milestones -- see
                     # milestones.services.member_q. Guarded so a hiccup never fails an otherwise-good link.

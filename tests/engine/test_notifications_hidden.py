@@ -120,8 +120,12 @@ def test_the_staff_user_picker_went_with_its_only_consumer():
     picker whose only reason for existing was to serve it."""
     assert not (ROOT / 'templates' / 'trophies' / 'badge_creation.html').exists()
 
-    api_urls = (ROOT / 'api' / 'urls.py').read_text(encoding='utf-8')
-    assert 'AdminUserSearchView' not in api_urls
+    # AST, not a substring scan: `api/urls.py` documents this removal in a comment, and a raw scan reads
+    # the explanation as the offence -- the same trap the sibling guards in this cutover avoid.
+    tree = ast.parse((ROOT / 'api' / 'urls.py').read_text(encoding='utf-8'))
+    imported = {a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names}
+    used = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    assert 'AdminUserSearchView' not in imported | used
 
     with pytest.raises(NoReverseMatch):
         reverse('api:admin-notification-user-search')

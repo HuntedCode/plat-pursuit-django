@@ -3092,6 +3092,11 @@ class UserGroupBadge(models.Model):
         help_text="CURRENT-iteration completion date (the engine's earned_date) -- the leaderboard sort key, "
                   "resynced on re-evaluation if the badge changes. NOT the sync time.",
     )
+    created_at = models.DateTimeField(
+        default=timezone.now, editable=False, db_index=True,
+        help_text="When WE awarded this row. Distinct from earned_at, which is the hunter's completion "
+                  "date and moves when the badge's iteration changes. Use this for 'earned this week'.",
+    )
 
     class Meta:
         unique_together = ['profile', 'group_badge']

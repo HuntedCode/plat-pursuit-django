@@ -284,18 +284,45 @@ def closest_badge(profile):
     furthest-along fraction over a series' editions and means exactly "how close are they", so this is a
     read rather than a computation.
 
-    EXCLUDES the finished (`10000` bp): "closest badge" pointing at one they have already earned is not a
-    reason to click. Ordered by the same `(-progress_bp, advanced_at)` the per-series board uses, so the
-    tie-break is "whoever got to this rung first" rather than an arbitrary row.
+    Three exclusions, and the last two are not the same as the first:
 
-    Two bounded reads, both catalog-scoped: the profile's standings (indexed by the `(profile, series_slug)`
-    unique constraint) and one name lookup.
+    1. **The finished (`10000` bp).** Pointing at a completed series is not a reason to click.
+    2. **Series the hunter already HOLDS.** Under `completion_policy='min_count'` (megamix) a badge is
+       earned at `min_required` gating stages while `progress_bp` measures cleared/gating, so a hunter can
+       hold the badge at 3750 bp. Filtering on progress alone offered them a medallion already on their
+       wall. Under policy `'all'` the two coincide, which is why this only shows up on megamix series.
+    3. **Series with no live edition.** `recompute_standing` only ever deletes standings for the series it
+       was handed, and it is only ever handed live ones -- so a standing written while a series was live
+       (or by `evaluate_badges --series`, which deliberately includes dormant badges for testing) survives
+       the series going dormant, forever. Without this gate a curator smoke-testing an unreleased series
+       against real profiles put that series in those hunters' Home CTA and weekly email.
+
+    Ordered by the same `(-progress_bp, advanced_at)` the per-series board uses, so the tie-break is
+    "whoever got to this rung first" rather than an arbitrary row.
+
+    Bounded, catalog-scoped reads: the profile's standings (indexed by the `(profile, series_slug)` unique
+    constraint), two small slug sets, and one name lookup.
     """
-    from trophies.models import BadgeSeries
+    from trophies.models import BadgeSeries, UserGroupBadge
+
+    held_slugs = set(
+        UserGroupBadge.objects
+        .filter(profile=profile)
+        .values_list('group_badge__series__series_slug', flat=True)
+    )
+    live_slugs = set(
+        BadgeSeries.objects
+        .filter(group_badges__is_live=True)
+        .values_list('series_slug', flat=True)
+    )
+    candidate_slugs = live_slugs - held_slugs
+    if not candidate_slugs:
+        return None
 
     standing = (
         SeriesBadgeStanding.objects
-        .filter(profile=profile, progress_bp__gt=0, progress_bp__lt=10000)
+        .filter(profile=profile, progress_bp__gt=0, progress_bp__lt=10000,
+                series_slug__in=candidate_slugs)
         .order_by('-progress_bp', 'advanced_at')
         .values('series_slug', 'stages_cleared', 'stages_total')
         .first()

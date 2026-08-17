@@ -110,10 +110,6 @@ class PSNManager:
             cls.assign_job('profile_refresh', args=[], profile_id=profile.id)
 
     @classmethod
-    def check_profile_badges(cls, profile: Profile, priority: str):
-        cls.assign_job('check_profile_badges', args=[], profile_id=profile.id, priority_override=priority)
-    
-    @classmethod
     def sync_complete(cls, profile: Profile, priority: str, touched_profilegame_ids: list[int]):
         args = [touched_profilegame_ids, priority]
         cls.assign_job('sync_complete', args=args, profile_id=profile.id, priority_override=priority)

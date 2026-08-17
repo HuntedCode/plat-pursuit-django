@@ -107,7 +107,7 @@ overlap -- a cross-gen game qualifies for both groups -- and went with the Badge
 
 Every board is one indexed Postgres read. There is no cache, no cron and no sorted set.
 
-1. `board_store(tab, ...)` picks the standing table for the tab (and the edition slice, if filtered).
+1. `badge_store(edition)` / `trophy_store()` pick the standing table for the tab (and the edition slice, if filtered).
 2. `_slice()` applies the country filter -- a WHERE served by a composite index, not a post-filter.
 3. `BoardPaginator` orders by that board's `*_KEYS` and slices the page.
 4. `hydrate()` joins identity (name, avatar, country) at render, so a renamed hunter can never show a

@@ -3,7 +3,7 @@ from django.utils import timezone
 from datetime import timedelta
 from trophies.models import (
     Profile, EarnedTrophy, Game, Trophy, Stage, Concept,
-    BadgeSeries, GroupBadge, UserGroupBadge, ProfileBadgeStanding,
+    BadgeSeries, GroupBadge, UserGroupBadge, SeriesBadgeStanding,
 )
 from trophies.services.badge_xp import XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS
 
@@ -50,9 +50,17 @@ def compute_community_stats():
         weekly=Count('id', filter=Q(created_at__gte=week_ago)),
     )
 
-    # Total badge XP standing across all hunters. `ProfileBadgeStanding.total_xp` is the materialized
-    # per-profile total the boards sort on, so the ribbon and the leaderboard cannot disagree.
-    badge_xp = ProfileBadgeStanding.objects.aggregate(total=Sum('total_xp'))
+    # Total badge XP across all hunters, summed from the PER-SERIES standings restricted to live series.
+    #
+    # Not `Sum(ProfileBadgeStanding.total_xp)`, which is the obvious read and is wrong here:
+    # `recompute_standing` re-sums that grand total from ALL of a profile's SeriesBadgeStanding rows, and
+    # it only ever deletes rows for the series it was handed (always live ones). A series that goes
+    # dormant therefore leaves its XP in every holder's total forever, so the ribbon would advertise XP
+    # from badges nobody can see. Every other badge figure on this page gates on `is_live`; this is the
+    # one that could not do it by filtering the same table.
+    badge_xp = SeriesBadgeStanding.objects.filter(
+        series_slug__in=live_series_slugs
+    ).aggregate(total=Sum('xp'))
 
     # Unique concepts across all badge stages
     unique_concepts_total = Concept.objects.filter(
@@ -62,10 +70,14 @@ def compute_community_stats():
     # Badges held across all hunters. Editions do NOT overlap (a group badge belongs to exactly one
     # platform group), so a flat row count is the honest total -- no per-user DISTINCT needed, unlike the
     # legacy tier model where four tiers of one series had to collapse to one.
+    #
+    # `weekly` reads created_at (when WE awarded it), NOT earned_at (when the hunter finished the games).
+    # The legacy column meant award time, so repointing onto `earned_at` silently changed the question:
+    # a series shipped today and awarded to hunters who platted it in 2019 would have reported zero.
     badges_earned_counts = {
         'total': UserGroupBadge.objects.filter(group_badge__is_live=True).count(),
         'weekly': UserGroupBadge.objects.filter(
-            group_badge__is_live=True, earned_at__gte=week_ago
+            group_badge__is_live=True, created_at__gte=week_ago
         ).count(),
     }
 

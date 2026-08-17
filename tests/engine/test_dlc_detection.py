@@ -43,6 +43,21 @@ def _series_game(series):
     return game
 
 
+def _refreshed_profiles(mock_call):
+    """The profile ids a mocked `evaluate_and_apply_batch` was asked to re-evaluate.
+
+    `call.args[0]` was never inspected before, which meant the repoint's stated reason -- re-evaluate
+    EVERY player of the series, because DLC can newly qualify a hunter as easily as it lapses one -- had
+    no coverage at all. Replacing the command's profile query with `Profile.objects.none()` left every
+    test in this file green.
+    """
+    ids = set()
+    for call in mock_call.call_args_list:
+        profiles, _badges = call.args
+        ids.update(profiles.values_list('id', flat=True))
+    return ids
+
+
 def _refreshed_series(mock_call):
     """The series slugs a mocked `evaluate_and_apply_batch` was asked to refresh.
 
@@ -262,3 +277,83 @@ def test_completion_recompute_caps_at_100():
 
     pg.refresh_from_db()
     assert pg.progress == 100   # clamped from a computed 120
+
+
+def test_the_refresh_covers_every_player_of_the_series_not_just_holders():
+    """DLC can newly QUALIFY a hunter as easily as it lapses one, so the sweep must re-evaluate everyone
+    who has played a game in the series -- holders and non-holders alike."""
+    from tests.factories import ProfileFactory, ProfileGameFactory
+
+    watermark = timezone.now()
+    game = _series_game('series-pop')
+    player = ProfileFactory()
+    ProfileGameFactory(profile=player, game=game)
+    bystander = ProfileFactory()          # plays nothing in the series
+    TrophyGroup.objects.create(game=game, trophy_group_id='default', created_at=watermark - timedelta(days=2))
+    TrophyGroup.objects.create(game=game, trophy_group_id='001', created_at=watermark + timedelta(hours=1))
+
+    with mock.patch(PATCH, return_value=Counter()) as m:
+        call_command('detect_dlc_and_refresh', '--since', watermark.isoformat())
+
+    refreshed = _refreshed_profiles(m)
+    assert player.id in refreshed, 'a player of the series was not re-evaluated'
+    assert bystander.id not in refreshed, 'an unrelated profile was swept in'
+
+
+def test_a_bundle_member_gaining_dlc_refreshes_its_series():
+    """The ConceptBundle trap. A concept is either a direct stage member OR a bundle member on that stage,
+    never both -- so a scan that matches only `Stage.concepts` misses every episodic/bundled game, and
+    that series is never flagged no matter how much DLC it gains.
+
+    Everything else in this cutover walks both paths; this scan did not until the 5b audit.
+    """
+    from tests.factories import ConceptBundleFactory
+
+    watermark = timezone.now()
+    series = BadgeSeriesFactory(series_slug='series-bundle')
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
+    stage = StageFactory(series_slug='series-bundle', stage_number=1)
+    concept = ConceptFactory()
+    bundle = ConceptBundleFactory(stage=stage)
+    bundle.concepts.add(concept)          # bundle member, deliberately NOT in stage.concepts
+    game = GameFactory(concept=concept)
+
+    TrophyGroup.objects.create(game=game, trophy_group_id='default', created_at=watermark - timedelta(days=2))
+    TrophyGroup.objects.create(game=game, trophy_group_id='001', created_at=watermark + timedelta(hours=1))
+
+    with mock.patch(PATCH, return_value=Counter()) as m:
+        call_command('detect_dlc_and_refresh', '--since', watermark.isoformat())
+
+    assert _refreshed_series(m) == {'series-bundle'}, 'DLC on a bundled game did not refresh its series'
+
+
+def test_a_bundle_only_player_is_re_evaluated():
+    """The same trap on the profile side: a hunter whose only game in the series is a bundle member must
+    still be swept. The legacy query matched `stages` only and this was inherited verbatim."""
+    from tests.factories import ConceptBundleFactory, ProfileFactory, ProfileGameFactory
+
+    watermark = timezone.now()
+    series = BadgeSeriesFactory(series_slug='series-bp')
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
+    stage = StageFactory(series_slug='series-bp', stage_number=1)
+
+    direct_concept = ConceptFactory()
+    stage.concepts.add(direct_concept)
+    direct_game = GameFactory(concept=direct_concept)
+
+    bundled_concept = ConceptFactory()
+    ConceptBundleFactory(stage=stage).concepts.add(bundled_concept)
+    bundled_game = GameFactory(concept=bundled_concept)
+
+    bundle_player = ProfileFactory()
+    ProfileGameFactory(profile=bundle_player, game=bundled_game)
+
+    TrophyGroup.objects.create(game=direct_game, trophy_group_id='default',
+                               created_at=watermark - timedelta(days=2))
+    TrophyGroup.objects.create(game=direct_game, trophy_group_id='001',
+                               created_at=watermark + timedelta(hours=1))
+
+    with mock.patch(PATCH, return_value=Counter()) as m:
+        call_command('detect_dlc_and_refresh', '--since', watermark.isoformat())
+
+    assert bundle_player.id in _refreshed_profiles(m), 'a bundle-only player was skipped'

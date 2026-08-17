@@ -505,26 +505,38 @@ def test_the_announcement_backfill_covers_every_existing_hold():
     assert GroupBadgeAnnouncement.objects.count() == len(held)
 
 
-def test_a_backfilled_hold_is_never_announced():
-    """The backfill's actual purpose, end to end: a hunter whose badges predate the marker table must stay
-    silent through their next sync."""
-    from unittest.mock import patch as _patch
+def test_a_backfilled_hold_is_never_announced_after_flux():
+    """The backfill's actual purpose: a hunter whose badge predates the marker table must stay silent when
+    PSN flux revokes and re-earns it.
+
+    The first version of this test held the badge and asserted silence, which proved nothing -- `diff()`
+    only emits an `award` when the hunter does NOT already hold the badge, so a held badge never announces
+    with or without the guard. The revoke is what makes the re-earn look brand new, so the revoke has to be
+    in the test. Mutation-checked: neutering the migration's backfill makes this fail.
+    """
     import importlib
 
     from django.apps import apps as global_apps
-    from trophies.models import GroupBadgeAnnouncement
+    from trophies.models import GroupBadgeAnnouncement, UserGroupBadge
     from trophies.services.badge_apply import evaluate_and_apply, evaluate_for_sync
 
     migration = importlib.import_module('trophies.migrations.0305_group_badge_announcement')
 
-    _series_with_both_editions('quiet-after-backfill', [ULTRA])
+    _series_with_both_editions('flux-after-backfill', [ULTRA])
     profile = ProfileFactory(is_linked=True, is_discord_verified=True, discord_id='123')
-    pg = _finish(profile, _game_in('quiet-after-backfill'))
+    game = _game_in('flux-after-backfill')
+    pg = _finish(profile, game)
+
+    # A pre-migration database: holds exist, markers do not.
     evaluate_and_apply(profile, notify=False)
-    GroupBadgeAnnouncement.objects.all().delete()        # pre-migration state
+    GroupBadgeAnnouncement.objects.all().delete()
     migration.seed_from_existing_holds(global_apps, None)
 
-    with _patch('trophies.discord_utils.discord_notifications.queue_webhook_send') as mock_send:
-        evaluate_for_sync(profile, [pg.id])
+    # Flux: the hold is deleted, so the next evaluation is a genuine fresh award.
+    UserGroupBadge.objects.filter(profile=profile).delete()
 
-    assert mock_send.call_count == 0, 'a pre-existing hold was announced after the backfill'
+    with patch('trophies.discord_utils.discord_notifications.queue_webhook_send') as mock_send:
+        result = evaluate_for_sync(profile, [pg.id])
+
+    assert result['awarded'], 'fixture is wrong -- the revoke should have made this a fresh award'
+    assert mock_send.call_count == 0, 'a backfilled hold was re-announced after flux'

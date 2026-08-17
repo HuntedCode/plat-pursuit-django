@@ -7,7 +7,11 @@ platform edition of that series. Earning one grants XP, a title, and a Discord a
 > **Rewritten 2026-08.** This replaced the tier-based engine (`Badge` tiers 1-4, `UserBadge`,
 > `UserBadgeProgress`, `badge_service`, `xp_service`, Redis leaderboards), removed in badge cutover 5b.
 > Design and cutover history: [badge-backend-rebuild.md](../design/rebuild/badge-backend-rebuild.md).
-> The legacy `Badge` / `UserBadge` tables are RETAINED for rollback and audit; nothing writes them.
+> The legacy `Badge` / `UserBadge` tables are RETAINED for rollback and audit. No BADGE-ENGINE code writes
+> them, but two live features still do and were never repointed: the **artwork fundraiser**
+> (`donation_service` writes `Badge.funded_by` when a donation completes) and **art_reveal**
+> (`ArtRevealItem.release()` writes `Badge.badge_image`). `BadgeAdmin` also permits manual writes and is
+> deliberately retained. See Gotchas below.
 
 ## Architecture Overview
 
@@ -61,7 +65,8 @@ each edition without any per-edition stage authoring.
 | Sync (`_job_sync_complete`) | `evaluate_for_sync(profile, pg_ids)` | Yes |
 | Discord link / PSN verify | `evaluate_and_apply(profile, notify=True)` | Yes |
 | Bot `/recheck-badges` | `evaluate_and_apply(..., notify=False)` | No (the bot replies with the deltas) |
-| Nightly cron, admin action | `evaluate_badges --all`, `evaluate_and_apply_batch` | No |
+| Nightly cron | `evaluate_badges --all` -> `evaluate_and_apply_batch` | No |
+| Admin action | `evaluate_and_apply` per selected profile | No |
 | DLC detection | `evaluate_and_apply_batch` | No |
 
 ## XP
@@ -80,6 +85,20 @@ Calibrated to the "1,000,000 Club": over a projected mature catalog (~400 group 
 each) a completionist lands ~1.24M. See `test_million_club_calibration`.
 
 ## Gotchas and Pitfalls
+
+**Two live features still write the legacy `Badge` table, and one of them is a payment flow.**
+`fundraiser/services/donation_service.py` credits a donor with
+`Badge.objects.filter(series_slug=...).update(funded_by=...)` when an artwork donation completes, and the
+fundraiser's badge picker reads `Badge.objects.live().filter(tier=1)`. But the medallion renders
+`GroupBadge.effective_funded_by`, which resolves `funded_by_override or series.funded_by` -- neither of
+which the fundraiser touches. **A donor who funds artwork today is credited on a row nothing displays.**
+`art_reveal.ArtRevealItem.release()` similarly writes `Badge.badge_image`. Repointing both onto
+`BadgeSeries` is outstanding work, and it is what actually retires the tier model; `BadgeAdmin` cannot be
+deleted until then (see below).
+
+**`BadgeAdmin` is retained deliberately.** `art_reveal.ArtRevealItem` has a live FK to `Badge`, and its
+inline's `autocomplete_fields` requires a registered admin for the model. Deleting the registration fails
+the ENTIRE admin site's system check with `admin.E039`, not just art_reveal.
 
 **Scope by SERIES, never by badge.** `recompute_standing` REPLACES a series' standing from only the
 editions it is handed. Evaluate one edition of a two-edition series and the other's XP silently becomes
@@ -119,8 +138,8 @@ smoke-test badge show up in a real hunter's totals.
 | Command | Usage | Purpose |
 |---|---|---|
 | `evaluate_badges` | `<username>`, `--all`, `--series <slug>`, `--dry-run`, `--compare-legacy` | The runner. Nightly `--all` is the reconcile that keeps every figure honest |
-| `audit_badge_coverage` | (no args) | Emails franchise/collection/developer series that are missing games |
-| `backfill_group_badges` | see `--help` | Cutover seeding |
+| `audit_badge_coverage` | `--dry-run`, `--always` | Emails franchise/collection/developer series that are missing games |
+| `convert_series_to_groups` | see `--help` | Cutover seeding: builds `BadgeSeries` + `GroupBadge` from the legacy rows |
 
 ## Related Docs
 

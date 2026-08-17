@@ -8,16 +8,13 @@ from django.db.models import Count, Q
 from django.db.models.functions import Lower
 from django.http import JsonResponse
 from django.shortcuts import redirect, get_object_or_404
-from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
-from django.views.generic.edit import FormView
 
 from trophies.mixins import (
     HtmxListMixin, StaffOrRoadmapAuthorRequiredMixin, StaffRequiredMixin,
 )
-from trophies.services.psn_api_service import PsnApiService
 from ..models import (
     Checklist, ChecklistItem, ChecklistSection,
     CommentReport, GameFamily, ModerationLog,

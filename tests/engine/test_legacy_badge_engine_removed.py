@@ -42,7 +42,34 @@ DELETED_COMMANDS = [
     'trophies/management/commands/backfill_stage_completions.py',
     'core/management/commands/update_leaderboards.py',
     'core/management/commands/audit_profile_gamification.py',
+    'trophies/management/commands/backfill_earn_ranks.py',
 ]
+
+
+#: Files that STILL write the legacy `Badge` table, deliberately listed rather than silently unscanned.
+#:
+#: Both are live features that predate the cutover and were never repointed:
+#:   - `fundraiser/services/donation_service.py` credits a donor by writing `Badge.funded_by` on every
+#:     completed artwork donation. The badge display reads `BadgeSeries.funded_by` (via
+#:     `GroupBadge.effective_funded_by`), so that credit currently lands where nothing renders it.
+#:   - `art_reveal/models.py` pushes released artwork onto `Badge.badge_image`.
+#:
+#: Shrinking this set is the goal. Adding to it needs a reason in the commit message.
+KNOWN_LEGACY_WRITERS = {
+    'fundraiser/services/donation_service.py',
+    'art_reveal/models.py',
+}
+
+
+def test_the_known_legacy_writers_still_exist():
+    """The exemption list must not rot into a lie in the other direction. If one of these files stops
+    writing `Badge` (because it got repointed), delete its entry -- an exemption for a file that no longer
+    needs one quietly re-opens a hole."""
+    for rel in KNOWN_LEGACY_WRITERS:
+        assert (ROOT / rel).exists(), f'{rel} is gone; drop it from KNOWN_LEGACY_WRITERS'
+        assert 'Badge' in (ROOT / rel).read_text(encoding='utf-8'), (
+            f'{rel} no longer references Badge; drop it from KNOWN_LEGACY_WRITERS'
+        )
 
 
 @pytest.mark.parametrize('name', DELETED_MODULES)
@@ -82,29 +109,51 @@ def test_the_retained_tables_have_no_writer():
     A retained table is fine; a retained table someone starts writing again is a silent fork of the truth,
     with two XP economies claiming to be the same number.
 
-    Scoped to the app's own service/signal/view layer -- `admin.py` is exempt (see the test below) and so
-    are migrations, tests and the design docs that discuss the history.
+    Three things this has to get right, all of which an earlier version got wrong:
+
+    - **Resolve the chain THROUGH calls.** `Model.objects.filter(...).update(...)` is the project's most
+      common write form, and a walk that stops at the first `Call` node never sees the model name.
+    - **Cover every write verb**, `save`/`delete`/`bulk_update` included, not just `create`/`update`.
+    - **Scan `api/` too.** The legacy `UserBadge` snapshots that this cutover repointed lived in
+      `api/views.py`, so excluding that package left the one file most likely to regress unguarded.
     """
+    watched = {'Badge', 'UserBadge', 'UserBadgeProgress', 'ProfileGamification'}
+    verbs = {'create', 'update', 'update_or_create', 'get_or_create', 'bulk_create', 'bulk_update',
+             'save', 'delete'}
     writes = []
-    for path in sorted(ROOT.glob('trophies/**/*.py')) + sorted(ROOT.glob('core/**/*.py')):
-        rel = path.relative_to(ROOT).as_posix()
-        if '/migrations/' in rel or rel.endswith('admin.py'):
-            continue
-        tree = ast.parse(path.read_text(encoding='utf-8'))
-        for node in ast.walk(tree):
-            # `Model.objects.create(...)` / `.update(...)` / `.update_or_create(...)` etc.
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+
+    def chain_root(node):
+        """Leftmost Name in an attribute/call chain: `X.objects.filter(...).update` -> `X`."""
+        while True:
+            if isinstance(node, ast.Attribute):
+                node = node.value
+            elif isinstance(node, ast.Call):
+                node = node.func
+            else:
+                return node
+
+    # EVERY first-party app. An earlier version scanned only `trophies` + `core` and reported the tables
+    # as writer-free; the 5b audit found two live writers in the apps it never looked at. A guard whose
+    # scope is narrower than the claim it backs is worse than no guard.
+    roots = ['trophies', 'core', 'api', 'notifications', 'users', 'milestones', 'fundraiser',
+             'art_reveal', 'plat_pursuit']
+    for root_pkg in roots:
+        for path in sorted((ROOT / root_pkg).glob('**/*.py')):
+            rel = path.relative_to(ROOT).as_posix()
+            if '/migrations/' in rel or rel.endswith('admin.py') or rel in KNOWN_LEGACY_WRITERS:
                 continue
-            if node.func.attr not in {'create', 'update', 'update_or_create', 'get_or_create', 'bulk_create'}:
-                continue
-            # Walk back to the leftmost name in the attribute chain.
-            root = node.func
-            while isinstance(root, ast.Attribute):
-                root = root.value
-            if isinstance(root, ast.Name) and root.id in {
-                'Badge', 'UserBadge', 'UserBadgeProgress', 'ProfileGamification',
-            }:
-                writes.append(f'{rel}:{node.lineno} writes {root.id}')
+            tree = ast.parse(path.read_text(encoding='utf-8'))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                # `Model.objects...verb(...)`
+                if isinstance(node.func, ast.Attribute) and node.func.attr in verbs:
+                    base = chain_root(node.func)
+                    if isinstance(base, ast.Name) and base.id in watched:
+                        writes.append(f'{rel}:{node.lineno} writes {base.id} (.{node.func.attr})')
+                # Bare constructor: `UserBadge(profile=...)`
+                elif isinstance(node.func, ast.Name) and node.func.id in watched:
+                    writes.append(f'{rel}:{node.lineno} constructs {node.func.id}')
 
     assert not writes, (
         'the retained legacy badge tables are being written again: ' + '; '.join(writes)

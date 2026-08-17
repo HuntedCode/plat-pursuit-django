@@ -25,7 +25,7 @@ import logging
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
-from django.db.models import F, Value
+from django.db.models import F, Q, Value
 from django.db.models.functions import Least, Round
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -72,7 +72,14 @@ class Command(BaseCommand):
                 continue
             dlc_groups += 1
             affected_game_ids.add(tg.game_id)   # its owners' completion % is now stale (denominator grew)
-            for slug in Stage.objects.filter(concepts=concept).values_list('series_slug', flat=True).distinct():
+            # BOTH qualifier paths. A concept is either a direct stage member OR a ConceptBundle member
+            # on that stage, never both -- so matching `concepts` alone misses every bundled game, and an
+            # episodic series would never be flagged as affected no matter how much DLC it gained.
+            for slug in (
+                Stage.objects
+                .filter(Q(concepts=concept) | Q(concept_bundles__concepts=concept))
+                .values_list('series_slug', flat=True).distinct()
+            ):
                 if slug:
                     affected.add(slug)
 
@@ -100,12 +107,20 @@ class Command(BaseCommand):
                     self.stdout.write(f"  skipped '{slug}': no live badges")
                     continue
 
-                # Everyone who has played a game in the series -- the same population the legacy refresh
-                # walked. Not just current holders: DLC can newly QUALIFY someone as easily as it lapses
-                # someone, and a holders-only scan would only ever take badges away.
+                # Everyone who has played a game in the series. Not just current holders: DLC can newly
+                # QUALIFY someone as easily as it lapses someone, and a holders-only scan would only ever
+                # take badges away.
+                #
+                # Both qualifier paths again -- the legacy query matched `stages` only, so a hunter whose
+                # single game in the series was a bundle member was never re-evaluated. Inheriting that
+                # verbatim is not parity worth keeping.
+                #
+                # `.only('id')` because the batch uses nothing else: Profile is 48 fields including three
+                # JSONFields and a TextField, and a broad franchise series approaches the whole userbase.
                 profiles = Profile.objects.filter(
-                    played_games__game__concept__stages__series_slug=slug
-                ).distinct()
+                    Q(played_games__game__concept__stages__series_slug=slug)
+                    | Q(played_games__game__concept__bundles__stage__series_slug=slug)
+                ).distinct().only('id', 'country_code')
 
                 # `evaluate_and_apply_batch` is silent by construction (no notify parameter), which is the
                 # behaviour this call site wants: an automated DLC sweep should not ping hunters about

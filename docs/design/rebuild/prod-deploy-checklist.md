@@ -20,8 +20,8 @@
 
 | # | Task | Command | When | Idempotent? | Blocks | Done |
 |---|------|---------|------|-------------|--------|------|
-| 1 | **Compute badge rarity** — populates `Badge.earned_count`, `rarity_pct`, `rarity_rank`, `rarity_class` | `python manage.py recalc_badge_rarity` | Launch (after migrations) | Yes (recomputes from scratch) | Frame back-of-card "Earned by N" + "Rarity %/#rank" slots render empty | ☐ |
-| 2 | **Backfill earn ranks** — stamps `UserBadge.earn_rank` on historical earners (NULL ranks only), ordered by `earned_at` | `python manage.py backfill_earn_ranks` | Launch (after migrations) | Yes (skips already-stamped rows) | Frame "Earn rank" engraving missing on all pre-existing badges | ☐ |
+| ~~1~~ | ~~Compute badge rarity~~ — **DROPPED.** `recalc_badge_rarity` was deleted in cutover 5b; rarity is derived live by `badge_rarity.py` and needs no backfill | — | — | — | — | n/a |
+| ~~2~~ | ~~Backfill earn ranks~~ — **DROPPED.** `backfill_earn_ranks` was deleted in cutover 5b. There is no permanent `earn_rank` in the current model: rank is the hunter's LIVE position among current holders, ordered by `earned_at` | — | — | — | — | n/a |
 | 3 | **Backfill per-edition `group_progress`** — populates the new `SeriesBadgeStanding.group_progress` read-model (per-edition `[cleared, gating]`) on every existing standing. `recompute_standing` writes it on each sync, but pre-existing standings hold `{}` until re-evaluated. | `python manage.py evaluate_badges --all` | Launch (after migrations) | Yes (full recompute from scratch) | Collection wall + badge-detail per-edition progress read empty/stale for pre-existing standings until their owner next syncs | ☐ |
 | 3a | **Migration `0286_alter_seriesbadgestanding_group_progress`** — help_text only, no data change and no column change. Applies on deploy with the rest; listed so it is not mistaken for a schema change needing a backfill. | (auto, on `migrate`) | With the collection work | Yes | nothing | ☐ |
 | 3b | **Re-run after the read-model widened (2026-08)** — `recompute_standing` now stores an entry for every EARNABLE edition, not only ones with cleared > 0, so an untouched edition carries its real `[0, gating]`. Until this runs, the Collection caption still shows no chase count on an edition the hunter has not started (it degrades to blank, never to a wrong number). Same command as #3; idempotent. | `python manage.py evaluate_badges --all` | With the rarity/collection work | Yes (full recompute) | "0 / N stages" missing on unstarted editions | ☐ |
@@ -206,12 +206,12 @@ Spec: [leaderboards-rebuild.md](leaderboards-rebuild.md). Migrations `0297`, `02
 - [ ] **Sanity-check one known hunter on each board** after the backfills — a name you can verify by
       hand. The boards are correct-looking under every failure mode above, so "it rendered" proves
       nothing.
-- [ ] **Confirm `update_leaderboards` still succeeds** on its next scheduled run. Its global-progress leg
-      was deleted and `rebuild_series_leaderboards` now returns a plain count rather than a pair; the
-      cron's own call sites were updated, but this is the first run against the narrowed service.
-- [ ] **Do NOT flush the `lb:*` Redis keys.** Earners, Badge Points and country sorted sets are still the
-      live backend for `frame_service` (legacy badge frame) and `profile_card_service` + two dashboard
-      modules. Only the four `lb:progress:*` keys are dead, and they will simply expire unused.
+- [x] ~~**Confirm `update_leaderboards` still succeeds.**~~ **SUPERSEDED by cutover 5b: the command is
+      DELETED.** Its Render entry must be removed, not verified -- left in place it fails with
+      `Unknown command` every 6 hours and alerts. See the 5b section below.
+- [x] ~~**Do NOT flush the `lb:*` Redis keys.**~~ **SUPERSEDED by cutover 5b: every named consumer
+      (`frame_service`, `profile_card_service`, the dashboard modules) is deleted.** All `lb:*` keys are
+      now garbage and safe to drop or leave to expire. See the 5b section below.
 
 ---
 
@@ -306,19 +306,16 @@ Migrations `0303` / `0304` (profile showcases, dashboard config) and `notificati
 
 Migration `trophies.0305_group_badge_announcement`.
 
-- [x] **`GroupBadgeAnnouncement` backfill: HANDLED BY THE MIGRATION, no action needed.** Recorded here
-      because it is the highest-consequence thing in this deploy and you should know it is covered.
+- [x] **`GroupBadgeAnnouncement` backfill: handled by migration 0305, no action needed.**
 
-      The table records who has already been told about which badge. An empty one reads as "nobody has
-      been told about anything", and since this deploy also makes sync announce, the first sync per hunter
-      would re-ping Discord for every badge they already hold -- a webhook storm proportional to the whole
-      userbase's badge count, and unrecoverable, because you cannot unsend a webhook.
+      The table records who has already been told about which badge, so a revoke -> re-earn cannot
+      re-announce. `0305` seeds one marker per currently held badge in the same migration that creates the
+      table, so hunters whose badges predate the column are covered from the first flux onward.
 
-      `0305` therefore seeds one marker per existing `UserGroupBadge` in the same migration that creates
-      the table (batched, `ignore_conflicts`, re-runnable). This was deliberately NOT left as a checklist
-      item: a manual step whose failure mode is spamming every hunter is not worth trusting to a checkbox.
-      Covered by `test_the_announcement_backfill_covers_every_existing_hold` and
-      `test_a_backfilled_hold_is_never_announced`.
+      **Correction to an earlier draft of this checklist:** it claimed the backfill prevented a first-sync
+      announcement storm at deploy. That was wrong. `diff()` only emits an `award` when the hunter does
+      not already hold the badge, and announcements fire only on awards, so held badges are silent either
+      way. The deploy is quiet regardless; the backfill is about flux, not launch day.
 - [ ] **Sync now announces badges** (`evaluate_for_sync` flipped to `notify=True`). This is intended --
       the legacy engine was the only reason it was silent -- but it is the first deploy where the new
       engine can post to Discord. Watch the webhook after the first few syncs.
@@ -330,3 +327,38 @@ Migration `trophies.0305_group_badge_announcement`.
       art_reveal. Repointing art_reveal is a tracked follow-up.
 - [ ] **Every `lb:*` Redis key is now garbage.** Nothing reads or writes them. They can be left to expire
       or dropped by hand; no action is required for correctness.
+
+## Badge cutover: post-audit additions (2026-08)
+
+Migration `trophies.0306_user_group_badge_created_at` (adds the award timestamp + backfills it).
+
+- [ ] **Purge orphaned DRF auth tokens.** `MobileLoginView` minted a `Token` on every login and
+      `MobileSignupView` was publicly reachable with `AllowAny`; both are deleted, and so is the logout
+      endpoint that invalidated them. Surviving non-bot tokens are permanent, non-expiring credentials
+      that still authenticate against ~60 session/token endpoints and bypass CSRF by design. They cannot
+      reach bot endpoints (`IsDiscordBot` matches the key against `BOT_API_KEY`). Check
+      `SELECT count(*) FROM authtoken_token` and delete every row whose key is not `BOT_API_KEY`.
+      Probably zero -- no mobile client was ever built -- but the count is unknown and nothing else covers
+      it.
+- [ ] **Clear the `CORS_ALLOWED_ORIGINS` env var.** `django-cors-headers` existed only for the Expo dev
+      server. Not currently permissive (`CORS_ALLOW_ALL_ORIGINS` and `CORS_ALLOW_CREDENTIALS` are both
+      unset, and `CORS_URLS_REGEX` confines it to `^/api/v1/.*$`), but any origin still listed keeps
+      cross-origin read access to public API responses for no reason. The app and middleware are staying;
+      a mobile rebuild will want them.
+- [ ] **Expect "Unique badges: +N" to show the whole catalogue for 7 days.** The ribbon's weekly delta
+      counts `BadgeSeries.created_at`, and every series row is created by the cutover backfill. Cosmetic
+      and self-correcting, but it will look like a bug and someone will report it.
+- [ ] **The nightly `evaluate_badges --all` Render entry does not exist yet.** It is documented in
+      cron-jobs.md but has to be created by hand. Without it, badge figures are only as fresh as whatever
+      each hunter's own sync last touched, and a newly authored series reaches nobody who does not happen
+      to play one of its games.
+
+### Known-stale, tracked separately
+
+- **The artwork fundraiser and art_reveal still write the legacy `Badge` table.** `donation_service`
+  credits a donor via `Badge.funded_by` on donation completion, but the medallion renders
+  `GroupBadge.effective_funded_by` (`funded_by_override or series.funded_by`) -- so **donor artwork credit
+  currently lands where nothing displays it**. This is pre-existing (it broke silently when the new badge
+  display went live, not in this cutover) and is a live payment-flow correctness issue. Repointing both
+  apps onto `BadgeSeries` is what actually retires the tier model and lets `BadgeAdmin` go. Pinned by
+  `KNOWN_LEGACY_WRITERS` in `tests/engine/test_legacy_badge_engine_removed.py`.

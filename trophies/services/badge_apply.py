@@ -240,9 +240,17 @@ def evaluate_and_apply_batch(profiles, group_badges=None) -> Counter:
     gb_map = {gb.id: gb for gb in group_badges}
 
     for profile in profiles:
-        changes, desired = _plan_with_catalog(profile, catalog)
-        if changes:
-            for key, ids in apply_changes(profile, changes, gb_map).items():
-                totals[key] += len(ids)
-        recompute_standing(profile.id, desired, group_badges)   # XP recompute is independent of the earn writes
+        # Per-profile insulation. Without it the first raising profile aborts the WHOLE batch, and the
+        # callers swallow that at series granularity: `detect_dlc_and_refresh` logs one FAILED line and
+        # advances its watermark anyway, so every remaining hunter in that series is left stale and is
+        # never re-swept. The legacy refresh guarded each (profile, badge) pair for the same reason.
+        try:
+            changes, desired = _plan_with_catalog(profile, catalog)
+            if changes:
+                for key, ids in apply_changes(profile, changes, gb_map).items():
+                    totals[key] += len(ids)
+            recompute_standing(profile.id, desired, group_badges)   # XP tracks progress, not just earns
+        except Exception:
+            totals['failed'] += 1
+            logger.exception('badge batch failed for profile %s', getattr(profile, 'id', None))
     return totals

@@ -10,8 +10,9 @@ from .views import (
 # is hidden, and an import with no route is just a name to trip over later. They are untouched in
 # api/notification_views.py -- restoring the system restores this import alongside the paths.
 #
-# as its user picker, so withdrawing it would silently break an unrelated staff tool. It belongs
-# somewhere neutral; rehoming it is a follow-up, not a reason to leave a door open here.
+# The tenth (AdminUserSearchView) was the exception, left routed because the staff badge-creation form
+# used it as a user picker. That form authored LEGACY tier badges and was deleted in badge cutover 5b,
+# so the picker went with it: there is no routed exception here any more.
 from .shareable_views import (
     PlatCardHTMLView, PlatCardPNGView, LegacyPlatinumCardHTMLView, LegacyPlatinumCardPNGView,
 )

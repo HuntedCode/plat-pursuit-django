@@ -369,8 +369,7 @@ Standard parallel-change / expand–contract with a separate schema:
    - **`art_reveal` has a live FK to `Badge`.** Its inline's `autocomplete_fields` requires a registered
      admin for the model, so deleting `BadgeAdmin` failed the whole admin site's system check
      (`admin.E039`), not just art_reveal. `BadgeAdmin` is therefore RETAINED and documented as an
-     exception. **Repointing art_reveal onto `BadgeSeries`/`GroupBadge` is the last thread tying the tier
-     model to a live feature, and is its own task.**
+     exception. **Repointing art_reveal onto `BadgeSeries`/`GroupBadge` is its own task.**
    - **`badge_coverage_service` was worth keeping.** Initially deleted with the rest, then restored and
      repointed: it is a curator tool that answers "a new game shipped and is missing from its series",
      which is still a real question. It got simpler in the move -- it scanned `tier=1` only because

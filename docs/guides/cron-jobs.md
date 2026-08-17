@@ -67,15 +67,16 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 - **Dependencies**: TokenKeeper sync caught up, so the completion signals it reads are current.
 - **Idempotency**: Fully safe to re-run — the engine is pure and the standings are a full replace.
 - **Failure impact**: newly authored badges and curator edits do not reach hunters who did not touch those
-  series; already-evaluated standings stay correct. Announcements are NOT sent by this path (`notify`
-  defaults off), so a re-run cannot spam Discord.
+  series; already-evaluated standings stay correct. Announcements are NOT sent by this path -- `evaluate_and_apply_batch`
+  has no `notify` parameter at all, so silence is structural rather than a default -- and a re-run cannot
+  spam Discord.
 
 > **Removed: `update_leaderboards`.** It rebuilt the LEGACY Redis badge leaderboards (per-series earners +
 > progress, total progress, total XP, community series XP) every 6 hours. Every board it fed now reads
 > indexed Postgres columns written by the badge write seam -- see
-> [leaderboard-system](../architecture/leaderboard-system.md). **Disable the Render Cron entry when the
-> rebuild branch deploys**; leaving it running is harmless but it burns a full-population pass every 6
-> hours writing sorted sets nothing reads.
+> [leaderboard-system](../architecture/leaderboard-system.md). **DELETE the Render Cron entry when the rebuild
+> branch deploys.** Not merely disable, and not harmless: the command FILE is deleted, so the entry now
+> fails with `Unknown command: update_leaderboards` every 6 hours and will alert.
 
 ### detect_dlc_and_refresh
 

@@ -15,6 +15,8 @@ Covered here:
 
 `compute_community_stats` is covered next door in test_community_stats_badge_catalog.py.
 """
+from unittest.mock import patch
+
 import pytest
 from django.conf import settings
 from django.urls import reverse
@@ -91,7 +93,39 @@ def test_recheck_awards_through_the_new_engine_and_reports_it():
     assert len(body['awarded']) == 1
     assert 'Souls Series' in body['awarded'][0]
     assert body['revoked'] == []
-    assert body['badges_checked'] == GroupBadge.objects.filter(is_live=True).count()
+    # A LITERAL, not the same queryset the view runs -- re-deriving it made this `1 == 1` and could not
+    # tell whether the view scoped to live badges at all.
+    assert body['badges_checked'] == 1
+
+
+@patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
+def test_recheck_ignores_dormant_editions_and_stays_silent(mock_send):
+    """Two decisions in one run, both previously unasserted.
+
+    Dormant: the view scopes to `is_live=True`, so a curator's unreleased edition must not be evaluated or
+    awarded. Without this, /recheck-badges was the one surface that could hand a hunter an invisible badge.
+
+    Silent: `notify=False` is deliberate -- the bot reports the deltas in its own reply, so announcing here
+    would double-message the recheck.
+    """
+    profile = ProfileFactory(discord_id='559', is_discord_verified=True)
+    _, live_badge, game = _earnable_series('souls', 'Souls Series')
+    _finish(profile, game)
+
+    dormant_series = BadgeSeriesFactory(series_slug='unreleased', name='Unreleased')
+    dormant = GroupBadgeFactory(
+        series=dormant_series,
+        platform_group=PlatformGroupFactory(key='legacy-hd', name='Legacy HD', platforms=['PS4', 'PS5']),
+        is_live=False,
+    )
+    StageFactory(series_slug='unreleased', stage_number=1).concepts.add(game.concept)
+
+    body = _bot_client().post(reverse('api:recheck-badges'), {'discord_id': '559'}, format='json').json()
+
+    assert body['badges_checked'] == 1, 'the dormant edition was counted'
+    assert UserGroupBadge.objects.filter(profile=profile, group_badge=live_badge).exists()
+    assert not UserGroupBadge.objects.filter(profile=profile, group_badge=dormant).exists(),         'a dormant edition was awarded'
+    assert mock_send.call_count == 0, 'the recheck announced as well as replying'
 
 
 def test_recheck_reports_nothing_when_the_hunter_does_not_qualify():
@@ -143,13 +177,13 @@ def test_digest_reports_badges_earned_this_week_with_their_edition():
     assert updates['badges_earned'] == [{'name': 'Souls Series', 'edition': 'Ultra HD'}]
 
 
-def test_digest_excludes_badges_earned_outside_the_window():
+def test_digest_excludes_badges_awarded_outside_the_window():
     """The window is the whole point of the block; without this the test above passes on any badge held."""
     profile = ProfileFactory()
     _, badge, _game = _earnable_series('souls', 'Souls Series')
     ugb = UserGroupBadge.objects.create(profile=profile, group_badge=badge)
     UserGroupBadge.objects.filter(pk=ugb.pk).update(
-        earned_at=timezone.now() - timezone.timedelta(days=30))
+        created_at=timezone.now() - timezone.timedelta(days=30))
 
     updates = WeeklyDigestService.get_badge_updates(
         profile,
@@ -158,6 +192,29 @@ def test_digest_excludes_badges_earned_outside_the_window():
     )
 
     assert updates['badges_earned'] == []
+
+
+def test_digest_windows_on_award_time_not_completion_date():
+    """The distinction that broke this block once. `earned_at` is the hunter's COMPLETION date and the
+    engine rewrites it; `created_at` is when we awarded the row.
+
+    A series shipped today and awarded to someone who platted its games in 2019 IS news to them. Windowing
+    on `earned_at` reported nothing -- the launch of a whole series was invisible to every digest.
+    """
+    profile = ProfileFactory()
+    _, badge, _game = _earnable_series('souls', 'Souls Series')
+    ugb = UserGroupBadge.objects.create(profile=profile, group_badge=badge)
+    # Awarded just now; completed years ago.
+    UserGroupBadge.objects.filter(pk=ugb.pk).update(
+        earned_at=timezone.now() - timezone.timedelta(days=2000))
+
+    updates = WeeklyDigestService.get_badge_updates(
+        profile,
+        timezone.now() - timezone.timedelta(days=7),
+        timezone.now() + timezone.timedelta(days=1),
+    )
+
+    assert len(updates['badges_earned']) == 1, 'a retroactively awarded badge was hidden from the digest'
 
 
 def test_digest_excludes_dormant_editions():
@@ -184,7 +241,13 @@ def test_digest_closest_badge_reads_the_materialized_standing():
     from trophies.models import SeriesBadgeStanding
 
     profile = ProfileFactory()
-    BadgeSeriesFactory(series_slug='ff', name='Final Fantasy')
+    # A LIVE edition is required: `closest_badge` gates on liveness so a dormant series' leftover standing
+    # cannot surface in the email (see test_digest_closest_badge_ignores_dormant_series below).
+    GroupBadgeFactory(
+        series=BadgeSeriesFactory(series_slug='ff', name='Final Fantasy'),
+        platform_group=PlatformGroupFactory(key='ff-ultra'),
+        is_live=True,
+    )
     SeriesBadgeStanding.objects.create(
         profile=profile, series_slug='ff', xp=500,
         progress_bp=6667, stages_cleared=2, stages_total=3,
@@ -202,6 +265,61 @@ def test_digest_closest_badge_reads_the_materialized_standing():
         'completed': 2,
         'required': 3,
     }
+
+
+def test_digest_closest_badge_ignores_dormant_series():
+    """`recompute_standing` only deletes standings for the series it was handed, and it is only ever handed
+    LIVE ones -- so a standing written while a series was live (or by `evaluate_badges --series`, which
+    deliberately includes dormant badges for testing) outlives the series going dormant, forever.
+
+    Without a liveness gate, a curator smoke-testing an unreleased series against real profiles put that
+    series into those hunters' weekly email and Home CTA.
+    """
+    from trophies.models import SeriesBadgeStanding
+
+    profile = ProfileFactory()
+    GroupBadgeFactory(
+        series=BadgeSeriesFactory(series_slug='secret', name='Unreleased'),
+        platform_group=PlatformGroupFactory(key='secret-grp'),
+        is_live=False,
+    )
+    SeriesBadgeStanding.objects.create(
+        profile=profile, series_slug='secret', xp=500,
+        progress_bp=6667, stages_cleared=2, stages_total=3,
+    )
+
+    updates = WeeklyDigestService.get_badge_updates(
+        profile,
+        timezone.now() - timezone.timedelta(days=7),
+        timezone.now() + timezone.timedelta(days=1),
+    )
+    assert updates['closest_badge'] is None
+
+
+def test_digest_closest_badge_ignores_a_series_already_held():
+    """Under `completion_policy='min_count'` (megamix) a badge is EARNED at `min_required` gating stages
+    while `progress_bp` measures cleared/gating -- so a hunter can hold the badge at 3750 bp. Filtering on
+    progress alone offered them a medallion already on their wall. Under policy 'all' the two coincide,
+    which is why this only ever showed up on megamix series."""
+    from trophies.models import SeriesBadgeStanding
+
+    profile = ProfileFactory()
+    series = BadgeSeriesFactory(series_slug='mega', name='Megamix', completion_policy='min_count',
+                                min_required=3)
+    badge = GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(key='mega-grp'),
+                              is_live=True)
+    UserGroupBadge.objects.create(profile=profile, group_badge=badge)      # HELD at partial progress
+    SeriesBadgeStanding.objects.create(
+        profile=profile, series_slug='mega', xp=500,
+        progress_bp=3750, stages_cleared=3, stages_total=8,
+    )
+
+    updates = WeeklyDigestService.get_badge_updates(
+        profile,
+        timezone.now() - timezone.timedelta(days=7),
+        timezone.now() + timezone.timedelta(days=1),
+    )
+    assert updates['closest_badge'] is None, 'the digest offered a badge the hunter already holds'
 
 
 def test_digest_closest_badge_is_none_with_no_standing():

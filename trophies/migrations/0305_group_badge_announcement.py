@@ -1,12 +1,19 @@
-"""GroupBadgeAnnouncement + the backfill that MUST ship with it.
+"""GroupBadgeAnnouncement + the backfill that ships with it.
 
-The table records every (profile, group_badge) already announced to Discord, so an empty one reads as
-"nobody has ever been told about anything". Because badge cutover 5b also flips `evaluate_for_sync` to
-`notify=True`, the first sync after this migration would re-announce every badge every hunter already
-holds -- a webhook storm proportional to the whole userbase's badge count.
+The table records every (profile, group_badge) already announced, so re-earning a badge cannot re-announce
+it. `UserGroupBadge` is binary: a revoke DELETES the row, so a later re-earn is indistinguishable from a
+first earn. PSN flux, a DLC drop or a curator editing a stage can therefore re-ping a hunter about a badge
+they have held for a year -- something the legacy engine's `maintenance` state made impossible.
 
-The backfill is IN the migration rather than on the deploy checklist deliberately: a manual step whose
-failure mode is "spam every hunter in the Discord" is not a step worth trusting to a checkbox.
+The backfill seeds one marker per CURRENTLY held badge, so hunters whose badges predate this column are
+covered by the same guard the moment flux touches them.
+
+WHAT THIS IS NOT: it is not protection against a first-sync announcement storm at deploy. An earlier draft
+of this docstring claimed that, and it was wrong. `diff()` only emits an `award` when the profile does not
+already hold the badge (`cur is None`), and `announce_badges_earned` fires only on `result['awarded']` --
+so a still-held badge produces an `update` or nothing, and never announces. The deploy is quiet with or
+without this backfill. The genuine case it covers is revoke -> re-earn, which is exactly what the 5a audit
+raised it for.
 """
 
 import django.db.models.deletion

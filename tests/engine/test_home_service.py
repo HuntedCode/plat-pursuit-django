@@ -95,15 +95,23 @@ def test_closest_badge_is_the_series_nearest_completion():
     fraction -- rather than the legacy per-TIER table it borrowed from `dashboard_service` until 2026-08.
 
     A FINISHED series is excluded: "closest badge" pointing at one already earned is not a reason to click.
+    Each series needs a LIVE edition -- `closest_badge` gates on liveness, because a standing outlives its
+    series going dormant (`recompute_standing` only deletes standings for the series it was handed, and it
+    is only ever handed live ones).
     """
     from trophies.models import SeriesBadgeStanding
     from trophies.services import collection_service
-    from tests.factories import BadgeSeriesFactory, ProfileFactory
+    from tests.factories import (
+        BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory, ProfileFactory,
+    )
 
     profile = ProfileFactory(is_linked=True)
-    BadgeSeriesFactory(series_slug='near', name='Nearly There')
-    BadgeSeriesFactory(series_slug='far', name='Barely Started')
-    BadgeSeriesFactory(series_slug='done', name='Already Earned')
+    for slug, name in (('near', 'Nearly There'), ('far', 'Barely Started'), ('done', 'Already Earned')):
+        GroupBadgeFactory(
+            series=BadgeSeriesFactory(series_slug=slug, name=name),
+            platform_group=PlatformGroupFactory(key=f'{slug}-grp'),
+            is_live=True,
+        )
 
     SeriesBadgeStanding.objects.create(
         profile=profile, series_slug='far', xp=1, progress_bp=2500, stages_cleared=1, stages_total=4)
@@ -126,10 +134,14 @@ def test_home_surfaces_the_closest_badge_in_its_glances():
     wiring had: the function was covered and the call site was not.
     """
     from trophies.models import SeriesBadgeStanding
-    from tests.factories import BadgeSeriesFactory
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
 
     profile = ProfileFactory(is_linked=True)
-    BadgeSeriesFactory(series_slug='soulsborne', name='Soulsborne')
+    GroupBadgeFactory(
+        series=BadgeSeriesFactory(series_slug='soulsborne', name='Soulsborne'),
+        platform_group=PlatformGroupFactory(key='souls-grp'),
+        is_live=True,
+    )
     SeriesBadgeStanding.objects.create(
         profile=profile, series_slug='soulsborne', xp=1, progress_bp=6000,
         stages_cleared=3, stages_total=5)

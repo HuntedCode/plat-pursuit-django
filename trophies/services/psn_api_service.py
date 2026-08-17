@@ -7,7 +7,7 @@ from django.db import transaction, IntegrityError, OperationalError
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from collections import defaultdict
 from django.db.models import Count, Max, Min, Q
-from trophies.models import Profile, Game, ProfileGame, ProfileTrophyGroup, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
+from trophies.models import Profile, Game, ProfileGame, ProfileTrophyGroup, Trophy, EarnedTrophy, Concept, TrophyGroup
 from psnawp_api.models.title_stats import TitleStats
 from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
 from trophies.discord_utils.discord_notifications import notify_new_platinum

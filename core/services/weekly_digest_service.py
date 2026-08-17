@@ -99,15 +99,19 @@ class WeeklyDigestService:
         from trophies.models import UserGroupBadge
         from trophies.services.collection_service import closest_badge
 
+        # Windowed on created_at (when WE awarded it), not earned_at (the hunter's completion date, which
+        # the engine rewrites whenever a badge's iteration changes). Using earned_at meant a newly shipped
+        # series was invisible to everyone who had already played it, while a curator editing an old
+        # series' stages resurfaced long-held badges as "earned this week".
         earned_this_week = (
             UserGroupBadge.objects.filter(
                 profile=profile,
                 group_badge__is_live=True,
-                earned_at__gte=week_start,
-                earned_at__lt=week_end,
+                created_at__gte=week_start,
+                created_at__lt=week_end,
             )
             .select_related('group_badge__series', 'group_badge__platform_group')
-            .order_by('earned_at')
+            .order_by('created_at')
         )
         badges_earned = [
             {
