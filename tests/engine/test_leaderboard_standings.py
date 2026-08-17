@@ -2,8 +2,10 @@
 
 Three things get denormalized so every board is an indexed `ORDER BY` instead of an aggregate per read:
 
-- **Badge-game trophy counts** on `ProfileBadgeStanding` — the Badge Trophies board. Replaces a
-  full-population aggregate over `EarnedTrophy` that ran every 6 hours.
+- **`ProfileBadgeStanding.total_xp` / `badges_held`** — the Badge Points board.
+  (Badge-game trophy counts also lived here and were REMOVED in 2026-08: maintaining them meant a
+  full-library `EarnedTrophy` aggregate per profile in the badge write seam, which became a per-sync cost
+  once the engine was wired into `sync_complete`. The board they fed now reads Profile's own counters.)
 - **`ProfileCareerStanding`** — the Career XP board and Pursuer Level, rolled up from `ProfileJobXP`.
 - **`country_code`** on every standing store — so a country slice is a range scan, not a join-then-filter.
 
@@ -20,7 +22,6 @@ from django.test.utils import CaptureQueriesContext
 from trophies.models import (
     EarnedTrophy, ProfileBadgeStanding, ProfileCareerStanding, ProfileJobXP, SeriesBadgeStanding, Trophy,
 )
-from trophies.services.badge_xp import badge_trophy_counts
 from trophies.services.contract_service import recompute_career_standing
 from tests.factories import (
     ProfileFactory, ConceptFactory, GameFactory, StageFactory, TrophyFactory, EarnedTrophyFactory,
@@ -49,86 +50,6 @@ def _earn(profile, game, tier, n=1):
     for i in range(n):
         trophy = TrophyFactory(game=game, trophy_type=tier)
         EarnedTrophyFactory(profile=profile, trophy=trophy, earned=True)
-
-
-# ---------------------------------------------------------------- badge trophy counts ------------------
-
-def test_trophy_counts_are_tallied_by_tier_and_totalled():
-    profile = ProfileFactory(is_linked=True)
-    game = _badge_game()
-    _earn(profile, game, 'bronze', 4)
-    _earn(profile, game, 'silver', 2)
-    _earn(profile, game, 'gold', 1)
-    _earn(profile, game, 'platinum', 1)
-
-    counts = badge_trophy_counts(profile.id)
-
-    assert counts == {
-        'trophies_bronze': 4, 'trophies_silver': 2, 'trophies_gold': 1, 'trophies_platinum': 1,
-        'trophies_total': 8,
-    }
-
-
-def test_a_game_in_many_badges_counts_its_trophies_once():
-    """The load-bearing one. The game set is an `IN (subquery)`, which dedupes by construction, so a game
-    sitting in five badges contributes its trophies exactly once.
-
-    Rewriting this as a join through Stage would multiply every trophy by the number of badges containing
-    its game -- a number that inflates with catalogue growth rather than with play, and looks entirely
-    plausible while doing it. That is the single most likely way for this figure to silently break, which
-    is why the fixture puts one game in THREE stages of three different series rather than one.
-    """
-    profile = ProfileFactory(is_linked=True)
-    concept = ConceptFactory()
-    for i, slug in enumerate(('alpha', 'beta', 'gamma'), start=1):
-        stage = StageFactory(series_slug=slug, stage_number=i)
-        stage.concepts.add(concept)
-    game = GameFactory(concept=concept, title_platform=['PS5'])
-
-    _earn(profile, game, 'bronze', 3)
-
-    assert badge_trophy_counts(profile.id)['trophies_bronze'] == 3, (
-        'trophies were multiplied by the number of badges containing their game'
-    )
-
-
-def test_trophies_outside_badge_games_do_not_count():
-    """The board is "trophies across BADGE games", not "trophies". A game in no stage is not in the set."""
-    profile = ProfileFactory(is_linked=True)
-    _earn(profile, _badge_game(), 'gold', 2)
-
-    unbadged = GameFactory(concept=ConceptFactory(), title_platform=['PS5'])
-    _earn(profile, unbadged, 'gold', 5)
-
-    assert badge_trophy_counts(profile.id)['trophies_gold'] == 2
-
-
-def test_unearned_rows_do_not_count():
-    """`EarnedTrophy` rows exist for trophies a profile has NOT earned; `earned=True` is the filter that
-    makes this a score rather than a catalogue size."""
-    profile = ProfileFactory(is_linked=True)
-    game = _badge_game()
-    trophy = TrophyFactory(game=game, trophy_type='gold')
-    EarnedTrophyFactory(profile=profile, trophy=trophy, earned=False)
-
-    assert badge_trophy_counts(profile.id)['trophies_total'] == 0
-
-
-def test_the_count_is_one_grouped_query_not_a_python_tally():
-    """A whale holds 250k+ EarnedTrophy rows. Iterating them in Python is the documented OOM/timeout
-    pattern this codebase has been bitten by repeatedly, and it is invisible in review because the code
-    reads fine at test scale. Pinned as a query COUNT so a future `for et in qs:` rewrite fails here."""
-    profile = ProfileFactory(is_linked=True)
-    game = _badge_game()
-    _earn(profile, game, 'bronze', 12)
-
-    with CaptureQueriesContext(connection) as ctx:
-        badge_trophy_counts(profile.id)
-
-    assert len(ctx.captured_queries) == 1, (
-        f'{len(ctx.captured_queries)} queries to count one profile\'s trophies -- this must be a single '
-        f'grouped aggregate'
-    )
 
 
 # ---------------------------------------------------------------- career standing -----------------------
@@ -290,50 +211,6 @@ def test_saving_a_profile_without_changing_country_touches_no_standings():
     touched = [q['sql'] for q in ctx.captured_queries
                if 'UPDATE' in q['sql'] and 'standing' in q['sql'].lower()]
     assert not touched, f'a non-country save still rewrote the standings: {touched}'
-
-
-def test_badge_trophies_board_ranks_platinums_first_then_total():
-    """A trophy-hunting board leads with the trophy that takes a whole game to earn. Total trophies is the
-    tiebreak, not the lead: 400 bronzes should not outrank a hunter with more platinums.
-
-    Asserted as an actual ORDER BY over real rows rather than by reading the index definition, because the
-    two can disagree -- an index is a performance fact and the ordering is a correctness one.
-    """
-    few_plats_many_trophies = ProfileFactory(is_linked=True)
-    many_plats = ProfileFactory(is_linked=True)
-    tie_breaker_loser = ProfileFactory(is_linked=True)
-
-    ProfileBadgeStanding.objects.create(
-        profile=few_plats_many_trophies, trophies_platinum=2, trophies_total=400)
-    ProfileBadgeStanding.objects.create(
-        profile=many_plats, trophies_platinum=9, trophies_total=50)
-    ProfileBadgeStanding.objects.create(
-        profile=tie_breaker_loser, trophies_platinum=9, trophies_total=20)
-
-    ordered = list(
-        ProfileBadgeStanding.objects
-        .order_by('-trophies_platinum', '-trophies_total', 'profile_id')
-        .values_list('profile_id', flat=True)
-    )
-
-    assert ordered == [many_plats.id, tie_breaker_loser.id, few_plats_many_trophies.id], (
-        'the board is not platinum-leading with total as the tiebreak'
-    )
-
-
-def test_the_progress_index_matches_the_board_order():
-    """A composite index only range-scans when its columns match the ORDER BY exactly. `(-platinum,
-    -total)` against `ORDER BY -platinum, -total` is a scan; any divergence silently becomes a sort of the
-    whole table, which is invisible until the table is large.
-    """
-    meta_indexes = {idx.name: idx.fields for idx in ProfileBadgeStanding._meta.indexes}
-
-    assert meta_indexes.get('pbs_progress_idx') == ['-trophies_platinum', '-trophies_total'], (
-        f'the Badge Trophies index no longer matches the board order: {meta_indexes.get("pbs_progress_idx")}'
-    )
-    assert meta_indexes.get('pbs_country_prog_idx') == [
-        'country_code', '-trophies_platinum', '-trophies_total'
-    ], 'the country-sliced Badge Trophies index must be (country, ...board order)'
 
 
 # ---------------------------------------------------------------- the per-series board tiebreak ---------

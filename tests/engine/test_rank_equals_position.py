@@ -58,27 +58,24 @@ def test_badge_points_rank_equals_position_across_a_large_tie():
     what produced the original report."""
     tied = [ProfileFactory() for _ in range(12)]
     for p in tied:
-        ProfileBadgeStanding.objects.create(profile=p, total_xp=1600, trophies_total=10)
+        ProfileBadgeStanding.objects.create(profile=p, total_xp=1600)
     ProfileBadgeStanding.objects.create(
-        profile=ProfileFactory(), total_xp=9000, trophies_total=99)   # clear leader above the tie
+        profile=ProfileFactory(), total_xp=9000)   # clear leader above the tie
     ProfileBadgeStanding.objects.create(
-        profile=ProfileFactory(), total_xp=100, trophies_total=1)     # and one below it
+        profile=ProfileFactory(), total_xp=100)     # and one below it
 
     _assert_agrees(lb.xp_rows(limit=100), lb.xp_rank, 'Badge Points')
 
 
-def test_badge_trophies_rank_equals_position_when_both_figures_tie():
+def test_trophies_rank_equals_position_when_both_figures_tie():
     """Two sort keys, so the tie has to be on BOTH before the tail decides. Stopping the count at
-    `trophies_total` looks correct and still ties everyone matching on both."""
+    `total_trophies` looks correct and still ties everyone matching on both."""
     for _ in range(8):
-        ProfileBadgeStanding.objects.create(
-            profile=ProfileFactory(), total_xp=500, trophies_platinum=5, trophies_total=120)
-    ProfileBadgeStanding.objects.create(
-        profile=ProfileFactory(), total_xp=500, trophies_platinum=5, trophies_total=400)   # same plats, more
-    ProfileBadgeStanding.objects.create(
-        profile=ProfileFactory(), total_xp=500, trophies_platinum=9, trophies_total=10)    # more plats
+        ProfileFactory(is_linked=True, total_plats=5, total_trophies=120)
+    ProfileFactory(is_linked=True, total_plats=5, total_trophies=400)    # same plats, more trophies
+    ProfileFactory(is_linked=True, total_plats=9, total_trophies=10)     # more plats
 
-    _assert_agrees(lb.badge_trophy_rows(limit=100), lb.badge_trophy_rank, 'Badge Trophies')
+    _assert_agrees(lb.trophy_rows(limit=100), lb.trophy_rank, 'Trophies')
 
 
 def test_career_rank_equals_position_across_a_tie():
@@ -137,11 +134,11 @@ def test_rank_equals_position_under_a_country_slice():
     the rank must be counted against the same slice the rows came from."""
     for _ in range(5):
         ProfileBadgeStanding.objects.create(
-            profile=ProfileFactory(country_code='CA'), total_xp=1600, trophies_total=10,
+            profile=ProfileFactory(country_code='CA'), total_xp=1600,
             country_code='CA')
     for _ in range(3):
         ProfileBadgeStanding.objects.create(
-            profile=ProfileFactory(country_code='GB'), total_xp=1600, trophies_total=10,
+            profile=ProfileFactory(country_code='GB'), total_xp=1600,
             country_code='GB')
 
     _assert_agrees(lb.xp_rows(limit=100, country='CA'),
@@ -151,9 +148,9 @@ def test_rank_equals_position_under_a_country_slice():
 def test_rank_equals_position_under_an_edition_slice():
     for _ in range(5):
         ProfileEditionStanding.objects.create(
-            profile=ProfileFactory(), platform_group_key='ultra-hd', total_xp=1600, trophies_total=10)
+            profile=ProfileFactory(), platform_group_key='ultra-hd', total_xp=1600)
     ProfileEditionStanding.objects.create(
-        profile=ProfileFactory(), platform_group_key='legacy-hd', total_xp=9999, trophies_total=99)
+        profile=ProfileFactory(), platform_group_key='legacy-hd', total_xp=9999)
 
     _assert_agrees(lb.xp_rows(limit=100, edition='ultra-hd'),
                    lambda pid: lb.xp_rank(pid, edition='ultra-hd'), 'Badge Points (Ultra HD)')
@@ -172,6 +169,6 @@ def test_every_board_order_ends_in_the_unique_key(keys, label):
     """The property the tests above depend on. Without a unique final key the order is not total, ties are
     resolved arbitrarily by Postgres, and rank/position can disagree run to run rather than consistently --
     which is far harder to notice than a stable wrong number."""
-    assert keys[-1] == ('profile_id', lb._ASC), (
-        f'{label} does not end in the unique profile_id key, so its ordering is not total'
+    assert keys[-1] in (('profile_id', lb._ASC), ('id', lb._ASC)), (
+        f'{label} does not end in a unique key, so its ordering is not total'
     )

@@ -909,13 +909,19 @@ class OverallBadgeLeaderboardsView(TemplateView):
 
     THREE boards, one per thing worth ranking, as `.pp-switch` tabs:
 
-      Badge Trophies -> trophies across badge games (platinums first, total as the tiebreak)
-      Badge Points   -> ProfileBadgeStanding.total_xp
-      Career XP      -> the jobs economy (ProfileCareerStanding)
+      Trophies     -> every game, platinums first, total as the tiebreak (Profile's own counters)
+      Badge Points -> ProfileBadgeStanding.total_xp
+      Career XP    -> the jobs economy (ProfileCareerStanding)
 
-    Badge Trophies and Badge Points are DELIBERATELY separate tabs rather than one "XP" board: they are two
-    sealed economies (the badge subsystem never reads or writes the jobs one), a hunter can hold very
-    different ranks in each, and a merged total would be the one figure on the site that means nothing.
+    One board per DOMAIN: overall trophy hunting, badges, career. Badge Points and Career XP are
+    deliberately separate rather than one "XP" board -- they are two sealed economies (the badge subsystem
+    never reads or writes the jobs one), a hunter can hold very different ranks in each, and a merged total
+    would be the one figure on the site that means nothing.
+
+    Trophies replaced a "Badge Trophies" board that counted trophies in badge-covered games. That needed a
+    full-library aggregate per profile inside the badge write seam, and once that seam ran on every sync it
+    was the only expensive query in the subsystem -- for a figure that mostly measured how many
+    badge-covered games somebody had played. See badge_leaderboards.trophy_rows.
 
     TWO filters, both of which swap what the board reads rather than post-filtering it:
 
@@ -939,13 +945,15 @@ class OverallBadgeLeaderboardsView(TemplateView):
 
     # (key, label). Order is the tab order; Badge Trophies leads because it has the most entrants.
     BOARDS = (
-        ('trophies', 'Badge Trophies'),
+        ('trophies', 'Trophies'),
         ('points', 'Badge Points'),
         ('career', 'Career XP'),
     )
     BOARD_KEYS = {k for k, _ in BOARDS}
-    # The badge boards -- the two that ProfileBadgeStanding backs, and so the two an edition can slice.
-    EDITION_BOARDS = frozenset({'trophies', 'points'})
+    # Only Badge Points slices by edition. An edition is a PlatformGroup, i.e. a BADGE concept; the
+    # Trophies board counts trophies across every game and Career XP is the jobs economy, so neither has
+    # editions to slice. A control that renders but changes nothing is worse than one that is absent.
+    EDITION_BOARDS = frozenset({'points'})
     # `xp` was the old key for the Badge Points board; `country` was a TAB before country became a filter;
     # `progress` was this board's key while it was called Progress, a name that described the store rather
     # than what it ranks. Bookmarks carrying any of them still land where they meant to.
@@ -1070,7 +1078,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
             cc = country or None
             ed = edition or None
             context['my_standing'] = {
-                'trophies': lb.badge_trophy_rank(profile.id, country=cc, edition=ed),
+                'trophies': lb.trophy_rank(profile.id, country=cc),
                 'points': lb.xp_rank(profile.id, country=cc, edition=ed),
                 'career': lb.career_xp_rank(profile.id, country=cc),
             }
@@ -1097,10 +1105,10 @@ class OverallBadgeLeaderboardsView(TemplateView):
         offset = (page_num - 1) * per
 
         if tab == 'trophies':
-            rows = lb.badge_trophy_rows(limit=per, offset=offset, country=cc, edition=ed)
+            rows = lb.trophy_rows(limit=per, offset=offset, country=cc)
             entries = lb.page(rows, offset, extra=lambda r: {
                 'primary': r[1], 'primary_label': 'platinums',
-                'secondary': r[5], 'secondary_label': 'trophies',
+                'secondary': r[2], 'secondary_label': 'trophies',
             })
         elif tab == 'points':
             rows = lb.xp_rows(limit=per, offset=offset, country=cc, edition=ed)

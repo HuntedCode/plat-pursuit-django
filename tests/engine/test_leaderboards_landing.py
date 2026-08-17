@@ -21,32 +21,38 @@ URL = reverse('overall_badge_leaderboards')
 
 
 def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0, career=0, level=0):
-    p = ProfileFactory(display_psn_username=name, country_code=country, country=country_name)
-    if plats or trophies or points:
-        ProfileBadgeStanding.objects.create(
-            profile=p, country_code=country, total_xp=points,
-            trophies_platinum=plats, trophies_total=trophies,
-        )
+    """A hunter placed on whichever boards the caller gives them figures for.
+
+    `plats`/`trophies` land on PROFILE's own counters, because the Trophies board reads those directly --
+    it is not badge-scoped and has no standing row. `points` still needs a ProfileBadgeStanding.
+    """
+    p = ProfileFactory(
+        display_psn_username=name, country_code=country, country=country_name,
+        is_linked=True, total_plats=plats, total_trophies=trophies,
+    )
+    if points:
+        ProfileBadgeStanding.objects.create(profile=p, country_code=country, total_xp=points)
     if career:
         ProfileCareerStanding.objects.create(
             profile=p, country_code=country, total_xp=career, pursuer_level=level)
     return p
 
 
-def test_the_landing_offers_three_boards_and_defaults_to_badge_trophies(client):
-    """Badge Trophies leads because it is the board with the most entrants -- the one a first-time visitor
-    is most likely to appear on.
+def test_the_landing_offers_three_boards_and_defaults_to_trophies(client):
+    """Trophies leads because it is the board with the most entrants -- every linked hunter with a trophy
+    is on it, which is the one a first-time visitor is most likely to appear on.
 
-    It was called "Progress", which named the STORE rather than what the board ranks; every other board on
-    the site is named for its figure. The label is asserted here too, because the key and the label are
-    separately changeable and a rename that only lands in one of them is the likely half-done state.
+    It has been renamed twice: "Progress" (which named the STORE rather than what it ranks), then "Badge
+    Trophies" (badge-scoped, and the only thing in the subsystem needing a full-library aggregate). The
+    label is asserted here as well as the key, because the two are separately changeable and a rename
+    landing in only one of them is the likely half-done state.
     """
     body = client.get(URL).content.decode()
 
     for key in ('trophies', 'points', 'career'):
         assert f'data-board="{key}"' in body, f'the {key} board is missing from the tab strip'
-    assert active_board(body) == 'trophies', 'the landing does not default to Badge Trophies'
-    assert '>Badge Trophies</span>' in body, 'the board is still labelled something else in the strip'
+    assert active_board(body) == 'trophies', 'the landing does not default to Trophies'
+    assert '>Trophies</span>' in body, 'the board is still labelled something else in the strip'
 
 
 def test_country_is_a_filter_not_a_tab(client):
@@ -75,7 +81,7 @@ def test_the_viewer_standing_is_in_the_header_not_in_the_rows(client):
     """Shown once, in the header. A per-row personal rank would make every response per-user and forfeit
     caching for the entire section, which is its defining performance property."""
     profile = ProfileFactory(display_psn_username='Me', is_linked=True)
-    ProfileBadgeStanding.objects.create(profile=profile, total_xp=100, trophies_platinum=3, trophies_total=40)
+    ProfileBadgeStanding.objects.create(profile=profile, total_xp=100)
     client.force_login(profile.user)
 
     body = client.get(URL).content.decode()

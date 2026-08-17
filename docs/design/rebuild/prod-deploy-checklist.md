@@ -196,10 +196,11 @@ Spec: [leaderboards-rebuild.md](leaderboards-rebuild.md). Migrations `0297`, `02
 - [ ] **Run `evaluate_badges --all` AFTER migrating, and before anyone sees a board.** This is the real
       backfill and it is easy to miss because nothing errors without it. The migrations add
       `trophies_*`, `advanced_at` and `country_code` with defaults, so every existing standing starts at
-      **zero trophies, a NULL advance date and no country**. Until a full evaluation rewrites them:
-      Badge Trophies ranks everyone equal-and-empty; the per-series board loses its tiebreak entirely,
-      so each rung of chasers falls back to profile id; and every country slice returns nothing. The
-      pages render perfectly throughout — they are simply wrong.
+      **a NULL advance date and no country**. Until a full evaluation rewrites them: the per-series board
+      loses its tiebreak entirely, so each rung of chasers falls back to profile id, and every country
+      slice returns nothing. The pages render perfectly throughout — they are simply wrong.
+      (The `trophies_*` columns this used to also warn about were removed in 2026-08; the Trophies board
+      reads `Profile`'s own counters, which no badge backfill touches.)
 - [ ] **Run `recompute_job_xp --all`** for the same reason on `ProfileCareerStanding`: without it the
       Career XP board is empty rather than absent.
 - [ ] **Sanity-check one known hunter on each board** after the backfills — a name you can verify by
@@ -235,6 +236,14 @@ Spec: [badge-backend-rebuild.md](badge-backend-rebuild.md) §6 step 5a. No migra
 - [ ] **On-site badge notifications are NOT ported** and will be absent from the inbox when the
       notifications rebuild ships. `emit_badge_earned` is the seam it should consume. Tracked in
       badge-backend-rebuild.md §6.
+- [ ] **DELETE the `update_leaderboards` Render Cron entry.** It rebuilt the legacy Redis badge boards
+      every 6 hours; every board it fed now reads indexed Postgres columns. Harmless if left, but it is a
+      full-population pass four times a day writing sorted sets nothing reads.
+- [ ] **ADD a nightly `evaluate_badges --all` Render Cron entry, 04:00 UTC.** Sync only evaluates the
+      series a hunter touched, so this is what closes the gaps: badges authored after someone's last sync,
+      curator edits to stages or platform groups, and any evaluation swallowed by the non-fatal wrapper in
+      `_job_sync_complete`. Without it there is no drift correction for the badge subsystem at all.
+      Documented in [cron-jobs.md](../../guides/cron-jobs.md).
 
 ---
 

@@ -8,7 +8,15 @@ Progress (for the "chasers" leaderboard) is the furthest-along fraction over the
 {series_slug: SeriesStanding}. `recompute_standing` is the one write seam: it recomputes a profile's standing
 from scratch off the current DesiredState and upserts SeriesBadgeStanding (per series) + ProfileBadgeStanding
 (the grand total) + ProfileEditionStanding (the same totals sliced per platform edition, which is what backs
-the edition filter on the boards). Everything is isolated from the legacy ProfileGamification.total_badge_xp.
+the edition filter on Badge Points). Everything is isolated from the legacy ProfileGamification.total_badge_xp.
+
+NOTHING HERE AGGREGATES A PROFILE'S TROPHIES. It used to: `badge_trophy_tallies` counted every earned trophy
+across every badge-stage game to feed a "Badge Trophies" board. That was affordable while this seam ran only
+from `evaluate_badges`, and became a full-library scan on every sync the moment the engine was wired into
+`sync_complete` -- precisely the inline-aggregate pattern `recalc_earn_rates` was created to undo after the
+May 2026 incident. The board now reads Profile's own trophy counters, which are already maintained. Keep it
+that way: everything this seam writes is derived from the DesiredState it was handed plus bounded per-profile
+reads, and none of it scans a hunter's library.
 """
 from dataclasses import dataclass
 from collections import defaultdict
@@ -233,12 +241,10 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
 
     total = SeriesBadgeStanding.objects.filter(profile_id=profile_id).aggregate(t=Sum('xp'))['t'] or 0
     if total > 0:
-        editions = edition_platforms()
-        overall, by_edition = badge_trophy_tallies(profile_id, editions)
         badges_total, badges_by_edition = badges_held_counts(profile_id)
         _upsert(ProfileBadgeStanding, {'profile_id': profile_id},
-                {'total_xp': total, 'country_code': country, 'badges_held': badges_total, **overall})
-        _write_edition_standings(profile_id, country, by_edition, badges_by_edition)
+                {'total_xp': total, 'country_code': country, 'badges_held': badges_total})
+        _write_edition_standings(profile_id, country, badges_by_edition)
     else:
         # No badge XP at all means no standing anywhere, editions included -- the boards read
         # ProfileBadgeStanding for the all-editions view and these rows for a slice, and one of them
@@ -247,7 +253,7 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
         ProfileEditionStanding.objects.filter(profile_id=profile_id).delete()
 
 
-def _write_edition_standings(profile_id, country, by_edition, badges_by_edition=None):
+def _write_edition_standings(profile_id, country, badges_by_edition):
     """Upsert the profile's per-edition standings, and drop the editions they no longer stand in.
 
     Per-edition XP is re-summed from EVERY one of the profile's SeriesBadgeStanding rows rather than from
@@ -255,9 +261,11 @@ def _write_edition_standings(profile_id, country, by_edition, badges_by_edition=
     makes a scoped `--series` recompute safe: the call only knows about the series it evaluated, but this
     row is profile-wide.
 
-    A row is kept when the profile has EITHER xp or trophies in that edition. Trophies without XP is a real
-    state -- badge-game trophies earned without clearing a gating stage -- and it belongs on the Badge
-    Trophies board even though it puts nothing on Badge Points.
+    The edition set comes from what the profile actually HAS -- xp keys union badge keys -- rather than
+    from the live PlatformGroup table. That dropped a query per recompute and, more importantly, removed
+    the last reason this seam needed to know which editions exist: a hunter's row set is a fact about the
+    hunter. An edition they hold nothing in has no row, and a deactivated edition's rows fall out on the
+    next recompute because neither source names it any more.
     """
     from trophies.models import ProfileEditionStanding, SeriesBadgeStanding
 
@@ -266,16 +274,15 @@ def _write_edition_standings(profile_id, country, by_edition, badges_by_edition=
         for key, xp in (blob or {}).items():
             xp_by_edition[key] += xp
 
-    badges_by_edition = badges_by_edition or {}
     keep = []
-    for key, counts in by_edition.items():
+    for key in set(xp_by_edition) | set(badges_by_edition):
         xp = xp_by_edition.get(key, 0)
-        if not xp and not counts['trophies_total']:
+        badges = badges_by_edition.get(key, 0)
+        if not xp and not badges:
             continue
         keep.append(key)
         _upsert(ProfileEditionStanding, {'profile_id': profile_id, 'platform_group_key': key},
-                {'total_xp': xp, 'country_code': country,
-                 'badges_held': badges_by_edition.get(key, 0), **counts})
+                {'total_xp': xp, 'country_code': country, 'badges_held': badges})
     ProfileEditionStanding.objects.filter(profile_id=profile_id).exclude(platform_group_key__in=keep).delete()
 
 
@@ -284,113 +291,6 @@ def _country_code(profile_id):
     rather than a join-then-filter over a board-ordered scan."""
     from trophies.models import Profile
     return Profile.objects.filter(pk=profile_id).values_list('country_code', flat=True).first() or ''
-
-
-_TIERS = ('platinum', 'gold', 'silver', 'bronze')
-
-
-def _tally(rows):
-    """{tier: n} -> the trophies_* field dict the standings store."""
-    counts = {f'trophies_{tier}': rows.get(tier, 0) for tier in _TIERS}
-    counts['trophies_total'] = sum(counts.values())
-    return counts
-
-
-def edition_platforms():
-    """{platform_group_key: frozenset(platforms)} for every active edition.
-
-    One query on a table with a handful of rows. Read per recompute rather than memoized: the groups are
-    config a curator edits ("adding a group is a row, not a schema change"), and a process-lifetime cache
-    would keep a batch run of `evaluate_badges --all` writing against the shape the table had when it
-    started.
-    """
-    from trophies.models import PlatformGroup
-    return {
-        g.key: frozenset(g.platforms or [])
-        for g in PlatformGroup.objects.filter(is_active=True).only('key', 'platforms')
-    }
-
-
-def trophy_groups(profile_id):
-    """The grouped aggregate the tallies are built from: [(title_platform, trophy_type, count), ...].
-
-    Named and returned as a list rather than inlined so its SIZE is inspectable, because that size is the
-    whole performance argument. The Python loop that consumes it iterates THIS, not EarnedTrophy: Postgres
-    does the counting and hands back one row per (distinct platform list x tier present).
-
-    That result set is bounded by the CATALOGUE's platform vocabulary -- roughly a dozen real `title_platform`
-    combinations x 4 tiers -- and is the same size for a hunter with 40 trophies and a whale with 250,000.
-    It is the shape CLAUDE.md's "Good" example uses, not the `for et in queryset:` one it forbids;
-    `test_the_aggregate_does_not_grow_with_the_library` pins it so a future edit cannot quietly turn this
-    into a per-row iteration while still reading like an aggregate.
-
-    WHAT THE EDITION SPLIT ACTUALLY COSTS, checked against the emitted SQL rather than assumed:
-
-      + `INNER JOIN trophies_game ON trophy.game_id = game.id`. This is a REAL added join -- the
-        `game_id IN (SELECT ...)` below reads Game under its own alias, so the outer query was not already
-        joining it. It is a primary-key probe over the rows that SURVIVE that IN test (the profile's
-        badge-game trophies), so it is strictly cheaper than the Trophy join on the same path already is.
-        A constant factor, not a change in complexity class.
-      + `GROUP BY` gains a jsonb column, which hashes less cheaply than the varchar it joins.
-
-    Both land on the SYNC path (inside a per-profile recompute that already reads ProfileGame,
-    ProfileTrophyGroup and the stage graph), never on a request. Rendering a board touches none of this:
-    it is an indexed ORDER BY plus one hydrate.
-    """
-    from django.db.models import Count
-    from trophies.models import EarnedTrophy, Game
-
-    badge_games = Game.objects.filter(concept__stages__isnull=False)
-    return list(
-        EarnedTrophy.objects
-        .filter(profile_id=profile_id, earned=True, trophy__game__in=badge_games)
-        .values('trophy__game__title_platform', 'trophy__trophy_type')
-        .annotate(n=Count('id'))
-        .values_list('trophy__game__title_platform', 'trophy__trophy_type', 'n')
-    )
-
-
-def badge_trophy_tallies(profile_id, editions=None):
-    """The Badge Trophies board's figures: trophies across every badge-stage game, by tier -- overall AND
-    per platform edition. Returns (overall_counts, {edition_key: counts}).
-
-    DB-aggregated in ONE grouped query, never iterated -- a whale holds 250k+ EarnedTrophy rows and
-    counting them in Python is the documented OOM/timeout pattern.
-
-    The game set is an `IN (subquery)`, and that is LOAD-BEARING: it dedupes by construction, so a game
-    sitting in five different badges contributes its trophies exactly once. Rewriting this as a join
-    through Stage would multiply each trophy by the number of badges containing its game and produce a
-    number that inflates with catalogue growth rather than with play. It would also be slower. See the
-    gotchas in docs/design/rebuild/leaderboards-rebuild.md.
-
-    The per-edition split GROUPS BY `title_platform` rather than running a query per edition. The number of
-    distinct platform lists in a catalogue is small and does not grow with the population, so this stays
-    one query no matter how many editions get seeded -- which is the property that makes a future third
-    group free. Routing each list to its editions happens in Python by INTERSECTION, deliberately the same
-    rule `badge_engine._qualifies` applies, so an edition's trophies and its badges can never disagree
-    about which games belong to it.
-
-    A game qualifying for two editions counts in both. See ProfileEditionStanding on why that is right and
-    why the editions therefore do not sum to the overall row.
-    """
-    editions = editions if editions is not None else edition_platforms()
-    rows = trophy_groups(profile_id)
-
-    overall = defaultdict(int)
-    per_edition = {key: defaultdict(int) for key in editions}
-    for platforms, tier, n in rows:
-        overall[tier] += n
-        owned = frozenset(platforms or ())
-        for key, group_platforms in editions.items():
-            if owned & group_platforms:
-                per_edition[key][tier] += n
-
-    return _tally(overall), {key: _tally(tiers) for key, tiers in per_edition.items()}
-
-
-def badge_trophy_counts(profile_id):
-    """Overall badge-game trophy counts only. `badge_trophy_tallies` is the one that does the work."""
-    return badge_trophy_tallies(profile_id, editions={})[0]
 
 
 def badges_held_counts(profile_id):
@@ -404,14 +304,19 @@ def badges_held_counts(profile_id):
     is what the Collection and the milestones metric already count. `ProfileGamification.total_badges_earned`
     is the retired tier count and a different number; the two must never be shown as the same figure.
 
-    Unlike the trophy tally, editions here do NOT overlap: a group badge belongs to exactly one platform
-    group, so these sum to the total.
+    LIVE badges only, matching what XP counts. Without that filter the two figures disagreed: XP is summed
+    over the badges the evaluation was scoped to (`is_live=True`), while this counted every held row -- so a
+    curator smoke-testing an unreleased badge against a real profile left that hunter permanently reading
+    "4,200 points, 7 badges" where only 6 of them produced any points. The whole reason this column exists
+    is to make the points figure legible, which it cannot do if it is counting something else.
+
+    Editions do NOT overlap: a group badge belongs to exactly one platform group, so these sum to the total.
     """
     from django.db.models import Count
     from trophies.models import UserGroupBadge
 
     rows = (
-        UserGroupBadge.objects.filter(profile_id=profile_id)
+        UserGroupBadge.objects.filter(profile_id=profile_id, group_badge__is_live=True)
         .values('group_badge__platform_group__key')
         .annotate(n=Count('id'))
         .values_list('group_badge__platform_group__key', 'n')

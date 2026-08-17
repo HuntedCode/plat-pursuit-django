@@ -11,7 +11,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | Every 30 min | `refresh_profiles` | Every 30 minutes | TokenKeeper must be running to process queued syncs |
 | Top of every hour | `refresh_homepage_hourly` | Hourly | None |
 | ~~Top of every hour~~ | ~~`process_scheduled_notifications`~~ | **PAUSED (2026-08)** | Notification system hidden |
-| Every 6 hours | `update_leaderboards` | Every 6 hours | Badge data should be reasonably current |
+| 04:00 UTC daily | `evaluate_badges --all` | Daily | TokenKeeper sync caught up |
 | Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
@@ -53,14 +53,29 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 
 > **Removed: `refresh_homepage_daily`.** This command was retired when the homepage redesign collapsed onto the dashboard. There are no daily-cached "featured games / featured badges / featured checklists" sources anymore; the dashboard's Recent Platinums, Recent Badges, and Top Studios modules took their place. Disable any legacy Render Cron entry pointing at it.
 
-### update_leaderboards
+### evaluate_badges --all
 
-- **Schedule**: Every 6 hours
-- **Command**: `python manage.py update_leaderboards`
-- **What it does**: Recomputes all badge leaderboards and caches the results with a 7-hour TTL. Covers: per-series earners leaderboard, per-series progress leaderboard, total progress leaderboard, total XP leaderboard, and community series XP totals. Iterates over every live badge series.
-- **Dependencies**: Badge data should be reasonably current. No hard ordering dependency, but running after a badge series refresh gives more accurate results.
-- **Idempotency**: Fully safe to re-run. Overwrites existing cache keys.
-- **Failure impact**: Leaderboard pages show stale data until the cache expires (7h TTL). Individual series failures are caught and logged without blocking other series.
+- **Schedule**: Daily, 04:00 UTC
+- **Command**: `python manage.py evaluate_badges --all`
+- **What it does**: Re-evaluates every live group badge for every profile and rewrites the standings from
+  scratch (`UserGroupBadge`, `SeriesBadgeStanding`, `ProfileBadgeStanding`, `ProfileEditionStanding`).
+- **Why it exists**: sync evaluates only the series a hunter TOUCHED, which is what keeps `sync_complete`
+  cheap. That leaves three gaps this pass closes: a badge authored after a hunter's last sync, a stage or
+  `PlatformGroup` edited by a curator, and any evaluation that failed and was swallowed by the non-fatal
+  wrapper in `_job_sync_complete`. Same shape as `recalc_earn_rates`: incremental in steady state, a
+  nightly recompute-from-scratch as the drift-correction net.
+- **Dependencies**: TokenKeeper sync caught up, so the completion signals it reads are current.
+- **Idempotency**: Fully safe to re-run — the engine is pure and the standings are a full replace.
+- **Failure impact**: newly authored badges and curator edits do not reach hunters who did not touch those
+  series; already-evaluated standings stay correct. Announcements are NOT sent by this path (`notify`
+  defaults off), so a re-run cannot spam Discord.
+
+> **Removed: `update_leaderboards`.** It rebuilt the LEGACY Redis badge leaderboards (per-series earners +
+> progress, total progress, total XP, community series XP) every 6 hours. Every board it fed now reads
+> indexed Postgres columns written by the badge write seam -- see
+> [leaderboard-system](../architecture/leaderboard-system.md). **Disable the Render Cron entry when the
+> rebuild branch deploys**; leaving it running is harmless but it burns a full-population pass every 6
+> hours writing sorted sets nothing reads.
 
 ### detect_dlc_and_refresh
 
@@ -264,7 +279,6 @@ The following diagram shows ordering constraints between jobs. Jobs on the same 
                         process_scheduled_notifications
 
 
-    EVERY 6 HOURS ──── update_leaderboards
 
 
     DAILY ──────────── populate_title_ids
@@ -301,7 +315,7 @@ Key ordering rules:
 There is no centralized cron job monitoring dashboard. Use these approaches to verify job execution:
 
 - **Render dashboard**: Each cron job shows its last run time and exit status in the Render Cron Jobs panel. Check the job's log output for success/error messages.
-- **Redis cache keys**: For cache-warming jobs (`refresh_homepage_hourly`, `refresh_homepage_daily`, `update_leaderboards`), you can verify freshness by checking the cache key timestamps:
+- **Redis cache keys**: For cache-warming jobs (`refresh_homepage_hourly`), you can verify freshness by checking the cache key timestamps:
   - `python manage.py redis_admin --flush-index` lists current index cache keys (use with caution, this flushes them)
   - Leaderboard keys include a `_refresh_time` companion key (e.g., `lb_total_progress_refresh_time`) storing an ISO timestamp
 - **Database records**: For monthly recap jobs, check `MonthlyRecap.email_sent`, `email_sent_at`, `notification_sent`, `notification_sent_at` fields.

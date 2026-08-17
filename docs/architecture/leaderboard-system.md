@@ -14,10 +14,10 @@ The leaderboard system ranks hunters by badge progress and Badge Points, per ser
 | Badge Points (global + country) | Redis sorted sets | Still read by `profile_card_service` + 2 dashboard modules, which display the LEGACY `ProfileGamification.total_badge_xp`. Ranking that against the new store would print a figure beside a rank derived from a different number |
 | Per-series earners | Redis sorted sets | Still read by `frame_service` for the legacy badge frame |
 | Community XP | Redis scalar | Unrelated to the boards; per-series total |
-| **Badge Trophies** | **Postgres** (`ProfileBadgeStanding`) | Redis version DELETED. Was called "Global Progress" until 2026-08 |
+| **Trophies** | **Postgres** (`Profile`'s own counters) | All games, not badge-scoped. Was "Global Progress" -> "Badge Trophies" -> this |
 | **Per-series board** | **Postgres** (`SeriesBadgeStanding`) | Redis version DELETED. Earners + chasers MERGED into one board |
 | **Career XP** | **Postgres** (`ProfileCareerStanding`) | New; no Redis equivalent ever existed |
-| **Both badge boards, per edition** | **Postgres** (`ProfileEditionStanding`) | The edition FILTER. Same columns, same names, pre-sliced |
+| **Badge Points, per edition** | **Postgres** (`ProfileEditionStanding`) | The edition FILTER. Same columns, same names, pre-sliced |
 
 The Postgres side is `trophies/services/badge_leaderboards.py` ("Lane B"): indexed reads over
 denormalized standing columns, written by the recompute the sync path already runs. No cron, no
@@ -33,7 +33,7 @@ canonical location per board, so no two pages can drift.
 
 | Surface | URL | What it is |
 |---|---|---|
-| Global Boards | `/leaderboards/` | Badge Trophies / Badge Points / Career XP, `.pp-switch` tabs, country + edition FILTERS |
+| Global Boards | `/leaderboards/` | Trophies / Badge Points / Career XP, `.pp-switch` tabs, country + edition FILTERS |
 | Game Boards | `/leaderboards/games/` | Directory -> game detail's Ranks panel |
 | Badge Boards | `/leaderboards/badges/` | Directory -> badge detail's Ranks section |
 | Job Boards | `/leaderboards/jobs/` | Directory -> job detail's Ranks tab |
@@ -57,29 +57,38 @@ as the whole thing.
 
 | Filter | Applies to | Mechanism |
 |---|---|---|
-| Country | all three boards | a WHERE on the denormalized `country_code`, served by `(country, ...board order)` |
-| Edition | the two BADGE boards | a different STORE: `ProfileEditionStanding`, indexed `(edition, [country,] ...board order)` |
+| Country | all three boards | a WHERE on `country_code`, served by `(country, ...board order)` |
+| Edition | **Badge Points only** | a different STORE: `ProfileEditionStanding`, indexed `(edition, [country,] ...board order)` |
 
 Edition exists because Legacy HD and Ultra HD are genuinely different games -- XP accrues per GROUP BADGE,
-not per series -- so "who leads Legacy HD" is a question the all-editions board cannot answer. It is absent
-from Career XP because the jobs economy has no editions; a control that renders but changes nothing
-promises a slice that does not exist.
+not per series -- so "who leads Legacy HD" is a question the all-editions board cannot answer. It applies to
+Badge Points ALONE: an edition is a PlatformGroup, i.e. a badge concept, and neither Trophies (every game)
+nor Career XP (the jobs economy) has editions to slice. A control that renders but changes nothing promises
+a slice that does not exist.
+
+### The Trophies board is not badge-scoped, deliberately
+
+It reads `Profile.total_plats` / `total_trophies`, maintained incrementally by the EarnedTrophy signals and
+reconciled nightly by `recalc_profile_counters`. **Nothing is denormalized for it.**
+
+It replaced a "Badge Trophies" board that counted trophies across badge-stage games. Keeping that figure
+current meant a full-library `EarnedTrophy` aggregate per profile inside `badge_xp.recompute_standing` --
+affordable while that seam ran only from `evaluate_badges`, and a per-sync cost the moment the engine was
+wired into `sync_complete` (badge cutover 5a). That is the same inline-aggregate pattern `recalc_earn_rates`
+exists to undo after the May 2026 incident.
+
+It is also a better board. "Trophies earned in games that happen to have badges" largely measures how many
+badge-covered games somebody has played; platinums earned is the figure every hunter already knows about
+themselves. The three boards now read one per domain: overall hunting, badges, career.
 
 `ProfileEditionStanding` names its columns identically to `ProfileBadgeStanding`, so `badge_store(edition)`
 picks a manager and every board query stays as written. An unrecognised key returns an EMPTY store rather
 than falling back to all editions: silently widening would show the global board under an edition heading.
 The view validates the key first, so that path only runs on a bug.
 
-**Editions overlap.** A cross-gen game qualifies for both groups by the engine's own platform-intersection
-rule, so its trophies count toward both and the per-edition figures do NOT sum to the all-editions row.
-That is correct, and the all-editions total is read from `ProfileBadgeStanding` rather than added up here.
-
-### Why the badge-trophy boards went first
-
-They were the expensive ones and had no readers left after the view swap. The global rebuild ran four
-filtered `COUNT`s plus a `MAX` over `EarnedTrophy` for **every linked profile**, against every
-badge-stage game, every 6 hours; the per-profile write recomputed a hunter's per-series trophy tallies
-on every sync-complete. Both are now materialized columns maintained in the badge write seam.
+**Editions do NOT overlap** for the figures that remain: a group badge belongs to exactly one platform
+group, so per-edition XP and badges-held sum to the all-editions totals. (Per-edition TROPHY counts DID
+overlap -- a cross-gen game qualifies for both groups -- and went with the Badge Trophies board.)
 
 ## File Map
 
@@ -87,11 +96,11 @@ on every sync-complete. Both are now materialized columns maintained in the badg
 |------|---------|
 | `trophies/services/redis_leaderboard_service.py` | REMAINING sorted set operations (earners, XP, country, community XP). Progress boards deleted 2026-08 |
 | `trophies/services/badge_leaderboards.py` | **Lane B**: every Postgres-backed board, `hydrate()`, `BoardPaginator`/`BoardPage` |
-| `trophies/services/badge_xp.py` | The write seam: `recompute_standing` materializes the standings, incl. trophy counts and `advanced_at` |
+| `trophies/services/badge_xp.py` | The write seam: `recompute_standing` materializes the standings (xp, progress, `advanced_at`, badges held). Runs on every sync -- it must never grow a profile-wide aggregate |
 | `trophies/services/leaderboard_service.py` | ORM computation functions (used by rebuilds) |
 | `trophies/services/xp_service.py` | XP + country XP + community XP sorted set writes via `update_profile_gamification()`, bulk pipeline via `bulk_gamification_update()` |
 | `trophies/signals.py` | Earners sorted set writes on UserBadge post_save/post_delete |
-| `core/management/commands/update_leaderboards.py` | Cron: rebuilds all sorted sets, supports `--series` and `--country` flags |
+| `core/management/commands/update_leaderboards.py` | LEGACY Redis rebuild. Its cron entry is retired -- delete it when the rebuild branch deploys |
 | `trophies/management/commands/refresh_badge_series.py` | Calls `rebuild_series_leaderboards()` after badge awards |
 | `trophies/views/badge_views.py` | `BadgeLeaderboardsView`, `OverallBadgeLeaderboardsView`, `BadgeDetailView` |
 | `trophies/services/dashboard_service.py` | `provide_badge_xp_leaderboard()` and `provide_country_xp_leaderboard()` dashboard modules |
@@ -193,7 +202,13 @@ Redis sorted set scores are 64-bit IEEE 754 doubles, representing integers exact
   not in the view, so the last page ran past the total the footer promised. `board_count()` is now the one
   definition, read by the paginator and the header tally alike.
 
-- **The edition split adds a `Game` join to the trophy tally, and it is not free.** Checked against the
+- **`recompute_standing` must not grow a profile-wide aggregate.** It runs on every sync. It briefly
+  carried the badge-game trophy tally (a full-library `EarnedTrophy` scan) and that is exactly what
+  `recalc_earn_rates` was created to remove from `sync_complete`. Everything the seam writes should derive
+  from the DesiredState it was handed plus bounded per-profile reads.
+
+- **The edition split's `Game` join is gone with the tally.** Recorded because the reasoning still applies
+  to anything that reintroduces a per-edition trophy figure: Checked against the
   emitted SQL, not assumed: `game_id IN (SELECT ...)` reads Game under its own alias, so the outer query
   was *not* already joining it. The added join is a PK probe over the rows that survive the IN test, so it
   is strictly cheaper than the `Trophy` join the same query already pays -- a constant factor. It is on the

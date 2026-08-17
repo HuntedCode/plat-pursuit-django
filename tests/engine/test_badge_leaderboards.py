@@ -158,37 +158,37 @@ def _standing(country='', **kw):
     return p
 
 
-def test_badge_trophies_board_ranks_platinums_first_then_total():
-    many_plats = _standing(trophies_platinum=9, trophies_total=50)
-    many_trophies = _standing(trophies_platinum=2, trophies_total=400)
-    tie_loser = _standing(trophies_platinum=9, trophies_total=20)
+def test_the_trophies_board_ranks_platinums_first_then_total():
+    """It reads Profile's OWN counters -- not a badge-scoped denorm. The board it replaced counted trophies
+    in badge-covered games, which needed a full-library aggregate per profile in the badge write seam."""
+    def hunter(plats, total):
+        return ProfileFactory(is_linked=True, total_plats=plats, total_trophies=total)
 
-    assert [r[0] for r in lb.badge_trophy_rows()] == [many_plats.id, tie_loser.id, many_trophies.id]
+    many_plats = hunter(9, 50)
+    many_trophies = hunter(2, 400)
+    tie_loser = hunter(9, 20)
+
+    assert [r[0] for r in lb.trophy_rows()] == [many_plats.id, tie_loser.id, many_trophies.id]
+    assert lb.trophy_rank(many_plats.id) == 1
+    assert lb.trophy_rank(tie_loser.id) == 2, 'the tiebreak is missing from the rank'
+    assert lb.trophy_rank(many_trophies.id) == 3
 
 
-def test_badge_trophy_rank_expresses_the_same_tiebreak_as_the_order_by():
-    """A two-key board needs a two-key rank. Counting only `trophies_platinum__gt` would report every
-    hunter sharing a platinum count as joint-first -- the board and the rank would disagree, and the rank
-    is what a viewer sees next to their own name."""
-    top = _standing(trophies_platinum=5, trophies_total=300)
-    same_plats_fewer = _standing(trophies_platinum=5, trophies_total=100)
-    fewer_plats = _standing(trophies_platinum=1, trophies_total=999)
-
-    assert lb.badge_trophy_rank(top.id) == 1
-    assert lb.badge_trophy_rank(same_plats_fewer.id) == 2, 'the tiebreak is missing from the rank'
-    assert lb.badge_trophy_rank(fewer_plats.id) == 3
-    assert lb.badge_trophy_rank(ProfileFactory().id) is None
+def test_an_unlinked_hunter_is_not_on_the_trophies_board():
+    """`is_linked` is the public gate every hunter-facing board has used: an unowned or scout profile is
+    catalogue data, not a competitor."""
+    ProfileFactory(is_linked=False, total_plats=99, total_trophies=999)
+    assert lb.trophy_rows() == []
 
 
 def test_every_board_can_be_sliced_by_country_without_a_separate_store():
     """The decision the whole design rests on: country is a FILTER, not a board. Same rows, same indexes,
     one extra WHERE -- versus the Redis design's separate sorted set per country."""
-    ca_top = _standing(country='CA', total_xp=500, trophies_platinum=9, trophies_total=90)
-    ca_low = _standing(country='CA', total_xp=100, trophies_platinum=1, trophies_total=10)
-    gb_only = _standing(country='GB', total_xp=900, trophies_platinum=99, trophies_total=999)
+    ca_top = _standing(country='CA', total_xp=500)
+    ca_low = _standing(country='CA', total_xp=100)
+    gb_only = _standing(country='GB', total_xp=900)
 
     assert [r[0] for r in lb.xp_rows(country='CA')] == [ca_top.id, ca_low.id]
-    assert [r[0] for r in lb.badge_trophy_rows(country='CA')] == [ca_top.id, ca_low.id]
 
     # The global board still contains everyone, and the GB hunter tops it.
     assert lb.xp_rows()[0][0] == gb_only.id

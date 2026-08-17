@@ -156,20 +156,28 @@ def evaluate_for_touched_games(profile, profilegame_ids, notify=True) -> dict:
     A badge authored after a hunter's last sync does not evaluate for them until they next touch one of its
     games -- the legacy path has the same property, and `evaluate_badges --series <slug>` is the existing
     answer for backfilling a newly authored series.
+
+    BOTH qualifier paths are followed. A Stage reaches its games through `concepts` AND through
+    `concept_bundles -> concepts`, and `ConceptBundle`'s own membership rule is that a concept must NOT
+    appear in both -- so they are disjoint by construction and matching only `concepts` cannot merely miss
+    the occasional bundled game, it misses EVERY one of them. `build_catalog` walks both; so must this, or
+    a hunter who finishes a bundled game gets no evaluation at all and nothing errors.
     """
+    from django.db.models import Q
     from trophies.models import ProfileGame, Stage
 
     if not profilegame_ids:
         return {'awarded': [], 'revoked': [], 'updated': []}
 
-    concept_ids = (
+    concept_ids = list(
         ProfileGame.objects.filter(id__in=profilegame_ids, profile=profile)
         .exclude(game__concept__isnull=True)
         .values_list('game__concept_id', flat=True).distinct()
     )
     series_slugs = list(
-        Stage.objects.filter(concepts__id__in=list(concept_ids))
-        .values_list('series_slug', flat=True).distinct()
+        Stage.objects.filter(
+            Q(concepts__id__in=concept_ids) | Q(concept_bundles__concepts__id__in=concept_ids)
+        ).values_list('series_slug', flat=True).distinct()
     )
     if not series_slugs:
         return {'awarded': [], 'revoked': [], 'updated': []}

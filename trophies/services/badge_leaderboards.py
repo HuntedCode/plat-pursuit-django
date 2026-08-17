@@ -58,7 +58,8 @@ _ASC, _DESC, _ASC_NULLS_LAST = 'asc', 'desc', 'asc_nulls_last'
 # (field, direction) in canonical order, unique key last. One definition per board, shared by the rank
 # count and asserted against the ORDER BY by test_rank_equals_position.
 XP_KEYS = (('total_xp', _DESC), ('profile_id', _ASC))
-TROPHY_KEYS = (('trophies_platinum', _DESC), ('trophies_total', _DESC), ('profile_id', _ASC))
+# The Trophies board reads Profile directly, so its unique tail is `id`, not `profile_id`.
+TROPHY_KEYS = (('total_plats', _DESC), ('total_trophies', _DESC), ('id', _ASC))
 CAREER_KEYS = (('total_xp', _DESC), ('profile_id', _ASC))
 # Postgres orders ASC NULLS LAST by default, which is what `.order_by('advanced_at')` gets and what this
 # mirrors: a hunter who has not advanced sorts below one who has, within the same rung.
@@ -209,12 +210,17 @@ def active_countries():
     Replaces the Redis `lb:xp:country:index` set, which had to be maintained alongside every per-country
     sorted set. Here it is a DISTINCT over indexed columns that already exist.
 
-    The UNION matters: the two economies are sealed apart, so a hunter can have Career XP and no badge
-    standing at all. Reading only ProfileBadgeStanding left their country missing from the picker, which
-    made it unselectable on the Career board they DO appear on -- the filter would have been quietly
-    incomplete for exactly the surface it was added to serve.
+    THREE sources, because a hunter can be on one board and not the others and the picker must offer every
+    country the reader could actually select. The two economies are sealed apart, so Career XP with no
+    badge standing is normal -- reading only ProfileBadgeStanding left those countries unselectable on the
+    very board those hunters appear on. The Trophies board widened it again: it ranks every linked hunter
+    with a trophy, most of whom have no badge or career standing at all.
     """
     codes = set(
+        trophy_store().exclude(country_code__isnull=True).exclude(country_code='')
+        .values_list('country_code', flat=True).distinct()
+    )
+    codes |= set(
         ProfileBadgeStanding.objects.exclude(country_code='')
         .values_list('country_code', flat=True).distinct()
     )
@@ -238,8 +244,9 @@ def board_count(tab, country=None, edition=None):
     """
     if tab == 'career':
         return _slice(ProfileCareerStanding.objects.filter(total_xp__gt=0), country).count()
-    field = 'total_xp' if tab == 'points' else 'trophies_total'
-    return _slice(badge_store(edition).filter(**{f'{field}__gt': 0}), country).count()
+    if tab == 'points':
+        return _slice(badge_store(edition).filter(total_xp__gt=0), country).count()
+    return _slice(trophy_store(), country).count()
 
 
 def xp_rows(limit=50, offset=0, country=None, edition=None):
@@ -279,32 +286,50 @@ def xp_rank(profile_id, country=None, edition=None):
     return ahead + 1
 
 
-def badge_trophy_rows(limit=50, offset=0, country=None, edition=None):
-    """Badge Trophies: trophies across badge games, PLATINUMS first, total as the tiebreak.
-    [(profile_id, platinum, gold, silver, bronze, total), ...].
+def trophy_store():
+    """The Trophies board's population: linked hunters with at least one trophy.
 
-    `> 0` is the board's membership rule -- see xp_rows for why it belongs here rather than only on the
-    count that pages it."""
+    `is_linked` is the public gate every other hunter-facing board has used -- an unowned or scout profile
+    is catalogue data, not a competitor.
+    """
+    from trophies.models import Profile
+    return Profile.objects.filter(is_linked=True, total_trophies__gt=0)
+
+
+def trophy_rows(limit=50, offset=0, country=None):
+    """The Trophies board -- ALL games, PLATINUMS first, total as the tiebreak:
+    [(profile_id, platinums, total_trophies, bronze, silver, gold), ...].
+
+    Reads `Profile`'s own counters, which are maintained incrementally by the EarnedTrophy signals and
+    reconciled nightly by `recalc_profile_counters`. Nothing here is badge-specific and nothing is
+    denormalized for this board's sake.
+
+    This REPLACED a "Badge Trophies" board that counted trophies across badge-stage games. That figure
+    needed a full-library aggregate per profile in the badge write seam, which became a per-sync cost when
+    the engine was wired into `sync_complete` -- and it mostly measured how many badge-covered games a
+    hunter had played, which is a strange thing to rank. Platinums earned is the figure hunters already
+    know about themselves.
+
+    No `edition` parameter, deliberately: an edition is a badge concept (a PlatformGroup), and these are
+    trophies across every game. The edition filter applies to Badge Points, where it means something.
+    """
     return list(
-        _slice(badge_store(edition), country).filter(trophies_total__gt=0)
-        .order_by('-trophies_platinum', '-trophies_total', 'profile_id')
-        .values_list('profile_id', 'trophies_platinum', 'trophies_gold',
-                     'trophies_silver', 'trophies_bronze', 'trophies_total')[offset:offset + limit]
+        _slice(trophy_store(), country)
+        .order_by('-total_plats', '-total_trophies', 'id')
+        .values_list('id', 'total_plats', 'total_trophies',
+                     'total_bronzes', 'total_silvers', 'total_golds')[offset:offset + limit]
     )
 
 
-def badge_trophy_rank(profile_id, country=None, edition=None):
-    """Position on the Badge Trophies board. The COUNT expresses the board's FULL key list, tail included
-    -- ahead means more platinums, or equal platinums and more trophies, or tied on both and a lower
-    profile id. Counting only `trophies_platinum__gt` would report every hunter on a platinum rung as
-    joint-first; stopping at `trophies_total` still ties everyone who matches on both."""
-    store = badge_store(edition)
-    mine = store.filter(profile_id=profile_id).values('trophies_platinum', 'trophies_total').first()
-    if mine is None or not mine['trophies_total']:
-        return None      # not on this board -- see badge_trophy_rows
-    ahead = _slice(store, country).filter(trophies_total__gt=0).filter(
-        _ahead_q(TROPHY_KEYS, {**mine, 'profile_id': profile_id})).count()
-    return ahead + 1
+def trophy_rank(profile_id, country=None):
+    """Position on the Trophies board. The COUNT expresses the board's FULL key list, tail included --
+    ahead means more platinums, or equal platinums and more trophies, or tied on both and a lower id."""
+    store = trophy_store()
+    mine = store.filter(pk=profile_id).values('total_plats', 'total_trophies').first()
+    if mine is None:
+        return None      # unlinked, or no trophies -- not on this board
+    return _slice(store, country).filter(
+        _ahead_q(TROPHY_KEYS, {**mine, 'id': profile_id})).count() + 1
 
 
 def career_xp_rows(limit=50, offset=0, country=None):

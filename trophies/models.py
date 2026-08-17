@@ -171,6 +171,17 @@ class Profile(models.Model):
             models.Index(fields=['last_synced'], name='profile_last_synced_idx'),
             models.Index(fields=['created_at'], name='profile_created_at_idx'),
             models.Index(fields=['country_code'], name='profile_country_code_idx'),
+            # The TROPHIES board on /leaderboards/, in board order. Platinums lead because a platinum takes
+            # a whole game; total trophies is the tiebreak, and `id` closes the ordering so it is TOTAL
+            # (see badge_leaderboards: rank and row position must agree, which needs a unique final key).
+            #
+            # It reads Profile's own counters -- signal-maintained in steady state, reconciled nightly by
+            # `recalc_profile_counters` -- rather than a badge-scoped denorm. The board this replaced
+            # counted trophies in badge-covered games, which needed a full-library aggregate per profile
+            # and mostly measured how many badge games somebody had played.
+            models.Index(fields=['-total_plats', '-total_trophies', 'id'], name='profile_board_idx'),
+            models.Index(fields=['country_code', '-total_plats', '-total_trophies', 'id'],
+                         name='profile_board_cc_idx'),
             models.Index(fields=['is_linked', 'sync_tier'], name='profile_linked_tier_idx'),
             models.Index(fields=['is_discord_verified', 'discord_linked_at'], name='profile_discord_idx'),
         ]
@@ -3194,33 +3205,19 @@ class ProfileBadgeStanding(models.Model):
     every evaluation (see services/badge_xp.py), so it can't drift. Isolated from the legacy tier-based
     ProfileGamification.total_badge_xp (repointed at cutover).
 
-    Also carries the BADGE TROPHIES board's figures (trophies earned across every badge-stage game). Those
-    are a materialized FACTUAL read-model, the same category as the XP total: recompute-from-scratch in the
-    one write seam, never relative. The board they replace paid a full-population aggregate over
-    EarnedTrophy every 6 hours; here it is an indexed ORDER BY. See
-    docs/design/rebuild/leaderboards-rebuild.md.
-
-    This row is the ALL-EDITIONS standing. ProfileEditionStanding carries the same two figures sliced per
+    This row is the ALL-EDITIONS standing. ProfileEditionStanding carries the same figures sliced per
     platform edition, and is a separate table rather than a JSON column here for the same reason country is
-    denormalized rather than joined: a board is an ORDER BY that has to ride an index."""
+    denormalized rather than joined: a board is an ORDER BY that has to ride an index.
+
+    It used to also carry `trophies_*` -- trophies earned across every badge-stage game, for a board then
+    called Badge Trophies. Those are GONE (2026-08). Maintaining them meant a full-library `EarnedTrophy`
+    aggregate per profile inside this write seam, which was affordable while the seam only ran from a
+    management command and became a per-sync cost the moment the engine was wired into `sync_complete` --
+    the same shape as the inline aggregates that `recalc_earn_rates` exists to undo. The board they fed was
+    replaced by one reading `Profile`'s own trophy counters, which are already maintained; see
+    `badge_leaderboards.trophy_rows`."""
     profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='badge_standing')
     total_xp = models.PositiveIntegerField(default=0, db_index=True)   # global leaderboard sort key
-
-    # Badge Trophies board. Ranked PLATINUMS first, total trophies as the tiebreak -- a trophy-hunting
-    # board should lead with the trophy that takes a whole game to earn.
-    #
-    # Expressed as a multi-column ORDER BY over a composite index rather than the legacy encoded score
-    # (plats*10^9 + golds*10^6 + silvers*10^3 + bronzes). Same ordering, but the encoding carries a silent
-    # ceiling (999 golds and the field bleeds into the platinum digit), forces a rewrite of every stored
-    # value to change the weighting, and reads as a magic number. A composite index range-scans identically.
-    #
-    # `trophies_total` is both the tiebreak and the figure the row displays; the per-tier counts are the
-    # breakdown beside it.
-    trophies_total = models.PositiveIntegerField(default=0)
-    trophies_platinum = models.PositiveIntegerField(default=0)
-    trophies_gold = models.PositiveIntegerField(default=0)
-    trophies_silver = models.PositiveIntegerField(default=0)
-    trophies_bronze = models.PositiveIntegerField(default=0)
 
     # Group badges HELD -- the Badge Points board's supporting figure. Materialized here rather than counted
     # per render: it rode along as a `Count('group_badges', distinct=True)` annotation on the identity
@@ -3244,16 +3241,9 @@ class ProfileBadgeStanding(models.Model):
 
     class Meta:
         indexes = [
-            # Badge Trophies, in board order. Must match the ORDER BY exactly (-platinum, -total) or the
-            # sort falls back to a scan; the Badge Points board rides `total_xp`'s own db_index.
-            # The index NAME still says progress -- that was the board's old label, and renaming an index
-            # costs a migration on a large table to change a string only a DBA reads.
-            models.Index(fields=['-trophies_platinum', '-trophies_total'], name='pbs_progress_idx'),
-            # Country-sliced boards: (country, ...board order) so a slice is a range scan, not a filter
-            # over a board-ordered scan.
+            # Badge Points rides `total_xp`'s own db_index; this is its country-sliced form, so a slice is
+            # a range scan rather than a filter over a board-ordered scan.
             models.Index(fields=['country_code', '-total_xp'], name='pbs_country_xp_idx'),
-            models.Index(fields=['country_code', '-trophies_platinum', '-trophies_total'],
-                         name='pbs_country_prog_idx'),
         ]
 
     def __str__(self):
@@ -3288,14 +3278,8 @@ class ProfileEditionStanding(models.Model):
     platform_group_key = models.SlugField(max_length=40)
 
     total_xp = models.PositiveIntegerField(default=0)          # Badge Points, this edition
-    trophies_total = models.PositiveIntegerField(default=0)    # Badge Trophies, this edition
-    trophies_platinum = models.PositiveIntegerField(default=0)
-    trophies_gold = models.PositiveIntegerField(default=0)
-    trophies_silver = models.PositiveIntegerField(default=0)
-    trophies_bronze = models.PositiveIntegerField(default=0)
-    # Badges held IN THIS EDITION. Sliced for the same reason every other figure here is: showing a global
-    # badge count beside an edition-sliced points total would be the header-tally category error again,
-    # one column over.
+    # Badges held IN THIS EDITION. Sliced for the same reason the points total is: showing a global badge
+    # count beside an edition-sliced points total would describe two different things in one row.
     badges_held = models.PositiveIntegerField(default=0)
 
     # max_length MATCHES Profile.country_code (5). See ProfileBadgeStanding for why a narrower mirror is a
@@ -3307,13 +3291,10 @@ class ProfileEditionStanding(models.Model):
         unique_together = ['profile', 'platform_group_key']
         indexes = [
             # Edition first (always filtered), then the board's own ORDER BY -- so a sliced board is a range
-            # scan. The country forms put the slice between the two, matching ProfileBadgeStanding's pattern.
+            # scan. The country form puts the slice between the two, matching ProfileBadgeStanding's pattern.
+            # Only Badge Points slices by edition now, so there is one ordering to serve rather than two.
             models.Index(fields=['platform_group_key', '-total_xp'], name='pes_ed_xp_idx'),
-            models.Index(fields=['platform_group_key', '-trophies_platinum', '-trophies_total'],
-                         name='pes_ed_troph_idx'),
             models.Index(fields=['platform_group_key', 'country_code', '-total_xp'], name='pes_ed_cc_xp_idx'),
-            models.Index(fields=['platform_group_key', 'country_code', '-trophies_platinum', '-trophies_total'],
-                         name='pes_ed_cc_troph_idx'),
         ]
 
     def __str__(self):

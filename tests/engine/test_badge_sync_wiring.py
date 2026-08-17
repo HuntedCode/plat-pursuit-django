@@ -129,6 +129,49 @@ def test_the_scope_carries_every_edition_of_a_touched_series():
     assert set(standing.group_xp) == {'ultra-hd', 'legacy-hd'}
 
 
+def test_a_game_qualifying_only_through_a_bundle_is_still_evaluated():
+    """A Stage reaches its games two ways -- `concepts`, and `concept_bundles -> concepts` -- and
+    `ConceptBundle`'s membership rule is that a concept must NOT appear in both. They are disjoint by
+    construction, so a derivation matching only `concepts` does not occasionally miss a bundled game: it
+    misses EVERY one of them.
+
+    The failure is silent end to end. The hunter finishes the game, sync finds no stage, no series, and
+    returns early; nothing is awarded and nothing is logged. `build_catalog` walks both paths, so the
+    engine would have evaluated it correctly if only it had been asked.
+
+    (The legacy `check_profile_badges` has this same gap at badge_service.py:230 and :892 -- it is where
+    this derivation was copied from. It retires with 5b, but it means bundled badges have been
+    under-evaluated on the incremental path all along, and only a manual `evaluate_badges --series` or
+    `refresh_badge_series` run would have caught them up.)
+    """
+    from trophies.models import Stage
+    from tests.factories import ConceptBundleFactory
+
+    series = BadgeSeriesFactory(series_slug='bundled')
+    ultra, _ = _editions()
+    GroupBadgeFactory(series=series, platform_group=ultra, is_live=True)
+    stage = StageFactory(series_slug='bundled', stage_number=1)
+
+    # The qualifying concept hangs off a BUNDLE on the stage, never off stage.concepts.
+    bundle = ConceptBundleFactory(stage=stage)
+    concept = ConceptFactory()
+    bundle.concepts.add(concept)
+    game = GameFactory(concept=concept, title_platform=ULTRA)
+
+    assert not Stage.objects.filter(concepts__id=concept.id).exists(), (
+        'fixture is wrong -- the concept must reach the stage ONLY through the bundle'
+    )
+
+    profile = ProfileFactory(is_linked=True)
+    pg = _finish(profile, game)
+    result = evaluate_for_touched_games(profile, [pg.id], notify=False)
+
+    assert result['awarded'], (
+        'a game qualifying only through a ConceptBundle was never evaluated -- the scope follows '
+        'Stage.concepts but not Stage.concept_bundles'
+    )
+
+
 def test_nothing_happens_for_games_in_no_badge():
     profile = ProfileFactory(is_linked=True)
     pg = _finish(profile, GameFactory(concept=ConceptFactory(), title_platform=ULTRA))

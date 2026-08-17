@@ -111,9 +111,9 @@ def test_a_series_with_no_participants_still_renders_a_count(client):
 
 @pytest.mark.parametrize('tab, must_not_fetch', [
     ('trophies', ['xp_rows', 'career_xp_rows']),
-    ('points',   ['badge_trophy_rows', 'career_xp_rows']),
-    ('career',   ['badge_trophy_rows', 'xp_rows']),
-    ('series',   ['badge_trophy_rows', 'xp_rows', 'career_xp_rows']),
+    ('points',   ['trophy_rows', 'career_xp_rows']),
+    ('career',   ['trophy_rows', 'xp_rows']),
+    ('series',   ['trophy_rows', 'xp_rows', 'career_xp_rows']),
 ])
 def test_a_tab_does_not_pay_for_the_boards_it_does_not_render(client, tab, must_not_fetch):
     """Every board used to be assembled on every request. Only the ACTIVE one is built now.
@@ -163,9 +163,8 @@ def test_an_unknown_country_does_not_silently_empty_the_board(client):
     from trophies.models import ProfileBadgeStanding
     from tests.factories import ProfileFactory
 
-    p = ProfileFactory(display_psn_username='Somebody', country_code='CA', country='Canada')
-    ProfileBadgeStanding.objects.create(profile=p, total_xp=100, country_code='CA',
-                                        trophies_platinum=2, trophies_total=30)
+    ProfileFactory(display_psn_username='Somebody', country_code='CA', country='Canada',
+                   is_linked=True, total_plats=2, total_trophies=30)
 
     body = client.get(URL, {'tab': 'trophies', 'country': 'ZZ'}).content.decode()
     assert 'Somebody' in body, 'an unknown country code emptied the board instead of falling back'
