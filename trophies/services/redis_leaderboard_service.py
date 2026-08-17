@@ -23,7 +23,6 @@ rebuild was the single most expensive thing in this module: four filtered COUNTs
 EarnedTrophy for EVERY linked profile, every 6 hours.
 
 What remains is still load-bearing and CANNOT be deleted until the badge cutover:
-  - earners  -> frame_service reads it for the legacy badge frame (Badge/UserBadge)
   - xp       -> profile_card_service + the dashboard providers rank the LEGACY
                 ProfileGamification.total_badge_xp; ranking that against the new ProfileBadgeStanding
                 would print a figure next to a rank computed from a different number

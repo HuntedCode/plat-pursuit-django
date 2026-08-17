@@ -835,9 +835,9 @@ class GameCardWorkshopView(TemplateView):
     def get_context_data(self, **kwargs):
         from django.db.models import Count
         from trophies.constants import badge_attribution_rank
-        from trophies.models import Game, Badge, Contract, Stage
+        from trophies.models import Game, Contract, GroupBadge, Stage
+        from trophies.services.badge_list_service import build_list_cards
         from trophies.services.contract_service import contract_by_concept_map
-        from trophies.services.frame_service import build_badge_frame
         from trophies.util_modules.constants import CONTRACT_XP_TOTAL
         ctx = super().get_context_data(**kwargs)
 
@@ -889,24 +889,27 @@ class GameCardWorkshopView(TemplateView):
                 .exclude(series_slug__isnull=True).exclude(series_slug='')
                 .values_list('series_slug', flat=True).distinct()
             )
-            # One tier-1 Badge per distinct series (badge_total counts SERIES, not tiers), ordered by the
-            # site-wide badge-type priority (Franchise > Collection > Developer > Series > special) then name.
-            badges = sorted(
-                Badge.objects.filter(series_slug__in=series_slugs, tier=1, is_live=True).select_related(
-                    'franchise', 'developer', 'funded_by',
-                    'base_badge', 'base_badge__franchise', 'base_badge__developer', 'base_badge__funded_by',
+            # One GroupBadge per distinct series (the count is of SERIES, not editions), ordered by the
+            # site-wide badge-type priority (Franchise > Collection > Developer > Series > special) then
+            # name. Repointed off the legacy Badge/frame_service pair at the badge cutover; the medallion
+            # frames come from `build_list_cards`, which is what the real Browse wall renders.
+            seen, badges = set(), []
+            for gb in sorted(
+                GroupBadge.objects.filter(series__series_slug__in=series_slugs, is_live=True)
+                .select_related('series', 'series__franchise', 'series__developer',
+                                'series__submitted_by', 'platform_group'),
+                key=lambda gb: (
+                    badge_attribution_rank(gb.series.collection_id, gb.series.franchise_id,
+                                           gb.series.developer_id),
+                    (gb.series.name or '').lower(),
                 ),
-                key=lambda b: (
-                    badge_attribution_rank(b.collection_id, b.franchise_id, b.developer_id),
-                    (b.name or '').lower(),
-                ),
-            )
-            frames = []
-            for b in badges[:self.BADGE_CAP]:
-                try:
-                    frames.append(build_badge_frame(b, showcase=True))
-                except Exception:
-                    pass  # workshop: a badge that can't build a frame is skipped, not fatal
+            ):
+                if gb.series_id in seen:
+                    continue
+                seen.add(gb.series_id)
+                badges.append(gb)
+
+            frames = [c['frame'] for c in build_list_cards(badges[:self.BADGE_CAP], None)]
 
             ct = cmap.get(g.concept_id)
             dt = g.defined_trophies or {}

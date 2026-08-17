@@ -62,7 +62,6 @@ from trophies.services.badge_rarity import (
     annotate_group_rarity, RARITY_CLASSES, RARITY_FILTER_CHOICES, RARITY_UNEARNED,
 )
 from trophies.mixins import HtmxListMixin
-from trophies.services.frame_service import build_badge_frame
 # Leaderboards read from Lane B (indexed DB reads over the standing stores). The Redis sorted-set
 # service is no longer imported here -- see docs/design/rebuild/leaderboards-rebuild.md step 2.
 from trophies.services import badge_leaderboards as lb
@@ -469,65 +468,6 @@ class BadgeListView(ListView):
             ),
         })
         return context
-
-
-class BadgeQuickPeekView(View):
-    """PUBLIC quick-peek modal for one badge (the Series/Gallery 'pick it up'): the medallion big + facts
-    ABOUT this badge tier, fetched on tap so the grids stay light. Deliberately GENERIC / viewer-independent
-    -- a display piece, like the sample on a showroom floor, not the viewer's own copy. So it's always the
-    showcase (full-colour) medallion + catalog stats (tier, requirement, XP on offer, rarity, earned-by, set
-    number); no personal progress / earn stats / owner engraving. (Those live on the badge detail page, and
-    on the collection's own CollectionBadgeModalView for a Pursuer's held badges.)"""
-
-    def get(self, request, badge_id):
-        badge = (
-            Badge.objects.filter(id=badge_id, is_live=True)
-            .select_related(
-                'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
-                'base_badge__franchise', 'base_badge__collection',
-                'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
-            ).first()
-        )
-        if badge is None:
-            return HttpResponseNotFound()   # explicit 404 (the project's handler404 renders at 200)
-        frame = build_badge_frame(badge, None)   # profile=None -> the generic showcase ('earned') look
-        frame['series_slug'] = badge.series_slug
-        frame['tier_xp'] = _badge_xp(badge)      # XP on offer for earning this tier (a catalog fact)
-        return render(request, 'components/badge_peek_modal.html', {'frame': frame})
-
-
-class BadgeProgressPeekView(View):
-    """Profile-aware badge peek for the badge detail page: the medallion in the DISPLAYED profile's REAL
-    state (earned / in-progress / unearned) + personalised base, for whichever tier is inspected. Keyed to
-    the profile in the URL (the page's target_profile), so it's correct whether you're viewing your OWN page
-    or another Pursuer's. Auth-gated -- a specific Pursuer's progress is only shown to signed-in viewers,
-    matching the badge detail page; anonymous visitors use the generic showcase BadgeQuickPeekView."""
-
-    def get(self, request, psn_username, badge_id):
-        if not request.user.is_authenticated:
-            return HttpResponseNotFound()
-        profile = get_object_or_404(Profile, psn_username__iexact=psn_username)
-        badge = (
-            Badge.objects.filter(id=badge_id, is_live=True)
-            .select_related(
-                'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
-                'base_badge__franchise', 'base_badge__collection',
-                'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
-            ).first()
-        )
-        if badge is None:
-            return HttpResponseNotFound()
-        frame = build_badge_frame(badge, profile)   # single hero: full stats + live rank/XP in the real state
-        frame['series_slug'] = badge.series_slug
-        frame['badge_id'] = badge.id
-        frame['tier_xp'] = _badge_xp(badge)
-        if frame.get('state') in ('earned', 'maintenance'):
-            frame['owner_name'] = profile.display_psn_username or profile.psn_username   # engraved on the base
-        # When the inspected profile isn't the viewer's own (the /badges/<slug>/<username>/ variant), tell the
-        # modal whose progress this is so it can't be mistaken for your own.
-        if profile != getattr(request.user, 'profile', None):
-            frame['viewing_other_name'] = profile.display_psn_username or profile.psn_username
-        return render(request, 'components/collection_badge_modal.html', {'frame': frame})
 
 
 class GroupBadgeInspectView(View):

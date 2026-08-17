@@ -1,7 +1,7 @@
 {% load humanize %}
 {% comment %}
 Collection badge detail ("pick it up") -- the medallion big + its full stats. Rendered by
-CollectionBadgeModalView and fetched on tap. Expects `frame` (a full build_badge_frame dict).
+CollectionBadgeModalView and fetched on tap. Expects `frame` (a medallion frame dict -- see badge_detail_service._medallion_frame).
 {% endcomment %}
 <div class="pp-bdetail" data-tier="{{ frame.tier }}" data-state="{{ frame.state }}">
     <div class="pp-bdetail__stage">
