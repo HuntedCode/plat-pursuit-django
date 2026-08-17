@@ -36,13 +36,20 @@ def test_every_old_overall_path_lands_in_one_hop(client, old):
 
 
 def test_the_per_series_path_moved_and_keeps_its_series(client):
+    """Retargeted 2026-08: the per-series board is a SECTION of badge detail now, not a page, so this
+    legacy path lands on the badge itself.
+
+    It still keeps the slug, which is the part that matters -- a redirect that dropped it would send
+    every old inbound link to a generic index instead of the board it asked for. And it had to be
+    repointed in the same change that retired the url NAME: a RedirectView naming a dead pattern raises
+    NoReverseMatch, so these would have started 500ing rather than 404ing."""
     series = BadgeSeriesFactory()
     old = f'/community/leaderboards/badges/{series.series_slug}/'
 
     resp = client.get(old)
 
     assert resp.status_code == 301
-    assert resp['Location'] == f'/leaderboards/badges/{series.series_slug}/', resp['Location']
+    assert resp['Location'] == f'/badges/{series.series_slug}/', resp['Location']
 
 
 def test_the_query_string_survives_the_move(client):

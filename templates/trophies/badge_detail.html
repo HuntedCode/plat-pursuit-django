@@ -55,7 +55,7 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                             </div>
                         </div>
 
-                        <a href="{% url 'badge_leaderboards' series.series_slug %}" class="shrink-0 mx-auto sm:mx-0 text-center sm:text-right group/earn">
+                        <a href="#ranks" class="shrink-0 mx-auto sm:mx-0 text-center sm:text-right group/earn">
                             <div class="leading-none"><span class="pp-tally text-2xl md:text-3xl text-primary">{{ g.earned_count|intcomma }}</span></div>
                             <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/40 mt-1 group-hover/earn:text-primary transition-colors">Earners &rsaquo;</div>
                         </a>
@@ -152,6 +152,30 @@ Collection. No extra wrapper container: a nested one would double the horizontal
     selector and the per-group journey. Leads with rarity (the prestige signal not shown elsewhere). {% endcomment %}
     {% include 'trophies/partials/badge_detail/bd2_community.html' %}
 
+    {% comment %} Ranks -- the series board, at SERIES level like the community band above it.
+
+    Deliberately not inside a `.bd2-panel`: those swap per EDITION, and the board is per series (earned
+    any edition counts, matching how progress_bp is already the max across them). Putting it in one would
+    have made the same board render twice with an edition switcher pretending to change it.
+
+    Fetched on first scroll-in rather than server-rendered, copying game detail's Ranks panel: the cost
+    scales with a series' popularity and most visitors come for the badge, not the board. This REPLACES
+    `/leaderboards/badges/<slug>/` -- a whole page for what is a section of the page about the badge.
+    {% endcomment %}
+    <section class="bd2-ranks" id="ranks" data-ranks-src="{% url 'badge_ranks_panel' series.series_slug %}">
+        <h2 class="bd2-ranks__h">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
+            Ranks
+        </h2>
+        <p class="bd2-ranks__sub">Everyone who finished, by who got there first, then everyone still chasing.</p>
+        <div class="bd2-ranks__body" data-ranks-body>
+            <div class="bd2-ranks__loading" data-ranks-loading>
+                <span class="bd2-ranks__spinner" aria-hidden="true"></span>
+                <span>Counting the hunters&hellip;</span>
+            </div>
+        </div>
+    </section>
+
     {% comment %} Stage journey -- per group, swaps with the selector alongside the hero. Free content below
     the chrome (each stage is its own bd-card). {% endcomment %}
     <div data-bd2-journey>
@@ -243,6 +267,53 @@ Collection. No extra wrapper container: a nested one would double the horizontal
 {% endblock %}
 
 {% block js_scripts %}
+<script>
+    (function () {
+        // Ranks: fetched the first time the section scrolls into view. Same reasoning as game detail's
+        // Ranks panel -- the cost scales with a series' popularity and most visitors never reach it -- but
+        // triggered by VISIBILITY rather than a tab click, because this section has no tab to click.
+        var sec = document.querySelector('[data-ranks-src]');
+        if (!sec) { return; }
+        var body = sec.querySelector('[data-ranks-body]');
+
+        function load() {
+            fetch(sec.dataset.ranksSrc, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.text(); })
+                .then(function (html) {
+                    body.innerHTML = html;
+                    // Rows land as they arrive, on the shared engine. Only when the helper actually
+                    // returns a handle -- it returns null under reduced motion, and `.pp-reveal` sets
+                    // opacity: 0, so adding it unconditionally would leave the board invisible.
+                    var wall = body.querySelector('[data-lb-wall]');
+                    if (wall && window.PlatPursuit && PlatPursuit.staggerReveal) {
+                        PlatPursuit.staggerReveal({
+                            grid: wall, cardSelector: '.lb-row', step: 14,
+                            reveal: function (el, delayMs) {
+                                if (!el.animate) { return; }
+                                el.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
+                                           { duration: 420, delay: delayMs, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
+                            },
+                        });
+                    }
+                })
+                .catch(function () {
+                    // A board that fails to load must say so. Silently leaving the spinner spinning reads
+                    // as "still counting" forever, which is worse than an honest failure.
+                    body.innerHTML = '<p class="bd2-ranks__err">The board could not be loaded. Refresh to try again.</p>';
+                });
+        }
+
+        if (!window.IntersectionObserver) { load(); return; }   // no IO -> just fetch it
+        var io = new IntersectionObserver(function (entries) {
+            if (entries.some(function (e) { return e.isIntersecting; })) {
+                io.disconnect();
+                load();
+            }
+        }, { rootMargin: '200px 0px' });   // start a little early so it is usually there on arrival
+        io.observe(sec);
+    })();
+</script>
+
 {{ block.super }}
 <script>
 (function () {

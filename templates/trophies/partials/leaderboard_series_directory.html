@@ -5,7 +5,7 @@
     {% if series_directory %}
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
             {% for badge in series_directory %}
-                <a href="{% url 'badge_leaderboards' badge.series_slug %}"
+                <a href="{% url 'badge_detail' badge.series_slug %}#ranks"
                    class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral transition-all duration-200 hover:border-warning hover:shadow-warning/30 cursor-pointer">
                     <div class="card-body p-2 md:p-3 gap-1.5 items-center text-center">
                         <div class="w-14 h-14 md:w-18 md:h-18 lg:w-20 lg:h-20 mx-auto overflow-visible">

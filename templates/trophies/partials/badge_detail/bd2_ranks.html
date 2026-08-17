@@ -1,0 +1,47 @@
+{% load humanize %}
+{% comment %} The series board, fetched into badge detail's Ranks section.
+
+ONE board, not two. Earners and chasers were separate leaderboards at different grains -- earners per
+EDITION, progress per SERIES -- and they merge at series grain because that is what progress already uses.
+Ordering is `(-progress_bp, advanced_at)`: everyone who finished sits on top by completion date, then each
+rung of chasers with whoever got there first ahead.
+
+`advanced_at` is what makes that possible. Progress is DISCRETE (cleared / gating stages), so a 3-stage
+series stacks most hunters on 1/3 or 2/3; without the date those large ties would sort by profile id and
+read as unranked.
+
+Rows reuse the `.lb-row` component from Global Boards rather than a second row treatment -- a leaderboard
+row is a leaderboard row, and the drift between two of them is exactly what this rebuild removes.
+{% endcomment %}
+
+{% if rows %}
+<div class="bd2-ranks__meta">
+    <span class="bd2-ranks__count">
+        <b class="pp-tally">{{ total|intcomma }}</b> hunter{{ total|pluralize }} on the board
+    </span>
+    {% if my_rank %}
+    <span class="bd2-ranks__mine">You are <b class="pp-tally">#{{ my_rank|intcomma }}</b></span>
+    {% endif %}
+</div>
+
+<ol class="lb-wall" data-lb-wall>
+    {% for entry in rows %}
+    {% include 'trophies/partials/leaderboard_row.html' with entry=entry %}
+    {% endfor %}
+</ol>
+
+{% if has_more %}
+{% comment %} A LINK to the full board rather than pagination in a panel: this is a preview inside a page
+about the badge, and a paginator here would turn a supporting section into a second destination. {% endcomment %}
+<div class="bd2-ranks__more">
+    <span class="bd2-ranks__more-k">Showing the top {{ rows|length }}</span>
+</div>
+{% endif %}
+
+{% else %}
+<div class="lb-empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+    <p class="lb-empty__title">Nobody is chasing this one yet</p>
+    <p class="lb-empty__sub">The board fills as hunters clear their first stage. Be the first name on it.</p>
+</div>
+{% endif %}

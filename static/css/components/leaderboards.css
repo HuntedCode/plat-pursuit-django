@@ -167,3 +167,47 @@
 .lb-empty svg { width: 34px; height: 34px; color: var(--pp-text-mute); opacity: 0.7; }
 .lb-empty__title { margin-top: 12px; font-size: 1rem; font-weight: 800; color: var(--pp-text); }
 .lb-empty__sub { margin-top: 5px; font-size: 0.85rem; color: var(--pp-text-dim); max-width: 42ch; }
+
+/* ---- Ranks section (badge detail) ------------------------------------------------------------------ */
+/* The series board, living on the badge it ranks rather than on a page of its own. Rows reuse `.lb-row`
+   above -- a leaderboard row is a leaderboard row, and a second treatment for the same object is the
+   drift this rebuild exists to remove. Only the section chrome is local. */
+.bd2-ranks { margin: 26px 0 8px; }
+.bd2-ranks__h {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 1.15rem; font-weight: 800; color: var(--pp-text); letter-spacing: -0.01em;
+}
+.bd2-ranks__h svg { width: 18px; height: 18px; color: var(--pp-primary); flex: 0 0 auto; }
+.bd2-ranks__sub { margin-top: 4px; font-size: 0.85rem; color: var(--pp-text-dim); }
+.bd2-ranks__body { margin-top: 14px; }
+@media (min-width: 768px) { .bd2-ranks__h { font-size: 1.35rem; } .bd2-ranks__sub { font-size: 0.92rem; } }
+
+/* A count and the viewer's own position, above the wall -- the same "your standing once, not per row"
+   rule the Global Boards landing follows, for the same caching reason. */
+.bd2-ranks__meta {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px;
+    margin-bottom: 10px; font-size: 12px; color: var(--pp-text-dim);
+}
+.bd2-ranks__count b, .bd2-ranks__mine b { color: var(--pp-text); }
+.bd2-ranks__mine { color: var(--pp-primary); }
+.bd2-ranks__mine b { color: var(--pp-primary); }
+.bd2-ranks__more { margin-top: 10px; text-align: center; }
+.bd2-ranks__more-k {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+/* Loading + failure. The spinner is a real state, not a placeholder: this section is fetched, so it can
+   genuinely be pending -- and it can genuinely fail, which must SAY so rather than spin forever. */
+.bd2-ranks__loading {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 34px 0; font-size: 13px; color: var(--pp-text-mute);
+}
+.bd2-ranks__spinner {
+    width: 15px; height: 15px; border-radius: 50%; flex: 0 0 auto;
+    border: 2px solid var(--pp-border); border-top-color: var(--pp-primary);
+    animation: ppRanksSpin 0.8s linear infinite;
+}
+@keyframes ppRanksSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bd2-ranks__spinner { animation-duration: 2.4s; } }
+.bd2-ranks__err { padding: 26px 0; text-align: center; font-size: 13px; color: var(--pp-text-mute); }

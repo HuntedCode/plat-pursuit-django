@@ -649,114 +649,46 @@ class BadgeDetailView(DetailView):
         return context
 
 
-class BadgeLeaderboardsView(DetailView):
+class BadgeRanksPanelView(View):
+    """`/badges/<series_slug>/ranks/` -- the series board, fetched into badge detail's Ranks section.
+
+    Lazily fetched rather than server-rendered, copying game detail's Ranks panel: the cost scales with a
+    series' popularity, and most visitors come for the badge itself and never scroll to the board. The
+    page pays for it only when someone looks.
+
+    Public: the board is identical for every viewer, which is what keeps it cacheable. A signed-in
+    viewer's own position is passed alongside the rows rather than marked inside one, for the same reason
+    the Global Boards landing puts it in the header.
+
+    This REPLACES `/leaderboards/badges/<slug>/`, which was a whole page for what is a section of the page
+    about the badge. Boards live on the thing they rank.
     """
-    Display leaderboards for a specific badge series.
+    PREVIEW = 25
 
-    Shows two leaderboards:
-    1. Earners - Users who have earned the highest tier
-    2. Progress - Users making progress on the badge series
-
-    Leaderboard data is served from Redis sorted sets with near-real-time updates.
-    """
-    model = Badge
-    template_name = 'trophies/badge_leaderboards.html'
-    slug_field = 'series_slug'
-    slug_url_kwarg = 'series_slug'
-    context_object_name = 'badge'
-
-    def get_object(self, queryset=None):
-        series_slug = self.kwargs[self.slug_url_kwarg]
-        # cover_url on most_recent_concept reads igdb_match; prefetch to avoid N+1.
-        badge = get_object_or_404(
-            Badge.objects.select_related(
-                'most_recent_concept', 'most_recent_concept__igdb_match',
-            ).defer('most_recent_concept__igdb_match__raw_response'),
-            series_slug=series_slug, tier=1,
-        )
-        if not badge.is_live and not self.request.user.is_staff:
+    def get(self, request, series_slug):
+        series = BadgeSeries.objects.filter(series_slug=series_slug).first()
+        if series is None:
             raise Http404("Series not found")
-        return badge
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        badge = self.object
-        series_slug = badge.series_slug
-        user = self.request.user
-        paginate_by = 50
+        total = lb.series_board_count(series_slug)
+        rows = lb.series_board_rows(series_slug, limit=self.PREVIEW)
+        entries = lb.page(rows, 0, extra=lambda r: {
+            'primary': r[2], 'primary_label': 'stages',
+            'secondary': None, 'secondary_label': '',
+        })
 
-        earners_page_num = max(1, int(self.request.GET.get('lb_earners_page', 1) or 1))
-        progress_page_num = max(1, int(self.request.GET.get('lb_progress_page', 1) or 1))
+        my_rank = None
+        profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
+        if profile:
+            my_rank = lb.series_board_rank(series_slug, profile.id)
 
-        # Both tables are now BRACKETS of the one merged series board (earners above chasers, ties broken
-        # by who got there first). This page renders them as two tables and is retired into a badge-detail
-        # panel at step 5; keeping the split here means the swap changes the backend and nothing else.
-        def _board(earned, page_num, page_key, paginator_key):
-            total = lb.series_board_count(series_slug, earned=earned)
-            paginator = lb.BoardPaginator(total, paginate_by)
-            page_num = min(page_num, paginator.num_pages)
-            offset = (page_num - 1) * paginate_by
-            entries = lb.page(
-                lb.series_board_rows(series_slug, limit=paginate_by, offset=offset, earned=earned),
-                offset,
-                extra=lambda r: {
-                    'progress_bp': r[1], 'stages_cleared': r[2], 'stages_total': r[3],
-                    'earned_date': r[4],
-                    # The old rows carried per-tier trophy counts denormalized into Redis. The series
-                    # board ranks by STAGES, not trophies, so there is nothing equivalent to show; the
-                    # template renders an empty tally rather than a wrong one.
-                    'trophy_totals': {'plats': None, 'golds': None, 'silvers': None, 'bronzes': None},
-                    'last_earned_date': r[4].isoformat() if r[4] else None,
-                },
-            )
-            context[page_key] = lb.BoardPage(entries, page_num, paginator)
-            context[paginator_key] = paginator
-
-        _board(True, earners_page_num, 'lb_earners_page_obj', 'lb_earners_paginator')
-        _board(False, progress_page_num, 'lb_progress_page_obj', 'lb_progress_paginator')
-
-        if user.is_authenticated and hasattr(user, 'profile'):
-            profile = user.profile
-            # One rank covers both brackets: the merged board is a single ordering, so a viewer's
-            # position is the same number whichever table they appear in.
-            board_rank = lb.series_board_rank(series_slug, profile.id)
-            if board_rank:
-                context['lb_earners_user_rank'] = board_rank
-                context['lb_earners_user_page'] = (board_rank - 1) // paginate_by + 1
-                context['lb_progress_user_rank'] = board_rank
-                context['lb_progress_user_page'] = (board_rank - 1) // paginate_by + 1
-
-            # User stats for this series
-            highest_user_badge = UserBadge.objects.filter(
-                profile=profile, badge__series_slug=series_slug
-            ).select_related('badge').order_by('-badge__tier').first()
-            context['user_highest_tier'] = highest_user_badge.badge.tier if highest_user_badge else 0
-
-            try:
-                gamification = profile.gamification
-                context['user_series_xp'] = gamification.series_badge_xp.get(series_slug, 0)
-            except ProfileGamification.DoesNotExist:
-                context['user_series_xp'] = 0
-
-        context['badge'] = badge
-        if badge.most_recent_concept:
-            context['image_urls'] = {'recent_concept_icon_url': badge.most_recent_concept.cover_url}
-        else:
-            context['image_urls'] = {'recent_concept_icon_url': ''}
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Leaderboards', 'url': reverse_lazy('overall_badge_leaderboards')},
-            {'text': context['badge'].effective_display_series, 'url': reverse_lazy('badge_detail', kwargs={'series_slug': badge.series_slug})},
-            {'text': 'Series Leaderboards'},
-        ]
-
-        active_tab = self.request.GET.get('tab', 'earners')
-        if active_tab not in ('earners', 'progress'):
-            active_tab = 'earners'
-        context['active_tab'] = active_tab
-
-        return context
-
+        return render(request, 'trophies/partials/badge_detail/bd2_ranks.html', {
+            'rows': entries,
+            'total': total,
+            'my_rank': my_rank,
+            'has_more': total > len(entries),
+            'series': series,
+        })
 
 class OverallBadgeLeaderboardsView(TemplateView):
     """`/leaderboards/` -- Global Boards, the hub landing.

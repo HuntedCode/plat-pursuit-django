@@ -37,7 +37,7 @@ sitemaps = {
     # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
     # for the revamp, since nothing else about the system was deleted.
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, BadgeQuickPeekView, BadgeProgressPeekView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
@@ -114,6 +114,11 @@ urlpatterns = [
     # GroupBadge id. Public showcase + the profile-aware variant; the badge id (0) is substituted by the peek JS.
     path('group-badge-peek/<int:group_badge_id>/', GroupBadgeInspectView.as_view(), name='group_badge_quick_peek'),
     path('group-badge-progress-peek/<str:psn_username>/<int:group_badge_id>/', GroupBadgeInspectView.as_view(), name='group_badge_progress_peek'),
+    # The per-series board, fetched into badge detail's Ranks section. TOP-LEVEL on purpose, for the same
+    # reason as the peek routes above: `/badges/<x>/<y>/` is the profile-scoped shape that the
+    # Cloudflare-bypass guard redirects (middleware.py) and that `badge_detail_with_profile` claims, so an
+    # endpoint there would 302 before it ever reached the view.
+    path('badge-ranks/<str:series_slug>/', BadgeRanksPanelView.as_view(), name='badge_ranks_panel'),
     path('badges/<str:series_slug>/', BadgeDetailView.as_view(), name='badge_detail'),
     path('badges/<str:series_slug>/<str:psn_username>/', BadgeDetailView.as_view(), name='badge_detail_with_profile'),
 
@@ -268,7 +273,11 @@ urlpatterns = [
     # `/leaderboards/` is the landing; the type segment stays on the per-series route so a second kind of
     # leaderboard can land beside `badges/` without colliding with a series slug.
     path('leaderboards/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
-    path('leaderboards/badges/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards'),
+    # Retired 2026-08: the per-series board moved onto badge detail. Permanent, and it keeps the slug, so
+    # every existing link lands on the badge whose board it wanted rather than on a generic index.
+    path('leaderboards/badges/<str:series_slug>/', RedirectView.as_view(
+        pattern_name='badge_detail', permanent=True, query_string=True)),
+
     # So the per-series route has a resolvable parent rather than a 404 above it.
     path('leaderboards/badges/', RedirectView.as_view(
         pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),
@@ -278,7 +287,7 @@ urlpatterns = [
     path('community/leaderboards/badges/', RedirectView.as_view(
         pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),
     path('community/leaderboards/badges/<str:series_slug>/', RedirectView.as_view(
-        pattern_name='badge_leaderboards', permanent=True, query_string=True)),
+        pattern_name='badge_detail', permanent=True, query_string=True)),
 
     # Guide/checklist URLs - all redirected to home (system removed, replaced by roadmaps)
     path('guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='guides_browse'),
@@ -386,7 +395,7 @@ urlpatterns = [
 
     # Leaderboards
     path('leaderboard/badges/', RedirectView.as_view(pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),
-    path('leaderboard/badges/<str:series_slug>/', RedirectView.as_view(pattern_name='badge_leaderboards', permanent=True, query_string=True)),
+    path('leaderboard/badges/<str:series_slug>/', RedirectView.as_view(pattern_name='badge_detail', permanent=True, query_string=True)),
 
     # Game Lists (hidden -- see the note above). These already 301'd to the /community/lists/ paths, which
     # now 302 to the homepage; sending them straight there saves the double hop. Kept as 301 because the

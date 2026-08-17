@@ -21,7 +21,7 @@ pursuer base, but it drives series_size and the series rank's "of N" -- never th
                     {% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s stats{% else %}My Stats{% endif %}
                 </button>
                 {% endif %}
-                <a href="{% url 'badge_leaderboards' series.series_slug %}" class="bd2-comm__lb">
+                <a href="#ranks" class="bd2-comm__lb">
                     See the full leaderboard
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
                 </a>

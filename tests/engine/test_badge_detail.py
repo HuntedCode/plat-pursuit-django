@@ -231,7 +231,11 @@ def test_view_renders_for_anon(client):
     assert 'Stage 1' in body           # the stage journey rendered
     # Backfilled a11y / wiring contracts from the retired tier-page suite:
     assert 'role="button"' in body and 'aria-label="Inspect' in body   # medallion inspect is a keyboard control
-    assert reverse('badge_leaderboards', args=['gow']) in body         # earners tally links to the full board
+    # The earners tally links to the Ranks SECTION of this same page now. `/leaderboards/badges/<slug>/`
+    # was retired: a whole page for what is a section of the page about the badge, and navigating away to
+    # reach it was the reason it went (leaderboards rebuild, step 5).
+    assert 'href="#ranks"' in body, 'the earners tally no longer links to the Ranks section'
+    assert 'id="ranks"' in body, 'the Ranks section it links to is missing'
     assert '/group-badge-peek/0/' in body                             # anon peek points at the showcase endpoint
 
 

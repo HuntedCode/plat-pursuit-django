@@ -318,8 +318,13 @@ will 500 (not 404) if the URL name disappears — they must be repointed in the 
 
 | Line | Route |
 |---|---|
-| `plat_pursuit/urls.py:281` | `community/leaderboards/badges/<slug>/` |
-| `plat_pursuit/urls.py:389` | `leaderboard/badges/<slug>/` |
+| `community/leaderboards/badges/<slug>/` | → `badge_detail` ✅ |
+| `leaderboard/badges/<slug>/` | → `badge_detail` ✅ |
+
+The panel endpoint is **`/badge-ranks/<slug>/`, deliberately top-level.** `/badges/<x>/<y>/` is the
+profile-scoped shape that the Cloudflare-bypass guard redirects and that `badge_detail_with_profile`
+claims, so an endpoint there 302s before it ever reaches the view -- the same trap the quick-peek routes
+already record in `urls.py`, walked into anyway and caught by a test.
 
 (Four further routes name `overall_badge_leaderboards`; the landing keeps that name and they are unaffected.)
 
@@ -385,7 +390,7 @@ Each step leaves the site working.
 | 2 | ✅ Lane B read swap; PROGRESS boards deleted from Redis entirely. Earners/XP/country reads remain, blocked on the badge cutover repointing their legacy consumers. **Still to pin: the recompute trigger -- badge-game trophy arrival, not badge state change (§3)** | Same pages, new backend |
 | 3 | ✅ Badge Points rename (labels) | Vocabulary fixed before new surfaces spread it |
 | 4 | ✅ Global Boards landing rebuilt (3 tabs, country filter, `.lb-*` component) | The hub landing |
-| 5 | Badge detail Ranks panel; retire `/leaderboards/badges/<slug>/` + repoint 2 redirects | Boards move to entities |
+| 5 | ✅ Badge detail Ranks panel (`/badge-ranks/<slug>/`, lazy); `/leaderboards/badges/<slug>/` retired + 2 redirects repointed | Boards move to entities |
 | 6 | Badge Boards + Game Boards directories | Discovery, on shipped machinery |
 | 7 | `/jobs/` + `/jobs/<slug>/` (Contracts + Ranks tabs) | New Browse surface |
 | 8 | Job Boards directory; sub-nav goes live | Section complete |

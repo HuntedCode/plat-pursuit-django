@@ -58,7 +58,7 @@ selected_tier. Keeps id="badge-header-card".
             </div>
 
             {% if stats %}
-            <a href="{% url 'badge_leaderboards' badge.series_slug %}" class="bdh-headline shrink-0 mx-auto sm:mx-0 text-center sm:text-right" title="See who owns this badge">
+            <a href="#ranks" class="bdh-headline shrink-0 mx-auto sm:mx-0 text-center sm:text-right" title="See who owns this badge">
                 <span class="pp-tally pp-tally--lg block text-primary" data-countup="{{ stats.tier_earner_counts.1|default:0 }}">{{ stats.tier_earner_counts.1|default:0|intcomma }}</span>
                 <span class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50">earners &rsaquo;</span>
             </a>
