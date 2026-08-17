@@ -164,7 +164,6 @@ def test_rank_equals_position_under_an_edition_slice():
     (lb.CAREER_KEYS, 'CAREER_KEYS'),
     (lb.SERIES_BOARD_KEYS, 'SERIES_BOARD_KEYS'),
     (lb.JOB_KEYS, 'JOB_KEYS'),
-    (lb.SERIES_XP_KEYS, 'SERIES_XP_KEYS'),
     (lb.EARNERS_KEYS, 'EARNERS_KEYS'),
 ])
 def test_every_board_order_ends_in_the_unique_key(keys, label):
@@ -179,16 +178,18 @@ def test_every_board_order_ends_in_the_unique_key(keys, label):
 def test_every_module_level_keys_tuple_is_covered_by_the_test_above():
     """The parametrize list is hand-maintained, and that is exactly how two ranks escaped it.
 
-    `series_rank` and `earners_rank` had no `*_KEYS` tuple at all -- they counted a bare `xp__gt` / 
+    `series_rank` and `earners_rank` had no `*_KEYS` tuple at all -- they counted a bare `xp__gt` /
     `earned_at__lt` -- so they were invisible here while every declared board was covered, and the file
-    read as though the whole module was checked. This asserts the list is COMPLETE, so declaring a new
+    read as though the whole module was checked. (`series_rank` was subsequently deleted outright: it
+    ranked the same population as the per-series board on a different key, so the badge page showed two
+    contradictory "rank" figures one click apart.) This asserts the list is COMPLETE, so declaring a new
     board without adding it fails rather than passing silently.
     """
     declared = {name for name in dir(lb) if name.endswith('_KEYS')}
     covered = {label for _keys, label in [
         (lb.XP_KEYS, 'XP_KEYS'), (lb.TROPHY_KEYS, 'TROPHY_KEYS'), (lb.CAREER_KEYS, 'CAREER_KEYS'),
         (lb.SERIES_BOARD_KEYS, 'SERIES_BOARD_KEYS'), (lb.JOB_KEYS, 'JOB_KEYS'),
-        (lb.SERIES_XP_KEYS, 'SERIES_XP_KEYS'), (lb.EARNERS_KEYS, 'EARNERS_KEYS'),
+        (lb.EARNERS_KEYS, 'EARNERS_KEYS'),
     ]}
     assert declared == covered, (
         f'uncovered key tuples: {sorted(declared - covered)}. Add them to the parametrize list above.'

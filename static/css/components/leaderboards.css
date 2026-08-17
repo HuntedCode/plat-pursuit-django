@@ -211,6 +211,32 @@
     background: var(--pp-bg-1); border: 1px dashed var(--pp-border);
 }
 .lb-empty svg { width: 34px; height: 34px; color: var(--pp-text-mute); opacity: 0.7; }
+
+/* Inside .bdir-wall (a grid) the empty state is a CELL unless told otherwise -- it rendered as a ~300px
+   box hugging the left edge with empty columns beside it, which is the first thing a viewer sees until
+   the standings are backfilled. Same span the sentinel already declares. */
+.lb-empty--wall { grid-column: 1 / -1; }
+
+/* Search clear: only shown when the field has a value (the button carries `hidden` otherwise). Sits
+   inside .bdir-bar__search, which is position:relative. */
+.bdir-bar__clear {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 999px;
+    color: var(--pp-text-mute); background: transparent; border: 0; cursor: pointer;
+    transition: color 140ms ease, background 140ms ease;
+}
+.bdir-bar__clear:hover { color: var(--pp-text); background: var(--pp-bg-2); }
+.bdir-bar__clear:focus-visible { outline: 2px solid var(--pp-accent); outline-offset: 2px; }
+.bdir-bar__clear svg { width: 14px; height: 14px; }
+.bdir-bar__clear[hidden] { display: none; }
+
+/* Infinite-scroll loading row. Spans the wall so the spinner centres under the cards. */
+.bdir-loading {
+    display: flex; align-items: center; justify-content: center;
+    padding: 18px 0; color: var(--pp-text-mute);
+}
+.bdir-loading[hidden] { display: none; }
 .lb-empty__title { margin-top: 12px; font-size: 1rem; font-weight: 800; color: var(--pp-text); }
 .lb-empty__sub { margin-top: 5px; font-size: 0.85rem; color: var(--pp-text-dim); max-width: 42ch; }
 

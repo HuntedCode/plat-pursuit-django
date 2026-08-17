@@ -50,7 +50,7 @@ def _standing(slug, name, *, bp, on, country=''):
 def test_the_retired_page_redirects_to_the_badge_it_was_about(client):
     """Permanently, and KEEPING the slug -- so an existing link lands on the badge whose board it wanted
     rather than on a generic index. A 404 would have been the lazy option and throws away the intent."""
-    BadgeSeriesFactory(series_slug='gow', name='God of War')
+    _renderable('gow', 'God of War')
     resp = client.get('/leaderboards/badges/gow/')
     assert resp.status_code == 301
     assert resp['Location'].rstrip('/').endswith('/badges/gow')
@@ -64,14 +64,14 @@ def test_the_legacy_redirects_still_resolve(client, path):
     """These two named the retired URL. Retiring a url NAME makes its RedirectView raise
     NoReverseMatch -- a 500, not a 404 -- so they had to be repointed in the same change or every old
     inbound link would have started erroring."""
-    BadgeSeriesFactory(series_slug='gow', name='God of War')
+    _renderable('gow', 'God of War')
     resp = client.get(path)
     assert resp.status_code == 301, f'{path} did not redirect (a 500 here means an unrepointed name)'
 
 
 def test_the_panel_endpoint_serves_the_merged_board(client):
     """Earners above chasers, ties broken by who got there first -- the merged board, not two lists."""
-    BadgeSeriesFactory(series_slug='mix', name='Mix')
+    _renderable('mix', 'Mix')
     # Built in REVERSE date order so profile ids run opposite to the dates: only the tiebreak can
     # produce the expected ordering.
     later = _standing('mix', 'SecondThere', bp=5000, on=dt.date(2024, 6, 1))
@@ -87,7 +87,7 @@ def test_the_panel_endpoint_serves_the_merged_board(client):
 def test_the_panel_is_public(client):
     """The board is identical for every viewer, which is what keeps it cacheable. Gating it behind login
     would forfeit that AND hide the section from the visitors most likely to be persuaded by it."""
-    BadgeSeriesFactory(series_slug='pub', name='Public')
+    _renderable('pub', 'Public')
     _standing('pub', 'Anyone', bp=2500, on=dt.date(2024, 1, 1))
     resp = client.get(reverse('badge_ranks_panel', args=['pub']))
     assert resp.status_code == 200 and 'Anyone' in resp.content.decode()
@@ -152,3 +152,36 @@ def test_the_ranks_section_renders_once_for_a_multi_edition_series(client):
     assert body.count('id="ranks"') == 1
     # Sanity that the fixture really is multi-edition, so the assertion above means something.
     assert 'Ultra HD' in body and 'Legacy HD' in body
+
+
+def test_the_panel_hides_a_dormant_series_from_the_public(client):
+    """The fragment must apply the SAME gate as the page it belongs to.
+
+    `BadgeDetailView.get_object` 404s a series with no live edition for non-staff. This view did a bare
+    slug lookup, so `/badges/<unreleased-slug>/ranks/` answered for a series whose own page 404s --
+    confirming the series exists and serving its board to anyone who guessed the slug. A curator's
+    unreleased work is exactly what that gate is protecting.
+    """
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+
+    series = BadgeSeriesFactory(series_slug='unreleased', name='Unreleased')
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(key='dg'), is_live=False)
+
+    assert client.get(reverse('badge_ranks_panel', args=[series.series_slug])).status_code == 404
+
+
+def test_staff_can_still_preview_a_dormant_series_panel(client):
+    """The gate is a staff PREVIEW gate, not a wall -- curators check the board before releasing."""
+    from tests.factories import (
+        BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory, ProfileFactory,
+    )
+
+    series = BadgeSeriesFactory(series_slug='unreleased2', name='Unreleased Two')
+    GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(key='dg2'), is_live=False)
+
+    staff = ProfileFactory(is_linked=True)
+    staff.user.is_staff = True
+    staff.user.save(update_fields=['is_staff'])
+    client.force_login(staff.user)
+
+    assert client.get(reverse('badge_ranks_panel', args=[series.series_slug])).status_code == 200

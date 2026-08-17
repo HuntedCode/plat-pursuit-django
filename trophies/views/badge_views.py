@@ -605,6 +605,7 @@ class BoardDirectoryView(HtmxListMixin, ListView):
     # Declared here so a new directory that forgets it fails loudly and early rather than with an
     # AttributeError deep in a template render.
     kind = None               # subclasses MUST set: 'badges' | 'games' | 'jobs'
+    DIRECTORY_LABEL = None    # subclasses MUST set: the breadcrumb leaf, e.g. 'Badge Boards'
     paginate_by = 24
     context_object_name = 'cards'
     SORTS = (('name', 'Name (A-Z)'), ('entrants', 'Most entrants'))
@@ -639,6 +640,18 @@ class BoardDirectoryView(HtmxListMixin, ListView):
             'sort': self._sort(),
             'sorts': self.SORTS,
             'directory_kind': self.kind,
+            # The infinite scroller resolves its resume point from this; hard-coding it in the template
+            # would silently desync the moment `paginate_by` changed.
+            'paginate_by': self.paginate_by,
+            # The template includes partials/breadcrumb.html, which is `{% if items %}`-guarded -- so
+            # omitting this failed silently and left the three directories without the breadcrumb their
+            # sibling (Global Boards) has.
+            # `text`, not `label` -- partials/breadcrumb.html reads item.text, and a wrong key renders
+            # empty <li>s rather than erroring.
+            'breadcrumb': [
+                {'text': 'Leaderboards', 'url': reverse('overall_badge_leaderboards')},
+                {'text': self.DIRECTORY_LABEL},
+            ],
         })
         return context
 
@@ -650,6 +663,7 @@ class BadgeBoardsView(BoardDirectoryView):
     tier concept the badge rebuild retired. This one reads BadgeSeries + the standing store.
     """
     kind = 'badges'
+    DIRECTORY_LABEL = 'Badge Boards'
     template_name = 'trophies/board_directory.html'
     partial_template_name = 'trophies/partials/board_directory_results.html'
 
@@ -703,6 +717,7 @@ class GameBoardsView(BoardDirectoryView):
     The full board is game detail's Ranks panel, which is already rebuilt; this is discovery over it.
     """
     kind = 'games'
+    DIRECTORY_LABEL = 'Game Boards'
     template_name = 'trophies/board_directory.html'
     partial_template_name = 'trophies/partials/board_directory_results.html'
     def get_queryset(self):
@@ -753,6 +768,7 @@ class JobBoardsView(BoardDirectoryView):
     where a filter panel looks harmless and a third sort looks free. Same base, same two sorts, same gate.
     """
     kind = 'jobs'
+    DIRECTORY_LABEL = 'Job Boards'
     template_name = 'trophies/board_directory.html'
     partial_template_name = 'trophies/partials/board_directory_results.html'
 
@@ -813,6 +829,11 @@ class BadgeRanksPanelView(View):
     def get(self, request, series_slug):
         series = BadgeSeries.objects.filter(series_slug=series_slug).first()
         if series is None:
+            raise Http404("Series not found")
+        # The SAME dormant gate BadgeDetailView.get_object applies. Without it this fragment answered for
+        # an unreleased series that its own page 404s -- so `/badges/<unreleased>/ranks/` confirmed the
+        # series exists and handed over its board, to anyone who guessed the slug.
+        if not request.user.is_staff and not series.group_badges.filter(is_live=True).exists():
             raise Http404("Series not found")
 
         total = lb.series_board_count(series_slug)
@@ -970,6 +991,9 @@ class OverallBadgeLeaderboardsView(TemplateView):
             # The display name, so the empty state and the standing label can say "Ultra HD" rather than
             # echo the slug back at the reader.
             'selected_edition_name': next((e.name for e in editions if e.key == edition), ''),
+            # Same courtesy for country: the picker beside it shows "United States", so echoing "US" back
+            # in the standing label reads as a different thing.
+            'selected_country_name': next((c['name'] for c in countries if c['code'] == country), ''),
             # Only offered where it does something. See the class docstring.
             'edition_applies': tab in self.EDITION_BOARDS,
             # The empty state's escape hatches, from the same builder the tab strip uses. Each clears ONE
@@ -1008,11 +1032,17 @@ class OverallBadgeLeaderboardsView(TemplateView):
         if profile:
             cc = country or None
             ed = edition or None
-            context['my_standing'] = {
+            standing = {
                 'trophies': lb.trophy_rank(profile.id, country=cc),
                 'points': lb.xp_rank(profile.id, country=cc, edition=ed),
                 'career': lb.career_xp_rank(profile.id, country=cc),
             }
+            # None when the viewer is on NO board, so the template's `{% if my_standing %}` means what it
+            # reads as. A populated dict of all-Nones is still truthy, so the heading rendered with every
+            # chip suppressed underneath it -- a bare "Your standing" over empty space, which is exactly
+            # what the block's own comment says it is avoiding. That is the default state until the
+            # standings are backfilled.
+            context['my_standing'] = standing if any(v is not None for v in standing.values()) else None
         return context
 
     def _build_board(self, tab, country, edition=''):

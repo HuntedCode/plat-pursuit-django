@@ -402,7 +402,12 @@ def get_badge_detail(series, target_profile) -> BadgeDetail:
             series_xp = standing.xp
             series_progress_pct = round(standing.progress_bp / 100)
         if target_profile and series_xp > 0:
-            series_rank = lb.series_rank(series.series_slug, target_profile.id)
+            # The BOARD's rank, not an XP-ordered one. This modal prints "Series rank #N of M" where M is
+            # the same population `series_board_count` returns, and the Ranks panel one scroll away prints
+            # "You are #N" from `series_board_rank` -- so ranking on a different key set put two different
+            # numbers, over the same denominator, one click apart. The per-series board is ordered by
+            # progress, so that is what "rank in this series" means.
+            series_rank = lb.series_board_rank(series.series_slug, target_profile.id)
 
     return BadgeDetail(
         series=series, groups=groups, has_multiple_groups=len(groups) > 1,

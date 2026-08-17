@@ -57,7 +57,7 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
             Only ranks the viewer actually holds render; a blank slot says less than no slot. {% endcomment %}
             {% if my_standing %}
             <div class="lb-mine mt-3 md:mt-4">
-                <span class="lb-mine__k">Your standing{% if selected_edition %} in {{ selected_edition_name }}{% endif %}{% if selected_country %} in {{ selected_country }}{% endif %}</span>
+                <span class="lb-mine__k">Your standing{% if selected_edition %} in {{ selected_edition_name }}{% endif %}{% if selected_country %} in {{ selected_country_name|default:selected_country }}{% endif %}</span>
                 <span class="lb-mine__rows">
                     {% for b in boards %}
                     {% with rank=my_standing|dict_get:b.key %}

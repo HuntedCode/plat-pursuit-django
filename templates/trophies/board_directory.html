@@ -53,6 +53,12 @@ that: 24 entities is where a bespoke third page would have looked cheapest to wr
         <div class="bdir-bar__search" data-search-wrap>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             <input type="search" name="q" value="{{ q }}" placeholder="Search {% if directory_kind == 'games' %}games{% elif directory_kind == 'jobs' %}jobs{% else %}series{% endif %}" aria-label="Search boards" data-page-search>
+            {% comment %}`[data-search-wrap]` suppresses the native type=search clear button (shared
+            browse-gallery CSS), so opting into that wrapper without supplying a clear control left no way
+            to empty the field except select-and-delete.{% endcomment %}
+            <button type="button" class="bdir-bar__clear" data-bdir-clear aria-label="Clear search" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
         </div>
         <select class="pp-gallery__select" name="sort" aria-label="Sort boards">
             {% for key, label in sorts %}
@@ -64,6 +70,13 @@ that: 24 entities is where a bespoke third page would have looked cheapest to wr
 
     <div class="bdir-wall" id="bdir-wall" data-bdir-wall>
         {% include 'trophies/partials/board_directory_results.html' %}
+    </div>
+
+    {% comment %}The scroller resolves this by id and returns null without it -- it lives on the shell
+    rather than the results partial because the partial is appended once per page fetch.{% endcomment %}
+    <div class="bdir-loading" id="bdir-loading" hidden aria-live="polite">
+        <span class="loading loading-spinner loading-md" aria-hidden="true"></span>
+        <span class="sr-only">Loading more boards</span>
     </div>
 {% endblock %}
 
@@ -79,17 +92,34 @@ that: 24 entities is where a bespoke third page would have looked cheapest to wr
         so this only removes a step.{% endcomment %}
         var sel = form.querySelector('select[name="sort"]');
         if (sel) { sel.addEventListener('change', function () { form.submit(); }); }
+        {% comment %}Search submits on ENTER (and via the noscript button), NOT on a typing pause. The
+        previous version debounced `form.submit()`, which reloads the whole page: 450ms of hesitation
+        mid-word threw away focus and the caret, and the keystrokes after it went nowhere. The other
+        browse surfaces get away with live search because they swap via HTMX; this one does a full
+        navigation, so the two are not the same trade.{% endcomment %}
         var q = form.querySelector('input[name="q"]');
-        if (q && window.PlatPursuit && PlatPursuit.debounce) {
-            q.addEventListener('input', PlatPursuit.debounce(function () { form.submit(); }, 450));
+        var clear = form.querySelector('[data-bdir-clear]');
+        if (q && clear) {
+            var syncClear = function () { clear.hidden = !q.value; };
+            q.addEventListener('input', syncClear);
+            clear.addEventListener('click', function () { q.value = ''; form.submit(); });
+            syncClear();
         }
 
         {% comment %}Infinite scroll on the shared engine. It sends X-Requested-With, which HtmxListMixin
-        answers with the results partial -- the same contract Browse Games uses.{% endcomment %}
+        answers with the results partial -- the same contract Browse Games uses.
+
+        `create`, not `init` -- there is no `init`, and the old call threw a TypeError that left these
+        directories with NO pagination at all past the first 24 boards. The config is ID-based
+        (getElementById) and `create` returns null if the grid, sentinel or loading element is missing,
+        so all three ids below are load-bearing. `paginateBy` must match the view's `paginate_by`, or the
+        scroller never starts observing.{% endcomment %}
         if (window.PlatPursuit && PlatPursuit.InfiniteScroller) {
-            PlatPursuit.InfiniteScroller.init({
-                container: wall,
-                sentinelSelector: '[data-bdir-sentinel]',
+            PlatPursuit.InfiniteScroller.create({
+                gridId: 'bdir-wall',
+                sentinelId: 'bdir-sentinel',
+                loadingId: 'bdir-loading',
+                paginateBy: {{ paginate_by }},
                 cardSelector: '.bdir-card',
             });
         }

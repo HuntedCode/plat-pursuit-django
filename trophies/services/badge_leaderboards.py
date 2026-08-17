@@ -410,34 +410,6 @@ def series_board_rank(series_slug, profile_id, country=None):
     return qs.filter(_ahead_q(SERIES_BOARD_KEYS, {**mine, 'profile_id': profile_id})).count() + 1
 
 
-#: The per-series XP order. Declared as a tuple like every other board so
-#: `test_every_board_order_ends_in_the_unique_key` sees it -- `series_rank` used to rank on a bare
-#: `xp__gt` with no tail, which made it invisible to that test precisely because it had no tuple.
-SERIES_XP_KEYS = (('xp', _DESC), ('profile_id', _ASC))
-
-
-def series_rank(series_slug, profile_id):
-    """A profile's 1-based XP position within a series, or None if they have no standing there.
-
-    Expresses the FULL key list via `_ahead_q`, like every other rank. It previously counted
-    `xp__gt=mine` alone, which is the same rank-vs-position bug the module docstring exists to warn
-    about -- and worse here than most, because `xp` is quantized to `500a + 600b`, so a 3-stage series
-    stacks hundreds of hunters onto identical totals and every one of them was told the group's FIRST
-    slot. It also sat one modal away from `series_board_rank`, over the identical denominator
-    (`series_size` == `series_board_count`), so the same page could show a hunter #51 and #372 at once.
-    """
-    mine = (
-        SeriesBadgeStanding.objects.filter(series_slug=series_slug, profile_id=profile_id)
-        .values_list('xp', flat=True).first()
-    )
-    if mine is None:
-        return None
-    return (
-        SeriesBadgeStanding.objects.filter(series_slug=series_slug)
-        .filter(_ahead_q(SERIES_XP_KEYS, {'xp': mine, 'profile_id': profile_id})).count() + 1
-    )
-
-
 # ------------------------------------------------------------------ per-badge earners --------------------
 
 def earners_rows(group_badge_id, limit=50, offset=0):

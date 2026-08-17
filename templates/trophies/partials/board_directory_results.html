@@ -28,15 +28,23 @@ appended by the infinite scroller, so it holds the cards and the sentinel and no
                 {% if entry.avatar_url %}<img src="{{ entry.avatar_url }}" alt="" loading="lazy" decoding="async">{% endif %}
             </span>
             <span class="bdir-row__name">{{ entry.psn_username }}</span>
-            <span class="bdir-row__v pp-tally">{{ entry.primary|default:0|intcomma }}{% if entry.primary_label == '%' %}%{% endif %}</span>
+            {% comment %}The unit is whatever the view named. Only '%' was rendered before, so Badge Boards showed a
+bare "2" where it meant "2 stages" and Job Boards a bare "3,400" where it meant XP -- a number with no
+unit beside a number with one reads as a different kind of quantity.{% endcomment %}
+                <span class="bdir-row__v pp-tally">{{ entry.primary|default:0|intcomma }}{% if entry.primary_label == '%' %}%{% elif entry.primary_label %} {{ entry.primary_label }}{% endif %}</span>
         </li>
         {% endfor %}
     </ol>
 </article>
 {% empty %}
-<div class="lb-empty">
+{% comment %}`lb-empty--wall` spans the grid. Without it this box is a ~300px GRID CELL hugging the left
+edge with empty columns beside it -- and it is the first thing every viewer sees until the standings are
+backfilled, so the broken-looking state is the default state.{% endcomment %}
+<div class="lb-empty lb-empty--wall">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-    <p class="lb-empty__title">No boards match</p>
+    {% comment %}Title branches with the subtitle: "No boards match" over "no board has enough hunters
+    yet" reads as a failed search when nobody searched.{% endcomment %}
+    <p class="lb-empty__title">{% if q %}No boards match{% else %}No boards yet{% endif %}</p>
     <p class="lb-empty__sub">
         {% if q %}Nothing here is called &ldquo;{{ q }}&rdquo;. Try a shorter search.{% else %}No board has enough hunters on it yet.{% endif %}
     </p>
@@ -46,5 +54,8 @@ appended by the infinite scroller, so it holds the cards and the sentinel and no
 {% comment %} Infinite scroll sentinel: the scroller fetches ?page=N+1 and appends the cards from this
 same partial, so the wall grows without a pager. {% endcomment %}
 {% if page_obj.has_next %}
-<span class="bdir-sentinel" data-bdir-sentinel data-next-page="{{ page_obj.next_page_number }}" aria-hidden="true"></span>
+{% comment %}The scroller resolves both by ID (getElementById), so the id attributes are load-bearing, not
+decoration. The loading row must exist too: InfiniteScroller.create() returns null when it is missing,
+which is how this page ended up with no pagination at all.{% endcomment %}
+<span class="bdir-sentinel" id="bdir-sentinel" data-bdir-sentinel data-next-page="{{ page_obj.next_page_number }}" aria-hidden="true"></span>
 {% endif %}

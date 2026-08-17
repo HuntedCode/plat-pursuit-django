@@ -68,8 +68,10 @@ def test_series_xp_board_is_scoped_to_the_series():
     evaluate_and_apply(partial, [gb])
 
     # `series_xp_rows` was removed in the 2026-08 audit -- it had no production caller and this test was
-    # its only reader. `series_rank` is the live half (badge_detail_service reads it) and stays covered.
-    assert lb.series_rank('gow', top.id) == 1 and lb.series_rank('gow', partial.id) == 2
+    # its only reader. The per-series rank the badge page shows now comes from `series_board_rank`
+    # (progress-ordered, matching the board) -- `series_rank` was an XP-ordered second opinion over the
+    # same population and was deleted rather than reconciled.
+    assert lb.series_board_rank('gow', top.id) == 1 and lb.series_board_rank('gow', partial.id) == 2
 
 
 def test_series_board_orders_by_furthest_along():
