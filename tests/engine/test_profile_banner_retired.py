@@ -5,6 +5,7 @@ What needs pinning is the part that rots quietly: a removed feature leaving its 
 model still offers a field nothing writes, `absorb()` still migrates a relation that no longer exists, or a
 type is still selectable with nothing able to render it.
 """
+import ast
 import re
 from pathlib import Path
 
@@ -106,6 +107,61 @@ def test_the_profile_page_no_longer_reserves_a_slot_for_them():
     profile = (ROOT / 'templates' / 'trophies' / 'profile_detail.html').read_text(encoding='utf-8')
     assert 'rendered_showcases' not in profile
     assert 'SHOWCASES sat here' not in profile
+
+
+def test_the_editor_url_still_sends_you_home(client):
+    """`ProfileEditorView` is deleted but `/profile-editor/` still resolves, to a redirect. Recovered from
+    `test_showcases_hidden.py`, which was deleted with the showcase system -- five of its tests covered
+    routing that is still live, and they went with the premise that was obsolete. That is the
+    deletion-specific failure mode this file exists to catch, caught on itself."""
+    resp = client.get('/profile-editor/')
+
+    assert resp.status_code == 302, f'the editor still renders (got {resp.status_code})'
+    assert resp['Location'] == '/', f'it redirects to {resp["Location"]}, not the homepage'
+
+
+def test_the_editor_redirect_stays_temporary(client):
+    """Still a 302, but for a different reason than when it was written.
+
+    It was temporary because customization was PARKED and would return. Customization is now removed and
+    may never return -- but a 301 is cached by the browser indefinitely, so it is the harder of the two to
+    undo. A temporary redirect on a URL nobody visits costs nothing; a permanent one on a path we might
+    reuse costs a support thread.
+    """
+    from django.urls import resolve
+
+    assert resolve('/profile-editor/').func.view_initkwargs['permanent'] is False
+
+
+def test_the_old_my_pursuit_path_goes_straight_home(client):
+    """Still 301 itself: the /my-pursuit/ -> root move IS permanent whatever happens to customization.
+    What matters is that it does not hop THROUGH `profile_editor` and cost a second redirect."""
+    resp = client.get('/my-pursuit/profile-editor/')
+
+    assert resp.status_code == 301
+    assert resp['Location'] == '/', f'still hops through {resp["Location"]}'
+
+
+def test_no_url_conf_imports_a_view_it_no_longer_routes():
+    """An import with nothing using it is the residue a teardown leaves, and it is what makes the next
+    reader think the routes are still there.
+
+    Generalised from the version deleted with `test_showcases_hidden.py`, which checked a hard-coded list
+    of names. Asserting "every import is referenced somewhere in the file" needs no list, so it covers the
+    next teardown as well as the last one -- which matters right now, because the dashboard's views and
+    routes are coming out next and a urls.py importing a view it no longer routes is exactly how that
+    breaks.
+    """
+    for rel in ('plat_pursuit/urls.py', 'api/urls.py'):
+        tree = ast.parse((ROOT / rel).read_text(encoding='utf-8'))
+        imported = {a.asname or a.name for n in ast.walk(tree)
+                    if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
+        used = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+        used |= {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+        # A dotted import (`import x.y`) binds the root name; compare on that.
+        orphans = {name for name in imported if name.split('.')[0] not in used}
+
+        assert not orphans, f'{rel} imports {sorted(orphans)} but references none of them'
 
 
 # ── The stray Pursuer Card scripts ────────────────────────────────────────────────────────────────

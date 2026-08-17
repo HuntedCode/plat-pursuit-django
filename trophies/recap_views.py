@@ -198,8 +198,6 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
         first_visit = not recap.has_been_viewed
         if first_visit:
             MonthlyRecap.objects.filter(pk=recap.pk).update(has_been_viewed=True)
-            from trophies.services.dashboard_service import invalidate_dashboard_cache
-            invalidate_dashboard_cache(profile.id)
 
         # The entrance renders from the recap ITSELF -- its headline numbers, and whether this month has
         # been seen before -- so it can be a real cover rather than a generic "Monthly Recap" header.

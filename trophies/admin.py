@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge
 
 
 # Register your models here.
@@ -3161,25 +3161,6 @@ class GameListItemAdmin(admin.ModelAdmin):
             return '-'
         return obj.note[:50] + '...' if len(obj.note) > 50 else obj.note
     note_preview.short_description = 'Note'
-
-
-@admin.register(DashboardConfig)
-class DashboardConfigAdmin(admin.ModelAdmin):
-    """Admin interface for dashboard configurations."""
-    list_display = ['profile', 'module_count', 'hidden_count', 'updated_at']
-    list_select_related = ('profile',)
-    search_fields = ['profile__psn_username', 'profile__display_psn_username']
-    raw_id_fields = ['profile']
-    readonly_fields = ['updated_at']
-    ordering = ['-updated_at']
-
-    def module_count(self, obj):
-        return len(obj.module_order) if obj.module_order else 0
-    module_count.short_description = 'Modules'
-
-    def hidden_count(self, obj):
-        return len(obj.hidden_modules) if obj.hidden_modules else 0
-    hidden_count.short_description = 'Hidden'
 
 
 # ---------------------------------------------------------------------------

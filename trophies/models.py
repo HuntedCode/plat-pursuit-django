@@ -4991,42 +4991,6 @@ class ArchivedAZChallenge(models.Model):
         return f"Archived A-Z ({self.psn_username}, {self.completed_count}/26)"
 
 
-class DashboardConfig(models.Model):
-    """
-    Per-user dashboard preferences: visible modules, ordering, and per-module settings.
-
-    module_order: ordered list of module slugs (premium-only to customize).
-        ["trophy_summary", "active_challenges", "recent_activity", ...]
-
-    hidden_modules: slugs the user has toggled off (free users: max 3).
-        ["community_engagement", "quick_links"]
-
-    module_settings: per-module config overrides (premium-only).
-        {"games_in_progress": {"limit": 10}, "recent_activity": {"limit": 12}}
-    """
-    profile = models.OneToOneField(
-        Profile,
-        on_delete=models.CASCADE,
-        related_name='dashboard_config',
-        primary_key=True,
-    )
-    module_order = models.JSONField(default=list, blank=True)
-    hidden_modules = models.JSONField(default=list, blank=True)
-    module_settings = models.JSONField(default=dict, blank=True)
-    tab_config = models.JSONField(
-        default=dict, blank=True,
-        help_text='Tab layout: {active_tab, tab_order, custom_tabs, module_tab_overrides}'
-    )
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = 'Dashboard Config'
-        verbose_name_plural = 'Dashboard Configs'
-
-    def __str__(self):
-        return f"DashboardConfig for {self.profile.psn_username}"
-
-
 class ProfileCardSettings(models.Model):
     """
     Per-user profile card preferences: theme, public forum signature toggle,

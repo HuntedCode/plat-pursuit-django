@@ -257,8 +257,6 @@ def check_profile_badges(profile, profilegame_ids, skip_notifications: bool = Fa
         send_badge_earned_notification(profile, created_badges)
 
     # Invalidate dashboard cache so badge progress module reflects changes
-    from trophies.services.dashboard_service import invalidate_dashboard_cache
-    invalidate_dashboard_cache(profile.id)
 
     duration = time.time() - start_time
     logger.info(

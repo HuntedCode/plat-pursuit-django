@@ -15,8 +15,8 @@ from django.views.generic import TemplateView, View
 
 from trophies.mixins import StaffRequiredMixin
 from trophies.util_modules.cache import redis_client
-from trophies.views.dashboard_views import _get_site_heartbeat
 from core.services import home_service
+from core.services.site_heartbeat import get_cached_heartbeat
 
 logger = logging.getLogger('psn_api')
 
@@ -1624,7 +1624,7 @@ class HomeView(TemplateView):
 
         # All non-dashboard states share the cached site heartbeat for their
         # community-stats card. Reused directly so we don't recompute on render.
-        context['site_heartbeat'] = _get_site_heartbeat()
+        context['site_heartbeat'] = get_cached_heartbeat()
 
         if state == 'syncing':
             profile = self.request.user.profile

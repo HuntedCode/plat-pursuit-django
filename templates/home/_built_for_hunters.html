@@ -1,8 +1,10 @@
 {% load humanize %}
 {# ───────────────────────────────────────────────────────────────────────── #}
 {# Built for Hunters: site-wide platform stats ribbon.                       #}
-{# Sits between the dashboard header and the tab bar so it's visible on     #}
-{# every dashboard load without scrolling. All data comes from the          #}
+{# Lives on the SYNCING lobby, its only consumer -- it moved here from the  #}
+{# dashboard partials when the dashboard was deleted. Its job is to give a  #}
+{# first-time hunter something true to read while they wait.                #}
+{# All data comes from the                                                  #}
 {# `site_heartbeat` cache key written hourly by refresh_homepage_hourly.    #}
 {# If the cache is empty (cron broken >2 hours), the section hides.         #}
 {#                                                                          #}

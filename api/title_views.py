@@ -28,7 +28,6 @@ class EquipTitleAPIView(APIView):
 
     @method_decorator(ratelimit(key='user', rate='15/m', method='POST', block=True))
     def post(self, request):
-        from trophies.services.dashboard_service import invalidate_dashboard_cache
 
         profile = getattr(request.user, 'profile', None)
         if not profile:
@@ -42,10 +41,6 @@ class EquipTitleAPIView(APIView):
         if title_id is None:
             # Unequip: clear all displayed titles
             profile.user_titles.update(is_displayed=False)
-            try:
-                invalidate_dashboard_cache(profile.pk)
-            except Exception:
-                pass
             return Response({'success': True, 'title_name': None})
 
         # Validate the user owns this title
@@ -63,11 +58,6 @@ class EquipTitleAPIView(APIView):
         profile.user_titles.update(is_displayed=False)
         user_title.is_displayed = True
         user_title.save(update_fields=['is_displayed'])
-
-        try:
-            invalidate_dashboard_cache(profile.pk)
-        except Exception:
-            pass
 
         return Response({
             'success': True,

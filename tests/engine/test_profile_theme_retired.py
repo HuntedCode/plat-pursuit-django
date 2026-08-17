@@ -60,14 +60,10 @@ def test_the_empty_premium_settings_form_is_gone():
     assert not hasattr(forms_module, 'PremiumSettingsForm')
 
 
-def test_the_dashboard_theme_picker_module_is_deregistered():
-    """A registered module whose provider reads a dropped column raises the moment its dashboard renders,
-    so the registry entry and the provider had to go together with the field."""
-    from trophies.services import dashboard_service
-
-    assert not hasattr(dashboard_service, 'provide_premium_settings')
-    slugs = {m['slug'] for m in dashboard_service.DASHBOARD_MODULES}
-    assert 'premium_settings' not in slugs
+def test_the_dashboard_theme_picker_module_is_gone():
+    """It was DEREGISTERED when the theme column was dropped (a registered module whose provider reads a
+    dropped column raises the moment it renders). The whole dashboard went in 2026-08, so the assertion
+    narrows to the template: there is no registry left to be absent from."""
     assert not (ROOT / 'templates/trophies/partials/dashboard/premium_settings.html').exists()
 
 

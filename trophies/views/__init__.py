@@ -20,14 +20,12 @@ from .admin_views import (
 from .misc_views import SearchView
 from .list_views import BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView
 from .review_hub_views import ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView
-from .dashboard_views import DashboardView
 from .title_views import MyTitlesView
 from .platinum_grid_views import PlatinumGridView
 from .roadmap_views import RoadmapDetailView, RoadmapEditorView
 from .shareables_views import PlatCardsView
 from .career_views import CareerView, JobsBrowseView, JobDetailView, ContractsResultsView, ContractModalView, ContractModalPreviewView
 from .collection_views import CollectionView, CollectionBadgeModalView
-from .stats_views import MyStatsView
 from .company_views import CompanyListView, CompanyDetailView
 from .franchise_views import FranchiseListView, FranchiseDetailView
 from .genre_views import GenreThemeListView, GenreDetailView, ThemeDetailView
@@ -55,7 +53,6 @@ __all__ = [
     # Review Hub views
     'ReviewHubLandingView', 'RateMyGamesView', 'ReviewHubDetailView', 'ReviewsArchivedView',
     # Dashboard views
-    'DashboardView',
     # Title views
     'MyTitlesView',
     # Platinum Grid views
@@ -70,7 +67,6 @@ __all__ = [
     'CollectionView',
     'CollectionBadgeModalView',
     # Stats views
-    'MyStatsView',
     # Company views
     'CompanyListView', 'CompanyDetailView',
     # Franchise views

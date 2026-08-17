@@ -1,8 +1,8 @@
 from django.urls import path, include
 from .views import (
     SummaryView, GenerateCodeView, VerifyView, UnlinkView, CheckLinkedView,
-    RefreshView, SyncRolesView, RecheckBadgesView, TrophyCaseView, CommentListView,
-    CommentCreateView, CommentDetailView, CommentVoteView, CommentReportView,
+    RefreshView, SyncRolesView, RecheckBadgesView, TrophyCaseView,
+    CommentDetailView, CommentVoteView, CommentReportView,
     AgreeToGuidelinesView
 )
 # Checklist API views removed during roadmap migration (DB tables retained)
@@ -38,7 +38,6 @@ from .game_family_views import (
 )
 from .subscription_admin_views import SubscriptionAdminActionView, SubscriptionAdminUserDetailView
 from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimStatusView
-from .dashboard_views import DashboardModuleDataView, DashboardConfigUpdateView, DashboardModuleReorderView, StatsPageDataView
 from .title_views import EquipTitleAPIView
 from .user_settings_views import UpdateTimezoneAPIView, UpdateQuickSettingsAPIView
 from .game_player_views import GamePlayersAPIView
@@ -206,12 +205,8 @@ urlpatterns = [
     path('admin/fundraiser/claim-status/', UpdateClaimStatusView.as_view(), name='fundraiser-claim-status'),
 
     # Dashboard endpoints
-    path('dashboard/module/<str:slug>/', DashboardModuleDataView.as_view(), name='dashboard-module-data'),
-    path('dashboard/config/', DashboardConfigUpdateView.as_view(), name='dashboard-config-update'),
-    path('dashboard/reorder/', DashboardModuleReorderView.as_view(), name='dashboard-reorder'),
 
     # Stats page endpoints
-    path('stats/premium/', StatsPageDataView.as_view(), name='stats-premium-data'),
 
     # Title endpoints
     path('equip-title/', EquipTitleAPIView.as_view(), name='equip-title'),

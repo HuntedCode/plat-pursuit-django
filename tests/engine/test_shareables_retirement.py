@@ -4,10 +4,14 @@ Two surfaces were retired (Platinum Grid, Profile Card) and one duplicate entry 
 Game Detail hero's Share Card button), so that a plat card is obtainable from exactly ONE place. These
 pin all three, plus the paid-perk cleanup that has to travel with a retirement.
 """
+from pathlib import Path
+
 import pytest
 
 from core.hub_subnav import _URL_NAME_TO_SLUG_OVERRIDES
 from tests.factories import GameFactory, ProfileFactory
+
+ROOT = Path(__file__).resolve().parents[2]
 
 pytestmark = pytest.mark.django_db
 
@@ -69,13 +73,12 @@ def test_game_detail_no_longer_offers_a_share_card(client):
     assert 'GRADIENT_THEMES' not in content
 
 
-def test_dashboard_registry_drops_the_retired_share_modules():
-    """The modules fed the two retired pages and the duplicate plat-card surface; leaving them would
-    also leave providers pointed at a share pipeline that no longer exists."""
-    from trophies.services.dashboard_service import DASHBOARD_MODULES
-
-    slugs = {m['slug'] for m in DASHBOARD_MODULES}
-    assert not slugs & {'profile_card_preview', 'recent_platinum_card', 'platinum_grid_cta'}
+def test_the_retired_share_modules_left_no_templates_behind():
+    """They fed the two retired pages and the duplicate plat-card surface, and were deregistered when
+    those went. The registry itself was deleted with the dashboard in 2026-08, so what is left to pin is
+    that their templates did not outlive it."""
+    for slug in ('profile_card_preview', 'recent_platinum_card', 'platinum_grid_cta'):
+        assert not (ROOT / 'templates' / 'trophies' / 'partials' / 'dashboard' / f'{slug}.html').exists()
 
 
 def test_platinum_grid_is_no_longer_sold_as_a_perk(client):
