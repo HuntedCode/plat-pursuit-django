@@ -679,8 +679,19 @@ class BoardDirectoryView(HtmxListMixin, ListView):
     SORTS = (('name', 'Name (A-Z)'), ('entrants', 'Most entrants'))
     SORT_KEYS = {k for k, _ in SORTS}
     DEFAULT_SORT = 'name'
-    MIN_ENTRANTS = 1          # a board needs at least one name on it to be worth listing
     PREVIEW = 5               # top slice per card; the template shows 3 of them on a phone
+
+    @property
+    def min_entrants(self):
+        """How many entrants a board needs before this directory lists it.
+
+        Read from settings per kind rather than hardcoded, because the right number depends on the size
+        of the dataset and the prod-correct value silently empties the page on any smaller one. A dev
+        database with a few linked profiles has almost no game with 3 owners, so the game gate hid the
+        entire catalogue and the page said "no board has enough hunters yet" -- confident, specific, and
+        wrong. See BOARD_MIN_ENTRANTS in settings.
+        """
+        return settings.BOARD_MIN_ENTRANTS.get(self.kind, 1)
 
     def _q(self):
         return (self.request.GET.get('q') or '').strip()
@@ -723,7 +734,7 @@ class BadgeBoardsView(BoardDirectoryView):
         counts = lb.series_board_counts(
             list(qs.values_list('series_slug', flat=True))
         )
-        live = {slug for slug, n in counts.items() if n >= self.MIN_ENTRANTS}
+        live = {slug for slug, n in counts.items() if n >= self.min_entrants}
         qs = qs.filter(series_slug__in=live)
 
         if self._sort() == 'entrants':
@@ -763,12 +774,14 @@ class GameBoardsView(BoardDirectoryView):
     kind = 'games'
     template_name = 'trophies/board_directory.html'
     partial_template_name = 'trophies/partials/board_directory_results.html'
-    MIN_ENTRANTS = 3          # games are numerous; a 1-2 name board is noise in a catalogue this size
-
     def get_queryset(self):
         # `played_count` is a denormalized column on Game, so the gate and the "entrants" sort are both
         # free -- no aggregate over ProfileGame, which is one of the largest tables in the schema.
-        qs = Game.objects.filter(played_count__gte=self.MIN_ENTRANTS).select_related(
+        #
+        # It is maintained by a post_save signal on ProfileGame CREATION and recomputed by the nightly
+        # `recalc_earn_rates`. Bulk loads, fixtures and restores bypass signals, so on a freshly imported
+        # database it can read 0 while the rows sit there intact -- run `backfill_played_count`.
+        qs = Game.objects.filter(played_count__gte=self.min_entrants).select_related(
             'concept', 'concept__igdb_match',
         ).defer('concept__igdb_match__raw_response')
 
@@ -821,7 +834,7 @@ class JobBoardsView(BoardDirectoryView):
             qs = qs.filter(name__icontains=q)
 
         counts = lb.job_board_counts(list(qs.values_list('slug', flat=True)))
-        live = {slug for slug, n in counts.items() if n >= self.MIN_ENTRANTS}
+        live = {slug for slug, n in counts.items() if n >= self.min_entrants}
         qs = qs.filter(slug__in=live)
 
         if self._sort() == 'entrants':

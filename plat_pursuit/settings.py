@@ -561,3 +561,23 @@ LOGGING = {
 # Notification settings
 NOTIFICATION_RETENTION_DAYS = 90
 NOTIFICATION_SSE_HEARTBEAT_INTERVAL = 30
+
+# ---------------------------------------------------------------------------
+# Leaderboards
+# ---------------------------------------------------------------------------
+# Minimum entrants a board needs before its DIRECTORY will list it. A wall of
+# one-name boards reads as broken and drowns the boards worth looking at.
+#
+# Per KIND because the catalogues differ in size: games are numerous, so a 1-2
+# name board there is noise; badge series and jobs are curated and far fewer, so
+# any board with a name on it is worth listing.
+#
+# Env-overridable because these numbers are wrong on any dataset smaller than
+# prod. A dev database with a handful of linked profiles has almost no game with
+# 3 owners, so the default silently empties the Game Boards page -- which is
+# exactly how it was first reported. Set BOARD_MIN_ENTRANTS_GAMES=1 locally.
+BOARD_MIN_ENTRANTS = {
+    'games': int(os.getenv('BOARD_MIN_ENTRANTS_GAMES', 3)),
+    'badges': int(os.getenv('BOARD_MIN_ENTRANTS_BADGES', 1)),
+    'jobs': int(os.getenv('BOARD_MIN_ENTRANTS_JOBS', 1)),
+}

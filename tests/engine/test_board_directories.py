@@ -220,3 +220,58 @@ def test_game_boards_gates_out_boards_nobody_is_on(client):
     body = client.get(reverse('game_boards')).content.decode()
     assert 'Busy Game' in body
     assert 'Lonely Game' not in body, 'a board below the participants gate was listed'
+
+
+# ------------------------------------------------------------------ the gate ------------------------------
+
+def test_the_gate_is_configurable_per_kind(client, settings):
+    """The prod-correct threshold silently empties the page on any smaller dataset.
+
+    Reported for real: a dev database with a handful of linked profiles has almost no game owned by 3
+    people, so the default hid the entire catalogue behind "no board has enough hunters on it yet" -- a
+    confident, specific, wrong explanation. The number now comes from settings so a smaller dataset can
+    lower it without a code edit.
+    """
+    from django.urls import reverse
+    from trophies.models import Game
+
+    game = GameFactory(concept=ConceptFactory(), title_name='Two Player Game', title_platform=['PS5'])
+    for i in range(2):
+        ProfileGame.objects.create(profile=ProfileFactory(), game=game, progress=80 - i)
+    # AFTER the creates: `ProfileGame.objects.create` fires the post_save signal that increments
+    # played_count, so setting it first just gets overwritten -- which is how this fixture failed the
+    # first time, reporting a gate bug that was not there.
+    Game.objects.filter(pk=game.pk).update(played_count=2)
+
+    settings.BOARD_MIN_ENTRANTS = {'games': 3, 'badges': 1, 'jobs': 1}
+    assert 'Two Player Game' not in client.get(reverse('game_boards')).content.decode()
+
+    settings.BOARD_MIN_ENTRANTS = {'games': 1, 'badges': 1, 'jobs': 1}
+    assert 'Two Player Game' in client.get(reverse('game_boards')).content.decode(), (
+        'lowering the gate did not surface the board -- the threshold is still hardcoded somewhere'
+    )
+
+
+def test_a_stale_played_count_hides_a_real_board(client, settings):
+    """Documents the coupling that caused the report, so the next reader of `played_count__gte` knows what
+    it depends on.
+
+    `Game.played_count` is incremented by a post_save signal on ProfileGame CREATION. bulk_create,
+    fixtures and database restores bypass signals entirely, so the counter reads 0 while the rows sit
+    there intact. `backfill_played_count` (or the nightly `recalc_earn_rates`) repairs it.
+    """
+    from django.urls import reverse
+    from trophies.models import Game
+
+    settings.BOARD_MIN_ENTRANTS = {'games': 3, 'badges': 1, 'jobs': 1}
+    game = GameFactory(concept=ConceptFactory(), title_name='Bulk Loaded', title_platform=['PS5'])
+    ProfileGame.objects.bulk_create([
+        ProfileGame(profile=ProfileFactory(), game=game, progress=90 - i) for i in range(6)
+    ])
+
+    assert Game.objects.get(pk=game.pk).played_count == 0, 'bulk_create fired the signal after all'
+    assert 'Bulk Loaded' not in client.get(reverse('game_boards')).content.decode()
+
+    # The repair the backfill command performs.
+    Game.objects.filter(pk=game.pk).update(played_count=6)
+    assert 'Bulk Loaded' in client.get(reverse('game_boards')).content.decode()

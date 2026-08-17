@@ -417,6 +417,15 @@ prerequisite to it.
   doing a lookup each looks fine at 24 rows and is not at 200. Infinite scroll bounds the rows rendered,
   never the queries per row — those are two different problems and only one of them is solved by
   pagination.
+- **The participants gate is dataset-sized, and its failure mode is a confident lie.** `BOARD_MIN_ENTRANTS`
+  (settings, env-overridable per kind) defaults to 3 for games. On any dataset smaller than prod that
+  hides the whole catalogue behind "no board has enough hunters on it yet" -- which is specific, sounds
+  authoritative, and is wrong. Set `BOARD_MIN_ENTRANTS_GAMES=1` in dev.
+- **The game gate reads `Game.played_count`, a signal-maintained denorm.** It is incremented by a
+  `post_save` on ProfileGame CREATION, so `bulk_create`, fixtures and database restores bypass it and
+  leave 0 while the rows sit there intact. The nightly `recalc_earn_rates` repairs it (chunked, resumable,
+  30-minute budget -- one run may not cover a large catalogue), or `backfill_played_count` does it in one
+  DB-side UPDATE.
 - **`earners_ranks()` is len(held) queries by its own docstring.** Fine for a page of medallions, not for
   a directory. Use the windowed query.
 - **Two XP economies, one word** was the original sin here. After the rename, resist any "total XP" that
