@@ -7,6 +7,7 @@ rank is derived live from earned_at (current holders ordered by completion date)
 `apply_changes()` executes changes in one transaction and OWNS the earned_count denorm (no signals); the
 eval->diff->apply entry points also recompute badge XP. See docs/design/rebuild/badge-backend-rebuild.md.
 """
+import logging
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,6 +25,8 @@ from trophies.services.badge_adapters import (
     grant_series_title, revoke_series_title_if_orphaned, emit_badge_earned, announce_badges_earned,
 )
 from trophies.services.badge_xp import recompute_standing
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -120,10 +123,8 @@ def plan(profile, group_badges=None):
 def evaluate_and_apply(profile, group_badges=None, notify=False) -> dict:
     """Single-profile entry point: evaluate, diff, apply, recompute XP. Returns the apply summary.
 
-    `notify` is OPT-IN and defaults off. The Discord announcement belongs to the live sync path, not to the
-    function: `evaluate_badges --all` calls this once per profile across the whole population, and a default
-    of True would turn a backfill into tens of thousands of webhook sends. The one caller that wants it is
-    the one reacting to a hunter actually playing.
+    `notify` is OPT-IN and defaults off. The announcement belongs to a caller reacting to a hunter actually
+    playing, not to the function: a default of True would make any batch caller a webhook storm.
     """
     group_badges = resolve_group_badges(group_badges)
     if not group_badges:
@@ -132,12 +133,40 @@ def evaluate_and_apply(profile, group_badges=None, notify=False) -> dict:
     gb_map = {gb.id: gb for gb in group_badges}
     changes, desired = _plan_with_catalog(profile, catalog)
     result = apply_changes(profile, changes, gb_map)
-    recompute_standing(profile.id, desired, group_badges)   # XP tracks current progress, not just earns
+
+    # Announced BEFORE the standing recompute, and that ordering is deliberate. `apply_changes` is atomic
+    # and has committed by here, so the badges are durable; `recompute_standing` is not atomic and its most
+    # likely failure is a timeout. Announcing after it meant a failure there swallowed the announcement --
+    # and permanently, because `awarded` is a TRANSITION: the next sync sees the badge already held, emits
+    # no change, and the hunter is never told about a badge they earned.
+    #
+    # ONE consolidated announcement for the whole run, not one per badge from inside apply_changes, which
+    # would ping a hunter three times for finishing a three-edition series.
     if notify and result['awarded']:
-        # ONE consolidated announcement for the whole run, after the writes land -- not one per badge from
-        # inside apply_changes, which would ping a hunter three times for finishing a three-edition series.
         announce_badges_earned(profile, [gb_map[gb_id] for gb_id in result['awarded'] if gb_id in gb_map])
+
+    recompute_standing(profile.id, desired, group_badges)   # XP tracks current progress, not just earns
     return result
+
+
+def evaluate_for_sync(profile, profilegame_ids) -> dict:
+    """What `_job_sync_complete` calls. Never raises.
+
+    A separate named function rather than a try/except inline in `token_keeper`, for two reasons. The
+    inline version wrapped the IMPORT as well as the call, so an ImportError or a renamed kwarg degraded to
+    a log line on every sync forever with the boards quietly frozen. And a block buried in a 300-line job
+    method is not reachable by a test -- deleting the whole thing passed the entire suite.
+
+    `notify=False` until badge cutover 5b. The LEGACY engine still runs immediately before this in
+    `_job_sync_complete` and still sends its own Discord embed, so announcing here too would ping a hunter
+    twice for one act -- once tier-shaped, once edition-shaped. The adapter is built and tested; 5b flips
+    this to True in the same change that stops the legacy notification.
+    """
+    try:
+        return evaluate_for_touched_games(profile, profilegame_ids, notify=False)
+    except Exception:
+        logger.exception('group-badge evaluation failed for profile %s', getattr(profile, 'id', None))
+        return {'awarded': [], 'revoked': [], 'updated': []}
 
 
 def evaluate_for_touched_games(profile, profilegame_ids, notify=True) -> dict:
@@ -154,8 +183,9 @@ def evaluate_for_touched_games(profile, profilegame_ids, notify=True) -> dict:
     series by construction.
 
     A badge authored after a hunter's last sync does not evaluate for them until they next touch one of its
-    games -- the legacy path has the same property, and `evaluate_badges --series <slug>` is the existing
-    answer for backfilling a newly authored series.
+    games -- the legacy path has the same property. The nightly `evaluate_badges --all` closes that gap
+    (it goes through `evaluate_and_apply_batch`, which has no announcement path at all), and
+    `evaluate_badges --series <slug>` is the targeted form.
 
     BOTH qualifier paths are followed. A Stage reaches its games through `concepts` AND through
     `concept_bundles -> concepts`, and `ConceptBundle`'s own membership rule is that a concept must NOT
@@ -171,7 +201,7 @@ def evaluate_for_touched_games(profile, profilegame_ids, notify=True) -> dict:
 
     concept_ids = list(
         ProfileGame.objects.filter(id__in=profilegame_ids, profile=profile)
-        .exclude(game__concept__isnull=True)
+        .filter(game__concept__isnull=False)
         .values_list('game__concept_id', flat=True).distinct()
     )
     series_slugs = list(

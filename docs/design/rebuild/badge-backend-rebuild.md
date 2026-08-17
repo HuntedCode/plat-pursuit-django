@@ -266,6 +266,16 @@ Standard parallel-change / expand–contract with a separate schema:
    for a soak that would never happen. `--dry-run` and `--compare-legacy` already cover engine sanity,
    which §6.2 says is exactly what they replaced the reconciliation harness for.
 
+   **5a follow-ups carried into 5b** (from the 2026-08 audit of 5a):
+   - **Flip `evaluate_for_sync` to `notify=True`** in the same change that stops the legacy Discord
+     announcement. Both engines currently run and both send to the same webhook, so the new adapter is
+     built and tested but deliberately silent — announcing now would ping a hunter twice for one act.
+   - **Repoint `detect_dlc_and_refresh`** at the new engine; it refreshes legacy series via `handle_badge`.
+   - **A re-earn re-announces.** `UserGroupBadge` is binary, so a revoke deletes the row and a later
+     re-earn is a fresh award. PSN flux or a stage edit can therefore ping a hunter again for a badge they
+     have held for a year — the legacy maintenance state made that structurally impossible. Needs a
+     cooldown or an announced-at marker before `notify=True` goes live.
+
    **5b — the old system comes out (NOT STARTED).** Repoint or delete every legacy `UserBadge` consumer,
    then remove `badge_service` and its sync call. Roughly ten modules: `dashboard_service` (23 call sites,
    and separately queued for sunset, so much of this is deletion rather than migration), `stats_service`,

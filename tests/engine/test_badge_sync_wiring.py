@@ -173,19 +173,98 @@ def test_a_game_qualifying_only_through_a_bundle_is_still_evaluated():
 
 
 def test_nothing_happens_for_games_in_no_badge():
+    """A live badge exists and the hunter QUALIFIES for it -- so "nothing happens" can only come from the
+    touched game being outside every stage, not from an empty catalogue. The first version created no
+    badges at all, which made the assertion true for a reason that had nothing to do with scoping."""
+    _series_with_both_editions('elsewhere', [ULTRA])
     profile = ProfileFactory(is_linked=True)
-    pg = _finish(profile, GameFactory(concept=ConceptFactory(), title_platform=ULTRA))
+    _finish(profile, _game_in('elsewhere'))
 
-    assert evaluate_for_touched_games(profile, [pg.id], notify=False) == {
+    unbadged = _finish(profile, GameFactory(concept=ConceptFactory(), title_platform=ULTRA))
+    assert evaluate_for_touched_games(profile, [unbadged.id], notify=False) == {
         'awarded': [], 'revoked': [], 'updated': []}
-    assert not UserGroupBadge.objects.filter(profile=profile).exists()
+    assert not UserGroupBadge.objects.filter(profile=profile).exists(), (
+        'touching a game in no stage evaluated the catalogue anyway'
+    )
 
 
 def test_an_empty_touch_list_is_a_no_op():
-    """A sync that touched nothing must not fall through to 'all live badges'."""
+    """A sync that touched nothing must not fall through to 'all live badges'.
+
+    The profile QUALIFIES for the badge, deliberately. The first version of this test created a hunter with
+    no completion at all, so the fall-through it names would have awarded nothing either -- it passed
+    against the exact implementation it exists to forbid.
+    """
     _series_with_both_editions('quiet', [ULTRA])
     profile = ProfileFactory(is_linked=True)
+    _finish(profile, _game_in('quiet'))
+
     assert evaluate_for_touched_games(profile, [], notify=False)['awarded'] == []
+    assert not UserGroupBadge.objects.filter(profile=profile).exists(), (
+        'an empty touch list fell through to evaluating the whole catalogue'
+    )
+
+
+def test_the_sync_entry_point_is_what_sync_complete_calls():
+    """`_job_sync_complete` actually CALLS `evaluate_for_sync`. Deleting the wiring used to pass the entire
+    suite, which is the regression this whole module exists to prevent and was the one thing untested.
+
+    Asserted by parsing the AST for a real Call node, not by importing `token_keeper` and not by scanning
+    its text. Importing it registers an atexit handler that logs after pytest has closed stdout, so every
+    suite run picked up teardown noise; a substring scan would match the call in a comment or a docstring.
+    The AST matches only a call that would execute.
+    """
+    import ast
+    import pathlib
+
+    source = pathlib.Path(__file__).resolve().parents[2] / 'trophies' / 'token_keeper.py'
+    tree = ast.parse(source.read_text(encoding='utf-8'))
+
+    target = next(
+        (n for n in ast.walk(tree)
+         if isinstance(n, ast.FunctionDef) and n.name == '_job_sync_complete'),
+        None,
+    )
+    assert target is not None, '_job_sync_complete is gone -- this test needs repointing'
+
+    called = {
+        n.func.id for n in ast.walk(target)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    }
+    assert 'evaluate_for_sync' in called, (
+        'sync_complete no longer calls evaluate_for_sync -- the rebuilt badge subsystem is back to being '
+        'written only by a management command that is on no schedule'
+    )
+
+
+def test_the_sync_entry_point_never_raises():
+    """It owns its error handling so `token_keeper` does not have to. A badge failure must not fail a sync,
+    and the swallow must be here rather than around the import -- an ImportError caught at the call site
+    degraded to a log line on every sync forever, with the boards silently frozen."""
+    from trophies.services.badge_apply import evaluate_for_sync
+
+    profile = ProfileFactory(is_linked=True)
+    with patch('trophies.services.badge_apply.evaluate_for_touched_games',
+               side_effect=RuntimeError('engine exploded')):
+        result = evaluate_for_sync(profile, [1, 2, 3])
+
+    assert result == {'awarded': [], 'revoked': [], 'updated': []}
+
+
+@patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
+def test_the_sync_entry_point_does_not_announce_while_the_legacy_engine_still_does(mock_send):
+    """Both engines run during cutover 5a and both send to the same webhook, so announcing here would ping
+    a hunter twice for one act -- once tier-shaped from `check_profile_badges`, once edition-shaped from
+    this. 5b flips this on in the same change that stops the legacy notification."""
+    from trophies.services.badge_apply import evaluate_for_sync
+
+    _series_with_both_editions('quiet', [ULTRA])
+    profile = ProfileFactory(is_linked=True, is_discord_verified=True, discord_id='123')
+    pg = _finish(profile, _game_in('quiet'))
+
+    result = evaluate_for_sync(profile, [pg.id])
+    assert result['awarded'], 'fixture is wrong -- expected an award'
+    assert mock_send.call_count == 0, 'the sync path announced while the legacy engine is still announcing'
 
 
 def test_the_sync_cost_does_not_grow_with_the_catalogue():
@@ -211,9 +290,12 @@ def test_the_sync_cost_does_not_grow_with_the_catalogue():
     with CaptureQueriesContext(connection) as small:
         evaluate_for_touched_games(profile, [pg.id], notify=False)
 
-    # Twelve more live series, none of them touched.
+    # Twelve more live series, none of them touched -- and the hunter QUALIFIES for every one. An unscoped
+    # run would therefore do real award work, not merely read more: without that the only thing separating
+    # the two measurements was an incidental `zeroed` DELETE, so a scope-by-badge bug was invisible here.
     for i in range(12):
         _series_with_both_editions(f'other-{i}', [ULTRA])
+        _finish(profile, _game_in(f'other-{i}'))
 
     with CaptureQueriesContext(connection) as large:
         evaluate_for_touched_games(profile, [pg.id], notify=False)
@@ -221,6 +303,9 @@ def test_the_sync_cost_does_not_grow_with_the_catalogue():
     assert len(large.captured_queries) == len(small.captured_queries), (
         f'{len(small.captured_queries)} queries with 1 series in the catalogue but '
         f'{len(large.captured_queries)} with 13 -- the sync seam is not scoped'
+    )
+    assert UserGroupBadge.objects.filter(profile=profile).count() == 1, (
+        'the untouched series were evaluated and awarded -- the scope is not holding'
     )
 
 
@@ -267,6 +352,62 @@ def test_a_backfill_run_announces_nothing(mock_send):
 
 
 @patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
+def test_a_mass_award_still_fits_inside_a_discord_embed(mock_send):
+    """Discord rejects a description over 4096 chars with a 400, and `webhook_sender_worker` treats any
+    non-429 as terminal -- so an over-long embed is dropped whole, with a log line that does not name the
+    profile. The optimistic "Queued notification" log has already fired by then.
+
+    This is the cutover scenario, not a hypothetical: the deploy checklist says a hunter's first sync after
+    `is_live` is flipped awards every badge the engine agrees with at once, and a badge is per
+    (series x edition) so one series can contribute two.
+    """
+    from trophies.discord_utils.discord_notifications import send_group_badges_earned_notification
+
+    ultra, _ = _editions()
+    badges = [
+        GroupBadgeFactory(
+            series=BadgeSeriesFactory(series_slug=f'mass-{i}',
+                                      name=f'A Rather Long Series Name For Testing {i}'),
+            platform_group=ultra, is_live=True)
+        for i in range(60)
+    ]
+    profile = ProfileFactory(is_linked=True, is_discord_verified=True, discord_id='123456789012345678')
+
+    send_group_badges_earned_notification(profile, badges)
+
+    payload = mock_send.call_args.args[0]
+    description = payload['embeds'][0]['description']
+    assert len(description) <= 4096, f'description is {len(description)} chars -- Discord will 400 this'
+    assert '…and 45 more' in description, 'the truncated remainder is not counted for the reader'
+    assert payload['embeds'][0]['title'].startswith('🎖️') and '60' in payload['embeds'][0]['title'], (
+        'the TITLE should still report the real total, even though the list is trimmed'
+    )
+
+
+@patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
+def test_a_series_name_cannot_inject_a_mention_or_break_the_formatting(mock_send):
+    """Series names are admin-authored free text landing in a message that pings a channel. The embed
+    carries a real `<@id>` mention, so mentions demonstrably resolve in this payload."""
+    from trophies.discord_utils.discord_notifications import send_group_badges_earned_notification
+
+    ultra, _ = _editions()
+    badge = GroupBadgeFactory(
+        series=BadgeSeriesFactory(series_slug='sneaky', name='Sonic @everyone **bold** [x](http://e.vil)'),
+        platform_group=ultra, is_live=True)
+    profile = ProfileFactory(is_linked=True, is_discord_verified=True, discord_id='123')
+
+    send_group_badges_earned_notification(profile, [badge])
+    payload = mock_send.call_args.args[0]
+
+    assert payload['allowed_mentions'] == {'users': ['123']}, (
+        'without allowed_mentions an @everyone in a series name would resolve'
+    )
+    description = payload['embeds'][0]['description']
+    assert '\\*\\*bold\\*\\*' in description, 'markdown in a series name was not escaped'
+    assert '\\[x\\]\\(http://e.vil\\)' in description, 'a link in a series name was not escaped'
+
+
+@patch('trophies.discord_utils.discord_notifications.queue_webhook_send')
 def test_an_unlinked_hunter_is_not_announced(mock_send):
     _series_with_both_editions('quiet', [ULTRA])
     profile = ProfileFactory(is_linked=True)      # no Discord
@@ -289,5 +430,9 @@ def test_a_failed_announcement_never_loses_the_badge(mock_send):
     result = evaluate_for_touched_games(profile, list(
         ProfileGame.objects.filter(profile=profile).values_list('id', flat=True)), notify=True)
 
+    assert mock_send.called, (
+        'the announcement was never attempted -- this test cannot distinguish a swallowed exception from '
+        'a call that never happened, which is what it exists to check'
+    )
     assert result['awarded'], 'the award was rolled back by a failed announcement'
     assert UserGroupBadge.objects.filter(profile=profile).exists()

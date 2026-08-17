@@ -31,6 +31,7 @@ from trophies.util_modules.language import detect_asian_language
 from trophies.util_modules.region import detect_region_from_details
 from trophies.services.profile_stats_service import update_profile_games, update_profile_trophy_counts
 from trophies.services.badge_service import check_profile_badges
+from trophies.services.badge_apply import evaluate_for_sync
 from trophies.services.concept_anchor_service import try_anchor_new_game
 
 logger = logging.getLogger("psn_api")
@@ -1491,13 +1492,10 @@ class TokenKeeper:
             # schedule -- so every board and every medallion the rebuild reads sat at whatever a manual run
             # last produced. Scoped to the touched series; see evaluate_for_touched_games.
             #
-            # Wrapped, like the contract detection below it: badges are not worth failing a sync over, and
-            # this engine is the newer of the two.
-            try:
-                from trophies.services.badge_apply import evaluate_for_touched_games
-                evaluate_for_touched_games(profile, touched_profilegame_ids)
-            except Exception:
-                logger.exception(f"[profile {profile_id}] sync_complete group-badge evaluation failed")
+            # `evaluate_for_sync` owns its own error handling, deliberately: a try/except here would wrap
+            # the import too, so an ImportError degraded to a log line forever, and a block inside this
+            # method is unreachable by a test -- deleting it passed the whole suite.
+            evaluate_for_sync(profile, touched_profilegame_ids)
 
             # Mark Contract (job XP) tiers as REACHED for the games touched this sync.
             # Detection only -- no XP is granted here; the user banks it later by ACCEPTING

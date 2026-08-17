@@ -150,6 +150,19 @@ def send_badge_earned_notification(profile, badges):
         logger.error(f"Failed to queue badge notification: {e}")
 
 
+# Discord caps an embed description at 4096 characters. A line runs ~75-85 (an 18-digit emoji snowflake
+# dominates it), so ~48 is the real ceiling; 15 leaves generous headroom and keeps the message readable --
+# nobody scans a 40-line list anyway.
+_MAX_BADGE_LINES = 15
+
+#: Markdown characters that would let one admin-authored series name reformat the lines after it.
+_MD_ESCAPE = str.maketrans({c: f'\\{c}' for c in '*_`~|[]()>'})
+
+
+def _escape_md(text):
+    return str(text or '').translate(_MD_ESCAPE)
+
+
 def send_group_badges_earned_notification(profile, group_badges):
     """The rebuilt subsystem's badge announcement: ONE consolidated embed per sync.
 
@@ -175,34 +188,51 @@ def send_group_badges_earned_notification(profile, group_badges):
     default_art = 'https://platpursuit.com/static/images/badges/default.png'
     thumbnail_url = default_art
     if not settings.DEBUG:
-        first = group_badges[0]
-        # Per-group override, else the series default. Same inheritance the badge pages render.
-        image = first.badge_image_override or getattr(first.series, 'badge_image', None)
-        if image:
-            try:
-                thumbnail_url = image.url
-            except ValueError:
-                thumbnail_url = default_art   # a FileField with no file raises rather than returning None
+        # `art_layers()` is the single source of truth for a badge's art, and its subject chain has a rung
+        # this used to miss: a `user` badge's subject is the SUBMITTER'S AVATAR. Hand-rolling
+        # `badge_image_override or series.badge_image` showed the real artwork on the badge page and the
+        # generic default in the announcement -- the two surfaces disagreeing about what a badge looks
+        # like, in the one message that goes to the whole server.
+        art = group_badges[0].art_layers()
+        subject = art.get('main') if art.get('has_custom_image') else None
+        if subject:
+            # art_layers() returns a root-relative static path in a non-request context; Discord needs an
+            # absolute URL, so a relative one falls back rather than shipping a broken thumbnail.
+            thumbnail_url = subject if str(subject).startswith('http') else default_art
 
-    badge_lines = [
-        f"{platinum_emoji} **{gb.series.name}** ({gb.platform_group.name})"
-        for gb in group_badges
-    ]
     count = len(group_badges)
     noun = 'badge' if count == 1 else 'badges'
-    description = (
-        f"{plat_pursuit_emoji} <@{profile.discord_id}>, you've earned {count} new {noun} on PlatPursuit!\n\n"
-        + "\n".join(badge_lines)
-        + "\n\nKeep up the hunt! 🎉"
-    )
+    header = f"{plat_pursuit_emoji} <@{profile.discord_id}>, you've earned {count} new {noun} on PlatPursuit!\n\n"
+    footer = "\n\nKeep up the hunt! 🎉"
+
+    # Discord rejects a description over 4096 characters with a 400, and `webhook_sender_worker` treats any
+    # non-429 as terminal -- so an over-long embed is dropped entirely, with a log line that does not name
+    # the profile. That is not hypothetical: at cutover a hunter's first sync awards every badge the engine
+    # agrees with at once, and a badge is per (series x edition), so one series can contribute two.
+    # Listing a bounded number and counting the rest keeps the message intact.
+    lines, shown = [], 0
+    for gb in group_badges:
+        if shown >= _MAX_BADGE_LINES:
+            break
+        # Series names are admin-authored free text; escaping the markdown characters keeps one badge from
+        # reformatting every line after it.
+        lines.append(f"{platinum_emoji} **{_escape_md(gb.series.name)}** ({gb.platform_group.name})")
+        shown += 1
+    if count > shown:
+        lines.append(f"…and {count - shown} more")
 
     payload = {'embeds': [{
         'title': f"🎖️ {profile.display_psn_username} earned {count} new {noun}!",
-        'description': description,
+        'description': header + "\n".join(lines) + footer,
         'color': 0x674EA7,
         'footer': {'text': 'Powered by Plat Pursuit | No Trophy Can Hide From Us'},
         'thumbnail': {'url': thumbnail_url},
-    }]}
+    }],
+        # Scope the ping to the one hunter this is about. Without it, an `@everyone` or a role mention in an
+        # admin-authored series name would resolve, because the embed's own `<@id>` proves mentions are live
+        # in this payload.
+        'allowed_mentions': {'users': [str(profile.discord_id)]},
+    }
     try:
         queue_webhook_send(payload)
         logger.info(f"Queued group-badge notification ({count}) for {profile.psn_username}")
