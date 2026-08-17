@@ -1482,6 +1482,23 @@ class TokenKeeper:
             PsnApiService.update_profilegame_stats(touched_profilegame_ids)
             check_profile_badges(profile, touched_profilegame_ids)
 
+            # The REBUILT badge subsystem (GroupBadge/UserGroupBadge + the standings that back the
+            # leaderboards). Runs alongside the legacy engine above, which still owns the surfaces that
+            # read `UserBadge`; the two write different tables and only ever meet on UserTitle, where the
+            # new system is the deliberate authority (see badge_adapters.grant_series_title).
+            #
+            # Until this existed, the new tables were written ONLY by `evaluate_badges`, which is on no
+            # schedule -- so every board and every medallion the rebuild reads sat at whatever a manual run
+            # last produced. Scoped to the touched series; see evaluate_for_touched_games.
+            #
+            # Wrapped, like the contract detection below it: badges are not worth failing a sync over, and
+            # this engine is the newer of the two.
+            try:
+                from trophies.services.badge_apply import evaluate_for_touched_games
+                evaluate_for_touched_games(profile, touched_profilegame_ids)
+            except Exception:
+                logger.exception(f"[profile {profile_id}] sync_complete group-badge evaluation failed")
+
             # Mark Contract (job XP) tiers as REACHED for the games touched this sync.
             # Detection only -- no XP is granted here; the user banks it later by ACCEPTING
             # the Contract. Wrapped so a failure never breaks the sync.

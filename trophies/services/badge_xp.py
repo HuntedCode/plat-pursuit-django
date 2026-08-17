@@ -235,9 +235,10 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     if total > 0:
         editions = edition_platforms()
         overall, by_edition = badge_trophy_tallies(profile_id, editions)
+        badges_total, badges_by_edition = badges_held_counts(profile_id)
         _upsert(ProfileBadgeStanding, {'profile_id': profile_id},
-                {'total_xp': total, 'country_code': country, **overall})
-        _write_edition_standings(profile_id, country, by_edition)
+                {'total_xp': total, 'country_code': country, 'badges_held': badges_total, **overall})
+        _write_edition_standings(profile_id, country, by_edition, badges_by_edition)
     else:
         # No badge XP at all means no standing anywhere, editions included -- the boards read
         # ProfileBadgeStanding for the all-editions view and these rows for a slice, and one of them
@@ -246,7 +247,7 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
         ProfileEditionStanding.objects.filter(profile_id=profile_id).delete()
 
 
-def _write_edition_standings(profile_id, country, by_edition):
+def _write_edition_standings(profile_id, country, by_edition, badges_by_edition=None):
     """Upsert the profile's per-edition standings, and drop the editions they no longer stand in.
 
     Per-edition XP is re-summed from EVERY one of the profile's SeriesBadgeStanding rows rather than from
@@ -265,6 +266,7 @@ def _write_edition_standings(profile_id, country, by_edition):
         for key, xp in (blob or {}).items():
             xp_by_edition[key] += xp
 
+    badges_by_edition = badges_by_edition or {}
     keep = []
     for key, counts in by_edition.items():
         xp = xp_by_edition.get(key, 0)
@@ -272,7 +274,8 @@ def _write_edition_standings(profile_id, country, by_edition):
             continue
         keep.append(key)
         _upsert(ProfileEditionStanding, {'profile_id': profile_id, 'platform_group_key': key},
-                {'total_xp': xp, 'country_code': country, **counts})
+                {'total_xp': xp, 'country_code': country,
+                 'badges_held': badges_by_edition.get(key, 0), **counts})
     ProfileEditionStanding.objects.filter(profile_id=profile_id).exclude(platform_group_key__in=keep).delete()
 
 
@@ -388,3 +391,30 @@ def badge_trophy_tallies(profile_id, editions=None):
 def badge_trophy_counts(profile_id):
     """Overall badge-game trophy counts only. `badge_trophy_tallies` is the one that does the work."""
     return badge_trophy_tallies(profile_id, editions={})[0]
+
+
+def badges_held_counts(profile_id):
+    """Group badges the profile HOLDS: (total, {platform_group_key: n}).
+
+    ONE grouped query for both halves -- the group is the edition key, so the per-edition split and the
+    total come out of the same aggregate. Bounded by the number of editions, not by how many badges the
+    hunter holds.
+
+    HELD, not "earned in the legacy sense": this reads `UserGroupBadge`, the new subsystem's surface, which
+    is what the Collection and the milestones metric already count. `ProfileGamification.total_badges_earned`
+    is the retired tier count and a different number; the two must never be shown as the same figure.
+
+    Unlike the trophy tally, editions here do NOT overlap: a group badge belongs to exactly one platform
+    group, so these sum to the total.
+    """
+    from django.db.models import Count
+    from trophies.models import UserGroupBadge
+
+    rows = (
+        UserGroupBadge.objects.filter(profile_id=profile_id)
+        .values('group_badge__platform_group__key')
+        .annotate(n=Count('id'))
+        .values_list('group_badge__platform_group__key', 'n')
+    )
+    by_edition = {key: n for key, n in rows if key}
+    return sum(n for _, n in rows), by_edition

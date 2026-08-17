@@ -21,7 +21,7 @@ from trophies.services.badge_orchestrator import (
     resolve_group_badges, build_catalog, evaluate_with_catalog,
 )
 from trophies.services.badge_adapters import (
-    grant_series_title, revoke_series_title_if_orphaned, emit_badge_earned,
+    grant_series_title, revoke_series_title_if_orphaned, emit_badge_earned, announce_badges_earned,
 )
 from trophies.services.badge_xp import recompute_standing
 
@@ -117,8 +117,14 @@ def plan(profile, group_badges=None):
     return changes, gb_map
 
 
-def evaluate_and_apply(profile, group_badges=None) -> dict:
-    """Single-profile entry point: evaluate, diff, apply, recompute XP. Returns the apply summary."""
+def evaluate_and_apply(profile, group_badges=None, notify=False) -> dict:
+    """Single-profile entry point: evaluate, diff, apply, recompute XP. Returns the apply summary.
+
+    `notify` is OPT-IN and defaults off. The Discord announcement belongs to the live sync path, not to the
+    function: `evaluate_badges --all` calls this once per profile across the whole population, and a default
+    of True would turn a backfill into tens of thousands of webhook sends. The one caller that wants it is
+    the one reacting to a hunter actually playing.
+    """
     group_badges = resolve_group_badges(group_badges)
     if not group_badges:
         return {'awarded': [], 'revoked': [], 'updated': []}
@@ -127,7 +133,52 @@ def evaluate_and_apply(profile, group_badges=None) -> dict:
     changes, desired = _plan_with_catalog(profile, catalog)
     result = apply_changes(profile, changes, gb_map)
     recompute_standing(profile.id, desired, group_badges)   # XP tracks current progress, not just earns
+    if notify and result['awarded']:
+        # ONE consolidated announcement for the whole run, after the writes land -- not one per badge from
+        # inside apply_changes, which would ping a hunter three times for finishing a three-edition series.
+        announce_badges_earned(profile, [gb_map[gb_id] for gb_id in result['awarded'] if gb_id in gb_map])
     return result
+
+
+def evaluate_for_touched_games(profile, profilegame_ids, notify=True) -> dict:
+    """The SYNC entry point: evaluate only the series the just-synced games belong to.
+
+    Scoped, because a sync touches a handful of games and the catalogue is the whole badge system --
+    re-evaluating every live badge on every sync would put the cost of the catalogue on every hunter who
+    plays anything. Same narrowing the legacy `check_profile_badges` does, from the same starting point.
+
+    Scoped by SERIES, never by individual badge, and that is load-bearing rather than incidental:
+    `recompute_standing` REPLACES a series' standing from only the editions it is handed, so a scope that
+    caught Ultra HD but not Legacy HD would undercount that series' XP and drop the sibling edition's
+    `group_progress`. Filtering `series__series_slug__in=...` returns every live edition of every touched
+    series by construction.
+
+    A badge authored after a hunter's last sync does not evaluate for them until they next touch one of its
+    games -- the legacy path has the same property, and `evaluate_badges --series <slug>` is the existing
+    answer for backfilling a newly authored series.
+    """
+    from trophies.models import ProfileGame, Stage
+
+    if not profilegame_ids:
+        return {'awarded': [], 'revoked': [], 'updated': []}
+
+    concept_ids = (
+        ProfileGame.objects.filter(id__in=profilegame_ids, profile=profile)
+        .exclude(game__concept__isnull=True)
+        .values_list('game__concept_id', flat=True).distinct()
+    )
+    series_slugs = list(
+        Stage.objects.filter(concepts__id__in=list(concept_ids))
+        .values_list('series_slug', flat=True).distinct()
+    )
+    if not series_slugs:
+        return {'awarded': [], 'revoked': [], 'updated': []}
+
+    return evaluate_and_apply(
+        profile,
+        GroupBadge.objects.filter(is_live=True, series__series_slug__in=series_slugs),
+        notify=notify,
+    )
 
 
 def evaluate_and_apply_batch(profiles, group_badges=None) -> Counter:

@@ -70,6 +70,41 @@ def revoke_series_title_if_orphaned(profile_id, series):
 
 
 def emit_badge_earned(profile_id, group_badge_id):
-    """The 'badge earned' event seam. Notifications are out of scope for the rebuild; this is the crude
-    emit-point a future notification adapter will consume. For now it just logs."""
+    """The per-badge 'earned' event seam.
+
+    DELIBERATELY still just a log. The ON-SITE notification path is not being ported at cutover: the
+    notification inbox is parked pending its own rebuild (`plat_pursuit/urls.py` -- every view in
+    `notifications/views.py` is unrouted and `/notifications/` 302s home), so a ported adapter would write
+    rows nobody can read. Worse, the legacy consolidation rule is "group by series, keep the highest TIER",
+    and this system has no tiers -- it has editions -- so porting means designing a new rule for invisible
+    output, against an inbox that is itself being redesigned.
+
+    So this stays the seam. When the notifications rebuild lands it consumes THIS, and the legacy
+    `notify_badge_awarded` post_save on UserBadge dies with the rest of the old engine.
+
+    DISCORD is different and is NOT deferred -- it is live and user-visible today. It is announced once per
+    run from `announce_badges_earned` below rather than per badge from here, because three editions of one
+    series finishing together is one event to a hunter, not three.
+    """
     logger.info("badge_earned: profile=%s group_badge=%s", profile_id, group_badge_id)
+
+
+def announce_badges_earned(profile, group_badges):
+    """Announce a run's newly earned group badges to Discord, as ONE consolidated embed.
+
+    Replaces the legacy `send_badge_earned_notification`, which reads tier-shaped `Badge` rows. The shape of
+    the message is deliberately the same -- hunters already recognise it -- but a badge is now identified by
+    its series AND its edition ("Soulsborne -- Ultra HD"), because in this system those are different badges
+    and saying only the series name would make two distinct earns look like a duplicate.
+
+    Never raises: an announcement is the least important thing happening in a sync, and the badges are
+    already written by the time this runs.
+    """
+    from trophies.discord_utils.discord_notifications import send_group_badges_earned_notification
+
+    if not profile or not group_badges:
+        return
+    try:
+        send_group_badges_earned_notification(profile, group_badges)
+    except Exception:
+        logger.exception("badge announce failed: profile=%s", getattr(profile, 'id', None))

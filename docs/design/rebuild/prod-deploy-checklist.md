@@ -214,6 +214,30 @@ Spec: [leaderboards-rebuild.md](leaderboards-rebuild.md). Migrations `0297`, `02
 
 ---
 
+## Badge cutover 5a: the new engine goes live on sync (2026-08)
+
+Spec: [badge-backend-rebuild.md](badge-backend-rebuild.md) §6 step 5a. No migration.
+
+- [ ] **Run `evaluate_badges --all` BEFORE the first sync lands.** From now on sync evaluates only the
+      series a hunter TOUCHED, so without a full pass first, a hunter's untouched series stay at whatever
+      state they were in — badges they already qualify for will not appear until they happen to play
+      something in that series again. The backfill is what makes the incremental path correct.
+- [ ] **Expect Discord traffic on the first synced hunters.** They will be awarded every badge the new
+      engine agrees with at once, and that is announced. Not a bug, but it will look like one if it is a
+      surprise. `evaluate_badges --all` itself stays silent (`notify` defaults off), so the backfill will
+      not fire webhooks — only the syncs after it.
+- [ ] **Watch for `sync_complete group-badge evaluation failed` in the logs.** The call is wrapped so it
+      can never fail a sync, which also means a broken evaluation is invisible except here.
+- [ ] **Titles change hands, one way.** Once the new system grants a series title it OWNS it, and if the
+      group badge later lapses the title goes — even where the hunter's legacy `UserBadge` still stands.
+      Documented in `badge_adapters.grant_series_title` and covered by `test_badge_apply`; expected, but
+      it is a real behaviour change for legacy holders.
+- [ ] **On-site badge notifications are NOT ported** and will be absent from the inbox when the
+      notifications rebuild ships. `emit_badge_earned` is the seam it should consume. Tracked in
+      badge-backend-rebuild.md §6.
+
+---
+
 ## Leaderboards: the edition filter + the Progress rename (2026-08)
 
 Spec: [leaderboards-rebuild.md](leaderboards-rebuild.md). Migration `0300`.
@@ -239,3 +263,7 @@ Spec: [leaderboards-rebuild.md](leaderboards-rebuild.md). Migration `0300`.
 - [ ] **`?tab=progress` must still land on Badge Trophies.** The board key changed and the old one is
       aliased; the links in the wild are bookmarks and Discord posts, which nobody will report as broken —
       they will just quietly land on the default board.
+- [ ] **`badges_held` (migration `0301`) is covered by the same `evaluate_badges --all`.** It defaults to
+      0, so until that runs the Badge Points board shows every hunter as holding **0 badges** beside a
+      correct points total — a wrong number rather than a missing one, which is the harder kind to notice.
+      If you are running the backfill for the edition standings anyway, this rides along with it.

@@ -243,16 +243,20 @@ def board_count(tab, country=None, edition=None):
 
 
 def xp_rows(limit=50, offset=0, country=None, edition=None):
-    """Top profiles by Badge Points: [(profile_id, total_xp), ...].
+    """Top profiles by Badge Points: [(profile_id, total_xp, badges_held), ...].
 
     `> 0` is the board's MEMBERSHIP rule, applied here and not only where the page is counted. A hunter can
     hold trophies in an edition without clearing a gating stage in it, which keeps their edition standing
     alive on zero points -- so an unfiltered read would hand the last page rows the count never promised.
+
+    `badges_held` rides along as the board's supporting figure. It is a COLUMN on the same row, so it costs
+    nothing beyond the read already happening -- and under an edition slice it is that edition's badge
+    count, because a global figure beside a sliced points total would be describing two different things.
     """
     return list(
         _slice(badge_store(edition), country).filter(total_xp__gt=0)
         .order_by('-total_xp', 'profile_id')
-        .values_list('profile_id', 'total_xp')[offset:offset + limit]
+        .values_list('profile_id', 'total_xp', 'badges_held')[offset:offset + limit]
     )
 
 

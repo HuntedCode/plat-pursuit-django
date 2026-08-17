@@ -515,6 +515,60 @@ def test_the_empty_edition_board_names_the_edition_that_emptied_it(client):
     assert 'still empty' not in body, 'the empty state blamed the board rather than the filter'
 
 
+def test_badges_held_is_materialized_per_edition_by_the_write_seam():
+    """The Badge Points board's supporting figure, sliced the same way the board is.
+
+    Editions do NOT overlap here, unlike the trophy tally: a group badge belongs to exactly one platform
+    group, so the per-edition counts sum to the total. That is a different property from the trophies, and
+    getting them confused is how a "fix" to one breaks the other.
+    """
+    legacy, ultra = _editions()
+    profile = ProfileFactory(is_linked=True)
+    _evaluated(profile, 'ua', ULTRA, ultra)
+    _evaluated(profile, 'ub', ULTRA, ultra)
+    _evaluated(profile, 'la', LEGACY, legacy)
+
+    overall = ProfileBadgeStanding.objects.get(profile=profile)
+    ultra_row = ProfileEditionStanding.objects.get(profile=profile, platform_group_key='ultra-hd')
+    legacy_row = ProfileEditionStanding.objects.get(profile=profile, platform_group_key='legacy-hd')
+
+    assert overall.badges_held == 3, f'expected 3 badges held, got {overall.badges_held}'
+    assert ultra_row.badges_held == 2
+    assert legacy_row.badges_held == 1
+    assert ultra_row.badges_held + legacy_row.badges_held == overall.badges_held, (
+        'the editions should sum to the total -- a group badge belongs to exactly one platform group'
+    )
+
+
+def test_the_points_board_shows_badges_held_and_slices_it_with_the_board(client):
+    """The figure has to follow the slice. A global badge count beside an edition-sliced points total is
+    the header-tally category error one column over."""
+    legacy, ultra = _editions()
+    profile = ProfileFactory(is_linked=True, display_psn_username='Slicer')
+    _evaluated(profile, 'ua', ULTRA, ultra)
+    _evaluated(profile, 'ub', ULTRA, ultra)
+    _evaluated(profile, 'la', LEGACY, legacy)
+
+    everywhere = lb.xp_rows()
+    assert everywhere[0][2] == 3, f'the all-editions row should carry 3 badges: {everywhere}'
+
+    ultra_only = lb.xp_rows(edition='ultra-hd')
+    assert ultra_only[0][2] == 2, f'the Ultra HD row should carry 2 badges: {ultra_only}'
+
+    body = client.get(URL, {'tab': 'points'}).content.decode()
+    assert 'badges' in body, 'the Badge Points board is not labelling its supporting figure'
+
+
+def test_a_zero_badge_hunter_still_renders_the_figure_rather_than_omitting_it():
+    """`secondary` is gated on `is not None`, not on truthiness. A hunter with points but no completed badge
+    (all partial progress) must show "0 badges", not a missing cell -- an absent figure reads as "this board
+    has no second number", which is a statement about the BOARD."""
+    someone = _standing('ultra-hd', total_xp=500, badges_held=0)
+    rows = lb.xp_rows(edition='ultra-hd')
+    assert rows == [(someone.id, 500, 0)], rows
+    assert rows[0][2] is not None, 'a zero badge count must be 0, never None'
+
+
 def test_each_escape_hatch_clears_only_the_filter_it_names(client):
     """With both filters on and the board empty, the empty state offers two ways out. Each must clear the
     one it names and KEEP the other -- otherwise "Show every edition" quietly drops your country too.

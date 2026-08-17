@@ -231,7 +231,7 @@ just per-edition. (Cutover: an `evaluate_badges` run backfills it onto existing 
 global XP (`xp_rows`/`xp_rank`), per-series XP (`series_xp_rows`/`series_rank`), per-series progress/chasers
 (`series_progress_rows`), and per-badge earners (`earners_rows` + `earners_rank`/`earners_ranks` -- the LIVE
 position shown on the medallion back, a bounded indexed COUNT). The earners board IS the derived rank (`held
-ORDER BY earned_at`), so no separate rank store. **Next:** cutover (sync wiring behind a flag, main-branch PR).
+ORDER BY earned_at`), so no separate rank store. **Next:** 5b -- retire the legacy consumers (§6).
 
 ---
 
@@ -252,9 +252,45 @@ Standard parallel-change / expand–contract with a separate schema:
    reads them yet).
 4. **Seed holds** by running `evaluate_badges --series`/`--all` (writes current holders + `earned_at`; rank is
    derived, so there's no separate rank backfill — §4).
-5. **Cutover behind a flag:** rebuild display reads the new store; sync calls the new engine; the old
-   `badge_service` stops; XP/titles/notifications source from the new adapters. Reversible.
+5. **Cutover.** Split into two changes, because the four clauses have very different sizes and only the
+   first is urgent:
+
+   **5a — the new system goes live (DONE, 2026-08).** Sync calls the new engine; titles are already
+   authored through `badge_adapters`; Discord announcements ported. `evaluate_for_touched_games` is the
+   sync seam, called from `_job_sync_complete` at the `stats_badges` phase, wrapped non-fatally beside the
+   legacy `check_profile_badges`. Both engines run: they write different tables and meet only on
+   `UserTitle`, where this system is the deliberate authority.
+
+   *No shadow/flag phase.* The branch is not deployed, so there is no production traffic to shadow
+   against; a flag would only have gated a dev box, at the cost of a `grant_titles=False` code path built
+   for a soak that would never happen. `--dry-run` and `--compare-legacy` already cover engine sanity,
+   which §6.2 says is exactly what they replaced the reconciliation harness for.
+
+   **5b — the old system comes out (NOT STARTED).** Repoint or delete every legacy `UserBadge` consumer,
+   then remove `badge_service` and its sync call. Roughly ten modules: `dashboard_service` (23 call sites,
+   and separately queued for sunset, so much of this is deletion rather than migration), `stats_service`,
+   `api/mobile_badge_views`, `api/profile_card_views`, `xp_service`, `redis_leaderboard_service`,
+   `weekly_digest_service`, `core/services/stats`, `api/views`.
 6. **Soak**, then **decommission** the old `Badge`/`UserBadge`/`badge_service` once stable.
+
+### Notifications at cutover
+
+**Discord is ported. On-site is deliberately NOT, and that is a tracked dependency.**
+
+The notification inbox is parked pending its own rebuild — every view in `notifications/views.py` is
+unrouted and `/notifications/` 302s home — while the *production* side still runs: the app is installed,
+`ready()` connects the signals, and `notify_badge_awarded` (a `post_save` on the legacy `UserBadge`) still
+writes rows. So on-site badge notifications are currently written to a table nobody can open.
+
+Porting them now would mean designing a new consolidation rule — the legacy one is "group by series, keep
+the highest TIER" and this system has no tiers, it has editions — for invisible output, against an inbox
+that is itself being redesigned.
+
+So `emit_badge_earned` stays the per-badge seam and the notifications rebuild consumes it. **When that
+rebuild lands, badges will be absent from the inbox until it does.** At 5b, delete `notify_badge_awarded`,
+`queue_badge_notification`, `create_badge_notifications` and its `sync_complete` drain call together —
+they are all tier-shaped, and the drain currently spends two Redis round-trips per sync on a queue whose
+only producer is the legacy engine.
 
 Old `UserBadge` history is never deleted at cutover — retained for rollback and audit.
 
@@ -282,7 +318,7 @@ Old `UserBadge` history is never deleted at cutover — retained for rollback an
 5. Authoring + processing tools: `convert_series_to_groups`, `evaluate_badges` (its completion-ordered batch IS
    the `earn_rank` backfill), `--compare-legacy` glance. [DONE — Phase 3 complete]
 6. Author dormant badges + art on prod.
-7. Cutover flag + soak + decommission.
+7. Cutover 5a (sync wiring + Discord) [DONE] -> 5b (retire legacy consumers) -> soak + decommission.
 
 ---
 

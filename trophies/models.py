@@ -3222,6 +3222,17 @@ class ProfileBadgeStanding(models.Model):
     trophies_silver = models.PositiveIntegerField(default=0)
     trophies_bronze = models.PositiveIntegerField(default=0)
 
+    # Group badges HELD -- the Badge Points board's supporting figure. Materialized here rather than counted
+    # per render: it rode along as a `Count('group_badges', distinct=True)` annotation on the identity
+    # hydrate, which is a LEFT JOIN + GROUP BY on every board page for a figure nothing was displaying.
+    # As a column it is one more value off the board read the page already does.
+    #
+    # HELD in the new subsystem (UserGroupBadge), which includes lapsed maintenance tiers -- deliberately
+    # the same surface the Collection and the milestones metric read, and NOT the legacy
+    # ProfileGamification.total_badges_earned, which counts retired UserBadge tiers and is a different
+    # number. One figure, one meaning, everywhere.
+    badges_held = models.PositiveIntegerField(default=0)
+
     # Denormalized from Profile so a country slice is an index range scan instead of a join-then-filter.
     # See CountryStandingMixin for why this is copied rather than joined.
     # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies. A denormalized
@@ -3282,6 +3293,10 @@ class ProfileEditionStanding(models.Model):
     trophies_gold = models.PositiveIntegerField(default=0)
     trophies_silver = models.PositiveIntegerField(default=0)
     trophies_bronze = models.PositiveIntegerField(default=0)
+    # Badges held IN THIS EDITION. Sliced for the same reason every other figure here is: showing a global
+    # badge count beside an edition-sliced points total would be the header-tally category error again,
+    # one column over.
+    badges_held = models.PositiveIntegerField(default=0)
 
     # max_length MATCHES Profile.country_code (5). See ProfileBadgeStanding for why a narrower mirror is a
     # DataError waiting to happen.

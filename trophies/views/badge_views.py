@@ -1105,11 +1105,11 @@ class OverallBadgeLeaderboardsView(TemplateView):
         elif tab == 'points':
             rows = lb.xp_rows(limit=per, offset=offset, country=cc, edition=ed)
             entries = lb.page(rows, offset, extra=lambda r: {
-                # No secondary figure: Badge Points is one number. It carried
-                # `'secondary_label': 'badges'` with `secondary: None` behind it -- a label for a value
-                # that never rendered, left over from when hydrate() counted badges held.
+                # Badges held is what gives the points their meaning -- 4,200 points across 30 badges is a
+                # different hunter from 4,200 across 6. The same reasoning the Trophies board's
+                # platinums-out-of-trophies pairing uses.
                 'primary': r[1], 'primary_label': 'points',
-                'secondary': None,
+                'secondary': r[2], 'secondary_label': 'badges',
             })
         else:
             rows = lb.career_xp_rows(limit=per, offset=offset, country=cc)

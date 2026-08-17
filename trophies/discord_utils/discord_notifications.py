@@ -148,7 +148,68 @@ def send_badge_earned_notification(profile, badges):
         logger.info(f"Queued badge-earned notification ({count}) for {profile.psn_username}")
     except Exception as e:
         logger.error(f"Failed to queue badge notification: {e}")
-    
+
+
+def send_group_badges_earned_notification(profile, group_badges):
+    """The rebuilt subsystem's badge announcement: ONE consolidated embed per sync.
+
+    Sibling of `send_badge_earned_notification` above, which it replaces at cutover. Same gate, same shape,
+    same voice -- hunters already recognise this message and the point is that earning a badge feels the
+    same, not that the backend changed underneath.
+
+    Two deliberate differences, both from the reframe:
+
+    - A badge is named by SERIES and EDITION ("Soulsborne -- Ultra HD"). In this system those are separate
+      badges with separate art and separate boards, so listing only the series would make finishing both
+      editions read as the message repeating itself.
+    - No tier label. There are no tiers; there is a platform group, which the edition already names.
+    """
+    if not profile or not group_badges:
+        return
+    if not profile.is_discord_verified or not profile.discord_id:
+        return
+
+    platinum_emoji = f"<:Platinum_Trophy:{settings.PLATINUM_EMOJI_ID}>" if settings.PLATINUM_EMOJI_ID else "🏆"
+    plat_pursuit_emoji = f"<:PlatPursuit:{settings.PLAT_PURSUIT_EMOJI_ID}>" if settings.PLAT_PURSUIT_EMOJI_ID else "🏆"
+
+    default_art = 'https://platpursuit.com/static/images/badges/default.png'
+    thumbnail_url = default_art
+    if not settings.DEBUG:
+        first = group_badges[0]
+        # Per-group override, else the series default. Same inheritance the badge pages render.
+        image = first.badge_image_override or getattr(first.series, 'badge_image', None)
+        if image:
+            try:
+                thumbnail_url = image.url
+            except ValueError:
+                thumbnail_url = default_art   # a FileField with no file raises rather than returning None
+
+    badge_lines = [
+        f"{platinum_emoji} **{gb.series.name}** ({gb.platform_group.name})"
+        for gb in group_badges
+    ]
+    count = len(group_badges)
+    noun = 'badge' if count == 1 else 'badges'
+    description = (
+        f"{plat_pursuit_emoji} <@{profile.discord_id}>, you've earned {count} new {noun} on PlatPursuit!\n\n"
+        + "\n".join(badge_lines)
+        + "\n\nKeep up the hunt! 🎉"
+    )
+
+    payload = {'embeds': [{
+        'title': f"🎖️ {profile.display_psn_username} earned {count} new {noun}!",
+        'description': description,
+        'color': 0x674EA7,
+        'footer': {'text': 'Powered by Plat Pursuit | No Trophy Can Hide From Us'},
+        'thumbnail': {'url': thumbnail_url},
+    }]}
+    try:
+        queue_webhook_send(payload)
+        logger.info(f"Queued group-badge notification ({count}) for {profile.psn_username}")
+    except Exception as e:
+        logger.error(f"Failed to queue group-badge notification: {e}")
+
+
 def send_subscription_notification(user):
     if not user or not hasattr(user, 'profile'):
         return
