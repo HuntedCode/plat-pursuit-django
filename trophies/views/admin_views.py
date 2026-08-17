@@ -9,8 +9,11 @@ from django.db.models.functions import Lower
 from django.http import JsonResponse
 from django.shortcuts import redirect, get_object_or_404
 from django.utils import timezone
+from django.db import transaction
+from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
+from django.views.generic.edit import FormView
 
 from trophies.mixins import (
     HtmxListMixin, StaffOrRoadmapAuthorRequiredMixin, StaffRequiredMixin,
@@ -20,6 +23,7 @@ from ..models import (
     CommentReport, GameFamily, ModerationLog,
     ReviewModerationLog, ReviewReport, Trophy,
 )
+from ..forms import BadgeSeriesCreationForm
 from ..services.review_service import ReviewService
 from trophies.util_modules.cache import redis_client
 
@@ -796,3 +800,75 @@ class LegacyChecklistDetailView(StaffOrRoadmapAuthorRequiredMixin, DetailView):
         context['item_count'] = sum(len(s.items.all()) for s in sections)
         context['export_payload'] = export_payload
         return context
+
+
+class BadgeSeriesCreationView(StaffRequiredMixin, FormView):
+    """Staff tool: author a badge series and its editions in one submit.
+
+    Restored and rebuilt in 2026-08. The pre-cutover version created four legacy tier `Badge` rows; it was
+    deleted in 5b on the reasoning that Django admin covers the new models. It does, but authoring one
+    series there is a seven-page-load click-path with three raw-ID popup lookups, which is not the same
+    thing as covering it.
+
+    Scope is deliberately series + editions. Stages stay in `StageAdmin`, which already has the concept
+    autocomplete and the bundle-overlap validation this page would otherwise have to reimplement.
+    """
+    template_name = 'trophies/staff/badge_series_create.html'
+    form_class = BadgeSeriesCreationForm
+    success_url = reverse_lazy('badge_creation')
+
+    def form_valid(self, form):
+        from ..models import BadgeSeries, GroupBadge
+
+        data = form.cleaned_data
+        editions = list(data['editions'])
+
+        try:
+            # One transaction: a series whose editions half-failed is worse than no series, because the
+            # slug is then taken and the author has to clean up before retrying.
+            with transaction.atomic():
+                series = BadgeSeries.objects.create(
+                    series_slug=data['series_slug'],
+                    name=data['name'],
+                    badge_type=data['badge_type'],
+                    completion_policy=data['completion_policy'],
+                    min_required=data.get('min_required') or 0,
+                    description=data.get('description') or '',
+                    display_series=data.get('display_series') or '',
+                    submitted_by=data.get('submitted_by'),
+                )
+                for group in editions:
+                    GroupBadge.objects.get_or_create(
+                        series=series, platform_group=group,
+                        defaults={'is_live': data.get('start_live', False)},
+                    )
+        except Exception:
+            logger.exception("Badge series creation failed for slug %s", data.get('series_slug'))
+            messages.error(self.request, 'Could not create the series. Check the logs.')
+            return self.form_invalid(form)
+
+        edition_names = ', '.join(g.name for g in editions)
+        state = 'live' if data.get('start_live') else 'hidden'
+        messages.success(
+            self.request,
+            f'Created "{series.name}" ({series.series_slug}) with {len(editions)} '
+            f'{"edition" if len(editions) == 1 else "editions"}: {edition_names} -- {state}. '
+            f'Add its stages in the admin next.',
+        )
+        return super().form_valid(form)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        from ..models import BadgeSeries, Stage
+
+        # Recently authored series, so the page doubles as "did that work, and what did I just make".
+        ctx['recent_series'] = (
+            BadgeSeries.objects.order_by('-created_at')
+            .prefetch_related('group_badges__platform_group')[:8]
+        )
+        # Slugs that already have stages but no series: the useful case (stages authored first) AND the
+        # typo case look identical until you see them listed.
+        series_slugs = set(BadgeSeries.objects.values_list('series_slug', flat=True))
+        stage_slugs = set(Stage.objects.values_list('series_slug', flat=True).distinct())
+        ctx['orphan_stage_slugs'] = sorted(s for s in stage_slugs - series_slugs if s)
+        return ctx

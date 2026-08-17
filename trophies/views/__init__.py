@@ -12,7 +12,7 @@ from .badge_views import BadgeHowItWorksView, BadgeListView, BadgeDetailView, Gr
 # Checklist views removed during roadmap migration (DB tables retained)
 from .sync_views import ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView
 from .admin_views import (
-    TokenMonitoringView, CommentModerationView, ModerationActionView,
+    TokenMonitoringView, BadgeSeriesCreationView, CommentModerationView, ModerationActionView,
     ModerationLogView, ReviewModerationView, ReviewModerationActionView,
     ReviewModerationLogView, GameFamilyManagementView,
     LegacyChecklistListView, LegacyChecklistDetailView,
@@ -43,7 +43,7 @@ __all__ = [
     # Sync views
     'ProfileSyncStatusView', 'TriggerSyncView', 'SearchSyncProfileView', 'AddSyncStatusView', 'ProfileSuggestView', 'SiteSuggestView',
     # Admin views
-    'TokenMonitoringView', 'CommentModerationView', 'ModerationActionView', 'ModerationLogView',
+    'TokenMonitoringView', 'BadgeSeriesCreationView', 'CommentModerationView', 'ModerationActionView', 'ModerationLogView',
     'ReviewModerationView', 'ReviewModerationActionView', 'ReviewModerationLogView', 'GameFamilyManagementView',
     'LegacyChecklistListView', 'LegacyChecklistDetailView',
     # Misc views

@@ -545,3 +545,130 @@ class ProfileSettingsForm(forms.ModelForm):
         fields = ['hide_hiddens', 'hide_zeros']
 
 # Admin Forms
+
+
+class BadgeSeriesCreationForm(forms.Form):
+    """Staff tool: author a whole badge series and its editions in one submit.
+
+    Replaces the pre-2026-08 form that created four legacy tier `Badge` rows. The shape of the job
+    changed with the model: a series is now one `BadgeSeries` plus one `GroupBadge` per platform edition,
+    so this form's real work is the `editions` multi-select.
+
+    Django admin can do all of this, which is why the old page was deleted in cutover 5b -- but "possible
+    in admin" turned out not to mean "usable": authoring one series there is a seven-page-load click-path
+    with three raw-ID popup lookups. This is one form.
+
+    Stages are deliberately NOT here. They are the bulk of authoring, they need the concept autocomplete
+    and the bundle-overlap validation `StageAdminForm` already implements, and duplicating that badly
+    would be worse than the extra trip to admin.
+    """
+
+    name = forms.CharField(
+        max_length=255, required=True, label='Series Name',
+        widget=forms.TextInput(attrs={'class': 'input input-bordered w-full',
+                                      'placeholder': 'Soulsborne'}),
+    )
+    series_slug = forms.SlugField(
+        max_length=100, required=False, label='Series Slug',
+        help_text='Left blank, this is generated from the name. Stages join to a series by this string, '
+                  'so it is the one field worth getting right first.',
+        widget=forms.TextInput(attrs={'class': 'input input-bordered w-full',
+                                      'placeholder': 'soulsborne'}),
+    )
+    badge_type = forms.ChoiceField(
+        required=True, label='Badge Type',  # choices sourced from the model in __init__
+        widget=forms.Select(attrs={'class': 'select select-bordered w-full'}),
+    )
+    completion_policy = forms.ChoiceField(
+        required=True, label='Completion Policy',  # choices sourced from the model in __init__
+        widget=forms.Select(attrs={'class': 'select select-bordered w-full',
+                                   'id': 'id_completion_policy'}),
+    )
+    min_required = forms.IntegerField(
+        required=False, min_value=0, initial=0, label='Stages Required',
+        help_text='Megamix only: how many gating stages earn the badge.',
+        widget=forms.NumberInput(attrs={'class': 'input input-bordered w-full'}),
+    )
+    description = forms.CharField(
+        required=False, label='Description',
+        widget=forms.Textarea(attrs={'class': 'textarea textarea-bordered w-full', 'rows': 3}),
+    )
+    display_series = forms.CharField(
+        max_length=100, required=False, label='Display Series',
+        help_text='Overrides the name where the series is labelled on a medallion.',
+        widget=forms.TextInput(attrs={'class': 'input input-bordered w-full'}),
+    )
+    submitted_by = forms.CharField(
+        max_length=100, required=False, label='Submitted By (PSN Username)',
+        widget=forms.TextInput(attrs={'class': 'input input-bordered w-full'}),
+    )
+    editions = forms.ModelMultipleChoiceField(
+        queryset=None,  # set in __init__ so the form picks up group changes without a reload
+        required=True, label='Editions',
+        widget=forms.CheckboxSelectMultiple,
+        help_text='One GroupBadge per checked edition. A series with no editions is unearnable.',
+    )
+    start_live = forms.BooleanField(
+        required=False, initial=False, label='Release immediately',
+        help_text='Off by default: a badge is normally authored, given stages, then released.',
+        widget=forms.CheckboxInput(attrs={'class': 'toggle toggle-primary'}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from trophies.models import BadgeSeries, PlatformGroup
+
+        self.fields['badge_type'].choices = list(BadgeSeries.BADGE_TYPES)
+        self.fields['completion_policy'].choices = list(BadgeSeries.COMPLETION_POLICIES)
+
+        active = PlatformGroup.objects.filter(is_active=True).order_by('sort_order', 'name')
+        self.fields['editions'].queryset = active
+        # Pre-check everything: the common case is a series that ships in every edition it can, and an
+        # unchecked box is a badge nobody can earn.
+        self.fields['editions'].initial = list(active.values_list('pk', flat=True))
+
+    def clean_series_slug(self):
+        """Fill from the name if blank, and reject a slug that is already taken.
+
+        `BadgeSeries.series_slug` is unique, so without this the form would 500 on a duplicate instead of
+        telling the author what happened.
+        """
+        from django.utils.text import slugify
+        from trophies.models import BadgeSeries
+
+        slug = (self.cleaned_data.get('series_slug') or '').strip()
+        if not slug:
+            slug = slugify(self.data.get('name', ''))[:100]
+        if not slug:
+            raise forms.ValidationError('Could not derive a slug from that name; enter one directly.')
+        if BadgeSeries.objects.filter(series_slug=slug).exists():
+            raise forms.ValidationError(f'A series already uses the slug "{slug}".')
+        return slug
+
+    def clean_submitted_by(self):
+        """Resolve the PSN username to a Profile. A typo here silently drops the credit otherwise."""
+        from trophies.models import Profile
+
+        username = (self.cleaned_data.get('submitted_by') or '').strip()
+        if not username:
+            return None
+        profile = Profile.objects.filter(psn_username__iexact=username).first()
+        if not profile:
+            raise forms.ValidationError(f'No profile found for "{username}".')
+        return profile
+
+    def clean(self):
+        """The `min_count` / `min_required` pairing, which the model does not enforce.
+
+        A megamix series with `min_required=0` is earned by clearing zero stages -- it would be granted to
+        everyone on the next evaluation. Worth catching at the one place a human types it.
+        """
+        cleaned = super().clean()
+        policy = cleaned.get('completion_policy')
+        minimum = cleaned.get('min_required') or 0
+
+        if policy == 'min_count' and minimum < 1:
+            self.add_error('min_required', 'A megamix series needs at least one required stage.')
+        elif policy != 'min_count':
+            cleaned['min_required'] = 0     # meaningless outside megamix; do not store a stray number
+        return cleaned

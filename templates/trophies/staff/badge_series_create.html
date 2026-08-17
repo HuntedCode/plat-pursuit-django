@@ -1,0 +1,293 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Create Badge Series{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-3 md:px-4 py-4 md:py-6 max-w-5xl">
+
+    {# ── Header ─────────────────────────────────────────────────────────── #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-warning shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 lg:p-5">
+            <h1 class="text-xl md:text-2xl font-bold">Create Badge Series</h1>
+            <p class="text-sm text-base-content/70 mt-1">
+                Authors a <span class="font-semibold">BadgeSeries</span> plus one
+                <span class="font-semibold">GroupBadge</span> per edition. Stages are added afterwards in
+                the admin, where the concept picker and bundle validation live.
+            </p>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %} mb-3 text-sm">
+            {{ message }}
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    {% if orphan_stage_slugs %}
+    <div class="alert alert-info mb-3 text-sm">
+        <div>
+            <span class="font-semibold">Stages exist for slugs with no series:</span>
+            {{ orphan_stage_slugs|join:", " }}.
+            <span class="text-base-content/70">
+                If you authored stages first, use one of these as the slug below and they will attach
+                automatically. If one is a typo, fix it in the admin.
+            </span>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+
+        {# ── The form ──────────────────────────────────────────────────── #}
+        <div class="lg:col-span-2">
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+                <div class="card-body p-3 md:p-4 lg:p-5">
+                    <form method="post" class="space-y-4" id="badge-series-form">
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-error text-sm">{{ form.non_field_errors }}</div>
+                        {% endif %}
+
+                        {# Identity #}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div class="form-control">
+                                <label class="label py-1" for="{{ form.name.id_for_label }}">
+                                    <span class="label-text font-semibold">Series Name</span>
+                                </label>
+                                {{ form.name }}
+                                {% if form.name.errors %}
+                                <span class="text-error text-xs mt-1">{{ form.name.errors|striptags }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="form-control">
+                                <label class="label py-1" for="{{ form.series_slug.id_for_label }}">
+                                    <span class="label-text font-semibold">Series Slug</span>
+                                </label>
+                                {{ form.series_slug }}
+                                <span class="label-text-alt text-base-content/50 mt-1">{{ form.series_slug.help_text }}</span>
+                                {% if form.series_slug.errors %}
+                                <span class="text-error text-xs mt-1">{{ form.series_slug.errors|striptags }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {# Type + policy #}
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="form-control">
+                                <label class="label py-1" for="{{ form.badge_type.id_for_label }}">
+                                    <span class="label-text font-semibold">Badge Type</span>
+                                </label>
+                                {{ form.badge_type }}
+                            </div>
+                            <div class="form-control">
+                                <label class="label py-1" for="{{ form.completion_policy.id_for_label }}">
+                                    <span class="label-text font-semibold">Completion Policy</span>
+                                </label>
+                                {{ form.completion_policy }}
+                            </div>
+                            {# Only meaningful for megamix; revealed by the policy select below. #}
+                            <div class="form-control{% if not form.min_required.errors %} hidden{% endif %}" id="min-required-field">
+                                <label class="label py-1" for="{{ form.min_required.id_for_label }}">
+                                    <span class="label-text font-semibold">Stages Required</span>
+                                </label>
+                                {{ form.min_required }}
+                                {% if form.min_required.errors %}
+                                <span class="text-error text-xs mt-1">{{ form.min_required.errors|striptags }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {# Display #}
+                        <div class="form-control">
+                            <label class="label py-1" for="{{ form.display_series.id_for_label }}">
+                                <span class="label-text font-semibold">Display Series</span>
+                                <span class="label-text-alt text-base-content/50">optional</span>
+                            </label>
+                            {{ form.display_series }}
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1" for="{{ form.description.id_for_label }}">
+                                <span class="label-text font-semibold">Description</span>
+                                <span class="label-text-alt text-base-content/50">optional</span>
+                            </label>
+                            {{ form.description }}
+                        </div>
+
+                        {# Submitter: only relevant for user-submitted badges. #}
+                        <div class="form-control hidden" id="submitted-by-field">
+                            <label class="label py-1">
+                                <span class="label-text font-semibold">Submitted By</span>
+                            </label>
+                            <div class="relative">
+                                <input type="text" id="submitted-by-search"
+                                       class="input input-bordered w-full"
+                                       placeholder="Search by PSN username..." autocomplete="off" />
+                                <input type="hidden" name="submitted_by" id="id_submitted_by"
+                                       value="{{ form.submitted_by.value|default:'' }}" />
+                                <div id="submitted-by-dropdown"
+                                     class="absolute z-50 w-full bg-base-100 border border-base-300 rounded-box shadow-lg mt-1 max-h-48 overflow-y-auto hidden"></div>
+                            </div>
+                            <span class="label-text-alt text-base-content/50 mt-1">
+                                Credited on the badge, and their avatar becomes its art when no image is set.
+                            </span>
+                            {% if form.submitted_by.errors %}
+                            <span class="text-error text-xs mt-1">{{ form.submitted_by.errors|striptags }}</span>
+                            {% endif %}
+                        </div>
+
+                        {# Editions #}
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text font-semibold">Editions</span>
+                            </label>
+                            <div class="flex flex-wrap gap-3 p-3 bg-base-100 border border-base-300 rounded-box">
+                                {% for choice in form.editions %}
+                                <label class="label cursor-pointer gap-2 py-0">
+                                    {{ choice.tag }}
+                                    <span class="label-text">{{ choice.choice_label }}</span>
+                                </label>
+                                {% empty %}
+                                <span class="text-sm text-warning">
+                                    No active platform groups. Create one in the admin first.
+                                </span>
+                                {% endfor %}
+                            </div>
+                            <span class="label-text-alt text-base-content/50 mt-1">{{ form.editions.help_text }}</span>
+                            {% if form.editions.errors %}
+                            <span class="text-error text-xs mt-1">{{ form.editions.errors|striptags }}</span>
+                            {% endif %}
+                        </div>
+
+                        {# Release #}
+                        <div class="form-control">
+                            <label class="label cursor-pointer justify-start gap-3">
+                                {{ form.start_live }}
+                                <span class="label-text font-semibold">Release immediately</span>
+                            </label>
+                            <span class="label-text-alt text-base-content/50">{{ form.start_live.help_text }}</span>
+                        </div>
+
+                        <button class="btn btn-primary w-full md:w-auto" type="submit">Create Series</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        {# ── Recently created ──────────────────────────────────────────── #}
+        <div class="lg:col-span-1">
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+                <div class="card-body p-3 md:p-4">
+                    <h2 class="text-sm font-bold uppercase tracking-wide text-base-content/70">Recently created</h2>
+                    {% for series in recent_series %}
+                    <div class="border-b border-base-300 last:border-0 py-2">
+                        <div class="font-semibold text-sm">{{ series.name }}</div>
+                        <div class="text-xs text-base-content/60 font-mono">{{ series.series_slug }}</div>
+                        <div class="flex flex-wrap gap-1 mt-1">
+                            {% for gb in series.group_badges.all %}
+                            <span class="badge badge-sm {% if gb.is_live %}badge-success{% else %}badge-ghost{% endif %}">
+                                {{ gb.platform_group.name }}{% if not gb.is_live %} (hidden){% endif %}
+                            </span>
+                            {% empty %}
+                            <span class="badge badge-sm badge-warning">no editions</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <p class="text-sm text-base-content/50 py-2">Nothing yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const nameInput   = document.getElementById('{{ form.name.id_for_label }}');
+    const slugInput   = document.getElementById('{{ form.series_slug.id_for_label }}');
+    const typeSelect  = document.getElementById('{{ form.badge_type.id_for_label }}');
+    const policySelect = document.getElementById('id_completion_policy');
+    const minField    = document.getElementById('min-required-field');
+    const submitterField = document.getElementById('submitted-by-field');
+
+    // Slugify the name into the slug box until the author types their own. `slugTouched` is what stops
+    // this from fighting someone who deliberately entered a different slug.
+    let slugTouched = Boolean(slugInput.value);
+    slugInput.addEventListener('input', function () { slugTouched = true; });
+    nameInput.addEventListener('input', function () {
+        if (slugTouched) return;
+        slugInput.value = nameInput.value
+            .toLowerCase().trim()
+            .replace(/[^a-z0-9\s-]/g, '')
+            .replace(/[\s_-]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 100);
+    });
+
+    // Reveal only the fields the current selections actually use.
+    function syncConditionalFields() {
+        minField.classList.toggle('hidden', policySelect.value !== 'min_count');
+        submitterField.classList.toggle('hidden', typeSelect.value !== 'user');
+    }
+    policySelect.addEventListener('change', syncConditionalFields);
+    typeSelect.addEventListener('change', syncConditionalFields);
+    syncConditionalFields();
+
+    // Submitter typeahead against the existing profile-suggest endpoint. It is prefix-only and public,
+    // which is fine here: the form resolves the username server-side anyway, so this is a convenience,
+    // not the source of truth.
+    const searchInput = document.getElementById('submitted-by-search');
+    const hiddenInput = document.getElementById('id_submitted_by');
+    const dropdown    = document.getElementById('submitted-by-dropdown');
+    let searchTimer = null;
+
+    searchInput.addEventListener('input', function () {
+        const query = searchInput.value.trim();
+        hiddenInput.value = query;          // typing IS the value; the dropdown just completes it
+        clearTimeout(searchTimer);
+        if (query.length < 2) { dropdown.classList.add('hidden'); return; }
+
+        searchTimer = setTimeout(async function () {
+            try {
+                const data = await PlatPursuit.API.get(
+                    `/api/profile-suggest/?q=${encodeURIComponent(query)}`);
+                const results = (data && data.results) || [];
+                if (!results.length) { dropdown.classList.add('hidden'); return; }
+                dropdown.innerHTML = results.map(function (r) {
+                    return `<button type="button" class="w-full text-left px-3 py-2 hover:bg-base-200 flex items-center gap-2"
+                                    data-username="${PlatPursuit.HTMLUtils.escape(r.psn_username)}">
+                                <img src="${PlatPursuit.HTMLUtils.escape(r.avatar_url || '')}" alt=""
+                                     class="w-6 h-6 rounded-full object-cover" />
+                                <span class="text-sm">${PlatPursuit.HTMLUtils.escape(r.display || r.psn_username)}</span>
+                            </button>`;
+                }).join('');
+                dropdown.classList.remove('hidden');
+            } catch (err) {
+                dropdown.classList.add('hidden');
+            }
+        }, 250);
+    });
+
+    dropdown.addEventListener('click', function (e) {
+        const button = e.target.closest('button[data-username]');
+        if (!button) return;
+        searchInput.value = button.dataset.username;
+        hiddenInput.value = button.dataset.username;
+        dropdown.classList.add('hidden');
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!dropdown.contains(e.target) && e.target !== searchInput) {
+            dropdown.classList.add('hidden');
+        }
+    });
+});
+</script>
+{% endblock %}
