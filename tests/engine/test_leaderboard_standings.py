@@ -314,17 +314,47 @@ def test_the_series_board_is_earners_then_chasers_with_dates_breaking_ties():
 
 
 def test_the_board_index_matches_the_board_order():
-    """A composite index only range-scans when it matches the ORDER BY. It also has to be a SUPERSET of the
-    old two-column (series_slug, -progress_bp), which it replaces -- keeping both would be dead write cost
-    on every standing write."""
+    """A composite index only range-scans when it matches the ORDER BY, and this one must express the
+    board's FULL ordering -- tiebreak and unique tail included.
+
+    The `profile` tail is what makes a rank COUNT index-only: `badge_leaderboards` numbers a page by SLOT
+    and computes a rank by counting everyone ahead, and those two agree only because the ordering ends in
+    a unique key. It is also a superset of the old two-column (series_slug, -progress_bp) it replaced --
+    keeping both would be dead write cost on every standing write.
+    """
     idx = {i.name: i.fields for i in SeriesBadgeStanding._meta.indexes}
 
-    assert idx.get('sbs_series_board_idx') == ['series_slug', '-progress_bp', 'advanced_at'], (
+    assert idx.get('sbs_series_board_idx') == ['series_slug', '-progress_bp', 'advanced_at', 'profile'], (
         f'the combined board index no longer matches the board order: {idx.get("sbs_series_board_idx")}'
     )
     assert 'sbs_series_prog_idx' not in idx, (
         'the superseded two-column progress index is back; the board index already covers that ordering'
     )
+    # The `-xp` pair served `series_xp_rows`, deleted in the 2026-08 audit for having no caller. They were
+    # pure write cost on a table every badge evaluation writes.
+    assert 'sbs_series_xp_idx' not in idx and 'sbs_series_cc_xp_idx' not in idx, (
+        'the per-series XP indexes are back; the board they served no longer exists'
+    )
+
+
+def test_the_scrolled_board_indexes_are_partial_on_the_population():
+    """0309 made the whole-table boards partial and left the per-entity ones plain, on the grounds that a
+    leading key already narrows them. That held for PAGINATION; these boards virtual-scroll now, so a
+    reader deep into a popular series walks the index fetching `is_linked` per candidate -- the shape 0307
+    measured at 49.7 ms. 0311 closed it."""
+    from trophies.models import ProfileEditionStanding, UserGroupBadge
+
+    for model, names in (
+        (SeriesBadgeStanding, ('sbs_series_board_idx', 'sbs_series_cc_board_idx')),
+        (ProfileEditionStanding, ('pes_ed_xp_idx', 'pes_ed_cc_xp_idx')),
+        (UserGroupBadge, ('ugb_badge_earned_idx', 'ugb_badge_cc_earned_idx')),
+    ):
+        by_name = {i.name: i for i in model._meta.indexes}
+        for name in names:
+            assert name in by_name, f'{model.__name__}.{name} is missing'
+            assert by_name[name].condition is not None, (
+                f'{name} is not partial -- a deep scroll will evaluate is_linked from the heap'
+            )
 
 
 def test_the_evaluation_seam_actually_writes_the_advance_date():

@@ -346,8 +346,10 @@ def test_the_edition_indexes_lead_with_the_edition():
     the combined slice is served too, rather than filtering over a board-ordered scan."""
     idx = {i.name: i.fields for i in ProfileEditionStanding._meta.indexes}
 
-    assert idx.get('pes_ed_xp_idx') == ['platform_group_key', '-total_xp']
-    assert idx.get('pes_ed_cc_xp_idx') == ['platform_group_key', 'country_code', '-total_xp'], (
+    # The `profile` tail completes the board's total ordering, which is what lets a rank COUNT be
+    # index-only rather than a sort. See test_the_board_index_matches_the_board_order.
+    assert idx.get('pes_ed_xp_idx') == ['platform_group_key', '-total_xp', 'profile']
+    assert idx.get('pes_ed_cc_xp_idx') == ['platform_group_key', 'country_code', '-total_xp', 'profile'], (
         'the combined edition+country index must be (edition, country, ...board order)'
     )
     assert 'pes_ed_troph_idx' not in idx and 'pes_ed_cc_troph_idx' not in idx, (

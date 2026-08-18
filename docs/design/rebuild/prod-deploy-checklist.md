@@ -503,6 +503,21 @@ Migrations `trophies.0308_profile_mirrors_is_linked` and `trophies.0309_partial_
 - [ ] **Run the migrations in order and do NOT skip 0308.** 0309's partial indexes have `is_linked=True`
       in their condition, so building them against an unbackfilled column produces six empty indexes.
 
+### Board containers + per-entity indexes (2026-08)
+
+Migration `trophies.0311_partial_indexes_for_scrolled_boards`.
+
+- [ ] **`0311` rebuilds six indexes CONCURRENTLY and DROPS two** (`atomic = False`). Same failure mode as
+      0307/0309/0310: a build that fails partway leaves an INVALID index to drop by hand. The migration's
+      docstring carries the exact SQL and the validity check.
+- [ ] **The two dropped indexes are not replaced.** `sbs_series_xp_idx` / `sbs_series_cc_xp_idx` served
+      `series_xp_rows`, deleted in the 2026-08 audit for having no caller; they were pure write cost on a
+      table every badge evaluation writes. Expect badge evaluation to get slightly cheaper.
+- [ ] **Nothing to run afterwards.** Index-only change; no backfill, no data movement.
+- [ ] **Badge detail and job detail now load their board on TAB ACTIVATION**, not with the page. If board
+      traffic looks like it dropped after deploy, that is the change: previously every reader who scrolled
+      badge detail to the bottom fetched the board whether or not they wanted it.
+
 ### The three board directories are gone (no deploy step)
 
 `/leaderboards/{games,badges,jobs}/` were removed without redirects -- they never left a dev machine, and

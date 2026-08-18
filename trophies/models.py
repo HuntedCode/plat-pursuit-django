@@ -3197,11 +3197,16 @@ class UserGroupBadge(models.Model):
             models.Index(fields=['profile', 'is_displayed'], name='ugb_display_idx'),
             # Serves the per-badge earners leaderboard (ORDER BY earned_at) AND a profile's live rank
             # (COUNT earned_at < mine) -- the value shown on the medallion back.
-            models.Index(fields=['group_badge', 'earned_at'], name='ugb_badge_earned_idx'),
+            # PARTIAL on `is_linked`, with `profile` as the tail. `earners_rank` counts everyone ahead
+            # and `earners_rows` seats them, and both express the same total ordering (earned_at, then
+            # profile id) -- so the tail is what lets the COUNT be index-only. No `> 0` half here: a held
+            # badge is the membership rule, and holding one has no quantity.
+            models.Index(fields=['group_badge', 'earned_at', 'profile'], name='ugb_badge_earned_idx',
+                         condition=Q(is_linked=True)),
             # The country-sliced form. Same column order as every other board's country index: the
             # always-filtered key first, then the slice, then the sort.
-            models.Index(fields=['group_badge', 'country_code', 'earned_at'],
-                         name='ugb_badge_cc_earned_idx'),
+            models.Index(fields=['group_badge', 'country_code', 'earned_at', 'profile'],
+                         name='ugb_badge_cc_earned_idx', condition=Q(is_linked=True)),
         ]
 
     def __str__(self):
@@ -3385,8 +3390,12 @@ class ProfileEditionStanding(models.Model):
             # Edition first (always filtered), then the board's own ORDER BY -- so a sliced board is a range
             # scan. The country form puts the slice between the two, matching ProfileBadgeStanding's pattern.
             # Only Badge Points slices by edition now, so there is one ordering to serve rather than two.
-            models.Index(fields=['platform_group_key', '-total_xp'], name='pes_ed_xp_idx'),
-            models.Index(fields=['platform_group_key', 'country_code', '-total_xp'], name='pes_ed_cc_xp_idx'),
+            # PARTIAL on the board's membership rule, with `profile` as the tail -- see the note on
+            # SeriesBadgeStanding's indexes for why 0309 skipped these and 0311 added them.
+            models.Index(fields=['platform_group_key', '-total_xp', 'profile'], name='pes_ed_xp_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
+            models.Index(fields=['platform_group_key', 'country_code', '-total_xp', 'profile'],
+                         name='pes_ed_cc_xp_idx', condition=Q(is_linked=True, total_xp__gt=0)),
         ]
 
     def __str__(self):
@@ -3534,17 +3543,23 @@ class SeriesBadgeStanding(models.Model):
     class Meta:
         unique_together = ['profile', 'series_slug']
         indexes = [
-            models.Index(fields=['series_slug', '-xp'], name='sbs_series_xp_idx'),            # per-series XP board
-            # The combined earners+chasers board, in board order. Supersedes the old
-            # (series_slug, -progress_bp): this is that index plus the tiebreak column, so it serves the
-            # shorter ordering too and the two-column version would be dead write cost.
-            models.Index(fields=['series_slug', '-progress_bp', 'advanced_at'], name='sbs_series_board_idx'),
-            # Country-sliced per-series boards. The column order matters: series first (always filtered),
-            # then country (the slice), then the sort key -- so both the global and sliced forms of a board
-            # are a range scan rather than a filter over a scan.
-            models.Index(fields=['series_slug', 'country_code', '-xp'], name='sbs_series_cc_xp_idx'),
-            models.Index(fields=['series_slug', 'country_code', '-progress_bp', 'advanced_at'],
-                         name='sbs_series_cc_board_idx'),
+            # The `(series_slug, -xp)` pair that used to sit here served `series_xp_rows`, a per-series XP
+            # board deleted in the 2026-08 audit for having no caller. The indexes outlived it and were
+            # dead write cost on a table every badge evaluation writes. Dropped in 0311.
+            #
+            # PARTIAL on `is_linked`, with `profile` as the tail. 0309 left the per-entity boards on plain
+            # indexes, reasoning that a leading key narrows them enough that the flag is a cheap heap
+            # filter -- true for PAGINATION, false for the virtual scrolling these boards use now. Scrolled
+            # deep into a popular series the scan walks the index fetching `is_linked` per candidate, the
+            # exact shape 0307 measured at 49.7 ms. The `profile` tail lets a rank COUNT be index-only,
+            # since it completes the board's total ordering.
+            models.Index(fields=['series_slug', '-progress_bp', 'advanced_at', 'profile'],
+                         name='sbs_series_board_idx', condition=Q(is_linked=True)),
+            # Country-sliced. The column order matters: series first (always filtered), then country (the
+            # slice), then the sort key -- so both forms of the board are a range scan, not a filter over
+            # a scan.
+            models.Index(fields=['series_slug', 'country_code', '-progress_bp', 'advanced_at', 'profile'],
+                         name='sbs_series_cc_board_idx', condition=Q(is_linked=True)),
         ]
 
     def __str__(self):
