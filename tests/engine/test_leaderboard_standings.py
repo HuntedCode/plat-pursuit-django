@@ -416,3 +416,87 @@ def test_a_null_country_propagates_as_empty_not_none():
     profile.save()
 
     assert ProfileBadgeStanding.objects.get(profile=profile).country_code == ''
+
+
+# ------------------------------------------------------------------ the write seam's integrity ----------
+
+def _desired_for(profile, gb, cleared, gating):
+    """Hand-built engine output for one group badge, which is what `recompute_standing` consumes. Building
+    it directly (rather than driving the whole engine) keeps these tests about the WRITE seam."""
+    from types import SimpleNamespace
+
+    return {gb.id: SimpleNamespace(
+        base_earned=cleared >= gating, holo=False, earned_date=None,
+        base_satisfied_count=cleared, gating_count=gating, stages=[],
+    )}
+
+
+def test_the_recompute_is_ATOMIC_across_all_four_tables():
+    """This seam writes across four tables and deletes from two, and its own comments already reason about
+    pairs of rows that must agree -- "one of them holding a hunter the other has dropped is the kind of
+    disagreement nobody would think to check". Without a transaction, a failure partway left exactly that
+    disagreement durably on disk.
+
+    The failure is injected at the LAST write, so everything before it has already been issued: if the
+    block is not atomic, the earlier rows survive the exception.
+    """
+    from unittest import mock
+
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+    from trophies.models import ProfileBadgeStanding, ProfileEditionStanding, SeriesBadgeStanding
+    from trophies.services import badge_xp
+
+    profile = ProfileFactory()
+    gb = GroupBadgeFactory(series=BadgeSeriesFactory(series_slug='atom'),
+                           platform_group=PlatformGroupFactory(key='atom-grp'), is_live=True)
+    desired = _desired_for(profile, gb, cleared=2, gating=2)
+
+    real = badge_xp._write_edition_standings
+
+    def boom(*a, **kw):
+        real(*a, **kw)                 # do the work...
+        raise RuntimeError('timeout')  # ...then fail, exactly as a statement timeout would
+
+    with mock.patch.object(badge_xp, '_write_edition_standings', boom):
+        with pytest.raises(RuntimeError):
+            badge_xp.recompute_standing(profile.id, desired, [gb])
+
+    assert not SeriesBadgeStanding.objects.filter(profile=profile).exists(), (
+        'a series standing survived a failed recompute'
+    )
+    assert not ProfileBadgeStanding.objects.filter(profile=profile).exists()
+    assert not ProfileEditionStanding.objects.filter(profile=profile).exists()
+
+
+def test_the_recompute_takes_a_per_profile_lock():
+    """`_upsert` skips `update_or_create`'s savepoint + SELECT FOR UPDATE on the grounds that "a profile's
+    recompute is never concurrent with itself". That was asserted as a fact before anything made it one:
+    the nightly `evaluate_badges --all` and a hunter's own `sync_complete` are separate processes with no
+    interlock, so a hunter syncing while the batch reached them ran two recomputes at once, and both would
+    find no row to UPDATE and both would INSERT.
+
+    An ADVISORY lock, not a row lock, and the distinction is the point: `Profile.add_to_sync_target`
+    locks the Profile row with `nowait=True` behind a ~0.8s tenacity retry, so a recompute holding that
+    row longer than that turns into a `RetryError` inside a hunter's sync -- which is exactly the overlap
+    the nightly orchestrator says to expect. An advisory lock takes no row, so Profile writers are
+    untouched.
+
+    Asserted on the emitted SQL rather than by racing two threads: a genuine race is timing-dependent and
+    would be the flakiest test in the suite. What must hold is that the lock is TAKEN, and that it is not
+    taken on the Profile row.
+    """
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+    from trophies.services import badge_xp
+
+    profile = ProfileFactory()
+    gb = GroupBadgeFactory(series=BadgeSeriesFactory(series_slug='lock'),
+                           platform_group=PlatformGroupFactory(key='lock-grp'), is_live=True)
+
+    with CaptureQueriesContext(connection) as ctx:
+        badge_xp.recompute_standing(profile.id, _desired_for(profile, gb, 1, 2), [gb])
+
+    sql = [q['sql'] for q in ctx.captured_queries]
+    assert any('pg_advisory_xact_lock' in q for q in sql), 'the recompute took no lock'
+    assert not any('FOR UPDATE' in q and 'trophies_profile' in q for q in sql), (
+        'the recompute locked the Profile ROW, which collides with add_to_sync_target(nowait=True)'
+    )

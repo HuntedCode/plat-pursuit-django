@@ -38,21 +38,24 @@ canonical location per board, so no two pages can drift.
 | Surface | URL | What it is |
 |---|---|---|
 | Global Boards | `/leaderboards/` | Trophies / Badge Points / Career XP, `.pp-switch` tabs, country + edition FILTERS |
-| Game Boards | `/leaderboards/games/` | Directory -> game detail's Ranks panel |
-| Badge Boards | `/leaderboards/badges/` | Directory -> badge detail's Ranks section |
-| Job Boards | `/leaderboards/jobs/` | Directory -> job detail's Ranks tab |
+| Game board | `/games/<id>/` Ranks panel, `/games/<id>/leaderboard/` | Everyone who has played it |
+| Badge board | `/badges/<slug>/` Ranks section (fetched from `/badge-ranks/<slug>/`) | Earners + chasers, merged |
+| Job board | `/jobs/<slug>/?tab=ranks` | One job's XP board, paginated |
 | Jobs catalogue | `/jobs/`, `/jobs/<slug>/` | In the BROWSE hub; Contracts + Ranks tabs, public |
 
-The three directories share one `BoardDirectoryView` base and one template. Each is THIN by rule: search
-plus exactly two sorts (alphabetical default, most entrants), no filter panel, no country facet. Without
-that rule they converge into second copies of `/games/`, `/badges/` and `/jobs/`.
+**Leaderboards is a hub with NO sub-nav rail**, which is the shape it was designed with and returned to.
+It briefly carried three board DIRECTORIES (`/leaderboards/{games,badges,jobs}/`) -- paginated catalogues
+of boards, sharing one `BoardDirectoryView` base. They were removed in 2026-08, without redirects, having
+never left a dev machine.
 
-Directory previews use `ROW_NUMBER() OVER (PARTITION BY ...)` -- one query for the whole page's top
-slices, because a per-card board read compounds under infinite scroll.
+They were removed because the thin-directory rule that kept them from becoming second copies of `/games/`,
+`/badges/` and `/jobs/` had, in the end, left nothing that those pages did not already do. Their one
+distinguishing sort already existed on each browse counterpart -- `played_count` on Browse Games, "Most
+earned" on Browse Badges, a hunter count on every job card -- and their min-entrants gate only ever HID
+entities. Nothing linked to them except the hub rail, which existed because they did.
 
-Country is a FILTER on the full boards only, never a board and never a directory facet. On the boards it
-is one WHERE served by a `(..., country_code, ...board order)` composite; on the directories it would
-multiply the cache surface ~200x for a view few would use.
+Country is a FILTER on the full boards only, never a board of its own: one WHERE served by a
+`(..., country_code, ...board order)` composite.
 
 ### The two filters on Global Boards
 
@@ -170,8 +173,12 @@ They are recomputed from scratch each time, so no incremental writer exists to d
   edition standing survives on zero points when the hunter has trophies but no cleared gating stage there,
   so an unfiltered read would hand the last page rows the count never promised.
 
-- **`BOARD_MIN_ENTRANTS_*` is env-overridable, so tests must pin it.** A dev box that lowered the games
-  gate turned an unrelated directory test red for a behaviour that had not changed.
+- **A per-entity board needs no denormalized count.** `BadgeSeries.entrants` and `Job.entrants` existed
+  only so the directories could GATE and SORT across the whole catalogue before pagination, which is the
+  one thing you cannot do on a value computed per row. A single board's count is one scoped, indexed read
+  (`series_board_count`, `job_board_counts([slug])`), so both columns went with the directories.
+  `Game.played_count` is unrelated and stays -- it predates all of this and feeds the game detail hero,
+  the ratings panel, browse cards and the recap.
 
 - **A new badge series needs no rebuild.** This used to be a real chore: the sorted sets only caught
   incremental events, so a newly authored series showed nothing until a rebuild ran. Standings are

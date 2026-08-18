@@ -36,8 +36,15 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('username', nargs='?', help="psn_username to evaluate.")
-        parser.add_argument('--all', action='store_true', help="Evaluate every linked profile (batch).")
-        parser.add_argument('--series', help="Scope to one series_slug's group badges, INCLUDING dormant (for testing).")
+        # "every profile with a PSN username", NOT "every LINKED profile", which is what this said and did
+        # not do. The distinction is ~300,000 rows against ~50,000: badges are evaluated for scraped
+        # profiles too, so an unlinked hunter's own page shows their badges. The BOARDS gate that
+        # population back out at read time (`badge_leaderboards._linked`); this does not.
+        parser.add_argument('--all', action='store_true',
+                            help="Evaluate every profile with a PSN username (batch), linked or not.")
+        parser.add_argument('--series', help="Scope to one series_slug's LIVE group badges.")
+        parser.add_argument('--include-dormant', action='store_true',
+                            help="With --series, also evaluate unreleased editions. Requires --dry-run.")
         parser.add_argument('--dry-run', action='store_true', help="Preview the changes; write nothing.")
         parser.add_argument('--compare-legacy', action='store_true',
                             help="Read-only: report kept/lost/gained recognition vs legacy tier badges. Pair with --series or --all.")
@@ -49,14 +56,40 @@ class Command(BaseCommand):
 
         dry = opts['dry_run']
 
-        # Resolve which group badges to evaluate: a specific series (incl. dormant), or the default live set.
+        # Resolve which group badges to evaluate: a specific series, or the default live set.
+        #
+        # LIVE-ONLY on a write run, `--include-dormant` notwithstanding. This scope used to include dormant
+        # editions unconditionally "for testing", and a write run through it did two things nothing undoes:
+        #
+        #   1. It wrote XP for an unreleased edition. `_live_standings` gates the profile-wide sum at
+        #      SERIES level, so a series with one live edition and one dormant one had the dormant one's XP
+        #      counted in the holder's Badge Points -- points from a badge no reader can see.
+        #   2. It awarded `UserGroupBadge` rows for dormant editions that the nightly `evaluate_badges
+        #      --all` can never revoke, because that run is live-scoped and never revisits them. A hold
+        #      created here outlives the state that justified it.
+        #
+        # Previewing a dormant edition is still legitimate -- it is how a curator checks a badge before
+        # launching it -- so `--include-dormant` keeps that, gated to `--dry-run` where neither hazard
+        # exists. Releasing a badge is what makes it evaluable, which is the same rule `is_live` already
+        # expresses everywhere else.
+        if opts['include_dormant'] and not (opts['series'] and dry):
+            self.stderr.write("--include-dormant requires --series and --dry-run (it must never write).")
+            return
+
         group_badges = None
         if opts['series']:
-            group_badges = list(
-                GroupBadge.objects.filter(series__series_slug=opts['series']).select_related('series', 'platform_group')
-            )
+            qs = GroupBadge.objects.filter(series__series_slug=opts['series'])
+            if not opts['include_dormant']:
+                qs = qs.filter(is_live=True)
+            group_badges = list(qs.select_related('series', 'platform_group'))
             if not group_badges:
-                self.stderr.write(f"No group badges for series '{opts['series']}' (run convert_series_to_groups first).")
+                dormant = GroupBadge.objects.filter(series__series_slug=opts['series']).exists()
+                self.stderr.write(
+                    f"No LIVE group badges for series '{opts['series']}'; its editions are all dormant. "
+                    f"Preview them with --dry-run --include-dormant, or release one first."
+                    if dormant else
+                    f"No group badges for series '{opts['series']}' (run convert_series_to_groups first)."
+                )
                 return
 
         # Resolve profiles.

@@ -75,16 +75,6 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         </div>
     </section>
 
-    {% if active_tab == 'series' %}
-        {% comment %} Legacy directory, kept reachable until step 6 rebuilds it as Badge Boards. {% endcomment %}
-        <div class="mb-3">
-            <a class="pp-edhint" href="?tab=trophies">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-                Back to the boards
-            </a>
-        </div>
-        {% include 'trophies/partials/leaderboard_series_directory.html' %}
-    {% else %}
 
     {% comment %} FREE content below the header: the switcher + the toolbar + the wall, unboxed. {% endcomment %}
     {% comment %} A NAV, not a `role="tablist"`. These chips are links that trigger a full page load, and
@@ -195,8 +185,6 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         </a>
         {% endif %}
     </div>
-    {% endif %}
-
     {% endif %}
 {% endblock %}
 

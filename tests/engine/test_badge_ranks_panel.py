@@ -185,3 +185,111 @@ def test_staff_can_still_preview_a_dormant_series_panel(client):
     client.force_login(staff.user)
 
     assert client.get(reverse('badge_ranks_panel', args=[series.series_slug])).status_code == 200
+
+
+def test_a_signed_in_hunter_is_told_when_they_are_NOT_on_the_board(client):
+    """The line used to be gated on `my_rank`, so a hunter with no standing in this series got silence
+    where the answer belonged -- on a page whose whole job is inviting them to chase the badge."""
+    series = _renderable('chase', 'Chase')
+    _standing('chase', 'Ahead', bp=5000, on=dt.date(2025, 1, 1))
+    viewer = ProfileFactory(display_psn_username='Newcomer')
+    client.force_login(viewer.user)
+
+    body = client.get(reverse('badge_ranks_panel', args=['chase'])).content.decode()
+    assert 'Not on this board yet' in body
+
+    SeriesBadgeStanding.objects.create(profile=viewer, series_slug='chase', xp=100, progress_bp=7500,
+                                       stages_cleared=3, stages_total=4, advanced_at=dt.date(2025, 2, 1))
+    body = client.get(reverse('badge_ranks_panel', args=['chase'])).content.decode()
+    assert 'You are' in body and 'Not on this board yet' not in body
+
+
+def test_a_signed_out_visitor_is_told_nothing_about_a_standing_they_cannot_have(client):
+    series = _renderable('chase', 'Chase')
+    _standing('chase', 'Ahead', bp=5000, on=dt.date(2025, 1, 1))
+    body = client.get(reverse('badge_ranks_panel', args=['chase'])).content.decode()
+    assert 'Not on this board yet' not in body and 'You are' not in body
+
+
+def test_the_board_can_be_read_past_the_first_slice(client):
+    """It stopped dead at 25 under a comment promising a link to a full board -- a page that does not
+    exist and deliberately does not, since this panel REPLACED it. So the panel told a hunter their rank
+    and in the same breath made the row it points at unreachable.
+    """
+    _renderable('deep', 'Deep')
+    for i in range(27):
+        _standing('deep', f'Hunter{i:02d}', bp=9900 - i, on=dt.date(2025, 1, 1))
+
+    first = client.get(reverse('badge_ranks_panel', args=['deep']))
+    body = first.content.decode()
+    assert first.context['has_more'] is True
+    assert first.context['next_offset'] == 25
+    assert 'data-ranks-more="25"' in body
+    assert 'Hunter00' in body and 'Hunter26' not in body
+
+    more = client.get(reverse('badge_ranks_panel', args=['deep']), {'offset': 25})
+    tail = more.content.decode()
+    # ROWS ONLY -- the meta line and the button must not be re-emitted into the middle of the list.
+    assert 'Hunter25' in tail and 'Hunter26' in tail
+    assert 'bd2-ranks__meta' not in tail and 'data-ranks-more' not in tail
+    # `page()` numbers by SLOT, so the continuation must not restart at #1.
+    assert more.context['rows'][0]['rank'] == 26
+
+
+def test_a_junk_offset_serves_the_full_panel_rather_than_erroring(client):
+    _renderable('deep', 'Deep')
+    _standing('deep', 'Only', bp=5000, on=dt.date(2025, 1, 1))
+    for raw in ('abc', '-5', ''):
+        resp = client.get(reverse('badge_ranks_panel', args=['deep']), {'offset': raw})
+        assert resp.status_code == 200
+        assert 'bd2-ranks__meta' in resp.content.decode(), f'offset={raw!r} lost the panel chrome'
+
+
+def test_the_server_decides_whether_more_remain(client):
+    """The client used to infer "that was the last slice" from a short response, which cost one dead click
+    on every board whose size is an exact multiple of the page size. `X-Has-Next` is the same header
+    `ContractsResultsView` already uses for its infinite scroll."""
+    _renderable('exact', 'Exact')
+    for i in range(25):                                  # EXACTLY one slice
+        _standing('exact', f'Hunter{i:02d}', bp=9900 - i, on=dt.date(2025, 1, 1))
+
+    full = client.get(reverse('badge_ranks_panel', args=['exact']))
+    assert full.context['has_more'] is False, 'a board of exactly one slice offered more'
+
+    _standing('exact', 'Hunter25', bp=5000, on=dt.date(2025, 1, 1))
+    more = client.get(reverse('badge_ranks_panel', args=['exact']), {'offset': 25})
+    assert more['X-Has-Next'] == '0', 'the last slice claimed more remained'
+
+    for i in range(30):
+        _standing('exact', f'Later{i:02d}', bp=4000 - i, on=dt.date(2025, 1, 1))
+    mid = client.get(reverse('badge_ranks_panel', args=['exact']), {'offset': 25})
+    assert mid['X-Has-Next'] == '1', 'a mid-board slice claimed it was the last'
+
+
+def test_the_appended_rows_carry_the_class_the_reveal_engine_looks_for(client):
+    """`staggerReveal` puts `.pp-reveal` on the wall permanently, and `.pp-reveal .lb-row { opacity: 0 }`
+    -- so an appended row is INVISIBLE until the returned handle observes it and adds `.is-revealed`.
+    The client-side half of that fix cannot be tested here; what this pins is that the fragment still
+    emits `.lb-row` elements, which is the selector both the append and the observer key on."""
+    _renderable('deep2', 'Deep2')
+    for i in range(27):
+        _standing('deep2', f'H{i:02d}', bp=9900 - i, on=dt.date(2025, 1, 1))
+
+    tail = client.get(reverse('badge_ranks_panel', args=['deep2']), {'offset': 25}).content.decode()
+    assert tail.count('<li class="lb-row') == 2   # closing-quote-free prefix; `lb-row__rank` etc. must not match
+
+
+def test_an_unverified_account_is_not_promised_a_board_it_cannot_enter(client):
+    """The THIRD viewer state, and the one neither the signed-out nor the ranked test reaches.
+
+    Every board population is `is_linked`-gated (`badge_leaderboards._linked`), so an unverified account
+    told "Not on this board yet" is being offered a board it cannot join until it verifies. Game detail
+    already resolved its viewer this way; the other two panels said "signed in" and meant it.
+    """
+    _renderable('chase', 'Chase')
+    _standing('chase', 'Ahead', bp=5000, on=dt.date(2025, 1, 1))
+    unlinked = ProfileFactory(is_linked=False, display_psn_username='Unverified')
+    client.force_login(unlinked.user)
+
+    body = client.get(reverse('badge_ranks_panel', args=['chase'])).content.decode()
+    assert 'Not on this board yet' not in body and 'You are' not in body

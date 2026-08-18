@@ -37,7 +37,7 @@ sitemaps = {
     # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
     # for the revamp, since nothing else about the system was deleted.
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, BadgeBoardsView, GameBoardsView, JobBoardsView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, JobsBrowseView, JobDetailView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, JobsBrowseView, JobDetailView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
@@ -275,12 +275,20 @@ urlpatterns = [
     # `/leaderboards/` is the landing; the type segment stays on the per-series route so a second kind of
     # leaderboard can land beside `badges/` without colliding with a series slug.
     path('leaderboards/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
-    # The board DIRECTORIES. `badges/` must precede the retired per-series redirect below, which would
-    # otherwise capture it as a series slug -- the same ordering rule that keeps /badges/how-it-works/
-    # out of the badge-detail pattern.
-    path('leaderboards/badges/', BadgeBoardsView.as_view(), name='badge_boards'),
-    path('leaderboards/games/', GameBoardsView.as_view(), name='game_boards'),
-    path('leaderboards/jobs/', JobBoardsView.as_view(), name='job_boards'),
+    # The three board DIRECTORIES (`leaderboards/badges|games|jobs/`) were removed in 2026-08 without
+    # redirects, having never left a dev machine. Each was a catalogue of the entities `/games/`,
+    # `/badges/` and `/jobs/` already catalogue, distinguished only by a sort those browse pages already
+    # had -- `played_count` on Browse Games, "Most earned" on Browse Badges, a hunter count on every job
+    # card -- plus a min-entrants gate that only ever HID entities. Nothing linked to them but the hub
+    # rail, which existed because they did. Boards live on the thing they rank; see the per-entity Ranks
+    # panels on game, badge and job detail.
+    #
+    # `leaderboards/badges/` keeps a redirect to the landing, which is what it did BEFORE the directory
+    # took the path: the per-series redirect below is still live, so somebody chopping that URL back to
+    # its parent needs somewhere to land rather than a 404. It must stay ABOVE that pattern, which would
+    # otherwise capture nothing here but reads confusingly out of order.
+    path('leaderboards/badges/', RedirectView.as_view(
+        pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),
     # Retired 2026-08: the per-series board moved onto badge detail. Permanent, and it keeps the slug, so
     # every existing link lands on the badge whose board it wanted rather than on a generic index.
     path('leaderboards/badges/<str:series_slug>/', RedirectView.as_view(

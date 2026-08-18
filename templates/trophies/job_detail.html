@@ -40,16 +40,24 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
             <p class="jobd__desc">{{ job.description }}</p>
             {% endif %}
 
-            {% if my_rank %}
+            {% if show_my_standing %}
             {% comment %} Once, in the header -- the same rule the Global Boards landing follows, and for
             the same reason: a per-row personal marker would make the board per-viewer and forfeit
-            caching. {% endcomment %}
+            caching.
+
+            Rendered for every signed-in viewer, ranked or not. `{% if my_rank %}` alone made the block
+            simply absent for a hunter who has banked nothing here, which reads as a missing feature
+            rather than as the answer to the question they opened the tab with. {% endcomment %}
             <div class="lb-mine mt-3">
                 <span class="lb-mine__k">Your standing</span>
                 <span class="lb-mine__rows">
                     <span class="lb-mine__row is-active">
                         <span class="lb-mine__lbl">{{ job.name }}</span>
+                        {% if my_rank %}
                         <span class="lb-mine__rank pp-tally">#{{ my_rank|intcomma }}</span>
+                        {% else %}
+                        <span class="lb-mine__rank lb-mine__rank--none">Not ranked yet</span>
+                        {% endif %}
                     </span>
                 </span>
             </div>
@@ -82,6 +90,24 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
             {% include 'trophies/partials/leaderboard_row.html' with entry=entry %}
             {% endfor %}
         </ol>
+
+        {% comment %} Prev/next rather than a full paginator, and rather than nothing. A job board is the
+        only per-entity board with no fuller surface to hand off to (badge boards have their own panel
+        endpoint, game boards have /games/<id>/leaderboard/), so capping at 25 left a hunter ranked #300
+        told their rank in the header and permanently unable to reach the row it points at. Links, not JS:
+        the tab itself is a link that reloads the page, and a second mechanism here would be the only
+        thing on the page that behaves differently. {% endcomment %}
+        {% if board_has_prev or board_has_next %}
+        <nav class="jobd__pager" aria-label="Board pages">
+            {% if board_has_prev %}
+            <a class="jobd__pager-btn" href="?tab=ranks&amp;page={{ board_page|add:'-1' }}" rel="prev"><span aria-hidden="true">&larr;</span> Previous</a>
+            {% else %}<span class="jobd__pager-btn is-off" aria-hidden="true"><span>&larr;</span> Previous</span>{% endif %}
+            <span class="jobd__pager-at">Page {{ board_page|intcomma }}</span>
+            {% if board_has_next %}
+            <a class="jobd__pager-btn" href="?tab=ranks&amp;page={{ board_page|add:'1' }}" rel="next">Next <span aria-hidden="true">&rarr;</span></a>
+            {% else %}<span class="jobd__pager-btn is-off" aria-hidden="true">Next <span>&rarr;</span></span>{% endif %}
+        </nav>
+        {% endif %}
         {% else %}
         <div class="lb-empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>

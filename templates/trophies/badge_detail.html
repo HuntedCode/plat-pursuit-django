@@ -276,6 +276,63 @@ Collection. No extra wrapper container: a nested one would double the horizontal
         if (!sec) { return; }
         var body = sec.querySelector('[data-ranks-body]');
 
+        // The handle from staggerReveal, kept because appended rows MUST be handed to it. The helper adds
+        // `.pp-reveal` to the wall permanently, and `.pp-reveal .lb-row { opacity: 0 }` -- so a row that
+        // never gets `.is-revealed` is appended invisible. Discarding this handle made "Show more" grow
+        // the wall by 25 rows of blank space for everyone except reduced-motion users, who are the only
+        // ones the opacity rule does not apply to.
+        var reveal = null;
+        var MORE_LABEL = 'Show more';   // hard-coded: reading it off the button meant one failed fetch
+                                        // permanently renamed it, error text and all, forever after.
+
+        // "Show more" appends the next slice into the existing wall. Delegated from the section, because
+        // the button arrives with the fetched panel and is replaced/removed as the list grows.
+        sec.addEventListener('click', function (ev) {
+            var btn = ev.target.closest('[data-ranks-more]');
+            if (!btn || btn.disabled) { return; }
+            var wall = body.querySelector('[data-lb-wall]');
+            var status = body.querySelector('[data-ranks-status]');
+            if (!wall) { return; }
+            var offset = parseInt(btn.dataset.ranksMore, 10) || 0;
+            btn.disabled = true;
+            btn.textContent = 'Loading...';
+            fetch(sec.dataset.ranksSrc + '?offset=' + offset,
+                  { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) {
+                    if (!r.ok) { throw new Error(r.status); }
+                    // The SERVER decides whether more remain. Inferring it from a short slice cost one
+                    // dead click on every board whose size is an exact multiple of the page size.
+                    var more = r.headers.get('X-Has-Next') === '1';
+                    return r.text().then(function (html) { return { html: html, more: more }; });
+                })
+                .then(function (res) {
+                    // An <ol> is the correct parsing context for <li> children -- a plain div silently
+                    // discards them.
+                    var tmp = document.createElement('ol');
+                    tmp.innerHTML = res.html;
+                    var added = tmp.querySelectorAll('.lb-row');
+                    Array.prototype.forEach.call(added, function (li) { wall.appendChild(li); });
+                    if (reveal) { reveal.observe(added); }
+                    if (status) { status.textContent = added.length + ' more hunters loaded.'; }
+
+                    if (res.more) {
+                        btn.dataset.ranksMore = String(offset + added.length);
+                        btn.disabled = false;
+                        btn.textContent = MORE_LABEL;
+                    } else {
+                        // Move focus off the button before removing it, or focus falls to <body> and the
+                        // next Tab restarts from the top of the page -- after the reader has worked their
+                        // way to the bottom of a long wall.
+                        if (status) { status.setAttribute('tabindex', '-1'); status.focus(); }
+                        btn.parentNode.removeChild(btn);
+                    }
+                })
+                .catch(function () {
+                    btn.disabled = false;
+                    btn.textContent = 'Could not load more. Try again';
+                });
+        });
+
         function load() {
             fetch(sec.dataset.ranksSrc, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.text(); })
@@ -286,7 +343,7 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                     // opacity: 0, so adding it unconditionally would leave the board invisible.
                     var wall = body.querySelector('[data-lb-wall]');
                     if (wall && window.PlatPursuit && PlatPursuit.staggerReveal) {
-                        PlatPursuit.staggerReveal({
+                        reveal = PlatPursuit.staggerReveal({
                             grid: wall, cardSelector: '.lb-row', step: 14,
                             reveal: function (el, delayMs) {
                                 if (!el.animate) { return; }

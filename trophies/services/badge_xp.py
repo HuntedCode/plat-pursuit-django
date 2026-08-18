@@ -21,6 +21,8 @@ reads, and none of it scans a hunter's library.
 from dataclasses import dataclass
 from collections import defaultdict
 
+from django.db import transaction
+
 # Calibratable constants -- keep all XP magnitudes here so the model is a one-file swap.
 # Calibrated to the "1,000,000 Club": over a projected mature catalog of ~400 group badges (~5 gating stages
 # each -> ~3,100 XP/badge), a completionist lands ~1.24M, so 1M is reachable but hard (~80% of the catalog),
@@ -172,13 +174,27 @@ def _results_by_series(desired: dict, group_badges) -> dict:
     return by_series
 
 
+#: Namespace for `recompute_standing`'s per-profile advisory lock. Arbitrary but STABLE -- changing it
+#: would let an old and a new deploy recompute the same profile concurrently during a rolling restart.
+_RECOMPUTE_LOCK_NS = 4267
+
+
 def _upsert(model, lookup: dict, defaults: dict) -> None:
     """Cheap upsert (UPDATE, else INSERT) -- avoids update_or_create's savepoint + SELECT FOR UPDATE, which is
-    heavy in the per-profile recompute. Safe because a profile's recompute is never concurrent with itself."""
+    heavy in the per-profile recompute.
+
+    Safe ONLY because `recompute_standing` holds a per-profile lock, which is what actually makes "a
+    profile's recompute is never concurrent with itself" true. It was asserted as a fact before the lock
+    existed and it was not one: the nightly `evaluate_badges --all` and a hunter's own `sync_complete` are
+    separate processes with no interlock, so a hunter syncing while the batch reached them ran two
+    recomputes at once. Both would find no row to UPDATE and both would INSERT -- an IntegrityError on the
+    unique constraint, aborting the whole recompute.
+    """
     if not model.objects.filter(**lookup).update(**defaults):
         model.objects.create(**lookup, **defaults)
 
 
+@transaction.atomic
 def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     """Write seam: recompute the EVALUATED series' standings from the current DesiredState and upsert them.
     Only touches series present in `group_badges` (a scoped --series run leaves other series intact); a series
@@ -190,9 +206,35 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     editions -- xp is SUMMED over them, progress_bp is the MAX, and group_progress is keyed per edition -- so a
     partial-series call (e.g. a future incremental sync scoped to one changed edition) would undercount xp and
     drop the sibling editions' group_progress. All current callers (evaluate_badges --all / --series / a
-    username) resolve full series, which honors this."""
+    username) resolve full series, which honors this.
+
+    ATOMIC, and serialized per profile by the lock below. This seam writes across FOUR tables and deletes
+    from two of them, and its own comments already reason about pairs of rows that must agree -- "one of
+    them holding a hunter the other has dropped is the kind of disagreement nobody would think to check".
+    Without a transaction, any failure partway (a timeout is the likely one) left exactly that
+    disagreement durably on disk. It stays SEPARATE from `apply_changes`'s transaction rather than being
+    folded into it, because the announcement between them is deliberately sent while the badges are
+    already committed -- see the comment in `evaluate_and_apply`."""
+    from django.db import connection
     from django.db.models import Sum
     from trophies.models import ProfileBadgeStanding, ProfileEditionStanding, SeriesBadgeStanding
+
+    # Serializes this profile's recomputes against each other, which is the precondition `_upsert` relies
+    # on. Two writers reach the same profile in normal operation: the nightly `evaluate_badges --all` and
+    # that hunter's own `sync_complete`.
+    #
+    # An ADVISORY lock, not `select_for_update` on the Profile row, and that choice is load-bearing. The
+    # row lock was tried and it collides with the sync path: `Profile.add_to_sync_target` locks the same
+    # row with `nowait=True` behind a 5-attempt / 0.2s tenacity retry, so a recompute holding it for more
+    # than ~0.8s turns into a `RetryError` inside the sync job -- and `nightly.py`'s own docstring says
+    # that overlap is expected. `increment_sync_progress`'s per-tick `save()` would block on it too.
+    # An advisory lock takes no row, so every Profile writer is unaffected; it is scoped to the badge
+    # recompute and nothing else contends for it.
+    #
+    # `_xact_` releases at COMMIT or ROLLBACK, so it cannot leak on the error path. Keyed on a constant
+    # namespace + the profile id, so two different profiles never wait on each other.
+    with connection.cursor() as cur:
+        cur.execute('SELECT pg_advisory_xact_lock(%s, %s)', [_RECOMPUTE_LOCK_NS, profile_id])
 
     standings = compute_series_standings(_results_by_series(desired, group_badges))
     positive = {slug: s for slug, s in standings.items() if s.xp > 0}

@@ -167,23 +167,24 @@ MY_PURSUIT_HUB = HubSubnavConfig(
 # landing-focused, so it carries NO sub-nav items -- the /support/ page features the fundraiser +
 # store instead. The /fundraiser/ prefix maps the campaign page here too. ("Support" is a
 # placeholder name, room for PlatPursuit charm.)
-# The Leaderboards hub. It carried NO items until 2026-08, on the argument that a rail would be a single
-# pill naming the page you were already on -- that comment invited items "the moment a second kind lands",
-# and the rebuild landed three.
+# The Leaderboards hub. NO items, which is where it started and where it has returned to: a rail would be
+# a single pill naming the page you are already on.
 #
-# Global Boards is the hub LANDING and its first pill, which is the standard shape: the strip's job is to
-# say what else is here, and the page you are on being marked is how you know where you are.
+# It briefly carried four. The original comment here invited items "the moment a second kind lands", and
+# the rebuild landed three at once -- Game Boards, Badge Boards and Job Boards. They were removed in
+# 2026-08 because each was a catalogue of entities that `/games/`, `/badges/` and `/jobs/` already
+# catalogue, differing only by a sort those pages already had. Nothing linked to them except this rail,
+# which existed because they did; the justification was circular, and it collapsed the moment either half
+# was examined. Boards live on the thing they rank, so the full board is on game, badge and job detail.
+#
+# `items=()` is the shape the Support hub also runs in: the hub is a single destination, and the nav item
+# goes straight to it.
 LEADERBOARDS_HUB = HubSubnavConfig(
     key='leaderboards',
     label='Leaderboards',
     icon='bar-chart',
     prefixes=('/leaderboards/',),
-    items=(
-        HubSubnavItem('global', 'Global Boards', 'overall_badge_leaderboards', 'bar-chart'),
-        HubSubnavItem('games', 'Game Boards', 'game_boards', 'gamepad-2'),
-        HubSubnavItem('badges', 'Badge Boards', 'badge_boards', 'award'),
-        HubSubnavItem('jobs', 'Job Boards', 'job_boards', 'briefcase'),
-    ),
+    items=(),
 )
 
 

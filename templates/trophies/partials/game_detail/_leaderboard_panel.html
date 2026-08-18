@@ -119,6 +119,13 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
             You&rsquo;re #{{ viewer_rank|intcomma }}
         </button>
+        {% elif viewer_profile %}
+        {% comment %} A signed-in hunter who is not on this board got NOTHING here, so the slot that
+        answers "where am I" simply vanished -- indistinguishable from a feature that does not exist. It
+        stays as a plain span rather than a button because there is no row to jump to. Deliberately does
+        not guess WHY (no trophies yet, 0%, or progress hidden are all reachable) -- naming the wrong
+        reason is worse than naming none. {% endcomment %}
+        <span class="gd-lb__jump gd-lb__jump--none">Not on this board yet</span>
         {% endif %}
     </div>
 

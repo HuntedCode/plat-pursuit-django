@@ -60,15 +60,45 @@ def test_write_applies_the_earn():
     assert UserGroupBadge.objects.filter(profile=profile, group_badge=gb).exists()
 
 
-def test_series_flag_evaluates_a_dormant_badge():
-    gb, game = _series_badge('dorm', is_live=False)   # dormant -> excluded from the default live run
+def test_a_dormant_badge_can_be_PREVIEWED_but_never_written():
+    """Releasing a badge is what makes it evaluable, and `--series` used to be a way around that.
+
+    A write run through a dormant edition did two things nothing undoes: it counted that edition's XP in
+    the holder's Badge Points (`_live_standings` gates the profile-wide sum at SERIES level, so one live
+    sibling carries the whole series through), and it created a `UserGroupBadge` the nightly
+    `evaluate_badges --all` can never revoke, because that run is live-scoped and never revisits it.
+
+    Previewing one is still legitimate -- it is how a curator checks a badge before launching it -- so the
+    capability survives as `--include-dormant`, welded to `--dry-run`.
+    """
+    _, game = _series_badge('dorm', is_live=False)
     profile = ProfileFactory(psn_username='hunter03')
     _complete(profile, game)
-    call_command('evaluate_badges', 'hunter03')        # default: live only -> nothing happens
+
+    # 1. The default run does not reach it.
+    call_command('evaluate_badges', 'hunter03')
     assert not UserGroupBadge.objects.filter(profile=profile).exists()
+
+    # 2. Nor does a plain --series run, which is the change: it now says so instead of writing.
+    err = StringIO()
+    call_command('evaluate_badges', 'hunter03', '--series', 'dorm', stderr=err)
+    assert 'No LIVE group badges' in err.getvalue()
+    assert not UserGroupBadge.objects.filter(profile=profile).exists(), (
+        'a dormant edition was awarded on a write run'
+    )
+
+    # 3. --include-dormant WITHOUT --dry-run is refused rather than honoured.
+    err = StringIO()
+    call_command('evaluate_badges', 'hunter03', '--series', 'dorm', '--include-dormant', stderr=err)
+    assert 'requires --series and --dry-run' in err.getvalue()
+    assert not UserGroupBadge.objects.filter(profile=profile).exists()
+
+    # 4. The preview still works, which is the whole point of keeping the flag.
     out = StringIO()
-    call_command('evaluate_badges', 'hunter03', '--series', 'dorm', '--dry-run', stdout=out)
-    assert 'award' in out.getvalue().lower()           # --series reaches the dormant badge
+    call_command('evaluate_badges', 'hunter03', '--series', 'dorm',
+                 '--include-dormant', '--dry-run', stdout=out)
+    assert 'award' in out.getvalue().lower()
+    assert not UserGroupBadge.objects.filter(profile=profile).exists(), 'a dry run wrote'
 
 
 def test_unknown_series_reports_error():
@@ -84,14 +114,29 @@ def test_username_not_found():
     assert 'No profile found' in err.getvalue()
 
 
-def test_all_flag_evaluates_every_profile():
+def test_all_flag_evaluates_every_profile_INCLUDING_UNLINKED_ONES():
+    """`--all` is `Profile.objects.exclude(psn_username='')` -- every SCRAPED profile, not every linked
+    one. That distinction is ~300,000 rows against ~50,000, and two other places depend on it being true:
+    the command's own help text, and `badge_leaderboards._linked`, whose justification for gating the
+    boards at READ is that standings for unlinked profiles "are real rows, not a hypothetical".
+
+    The unlinked profile is the whole point of this test. It used to be implicit -- `ProfileFactory` left
+    `is_linked` at the model default of False, so every profile here was unlinked by accident. When the
+    factory was corrected to match its own docstring, this test kept passing while silently losing the
+    only thing it proved: narrowing `--all` to `filter(is_linked=True)` left it green.
+    """
     gb, game = _series_badge('gow')
-    p1 = ProfileFactory(psn_username='hunterA')
-    _complete(p1, game)
-    p2 = ProfileFactory(psn_username='hunterB')
-    _complete(p2, game)
+    linked = ProfileFactory(psn_username='hunterA')
+    _complete(linked, game)
+    scraped = ProfileFactory(psn_username='hunterC', is_linked=False)
+    _complete(scraped, game)
+
     call_command('evaluate_badges', '--all')
-    assert UserGroupBadge.objects.filter(group_badge=gb).count() == 2
+
+    assert UserGroupBadge.objects.filter(group_badge=gb, profile=linked).exists()
+    assert UserGroupBadge.objects.filter(group_badge=gb, profile=scraped).exists(), (
+        '--all skipped an unlinked profile; it is documented to walk every profile with a PSN username'
+    )
 
 
 def test_series_alone_processes_only_players():

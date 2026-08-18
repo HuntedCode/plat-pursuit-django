@@ -386,7 +386,10 @@ def get_badge_detail(series, target_profile) -> BadgeDetail:
     # rows, so this is "made real progress", not "synced once"). One bounded indexed count, driving
     # series_size and the series rank's "of N". No longer the rarity denominator -- that is the whole
     # community now. Computed always (cheap), including for anon.
-    participants = SeriesBadgeStanding.objects.filter(series_slug=series.series_slug).count()
+    # THE SERVICE, not a hand-rolled count. The modal prints "Series rank #N of M" and this is the M;
+    # `series_rank` below is `lb.series_board_rank`, whose population is `is_linked`-gated. A raw count
+    # here counted the scraped profiles the board does not seat, so the denominator exceeded the board.
+    participants = lb.series_board_count(series.series_slug)
 
     groups = [_group_view(gb, desired.get(gb.id), holds.get(gb.id), target_profile, series, catalog,
                           games_map, profile_games, ratings_map, contract_map, participants)

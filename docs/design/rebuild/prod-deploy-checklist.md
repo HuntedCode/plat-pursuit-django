@@ -432,9 +432,15 @@ GROUP BY series_slug HAVING count(*) > 1;
       raises `ProtectedError` in the admin instead of silently deleting the payment record. If a series
       genuinely must go, delete or re-point its claim first, deliberately.
 
-## Leaderboard performance + board entrants (2026-08)
+## Leaderboard performance (2026-08)
 
-Migrations `trophies.0307_partial_board_indexes` and `trophies.0308_board_entrants`.
+Migration `trophies.0307_partial_board_indexes`.
+
+> `0308_board_entrants` was written, applied on dev, and then **deleted** when the three board
+> directories were removed -- `BadgeSeries.entrants` / `Job.entrants` existed only so those pages could
+> gate and sort across the whole catalogue before pagination, and nothing else read them. It never
+> reached prod, so there is nothing to undo here and no drop migration to run. `Game.played_count` is a
+> different, older column and is unaffected.
 
 - [ ] **`0307` rebuilds two indexes on `Profile` CONCURRENTLY.** It makes them partial on the Trophies
       board's population (`is_linked AND total_trophies > 0`), which takes `trophy_rank` off a seq scan of
@@ -454,26 +460,43 @@ Migrations `trophies.0307_partial_board_indexes` and `trophies.0308_board_entran
       WHERE indexrelid::regclass::text IN ('profile_board_idx','profile_board_cc_idx');
       ```
 
-- [ ] **`0308` backfills the new entrant counts in the migration.** It must: the directories gate on
-      `entrants >= BOARD_MIN_ENTRANTS`, so without the backfill every badge and job board fails its own
-      gate and both directories render an empty state that reads as considered rather than broken. No
-      action needed -- recorded so you know it is covered.
-- [ ] **Replace the four nightly Render entries with ONE `nightly` entry at 04:00 UTC.** Delete
+- [ ] **Replace the three nightly Render entries with ONE `nightly` entry at 04:00 UTC.** Delete
       `evaluate_badges --all` (04:00), `detect_dlc_and_refresh` (04:30) and `audit_badge_coverage`
-      (05:00); `nightly` runs all three plus `recalc_board_entrants`, in dependency order. Leaving the old
-      entries in place is not harmless: they would run the same work a second time, concurrently with the
-      orchestrator, and `recompute_standing`'s `_upsert` has no concurrency guard.
-- [ ] **Sanity-check the entrants counts after the first run.** `python manage.py recalc_board_entrants
-      --dry-run` should report 0 series and 0 jobs changed. Anything else means the nightly did not run or
-      the standings moved after it.
-- [ ] **Expect the board gate to lag by a day.** A series or job that qualifies at noon gets its directory
-      card after the next nightly. This is the accepted trade for the column (`Game.played_count` already
-      behaves this way) and is worth knowing before somebody reports it as a bug.
+      (05:00); `nightly` runs all three in dependency order. Leaving the old entries in place is not
+      harmless: they would run the same work a second time, concurrently with the orchestrator.
+      (`recompute_standing` now takes a per-profile `select_for_update` lock, so a concurrent pair
+      serializes instead of both INSERTing -- but serializing two full passes over ~300,000 profiles is
+      not a thing to leave scheduled.)
+- [ ] **`ProfileEditionStanding` rows are written only for editions a hunter HOLDS something in**, so a
+      newly seeded edition has no rows until each hunter's next evaluation. Its board is genuinely empty
+      on day one rather than broken; the first `nightly` after seeding fills it. Nothing to run -- noted
+      because "the new edition's board is empty" reads like a bug for the first 24 hours.
+
+### Board population now gates on `is_linked` (behaviour change, no migration)
+
+Every board in `badge_leaderboards` filters `profile__is_linked=True`, which only the Trophies board did
+before. **Badge Points, Career XP, the per-series boards, the per-job boards and the earners lists will
+all lose rows on deploy** -- specifically the scraped, unverified profiles that `evaluate_badges --all`
+has been writing standings for all along, scout accounts included. That is the intended correction, but
+it means published ranks move, so it is worth saying so rather than letting hunters discover it.
+
+Nothing to run. The gate is at READ, so verifying an account puts a hunter on the boards immediately with
+no re-evaluation. Game boards are deliberately exempt (they record who played a game, not who competes)
+and are owned by `game_leaderboard_service`, which has its own `members_only` toggle.
+
+### The three board directories are gone (no deploy step)
+
+`/leaderboards/{games,badges,jobs}/` were removed without redirects -- they never left a dev machine, and
+nothing linked to them but the hub rail, which existed because they did. The Leaderboards hub is back to
+`items=()`, so it is one destination reached from the navbar, like Support. `/leaderboards/badges/` keeps
+its pre-directory 301 to the landing, because the per-series redirect below it is still live and that
+path is its parent.
 
 ### Still on wall-clock ordering (not part of this change)
 
-`recalc_earn_rates` (03:00), `recalc_profile_counters` (03:30), `recompute_tag_covers` (03:45),
-`update_shovelware` (04:00) and `recompute_milestones` (05:30) remain separate entries whose ordering is
-implied by their times. `recompute_milestones` already documents a dependency on `recalc_profile_counters`
-rather than enforcing it -- the same hazard `nightly` was built to remove for the badge chain. Folding
-them in is a follow-up; it was left out here to keep the change to one subsystem.
+`populate_title_ids` (02:00), `recalc_earn_rates` (03:00), `recalc_profile_counters` (03:30),
+`recompute_tag_covers` (03:45), `update_shovelware` (04:00) and `recompute_milestones` (05:30) remain
+separate entries whose ordering is implied by their times. `recompute_milestones` already documents a
+dependency on `recalc_profile_counters` rather than enforcing it -- the same hazard `nightly` was built to
+remove for the badge chain. **Folding them in is a tracked follow-up** (see the FOLLOW-UP block in
+[cron-jobs.md](../../guides/cron-jobs.md)); it was left out here to keep the change to one subsystem.

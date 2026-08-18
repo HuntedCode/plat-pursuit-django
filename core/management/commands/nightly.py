@@ -4,11 +4,12 @@ WHY THIS EXISTS: the nightly work has real ordering constraints, and they used t
 wall-clock spacing in the Render dashboard -- `evaluate_badges --all` at 04:00, `detect_dlc_and_refresh`
 at 04:30. Thirty minutes is a guess. `evaluate_badges --all` walks every linked profile, so when it
 outgrows that gap the two overlap, and then two processes call `recompute_standing` for the same profiles
-while `_upsert` has no concurrency guard. The entrants denorm sharpened it further: a count taken while
-standings are being rewritten is a count of a half-written table.
+while two `recompute_standing` calls raced for the same profile. (That one now takes a per-profile lock,
+so a race serializes rather than corrupting -- but two full passes over 300,000 profiles serializing is
+not a thing to leave scheduled.)
 
-Sequence is the point. `recalc_board_entrants` MUST follow the badge evaluation, because it counts the
-standings that evaluation writes.
+Sequence is the point: `detect_dlc_and_refresh` re-evaluates series whose games gained DLC, so it must
+follow the evaluation rather than overlap it.
 
 WHAT THIS IS NOT: a single monolithic command. Each step is isolated -- one failing step is logged and
 the rest still run, because "the DLC sweep failed" should not also cost you the coverage email. Steps
@@ -27,12 +28,10 @@ from django.core.management.base import BaseCommand
 #: (label, command, kwargs). Order is a DEPENDENCY order, not a preference:
 #:   1. evaluate_badges --all  writes SeriesBadgeStanding / ProfileBadgeStanding / ProfileEditionStanding
 #:   2. detect_dlc_and_refresh re-evaluates series whose games gained DLC (writes the same tables)
-#:   3. recalc_board_entrants  COUNTS those standings -- must be last of the three
-#:   4. audit_badge_coverage   read-only report; last because it is the least urgent
+#:   3. audit_badge_coverage   read-only report; last because it is the least urgent
 STEPS = [
     ('badge evaluation', 'evaluate_badges', {'all': True}),
     ('DLC detection', 'detect_dlc_and_refresh', {}),
-    ('board entrants', 'recalc_board_entrants', {}),
     ('badge coverage audit', 'audit_badge_coverage', {}),
 ]
 
@@ -41,7 +40,7 @@ class Command(BaseCommand):
     help = "Run the nightly maintenance steps in dependency order. One cron entry, isolated failures."
 
     def add_arguments(self, parser):
-        parser.add_argument('--only', help="Run a single step by label, e.g. --only 'board entrants'.")
+        parser.add_argument('--only', help="Run a single step by label, e.g. --only 'DLC detection'.")
         parser.add_argument('--skip', action='append', default=[],
                             help='Skip a step by label. Repeatable.')
         parser.add_argument('--dry-run', action='store_true',

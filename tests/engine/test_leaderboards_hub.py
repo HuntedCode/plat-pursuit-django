@@ -34,13 +34,16 @@ def test_every_old_overall_path_lands_in_one_hop(client, old):
     assert client.get(resp['Location']).status_code == 200, 'the destination is not a live page'
 
 
-def test_the_badge_boards_path_became_a_page(client):
-    """`/leaderboards/badges/` used to redirect to the landing -- it existed only so the per-series route
-    had a resolvable parent. It is the Badge Boards DIRECTORY now, so it must serve a page rather than
-    bounce, and its old redirect was deleted rather than left shadowed (a RedirectView that can never run
-    reads as intent and does nothing)."""
+def test_the_badge_boards_path_still_lands_somewhere(client):
+    """`/leaderboards/badges/` redirects to the landing, which is what it did before the Badge Boards
+    directory briefly took the path and what it does again now the directory is gone.
+
+    It is not decoration: the per-series redirect below is still live, so this is the parent of a URL
+    people can be holding, and chopping a URL back to its parent is a thing readers do."""
     resp = client.get('/leaderboards/badges/')
-    assert resp.status_code == 200, 'Badge Boards does not serve a page'
+
+    assert resp.status_code == 301
+    assert resp['Location'] == LANDING
 
 
 def test_the_per_series_path_moved_and_keeps_its_series(client):

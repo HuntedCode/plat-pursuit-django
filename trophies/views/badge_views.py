@@ -581,237 +581,6 @@ class BadgeDetailView(DetailView):
         return context
 
 
-class BoardDirectoryView(HtmxListMixin, ListView):
-    """Shared base for the board directories (Badge Boards, Game Boards).
-
-    A directory is a catalogue of BOARDS: entity identity, a top slice, a link to the full board. It owns
-    no data and is not a second home for one -- the full board lives on the entity.
-
-    THIN, deliberately (see docs/design/rebuild/leaderboards-rebuild.md). Search plus exactly TWO sorts:
-
-      name     -> alphabetical, the default. A catalogue that reorders between visits is disorienting, and
-                  anyone hunting a specific entity uses search.
-      entrants -> the only sort that answers "which boards are actually alive".
-
-    No filter panel, no facets, no country. These directories catalogue the same entities `/games/` and
-    `/badges/` already catalogue; without a stated differentiator they converge into second copies of
-    those browse pages, and then there are two walls, two filter sets and a drift risk. If one ever grows
-    a filter drawer it has become a second Browse Games and belongs folded back in as a view mode.
-
-    The MINIMUM-PARTICIPANTS gate is what keeps the wall worth scrolling: a directory full of
-    one-entrant boards reads as broken and drowns the boards worth looking at. It also pays for the
-    "entrants" sort, since the counts are needed either way.
-    """
-    # Declared here so a new directory that forgets it fails loudly and early rather than with an
-    # AttributeError deep in a template render.
-    kind = None               # subclasses MUST set: 'badges' | 'games' | 'jobs'
-    DIRECTORY_LABEL = None    # subclasses MUST set: the breadcrumb leaf, e.g. 'Badge Boards'
-    paginate_by = 24
-    context_object_name = 'cards'
-    SORTS = (('name', 'Name (A-Z)'), ('entrants', 'Most entrants'))
-    SORT_KEYS = {k for k, _ in SORTS}
-    DEFAULT_SORT = 'name'
-    PREVIEW = 5               # top slice per card; the template shows 3 of them on a phone
-
-    @property
-    def min_entrants(self):
-        """How many entrants a board needs before this directory lists it.
-
-        Read from settings per kind rather than hardcoded, because the right number depends on the size
-        of the dataset and the prod-correct value silently empties the page on any smaller one. A dev
-        database with a few linked profiles has almost no game with 3 owners, so the game gate hid the
-        entire catalogue and the page said "no board has enough hunters yet" -- confident, specific, and
-        wrong. See BOARD_MIN_ENTRANTS in settings.
-        """
-        return settings.BOARD_MIN_ENTRANTS.get(self.kind, 1)
-
-    def _q(self):
-        return (self.request.GET.get('q') or '').strip()
-
-    def _sort(self):
-        raw = self.request.GET.get('sort') or self.DEFAULT_SORT
-        return raw if raw in self.SORT_KEYS else self.DEFAULT_SORT
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        assert self.kind, f'{type(self).__name__} must set `kind`'
-        context.update({
-            'q': self._q(),
-            'sort': self._sort(),
-            'sorts': self.SORTS,
-            'directory_kind': self.kind,
-            # The infinite scroller resolves its resume point from this; hard-coding it in the template
-            # would silently desync the moment `paginate_by` changed.
-            'paginate_by': self.paginate_by,
-            # The template includes partials/breadcrumb.html, which is `{% if items %}`-guarded -- so
-            # omitting this failed silently and left the three directories without the breadcrumb their
-            # sibling (Global Boards) has.
-            # `text`, not `label` -- partials/breadcrumb.html reads item.text, and a wrong key renders
-            # empty <li>s rather than erroring.
-            'breadcrumb': [
-                {'text': 'Leaderboards', 'url': reverse('overall_badge_leaderboards')},
-                {'text': self.DIRECTORY_LABEL},
-            ],
-        })
-        return context
-
-
-class BadgeBoardsView(BoardDirectoryView):
-    """`/leaderboards/badges/` -- every badge series with a live board.
-
-    Replaces the old `?tab=series` directory, which was built on `Badge.objects.filter(tier=1)` -- the
-    tier concept the badge rebuild retired. This one reads BadgeSeries + the standing store.
-    """
-    kind = 'badges'
-    DIRECTORY_LABEL = 'Badge Boards'
-    template_name = 'trophies/board_directory.html'
-    partial_template_name = 'trophies/partials/board_directory_results.html'
-
-    def get_queryset(self):
-        # Only series with a LIVE group badge: a dormant series has no board to preview.
-        qs = BadgeSeries.objects.filter(
-            Exists(GroupBadge.objects.filter(series=OuterRef('pk'), is_live=True))
-        )
-        q = self._q()
-        if q:
-            qs = qs.filter(name__icontains=q)
-
-        # Gate and sort BOTH read the denormalized `entrants` column, so this is one indexed query that
-        # the database paginates. It used to aggregate the WHOLE standing table to decide which 24 rows
-        # to show -- unavoidable when the gate depends on a computed value -- then aggregate again for
-        # the page, then sort in Python before ListView could paginate. Measured 91 ms x2 for jobs,
-        # re-run on every infinite-scroll page. See BadgeSeries.entrants for why the column is
-        # recomputed rather than incremented.
-        qs = qs.filter(entrants__gte=self.min_entrants)
-
-        if self._sort() == 'entrants':
-            return qs.order_by('-entrants', Lower('name'))
-        return qs.order_by(Lower('name'))
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        series = list(context['cards'])
-        slugs = [s.series_slug for s in series]
-
-        previews = lb.series_board_previews(slugs, n=self.PREVIEW)
-        # No second count query: `entrants` is already on each row.
-        hydrated = lb.hydrate([r[0] for rows in previews.values() for r in rows])
-
-        context['boards'] = [{
-            'key': s.series_slug,
-            'name': s.name,
-            'url': reverse('badge_detail', args=[s.series_slug]) + '#ranks',
-            'entrants': s.entrants,
-            'rows': [
-                dict(lb.entry(hydrated, r[0], i + 1), primary=r[2], primary_label='stages')
-                for i, r in enumerate(previews.get(s.series_slug, []))
-            ],
-        } for s in series]
-        return context
-
-
-class GameBoardsView(BoardDirectoryView):
-    """`/leaderboards/games/` -- every game with a board worth looking at.
-
-    The full board is game detail's Ranks panel, which is already rebuilt; this is discovery over it.
-    """
-    kind = 'games'
-    DIRECTORY_LABEL = 'Game Boards'
-    template_name = 'trophies/board_directory.html'
-    partial_template_name = 'trophies/partials/board_directory_results.html'
-    def get_queryset(self):
-        # `played_count` is a denormalized column on Game, so the gate and the "entrants" sort are both
-        # free -- no aggregate over ProfileGame, which is one of the largest tables in the schema.
-        #
-        # It is maintained by a post_save signal on ProfileGame CREATION and recomputed by the nightly
-        # `recalc_earn_rates`. Bulk loads, fixtures and restores bypass signals, so on a freshly imported
-        # database it can read 0 while the rows sit there intact -- run `backfill_played_count`.
-        qs = Game.objects.filter(played_count__gte=self.min_entrants).select_related(
-            'concept', 'concept__igdb_match',
-        ).defer('concept__igdb_match__raw_response')
-
-        q = self._q()
-        if q:
-            qs = qs.filter(title_name__icontains=q)
-
-        if self._sort() == 'entrants':
-            return qs.order_by('-played_count', Lower('title_name'))
-        return qs.order_by(Lower('title_name'))
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        games = list(context['cards'])
-        ids = [g.id for g in games]
-
-        previews = lb.game_board_previews(ids, n=self.PREVIEW)
-        hydrated = lb.hydrate([r[0] for rows in previews.values() for r in rows])
-
-        context['boards'] = [{
-            'key': g.id,
-            'name': g.title_name,
-            'art': g.display_image_url,
-            'url': reverse('game_detail', args=[g.np_communication_id]),
-            'entrants': g.played_count,
-            'rows': [
-                dict(lb.entry(hydrated, r[0], i + 1), primary=r[1], primary_label='%')
-                for i, r in enumerate(previews.get(g.id, []))
-            ],
-        } for g in games]
-        return context
-
-
-class JobBoardsView(BoardDirectoryView):
-    """`/leaderboards/jobs/` -- the 24 job boards.
-
-    The smallest directory by far, which is exactly why it must follow the same rules: 24 entities is
-    where a filter panel looks harmless and a third sort looks free. Same base, same two sorts, same gate.
-    """
-    kind = 'jobs'
-    DIRECTORY_LABEL = 'Job Boards'
-    template_name = 'trophies/board_directory.html'
-    partial_template_name = 'trophies/partials/board_directory_results.html'
-
-    def get_queryset(self):
-        from trophies.models import Job
-
-        qs = Job.objects.all()
-        q = self._q()
-        if q:
-            qs = qs.filter(name__icontains=q)
-
-        # Gate and sort BOTH read the denormalized `entrants` column, so this is one indexed query that
-        # the database paginates. It used to aggregate the WHOLE standing table to decide which 24 rows
-        # to show -- unavoidable when the gate depends on a computed value -- then aggregate again for
-        # the page, then sort in Python before ListView could paginate. Measured 91 ms x2 for jobs,
-        # re-run on every infinite-scroll page. See BadgeSeries.entrants for why the column is
-        # recomputed rather than incremented.
-        qs = qs.filter(entrants__gte=self.min_entrants)
-
-        if self._sort() == 'entrants':
-            return qs.order_by('-entrants', Lower('name'))
-        return qs.order_by(Lower('name'))
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        jobs = list(context['cards'])
-        slugs = [j.slug for j in jobs]
-
-        previews = lb.job_board_previews(slugs, n=self.PREVIEW)
-        # No second count query: `entrants` is already on each row.
-        hydrated = lb.hydrate([r[0] for rows in previews.values() for r in rows])
-
-        context['boards'] = [{
-            'key': j.slug,
-            'name': j.name,
-            'url': reverse('job_detail', args=[j.slug]) + '?tab=ranks',
-            'entrants': j.entrants,
-            'rows': [
-                dict(lb.entry(hydrated, r[0], i + 1), primary=r[1], primary_label='XP')
-                for i, r in enumerate(previews.get(j.slug, []))
-            ],
-        } for j in jobs]
-        return context
-
 
 class BadgeRanksPanelView(View):
     """`/badges/<series_slug>/ranks/` -- the series board, fetched into badge detail's Ranks section.
@@ -839,23 +608,46 @@ class BadgeRanksPanelView(View):
         if not request.user.is_staff and not series.group_badges.filter(is_live=True).exists():
             raise Http404("Series not found")
 
-        total = lb.series_board_count(series_slug)
-        rows = lb.series_board_rows(series_slug, limit=self.PREVIEW)
-        entries = lb.page(rows, 0, extra=lambda r: {
+        # `offset > 0` means the reader pressed "show more", so only the next slice of ROWS comes back and
+        # is appended. The full panel (meta line, empty state, the button itself) is emitted once.
+        try:
+            offset = max(0, int(request.GET.get('offset', 0)))
+        except (TypeError, ValueError):
+            offset = 0
+
+        rows = lb.series_board_rows(series_slug, limit=self.PREVIEW, offset=offset)
+        # `offset`, not 0: `page()` numbers rows by SLOT, so the second slice must start at 26, not at 1.
+        entries = lb.page(rows, offset, extra=lambda r: {
             'primary': r[2], 'primary_label': 'stages',
             'secondary': None, 'secondary_label': '',
         })
+        if offset:
+            # ROWS ONLY, plus one header. The client used to infer "that was the last slice" from a short
+            # response, which cost a dead click on every board whose size is an exact multiple of PREVIEW.
+            # A header rather than markup keeps the fragment a clean list of <li>s.
+            resp = render(request, 'trophies/partials/badge_detail/bd2_ranks_rows.html', {'rows': entries})
+            resp['X-Has-Next'] = '1' if len(entries) == self.PREVIEW and lb.series_board_rows(
+                series_slug, limit=1, offset=offset + self.PREVIEW) else '0'
+            return resp
 
-        my_rank = None
+        total = lb.series_board_count(series_slug)
+
         profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
-        if profile:
-            my_rank = lb.series_board_rank(series_slug, profile.id)
+        my_rank = lb.series_board_rank(series_slug, profile.id) if profile else None
 
         return render(request, 'trophies/partials/badge_detail/bd2_ranks.html', {
             'rows': entries,
             'total': total,
             'my_rank': my_rank,
+            # Distinguishes "signed out" from "signed in and not on this board". The template used to gate
+            # the whole line on `my_rank`, so an unranked hunter got silence where the answer belonged.
+            #
+            # `is_linked`, not merely "has a profile": every board population is gated on it
+            # (`badge_leaderboards._linked`), so an unverified account told "not on this board yet" is
+            # being promised a board it cannot enter. Game detail already resolves its viewer this way.
+            'show_my_standing': bool(profile and profile.is_linked),
             'has_more': total > len(entries),
+            'next_offset': len(entries),
             'series': series,
         })
 
@@ -912,12 +704,18 @@ class OverallBadgeLeaderboardsView(TemplateView):
     # `xp` was the old key for the Badge Points board; `country` was a TAB before country became a filter;
     # `progress` was this board's key while it was called Progress, a name that described the store rather
     # than what it ranks. Bookmarks carrying any of them still land where they meant to.
-    LEGACY_TABS = {'xp': 'points', 'country': 'points', 'progress': 'trophies'}
+    #
+    # `series` joins them: it was a DIRECTORY reachable at `?tab=series`, deliberately out of the tab
+    # strip, held open as a placeholder for `/leaderboards/badges/`. That page was built and then removed
+    # in 2026-08, and the placeholder read the RETIRED tier-era `Badge` model, which has had no writer
+    # since cutover 5b -- so it rendered a frozen catalogue beside live standing counts. It maps to the
+    # default board rather than 404ing: a stale bookmark should land on a board, not on an error.
+    LEGACY_TABS = {'xp': 'points', 'country': 'points', 'progress': 'trophies', 'series': 'trophies'}
 
     def _active_tab(self):
         raw = self.request.GET.get('tab', 'trophies')
         raw = self.LEGACY_TABS.get(raw, raw)
-        return raw if (raw in self.BOARD_KEYS or raw == 'series') else 'trophies'
+        return raw if raw in self.BOARD_KEYS else 'trophies'
 
     def _country(self, codes):
         """The country slice, validated against `codes` -- countries that actually have ranked hunters.
@@ -1021,13 +819,6 @@ class OverallBadgeLeaderboardsView(TemplateView):
             context['board'] = board
             context['ranked_total'] = board.paginator.count
             context['ranked_label'] = 'hunter'
-        elif tab == 'series':
-            directory = self._series_directory()
-            context['series_directory'] = directory
-            # The directory lists SERIES, so the tally counts series. Carrying the hunter figure onto a
-            # surface that shows no hunters is the same category error, one page over.
-            context['ranked_total'] = len(directory)
-            context['ranked_label'] = 'series'
 
         # The viewer's own standing, ONCE, in the header -- not per row (see the class docstring).
         # Each rank is read under the SAME slice as the board it links to, so the number the reader sees
@@ -1090,34 +881,6 @@ class OverallBadgeLeaderboardsView(TemplateView):
                 'secondary': r[2], 'secondary_label': 'level',
             })
         return lb.BoardPage(entries, page_num, paginator)
-
-    def _series_directory(self):
-        """The per-series board directory, still on the LEGACY Badge model.
-
-        Temporary: step 6 of the leaderboards rebuild promotes this to a proper Badge Boards directory at
-        `/leaderboards/badges/`, built on BadgeSeries/GroupBadge. It stays reachable at `?tab=series` in
-        the meantime so the section has no gap, and is deliberately NOT in the tab strip -- that strip is
-        for boards, and a directory sitting in it was the incoherence this rebuild is removing.
-        """
-        badges = Badge.objects.live().filter(tier=1).select_related(
-            'base_badge', 'most_recent_concept', 'most_recent_concept__igdb_match',
-            'base_badge__most_recent_concept', 'base_badge__most_recent_concept__igdb_match',
-            'base_badge__title', 'title',
-        ).defer(
-            'most_recent_concept__igdb_match__raw_response',
-            'base_badge__most_recent_concept__igdb_match__raw_response',
-        ).exclude(series_slug__isnull=True).exclude(series_slug='').order_by(Lower('display_series'))
-
-        directory = list(badges)
-        counts = dict(
-            SeriesBadgeStanding.objects
-            .filter(series_slug__in=[b.series_slug for b in directory])
-            .values('series_slug').annotate(n=Count('id'))
-            .values_list('series_slug', 'n')
-        )
-        for badge in directory:
-            badge.progress_count = counts.get(badge.series_slug, 0)
-        return directory
 
 class BadgeHowItWorksView(TemplateView):
     """`/badges/how-it-works/` -- the permanent, addressable home for the badge teaching.

@@ -1026,6 +1026,10 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-lb__jump svg { width: 13px; height: 13px; }
 .gd-lb__jump:hover { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); }
 .gd-lb__jump:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* Same slot, same shape, none of the affordance: it is a statement, not a control, so it drops the accent
+   and the pointer. Keeping the pill keeps the heading row from reflowing between the two states. */
+.gd-lb__jump--none { cursor: default; font-weight: 600; color: var(--pp-text-mute); background: var(--pp-bg-2); border-color: var(--pp-border); }
+.gd-lb__jump--none:hover { background: var(--pp-bg-2); border-color: var(--pp-border); }
 
 /* The list is a card: it frames the rows as one object, so they read as a ranking table rather than a
    stack of floating chips. Rows lose their own background (chip-in-card is busy) and separate by a

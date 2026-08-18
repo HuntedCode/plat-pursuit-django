@@ -18,9 +18,11 @@ URL-matched.
 > **2026-08:** Browse's Catalog rail gained **Jobs** (`/jobs/`, + `/jobs/<slug>/`). A catalogue of
 > jobs is a browse surface, not a Leaderboards one -- its relationship to Career's Dossier is the
 > Collection-vs-Browse-Badges split (*scope, not pagination*): Career shows YOUR standing across the
-> 24 jobs, `/jobs/` shows what they are. Leaderboards gained its first sub-nav at the same time
-> (Global / Game / Badge / Job Boards), retiring the "no items on purpose" note it carried while
-> badge leaderboards were the only kind. See
+> 24 jobs, `/jobs/` shows what they are. Leaderboards briefly gained a sub-nav at the same time
+> (Global / Game / Badge / Job Boards) and **lost it again before the end of the month**: the three
+> board directories were removed as second copies of `/games/`, `/badges/` and `/jobs/`, and the hub is
+> back to `items=()` -- the shape it was designed with, and the one Support runs in. A hub landing is
+> reached by its own navbar entry; a one-pill rail naming the page you are on is not navigation. See
 > [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
 | **Leaderboards** | `/leaderboards/` | how everyone ranks | "where do I stand" |
 | **Support** | `/support/` | the fundraiser + (coming) membership store | "ways to support us" |

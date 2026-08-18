@@ -39,6 +39,34 @@ def _slice(qs, country):
     return qs.filter(country_code=country.upper()) if country else qs
 
 
+def _linked(qs, path='profile__'):
+    """Restrict a board's population to VERIFIED hunters.
+
+    ONE rule for every board in this module, because the three Global Boards disagreed about it and the
+    disagreement was visible on a single page. `trophy_store()` has always gated on `is_linked` -- it reads
+    `Profile` directly, and without the gate it would rank all ~300,000 scraped profiles rather than the
+    ~50,000 people who actually claimed one. The badge and career stores never did, so:
+
+      - Badge Points ranked unlinked profiles, including the SCOUT ACCOUNTS the catalogue uses to discover
+        games. `evaluate_badges --all` walks `Profile.objects.exclude(psn_username='')` -- every scraped
+        profile, not every linked one, whatever its `--all` help text used to claim -- so those standings
+        are real rows, not a hypothetical.
+      - Career XP was linked-only by ACCIDENT rather than by rule: claiming a contract requires a login, so
+        no unlinked profile has ever had career XP. Gating it explicitly costs nothing today and stops the
+        next writer from having to rediscover why the other two boards filter and this one does not.
+
+    The gate is at READ, not at the write seam, deliberately. Standings are also what a PROFILE page reads,
+    and an unlinked hunter's badges are legitimate content there -- they are just not a competitor. Reading
+    it this way also means verifying an account puts you on the boards immediately, with no re-evaluation.
+
+    Game boards are the one exception and do not live here: they record who PLAYED a game, which is
+    catalogue data, and `game_leaderboard_service` owns them with its own `members_only` toggle.
+
+    `path` names the hop to `Profile` for the row's own model ('' when the queryset IS Profile).
+    """
+    return qs.filter(**{f'{path}is_linked': True})
+
+
 # ------------------------------------------------------------------ rank == position ---------------------
 # Every board's canonical order ENDS IN `profile_id`, a unique final key that makes the order TOTAL, and the
 # rank count expresses that same full key list. This is the rule `game_leaderboard_service` already
@@ -106,8 +134,8 @@ def badge_store(edition=None):
     from this path means a bug, not a typo'd URL.
     """
     if not edition:
-        return ProfileBadgeStanding.objects.all()
-    return ProfileEditionStanding.objects.filter(platform_group_key=edition)
+        return _linked(ProfileBadgeStanding.objects.all())
+    return _linked(ProfileEditionStanding.objects.filter(platform_group_key=edition))
 
 
 #: The picker lookups are VIEWER-INDEPENDENT and change roughly never (a new country appears when a
@@ -143,17 +171,18 @@ def _cached(key, build):
 def active_editions():
     """Platform editions the picker may offer, as PlatformGroup rows.
 
-    BOTH gates, deliberately, because the reader and the writer disagree about which one matters and an
-    edition needs to satisfy each:
+    BOTH gates, deliberately, because they answer different questions and an edition has to pass each:
 
-      is_active=True         -- what `badge_xp.edition_platforms()` uses to decide which standings to WRITE.
+      is_active=True         -- the CURATOR's switch: is this edition something we offer at all. It is the
+                                same gate the badge-authoring form and `convert_series_to_groups` read, so
+                                an edition withdrawn there stops being offered here too.
       group_badges__is_live  -- what the Browse Badges gallery chips use; an unlaunched group would offer a
                                 board that could only ever be empty.
 
-    Gating on `is_live` alone was the bug: deactivating a group whose badges are still live left it in this
-    dropdown while the write seam stopped maintaining its rows and then deleted them on each re-sync, so
-    the board drained over a few days and finally claimed "nobody is on Legacy HD yet" -- a sentence about
-    a config flag, presented as a fact about hunters.
+    (This docstring used to justify the first gate as "what `badge_xp.edition_platforms()` uses to decide
+    which standings to WRITE". That function no longer exists and the write seam does not read `is_active`
+    at all -- `_write_edition_standings` derives a hunter's edition set from what they actually HOLD. The
+    gate is still right; only the reason for it was stale.)
     """
     from trophies.models import PlatformGroup
 
@@ -193,7 +222,13 @@ def hydrate(profile_ids):
         # board page, every directory card page and every job board, for a figure no template renders. The
         # only three that ever read it are orphaned pre-rebuild partials with no includers. If a board ever
         # wants to show badges held, add it back deliberately and render it.
-        .values('id', 'display_psn_username', 'avatar_url', 'flag', 'user_is_premium',
+        # BOTH usernames. `display_psn_username` is blank/nullable (it is populated from the PSN API and a
+        # profile can exist without one), while `psn_username` is unique and required -- so selecting only
+        # the display column rendered those hunters nameless AND unlinkable, which `entry()` then turned
+        # into a blank row. `display_psn_username or psn_username` is the site's established fallback
+        # (api/platinum_grid_views.py, api/recap_views.py, api/roadmap_note_views.py, ...); the boards were
+        # the one place that skipped it.
+        .values('id', 'display_psn_username', 'psn_username', 'avatar_url', 'flag', 'user_is_premium',
                 'country_code', 'display_title')
     )
     return {r['id']: r for r in rows}
@@ -218,8 +253,6 @@ def country_options(codes=None):
     `codes` may be passed by a caller that already has them, so the page does not resolve the same two
     DISTINCT aggregates twice.
     """
-    from trophies.models import Profile
-
     codes = active_countries() if codes is None else codes
     if not codes:
         return []
@@ -264,11 +297,14 @@ def active_countries():
             .values_list('country_code', flat=True).distinct()
         )
         codes |= set(
-            ProfileBadgeStanding.objects.exclude(country_code='')
+            # `badge_store()`, not the raw manager -- its two siblings here are gated and this one was
+            # not, so a country whose only badge standings belong to scraped profiles was offered in the
+            # picker and then rendered an empty board on all three tabs. Cached for an hour, so it stuck.
+            badge_store().exclude(country_code='')
             .values_list('country_code', flat=True).distinct()
         )
         codes |= set(
-            ProfileCareerStanding.objects.exclude(country_code='')
+            career_store().exclude(country_code='')
             .values_list('country_code', flat=True).distinct()
         )
         return sorted(codes)
@@ -287,7 +323,7 @@ def board_count(tab, country=None, edition=None):
     expression again (so `?tab=career` printed the badge population above the career wall).
     """
     if tab == 'career':
-        return _slice(ProfileCareerStanding.objects.filter(total_xp__gt=0), country).count()
+        return _slice(career_store().filter(total_xp__gt=0), country).count()
     if tab == 'points':
         return _slice(badge_store(edition).filter(total_xp__gt=0), country).count()
     return _slice(trophy_store(), country).count()
@@ -378,6 +414,11 @@ def trophy_rank(profile_id, country=None):
     return store.filter(_ahead_q(TROPHY_KEYS, {**mine, 'id': profile_id})).count() + 1
 
 
+def career_store():
+    """The Career XP board's population. Same verified-hunter gate as the other two Global Boards."""
+    return _linked(ProfileCareerStanding.objects.all())
+
+
 def career_xp_rows(limit=50, offset=0, country=None):
     """Career XP (the jobs economy): [(profile_id, total_xp, pursuer_level), ...].
 
@@ -388,7 +429,7 @@ def career_xp_rows(limit=50, offset=0, country=None):
     so the last page ran past the total the footer promised.
     """
     return list(
-        _slice(ProfileCareerStanding.objects, country).filter(total_xp__gt=0)
+        _slice(career_store(), country).filter(total_xp__gt=0)
         .order_by('-total_xp', 'profile_id')
         .values_list('profile_id', 'total_xp', 'pursuer_level')[offset:offset + limit]
     )
@@ -401,7 +442,7 @@ def career_xp_rank(profile_id, country=None):
     career_xp_rows). Guarding on None alone handed every zeroed hunter `count(everyone) + 1` -- one rank,
     shared by all of them, pointing at a board none of them appear on.
     """
-    store = _slice(ProfileCareerStanding.objects, country)
+    store = _slice(career_store(), country)
     mine = store.filter(profile_id=profile_id).values_list('total_xp', flat=True).first()
     if not mine:
         return None
@@ -418,7 +459,7 @@ def series_board_count(series_slug, country=None):
 
 
 def _series_board_qs(series_slug, country):
-    return _slice(SeriesBadgeStanding.objects.filter(series_slug=series_slug), country)
+    return _slice(_linked(SeriesBadgeStanding.objects.filter(series_slug=series_slug)), country)
 
 
 def series_board_rows(series_slug, limit=50, offset=0, country=None):
@@ -447,7 +488,7 @@ def series_board_rank(series_slug, profile_id, country=None):
     The tail matters most here of all the boards: progress_bp is discrete (cleared / gating stages), so a
     3-stage series stacks every chaser onto 1/3 or 2/3 and the date breaks only some of those ties.
     """
-    qs = _slice(SeriesBadgeStanding.objects.filter(series_slug=series_slug), country)
+    qs = _series_board_qs(series_slug, country)   # ONE definition of the population, shared with rows/count
     mine = qs.filter(profile_id=profile_id).values('progress_bp', 'advanced_at').first()
     if mine is None:
         return None      # no standing in this series, or not in this country
@@ -456,10 +497,16 @@ def series_board_rank(series_slug, profile_id, country=None):
 
 # ------------------------------------------------------------------ per-badge earners --------------------
 
+def _earners_qs(group_badge_id):
+    """The earners population. Verified hunters only, like every other board here -- an unlinked profile is
+    catalogue data, and a scout account holding Earn #1 on a badge is the exact case the gate exists for."""
+    return _linked(UserGroupBadge.objects.filter(group_badge_id=group_badge_id))
+
+
 def earners_rows(group_badge_id, limit=50, offset=0):
     """First-to-complete order for one group badge: [(profile_id, earned_at), ...] earliest first."""
     return list(
-        UserGroupBadge.objects.filter(group_badge_id=group_badge_id).order_by('earned_at', 'profile_id')
+        _earners_qs(group_badge_id).order_by('earned_at', 'profile_id')
         .values_list('profile_id', 'earned_at')[offset:offset + limit]
     )
 
@@ -480,16 +527,11 @@ def earners_rank(profile_id, group_badge_id):
     alone printed one number -- "Earn #12" -- on the medallion back of all nine of them, while
     `earners_rows` seated them at 12 through 20.
     """
-    mine = (
-        UserGroupBadge.objects.filter(group_badge_id=group_badge_id, profile_id=profile_id)
-        .values_list('earned_at', flat=True).first()
-    )
+    qs = _earners_qs(group_badge_id)
+    mine = qs.filter(profile_id=profile_id).values_list('earned_at', flat=True).first()
     if mine is None:
-        return None
-    return (
-        UserGroupBadge.objects.filter(group_badge_id=group_badge_id)
-        .filter(_ahead_q(EARNERS_KEYS, {'earned_at': mine, 'profile_id': profile_id})).count() + 1
-    )
+        return None      # doesn't hold it, or holds it unlinked -- either way, not ON this board
+    return qs.filter(_ahead_q(EARNERS_KEYS, {'earned_at': mine, 'profile_id': profile_id})).count() + 1
 
 
 # ------------------------------------------------------------------ page assembly ------------------------
@@ -556,12 +598,14 @@ def entry(hydrated, profile_id, rank):
     return {
         'profile_id': profile_id,
         'rank': rank,
-        # `or ''` rather than a default, because the column is nullable: a row whose profile exists but has
-        # no display name would otherwise return None, and the template links to `/hunters/None/`. The row
-        # template gates the LINK on this being truthy -- an empty name cannot be reversed against
-        # `<str:psn_username>` and raises NoReverseMatch, which is a 500 for the whole page rather than the
-        # blank row `page()` promises below.
-        'psn_username': p.get('display_psn_username') or '',
+        # Falls back to `psn_username`, which is unique and required, before falling back to blank. The
+        # display column is nullable -- it is populated from the PSN API -- so reading it alone rendered a
+        # hunter with a perfectly good canonical username as an unnamed, unlinked row.
+        #
+        # `or ''` still terminates the chain, because the template gates the LINK on this being truthy: an
+        # empty name cannot be reversed against `<str:psn_username>` and raises NoReverseMatch, which is a
+        # 500 for the whole page rather than the blank row `page()` promises below.
+        'psn_username': p.get('display_psn_username') or p.get('psn_username') or '',
         'avatar_url': p.get('avatar_url') or '',
         'flag': p.get('flag') or '',
         'is_premium': p.get('user_is_premium', False),
@@ -590,103 +634,6 @@ def page(rows, offset, extra=None):
         out.append(row_entry)
     return out
 
-
-# ------------------------------------------------------------------ directory previews -------------------
-
-def _top_n_by_partition(qs, partition_field, partition_values, order_by, n, value_fields):
-    """Top `n` rows per partition: ONE INDEX-LIMITED READ PER PARTITION.
-
-    This used to be a single `ROW_NUMBER() OVER (PARTITION BY ...)` query, on the reasoning that one query
-    must beat N. Measured on realistic data, that was backwards by about three orders of magnitude, and
-    the reason is worth writing down because the instinct behind it is normally right:
-
-    **Postgres cannot push a LIMIT into a window partition.** `WHERE row_number <= 5` is evaluated AFTER
-    the window runs, so the plan reads and sorts EVERY row of EVERY partition to return 5 from each. The
-    cost scales with the whole table, not with the ~120 rows displayed. On the Job Boards directory (24
-    partitions over ~1.2M `ProfileJobXP` rows) that measured **1,279 ms with a 30 MB external merge sort
-    spilling to disk**; the same result via per-partition reads measured **1.6 ms**. Game Boards over
-    `ProfileGame`: 451 ms versus 0.27 ms. And the "Most entrants" sort puts the 24 BIGGEST partitions on
-    page one by construction, so page one is the worst case, not the average.
-
-    Each per-partition read is an index range scan that touches a handful of pages and stops at `n`. N
-    small seeks beat one full scan here, and the N is bounded by the page size (24), not by the catalogue.
-
-    Returns {partition_value: [row_tuple, ...]} preserving board order within each partition.
-    """
-    out = {}
-    for value in partition_values:
-        rows = list(
-            qs.filter(**{partition_field: value})
-            .order_by(*order_by)
-            .values_list(*value_fields)[:n]
-        )
-        if rows:
-            out[value] = rows
-    return out
-
-
-def series_board_previews(series_slugs, n=5):
-    """Top `n` of each series' board: {series_slug: [(profile_id, progress_bp, stages_cleared,
-    stages_total, advanced_at), ...]}.
-
-    Same ordering as the full board, so a preview can never disagree with the board it previews.
-    """
-    from django.db.models import F
-
-    if not series_slugs:
-        return {}
-    slugs = list(series_slugs)
-    return _top_n_by_partition(
-        SeriesBadgeStanding.objects.all(),
-        'series_slug',
-        slugs,
-        ('-progress_bp', 'advanced_at', 'profile_id'),
-        n,
-        ('profile_id', 'progress_bp', 'stages_cleared', 'stages_total', 'advanced_at'),
-    )
-
-
-def series_board_counts(series_slugs):
-    """Entrants per series: {series_slug: count}. One grouped query.
-
-    Feeds BOTH the "most entrants" sort and the minimum-participants gate, which is what makes that sort
-    free -- the counts are needed either way.
-    """
-    from django.db.models import Count
-
-    if not series_slugs:
-        return {}
-    return dict(
-        SeriesBadgeStanding.objects.filter(series_slug__in=list(series_slugs))
-        .values('series_slug').annotate(n=Count('id'))
-        .values_list('series_slug', 'n')
-    )
-
-
-def game_board_previews(game_ids, n=5):
-    """Top `n` of each game's board: {game_id: [(profile_id, progress, most_recent_trophy_date), ...]}.
-
-    Ordered to match `pg_game_leaderboard_idx` (game, -progress, most_recent_trophy_date, profile) so the
-    window rides the index the shipped game leaderboard already uses, rather than forcing its own sort.
-    """
-    from django.db.models import F
-    from trophies.models import ProfileGame
-
-    if not game_ids:
-        return {}
-    ids = list(game_ids)
-    return _top_n_by_partition(
-        # `hidden_flag` / `user_hidden` match EverythingBoard._population(): without them a card could
-        # preview a hunter who does not appear on the board that card links to.
-        ProfileGame.objects.filter(progress__gt=0, hidden_flag=False, user_hidden=False),
-        'game_id',
-        ids,
-        ('-progress', 'most_recent_trophy_date', 'profile_id'),
-        n,
-        ('profile_id', 'progress', 'most_recent_trophy_date'),
-    )
-
-
 # ------------------------------------------------------------------ job boards ---------------------------
 
 def job_rows(job_slug, limit=50, offset=0, country=None):
@@ -697,27 +644,29 @@ def job_rows(job_slug, limit=50, offset=0, country=None):
     `> 0` because a row is created for a job the moment any XP touches it, so unfiltered the board would
     open with a wall of zeroes.
     """
-    from trophies.models import ProfileJobXP
-
     return list(
-        _slice(ProfileJobXP.objects.filter(job_id=job_slug, total_xp__gt=0), country)
+        _job_board_qs(job_slug, country)
         .order_by('-total_xp', 'profile_id')
         .values_list('profile_id', 'total_xp', 'level')[offset:offset + limit]
     )
 
 
-def job_rank(job_slug, profile_id, country=None):
-    """A profile's position on one job's board, or None if they have no XP in it."""
+def _job_board_qs(job_slug, country):
+    """ONE definition of a job board's population, shared by rows and rank. They used to express it twice
+    and not identically -- `job_rank` read `mine` from a store WITHOUT the `> 0` rule and counted `ahead`
+    with it, so the two halves of the same rank disagreed about who is on the board."""
     from trophies.models import ProfileJobXP
 
-    store = _slice(ProfileJobXP.objects.filter(job_id=job_slug), country)
-    mine = (store.filter(profile_id=profile_id)
-            .values_list('total_xp', flat=True).first())
+    return _slice(_linked(ProfileJobXP.objects.filter(job_id=job_slug, total_xp__gt=0)), country)
+
+
+def job_rank(job_slug, profile_id, country=None):
+    """A profile's position on one job's board, or None if they have no XP in it."""
+    store = _job_board_qs(job_slug, country)
+    mine = store.filter(profile_id=profile_id).values_list('total_xp', flat=True).first()
     if not mine:
-        return None
-    ahead = (_slice(ProfileJobXP.objects.filter(job_id=job_slug, total_xp__gt=0), country)
-             .filter(_ahead_q(JOB_KEYS, {'total_xp': mine, 'profile_id': profile_id})).count())
-    return ahead + 1
+        return None      # no XP in this job, unlinked, or not in this country -- not ON this board
+    return store.filter(_ahead_q(JOB_KEYS, {'total_xp': mine, 'profile_id': profile_id})).count() + 1
 
 
 def job_board_counts(job_slugs):
@@ -728,25 +677,7 @@ def job_board_counts(job_slugs):
     if not job_slugs:
         return {}
     return dict(
-        ProfileJobXP.objects.filter(job_id__in=list(job_slugs), total_xp__gt=0)
+        _linked(ProfileJobXP.objects.filter(job_id__in=list(job_slugs), total_xp__gt=0))
         .values('job_id').annotate(n=Count('id'))
         .values_list('job_id', 'n')
-    )
-
-
-def job_board_previews(job_slugs, n=5):
-    """Top `n` of each job's board, in ONE query: {job_slug: [(profile_id, total_xp, level), ...]}."""
-    from django.db.models import F
-    from trophies.models import ProfileJobXP
-
-    if not job_slugs:
-        return {}
-    slugs = list(job_slugs)
-    return _top_n_by_partition(
-        ProfileJobXP.objects.filter(total_xp__gt=0),
-        'job_id',
-        slugs,
-        ('-total_xp', 'profile_id'),
-        n,
-        ('profile_id', 'total_xp', 'level'),
     )

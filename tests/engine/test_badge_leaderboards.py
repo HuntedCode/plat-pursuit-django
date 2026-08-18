@@ -6,7 +6,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from trophies.models import ProfileGame, TrophyGroup, ProfileTrophyGroup
+from trophies.models import Job, ProfileGame, TrophyGroup, ProfileTrophyGroup
 from trophies.services.badge_apply import evaluate_and_apply
 from trophies.services import badge_leaderboards as lb
 from tests.factories import (
@@ -181,6 +181,95 @@ def test_an_unlinked_hunter_is_not_on_the_trophies_board():
     catalogue data, not a competitor."""
     ProfileFactory(is_linked=False, total_plats=99, total_trophies=999)
     assert lb.trophy_rows() == []
+
+
+def test_an_unlinked_hunter_is_not_on_ANY_board():
+    """The gate `trophy_rows` has always applied, applied everywhere.
+
+    Badge Points did not have it, so it ranked scraped profiles -- including the SCOUT ACCOUNTS the
+    catalogue uses to discover games. Those are not hypothetical rows: `evaluate_badges --all` walks every
+    profile with a PSN username, not every linked one. Career XP was linked-only by accident (claiming a
+    contract requires a login) rather than by rule.
+
+    All three tabs live on ONE page, so the disagreement was visible in a single glance: a hunter present
+    on Trophies and absent from Badge Points, or the reverse.
+    """
+    from trophies.models import (
+        ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
+        SeriesBadgeStanding,
+    )
+
+    scout = ProfileFactory(is_linked=False, total_plats=99, total_trophies=999, country_code='MT')
+    ProfileBadgeStanding.objects.create(profile=scout, total_xp=999_999, badges_held=50, country_code='MT')
+    # The EDITION store is a separate manager that `badge_store(edition)` swaps to, so the gate has to be
+    # proven on it independently -- a fixture with no edition standing leaves that branch unreachable and
+    # dropping `_linked` from it stays green.
+    ProfileEditionStanding.objects.create(profile=scout, platform_group_key='ultra-hd',
+                                          total_xp=999_999, badges_held=50, country_code='MT')
+    ProfileCareerStanding.objects.create(profile=scout, total_xp=999_999, pursuer_level=99)
+    SeriesBadgeStanding.objects.create(profile=scout, series_slug='aaa', xp=9999, progress_bp=10000,
+                                       stages_cleared=2, stages_total=2)
+    job = Job.objects.create(slug='ranger', name='Ranger', discipline='combat')
+    ProfileJobXP.objects.create(profile=scout, job=job, total_xp=999_999, level=99)
+
+    assert lb.xp_rows() == [], 'an unlinked profile is on Badge Points'
+    assert lb.xp_rank(scout.id) is None
+    assert lb.career_xp_rows() == [], 'an unlinked profile is on Career XP'
+    assert lb.career_xp_rank(scout.id) is None
+    assert lb.series_board_rows('aaa') == [], 'an unlinked profile is on a series board'
+    assert lb.series_board_rank('aaa', scout.id) is None
+    assert lb.job_rows('ranger') == [], 'an unlinked profile is on a job board'
+    assert lb.job_rank('ranger', scout.id) is None
+    assert lb.xp_rows(edition='ultra-hd') == [], 'an unlinked profile is on an EDITION board'
+    assert lb.xp_rank(scout.id, edition='ultra-hd') is None
+
+    # And the counts the pages print agree with the rows they print.
+    assert lb.board_count('points') == 0
+    assert lb.board_count('career') == 0
+    assert lb.board_count('trophies') == 0
+    assert lb.series_board_count('aaa') == 0
+    assert lb.job_board_counts(['ranger']) == {}
+    assert lb.board_count('points', edition='ultra-hd') == 0
+
+    # ...and the country PICKER, which is the one that fails quietly: an offered country whose only
+    # standings belong to scraped profiles renders an empty board on all three tabs, cached for an hour.
+    assert 'MT' not in lb.active_countries(), 'the picker offers a country with no rankable hunters'
+
+
+def test_an_unlinked_hunter_is_not_an_earner_either():
+    """The medallion back reads `earners_rank`. A scout account holding Earn #1 on a badge is the exact
+    case the gate exists for, and it also has to agree with the board: a hunter the earners LIST does not
+    seat cannot be given a position in it."""
+    gb, games = _series('earn', 1)
+    scout = ProfileFactory(is_linked=False)
+    real = ProfileFactory()
+    for p in (scout, real):
+        _complete(p, games[0])
+        evaluate_and_apply(p, [gb])
+
+    assert [r[0] for r in lb.earners_rows(gb.id)] == [real.id]
+    assert lb.earners_rank(scout.id, gb.id) is None
+    assert lb.earners_rank(real.id, gb.id) == 1
+
+
+def test_a_hunter_with_no_display_name_still_gets_a_name_and_a_link():
+    """`display_psn_username` is populated from the PSN API and is nullable; `psn_username` is unique and
+    required. Reading only the display column rendered a perfectly identifiable hunter as an unnamed row
+    -- and an unlinked one, since the row template gates the profile link on this being truthy.
+
+    `display_psn_username or psn_username` is the site's established fallback (api/platinum_grid_views.py,
+    api/recap_views.py, api/roadmap_note_views.py); the boards were the one place that skipped it.
+    """
+    named = ProfileFactory(psn_username='canonical', display_psn_username='CanoniCal')
+    nameless = ProfileFactory(psn_username='nodisplay', display_psn_username=None)
+    blank = ProfileFactory(psn_username='blankname', display_psn_username='')
+
+    hydrated = lb.hydrate([named.id, nameless.id, blank.id])
+    assert lb.entry(hydrated, named.id, 1)['psn_username'] == 'CanoniCal'
+    assert lb.entry(hydrated, nameless.id, 2)['psn_username'] == 'nodisplay'
+    assert lb.entry(hydrated, blank.id, 3)['psn_username'] == 'blankname'
+    # A profile that is not in the page at all still degrades to a blank row rather than NoReverseMatch.
+    assert lb.entry(hydrated, -1, 4)['psn_username'] == ''
 
 
 def test_every_board_can_be_sliced_by_country_without_a_separate_store():

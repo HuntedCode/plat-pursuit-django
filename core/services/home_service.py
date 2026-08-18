@@ -180,9 +180,22 @@ def _recent_medallions(profile, limit=3):
 
     rows = (
         UserGroupBadge.objects
-        .filter(profile=profile, earned_at__isnull=False)
+        # `is_live`, because a dormant edition's medallion is not something the hunter can see anywhere
+        # else on the site -- it would appear here and nowhere it could be clicked through to.
+        .filter(profile=profile, group_badge__is_live=True)
         .select_related('group_badge', 'group_badge__series', 'group_badge__platform_group')
-        .order_by('-earned_at')[:limit]
+        # `-created_at` (when WE awarded it), not `-earned_at` (when the HUNTER finished the games). A
+        # series shipped today and awarded to someone who platted its games in 2019 is genuinely their
+        # newest badge, and sorting by completion date buried it below badges they have held for years --
+        # so the one medallion that was actual news never made the slice. `earned_at` is also rewritten
+        # whenever a badge's iteration changes, which reshuffles this list for reasons the hunter did
+        # nothing to cause. Backfilled to `earned_at` by migration 0306, so pre-existing rows order
+        # exactly as they did before. (`created_at` carries a global `db_index`, which does NOT serve
+        # this `WHERE profile_id = X ORDER BY -created_at` -- there is no composite. Harmless: a
+        # profile's UserGroupBadge count is catalogue-bounded, not trophy-scaled.)
+        #
+        # The DISPLAYED date stays `earned_at`: the label commemorates when they finished the games.
+        .order_by('-created_at')[:limit]
     )
     out = []
     for row in rows:

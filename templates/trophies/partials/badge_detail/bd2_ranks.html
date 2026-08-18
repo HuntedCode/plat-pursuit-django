@@ -19,22 +19,39 @@ row is a leaderboard row, and the drift between two of them is exactly what this
     <span class="bd2-ranks__count">
         <b class="pp-tally">{{ total|intcomma }}</b> hunter{{ total|pluralize }} on the board
     </span>
+    {% comment %} Shown to every signed-in viewer, ranked or not. Gating the whole line on `my_rank` made
+    it absent for a hunter with no standing in this series, which reads as a missing feature rather than
+    as the answer -- and this is a badge they are being invited to chase. {% endcomment %}
+    {% if show_my_standing %}
     {% if my_rank %}
     <span class="bd2-ranks__mine">You are <b class="pp-tally">#{{ my_rank|intcomma }}</b></span>
+    {% else %}
+    <span class="bd2-ranks__mine bd2-ranks__mine--none">Not on this board yet</span>
+    {% endif %}
     {% endif %}
 </div>
 
 <ol class="lb-wall" data-lb-wall>
-    {% for entry in rows %}
-    {% include 'trophies/partials/leaderboard_row.html' with entry=entry %}
-    {% endfor %}
+    {% include 'trophies/partials/badge_detail/bd2_ranks_rows.html' %}
 </ol>
 
 {% if has_more %}
-{% comment %} A LINK to the full board rather than pagination in a panel: this is a preview inside a page
-about the badge, and a paginator here would turn a supporting section into a second destination. {% endcomment %}
+{% comment %} A "show more" that APPENDS, not a link and not a paginator. The comment that stood here
+described a link to a full board page -- which does not exist and deliberately does not: `/leaderboards/
+badges/<slug>/` was replaced by this panel, on the principle that boards live on the thing they rank. So
+the promise was unkeepable and the panel simply stopped at 25, telling a hunter their rank in the same
+breath as making the row it points at unreachable.
+
+Appending in place, rather than prev/next links: this section is lazily fetched into the middle of badge
+detail, and a link would reload the page and lose the reader's place in it. {% endcomment %}
 <div class="bd2-ranks__more">
-    <span class="bd2-ranks__more-k">Showing the top {{ rows|length }}</span>
+    <button type="button" class="bd2-ranks__more-btn" data-ranks-more="{{ next_offset }}">
+        Show more
+    </button>
+    {% comment %} Appending 25 rows is silent to a screen reader without this -- the house pattern for
+    every other load-more on the site (trophies_panel, activity_sessions, games_results). It doubles as
+    the focus target when the button removes itself at the end of the board. {% endcomment %}
+    <p class="bd2-ranks__status" role="status" aria-live="polite" data-ranks-status></p>
 </div>
 {% endif %}
 

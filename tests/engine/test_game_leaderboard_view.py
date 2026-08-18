@@ -198,6 +198,33 @@ def test_anonymous_viewer_exposes_no_rank(client):
     assert 'data-lb-viewer-rank=""' in client.get(_url(game)).content.decode()
 
 
+def test_a_linked_viewer_who_is_NOT_on_the_board_is_told_so(client):
+    """The slot that answers "where am I" used to vanish for a linked hunter with no row here, which is
+    indistinguishable from a feature that does not exist. It becomes a statement rather than the jump
+    BUTTON, because there is no row to jump to.
+
+    Deliberately says nothing about WHY -- no trophies yet, 0%, and hidden progress are all reachable, and
+    naming the wrong reason is worse than naming none.
+    """
+    game, _ = _board(3)
+    outsider = ProfileFactory(is_linked=True)          # owns nothing in this game
+    client.force_login(outsider.user)
+
+    body = client.get(_url(game)).content.decode()
+
+    assert 'Not on this board yet' in body
+    assert 'data-lb-jump' not in body, 'a jump control was offered with no row to jump to'
+
+
+def test_an_anonymous_visitor_is_told_nothing_about_a_standing_they_cannot_have(client):
+    """The distinction the branch exists for: silence, not "not on this board"."""
+    game, _ = _board(3)
+
+    body = client.get(_url(game)).content.decode()
+
+    assert 'Not on this board yet' not in body and 'data-lb-jump' not in body
+
+
 def test_anonymous_viewer_gets_no_rank_control(client):
     game, _ = _board(3)
 

@@ -220,13 +220,90 @@ def test_recent_medallions_come_from_the_rebuilt_badge_tables():
 
 
 def test_recent_medallions_are_bounded_and_newest_first():
+    """The BOUND, asserted on the OUTPUT rather than on `__defaults__`.
+
+    Reading the default argument proved only that the number 3 was written down somewhere; deleting
+    `[:limit]` from the queryset left it green. The CTA renders these in a fixed-width strip, so an
+    unbounded read is both a layout break and an unbounded query on the lobby.
+    """
+    import datetime as dt
+
     from core.services import home_service
 
     profile = ProfileFactory()
     assert home_service._recent_medallions(profile) == []          # day one: nothing earned yet
 
-    sig = home_service._recent_medallions.__defaults__
-    assert sig and sig[0] == 3, 'the slice is unbounded or no longer defaults to three'
+    base = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+    for i in range(5):
+        _held(profile, f'srs{i}', earned_at=base, created_at=base + dt.timedelta(days=i))
+
+    out = home_service._recent_medallions(profile)
+    assert len(out) == 3, 'the slice is unbounded'
+    assert [m['series_slug'] for m in out] == ['srs4', 'srs3', 'srs2'], 'not newest-by-award-date first'
+
+
+def _held(profile, slug, *, earned_at, created_at, is_live=True):
+    """Award a badge with the two dates set INDEPENDENTLY -- which is the whole point of the pair.
+    `created_at` is auto_now_add-ish (a `timezone.now` default), so it is written after the fact."""
+    import datetime as dt
+
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+    from trophies.models import UserGroupBadge
+
+    gb = GroupBadgeFactory(
+        series=BadgeSeriesFactory(series_slug=slug, name=slug.title()),
+        platform_group=PlatformGroupFactory(key=f'{slug}-grp'),
+        is_live=is_live,
+    )
+    row = UserGroupBadge.objects.create(profile=profile, group_badge=gb, earned_at=earned_at)
+    UserGroupBadge.objects.filter(pk=row.pk).update(created_at=created_at)
+    return gb
+
+
+def test_recent_medallions_are_newest_by_AWARD_date_not_completion_date():
+    """`earned_at` is when the HUNTER finished the games; `created_at` is when WE gave them the badge.
+
+    A series shipped today and awarded to someone who platted its games in 2019 is genuinely their newest
+    badge -- and sorting by completion date buried it below badges they have held for years, so the one
+    medallion that was actual news never made the three-slot slice. `earned_at` is also rewritten whenever
+    a badge's iteration changes, which reshuffles the list for reasons the hunter did nothing to cause.
+    """
+    import datetime as dt
+
+    from core.services import home_service
+
+    profile = ProfileFactory()
+    old_completion = dt.datetime(2019, 3, 1, tzinfo=dt.timezone.utc)
+    new_completion = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+
+    # Held for years; awarded long ago.
+    _held(profile, 'veteran', earned_at=new_completion,
+          created_at=dt.datetime(2026, 1, 2, tzinfo=dt.timezone.utc))
+    # Shipped TODAY, for games finished in 2019. This is the news.
+    _held(profile, 'justshipped', earned_at=old_completion,
+          created_at=dt.datetime(2026, 8, 1, tzinfo=dt.timezone.utc))
+
+    out = home_service._recent_medallions(profile)
+
+    assert [m['series_slug'] for m in out] == ['justshipped', 'veteran'], (
+        'the newest badge was ordered by when the games were finished, not by when it was awarded'
+    )
+    # The DISPLAYED date stays the completion date -- the label commemorates the playing, not the award.
+    assert out[0]['earned_at'] == old_completion
+
+
+def test_a_dormant_edition_never_reaches_the_CTA():
+    """A medallion the hunter cannot see anywhere else on the site would appear here and nowhere it could
+    be clicked through to."""
+    import datetime as dt
+
+    from core.services import home_service
+
+    profile = ProfileFactory()
+    when = dt.datetime(2026, 5, 1, tzinfo=dt.timezone.utc)
+    _held(profile, 'unreleased', earned_at=when, created_at=when, is_live=False)
+
+    assert home_service._recent_medallions(profile) == []
 
 
 def test_a_pursuer_with_no_badges_still_gets_a_context():

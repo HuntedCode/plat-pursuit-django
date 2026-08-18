@@ -48,11 +48,26 @@ def test_every_rail_item_lands_inside_its_own_hub(hub_key, url_name):
 
 
 @pytest.mark.parametrize('url_name', [
-    'jobs_browse', 'badge_boards', 'game_boards', 'job_boards', 'overall_badge_leaderboards',
+    'jobs_browse', 'overall_badge_leaderboards',
 ])
-def test_the_new_leaderboards_surfaces_are_reachable_from_a_rail(url_name):
+def test_the_new_leaderboards_surfaces_are_reachable(url_name):
     """Every page built by the leaderboards rebuild has a way in. `/jobs/` shipped without one and nobody
-    noticed until it was asked about directly, which is exactly why this is a test rather than a habit."""
+    noticed until it was asked about directly, which is exactly why this is a test rather than a habit.
+
+    TWO routes count, not just a rail. A hub LANDING is linked from the navbar by the hub's own nav item,
+    which is how `/leaderboards/` and `/support/` are reached -- both hubs carry `items=()`, so demanding
+    a rail entry would fail them for having the shape they were designed with. This asked only about
+    rails until the three board directories were removed in 2026-08 and the Leaderboards rail emptied,
+    at which point it reported the hub landing as unreachable while the navbar was linking it.
+    """
+    from pathlib import Path
+
     path = reverse(url_name)
     rails = {reverse(i.url_name) for h in HUBS for i in h.items}
-    assert path in rails, f'{url_name} ({path}) is not on any hub rail -- it is unreachable by navigation'
+    navbar = (Path(__file__).resolve().parents[2] / 'templates' / 'partials' / 'navbar.html'
+              ).read_text(encoding='utf-8')
+
+    assert path in rails or f"url '{url_name}'" in navbar, (
+        f'{url_name} ({path}) is on no hub rail and is not linked from the navbar -- it is unreachable '
+        f'by navigation'
+    )

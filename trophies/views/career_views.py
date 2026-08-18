@@ -248,36 +248,29 @@ class JobDetailView(DetailView):
         profile = getattr(self.request.user, 'profile', None) if self.request.user.is_authenticated else None
 
         tab = self.request.GET.get('tab', 'contracts')
-        context['active_tab'] = tab if tab in ('contracts', 'ranks') else 'contracts'
+        tab = tab if tab in ('contracts', 'ranks') else 'contracts'
+        context['active_tab'] = tab
 
-        # ---- Ranks ----
-        rows = lb.job_rows(job.slug, limit=self.BOARD_SIZE)
-        context['board'] = lb.page(rows, 0, extra=lambda r: {
-            'primary': r[1], 'primary_label': 'XP',
-            'secondary': r[2], 'secondary_label': 'level',
-        })
+        # PAGE CHROME, above the switcher, so it is on the page whichever tab is open. `my_rank` belongs
+        # here for exactly that reason: it briefly moved into `_ranks()` and therefore vanished from the
+        # default Contracts tab, which is where a signed-in hunter lands -- the standing chip only
+        # appeared once you clicked Ranks, which is the tab that already shows you the board.
         context['board_total'] = lb.job_board_counts([job.slug]).get(job.slug, 0)
         context['my_rank'] = lb.job_rank(job.slug, profile.id) if profile else None
+        # Distinguishes "signed out" from "signed in and not on this board". The template gated the whole
+        # block on `my_rank`, so an unranked hunter got silence where the answer belonged.
+        #
+        # `is_linked`, not merely "has a profile": every board population is gated on it
+        # (`badge_leaderboards._linked`), so telling an unverified account it is "not ranked yet" promises
+        # a board it cannot enter until it verifies. Game detail already resolves its viewer this way.
+        context['show_my_standing'] = bool(profile and profile.is_linked)
 
-        # ---- Contracts ----
-        contracts = list(
-            Contract.objects.filter(is_live=True, jobs=job)
-            .prefetch_related('jobs')
-            .order_by(Lower('name'))[:self.CONTRACT_PAGE]
-        )
-        context['contracts'] = contracts
-        context['contract_total'] = Contract.objects.filter(is_live=True, jobs=job).count()
-
-        # Per-row viewer state, BATCHED for the page. The trap here is a lookup per row: it looks fine at
-        # 24 contracts and is not at 200, and infinite scroll bounds the rows rendered but never the
-        # queries per row.
-        if profile and contracts:
-            context['earned_map'] = {
-                ec.contract_id: ec for ec in EarnedContract.objects.filter(
-                    profile=profile, contract__in=contracts)
-            }
+        # ONLY the open tab's data. These are `?tab=` LINKS that reload the page, and the template renders
+        # exactly one panel -- so building both meant every visit paid for six queries to render three.
+        if tab == 'ranks':
+            context.update(self._ranks(job, profile))
         else:
-            context['earned_map'] = {}
+            context.update(self._contracts(job, profile))
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
@@ -285,3 +278,49 @@ class JobDetailView(DetailView):
             {'text': job.name},
         ]
         return context
+
+    def _ranks(self, job, profile):
+        """The board, paginated. A job board is the only per-entity board with no other home -- badge and
+        game boards each have a fuller surface to hand off to -- so stopping dead at 25 left a hunter
+        ranked #300 with no way to ever see their own row."""
+        try:
+            page = max(1, int(self.request.GET.get('page', 1)))
+        except (TypeError, ValueError):
+            page = 1
+        offset = (page - 1) * self.BOARD_SIZE
+        # +1 is the look-ahead that answers "is there a next page" without a COUNT. `board` slices it back.
+        rows = lb.job_rows(job.slug, limit=self.BOARD_SIZE + 1, offset=offset)
+        return {
+            'board_page': page,
+            'board_has_prev': page > 1,
+            # From a LOOK-AHEAD row, not from `len(rows) == BOARD_SIZE`. That test is wrong at exact
+            # multiples of the page size: a board of exactly 25 offered "Next", and the next page had no
+            # rows, so it rendered the empty state ("Nobody has banked XP here yet") with no pager on it
+            # -- browser Back was the only way out of a board that was not empty at all.
+            'board_has_next': len(rows) > self.BOARD_SIZE,
+            'board': lb.page(rows[:self.BOARD_SIZE], offset, extra=lambda r: {
+                'primary': r[1], 'primary_label': 'XP',
+                'secondary': r[2], 'secondary_label': 'level',
+            }),
+        }
+
+    def _contracts(self, job, profile):
+        contracts = list(
+            Contract.objects.filter(is_live=True, jobs=job)
+            .prefetch_related('jobs')
+            .order_by(Lower('name'))[:self.CONTRACT_PAGE]
+        )
+        # Per-row viewer state, BATCHED for the page. The trap here is a lookup per row: it looks fine at
+        # 24 contracts and is not at 200, and infinite scroll bounds the rows rendered but never the
+        # queries per row.
+        earned_map = {}
+        if profile and contracts:
+            earned_map = {
+                ec.contract_id: ec for ec in EarnedContract.objects.filter(
+                    profile=profile, contract__in=contracts)
+            }
+        return {
+            'contracts': contracts,
+            'contract_total': Contract.objects.filter(is_live=True, jobs=job).count(),
+            'earned_map': earned_map,
+        }

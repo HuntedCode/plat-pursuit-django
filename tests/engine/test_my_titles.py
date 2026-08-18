@@ -310,9 +310,11 @@ def _holders(series, profiles):
     (100, 'common'),    # 50.0%
 ])
 def test_a_title_wears_the_sites_rarity_grade(client, holders, expected):
-    p = ProfileFactory()
-    series = _series_with_title('Crash', 'Crate Crusher')
     community = _community(200)
+    p = community[-1]           # the viewer is one of the two hundred, as they are in reality, and NOT a
+                                # holder -- so the denominator is 200, not 201, and the percentages below
+                                # are the arithmetic they claim rather than a rounding coincidence
+    series = _series_with_title('Crash', 'Crate Crusher')
     _holders(series, community[:holders])
 
     entry = _get(client, p).context['all_titles'][0]
@@ -324,9 +326,11 @@ def test_legacy_and_one_off_grants_are_not_counted(client):
     """The page surfaces the NEW badge system only, so counting a legacy 'badge' or one-off 'milestone'
     grant would inflate the numerator against a denominator that knows nothing about them -- making the
     title read more common than the system it belongs to says it is."""
-    p = ProfileFactory()
-    series = _series_with_title('Crash', 'Crate Crusher')
     community = _community(200)
+    p = community[-1]           # the viewer is one of the two hundred, as they are in reality, and NOT a
+                                # holder -- so the denominator is 200, not 201, and the percentages below
+                                # are the arithmetic they claim rather than a rounding coincidence
+    series = _series_with_title('Crash', 'Crate Crusher')
     _holders(series, community[:2])
     for profile, source in zip(community[2:12], ['badge'] * 5 + ['milestone'] * 5):
         UserTitle.objects.create(profile=profile, title=series.title, source_type=source,
@@ -342,9 +346,10 @@ def test_the_grade_counts_title_holders_not_badge_earners(client):
     """A title is granted by ANY live edition, so it is strictly easier than any single edition -- and
     the plate prints "N earned" right beside the grade. Grading a different population from the one
     displayed is how a card ends up reading "Mythic - 44,210 earned"."""
-    p = ProfileFactory()
-    series = _series_with_title('Crash', 'Crate Crusher')
     community = _community(100)
+    p = community[-1]           # the viewer is one of the hundred, as they are in reality -- and NOT a
+                                # holder, so the numerator below is the 40 that were granted it
+    series = _series_with_title('Crash', 'Crate Crusher')
     _holders(series, community[:40])
 
     entry = _get(client, p).context['all_titles'][0]
@@ -360,9 +365,9 @@ def test_the_count_is_holders_not_wearers(client):
     flag would measure which title people currently like best rather than who earned it -- collapsing the
     numerator toward 1 and reading almost everything as Mythic for reasons that have nothing to do with
     difficulty. Here 30 of 100 hold the title and exactly one is wearing it: the grade must say 30."""
-    p = ProfileFactory()
-    series = _series_with_title('Crash', 'Crate Crusher')
     community = _community(100)
+    p = community[-1]           # one of the hundred, and not a holder
+    series = _series_with_title('Crash', 'Crate Crusher')
     _holders(series, community[:30])
     UserTitle.objects.filter(profile=community[0], title=series.title).update(is_displayed=True)
 
@@ -391,7 +396,8 @@ def test_a_title_nobody_holds_gets_no_grade(client):
 
 def test_no_community_yet_gets_no_grade(client):
     """Nothing to grade against -- rarity_for returns (None, '') rather than dividing by zero."""
-    p = ProfileFactory()          # not linked, so the community is empty
+    p = ProfileFactory(is_linked=False)   # EXPLICITLY unlinked -- with nobody linked there is no
+                                          # denominator, which is the state being tested
     _series_with_title('Crash', 'Crate Crusher')
 
     entry = _get(client, p).context['all_titles'][0]
@@ -405,9 +411,10 @@ def test_the_grade_reaches_the_plate_through_the_shared_component(client):
     Asserting the SHARED markup rather than a `ttl-` class is the point: this page hand-rolled its own
     grade colours until the primitive was extracted, so a page-local class reappearing here is exactly
     the regression worth catching."""
-    p = ProfileFactory()
+    community = _community(200)
+    p = community[-1]                                    # one of the two hundred, and not the holder
     series = _series_with_title('Crash', 'Crate Crusher')
-    _holders(series, _community(200)[:1])                # 0.5% -> mythic
+    _holders(series, community[:1])                      # 1/200 = 0.5% -> mythic
 
     content = _get(client, p).content.decode()
 

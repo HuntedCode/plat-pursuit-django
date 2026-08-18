@@ -2647,15 +2647,9 @@ class Job(models.Model):
     display_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    #: See BadgeSeries.entrants for the full reasoning -- same column, same nightly recompute, same
-    #: reason (Job Boards had the identical whole-table aggregate, measured at 91 ms twice per request).
-    entrants = models.PositiveIntegerField(default=0, help_text="Denormalized count of hunters on this board. RECOMPUTED FROM SCRATCH nightly by `recalc_board_entrants` -- never incremented. See the model docstring.")
 
     class Meta:
         ordering = ['discipline', 'display_order', 'name']
-        indexes = [
-            models.Index(fields=['-entrants'], name='job_entrants_idx'),
-        ]
 
     def __str__(self):
         return self.name
@@ -3007,34 +3001,12 @@ class BadgeSeries(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
-    #: Hunters on this board, denormalized. Mirrors `Game.played_count`, which is why Game Boards is the
-    #: one directory that was already fast: its gate is `WHERE played_count >= N` and its sort is
-    #: `ORDER BY played_count DESC`, both index-served.
-    #:
-    #: The other two directories had to COUNT to decide what to show. A min-entrants gate cannot be
-    #: applied without knowing the counts, and the counts are only knowable by aggregating -- so every
-    #: request aggregated the WHOLE standing table (every slug in the IN list, which makes Postgres
-    #: abandon the index) to choose 24 rows, then counted again for the page. Measured at 91 ms x2 for
-    #: jobs, re-run on every infinite-scroll page.
-    #:
-    #: RECOMPUTE-FROM-SCRATCH, never incremented. That distinction is the one this codebase has actually
-    #: been burned by: `earned_count` came to mean two different things because it was maintained
-    #: incrementally on create/delete but not on lapse, and `required_stages` refreshed only out-of-band
-    #: so a stage edit silently desynced award math. Both were pain points that justified the badge
-    #: rebuild, and `earned_count` still drifts down-only today. A column rebuilt from a GROUP BY cannot
-    #: drift; a column nudged by signals eventually does.
-    #:
-    #: Cost of the trade: the gate lags by up to a nightly cycle, so a board that qualifies at noon gets
-    #: its card tomorrow. `Game.played_count` already behaves this way.
-    entrants = models.PositiveIntegerField(default=0, help_text="Denormalized count of hunters on this board. RECOMPUTED FROM SCRATCH nightly by `recalc_board_entrants` -- never incremented. See the model docstring.")
 
     class Meta:
         ordering = ['name']
         indexes = [
             models.Index(fields=['series_slug'], name='badgeseries_slug_idx'),
             models.Index(fields=['badge_type'], name='badgeseries_type_idx'),
-            # Serves the directory's gate (`entrants__gte`) AND its "most entrants" sort in one index.
-            models.Index(fields=['-entrants'], name='badgeseries_entrants_idx'),
         ]
 
     def __str__(self):
@@ -3271,10 +3243,21 @@ class ProfileEditionStanding(models.Model):
     cannot drift from it. The columns are deliberately NAMED IDENTICALLY to ProfileBadgeStanding's, which is
     what lets the read layer swap stores by picking a manager instead of branching every query body.
 
-    Editions OVERLAP by design: a cross-gen game on ['PS3','PS4'] qualifies for both groups (the engine's own
-    rule is platform INTERSECTION), so its trophies count toward both editions and the per-edition figures do
-    not sum to the all-editions row. That is correct -- each edition answers "how far are you in THIS one" --
-    and it is why the all-editions total is read from ProfileBadgeStanding rather than added up from here.
+    WHAT OVERLAPS AND WHAT DOES NOT -- these are easy to conflate and the two answers are opposite:
+
+      GAMES overlap editions. A cross-gen game on ['PS3','PS4'] qualifies for both groups, because the
+      engine's rule is platform INTERSECTION. So the same playthrough can advance a hunter in two editions
+      at once, and can earn them the same series' badge twice.
+
+      BADGES do not. A `GroupBadge` belongs to exactly ONE `PlatformGroup`, so every row here partitions
+      cleanly: `badges_held` and `total_xp` across a profile's editions SUM to the ProfileBadgeStanding
+      row. `badge_xp.badges_held_counts` states the same rule from the write side.
+
+    This docstring previously claimed the opposite ("per-edition figures do not sum to the all-editions
+    row"), describing per-edition TROPHY columns that no longer exist. Left standing beside the current
+    columns it read as license for exactly the double-count it was warning about, and the reason the
+    all-editions total is read from ProfileBadgeStanding is NOT that these fail to add up -- it is that
+    one indexed read beats an aggregate over a hunter's edition rows on every board render.
     """
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='edition_standings')
     # The PlatformGroup key, denormalized as a slug rather than an FK -- the same call SeriesBadgeStanding

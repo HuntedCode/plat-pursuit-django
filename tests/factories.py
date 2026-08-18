@@ -62,13 +62,21 @@ class UserFactory(factory.django.DjangoModelFactory):
 
 
 class ProfileFactory(factory.django.DjangoModelFactory):
-    """A linked Profile. psn_username must match ^[a-zA-Z0-9_-]{3,16}$ and be unique."""
+    """A LINKED Profile. psn_username must match ^[a-zA-Z0-9_-]{3,16}$ and be unique.
+
+    `is_linked=True` is set here rather than left on the model default, which is False. The docstring has
+    always called this a linked profile and dozens of tests pass `is_linked=True` explicitly to get what
+    they thought they already had -- but the leaderboards gate their whole population on that flag, so a
+    default-unlinked factory silently produced profiles that no board would ever rank. Pass
+    `is_linked=False` for the unverified case; several tests already do, and they still get it.
+    """
 
     class Meta:
         model = Profile
 
     user = factory.SubFactory(UserFactory)
     psn_username = factory.Sequence(lambda n: f"hunter{n:04d}")
+    is_linked = True
 
 
 class ConceptFactory(factory.django.DjangoModelFactory):

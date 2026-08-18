@@ -21,7 +21,6 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from tests.factories import BadgeFactory, ConceptFactory, IGDBMatchFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -41,84 +40,10 @@ def active_board(body):
     return match.group(1) if match else None
 
 
-def _live_series(slug, name):
-    """A live tier-1 badge with a concept carrying an IGDBMatch -- i.e. a directory row whose
-    `raw_response` is reachable through the select_related the view does."""
-    concept = ConceptFactory()
-    # `raw_response` populated on purpose: an empty column would let the deferral test pass even if the
-    # join were reintroduced, since the assertion is about the SQL, but a realistic row keeps the fixture
-    # honest about what the page would actually be dragging across.
-    IGDBMatchFactory(concept=concept, raw_response={'id': 1, 'name': 'x' * 2000})
-    return BadgeFactory(series_slug=slug, display_series=name, tier=1, is_live=True,
-                        most_recent_concept=concept)
-
-
-def test_the_series_directory_never_selects_the_igdb_blob(client):
-    """`raw_response` is ~30 KB of IGDB JSON per row that no directory row reads, and this queryset joins
-    `igdb_match` through TWO paths (the badge's own concept and its base badge's). Undeferred and
-    unpaginated, that is the whole catalogue's worth of unread blob in one response.
-
-    Asserted against the SQL actually issued rather than against a `.defer(...)` call in the source: the
-    point is that the column does not travel, and a future refactor could achieve or lose that any number
-    of ways. `.only()` on the wrong field list would silently reintroduce it while the source still reads
-    like it defers.
-    """
-    for i in range(3):
-        _live_series(f'srs-{i}', f'Series {i}')
-
-    with CaptureQueriesContext(connection) as ctx:
-        assert client.get(URL, {'tab': 'series'}).status_code == 200
-
-    offending = [q['sql'] for q in ctx.captured_queries if 'raw_response' in q['sql']]
-    assert not offending, (
-        'the Series directory is selecting igdb_match.raw_response -- the ~30 KB blob per joined row that '
-        'CLAUDE.md flags as the OOM trigger. Defer it on BOTH concept paths.'
-    )
-
-
-def test_the_series_directory_count_does_not_scale_with_the_catalogue(client):
-    """Was a Redis N+1 (one ZCARD per series in a Python loop), now one grouped query over the standing
-    store. Either way the property that matters is the same and is asserted directly: the number of
-    queries must not grow with the number of series.
-
-    Pinned as "does not scale" rather than "calls X once" deliberately -- the first version of this test
-    patched a specific Redis helper by name and broke the moment the backend changed, even though the
-    behaviour it guarded was still correct. A scaling assertion outlives the implementation.
-    """
-    for i in range(3):
-        _live_series(f'few-{i}', f'Few {i}')
-    # Warm the picker caches (viewer-independent, hour-TTL) before measuring. A cold request legitimately
-    # costs more than a warm one, and comparing one of each measures cold-start rather than the scaling
-    # property this test is about.
-    client.get(URL, {'tab': 'series'})
-    with CaptureQueriesContext(connection) as small:
-        assert client.get(URL, {'tab': 'series'}).status_code == 200
-
-    for i in range(12):
-        _live_series(f'many-{i}', f'Many {i}')
-    client.get(URL, {'tab': 'series'})
-    with CaptureQueriesContext(connection) as large:
-        assert client.get(URL, {'tab': 'series'}).status_code == 200
-
-    assert len(large.captured_queries) == len(small.captured_queries), (
-        f'{len(small.captured_queries)} queries for 3 series but {len(large.captured_queries)} for 15 -- '
-        f'the directory is querying per row again'
-    )
-
-
-def test_a_series_with_no_participants_still_renders_a_count(client):
-    """A grouped query returns no ROW for a series nobody is chasing, so the lookup must default rather
-    than KeyError -- and it must show 0, not blank. Every new series starts here."""
-    _live_series('nobody', 'Nobody Home')
-    body = client.get(URL, {'tab': 'series'}).content.decode()
-    assert 'Nobody Home' in body, 'a series with no participants vanished from the directory'
-
-
 @pytest.mark.parametrize('tab, must_not_fetch', [
     ('trophies', ['xp_rows', 'career_xp_rows']),
     ('points',   ['trophy_rows', 'career_xp_rows']),
     ('career',   ['trophy_rows', 'xp_rows']),
-    ('series',   ['trophy_rows', 'xp_rows', 'career_xp_rows']),
 ])
 def test_a_tab_does_not_pay_for_the_boards_it_does_not_render(client, tab, must_not_fetch):
     """Every board used to be assembled on every request. Only the ACTIVE one is built now.
@@ -127,8 +52,6 @@ def test_a_tab_does_not_pay_for_the_boards_it_does_not_render(client, tab, must_
     indexed COUNTs feeding the header's "your standing" strip, which shows all three whichever board is
     open. Cutting those would change what renders, not just what it costs.
     """
-    _live_series('paid', 'Paid')
-
     patches = {name: patch(f'trophies.services.badge_leaderboards.{name}') for name in must_not_fetch}
     started = {name: p.start() for name, p in patches.items()}
     try:

@@ -144,10 +144,11 @@ def evaluate_and_apply(profile, group_badges=None, notify=False) -> dict:
     result = apply_changes(profile, changes, gb_map)
 
     # Announced BEFORE the standing recompute, and that ordering is deliberate. `apply_changes` is atomic
-    # and has committed by here, so the badges are durable; `recompute_standing` is not atomic and its most
-    # likely failure is a timeout. Announcing after it meant a failure there swallowed the announcement --
-    # and permanently, because `awarded` is a TRANSITION: the next sync sees the badge already held, emits
-    # no change, and the hunter is never told about a badge they earned.
+    # and has committed by here, so the badges are durable. `recompute_standing` is atomic too, but it is
+    # a SEPARATE transaction that can still roll back on its own (a timeout is the likely failure), and
+    # the announcement must not be inside it. Announcing after it meant a failure there swallowed the
+    # announcement -- and permanently, because `awarded` is a TRANSITION: the next sync sees the badge
+    # already held, emits no change, and the hunter is never told about a badge they earned.
     #
     # ONE consolidated announcement for the whole run, not one per badge from inside apply_changes, which
     # would ping a hunter three times for finishing a three-edition series.

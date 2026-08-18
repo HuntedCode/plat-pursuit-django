@@ -169,16 +169,18 @@ def test_the_empty_board_says_which_kind_of_empty_it_is(client):
     assert 'Elsewhere' in sliced   # sanity: GB has someone on the progress board
 
 
-def test_the_series_directory_stays_reachable_but_out_of_the_tab_strip(client):
-    """It is a DIRECTORY, not a board, and step 6 promotes it to `/leaderboards/badges/`. Keeping it in
-    the strip was the incoherence this rebuild removes; dropping it entirely would leave a gap until
-    step 6."""
-    body = client.get(URL, {'tab': 'series'}).content.decode()
-    assert 'Back to the boards' in body, 'the directory has no way back'
+def test_the_retired_series_tab_lands_on_a_board(client):
+    """`?tab=series` was a DIRECTORY, out of the tab strip, held open as a placeholder for
+    `/leaderboards/badges/`. That page was built and then removed, and the placeholder outlived it while
+    reading the RETIRED tier-era `Badge` model -- a frozen catalogue beside live counts.
 
-    strip = client.get(URL).content.decode()
-    assert 'data-board="series"' not in strip, 'the directory is back in the board tab strip'
+    A stale bookmark maps to the default board rather than 404ing, the same courtesy the other retired tab
+    keys (`xp`, `country`, `progress`) get.
+    """
+    resp = client.get(URL, {'tab': 'series'})
 
+    assert resp.status_code == 200
+    assert resp.context['active_tab'] == 'trophies'
 
 def test_a_career_only_hunter_makes_their_country_selectable(client):
     """The two economies are sealed apart, so a hunter can hold Career XP and no badge standing at all.

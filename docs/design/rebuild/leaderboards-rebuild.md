@@ -1,9 +1,29 @@
 # Leaderboards — Section Rebuild
 
-> Status: **BUILT (steps 1-8, 2026-08).** Kept as the record of what was decided and why;
-> the build order below is a changelog now. Not browser-verified -- see the playbook row. Supersedes nothing; the section has never had a
-> rebuild-playbook row. Backend audit performed 2026-08; the three cost defects it found are already
-> fixed (commit `2b0bf02e`) and are not part of this plan.
+> Status: **BUILT (steps 1-8, 2026-08), then PARTLY REVERSED.** Kept as the record of what was decided
+> and why; the build order below is a changelog now. Backend audit performed 2026-08; the three cost
+> defects it found are already fixed (commit `2b0bf02e`) and are not part of this plan.
+>
+> ### The three directories were removed (2026-08)
+>
+> `/leaderboards/{games,badges,jobs}/` are **gone**, without redirects -- they never left a dev machine.
+> The rest of this document stands: boards live on the thing they rank, and the per-entity Ranks panels on
+> game, badge and job detail are the surfaces that survived and are the ones worth reading.
+>
+> **What the thin-directory rule below did not anticipate.** It was written to stop each directory
+> becoming "a second Browse Games", and it worked -- but held to it strictly, what remained was a page
+> whose only differentiator was a sort each browse counterpart already had: `played_count` on Browse
+> Games, "Most earned" on Browse Badges, a hunter count on every card at `/jobs/`. The min-entrants gate,
+> presented below as what pays for that sort, only ever HID entities. And nothing linked to any of the
+> three except the Leaderboards rail, which existed because they did -- a circular justification that
+> collapsed the moment either half was examined.
+>
+> The rule was right and the section below argues it well. The conclusion it should have reached is that
+> a catalogue thin enough to obey it had no reason to be a separate page.
+>
+> Went with them: `BadgeSeries.entrants` / `Job.entrants` (+ migration `0308`, deleted before it reached
+> prod), `recalc_board_entrants` and its `nightly` step, `BOARD_MIN_ENTRANTS`, and the preview machinery
+> (`_top_n_by_partition` and the three `*_previews`). The Leaderboards hub is back to `items=()`.
 
 ## Why this exists
 
