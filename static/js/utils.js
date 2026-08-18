@@ -2241,6 +2241,17 @@ function virtualBoard(o) {
         if (el) { el.classList.add('is-found'); }
     }
 
+    // A reveal boot that ran before us leaves `.pp-reveal` on the wall, and `.pp-reveal .row` is
+    // `opacity: 0` until a row earns `.is-revealed`. This engine mounts and unmounts rows continuously,
+    // and they never reach that observer -- so every row past the first screenful would arrive INVISIBLE.
+    // Stripped here rather than left to each page to remember, because the failure is silent: the board
+    // looks frozen, nothing errors, and on a page whose wall gets replaced by a filter swap it only
+    // reproduces on first load. (Beta caught exactly that on the Global Boards.)
+    //
+    // A virtualized row appears because you scrolled to it, which IS the reveal -- so there is nothing to
+    // reinstate, only motion to stop fighting.
+    list.classList.remove('pp-reveal');
+
     list.style.height = (total * H) + 'px';
 
     // Seed the cache + DOM from the server-rendered first window; convert those rows to absolute.

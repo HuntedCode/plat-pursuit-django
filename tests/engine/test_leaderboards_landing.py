@@ -380,3 +380,24 @@ def test_the_board_slides_on_a_tab_change(client):
 
     assert 'PlatPursuit.slideViewIn' in body, 'the tab swap has no directional slide'
     assert 'tabOrder()' in body, 'the slide has no order, so it cannot pick a direction'
+
+
+def test_the_virtual_wall_is_not_given_a_stagger_reveal(client):
+    """The bug beta caught, pinned at the template level.
+
+    `staggerReveal` puts `.pp-reveal` on a wall permanently, and `.pp-reveal .lb-row` is `opacity: 0`
+    until a row earns `.is-revealed`. It reveals the batch present when it runs and then only rows handed
+    to its observer -- and a virtualized wall mounts rows continuously, so every row past the first
+    screenful arrived INVISIBLE. The board looked frozen on first load and fine after a tab swap, because
+    the swap replaces the wall and the one-shot boot never ran on the new one.
+
+    The engine now strips `.pp-reveal` defensively too, so re-adding this would be survivable -- but a
+    reveal on a virtual wall is motion fighting motion either way, and it should not come back.
+    """
+    _ranked('Someone', plats=5, trophies=10)
+    body = client.get(URL).content.decode()
+
+    boot = body[body.index('<div data-lb-page>'):]
+    assert 'PlatPursuit.staggerReveal' not in boot, (
+        'the virtualized wall has a stagger reveal again -- rows mounted on scroll will be invisible'
+    )

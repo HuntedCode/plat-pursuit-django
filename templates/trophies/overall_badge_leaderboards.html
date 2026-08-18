@@ -263,20 +263,23 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
             });
         }
 
-        {% comment %}Rows land as the wall arrives, on the shared engine every other wall uses. The helper
-        returns null under reduced motion / no IO, and `.pp-reveal` is only added when it did NOT, so rows
-        can never stick hidden.{% endcomment %}
-        var wall = document.querySelector('[data-lb-wall]');
-        if (wall && window.PlatPursuit && PlatPursuit.staggerReveal) {
-            PlatPursuit.staggerReveal({
-                grid: wall, cardSelector: '.lb-row', step: 14,
-                reveal: function (el, delayMs) {
-                    if (!el.animate) { return; }
-                    el.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
-                               { duration: 420, delay: delayMs, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
-                },
-            });
-        }
+        {% comment %} NO staggerReveal on this wall, and the reason is load-bearing rather than a
+        preference.
+
+        `staggerReveal` puts `.pp-reveal` on the wall PERMANENTLY, and `.pp-reveal .lb-row` is
+        `opacity: 0` until a row earns `.is-revealed`. It reveals the batch present when it runs and then
+        only reveals rows handed to its observer. A VIRTUAL wall mounts and unmounts rows continuously as
+        you scroll, and those rows never reach that observer -- so every row past the first screenful
+        arrived invisible. The board looked frozen on first load and fine after a tab swap, because the
+        swap replaces the wall and this one-shot boot never ran again on the new one.
+
+        Reveal-on-mount would be wrong here even if it were wired: on a virtualized wall a row appears
+        BECAUSE you scrolled to it, which is the reveal. An opacity animation on rows being mounted and
+        evicted at scroll speed is motion fighting motion.
+
+        This is the second time the same collision has bitten -- badge detail's "Show more" appended rows
+        into a `.pp-reveal` wall and they arrived invisible too. There the fix was to hand the appended
+        nodes to the observer; here the right answer is not to hide them in the first place. {% endcomment %}
 
         {% comment %}The Tally ticks ONCE, on the header figure. There is no global `[data-countup]` boot
         on this site -- every page wires its own -- so the attribute alone did nothing and the number just
