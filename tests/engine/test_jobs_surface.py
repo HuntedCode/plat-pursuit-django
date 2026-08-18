@@ -25,8 +25,19 @@ def _job(slug, name, discipline='combat', **kw):
 
 
 def _xp(job, name, xp, level=1):
+    """Give a hunter XP in a job, and refresh the denormalized entrant count.
+
+    Job Boards gates and sorts on `Job.entrants`, which is recomputed nightly rather than maintained on
+    write -- so a fixture that creates XP rows and stops leaves the board correctly invisible. Calling
+    the real recompute (rather than setting the column by hand) means these tests would notice if it
+    broke.
+    """
+    from trophies.management.commands.recalc_board_entrants import recalc_job_entrants
+
     p = ProfileFactory(display_psn_username=name)
     ProfileJobXP.objects.create(profile=p, job=job, total_xp=xp, level=level)
+    recalc_job_entrants()
+    job.refresh_from_db()
     return p
 
 

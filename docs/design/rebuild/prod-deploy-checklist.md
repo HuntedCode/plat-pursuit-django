@@ -431,3 +431,49 @@ GROUP BY series_slug HAVING count(*) > 1;
 - [ ] **`fundraiser.0007` makes the claim FK PROTECT.** Deleting a `BadgeSeries` that has a claim now
       raises `ProtectedError` in the admin instead of silently deleting the payment record. If a series
       genuinely must go, delete or re-point its claim first, deliberately.
+
+## Leaderboard performance + board entrants (2026-08)
+
+Migrations `trophies.0307_partial_board_indexes` and `trophies.0308_board_entrants`.
+
+- [ ] **`0307` rebuilds two indexes on `Profile` CONCURRENTLY.** It makes them partial on the Trophies
+      board's population (`is_linked AND total_trophies > 0`), which takes `trophy_rank` off a seq scan of
+      a 48-column table on every authenticated page view. `atomic = False`, so it does NOT write-lock
+      Profile -- but that also means it is NOT transactional: **if a `CONCURRENTLY` build fails partway,
+      Postgres leaves an INVALID index behind that must be dropped by hand before re-running**:
+
+      ```sql
+      DROP INDEX CONCURRENTLY IF EXISTS profile_board_idx;
+      DROP INDEX CONCURRENTLY IF EXISTS profile_board_cc_idx;
+      ```
+
+      Verify afterwards that both exist and are valid:
+
+      ```sql
+      SELECT indexrelid::regclass, indisvalid FROM pg_index
+      WHERE indexrelid::regclass::text IN ('profile_board_idx','profile_board_cc_idx');
+      ```
+
+- [ ] **`0308` backfills the new entrant counts in the migration.** It must: the directories gate on
+      `entrants >= BOARD_MIN_ENTRANTS`, so without the backfill every badge and job board fails its own
+      gate and both directories render an empty state that reads as considered rather than broken. No
+      action needed -- recorded so you know it is covered.
+- [ ] **Replace the four nightly Render entries with ONE `nightly` entry at 04:00 UTC.** Delete
+      `evaluate_badges --all` (04:00), `detect_dlc_and_refresh` (04:30) and `audit_badge_coverage`
+      (05:00); `nightly` runs all three plus `recalc_board_entrants`, in dependency order. Leaving the old
+      entries in place is not harmless: they would run the same work a second time, concurrently with the
+      orchestrator, and `recompute_standing`'s `_upsert` has no concurrency guard.
+- [ ] **Sanity-check the entrants counts after the first run.** `python manage.py recalc_board_entrants
+      --dry-run` should report 0 series and 0 jobs changed. Anything else means the nightly did not run or
+      the standings moved after it.
+- [ ] **Expect the board gate to lag by a day.** A series or job that qualifies at noon gets its directory
+      card after the next nightly. This is the accepted trade for the column (`Game.played_count` already
+      behaves this way) and is worth knowing before somebody reports it as a bug.
+
+### Still on wall-clock ordering (not part of this change)
+
+`recalc_earn_rates` (03:00), `recalc_profile_counters` (03:30), `recompute_tag_covers` (03:45),
+`update_shovelware` (04:00) and `recompute_milestones` (05:30) remain separate entries whose ordering is
+implied by their times. `recompute_milestones` already documents a dependency on `recalc_profile_counters`
+rather than enforcing it -- the same hazard `nightly` was built to remove for the badge chain. Folding
+them in is a follow-up; it was left out here to keep the change to one subsystem.

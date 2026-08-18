@@ -135,12 +135,21 @@ def test_empty_input_touches_the_database_at_all():
 
 def _series_with_board(slug, name, n_hunters, *, live=True):
     from tests.factories import BadgeSeriesFactory, PlatformGroupFactory, GroupBadgeFactory
+    from trophies.management.commands.recalc_board_entrants import recalc_badge_series_entrants
+
     series = BadgeSeriesFactory(series_slug=slug, name=name)
     if live:
         pg = PlatformGroupFactory(key=f'{slug}-pg', name='Ultra HD', platforms=['PS5'])
         GroupBadgeFactory(series=series, platform_group=pg, is_live=True)
     for i in range(n_hunters):
         _standing(slug, bp=9000 - i * 100, on=dt.date(2024, 1, 1 + i))
+
+    # The directory gates and sorts on the denormalized `BadgeSeries.entrants`, which is recomputed
+    # nightly rather than maintained on write -- so a fixture that creates standings and stops leaves the
+    # board correctly invisible. Running the real recompute here rather than setting the column by hand
+    # keeps these tests honest about the contract: if the recompute breaks, the directory tests notice.
+    recalc_badge_series_entrants()
+    series.refresh_from_db()
     return series
 
 

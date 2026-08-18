@@ -11,15 +11,13 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | Every 30 min | `refresh_profiles` | Every 30 minutes | TokenKeeper must be running to process queued syncs |
 | Top of every hour | `refresh_homepage_hourly` | Hourly | None |
 | ~~Top of every hour~~ | ~~`process_scheduled_notifications`~~ | **PAUSED (2026-08)** | Notification system hidden |
-| 04:00 UTC daily | `evaluate_badges --all` | Daily | TokenKeeper sync caught up |
+| 04:00 UTC daily | `nightly` | Daily | TokenKeeper sync caught up. Runs the badge chain: `evaluate_badges --all` -> `detect_dlc_and_refresh` -> `recalc_board_entrants` -> `audit_badge_coverage` |
 | Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
 | 03:30 UTC daily | `recalc_profile_counters` | Daily | None |
 | 03:45 UTC daily | `recompute_tag_covers` | Daily | None |
-| 04:30 UTC daily | `detect_dlc_and_refresh` | Daily | TrophyGroups synced (TokenKeeper current) |
-| 05:00 UTC daily | `audit_badge_coverage` | Daily | None |
 | 05:30 UTC daily | `recompute_milestones` | Daily | Profile counters current (`recalc_profile_counters` at 03:30) |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
@@ -52,6 +50,40 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 - **Failure impact**: The ribbon falls back to the previous hour's cached data. If two consecutive hours fail, the entire ribbon silently hides itself across every home shell. This is the only homepage data source left that is invisible to dashboard module caching, so monitor it explicitly.
 
 > **Removed: `refresh_homepage_daily`.** This command was retired when the homepage redesign collapsed onto the dashboard. There are no daily-cached "featured games / featured badges / featured checklists" sources anymore; the dashboard's Recent Platinums, Recent Badges, and Top Studios modules took their place. Disable any legacy Render Cron entry pointing at it.
+
+> **The badge chain is folded into `nightly`; the rest of the nightly work is not, yet.**
+> `recalc_earn_rates` (03:00), `recalc_profile_counters` (03:30), `recompute_tag_covers` (03:45),
+> `update_shovelware` (04:00) and `recompute_milestones` (05:30) still sit on their own entries with
+> ordering expressed as wall-clock spacing. At least one dependency there is already documented rather
+> than enforced -- `recompute_milestones` needs `recalc_profile_counters` to have finished -- which is the
+> same hazard `nightly` was built to remove for the badge chain. Folding them in is a natural follow-up;
+> it was left out of the change that introduced this command to keep the blast radius to one subsystem.
+
+### nightly
+
+**This is the only nightly cron entry.** It runs the badge maintenance steps in DEPENDENCY order and
+replaces four separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh`,
+`recalc_board_entrants`, `audit_badge_coverage`).
+
+- **Command**: `python manage.py nightly`
+- **Order** (dependency, not preference):
+  1. `evaluate_badges --all` -- writes the standing tables
+  2. `detect_dlc_and_refresh` -- re-evaluates series whose games gained DLC (writes the same tables)
+  3. `recalc_board_entrants` -- COUNTS those standings, so it must follow both
+  4. `audit_badge_coverage` -- read-only curator email, least urgent
+- **Why one entry**: the ordering used to be wall-clock spacing (04:00 and 04:30). Thirty minutes is a
+  guess, and `evaluate_badges --all` walks every linked profile -- when it outgrows the gap the two
+  overlap, and two processes call `recompute_standing` for the same profiles while `_upsert` has no
+  concurrency guard. The entrants denorm sharpened it: a count taken mid-rewrite counts a half-written
+  table.
+- **Failure behaviour**: each step is isolated, so one failure does not cancel the rest -- "the DLC sweep
+  failed" should not also cost you the coverage email. The command still exits NON-ZERO if any step
+  failed, so the run goes red rather than green-with-an-error-in-the-logs.
+- **Operator flags**: `--dry-run` lists the order, `--only '<label>'` re-runs one step after a failure
+  without repeating the expensive evaluation, `--skip '<label>'` is repeatable.
+- **Adding nightly work**: add a step to `STEPS` in `core/management/commands/nightly.py`, NOT a new cron
+  entry. A test asserts every step names a real command, and another asserts the entrants step stays
+  after the two that write standings.
 
 ### evaluate_badges --all
 

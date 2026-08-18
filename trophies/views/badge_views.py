@@ -676,17 +676,16 @@ class BadgeBoardsView(BoardDirectoryView):
         if q:
             qs = qs.filter(name__icontains=q)
 
-        counts = lb.series_board_counts(
-            list(qs.values_list('series_slug', flat=True))
-        )
-        live = {slug for slug, n in counts.items() if n >= self.min_entrants}
-        qs = qs.filter(series_slug__in=live)
+        # Gate and sort BOTH read the denormalized `entrants` column, so this is one indexed query that
+        # the database paginates. It used to aggregate the WHOLE standing table to decide which 24 rows
+        # to show -- unavoidable when the gate depends on a computed value -- then aggregate again for
+        # the page, then sort in Python before ListView could paginate. Measured 91 ms x2 for jobs,
+        # re-run on every infinite-scroll page. See BadgeSeries.entrants for why the column is
+        # recomputed rather than incremented.
+        qs = qs.filter(entrants__gte=self.min_entrants)
 
         if self._sort() == 'entrants':
-            # Ordered in PYTHON off the counts map rather than by re-querying: the map is already built
-            # for the gate, and the alternative is a correlated subquery per row.
-            ordered = sorted(qs, key=lambda s: (-counts.get(s.series_slug, 0), s.name.lower()))
-            return ordered
+            return qs.order_by('-entrants', Lower('name'))
         return qs.order_by(Lower('name'))
 
     def get_context_data(self, **kwargs):
@@ -695,14 +694,14 @@ class BadgeBoardsView(BoardDirectoryView):
         slugs = [s.series_slug for s in series]
 
         previews = lb.series_board_previews(slugs, n=self.PREVIEW)
-        counts = lb.series_board_counts(slugs)
+        # No second count query: `entrants` is already on each row.
         hydrated = lb.hydrate([r[0] for rows in previews.values() for r in rows])
 
         context['boards'] = [{
             'key': s.series_slug,
             'name': s.name,
             'url': reverse('badge_detail', args=[s.series_slug]) + '#ranks',
-            'entrants': counts.get(s.series_slug, 0),
+            'entrants': s.entrants,
             'rows': [
                 dict(lb.entry(hydrated, r[0], i + 1), primary=r[2], primary_label='stages')
                 for i, r in enumerate(previews.get(s.series_slug, []))
@@ -780,12 +779,16 @@ class JobBoardsView(BoardDirectoryView):
         if q:
             qs = qs.filter(name__icontains=q)
 
-        counts = lb.job_board_counts(list(qs.values_list('slug', flat=True)))
-        live = {slug for slug, n in counts.items() if n >= self.min_entrants}
-        qs = qs.filter(slug__in=live)
+        # Gate and sort BOTH read the denormalized `entrants` column, so this is one indexed query that
+        # the database paginates. It used to aggregate the WHOLE standing table to decide which 24 rows
+        # to show -- unavoidable when the gate depends on a computed value -- then aggregate again for
+        # the page, then sort in Python before ListView could paginate. Measured 91 ms x2 for jobs,
+        # re-run on every infinite-scroll page. See BadgeSeries.entrants for why the column is
+        # recomputed rather than incremented.
+        qs = qs.filter(entrants__gte=self.min_entrants)
 
         if self._sort() == 'entrants':
-            return sorted(qs, key=lambda j: (-counts.get(j.slug, 0), j.name.lower()))
+            return qs.order_by('-entrants', Lower('name'))
         return qs.order_by(Lower('name'))
 
     def get_context_data(self, **kwargs):
@@ -794,14 +797,14 @@ class JobBoardsView(BoardDirectoryView):
         slugs = [j.slug for j in jobs]
 
         previews = lb.job_board_previews(slugs, n=self.PREVIEW)
-        counts = lb.job_board_counts(slugs)
+        # No second count query: `entrants` is already on each row.
         hydrated = lb.hydrate([r[0] for rows in previews.values() for r in rows])
 
         context['boards'] = [{
             'key': j.slug,
             'name': j.name,
             'url': reverse('job_detail', args=[j.slug]) + '?tab=ranks',
-            'entrants': counts.get(j.slug, 0),
+            'entrants': j.entrants,
             'rows': [
                 dict(lb.entry(hydrated, r[0], i + 1), primary=r[1], primary_label='XP')
                 for i, r in enumerate(previews.get(j.slug, []))
