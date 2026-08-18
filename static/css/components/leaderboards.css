@@ -505,3 +505,74 @@
    343px); Prev/Next keep their words, which are the ones people actually aim for. */
 @media (max-width: 767px) { .lb-pager__btn-lbl { display: none; } }
 @media (prefers-reduced-motion: reduce) { .lb-pager__btn { transition: none; } }
+
+/* ---- The virtualized board's own chrome ------------------------------------------------------------
+   Jump affordances + column headers, above a wall you cannot page through. Both exist because the wall
+   virtualizes: with no pager, "get me to row 4,000" and "get me to MY row" are the two questions a reader
+   has, and scrolling is a poor answer to either. */
+.lb-board { position: relative; }
+/* The swap dims rather than blanks: a filter change replaces this region's contents, and a flash of empty
+   reads as breakage where a dim reads as work. Pointer-events off so a second click cannot race it. */
+.lb-board.is-swapping, [data-lb-page].is-swapping { opacity: 0.55; pointer-events: none; }
+[data-lb-page] { transition: opacity var(--pp-dur) var(--pp-ease); }
+@media (prefers-reduced-motion: reduce) { [data-lb-page] { transition: none; } }
+
+.lb-jumpbar {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 8px 12px; margin-bottom: 8px;
+}
+.lb-jump {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    padding: 6px 12px; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 700;
+    color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border));
+    transition: background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+.lb-jump b { color: var(--pp-primary); }
+.lb-jump__ico { width: 13px; height: 13px; transition: transform var(--pp-dur) var(--pp-ease); }
+/* The chevron points the way the reader would travel. `here` means their row is already on screen, so it
+   flattens rather than pointing at nothing. */
+.lb-jump[data-lb-dir="up"] .lb-jump__ico { transform: rotate(180deg); }
+.lb-jump[data-lb-dir="here"] .lb-jump__ico { transform: rotate(-90deg); opacity: 0.5; }
+@media (hover: hover) {
+    .lb-jump:hover {
+        background: color-mix(in oklab, var(--pp-primary) 20%, transparent);
+        border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    }
+}
+.lb-jump:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .lb-jump, .lb-jump__ico { transition: none; } }
+
+.lb-goto { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.lb-goto__lbl {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.lb-goto input {
+    width: 5.5ch; padding: 5px 8px; border-radius: 8px; font-size: 12px;
+    color: var(--pp-text); background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    font-variant-numeric: tabular-nums;
+}
+.lb-goto input:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
+/* The spinners are noise on a field this narrow, and the reader types a number then presses enter. */
+.lb-goto input::-webkit-outer-spin-button,
+.lb-goto input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.lb-goto input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+/* Column headers, desktop only. The row labels its own figures in small caps, which is right when you are
+   reading ONE row and repetitive when you are running down fifty -- so the header carries them at the top
+   and the phone layout, where the row is already tight, keeps the per-row labels instead. */
+.lb-colhead { display: none; }
+@media (min-width: 768px) {
+    .lb-colhead {
+        display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center; gap: 10px;
+        padding: 0 10px 6px;
+        font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--pp-text-mute);
+    }
+    .lb-colhead__rank { min-width: 3ch; text-align: right; }
+    .lb-colhead__figs { display: flex; gap: 22px; }
+    .lb-colhead__figs span { text-align: right; }
+}

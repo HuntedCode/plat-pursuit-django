@@ -275,3 +275,93 @@ def test_the_endpoint_is_public(client):
     own rank lives in the page header rather than in a row."""
     _ranked('Public', plats=5, trophies=10)
     assert client.get(reverse('leaderboard_rows'), {'tab': 'trophies'}).status_code == 200
+
+
+# ------------------------------------------------------------------ the virtualized wall -----------------
+
+def test_the_wall_ships_its_first_window_and_the_engine_contract(client):
+    """The board is there on arrival and on a no-JS read: the first window is server-rendered INSIDE the
+    spacer, and the engine adopts those rows rather than re-fetching them.
+
+    Everything the client needs rides on the root as data. A page size or rows URL hardcoded in the JS is
+    the kind of thing that silently desyncs from the server that pages by it.
+    """
+    for i in range(4):
+        _ranked(f'H{i}', plats=100 - i, trophies=500)
+
+    resp = client.get(URL)
+    body = resp.content.decode()
+
+    assert 'lb-wall--virtual' in body, 'the wall is not virtualized'
+    assert 'data-lb-total=' in body and 'data-lb-rows-url=' in body
+    assert f'data-lb-page-size="{resp.context["page_size"]}"' in body
+    assert '<li class="lb-row' in body, 'the first window was not server-rendered'
+    assert 'data-lb-rank=' in body, 'rows carry no canonical rank for the engine to seed from'
+
+
+def test_the_pager_is_gone(client):
+    """Pagination and a spacer are two answers to the same question. Keeping both would leave a control
+    that moves the reader somewhere the scrollbar says they already are."""
+    _ranked('Someone', plats=5, trophies=10)
+    body = client.get(URL).content.decode()
+
+    assert 'leaderboard_pager' not in body
+    assert 'rel="next"' not in body and 'rel="prev"' not in body
+
+
+def test_the_column_header_labels_match_the_rows_beneath_it(client):
+    """One definition of each board's figures (`FIGURES`), read by the header, the first window and every
+    window the rows endpoint serves. A header naming one thing over rows naming another is the drift a
+    separate rows endpoint invites."""
+    from trophies.views.badge_views import OverallBadgeLeaderboardsView as V
+
+    _ranked('P', points=900)
+    resp = client.get(URL, {'tab': 'points'})
+
+    primary, secondary = V.FIGURES['points']
+    assert resp.context['primary_label'] == primary
+    assert resp.context['secondary_label'] == secondary
+    body = resp.content.decode()
+    assert 'lb-colhead' in body and primary in body and secondary in body
+
+
+def test_jump_to_my_rank_appears_only_for_a_ranked_viewer(client):
+    """It reuses the rank the header already computed for the standing strip, so it costs nothing -- but
+    an unranked viewer has nowhere to jump to, and a control that cannot act is worse than no control."""
+    me = _ranked('Me', plats=9, trophies=90)
+    _ranked('Other', plats=50, trophies=500)
+
+    # Matched on the rendered BUTTON, not the bare attribute: the page's own JS selects `[data-lb-jump]`,
+    # so an attribute search finds the script and passes on correct code.
+    anon = client.get(URL).content.decode()
+    assert 'class="lb-jump"' not in anon, 'a signed-out visitor was offered a jump to their own rank'
+
+    client.force_login(me.user)
+    body = client.get(URL).content.decode()
+    assert 'class="lb-jump"' in body
+    assert client.get(URL).context['my_rank'] == 2
+
+
+def test_the_rank_box_is_bounded_by_the_board(client):
+    """Typing a rank past the end should not be offered as a destination."""
+    for i in range(3):
+        _ranked(f'H{i}', plats=10 - i, trophies=50)
+
+    resp = client.get(URL)
+    body = resp.content.decode()
+
+    assert 'class="lb-goto"' in body
+    assert f'max="{resp.context["ranked_total"]}"' in body
+
+
+def test_the_swap_region_wraps_everything_that_moves_with_the_slice(client):
+    """A tab or filter change replaces one region rather than syncing pieces, because everything in it
+    moves together: the tally, the standing chips and their labels, the lit tab, the selected filters,
+    whether the edition control renders at all, and the board."""
+    _ranked('Someone', plats=5, trophies=10, country='GB')
+    body = client.get(URL).content.decode()
+
+    region = body[body.index('<div data-lb-page>'):body.index('<!-- /lb-page -->')]
+    assert 'data-lb-board' in region, 'the board is outside the swap region'
+    assert 'pp-switch' in region, 'the tab strip is outside the swap region'
+    assert 'data-filter-form' in region, 'the filters are outside the swap region'

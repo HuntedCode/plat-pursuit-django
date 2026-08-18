@@ -723,6 +723,15 @@ class OverallBadgeLeaderboardsView(TemplateView):
     # default board rather than 404ing: a stale bookmark should land on a board, not on an error.
     LEGACY_TABS = {'xp': 'points', 'country': 'points', 'progress': 'trophies', 'series': 'trophies'}
 
+    #: (primary_label, secondary_label) per board. ONE definition: the column header, the first window and
+    #: every window the rows endpoint serves all read it, so the labels above a column and the labels
+    #: inside its rows cannot drift -- which is the failure a separate rows endpoint invites.
+    FIGURES = {
+        'trophies': ('platinums', 'trophies'),
+        'points': ('points', 'badges'),
+        'career': ('XP', 'level'),
+    }
+
     @classmethod
     def active_tab(cls, request):
         raw = request.GET.get('tab', 'trophies')
@@ -834,6 +843,13 @@ class OverallBadgeLeaderboardsView(TemplateView):
             context['board'] = board
             context['ranked_total'] = board.paginator.count
             context['ranked_label'] = 'hunter'
+            # For the virtual wall: the client sizes its spacer and its fetch granularity from these
+            # rather than carrying constants of its own, which is how a page size silently desyncs from
+            # the server that pages by it.
+            context['page_size'] = self.paginate_by
+            primary_label, secondary_label = self.FIGURES[tab]
+            context['primary_label'] = primary_label
+            context['secondary_label'] = secondary_label
 
         # The viewer's own standing, ONCE, in the header -- not per row (see the class docstring).
         # Each rank is read under the SAME slice as the board it links to, so the number the reader sees
@@ -846,6 +862,9 @@ class OverallBadgeLeaderboardsView(TemplateView):
                 'points': lb.xp_rank(profile.id, country=cc, edition=ed),
                 'career': lb.career_xp_rank(profile.id, country=cc),
             }
+            # The ACTIVE board's rank, for jump-to-my-rank. Already computed for the header strip, so
+            # the affordance costs nothing extra -- it is the same number the reader is looking at.
+            context['my_rank'] = standing.get(tab)
             # None when the viewer is on NO board, so the template's `{% if my_standing %}` means what it
             # reads as. A populated dict of all-Nones is still truthy, so the heading rendered with every
             # chip suppressed underneath it -- a bare "Your standing" over empty space, which is exactly
@@ -888,25 +907,20 @@ class OverallBadgeLeaderboardsView(TemplateView):
         """
         cc = country or None
         ed = edition or None
+        # The supporting figure is what gives the leading one its meaning: 9 platinums out of 140 trophies
+        # is a different hunter from 9 out of 900, and 4,200 points across 30 badges from 4,200 across 6.
+        primary_label, secondary_label = OverallBadgeLeaderboardsView.FIGURES[tab]
+
         if tab == 'trophies':
             rows = lb.trophy_rows(limit=limit, offset=offset, country=cc)
-            return lb.page(rows, offset, extra=lambda r: {
-                'primary': r[1], 'primary_label': 'platinums',
-                'secondary': r[2], 'secondary_label': 'trophies',
-            })
-        if tab == 'points':
+        elif tab == 'points':
             rows = lb.xp_rows(limit=limit, offset=offset, country=cc, edition=ed)
-            return lb.page(rows, offset, extra=lambda r: {
-                # Badges held is what gives the points their meaning -- 4,200 points across 30 badges is a
-                # different hunter from 4,200 across 6. The same reasoning the Trophies board's
-                # platinums-out-of-trophies pairing uses.
-                'primary': r[1], 'primary_label': 'points',
-                'secondary': r[2], 'secondary_label': 'badges',
-            })
-        rows = lb.career_xp_rows(limit=limit, offset=offset, country=cc)
+        else:
+            rows = lb.career_xp_rows(limit=limit, offset=offset, country=cc)
+
         return lb.page(rows, offset, extra=lambda r: {
-            'primary': r[1], 'primary_label': 'XP',
-            'secondary': r[2], 'secondary_label': 'level',
+            'primary': r[1], 'primary_label': primary_label,
+            'secondary': r[2], 'secondary_label': secondary_label,
         })
 
 class LeaderboardRowsView(View):

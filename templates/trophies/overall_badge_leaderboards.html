@@ -30,6 +30,14 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
+    {% comment %} Everything below the breadcrumb is ONE swap region. A tab or filter change replaces its
+    innerHTML from a fresh render rather than reloading the document -- a reload would throw away the
+    reader's scroll position and the virtualizer's whole row cache. It is one region rather than several
+    because everything in it moves with the slice: the hunter tally, the standing chips AND their labels,
+    which tab is lit, which filters are selected, whether the edition control renders at all, and the
+    board. Rebuilding that piecewise client-side is how two versions of the same copy drift. {% endcomment %}
+    <div data-lb-page>
+
     {# ── Page header ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
@@ -153,13 +161,62 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
     </div>
 
     {% if board and board.object_list %}
-    <ol class="lb-wall" data-lb-wall>
-        {% for entry in board.object_list %}
-        {% include 'trophies/partials/leaderboard_row.html' with entry=entry %}
-        {% endfor %}
-    </ol>
+    {% comment %} The board. A VIRTUAL wall: the `<ol>` is a full-height spacer (total x --lb-row-h) so the
+    page scrollbar spans the whole board, and only the visible rows live in the DOM, placed absolutely by
+    the shared `PlatPursuit.virtualBoard`. The pager is gone with it -- pagination and a spacer are two
+    answers to the same question, and this is the one that lets a reader move around the board freely.
 
-    {% include 'trophies/partials/leaderboard_pager.html' with page_obj=board paginator=board.paginator page_param='page' %}
+    The FIRST window is server-rendered inside the spacer, so the board is there on arrival and on a
+    no-JS read; every window after it comes from `leaderboard_rows`. The engine adopts these rows rather
+    than re-fetching them.
+
+    Everything the client needs rides on the root as data, so the JS reads no constants of its own: a
+    hardcoded page size or rows URL is the kind of thing that silently desyncs from the server. {% endcomment %}
+    <div class="lb-board" data-lb-board
+         data-lb-total="{{ ranked_total }}"
+         data-lb-page-size="{{ page_size }}"
+         data-lb-rows-url="{% url 'leaderboard_rows' %}"
+         data-lb-tab="{{ active_tab }}"
+         data-lb-country="{{ selected_country }}"
+         data-lb-edition="{{ selected_edition }}"
+         data-lb-viewer-rank="{{ my_rank|default_if_none:'' }}">
+
+        {% comment %} Column headers, desktop only: the figures are unlabelled per row (the labels are in
+        the row's own small caps), and at 50+ rows a header is what stops the eye re-reading them. Hidden
+        on phones, where the row is already tight and the labels sit under each figure. {% endcomment %}
+        {% comment %} The two ways to move around a board you cannot page through. Jump-to-me reuses the
+        rank the header already computed, so it costs nothing; the rank box is the same motion aimed
+        anywhere. Both are enhancements over a wall that scrolls perfectly well without them, which is why
+        neither is a link and the box is a form that does nothing on submit without JS. {% endcomment %}
+        <div class="lb-jumpbar">
+            {% if my_rank %}
+            <button type="button" class="lb-jump" data-lb-jump>
+                <svg class="lb-jump__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+                You&rsquo;re <b class="pp-tally">#{{ my_rank|intcomma }}</b>
+            </button>
+            {% endif %}
+            <form class="lb-goto" data-lb-gotoform>
+                <label class="lb-goto__lbl" for="lb-goto-input">Go to rank</label>
+                <input id="lb-goto-input" type="number" inputmode="numeric" min="1" max="{{ ranked_total }}"
+                       placeholder="#" aria-label="Jump to a rank on this board">
+            </form>
+        </div>
+
+        <div class="lb-colhead" aria-hidden="true">
+            <span class="lb-colhead__rank">#</span>
+            <span class="lb-colhead__who">Hunter</span>
+            <span class="lb-colhead__figs">
+                <span>{{ primary_label }}</span>
+                {% if secondary_label %}<span>{{ secondary_label }}</span>{% endif %}
+            </span>
+        </div>
+
+        <ol class="lb-wall lb-wall--virtual" data-lb-wall>
+            {% for entry in board.object_list %}
+            {% include 'trophies/partials/leaderboard_row.html' with entry=entry %}
+            {% endfor %}
+        </ol>
+    </div>
 
     {% else %}
     <div class="lb-empty">
@@ -190,6 +247,7 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         {% endif %}
     </div>
     {% endif %}
+    </div><!-- /lb-page -->
 {% endblock %}
 
 {% block js_scripts %}
@@ -235,4 +293,151 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         on unreachable by Tab.{% endcomment %}
     })();
 </script>
+
+<script>
+/**
+ * Global Boards: the virtualized wall, the jump affordances, and in-place tab/filter swaps.
+ *
+ * The board itself is `PlatPursuit.virtualBoard` -- the same engine game detail's Ranks panel runs. What
+ * lives here is this page's wiring: where a fetch URL comes from, what the jump chip and the rank box
+ * aim at, and re-seeding the board when the slice changes.
+ *
+ * TABS AND FILTERS SWAP IN PLACE rather than reloading, and that is not polish. A reload throws away the
+ * scroll position AND the engine's row cache, so every filter change would drop a reader at the top of a
+ * board they were partway down and re-fetch from row 1. The `?tab=` links and the filter form stay real,
+ * so nothing here is required for the page to work -- without JS it is exactly the page it was.
+ *
+ * The swap replaces ONE wrapper rather than syncing pieces. Everything below the breadcrumb changes with
+ * the slice: the hunter tally, the "your standing" chips and their labels, which tab is lit, which
+ * filters are selected, whether the edition control renders at all, and the board. Reassembling that
+ * client-side is how two versions of the same copy drift.
+ */
+(function () {
+    var page = document.querySelector('[data-lb-page]');
+    if (!page || !window.PlatPursuit) { return; }
+
+    var XHR = { headers: { 'X-Requested-With': 'XMLHttpRequest' } };
+    var root = null;        // the current [data-lb-board]
+    var board = null;       // the live virtualBoard handle
+
+    function rowsUrl(extra) {
+        var qp = new URLSearchParams({ tab: root.dataset.lbTab });
+        if (root.dataset.lbCountry) { qp.set('country', root.dataset.lbCountry); }
+        if (root.dataset.lbEdition) { qp.set('edition', root.dataset.lbEdition); }
+        Object.keys(extra).forEach(function (k) { qp.set(k, extra[k]); });
+        return root.dataset.lbRowsUrl + '?' + qp.toString();
+    }
+
+    function rowHeight() {
+        var wall = root.querySelector('[data-lb-wall]');
+        return parseFloat(getComputedStyle(wall).getPropertyValue('--lb-row-h')) || 62;
+    }
+
+    // The sticky chrome a jump must land below, measured live: the nav's height differs across
+    // breakpoints, so a hardcoded inset would be wrong on one of them.
+    function chromeInset() {
+        var nav = document.querySelector('.pp-nav') || document.querySelector('header');
+        return nav ? Math.max(0, nav.getBoundingClientRect().bottom) : 0;
+    }
+
+    function viewerRank() {
+        var n = parseInt((root && root.dataset.lbViewerRank) || '', 10);
+        return n >= 1 ? n : 0;
+    }
+
+    function mount() {
+        if (board) { board.destroy(); board = null; }
+        root = page.querySelector('[data-lb-board]');
+        if (!root) { return; }                  // an empty state came back; nothing to virtualize
+        board = PlatPursuit.virtualBoard({
+            list: root.querySelector('[data-lb-wall]'),
+            total: parseInt(root.dataset.lbTotal, 10) || 0,
+            rowSelector: '.lb-row',
+            pageSize: parseInt(root.dataset.lbPageSize, 10) || 50,
+            rowHeight: rowHeight,
+            chromeInset: chromeInset,
+            fetchRows: function (start, from, count) {
+                return fetch(rowsUrl({ range: start, count: count }), XHR).then(function (r) {
+                    if (!r.ok) { throw new Error(r.status); }
+                    return r.text();
+                });
+            },
+            onRender: function (localTop, localBottom, posOf) {
+                var chip = page.querySelector('[data-lb-jump]');
+                var rank = viewerRank();
+                if (!chip || !rank) { return; }
+                var H = rowHeight();
+                var top = (posOf(rank) - 1) * H;
+                // Which way the reader would travel to reach their own row, so the chip says where it
+                // goes rather than only that it exists.
+                chip.dataset.lbDir = top + H < localTop ? 'up' : (top > localBottom ? 'down' : 'here');
+            },
+        });
+    }
+
+    function swap(params) {
+        var qp = new URLSearchParams(location.search);
+        Object.keys(params).forEach(function (k) {
+            if (params[k]) { qp.set(k, params[k]); } else { qp.delete(k); }
+        });
+        var qs = qp.toString();
+        var href = location.pathname + (qs ? '?' + qs : '');
+
+        page.classList.add('is-swapping');
+        fetch(href, XHR)
+            .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.text(); })
+            .then(function (html) {
+                var fresh = new DOMParser().parseFromString(html, 'text/html')
+                    .querySelector('[data-lb-page]');
+                if (!fresh) { throw new Error('no board in the response'); }
+                page.innerHTML = fresh.innerHTML;
+                window.scrollTo({ top: 0, behavior: 'instant' });   // a new slice starts at its top
+                mount();
+                history.replaceState(null, '', href);
+            })
+            .catch(function () { location.href = href; })           // honest fallback: just navigate
+            .finally(function () { page.classList.remove('is-swapping'); });
+    }
+
+    mount();
+
+    // -- jump affordances -----------------------------------------------------------------------------
+    // Both land on the same `board.jump`. The viewer's rank is already computed for the header's standing
+    // strip, so the chip costs nothing extra; the box is the same motion aimed anywhere on the board.
+    // Delegated from the page, because a swap replaces both.
+    page.addEventListener('click', function (ev) {
+        var chip = ev.target.closest && ev.target.closest('[data-lb-jump]');
+        if (chip) {
+            ev.preventDefault();
+            if (board && viewerRank()) { board.jump(viewerRank()); }
+            return;
+        }
+        var tab = ev.target.closest && ev.target.closest('[data-board]');
+        if (!tab || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button !== 0) { return; }
+        ev.preventDefault();
+        swap({ tab: tab.dataset.board, page: '' });
+    });
+
+    page.addEventListener('submit', function (ev) {
+        var form = ev.target.closest && ev.target.closest('[data-lb-gotoform]');
+        if (!form) { return; }
+        ev.preventDefault();
+        var input = form.querySelector('input');
+        var rank = parseInt((input && input.value) || '', 10);
+        var total = root ? (parseInt(root.dataset.lbTotal, 10) || 0) : 0;
+        if (!(rank >= 1) || !board || !total) { return; }
+        board.jump(Math.min(rank, total));
+        if (input) { input.blur(); }        // dismiss the touch keyboard before the scroll starts
+    });
+
+    page.addEventListener('change', function (ev) {
+        var select = ev.target.closest && ev.target.closest('[data-filter-form] select');
+        if (!select) { return; }
+        var params = { page: '' };
+        params[select.name] = select.value;
+        swap(params);
+    });
+})();
+</script>
+
 {% endblock %}
