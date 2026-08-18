@@ -382,3 +382,12 @@ def test_the_url_written_by_the_switcher_is_the_one_the_server_reads(client):
 
     assert "param: 'tab'" in body, 'the switcher writes a param the server does not read'
     assert "default: 'contracts'" in body
+
+
+def test_the_tabs_slide_like_every_other_switcher(client):
+    """The house standard for a segmented switcher. Built without it, job detail's tabs swapped
+    instantly while nine other surfaces glide."""
+    _job('archivist', 'Archivist')
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+
+    assert 'PlatPursuit.slideViewIn' in body, 'the tab swap has no directional slide'

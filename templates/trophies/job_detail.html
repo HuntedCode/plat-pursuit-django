@@ -187,10 +187,15 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
                 });
         }
 
+        // The tab order, for the directional slide -- see badge detail's copy of this. Every other
+        // segmented switcher on the site glides; a tab that swaps instantly reads as a jump.
+        var ORDER = tabs.map(function (t) { return t.dataset.view; });
+
         function showView(name) {
-            var changed = false, active = null, shown = null;
+            var changed = false, active = null, shown = null, from = null;
             tabs.forEach(function (t) {
                 var on = t.dataset.view === name;
+                if (t.classList.contains('is-active')) { from = t.dataset.view; }
                 if (on && !t.classList.contains('is-active')) { changed = true; }
                 t.classList.toggle('is-active', on);
                 t.setAttribute('aria-selected', on ? 'true' : 'false');
@@ -200,6 +205,9 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
                 p.hidden = p.dataset.view !== name;
                 if (p.dataset.view === name) { shown = p; }
             });
+            if (changed && shown && PlatPursuit.slideViewIn) {
+                PlatPursuit.slideViewIn(shown, from, name, ORDER);
+            }
             if (tablist) { tablist.syncTabindex(); }
             if (changed && active && PlatPursuit.igniteTab) { PlatPursuit.igniteTab(active); }
             if (PlatPursuit.syncViewParam) { PlatPursuit.syncViewParam(name, { default: 'contracts', param: 'tab' }); }

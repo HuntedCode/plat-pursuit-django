@@ -365,3 +365,18 @@ def test_the_swap_region_wraps_everything_that_moves_with_the_slice(client):
     assert 'data-lb-board' in region, 'the board is outside the swap region'
     assert 'pp-switch' in region, 'the tab strip is outside the swap region'
     assert 'data-filter-form' in region, 'the filters are outside the swap region'
+
+
+def test_the_board_slides_on_a_tab_change(client):
+    """Every other segmented switcher on the site uses the shared `slideViewIn` -- game detail, career,
+    profile detail, badge list, titles and more. A tab that swaps instantly reads as a jump on a page
+    where everything else glides.
+
+    The BOARD slides, not the whole swap region: the tab strip and the header card are chrome and hold
+    still, exactly as game detail's hero does while its panel moves.
+    """
+    _ranked('Someone', plats=5, trophies=10)
+    body = client.get(URL).content.decode()
+
+    assert 'PlatPursuit.slideViewIn' in body, 'the tab swap has no directional slide'
+    assert 'tabOrder()' in body, 'the slide has no order, so it cannot pick a direction'

@@ -375,7 +375,16 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         });
     }
 
+    // The tab order, for the directional slide. Read off the strip rather than hardcoded, so it cannot
+    // fall out of step with the order the tabs actually render in.
+    function tabOrder() {
+        return Array.prototype.map.call(page.querySelectorAll('[data-board]'), function (t) {
+            return t.dataset.board;
+        });
+    }
+
     function swap(params) {
+        var from = root ? root.dataset.lbTab : null;
         var qp = new URLSearchParams(location.search);
         Object.keys(params).forEach(function (k) {
             if (params[k]) { qp.set(k, params[k]); } else { qp.delete(k); }
@@ -394,6 +403,14 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
                 window.scrollTo({ top: 0, behavior: 'instant' });   // a new slice starts at its top
                 mount();
                 history.replaceState(null, '', href);
+                // The BOARD slides, not the whole region: the tab strip and the header card are chrome
+                // and must hold still, exactly as game detail's hero does while its panel moves. A
+                // FILTER change passes the same tab for both ends, and `slideViewIn` no-ops on that --
+                // which is right, since changing a country is a refresh rather than lateral travel. It
+                // gets the fade the `is-swapping` class already gives it.
+                if (root && PlatPursuit.slideViewIn) {
+                    PlatPursuit.slideViewIn(root, from, root.dataset.lbTab, tabOrder());
+                }
             })
             .catch(function () { location.href = href; })           // honest fallback: just navigate
             .finally(function () { page.classList.remove('is-swapping'); });

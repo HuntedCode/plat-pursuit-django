@@ -417,3 +417,15 @@ def test_the_in_page_links_to_the_board_are_wired_to_the_tab(client):
         'the #ranks links have no handler -- they cannot scroll into a hidden panel on their own'
     )
     assert "showView('ranks')" in body
+
+
+def test_the_content_tabs_slide_like_every_other_switcher(client):
+    """`slideViewIn` is the house standard for a segmented switcher -- nine surfaces use it. This one was
+    built without it and swapped instantly, which reads as a jump beside the edition switcher directly
+    above it, which does slide."""
+    _renderable('slide', 'Slide')
+    body = client.get(reverse('badge_detail', args=['slide'])).content.decode()
+
+    assert body.count('PlatPursuit.slideViewIn') >= 2, (
+        'the content tabs do not slide (the edition switcher above them does)'
+    )

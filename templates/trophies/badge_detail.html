@@ -419,16 +419,28 @@ Collection. No extra wrapper container: a nested one would double the horizontal
         var panels = Array.prototype.slice.call(document.querySelectorAll('.bd-view[data-view]'));
         var tablist = null;
 
+        // The tab order, so the panel slides IN from the side it travelled from -- the shared
+        // `slideViewIn` every other segmented switcher on the site uses. Without it a tab change is an
+        // instant swap, which reads as a jump on a page where every other switcher glides.
+        var ORDER = tabs.map(function (t) { return t.dataset.view; });
+
         function showView(name) {
-            var changed = false, active = null;
+            var changed = false, active = null, shown = null, from = null;
             tabs.forEach(function (t) {
                 var on = t.dataset.view === name;
+                if (t.classList.contains('is-active')) { from = t.dataset.view; }
                 if (on && !t.classList.contains('is-active')) { changed = true; }
                 t.classList.toggle('is-active', on);
                 t.setAttribute('aria-selected', on ? 'true' : 'false');
                 if (on) { active = t; }
             });
-            panels.forEach(function (p) { p.hidden = p.dataset.view !== name; });
+            panels.forEach(function (p) {
+                p.hidden = p.dataset.view !== name;
+                if (p.dataset.view === name) { shown = p; }
+            });
+            if (changed && shown && PlatPursuit.slideViewIn) {
+                PlatPursuit.slideViewIn(shown, from, name, ORDER);
+            }
             if (tablist) { tablist.syncTabindex(); }
             if (changed && active && PlatPursuit.igniteTab) { PlatPursuit.igniteTab(active); }
             if (PlatPursuit.syncViewParam) { PlatPursuit.syncViewParam(name, { default: 'overview' }); }
