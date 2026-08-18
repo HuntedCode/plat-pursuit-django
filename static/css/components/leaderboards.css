@@ -373,6 +373,10 @@
 }
 .jobd__desc { margin-top: 10px; font-size: 0.88rem; line-height: 1.55; color: var(--pp-text-dim); max-width: 68ch; }
 
+/* Content tab panels. `hidden` alone is enough -- these are siblings in normal flow, not a positioned
+   stack -- but the rule is explicit because a `display` set anywhere else would beat the attribute. */
+.jobd-view[hidden] { display: none; }
+
 .jobd__contracts { display: flex; flex-direction: column; gap: 6px; }
 .jobd__con {
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;

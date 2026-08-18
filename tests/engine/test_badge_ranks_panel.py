@@ -102,7 +102,12 @@ def test_an_unknown_series_is_a_404_not_an_empty_board(client):
 
 def test_badge_detail_carries_the_ranks_section_and_fetches_it_lazily(client):
     """Server-rendering it would put the board's cost on every badge-page view, including the majority
-    who never scroll to it."""
+    who never open it.
+
+    As of 2026-08 the trigger is the Ranks TAB being activated, not the section scrolling into view --
+    on the main scroll every reader who reached the bottom paid for a board they may not have wanted.
+    The assertions below hold for either, which is the point: they pin that the rows are not in the
+    initial document, not how the fetch is triggered."""
     _renderable('lazy', 'Lazy')
     body = client.get(reverse('badge_detail', args=['lazy'])).content.decode()
 
@@ -344,3 +349,71 @@ def test_the_date_orders_rows_that_share_a_rung(client):
 
     assert [r['profile_id'] for r in rows] == [earlier.id, later.id]
     assert rows[0]['primary'] == rows[1]['primary'], 'the fixture no longer tests a shared rung'
+
+
+def test_the_board_lives_behind_its_own_tab(client):
+    """Badge detail was the only detail page rendering its board on the main scroll -- game detail and
+    job detail both tab it. Two panels, real tablist semantics, and Overview open by default.
+
+    The badge HERO stays outside both panels: it is the page header and has to remain visible whichever
+    tab is open, or a reader on Ranks has lost track of which badge they are looking at.
+    """
+    _renderable('tabbed', 'Tabbed')
+    body = client.get(reverse('badge_detail', args=['tabbed'])).content.decode()
+
+    assert 'id="bd-switch"' in body and 'role="tablist"' in body
+    assert 'id="bd-view-overview"' in body and 'id="bd-view-ranks"' in body
+    # Overview open, Ranks closed, and the closed one really is closed rather than merely unstyled.
+    assert 'data-view="ranks" hidden' in body, 'the Ranks panel is not hidden on arrival'
+    assert 'id="bd-tab-overview" aria-controls="bd-view-overview" role="tab"' in body
+
+    # The board markup is INSIDE the Ranks panel, not loose on the page.
+    ranks_panel = body.index('id="bd-view-ranks"')
+    assert body.index('data-ranks-src') > ranks_panel, 'the board is not inside the Ranks panel'
+
+    # ...and the hero card is above both panels, so it survives a tab switch.
+    assert body.index('bd2-med') < body.index('id="bd-switch"'), (
+        'the hero fell inside the content tabs -- it is the page header and must survive a tab switch'
+    )
+
+
+def test_the_ranks_tab_carries_no_edition_control(client):
+    """The clean half of the split: the board is per SERIES (earning any edition counts), so an edition
+    switcher over it would be pretending to change it. Overview owns the editions; Ranks does not.
+
+    Uses a TWO-edition series, because a single-edition one hides the switcher entirely
+    (`detail.has_multiple_groups`) and would pass without ever rendering the thing being excluded.
+    Sliced at the first `<script`, since the switcher's classes legitimately appear in the page's JS.
+    """
+    series = _renderable('noedition', 'No Edition')
+    second = PlatformGroupFactory(key='noedition-legacy', name='Legacy HD', platforms=['PS3'])
+    GroupBadgeFactory(series=series, platform_group=second, is_live=True)
+
+    body = client.get(reverse('badge_detail', args=['noedition'])).content.decode()
+    # The opening TAG, not the bare class: the page's own JS selects `.bd2-groupswitch`, so a class-name
+    # search finds the script and passes on correct code.
+    assert '<div class="bd2-groupswitch"' in body, 'the fixture did not render an edition switcher'
+
+    # From the panel to the next <script> after it -- the page's trailing scripts mention these classes.
+    start = body.index('id="bd-view-ranks"')
+    ranks_panel = body[start:body.index('<script', start)]
+    assert 'bd2-groupswitch' not in ranks_panel
+    assert 'bd2-gbtn' not in ranks_panel
+
+
+def test_the_in_page_links_to_the_board_are_wired_to_the_tab(client):
+    """The board moved behind a tab, and a browser cannot scroll to a target inside a `hidden` panel --
+    so every `href="#ranks"` on the page became a dead click the moment it moved. Silently, too: a
+    fragment link that resolves to nothing raises nothing and logs nothing.
+
+    Pins BOTH halves: that the links still exist (the hero's Earners figure and the community band's CTA
+    are how most readers reach the board), and that the page carries a handler for them.
+    """
+    _renderable('wired', 'Wired')
+    body = client.get(reverse('badge_detail', args=['wired'])).content.decode()
+
+    assert body.count('href="#ranks"') >= 1, 'nothing links to the board any more'
+    assert 'a[href="#ranks"]' in body, (
+        'the #ranks links have no handler -- they cannot scroll into a hidden panel on their own'
+    )
+    assert "showView('ranks')" in body

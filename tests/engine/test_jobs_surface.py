@@ -85,7 +85,7 @@ def test_job_detail_is_public_and_both_tabs_render_signed_out(client):
     _xp(job, 'TopHunter', 900, level=9)
     _contract('Some Contract', [job])
 
-    ranks = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks'}).content.decode()
+    ranks = client.get(reverse('job_ranks_panel', args=['archivist'])).content.decode()
     assert 'TopHunter' in ranks, 'the board is not visible signed out'
 
     contracts = client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'}).content.decode()
@@ -130,38 +130,42 @@ def test_the_job_board_ranks_by_xp(client):
     job = _job('archivist', 'Archivist')
     _xp(job, 'Lower', 100)
     _xp(job, 'Higher', 900)
-    body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks'}).content.decode()
+    body = client.get(reverse('job_ranks_panel', args=['archivist'])).content.decode()
     assert body.index('Higher') < body.index('Lower')
 
 
 def test_a_job_with_no_xp_says_so_rather_than_rendering_an_empty_wall(client):
     _job('quiet', 'Quiet Job')
-    body = client.get(reverse('job_detail', args=['quiet']), {'tab': 'ranks'}).content.decode()
+    body = client.get(reverse('job_ranks_panel', args=['quiet'])).content.decode()
     assert 'Nobody has banked XP here yet' in body
 
 
-def test_only_the_OPEN_tab_is_built(client):
-    """These are `?tab=` links that reload the page, and the template renders exactly one panel -- so
-    building both meant every visit paid for six queries to render three."""
+def test_the_page_never_builds_the_board(client):
+    """The tabs switch IN PLACE now, so both panels are on the page -- which would normally mean paying
+    for both. It does not, because only the CHEAP one is server-rendered: the board is fetched from
+    `job_ranks_panel` when its tab is opened.
+
+    That preserves a saving the `?tab=` version got for free from a full page reload, and it is the same
+    trade game detail makes with its leaderboard panel.
+    """
     job = _job('archivist', 'Archivist')
     _xp(job, 'Someone', 500)
     for i in range(3):
         _contract(f'Con {i}', [job])
 
-    with CaptureQueriesContext(connection) as ranks:
-        client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks'})
-    ranks_sql = ' '.join(q['sql'] for q in ranks.captured_queries)
-    assert 'trophies_contract' not in ranks_sql, 'the Ranks tab queried the Contracts panel'
+    with CaptureQueriesContext(connection) as page:
+        client.get(reverse('job_detail', args=['archivist']))
+    sql = ' '.join(q['sql'] for q in page.captured_queries)
 
-    with CaptureQueriesContext(connection) as contracts:
-        client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'})
-    contracts_sql = ' '.join(q['sql'] for q in contracts.captured_queries)
-    assert 'trophies_profilejobxp' in contracts_sql, (
-        'the header tally is on both tabs, so ProfileJobXP is expected here'
-    )
-    # ...but only for the tally, not for the board rows the Contracts tab never renders.
-    assert contracts_sql.count('trophies_profilejobxp') < ranks_sql.count('trophies_profilejobxp')
+    # The header tally and the viewer's rank ARE on the page -- they sit above the switcher and show on
+    # both tabs -- so ProfileJobXP is expected. What must NOT be there is the board's own row read.
+    assert 'trophies_profilejobxp' in sql, 'the header hunter tally is missing'
+    assert 'LIMIT 26' not in sql, 'the page built the board rows despite shipping an empty Ranks panel'
 
+    # And the panel, asked for directly, does build them.
+    with CaptureQueriesContext(connection) as panel:
+        client.get(reverse('job_ranks_panel', args=['archivist']))
+    assert 'LIMIT 26' in ' '.join(q['sql'] for q in panel.captured_queries)
 
 def test_a_signed_in_hunter_with_no_XP_is_TOLD_they_are_not_ranked(client):
     """`{% if my_rank %}` alone made the standing block simply absent for an unranked hunter, which reads
@@ -195,13 +199,13 @@ def test_the_board_pages_past_the_first_slice(client):
     for i in range(27):
         _xp(job, f'Hunter{i:02d}', 1000 - i)      # descending, so rank order == creation order
 
-    first = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks'})
+    first = client.get(reverse('job_ranks_panel', args=['archivist']))
     assert len(first.context['board']) == 25
     assert first.context['board_has_next'] is True
     assert first.context['board_has_prev'] is False
     assert first.context['board'][0]['rank'] == 1
 
-    second = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks', 'page': 2})
+    second = client.get(reverse('job_ranks_panel', args=['archivist']), {'page': 2})
     assert len(second.context['board']) == 2
     assert second.context['board_has_next'] is False
     assert second.context['board_has_prev'] is True
@@ -215,7 +219,7 @@ def test_a_junk_page_number_falls_back_to_the_first_page(client):
     job = _job('archivist', 'Archivist')
     _xp(job, 'Someone', 500)
     for raw in ('0', '-3', 'abc', ''):
-        resp = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks', 'page': raw})
+        resp = client.get(reverse('job_ranks_panel', args=['archivist']), {'page': raw})
         assert resp.status_code == 200
         assert resp.context['board_page'] == 1, f'page={raw!r} did not fall back'
 
@@ -260,13 +264,13 @@ def test_a_board_of_exactly_one_page_does_not_offer_a_next(client):
     for i in range(25):                                  # EXACTLY one page
         _xp(job, f'Hunter{i:02d}', 1000 - i)
 
-    first = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks'})
+    first = client.get(reverse('job_ranks_panel', args=['archivist']))
     assert len(first.context['board']) == 25
     assert first.context['board_has_next'] is False, 'a full first page offered a next page that is empty'
 
     # ...and one more entrant flips it, so the look-ahead is actually being read.
     _xp(job, 'Hunter25', 500)
-    again = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks'})
+    again = client.get(reverse('job_ranks_panel', args=['archivist']))
     assert again.context['board_has_next'] is True
     assert len(again.context['board']) == 25, 'the look-ahead row leaked into the rendered page'
 
@@ -279,7 +283,46 @@ def test_a_huge_page_number_is_clamped_rather_than_scanned(client):
     job = _job('archivist', 'Archivist')
     _xp(job, 'Someone', 500)
 
-    resp = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks', 'page': 99999999})
+    resp = client.get(reverse('job_ranks_panel', args=['archivist']), {'page': 99999999})
 
     assert resp.status_code == 200
     assert resp.context['board_page'] == JobDetailView.MAX_PAGE
+
+
+def test_the_tabs_are_a_real_tablist_over_real_panels(client):
+    """Converted from `?tab=` links to in-place switching, so all three detail pages (game, badge, job)
+    use one mechanism. The ARIA follows the behaviour rather than the other way round: it was a `nav` of
+    links precisely BECAUSE nothing switched in place, and now something does."""
+    _job('archivist', 'Archivist')
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+
+    assert 'id="jobd-switch"' in body and 'role="tablist"' in body
+    assert 'id="jobd-view-contracts"' in body and 'id="jobd-view-ranks"' in body
+    assert 'data-view="ranks"' in body and 'data-ranks-src' in body
+    # Contracts open, Ranks empty-and-hidden until asked for.
+    assert '<li class="lb-row' not in body, 'the board was server-rendered into the page'
+    # Scoped to the switcher: `aria-current="page"` is legitimately on the breadcrumb and the hub rail.
+    strip = body[body.index('id="jobd-switch"'):body.index('</div>', body.index('id="jobd-switch"'))]
+    assert 'aria-current' not in strip, 'the old link semantics survived the conversion'
+    assert '<a ' not in strip, 'the tabs are still links rather than buttons'
+
+
+def test_an_old_tab_ranks_bookmark_still_opens_the_board(client):
+    """`?tab=` was the switching mechanism and is now only an entry point. It has to keep working: it is
+    what old bookmarks carry and what the board's own pager links use."""
+    job = _job('archivist', 'Archivist')
+    _xp(job, 'Someone', 500)
+
+    body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks'}).content.decode()
+
+    # Asserted on the TAB, not by scanning the panel for `hidden` -- the panel's own spinner carries
+    # `aria-hidden` and a substring check would match it.
+    tab = body[body.index('id="jobd-tab-ranks"'):]
+    tab = tab[:tab.index('>')]
+    assert 'aria-selected="true"' in tab, 'arriving on ?tab=ranks did not select the Ranks tab'
+
+    # ...and the Contracts panel is the one closed instead.
+    panel = body[body.index('id="jobd-view-contracts"'):]
+    panel = panel[:panel.index('>')]
+    assert 'hidden' in panel, 'both panels are open on ?tab=ranks'

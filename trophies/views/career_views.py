@@ -13,7 +13,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponseNotFound
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views import View
 from django.db.models import Count, Q
@@ -222,6 +222,25 @@ class JobsBrowseView(ListView):
         return context
 
 
+class JobRanksPanelView(View):
+    """`/jobs/<slug>/ranks/` -- one job's board, fetched into job detail's Ranks tab on activation.
+
+    Its own endpoint rather than a branch in `JobDetailView`, for the reason game detail's leaderboard
+    panel has one: the cost scales with the job's popularity and most visitors come for the contracts. A
+    page that renders both panels pays for both; a page that ships the cheap one and fetches the expensive
+    one pays for what was asked for.
+
+    PUBLIC, like the board itself. The rows are identical for every viewer -- the viewer's own rank lives
+    in the page header, above the switcher, and is not in this fragment.
+    """
+
+    def get(self, request, slug):
+        job = get_object_or_404(Job, slug=slug)
+        profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
+        ctx = JobDetailView.ranks_context(request, job, profile, JobDetailView.BOARD_SIZE)
+        return render(request, 'trophies/partials/job_detail/_ranks_panel.html', {**ctx, 'job': job})
+
+
 class JobDetailView(DetailView):
     """`/jobs/<slug>/` -- what a job IS, the contracts that feed it, and its board.
 
@@ -267,12 +286,10 @@ class JobDetailView(DetailView):
         # a board it cannot enter until it verifies. Game detail already resolves its viewer this way.
         context['show_my_standing'] = bool(profile and profile.is_linked)
 
-        # ONLY the open tab's data. These are `?tab=` LINKS that reload the page, and the template renders
-        # exactly one panel -- so building both meant every visit paid for six queries to render three.
-        if tab == 'ranks':
-            context.update(self._ranks(job, profile))
-        else:
-            context.update(self._contracts(job, profile))
+        # Contracts ONLY. The board moved to `JobRanksPanelView`, fetched when its tab is opened -- so a
+        # visitor who never opens Ranks never pays for it, which is the saving the old `?tab=` version got
+        # for free from a full page reload and would have lost when the tabs became in-place.
+        context.update(self._contracts(job, profile))
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
@@ -281,20 +298,24 @@ class JobDetailView(DetailView):
         ]
         return context
 
-    def _ranks(self, job, profile):
-        """The board, paginated. A job board is the only per-entity board with no other home -- badge and
-        game boards each have a fuller surface to hand off to -- so stopping dead at 25 left a hunter
-        ranked #300 with no way to ever see their own row."""
+    @staticmethod
+    def ranks_context(request, job, profile, board_size):
+        """The board, paginated. Shared with `JobRanksPanelView`, which is what actually renders it -- the
+        page itself only ships the empty panel.
+
+        A job board is the only per-entity board with no other home (badge boards have their own panel
+        endpoint, game boards have `/games/<id>/leaderboard/`), so stopping dead at 25 left a hunter
+        ranked #300 with no way to ever reach the row their header rank points at."""
         # Clamped at BOTH ends. The upper bound is not theoretical: `?page=99999999` is a public URL that
         # becomes a nine-figure OFFSET, and Postgres walks every skipped row to honour it. The page
         # renders empty either way, so the cap costs a reader nothing and takes the scan off the table.
         try:
-            page = min(max(1, int(self.request.GET.get('page', 1))), self.MAX_PAGE)
+            page = min(max(1, int(request.GET.get('page', 1))), JobDetailView.MAX_PAGE)
         except (TypeError, ValueError):
             page = 1
-        offset = (page - 1) * self.BOARD_SIZE
+        offset = (page - 1) * board_size
         # +1 is the look-ahead that answers "is there a next page" without a COUNT. `board` slices it back.
-        rows = lb.job_rows(job.slug, limit=self.BOARD_SIZE + 1, offset=offset)
+        rows = lb.job_rows(job.slug, limit=board_size + 1, offset=offset)
         return {
             'board_page': page,
             'board_has_prev': page > 1,
@@ -302,8 +323,8 @@ class JobDetailView(DetailView):
             # multiples of the page size: a board of exactly 25 offered "Next", and the next page had no
             # rows, so it rendered the empty state ("Nobody has banked XP here yet") with no pager on it
             # -- browser Back was the only way out of a board that was not empty at all.
-            'board_has_next': len(rows) > self.BOARD_SIZE,
-            'board': lb.page(rows[:self.BOARD_SIZE], offset, extra=lambda r: {
+            'board_has_next': len(rows) > board_size,
+            'board': lb.page(rows[:board_size], offset, extra=lambda r: {
                 'primary': r[1], 'primary_label': 'XP',
                 'secondary': r[2], 'secondary_label': 'level',
             }),

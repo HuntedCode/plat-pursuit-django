@@ -148,33 +148,37 @@ Collection. No extra wrapper container: a nested one would double the horizontal
     </div>
     {% endif %}
 
+    {% comment %} Content tabs -- Overview | Ranks. The board gets its own tab rather than sitting on the
+    main scroll, which is what game detail and job detail already do; badge detail was the odd one out.
+
+    TWO controls on this page, and they are not peers. The `.bd2-groupswitch` above is part of the HEADER:
+    it swaps the hero, and the hero has to stay visible whichever tab is open or you lose track of which
+    badge you are reading. These are content tabs beneath it, on the small `.pp-switch` chips, so the two
+    read as different kinds of control rather than two tab strips stacked.
+
+    Editions do NOT apply to Ranks, and that is why the split is clean rather than a compromise: the board
+    is per SERIES (earning any edition counts), so the Ranks tab correctly carries no edition control. See
+    the comment on the panel itself.
+
+    Real `role="tablist"` over real `role="tabpanel"`s -- in-place switching, so the markup is honest. This
+    is the mechanism game detail uses; job detail was `?tab=` links and has been brought onto it too. {% endcomment %}
+    <div class="pp-switch bd-viewswitch" id="bd-switch" role="tablist" aria-label="Badge view">
+        <button type="button" id="bd-tab-overview" aria-controls="bd-view-overview" role="tab"
+                aria-selected="true" class="pp-switch__chip is-active" data-view="overview">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            <span class="pp-switch__lbl">Overview</span>
+        </button>
+        <button type="button" id="bd-tab-ranks" aria-controls="bd-view-ranks" role="tab"
+                aria-selected="false" class="pp-switch__chip" data-view="ranks">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
+            <span class="pp-switch__lbl">Ranks</span>
+        </button>
+    </div>
+
+    <div class="bd-view" id="bd-view-overview" role="tabpanel" aria-labelledby="bd-tab-overview" data-view="overview">
     {% comment %} Rarity & Community band -- series-level (both groups side by side), sits between the group
     selector and the per-group journey. Leads with rarity (the prestige signal not shown elsewhere). {% endcomment %}
     {% include 'trophies/partials/badge_detail/bd2_community.html' %}
-
-    {% comment %} Ranks -- the series board, at SERIES level like the community band above it.
-
-    Deliberately not inside a `.bd2-panel`: those swap per EDITION, and the board is per series (earned
-    any edition counts, matching how progress_bp is already the max across them). Putting it in one would
-    have made the same board render twice with an edition switcher pretending to change it.
-
-    Fetched on first scroll-in rather than server-rendered, copying game detail's Ranks panel: the cost
-    scales with a series' popularity and most visitors come for the badge, not the board. This REPLACES
-    `/leaderboards/badges/<slug>/` -- a whole page for what is a section of the page about the badge.
-    {% endcomment %}
-    <section class="bd2-ranks" id="ranks" data-ranks-src="{% url 'badge_ranks_panel' series.series_slug %}">
-        <h2 class="bd2-ranks__h">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
-            Ranks
-        </h2>
-        <p class="bd2-ranks__sub">Everyone who finished, by who got there first, then everyone still chasing.</p>
-        <div class="bd2-ranks__body" data-ranks-body>
-            <div class="bd2-ranks__loading" data-ranks-loading>
-                <span class="bd2-ranks__spinner" aria-hidden="true"></span>
-                <span>Counting the hunters&hellip;</span>
-            </div>
-        </div>
-    </section>
 
     {% comment %} Stage journey -- per group, swaps with the selector alongside the hero. Free content below
     the chrome (each stage is its own bd-card). {% endcomment %}
@@ -204,6 +208,34 @@ Collection. No extra wrapper container: a nested one would double the horizontal
             {% endif %}
         </div>
         {% endfor %}
+    </div>
+    </div>{# /bd-view-overview #}
+
+    {% comment %} Ranks -- the series board, at SERIES level.
+
+    Deliberately not inside a `.bd2-panel`: those swap per EDITION, and the board is per series (earning
+    any edition counts, matching how progress_bp is already the max across them). Putting it in one would
+    have made the same board render twice with an edition switcher pretending to change it. That is also
+    why this TAB carries no edition control while Overview does.
+
+    Fetched on first ACTIVATION of the tab, not on scroll-in as it used to be: the cost scales with a
+    series' popularity, and on the main scroll every reader who reached the bottom paid for a board they
+    may not have come for. This REPLACES `/leaderboards/badges/<slug>/` -- a whole page for what is a
+    section of the page about the badge. {% endcomment %}
+    <div class="bd-view" id="bd-view-ranks" role="tabpanel" aria-labelledby="bd-tab-ranks" data-view="ranks" hidden>
+    <section class="bd2-ranks" id="ranks" data-ranks-src="{% url 'badge_ranks_panel' series.series_slug %}">
+        <h2 class="bd2-ranks__h">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
+            Ranks
+        </h2>
+        <p class="bd2-ranks__sub">Everyone who finished, by who got there first, then everyone still chasing.</p>
+        <div class="bd2-ranks__body" data-ranks-body>
+            <div class="bd2-ranks__loading" data-ranks-loading>
+                <span class="bd2-ranks__spinner" aria-hidden="true"></span>
+                <span>Counting the hunters&hellip;</span>
+            </div>
+        </div>
+    </section>
     </div>
 {% endblock %}
 
@@ -360,14 +392,70 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                 });
         }
 
-        if (!window.IntersectionObserver) { load(); return; }   // no IO -> just fetch it
-        var io = new IntersectionObserver(function (entries) {
-            if (entries.some(function (e) { return e.isIntersecting; })) {
-                io.disconnect();
-                load();
+        // Exposed for the view switcher below: the board loads when its TAB is opened, not when the
+        // section scrolls into view. On the main scroll every reader who reached the bottom paid for a
+        // board they may not have come for; behind a tab, only someone who asks for it does. `loaded`
+        // guards a re-open, so switching back and forth fetches once.
+        var loaded = false;
+        sec._bdLoadRanks = function () {
+            if (loaded) { return; }
+            loaded = true;
+            load();
+        };
+    })();
+
+    // -- Content tabs: Overview | Ranks -------------------------------------------------------------
+    // The mechanism game detail uses (shared wireTablist + igniteTab + syncViewParam over real
+    // role="tabpanel" islands), so the two pages switch identically rather than each having their own.
+    (function () {
+        var strip = document.getElementById('bd-switch');
+        if (!strip || !window.PlatPursuit) { return; }
+        var tabs = Array.prototype.slice.call(strip.querySelectorAll('.pp-switch__chip[data-view]'));
+        var panels = Array.prototype.slice.call(document.querySelectorAll('.bd-view[data-view]'));
+        var tablist = null;
+
+        function showView(name) {
+            var changed = false, active = null;
+            tabs.forEach(function (t) {
+                var on = t.dataset.view === name;
+                if (on && !t.classList.contains('is-active')) { changed = true; }
+                t.classList.toggle('is-active', on);
+                t.setAttribute('aria-selected', on ? 'true' : 'false');
+                if (on) { active = t; }
+            });
+            panels.forEach(function (p) { p.hidden = p.dataset.view !== name; });
+            if (tablist) { tablist.syncTabindex(); }
+            if (changed && active && PlatPursuit.igniteTab) { PlatPursuit.igniteTab(active); }
+            if (PlatPursuit.syncViewParam) { PlatPursuit.syncViewParam(name, { default: 'overview' }); }
+            // LAST, and only on Ranks: the fetch is the expensive part, so tab state (panels, chips, URL)
+            // should be fully settled before it starts -- a fault in the fetch can then never strand the
+            // switcher mid-update.
+            if (name === 'ranks') {
+                var sec = document.querySelector('[data-ranks-src]');
+                if (sec && sec._bdLoadRanks) { sec._bdLoadRanks(); }
             }
-        }, { rootMargin: '200px 0px' });   // start a little early so it is usually there on arrival
-        io.observe(sec);
+        }
+
+        tablist = PlatPursuit.wireTablist(tabs, { onSelect: function (t) { showView(t.dataset.view); } });
+
+        // Deep links still land on the board. `?view=ranks` is what syncViewParam writes, so a shared tab
+        // URL reopens where the sharer was; `#ranks` is what the hero's "Earners" link, the community
+        // band's CTA and the context band all point at, from when the board was a section on this scroll.
+        var params = new URLSearchParams(location.search);
+        if (params.get('view') === 'ranks' || location.hash === '#ranks') { showView('ranks'); }
+
+        // ...and those same `#ranks` links have to keep working from INSIDE the page. The browser cannot
+        // scroll to a target in a `hidden` panel, so without this they became dead clicks the moment the
+        // board moved behind a tab -- silently, since a fragment link that goes nowhere raises nothing.
+        // Delegated, so it covers every one of them without each partial needing to know about the tabs.
+        document.addEventListener('click', function (ev) {
+            var link = ev.target.closest && ev.target.closest('a[href="#ranks"]');
+            if (!link) { return; }
+            ev.preventDefault();
+            showView('ranks');
+            var sec = document.getElementById('ranks');
+            if (sec && sec.scrollIntoView) { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        });
     })();
 </script>
 

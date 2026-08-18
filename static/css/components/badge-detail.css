@@ -1007,3 +1007,15 @@
     .bd2-comm__bar .pp-horizon__fill { transition: none; }
     .bd2-comm--anim .bd2-comm__group { opacity: 1; transform: none; transition: none; }
 }
+
+/* ---- Content tabs: Overview | Ranks ----------------------------------------------------------------
+   The board moved off the main scroll and behind a tab, matching game detail and job detail -- badge
+   detail was the only one rendering its board inline.
+
+   TWO controls sit above this content and they are deliberately not peers. `.bd2-groupswitch` is part of
+   the HEADER: it swaps the hero, which has to stay visible whichever tab is open or you lose track of
+   which badge you are reading. This strip is content tabs beneath it, on the small shared `.pp-switch`
+   chips, so the difference in weight says which one is chrome and which one is navigation. Editions do
+   not apply to the board (it is per SERIES), so the Ranks tab correctly carries no edition control. */
+.bd-viewswitch { margin: 0 0 14px; }
+.bd-view[hidden] { display: none; }
